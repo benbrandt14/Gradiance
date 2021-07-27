@@ -10,7 +10,7 @@ using UnityEngine.EventSystems;
 /// </summary>
 public class DrawController : MonoBehaviour
 {
-    public DrawMode Mode = DrawMode.Rectangle;
+    public DrawMode Mode = DrawMode.None;
 
     public DrawShape RectanglePrefab;
     public DrawShape CirclePrefab;
@@ -29,12 +29,21 @@ public class DrawController : MonoBehaviour
         _drawModeToPrefab = new Dictionary<DrawMode, DrawShape> {
             {DrawMode.Rectangle, RectanglePrefab},
             {DrawMode.Circle, CirclePrefab},
-            {DrawMode.Triangle, TrianglePrefab}
+            {DrawMode.Triangle, TrianglePrefab},
         };
     }
 
     private void Update()
     {
+         if (Input.GetKeyDown(KeyCode.Escape))
+        {
+           Mode = DrawMode.None;
+        }
+
+        if (Mode == DrawMode.None) {
+            return;
+        }
+
         var mousePos = (Vector2) Camera.main.ScreenToWorldPoint(Input.mousePosition);
 
         var click = Input.GetKeyUp(KeyCode.Mouse0) &&
@@ -110,6 +119,7 @@ public class DrawController : MonoBehaviour
     {
         Rectangle,
         Circle,
-        Triangle
+        Triangle,
+        None
     }
 }

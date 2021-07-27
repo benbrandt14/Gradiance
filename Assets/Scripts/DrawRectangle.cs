@@ -43,6 +43,8 @@ public class DrawRectangle : DrawShape
         _lineRenderer = GetComponent<LineRenderer>();
 
         _rigidbody2D.useAutoMass = true;
+        _rigidbody2D.isKinematic = true;
+        _rigidbody2D.freezeRotation = true;
     }
 
     public override void AddVertex(Vector2 vertex)
@@ -53,6 +55,9 @@ public class DrawRectangle : DrawShape
 
         _vertices.Add(vertex);
         UpdateShape(vertex);
+
+        _rigidbody2D.isKinematic = false;
+        _rigidbody2D.freezeRotation = false;
     }
 
     public override void UpdateShape(Vector2 newVertex)

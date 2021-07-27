@@ -204,19 +204,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 63766613}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 232626160}
-        m_TargetAssemblyTypeName: 
-        m_MethodName: SetDrawMode
-        m_Mode: 5
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: Rectangle
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &63766613
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -338,7 +326,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 232626160}
-        m_TargetAssemblyTypeName: 
+        m_TargetAssemblyTypeName: DrawController, Assembly-CSharp
         m_MethodName: SetDrawMode
         m_Mode: 5
         m_Arguments:
@@ -432,7 +420,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dc6d134c3716dbf42b221844300ee6d5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Mode: 0
+  Mode: 3
   RectanglePrefab: {fileID: 114012866891588282, guid: 9f899b9f6f08f5f4fbc2b21dbb6da9c6,
     type: 3}
   CirclePrefab: {fileID: 114714656820787570, guid: 9dab774982fc2a948940e206a8122d80,
@@ -2005,6 +1993,8 @@ GameObject:
   - component: {fileID: 942242491}
   - component: {fileID: 942242490}
   - component: {fileID: 942242489}
+  - component: {fileID: 942242493}
+  - component: {fileID: 942242494}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -2085,6 +2075,34 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &942242493
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 942242488}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d7aeb3971d109841b64b61e30691d74, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &942242494
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 942242488}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01927bf663e4a814eb86e11e6bf1684c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cam: {fileID: 942242491}
+  zoomSpeed: 20
+  minCamSize: 1
+  maxCamSize: 30
 --- !u!1 &948062985
 GameObject:
   m_ObjectHideFlags: 0
