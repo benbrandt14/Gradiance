@@ -112,7 +112,14 @@ namespace UI
             textGo.transform.SetParent(btnGo.transform, false);
             var textComp = textGo.AddComponent<Text>();
             textComp.text = text;
-            textComp.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+            var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (font == null)
+            {
+                font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+            }
+            textComp.font = font;
+
             textComp.alignment = TextAnchor.MiddleCenter;
             textComp.color = Color.white;
             textComp.resizeTextForBestFit = true;
