@@ -36,7 +36,7 @@ namespace Tools
             if (rb) rb.simulated = true;
 
             var sr = PreviewObject.GetComponent<SpriteRenderer>();
-            if (sr) sr.color = Color.HSVToRGB(Random.value, 0.6f, 0.9f);
+            if (sr) sr.color = Color.HSVToRGB(UnityEngine.Random.value, 0.6f, 0.9f);
 
             PreviewObject = null;
         }

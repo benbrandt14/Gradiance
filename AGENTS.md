@@ -29,7 +29,7 @@ Gradiance is a Unity project aiming to recreate Algodoo-style interactive 2D phy
 
 ## Environment & Testing
 *   **Testing**: Since this is a Unity project, standard NUnit tests are used. For CI/CD in headless environments (like this agent VM), we use a **Mock UnityEngine** approach.
-    *   **Run Tests**: `dotnet test Tests/Gradiance.UnitTests.csproj`
+    *   **Run Tests**: `dotnet test Tests/Gradiance.UnitTests/Gradiance.UnitTests.csproj`
     *   **Setup**: Run `bash setup.sh` to install the .NET SDK.
 *   **Compilation**: The `Verification.cs` script in `Assets/Scripts` is a compile-time check for the Unity Editor, but `dotnet test` serves as the primary CI verification tool.
 

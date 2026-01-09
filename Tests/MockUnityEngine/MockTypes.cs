@@ -13,6 +13,7 @@ namespace UnityEngine
         public static Vector2 operator +(Vector2 a, Vector2 b) => new Vector2(a.x + b.x, a.y + b.y);
         public static Vector2 operator -(Vector2 a, Vector2 b) => new Vector2(a.x - b.x, a.y - b.y);
         public static Vector2 operator *(Vector2 a, float b) => new Vector2(a.x * b, a.y * b);
+        public static Vector2 operator /(Vector2 a, float b) => new Vector2(a.x / b, a.y / b);
         public static float Distance(Vector2 a, Vector2 b) => 0f;
     }
 
@@ -56,6 +57,12 @@ namespace UnityEngine
         public Rect(float x, float y, float w, float h) { this.x = x; this.y = y; width = w; height = h; }
     }
 
+    public struct RectOffset
+    {
+        public int left, right, top, bottom;
+        public RectOffset(int l, int r, int t, int b) { left = l; right = r; top = t; bottom = b; }
+    }
+
     public enum KeyCode
     {
         None, Space, Delete, Backspace, Return, Escape
@@ -66,12 +73,19 @@ namespace UnityEngine
         public static float value => 0.5f;
     }
 
+    public class Time
+    {
+        public static float timeScale { get; set; } = 1f;
+        public static float deltaTime { get; set; } = 0.016f;
+    }
+
     public class Mathf
     {
         public static float Abs(float f) => Math.Abs(f);
         public static float Sin(float f) => (float)Math.Sin(f);
         public static float Cos(float f) => (float)Math.Cos(f);
         public static float Atan2(float y, float x) => (float)Math.Atan2(y, x);
+        public static float Max(float a, float b) => Math.Max(a, b);
         public static float Rad2Deg => 57.29578f;
     }
 
@@ -83,26 +97,37 @@ namespace UnityEngine
         public static T Instantiate<T>(T original) where T : Object => original;
         public static T Instantiate<T>(T original, Transform parent) where T : Object => original;
         public static T FindObjectOfType<T>() where T : Object => null;
+        public static T[] FindObjectsOfType<T>() where T : Object => new T[0];
+        public static void DontDestroyOnLoad(Object target) { }
         public static implicit operator bool(Object obj) => obj != null;
     }
 
     public class GameObject : Object
     {
         public Transform transform { get; } = new Transform();
+        public int layer { get; set; }
+        public string tag { get; set; }
         public GameObject() { }
         public GameObject(string name) { this.name = name; }
         public void SetActive(bool active) { }
+
+        private List<Component> _components = new List<Component>();
 
         public T AddComponent<T>() where T : Component, new()
         {
             var comp = new T();
             comp.gameObject = this;
+            _components.Add(comp);
             return comp;
         }
 
         public T GetComponent<T>() where T : Component
         {
-            return null; // Mock returns null by default
+             foreach(var c in _components)
+             {
+                 if (c is T t) return t;
+             }
+             return null;
         }
     }
 
@@ -110,6 +135,7 @@ namespace UnityEngine
     {
         public GameObject gameObject { get; set; }
         public Transform transform => gameObject?.transform;
+        public T GetComponent<T>() where T : Component => gameObject?.GetComponent<T>();
     }
 
     public class MonoBehaviour : Component
@@ -126,6 +152,7 @@ namespace UnityEngine
         public void SetParent(Transform p) { parent = p; }
         public void SetParent(Transform p, bool worldPositionStays) { parent = p; }
         public Vector3 InverseTransformPoint(Vector3 position) => position;
+        public Vector3 TransformPoint(Vector3 position) => position;
     }
 
     public class PhysicsMaterial2D : Object
@@ -144,18 +171,8 @@ namespace UnityEngine
         public bool simulated { get; set; }
         public float mass { get; set; }
         public RigidbodyType2D bodyType { get; set; }
-        // Note: In real Unity, sharedMaterial is on Collider2D, but sometimes accessed via rb attached collider shortcuts or custom logic.
-        // The error log showed `Rigidbody2D.sharedMaterial`, which suggests the user code might be doing `rb.GetComponent<Collider2D>().sharedMaterial`
-        // OR the user code actually thinks RB has a material.
-        // Looking at the error: `ContextMenuController.cs(121,25): error CS1061: 'Rigidbody2D' does not contain a definition for 'sharedMaterial'`
-        // If the code is `target.sharedMaterial`, and target is Rigidbody2D, then the code is technically wrong for Unity API unless it's an extension method.
-        // But I will add it here to make it compile if that's what the legacy code expects.
-        // Wait, looking at ContextMenuController, it likely casts or gets the collider.
-        // Actually, if `_target` is `Rigidbody2D`, then `_target.sharedMaterial` is invalid in Unity.
-        // Let's assume for now I should add it to Rigidbody2D to suppress the error, or the user code is using a wrapper.
-        // However, `Collider2D` has `sharedMaterial`.
-        // Let's check `ContextMenuController.cs` line 121 later. For now, I'll add a dummy property.
         public PhysicsMaterial2D sharedMaterial { get; set; }
+        public static implicit operator bool(Rigidbody2D rb) => rb != null;
     }
 
     public enum RigidbodyType2D { Dynamic, Kinematic, Static }
@@ -189,6 +206,7 @@ namespace UnityEngine
 
     public class Physics2D
     {
+        public static Vector2 gravity { get; set; } = new Vector2(0, -9.81f);
         public static RaycastHit2D Raycast(Vector2 origin, Vector2 direction) => new RaycastHit2D();
         public static RaycastHit2D[] RaycastAll(Vector2 origin, Vector2 direction) => new RaycastHit2D[0];
     }
@@ -220,9 +238,13 @@ namespace UnityEngine
         public SpriteDrawMode drawMode { get; set; }
         public int sortingOrder { get; set; }
         public Vector2 size { get; set; }
+        public static implicit operator bool(SpriteRenderer sr) => sr != null;
     }
 
-    public class Material : Object { }
+    public class Material : Object
+    {
+        public Material(Shader shader) {}
+    }
     public class Shader : Object { public static Shader Find(string name) => new Shader(); }
 
     public class LineRenderer : Component {
@@ -235,13 +257,24 @@ namespace UnityEngine
         public Color endColor { get; set; }
     }
 
+    public enum CameraClearFlags { SolidColor }
     public class Camera : Component
     {
         public static Camera main => new Camera();
         public Vector3 ScreenToWorldPoint(Vector3 position) => position;
+        public bool orthographic { get; set; }
+        public float orthographicSize { get; set; }
+        public CameraClearFlags clearFlags { get; set; }
+        public Color backgroundColor { get; set; }
     }
 
-    public class Canvas : Component { }
+    public enum RenderMode { ScreenSpaceOverlay }
+    public class Canvas : Component
+    {
+        public RenderMode renderMode { get; set; }
+        public int sortingOrder { get; set; }
+    }
+
     public class RectTransform : Transform
     {
         public Vector2 anchorMin { get; set; }
@@ -249,6 +282,8 @@ namespace UnityEngine
         public Vector2 offsetMin { get; set; }
         public Vector2 offsetMax { get; set; }
         public Vector2 sizeDelta { get; set; }
+        public Vector2 pivot { get; set; }
+        public Vector2 anchoredPosition { get; set; }
     }
 
     public class Debug
@@ -289,25 +324,32 @@ namespace UnityEngine
 
 namespace UnityEngine.Events
 {
-     public class UnityEvent : UnityEngine.Object { public void AddListener(Action call) {} }
-     public class UnityAction : UnityEngine.Object
-     {
-         private Action _action;
-         public UnityAction(Action action) { _action = action; }
-         public static implicit operator Action(UnityAction ua) => ua._action;
-         public static implicit operator UnityAction(Action a) => new UnityAction(a);
-     }
+     public delegate void UnityAction();
+     public class UnityEvent : UnityEngine.Object { public void AddListener(UnityAction call) {} }
+     public class UnityEvent<T> : UnityEngine.Object { public void AddListener(Action<T> call) {} }
 }
 
 namespace UnityEngine.EventSystems
 {
-    public class EventSystem : MonoBehaviour { }
+    public class EventSystem : MonoBehaviour
+    {
+        public static EventSystem current { get; set; }
+        public bool IsPointerOverGameObject() => false;
+    }
+    public class StandaloneInputModule : MonoBehaviour { }
 }
 
 namespace UnityEngine.UI
 {
     public enum TextAnchor { UpperLeft, MiddleCenter, MiddleLeft }
-    public class Text : MonoBehaviour { public string text { get; set; } public Font font { get; set; } public Color color { get; set; } public TextAnchor alignment { get; set; } }
+    public class Text : MonoBehaviour
+    {
+        public string text { get; set; }
+        public Font font { get; set; }
+        public Color color { get; set; }
+        public TextAnchor alignment { get; set; }
+        public bool resizeTextForBestFit { get; set; }
+    }
     public class Image : MonoBehaviour { public Color color { get; set; } public UnityEngine.Sprite sprite { get; set; } public UnityEngine.Color targetGraphic { get; set; } }
     // Image doesn't have targetGraphic, Selectable does. Button/Slider inherit Selectable.
 
@@ -322,8 +364,31 @@ namespace UnityEngine.UI
         public float value { get; set; }
         public float minValue { get; set; }
         public float maxValue { get; set; }
-        public UnityEngine.Events.UnityEvent onValueChanged;
+        public UnityEngine.Events.UnityEvent<float> onValueChanged;
         public RectTransform handleRect { get; set; }
     }
     public class LayoutElement : MonoBehaviour { public float minWidth { get; set; } public float minHeight { get; set; } public float flexibleWidth { get; set; } public float preferredWidth { get; set; } }
+
+    public class CanvasScaler : MonoBehaviour
+    {
+        public enum ScaleMode { ScaleWithScreenSize }
+        public ScaleMode uiScaleMode { get; set; }
+        public Vector2 referenceResolution { get; set; }
+    }
+    public class GraphicRaycaster : MonoBehaviour { }
+    public class VerticalLayoutGroup : MonoBehaviour
+    {
+        public UnityEngine.RectOffset padding { get; set; }
+        public float spacing { get; set; }
+        public bool childControlHeight { get; set; }
+        public bool childForceExpandHeight { get; set; }
+    }
+    public class HorizontalLayoutGroup : MonoBehaviour
+    {
+        public UnityEngine.RectOffset padding { get; set; }
+        public float spacing { get; set; }
+        public bool childControlWidth { get; set; }
+        public bool childForceExpandWidth { get; set; }
+        public TextAnchor childAlignment { get; set; }
+    }
 }

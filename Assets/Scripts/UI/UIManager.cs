@@ -155,7 +155,7 @@ namespace UI
             // A simple way is to delete everything that isn't a Manager or Camera or UI
             // Or just reload scene. But we are dynamic.
 
-            var rigidbodies = Object.FindObjectsOfType<Rigidbody2D>();
+            var rigidbodies = UnityEngine.Object.FindObjectsOfType<Rigidbody2D>();
             foreach (var rb in rigidbodies)
             {
                 Destroy(rb.gameObject);
