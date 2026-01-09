@@ -10,10 +10,10 @@ namespace Core
         {
             // Create a root GameObject for our Managers
             var managersObject = new GameObject("Managers");
-            Object.DontDestroyOnLoad(managersObject);
+            UnityEngine.Object.DontDestroyOnLoad(managersObject);
 
             // Ensure we have an EventSystem for UI
-            if (Object.FindObjectOfType<EventSystem>() == null)
+            if (UnityEngine.Object.FindObjectOfType<EventSystem>() == null)
             {
                 var eventSystemGo = new GameObject("EventSystem");
                 eventSystemGo.AddComponent<EventSystem>();

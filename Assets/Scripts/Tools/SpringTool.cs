@@ -134,7 +134,7 @@ namespace Tools
             _lr.material = new Material(Shader.Find("Sprites/Default"));
             _lr.startColor = Color.white;
             _lr.endColor = Color.white;
-            // Make it look like a zigzag? For now just a line.
+            // TODO: [Phase 3] Make it look like a zigzag spring instead of a straight line
         }
 
         private void Update()
@@ -144,6 +144,8 @@ namespace Tools
                 Destroy(gameObject);
                 return;
             }
+
+            // TODO: Handle case where connectedBody is destroyed?
 
             var p1 = _joint.transform.TransformPoint(_joint.anchor);
             var p2 = _joint.connectedBody != null ?

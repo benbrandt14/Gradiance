@@ -20,6 +20,10 @@ namespace Tools
                 {
                     _targetBody = hit.rigidbody;
 
+                    // TODO: [Phase 1] Check if the body is static. If so, maybe don't drag it, or make it dynamic temporarily?
+                    // Algodoo allows moving static objects in "edit" mode but not simulation.
+                    // Gradiance is always running? Or do we distinguish Edit/Play mode?
+
                     // Add a TargetJoint2D to drag the object
                     _targetJoint = _targetBody.gameObject.AddComponent<TargetJoint2D>();
                     _targetJoint.anchor = _targetBody.transform.InverseTransformPoint(hit.point);
@@ -39,6 +43,9 @@ namespace Tools
                 _targetJoint = null;
                 _targetBody = null;
             }
+
+            // TODO: [Phase 1] Implement Right-Click Context Menu trigger here? Or in a separate Interaction Manager?
+            // if (Input.GetMouseButtonDown(1)) { ... }
         }
 
         public override void OnToolDeselected()

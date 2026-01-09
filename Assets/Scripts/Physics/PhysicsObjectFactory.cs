@@ -7,6 +7,10 @@ namespace Physics
         private static Sprite _squareSprite;
         private static Sprite _circleSprite;
 
+        // TODO: [Phase 2] SerializableData Support
+        // - When creating objects, return a wrapper that contains both the GameObject and a SerializableData class.
+        // - Or, attach a component `PhysicsObjectData` that holds properties for serialization (color, material, etc.).
+
         public static GameObject CreateBox(Vector2 position, Vector2 size)
         {
             var go = new GameObject("Box");
@@ -25,6 +29,8 @@ namespace Physics
 
             // Rigidbody
             var rb = go.AddComponent<Rigidbody2D>();
+
+            // TODO: Add PhysicsMaterial2D configuration (friction, bounciness)
 
             return go;
         }
@@ -47,6 +53,8 @@ namespace Physics
 
             // Rigidbody
             var rb = go.AddComponent<Rigidbody2D>();
+
+            // TODO: Add PhysicsMaterial2D configuration (friction, bounciness)
 
             return go;
         }

@@ -53,6 +53,9 @@ namespace Tools
             joint.anchor = jointHost.transform.InverseTransformPoint(anchor);
             joint.connectedBody = connectedBody;
 
+            // TODO: [Phase 1] Check if we need to set 'enableCollision' (collideConnected) to false by default?
+            // Usually hinge joints disable collision between the connected bodies.
+
             // Visuals: Create a small circle to represent the hinge
             var hingeVis = new GameObject("HingeVisual");
             hingeVis.transform.position = anchor;

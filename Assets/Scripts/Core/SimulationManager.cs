@@ -45,5 +45,15 @@ namespace Core
         {
             Physics2D.gravity = gravity;
         }
+
+        // TODO: [Phase 2] Implement Undo/Redo System
+        // - Create a Command interface (ICommand) with Execute() and Undo() methods.
+        // - Maintain a Stack<ICommand> for undo history and a Stack<ICommand> for redo history.
+        // - Actions like CreateObject, DeleteObject, MoveObject, ChangeProperty should be encapsulated as Commands.
+
+        // TODO: [Phase 2] Implement Scene Serialization
+        // - Add methods to Serialize current scene state to JSON.
+        // - Add methods to Deserialize and reconstruct the scene.
+        // - Ensure all PhysicsObjects have unique IDs for reference serialization.
     }
 }
