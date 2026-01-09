@@ -12,6 +12,9 @@ namespace Tools
 
         private List<Tool> _availableTools = new List<Tool>();
 
+        // TODO: [Phase 2] Add Undo/Redo Stacks here (or in a separate CommandManager)
+        // public CommandManager CommandManager { get; private set; }
+
         private void Awake()
         {
             if (Instance == null)
@@ -30,6 +33,8 @@ namespace Tools
             {
                 CurrentTool.OnToolUpdate();
             }
+
+            // TODO: [Phase 1] Add keyboard shortcuts for selecting tools (e.g., M for Move, B for Box, C for Circle)
         }
 
         public void RegisterTool(Tool tool)
