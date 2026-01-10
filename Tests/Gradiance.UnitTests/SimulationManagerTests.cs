@@ -14,7 +14,7 @@ namespace Gradiance.UnitTests
         {
             if (SimulationManager.Instance != null)
             {
-                Object.DestroyImmediate(SimulationManager.Instance.gameObject);
+                UnityEngine.Object.DestroyImmediate(SimulationManager.Instance.gameObject);
             }
 
             _simManagerGO = new GameObject("SimulationManager");
@@ -26,7 +26,7 @@ namespace Gradiance.UnitTests
         {
             if (_simManagerGO != null)
             {
-                Object.DestroyImmediate(_simManagerGO);
+                UnityEngine.Object.DestroyImmediate(_simManagerGO);
             }
             // Reset Time.timeScale to default
             Time.timeScale = 1.0f;

@@ -51,7 +51,7 @@ namespace Gradiance.UnitTests
             // Checking if Instance exists and destroying it if so (simulating scene reload)
             if (ToolManager.Instance != null)
             {
-                Object.DestroyImmediate(ToolManager.Instance.gameObject);
+                UnityEngine.Object.DestroyImmediate(ToolManager.Instance.gameObject);
             }
 
             _toolManagerGO = new GameObject("ToolManager");
@@ -67,7 +67,7 @@ namespace Gradiance.UnitTests
         {
             if (_toolManagerGO != null)
             {
-                Object.DestroyImmediate(_toolManagerGO);
+                UnityEngine.Object.DestroyImmediate(_toolManagerGO);
             }
         }
 
