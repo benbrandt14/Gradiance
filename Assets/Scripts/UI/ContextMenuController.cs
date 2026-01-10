@@ -95,7 +95,7 @@ namespace UI
                 if (_target != null)
                 {
                     var sr = _target.GetComponent<SpriteRenderer>();
-                    if (sr) sr.color = Color.HSVToRGB(Random.value, 0.7f, 0.9f);
+                    if (sr) sr.color = Color.HSVToRGB(UnityEngine.Random.value, 0.7f, 0.9f);
                 }
             });
 

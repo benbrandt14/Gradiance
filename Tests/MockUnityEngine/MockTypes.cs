@@ -118,6 +118,14 @@ namespace UnityEngine
             var comp = new T();
             comp.gameObject = this;
             _components.Add(comp);
+
+            // Simulate Unity Lifecycle: Awake
+            if (comp is MonoBehaviour)
+            {
+                var method = typeof(T).GetMethod("Awake", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+                if (method != null) method.Invoke(comp, null);
+            }
+
             return comp;
         }
 
