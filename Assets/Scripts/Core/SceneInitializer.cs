@@ -13,7 +13,7 @@ namespace Core
             UnityEngine.Object.DontDestroyOnLoad(managersObject);
 
             // Ensure we have an EventSystem for UI
-            if (UnityEngine.Object.FindObjectOfType<EventSystem>() == null)
+            if (UnityEngine.Object.FindFirstObjectByType<EventSystem>() == null)
             {
                 var eventSystemGo = new GameObject("EventSystem");
                 eventSystemGo.AddComponent<EventSystem>();

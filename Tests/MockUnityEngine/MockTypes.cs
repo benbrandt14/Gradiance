@@ -177,6 +177,12 @@ namespace UnityEngine
         public static float Rad2Deg => 57.29578f;
     }
 
+    public enum FindObjectsSortMode
+    {
+        None,
+        InstanceID,
+    }
+
     // Object & Component System
     public class Object
     {
@@ -204,7 +210,15 @@ namespace UnityEngine
             where T : Object
             => null;
 
+        public static T FindFirstObjectByType<T>()
+            where T : Object
+            => null;
+
         public static T[] FindObjectsOfType<T>()
+            where T : Object
+            => new T[0];
+
+        public static T[] FindObjectsByType<T>(FindObjectsSortMode mode)
             where T : Object
             => new T[0];
 
