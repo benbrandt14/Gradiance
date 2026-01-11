@@ -140,6 +140,12 @@ namespace UnityEngine
         }
     }
 
+    public enum FindObjectsSortMode
+    {
+        None,
+        InstanceID,
+    }
+
     public enum KeyCode
     {
         None,
@@ -205,6 +211,14 @@ namespace UnityEngine
             => null;
 
         public static T[] FindObjectsOfType<T>()
+            where T : Object
+            => new T[0];
+
+        public static T FindFirstObjectByType<T>()
+            where T : Object
+            => null;
+
+        public static T[] FindObjectsByType<T>(FindObjectsSortMode mode)
             where T : Object
             => new T[0];
 

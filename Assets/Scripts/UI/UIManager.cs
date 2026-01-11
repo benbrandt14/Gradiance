@@ -16,7 +16,7 @@ namespace UI
 
         private static void ResetScene()
         {
-            var rigidbodies = UnityEngine.Object.FindObjectsOfType<Rigidbody2D>();
+            var rigidbodies = UnityEngine.Object.FindObjectsByType<Rigidbody2D>(FindObjectsSortMode.None);
             foreach (var rb in rigidbodies)
             {
                 Destroy(rb.gameObject);
