@@ -77,35 +77,13 @@ namespace Tools
                 // Fallback: create a tiny circle procedurally or use what we have
                 // We don't have easy access to PhysicsObjectFactory private sprites, maybe make them public?
                 // For now, let's just make a tiny circle primitive
-                sr.sprite = CreateCircleSprite();
+                sr.sprite = Core.GraphicsHelper.CreateCircleSprite();
             }
 
             sr.drawMode = SpriteDrawMode.Sliced;
             sr.sortingOrder = 10; // On top
             sr.color = Color.yellow;
             sr.size = new Vector2(0.2f, 0.2f);
-        }
-
-        private static Sprite CreateCircleSprite()
-        {
-            // Quick 32x32 circle
-            int res = 32;
-            var tex = new Texture2D(res, res);
-            var cols = new Color[res * res];
-            float c = res / 2f;
-            float rSq = (c - 1) * (c - 1);
-            for (int y = 0; y < res; y++)
-            {
-                for (int x = 0; x < res; x++)
-                {
-                    float d = ((x - c) * (x - c)) + ((y - c) * (y - c));
-                    cols[(y * res) + x] = (d < rSq) ? Color.white : Color.clear;
-                }
-            }
-
-            tex.SetPixels(cols);
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, res, res), new Vector2(0.5f, 0.5f), res);
         }
     }
 }
