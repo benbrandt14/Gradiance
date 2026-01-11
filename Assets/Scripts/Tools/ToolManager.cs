@@ -6,36 +6,11 @@ namespace Tools
 {
     public class ToolManager : MonoBehaviour
     {
-        public static ToolManager Instance { get; private set; }
+        private readonly List<Tool> _availableTools = new List<Tool>();
 
-        public Tool CurrentTool { get; private set; }
+        public static ToolManager? Instance { get; private set; }
 
-        private List<Tool> _availableTools = new List<Tool>();
-
-        // TODO: [Phase 2] Add Undo/Redo Stacks here (or in a separate CommandManager)
-        // public CommandManager CommandManager { get; private set; }
-
-        private void Awake()
-        {
-            if (Instance == null)
-            {
-                Instance = this;
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
-        }
-
-        private void Update()
-        {
-            if (CurrentTool != null && !EventSystem.current.IsPointerOverGameObject())
-            {
-                CurrentTool.OnToolUpdate();
-            }
-
-            // TODO: [Phase 1] Add keyboard shortcuts for selecting tools (e.g., M for Move, B for Box, C for Circle)
-        }
+        public Tool? CurrentTool { get; private set; }
 
         public void RegisterTool(Tool tool)
         {
@@ -74,13 +49,38 @@ namespace Tools
             }
         }
 
-        public T GetTool<T>() where T : Tool
+        public T? GetTool<T>()
+            where T : Tool
         {
-             foreach(var tool in _availableTools)
-             {
-                 if (tool is T t) return t;
-             }
-             return null;
+            foreach (var tool in _availableTools)
+            {
+                if (tool is T t)
+                {
+                    return t;
+                }
+            }
+
+            return null;
+        }
+
+        private void Awake()
+        {
+            if (Instance == null)
+            {
+                Instance = this;
+            }
+            else
+            {
+                Destroy(gameObject);
+            }
+        }
+
+        private void Update()
+        {
+            if (CurrentTool != null && !EventSystem.current.IsPointerOverGameObject())
+            {
+                CurrentTool.OnToolUpdate();
+            }
         }
     }
 }

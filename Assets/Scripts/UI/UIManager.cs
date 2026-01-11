@@ -1,20 +1,27 @@
-using UnityEngine;
-using UnityEngine.UI;
-using UnityEngine.EventSystems;
-using Tools;
 using Core;
+using Tools;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace UI
 {
     public class UIManager : MonoBehaviour
     {
-        public static UIManager Instance { get; private set; }
+        public static UIManager? Instance { get; private set; }
 
-        private GameObject _canvas;
-        private GameObject _toolbarPanel;
+        private GameObject? _canvas;
+        private GameObject? _toolbarPanel;
+        private ContextMenuController? _contextMenu;
 
-        // References to our context menu (we will create it on demand or keep hidden)
-        private ContextMenuController _contextMenu;
+        private static void ResetScene()
+        {
+            var rigidbodies = UnityEngine.Object.FindObjectsOfType<Rigidbody2D>();
+            foreach (var rb in rigidbodies)
+            {
+                Destroy(rb.gameObject);
+            }
+        }
 
         private void Awake()
         {
@@ -55,7 +62,10 @@ namespace UI
         private void CreateToolbar()
         {
             _toolbarPanel = new GameObject("Toolbar");
-            _toolbarPanel.transform.SetParent(_canvas.transform, false);
+            if (_canvas != null)
+            {
+                _toolbarPanel.transform.SetParent(_canvas.transform, false);
+            }
 
             var rect = _toolbarPanel.AddComponent<RectTransform>();
             rect.anchorMin = new Vector2(0, 1);
@@ -75,28 +85,30 @@ namespace UI
             layout.childAlignment = TextAnchor.MiddleLeft;
 
             // Add Buttons
-            CreateToolButton("Move", () => ToolManager.Instance.SelectTool("Move"));
-            CreateToolButton("Box", () => ToolManager.Instance.SelectTool("Box"));
-            CreateToolButton("Circle", () => ToolManager.Instance.SelectTool("Circle"));
-            CreateToolButton("Hinge", () => ToolManager.Instance.SelectTool("Hinge"));
-            CreateToolButton("Spring", () => ToolManager.Instance.SelectTool("Spring"));
+            CreateToolButton("Move", () => ToolManager.Instance!.SelectTool("Move"));
+            CreateToolButton("Box", () => ToolManager.Instance!.SelectTool("Box"));
+            CreateToolButton("Circle", () => ToolManager.Instance!.SelectTool("Circle"));
+            CreateToolButton("Hinge", () => ToolManager.Instance!.SelectTool("Hinge"));
+            CreateToolButton("Spring", () => ToolManager.Instance!.SelectTool("Spring"));
 
             CreateSpacer();
 
-            CreateButton("Play/Pause", () => SimulationManager.Instance.TogglePause());
+            CreateButton("Play/Pause", () => SimulationManager.Instance!.TogglePause());
             CreateButton("Clear All", () => ResetScene());
         }
 
         private void CreateToolButton(string name, UnityEngine.Events.UnityAction action)
         {
-            var btnGo = CreateButton(name, action);
-            // Optionally add highlighting logic here later
+            CreateButton(name, action);
         }
 
-        private GameObject CreateButton(string text, UnityEngine.Events.UnityAction action)
+        private void CreateButton(string text, UnityEngine.Events.UnityAction action)
         {
             var btnGo = new GameObject(text + "Button");
-            btnGo.transform.SetParent(_toolbarPanel.transform, false);
+            if (_toolbarPanel != null)
+            {
+                btnGo.transform.SetParent(_toolbarPanel.transform, false);
+            }
 
             var img = btnGo.AddComponent<Image>();
             img.color = new Color(0.3f, 0.3f, 0.3f);
@@ -118,6 +130,7 @@ namespace UI
             {
                 font = Font.CreateDynamicFontFromOSFont("Arial", 14);
             }
+
             textComp.font = font;
 
             textComp.alignment = TextAnchor.MiddleCenter;
@@ -129,37 +142,29 @@ namespace UI
             textRect.anchorMax = Vector2.one;
             textRect.offsetMin = Vector2.zero;
             textRect.offsetMax = Vector2.zero;
-
-            return btnGo;
         }
 
         private void CreateSpacer()
         {
             var spacer = new GameObject("Spacer");
-            spacer.transform.SetParent(_toolbarPanel.transform, false);
-            var layout = spacer.AddComponent<LayoutElement>();
-            layout.minWidth = 50;
+            if (_toolbarPanel != null)
+            {
+                spacer.transform.SetParent(_toolbarPanel.transform, false);
+            }
+
+            spacer.AddComponent<LayoutElement>().minWidth = 50;
         }
 
         private void CreateContextMenu()
         {
             var menuGo = new GameObject("ContextMenu");
-            menuGo.transform.SetParent(_canvas.transform, false);
+            if (_canvas != null)
+            {
+                menuGo.transform.SetParent(_canvas.transform, false);
+            }
+
             _contextMenu = menuGo.AddComponent<ContextMenuController>();
             menuGo.SetActive(false); // Start hidden
-        }
-
-        private void ResetScene()
-        {
-            // Delete all Physics objects (Boxes, Circles, Joints)
-            // A simple way is to delete everything that isn't a Manager or Camera or UI
-            // Or just reload scene. But we are dynamic.
-
-            var rigidbodies = UnityEngine.Object.FindObjectsOfType<Rigidbody2D>();
-            foreach (var rb in rigidbodies)
-            {
-                Destroy(rb.gameObject);
-            }
         }
     }
 }

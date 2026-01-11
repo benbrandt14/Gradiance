@@ -4,10 +4,10 @@ namespace Tools
 {
     public class MoveTool : Tool
     {
-        public override string ToolName => "Move";
+        private Rigidbody2D? _targetBody;
+        private TargetJoint2D? _targetJoint;
 
-        private Rigidbody2D _targetBody;
-        private TargetJoint2D _targetJoint;
+        public override string ToolName => "Move";
 
         public override void OnToolUpdate()
         {
@@ -50,13 +50,13 @@ namespace Tools
 
         public override void OnToolDeselected()
         {
-             // Cleanup if tool changed while dragging
-             if (_targetJoint != null)
-             {
-                 Destroy(_targetJoint);
-                 _targetJoint = null;
-                 _targetBody = null;
-             }
+            // Cleanup if tool changed while dragging
+            if (_targetJoint != null)
+            {
+                Destroy(_targetJoint);
+                _targetJoint = null;
+                _targetBody = null;
+            }
         }
     }
 }

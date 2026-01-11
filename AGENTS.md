@@ -33,6 +33,19 @@ Gradiance is a Unity project aiming to recreate Algodoo-style interactive 2D phy
     *   **Setup**: Run `bash setup.sh` to install the .NET SDK.
 *   **Compilation**: The `Verification.cs` script in `Assets/Scripts` is a compile-time check for the Unity Editor, but `dotnet test` serves as the primary CI verification tool.
 
+## Quality Assurance
+We enforce strict code quality using Roslyn Analyzers and StyleCop.
+*   **Tools**:
+    *   `StyleCop.Analyzers`: Enforces style consistency.
+    *   `SonarAnalyzer.CSharp`: Detects code smells and bugs.
+*   **Commands**:
+    *   `make setup`: Install dependencies.
+    *   `make build`: Build the project (Mock Engine and Tests).
+    *   `make test`: Run unit tests.
+    *   `make format`: Auto-format code using `dotnet format`.
+    *   `make lint`: Check for style violations (used in CI).
+*   **Strictness**: Warnings are treated as errors in the build. Ensure your code compiles cleanly.
+
 ## Agent Instructions
 *   **Deep Planning**: Please use a "Deep Planning" mode where you iteratively ask questions to clarify requirements before setting a plan.
 *   **Functional Style**: Prefer functional programming patterns where applicable in C# (LINQ, immutability where sensible).

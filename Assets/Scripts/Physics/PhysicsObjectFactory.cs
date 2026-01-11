@@ -10,7 +10,6 @@ namespace Physics
         // TODO: [Phase 2] SerializableData Support
         // - When creating objects, return a wrapper that contains both the GameObject and a SerializableData class.
         // - Or, attach a component `PhysicsObjectData` that holds properties for serialization (color, material, etc.).
-
         public static GameObject CreateBox(Vector2 position, Vector2 size)
         {
             var go = new GameObject("Box");
@@ -28,10 +27,9 @@ namespace Physics
             col.size = size;
 
             // Rigidbody
-            var rb = go.AddComponent<Rigidbody2D>();
+            go.AddComponent<Rigidbody2D>();
 
             // TODO: Add PhysicsMaterial2D configuration (friction, bounciness)
-
             return go;
         }
 
@@ -52,10 +50,9 @@ namespace Physics
             col.radius = radius;
 
             // Rigidbody
-            var rb = go.AddComponent<Rigidbody2D>();
+            go.AddComponent<Rigidbody2D>();
 
             // TODO: Add PhysicsMaterial2D configuration (friction, bounciness)
-
             return go;
         }
 
@@ -64,45 +61,49 @@ namespace Physics
             if (_squareSprite == null)
             {
                 var texture = new Texture2D(2, 2);
-                texture.SetPixels(new[] {Color.white, Color.white, Color.white, Color.white});
+                texture.SetPixels(new[] { Color.white, Color.white, Color.white, Color.white });
                 texture.Apply();
+
                 // 1 pixel per unit for easy scaling? No, defaults usually 100.
                 // Let's make it 100 so 1x1 scale is 1 unit.
                 _squareSprite = Sprite.Create(texture, new Rect(0, 0, 2, 2), new Vector2(0.5f, 0.5f), 1f);
             }
+
             return _squareSprite;
         }
 
         private static Sprite GetCircleSprite()
         {
-             if (_circleSprite == null)
+            if (_circleSprite == null)
             {
                 // Procedurally generate a simple circle texture
                 int res = 64;
                 var texture = new Texture2D(res, res);
                 Color[] colors = new Color[res * res];
                 float center = res / 2f;
-                float radiusSqr = (res / 2f - 1) * (res / 2f - 1); // -1 for padding
+                float radiusSqr = ((res / 2f) - 1) * ((res / 2f) - 1); // -1 for padding
 
                 for (int y = 0; y < res; y++)
                 {
                     for (int x = 0; x < res; x++)
                     {
-                        float distSqr = (x - center) * (x - center) + (y - center) * (y - center);
+                        float distSqr = ((x - center) * (x - center)) + ((y - center) * (y - center));
                         if (distSqr < radiusSqr)
                         {
-                            colors[y * res + x] = Color.white;
+                            colors[(y * res) + x] = Color.white;
                         }
                         else
                         {
-                            colors[y * res + x] = Color.clear;
+                            colors[(y * res) + x] = Color.clear;
                         }
                     }
                 }
+
                 texture.SetPixels(colors);
                 texture.Apply();
                 _circleSprite = Sprite.Create(texture, new Rect(0, 0, res, res), new Vector2(0.5f, 0.5f), res);
             }
+
             return _circleSprite;
         }
     }

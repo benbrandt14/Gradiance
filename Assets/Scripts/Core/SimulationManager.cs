@@ -4,22 +4,15 @@ namespace Core
 {
     public class SimulationManager : MonoBehaviour
     {
-        public static SimulationManager Instance { get; private set; }
+        private float _timeScaleBeforePause = 1.0f;
+
+        public static SimulationManager? Instance { get; private set; }
 
         public bool IsPaused { get; private set; } = false;
 
-        private float _timeScaleBeforePause = 1.0f;
-
-        private void Awake()
+        public static void SetGravity(Vector2 gravity)
         {
-            if (Instance == null)
-            {
-                Instance = this;
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            Physics2D.gravity = gravity;
         }
 
         public void SetPaused(bool paused)
@@ -41,9 +34,16 @@ namespace Core
             SetPaused(!IsPaused);
         }
 
-        public void SetGravity(Vector2 gravity)
+        private void Awake()
         {
-            Physics2D.gravity = gravity;
+            if (Instance == null)
+            {
+                Instance = this;
+            }
+            else
+            {
+                Destroy(gameObject);
+            }
         }
 
         // TODO: [Phase 2] Implement Undo/Redo System
