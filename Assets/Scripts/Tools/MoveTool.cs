@@ -126,7 +126,7 @@ namespace Tools
             if (target != null)
             {
                 _selectedBody = target;
-                var ctx = UnityEngine.Object.FindObjectOfType<ContextMenuController>();
+                var ctx = UnityEngine.Object.FindFirstObjectByType<ContextMenuController>();
                 if (ctx != null)
                 {
                     ctx.Show(target, Input.mousePosition);
