@@ -1,7 +1,7 @@
-using NUnit.Framework;
-using UnityEngine;
-using Tools;
 using Core;
+using NUnit.Framework;
+using Tools;
+using UnityEngine;
 
 namespace Gradiance.UnitTests
 {
@@ -22,10 +22,7 @@ namespace Gradiance.UnitTests
         {
             // Just verifying we can access the types without crashing
             var tm = ToolManager.Instance;
-            // Instance might be null if not initialized, but checking access.
-            // In a clean test run, it's likely null unless set up.
-            // But we just want to ensure the type resolves.
-             Assert.That(true, Is.True);
+            Assert.That(tm, Is.Not.Null);
         }
     }
 }

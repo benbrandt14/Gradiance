@@ -31,11 +31,20 @@ Gradiance is a Unity project aiming to recreate Algodoo-style interactive 2D phy
 *   **Testing**: Since this is a Unity project, standard NUnit tests are used. For CI/CD in headless environments (like this agent VM), we use a **Mock UnityEngine** approach.
     *   **Run Tests**: `dotnet test Tests/Gradiance.UnitTests/Gradiance.UnitTests.csproj`
     *   **Setup**: Run `bash setup.sh` to install the .NET SDK.
-    *   **Coverage**:
-        *   `PhysicsObjectFactoryTests`: Verifies object creation (Box, Circle) and component initialization.
-        *   `ToolManagerTests`: Verifies tool registration, selection, and callback execution.
-        *   `SimulationManagerTests`: Verifies singleton, pause/resume logic, and global settings like gravity.
 *   **Compilation**: The `Verification.cs` script in `Assets/Scripts` is a compile-time check for the Unity Editor, but `dotnet test` serves as the primary CI verification tool.
+
+## Quality Assurance
+We enforce strict code quality using Roslyn Analyzers and StyleCop.
+*   **Tools**:
+    *   `StyleCop.Analyzers`: Enforces style consistency.
+    *   `SonarAnalyzer.CSharp`: Detects code smells and bugs.
+*   **Commands**:
+    *   `make setup`: Install dependencies.
+    *   `make build`: Build the project (Mock Engine and Tests).
+    *   `make test`: Run unit tests.
+    *   `make format`: Auto-format code using `dotnet format`.
+    *   `make lint`: Check for style violations (used in CI).
+*   **Strictness**: Warnings are treated as errors in the build. Ensure your code compiles cleanly.
 
 ## Agent Instructions
 *   **Deep Planning**: Please use a "Deep Planning" mode where you iteratively ask questions to clarify requirements before setting a plan.

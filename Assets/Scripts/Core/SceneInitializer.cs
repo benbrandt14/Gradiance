@@ -3,7 +3,7 @@ using UnityEngine.EventSystems;
 
 namespace Core
 {
-    public class SceneInitializer
+    public static class SceneInitializer
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void InitializeScene()

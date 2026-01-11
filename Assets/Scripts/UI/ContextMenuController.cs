@@ -1,165 +1,40 @@
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace UI
 {
     public class ContextMenuController : MonoBehaviour
     {
-        private GameObject _panel;
-        private Rigidbody2D _target;
+        private GameObject? _panel;
+        private Rigidbody2D? _target;
 
         // UI Elements
-        private Slider _frictionSlider;
-        private Slider _bouncinessSlider;
-        private Slider _massSlider; // Density
-        private Image _colorPreview;
+        private Slider? _frictionSlider;
+        private Slider? _bouncinessSlider;
+        private Slider? _massSlider; // Density
 
-        private void Awake()
-        {
-            BuildUI();
-        }
-
-        private void Update()
-        {
-            // Right click detection
-            if (Input.GetMouseButtonDown(1))
-            {
-                var worldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                var hit = Physics2D.Raycast(worldPos, Vector2.zero);
-
-                if (hit.collider != null && hit.rigidbody != null)
-                {
-                    Show(hit.rigidbody, Input.mousePosition);
-                }
-                else
-                {
-                    Hide();
-                }
-            }
-
-            // Close if clicked outside (Left click) and not on UI
-            if (Input.GetMouseButtonDown(0) && !IsPointerOverUI())
-            {
-                Hide();
-            }
-        }
-
-        private bool IsPointerOverUI()
+        private static bool IsPointerOverUI()
         {
             return EventSystem.current.IsPointerOverGameObject();
         }
 
-        private void BuildUI()
-        {
-            // Background Panel
-            _panel = gameObject;
-            var img = _panel.AddComponent<Image>();
-            img.color = new Color(0.2f, 0.2f, 0.2f, 0.95f);
-
-            var rect = _panel.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(250, 300);
-            rect.pivot = new Vector2(0, 1); // Top Left pivot for easy positioning
-
-            var layout = _panel.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(10, 10, 10, 10);
-            layout.spacing = 5;
-            layout.childControlHeight = false;
-            layout.childForceExpandHeight = false;
-
-            // Header
-            CreateText("Properties");
-
-            // Friction
-            CreateText("Friction");
-            _frictionSlider = CreateSlider(0, 1, (val) => {
-                if (_target != null && _target.sharedMaterial != null)
-                    _target.sharedMaterial.friction = val;
-            });
-
-            // Bounciness
-            CreateText("Bounciness");
-            _bouncinessSlider = CreateSlider(0, 1.2f, (val) => {
-                 if (_target != null && _target.sharedMaterial != null)
-                    _target.sharedMaterial.bounciness = val;
-            });
-
-            // Density (Mass)
-            CreateText("Density");
-            _massSlider = CreateSlider(0.1f, 10f, (val) => {
-                 if (_target != null) _target.mass = val; // Actually mass, but close enough
-            });
-
-            // Color Randomizer Button
-            CreateButton("Random Color", () => {
-                if (_target != null)
-                {
-                    var sr = _target.GetComponent<SpriteRenderer>();
-                    if (sr) sr.color = Color.HSVToRGB(UnityEngine.Random.value, 0.7f, 0.9f);
-                }
-            });
-
-            // Delete Button
-            CreateButton("Delete", () => {
-                if (_target != null)
-                {
-                    Destroy(_target.gameObject);
-                    Hide();
-                }
-            });
-        }
-
-        public void Show(Rigidbody2D target, Vector2 screenPos)
-        {
-            _target = target;
-            transform.position = screenPos;
-            gameObject.SetActive(true);
-
-            // Sync UI values
-            // Create a unique material instance if shared to avoid affecting all objects
-            // In a real app we'd manage materials better. Here we just clone it.
-            if (_target.sharedMaterial == null)
-            {
-                _target.sharedMaterial = new PhysicsMaterial2D("Custom");
-            }
-            else if (_target.sharedMaterial.name != "Custom (Instance)") // Check if already unique-ish
-            {
-                 var copy = new PhysicsMaterial2D("Custom");
-                 copy.friction = _target.sharedMaterial.friction;
-                 copy.bounciness = _target.sharedMaterial.bounciness;
-                 _target.sharedMaterial = copy;
-            }
-
-            _frictionSlider.value = _target.sharedMaterial.friction;
-            _bouncinessSlider.value = _target.sharedMaterial.bounciness;
-            _massSlider.value = _target.mass;
-        }
-
-        public void Hide()
-        {
-            gameObject.SetActive(false);
-            _target = null;
-        }
-
-        // Helpers
-        private GameObject CreateText(string content)
+        private static void CreateText(string content, Transform parent)
         {
             var go = new GameObject("Label");
-            go.transform.SetParent(transform, false);
+            go.transform.SetParent(parent, false);
             var txt = go.AddComponent<Text>();
             txt.text = content;
             txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             txt.color = Color.white;
             txt.alignment = TextAnchor.MiddleLeft;
-            var layout = go.AddComponent<LayoutElement>();
-            layout.minHeight = 20;
-            return go;
+            go.AddComponent<LayoutElement>().minHeight = 20;
         }
 
-        private Slider CreateSlider(float min, float max, System.Action<float> onChanged)
+        private static Slider CreateSlider(float min, float max, Transform parent, System.Action<float> onChanged)
         {
             var go = new GameObject("Slider");
-            go.transform.SetParent(transform, false);
+            go.transform.SetParent(parent, false);
             var layout = go.AddComponent<LayoutElement>();
             layout.minHeight = 30;
             layout.preferredWidth = 200;
@@ -206,27 +81,173 @@ namespace UI
             return slider;
         }
 
-        private void CreateButton(string text, UnityEngine.Events.UnityAction action)
+        private static void CreateButton(string text, Transform parent, UnityEngine.Events.UnityAction action)
         {
-             var go = new GameObject("Btn");
-             go.transform.SetParent(transform, false);
-             var img = go.AddComponent<Image>();
-             img.color = new Color(0.4f, 0.4f, 0.4f);
-             var btn = go.AddComponent<Button>();
-             btn.onClick.AddListener(action);
-             var layout = go.AddComponent<LayoutElement>();
-             layout.minHeight = 30;
+            var go = new GameObject("Btn");
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.4f, 0.4f, 0.4f);
+            var btn = go.AddComponent<Button>();
+            btn.onClick.AddListener(action);
+            go.AddComponent<LayoutElement>().minHeight = 30;
 
-             var tGo = new GameObject("Text");
-             tGo.transform.SetParent(go.transform, false);
-             var txt = tGo.AddComponent<Text>();
-             txt.text = text;
-             txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-             txt.color = Color.white;
-             txt.alignment = TextAnchor.MiddleCenter;
-             var tr = tGo.GetComponent<RectTransform>();
-             tr.anchorMin = Vector2.zero;
-             tr.anchorMax = Vector2.one;
+            var tGo = new GameObject("Text");
+            tGo.transform.SetParent(go.transform, false);
+            var txt = tGo.AddComponent<Text>();
+            txt.text = text;
+            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            txt.color = Color.white;
+            txt.alignment = TextAnchor.MiddleCenter;
+            var tr = tGo.GetComponent<RectTransform>();
+            tr.anchorMin = Vector2.zero;
+            tr.anchorMax = Vector2.one;
+        }
+
+        private void Awake()
+        {
+            BuildUI();
+        }
+
+        private void Update()
+        {
+            // Right click detection
+            if (Input.GetMouseButtonDown(1))
+            {
+                var worldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                var hit = Physics2D.Raycast(worldPos, Vector2.zero);
+
+                if (hit.collider != null && hit.rigidbody != null)
+                {
+                    Show(hit.rigidbody, Input.mousePosition);
+                }
+                else
+                {
+                    Hide();
+                }
+            }
+
+            // Close if clicked outside (Left click) and not on UI
+            if (Input.GetMouseButtonDown(0) && !IsPointerOverUI())
+            {
+                Hide();
+            }
+        }
+
+        private void BuildUI()
+        {
+            // Background Panel
+            _panel = gameObject;
+            var img = _panel.AddComponent<Image>();
+            img.color = new Color(0.2f, 0.2f, 0.2f, 0.95f);
+
+            var rect = _panel.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(250, 300);
+            rect.pivot = new Vector2(0, 1); // Top Left pivot for easy positioning
+
+            var layout = _panel.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(10, 10, 10, 10);
+            layout.spacing = 5;
+            layout.childControlHeight = false;
+            layout.childForceExpandHeight = false;
+
+            // Header
+            CreateText("Properties", transform);
+
+            // Friction
+            CreateText("Friction", transform);
+            _frictionSlider = CreateSlider(0, 1, transform, (val) =>
+            {
+                if (_target != null && _target.sharedMaterial != null)
+                {
+                    _target.sharedMaterial.friction = val;
+                }
+            });
+
+            // Bounciness
+            CreateText("Bounciness", transform);
+            _bouncinessSlider = CreateSlider(0, 1.2f, transform, (val) =>
+            {
+                if (_target != null && _target.sharedMaterial != null)
+                {
+                    _target.sharedMaterial.bounciness = val;
+                }
+            });
+
+            // Density (Mass)
+            CreateText("Density", transform);
+            _massSlider = CreateSlider(0.1f, 10f, transform, (val) =>
+            {
+                if (_target != null)
+                {
+                    _target.mass = val; // Actually mass, but close enough
+                }
+            });
+
+            // Color Randomizer Button
+            CreateButton("Random Color", transform, () =>
+            {
+                if (_target != null)
+                {
+                    var sr = _target.GetComponent<SpriteRenderer>();
+                    if (sr)
+                    {
+                        sr.color = Color.HSVToRGB(UnityEngine.Random.value, 0.7f, 0.9f);
+                    }
+                }
+            });
+
+            // Delete Button
+            CreateButton("Delete", transform, () =>
+            {
+                if (_target != null)
+                {
+                    Destroy(_target.gameObject);
+                    Hide();
+                }
+            });
+        }
+
+        public void Show(Rigidbody2D target, Vector2 screenPos)
+        {
+            _target = target;
+            transform.position = screenPos;
+            gameObject.SetActive(true);
+
+            // Sync UI values
+            // Create a unique material instance if shared to avoid affecting all objects
+            // In a real app we'd manage materials better. Here we just clone it.
+            if (_target.sharedMaterial == null)
+            {
+                _target.sharedMaterial = new PhysicsMaterial2D("Custom");
+            }
+            else if (_target.sharedMaterial.name != "Custom (Instance)") // Check if already unique-ish
+            {
+                var copy = new PhysicsMaterial2D("Custom");
+                copy.friction = _target.sharedMaterial.friction;
+                copy.bounciness = _target.sharedMaterial.bounciness;
+                _target.sharedMaterial = copy;
+            }
+
+            if (_frictionSlider != null)
+            {
+                _frictionSlider.value = _target.sharedMaterial.friction;
+            }
+
+            if (_bouncinessSlider != null)
+            {
+                _bouncinessSlider.value = _target.sharedMaterial.bounciness;
+            }
+
+            if (_massSlider != null)
+            {
+                _massSlider.value = _target.mass;
+            }
+        }
+
+        public void Hide()
+        {
+            gameObject.SetActive(false);
+            _target = null;
         }
     }
 }
