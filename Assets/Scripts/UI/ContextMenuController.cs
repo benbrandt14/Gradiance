@@ -110,23 +110,8 @@ namespace UI
 
         private void Update()
         {
-            // Right click detection
-            if (Input.GetMouseButtonDown(1))
-            {
-                var worldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                var hit = Physics2D.Raycast(worldPos, Vector2.zero);
-
-                if (hit.collider != null && hit.rigidbody != null)
-                {
-                    Show(hit.rigidbody, Input.mousePosition);
-                }
-                else
-                {
-                    Hide();
-                }
-            }
-
             // Close if clicked outside (Left click) and not on UI
+            // Note: We leave Right Click detection to the Tools (like MoveTool) now.
             if (Input.GetMouseButtonDown(0) && !IsPointerOverUI())
             {
                 Hide();
