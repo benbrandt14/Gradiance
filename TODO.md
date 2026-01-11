@@ -13,6 +13,5 @@
 - [ ] **Camera Controls**: Add pan and zoom functionality to the Main Camera.
 
 ## Code Debt
-- [x] **Test Coverage**: Added unit tests for `PhysicsObjectFactory`, `ToolManager`, and `SimulationManager`.
 - [ ] **Physics Materials**: Add support for friction and bounciness configuration.
 - [ ] **Collision Layers**: Set up collision layers/masks to prevent objects from colliding with themselves if complex shapes are added.
