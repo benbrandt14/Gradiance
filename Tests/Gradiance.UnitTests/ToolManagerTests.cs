@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEngine;
 using Tools;
 using System.Linq;
+using System.Reflection;
 
 namespace Gradiance.UnitTests
 {
@@ -43,23 +44,10 @@ namespace Gradiance.UnitTests
         [SetUp]
         public void SetUp()
         {
-            // Reset singleton if possible or create new GO
-            // Since ToolManager is a Singleton, we might need to be careful.
-            // In a real Unity environment, we'd destroy the old one.
-            // In mock, we can just create a new one, but the static Instance might persist.
-
-            // Checking if Instance exists and destroying it if so (simulating scene reload)
-            if (ToolManager.Instance != null)
-            {
-                UnityEngine.Object.DestroyImmediate(ToolManager.Instance.gameObject);
-            }
+            ResetSingleton();
 
             _toolManagerGO = new GameObject("ToolManager");
             _toolManager = _toolManagerGO.AddComponent<ToolManager>();
-            // Awake is called by AddComponent in the Mock engine usually,
-            // but let's double check AGENTS.md.
-            // "MockTypes.AddComponent<T> reflectively invokes Awake() on MonoBehaviours."
-            // So Instance should be set.
         }
 
         [TearDown]
@@ -68,6 +56,20 @@ namespace Gradiance.UnitTests
             if (_toolManagerGO != null)
             {
                 UnityEngine.Object.DestroyImmediate(_toolManagerGO);
+            }
+            ResetSingleton();
+        }
+
+        private void ResetSingleton()
+        {
+            // Reset singleton via Reflection because Mock Engine doesn't handle static lifecycle
+            if (ToolManager.Instance != null)
+            {
+                var instanceProp = typeof(ToolManager).GetProperty("Instance", BindingFlags.Static | BindingFlags.Public);
+                if (instanceProp != null)
+                {
+                    instanceProp.SetValue(null, null);
+                }
             }
         }
 
@@ -78,8 +80,8 @@ namespace Gradiance.UnitTests
             _toolManager.RegisterTool(tool);
 
             var retrievedTool = _toolManager.GetTool<MockTool>();
-            Assert.IsNotNull(retrievedTool);
-            Assert.AreEqual(tool, retrievedTool);
+            Assert.That(retrievedTool, Is.Not.Null);
+            Assert.That(retrievedTool, Is.EqualTo(tool));
         }
 
         [Test]
@@ -89,7 +91,7 @@ namespace Gradiance.UnitTests
             _toolManager.RegisterTool(tool);
             _toolManager.SelectTool(tool);
 
-            Assert.AreEqual(tool, _toolManager.CurrentTool);
+            Assert.That(_toolManager.CurrentTool, Is.EqualTo(tool));
         }
 
         [Test]
@@ -101,13 +103,13 @@ namespace Gradiance.UnitTests
             _toolManager.RegisterTool(tool2);
 
             _toolManager.SelectTool(tool1);
-            Assert.IsTrue(tool1.IsSelected);
-            Assert.IsFalse(tool1.IsDeselected);
+            Assert.That(tool1.IsSelected, Is.True);
+            Assert.That(tool1.IsDeselected, Is.False);
 
             _toolManager.SelectTool(tool2);
-            Assert.IsFalse(tool1.IsSelected);
-            Assert.IsTrue(tool1.IsDeselected);
-            Assert.IsTrue(tool2.IsSelected);
+            Assert.That(tool1.IsSelected, Is.False);
+            Assert.That(tool1.IsDeselected, Is.True);
+            Assert.That(tool2.IsSelected, Is.True);
         }
 
         [Test]
@@ -117,16 +119,14 @@ namespace Gradiance.UnitTests
             _toolManager.RegisterTool(tool);
 
             _toolManager.SelectTool("NamedTool");
-            Assert.AreEqual(tool, _toolManager.CurrentTool);
+            Assert.That(_toolManager.CurrentTool, Is.EqualTo(tool));
         }
 
         [Test]
         public void SelectToolByName_LogsWarningIfNotFound()
         {
-            // Since we can't easily assert on Debug.Log in this setup without a log assert,
-            // we primarily check that CurrentTool remains null or unchanged.
             _toolManager.SelectTool("NonExistentTool");
-            Assert.IsNull(_toolManager.CurrentTool);
+            Assert.That(_toolManager.CurrentTool, Is.Null);
         }
     }
 }

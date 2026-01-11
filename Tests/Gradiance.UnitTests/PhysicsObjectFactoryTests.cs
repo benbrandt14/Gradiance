@@ -14,21 +14,21 @@ namespace Gradiance.UnitTests
 
             var go = PhysicsObjectFactory.CreateBox(position, size);
 
-            Assert.IsNotNull(go);
-            Assert.AreEqual("Box", go.name);
-            Assert.AreEqual(position, (Vector2)go.transform.position);
+            Assert.That(go, Is.Not.Null);
+            Assert.That(go.name, Is.EqualTo("Box"));
+            Assert.That((Vector2)go.transform.position, Is.EqualTo(position));
 
             var sr = go.GetComponent<SpriteRenderer>();
-            Assert.IsNotNull(sr);
-            Assert.AreEqual(size, sr.size);
-            Assert.AreEqual(SpriteDrawMode.Sliced, sr.drawMode);
+            Assert.That(sr, Is.Not.Null);
+            Assert.That(sr.size, Is.EqualTo(size));
+            Assert.That(sr.drawMode, Is.EqualTo(SpriteDrawMode.Sliced));
 
             var col = go.GetComponent<BoxCollider2D>();
-            Assert.IsNotNull(col);
-            Assert.AreEqual(size, col.size);
+            Assert.That(col, Is.Not.Null);
+            Assert.That(col.size, Is.EqualTo(size));
 
             var rb = go.GetComponent<Rigidbody2D>();
-            Assert.IsNotNull(rb);
+            Assert.That(rb, Is.Not.Null);
         }
 
         [Test]
@@ -39,21 +39,21 @@ namespace Gradiance.UnitTests
 
             var go = PhysicsObjectFactory.CreateCircle(position, radius);
 
-            Assert.IsNotNull(go);
-            Assert.AreEqual("Circle", go.name);
-            Assert.AreEqual(position, (Vector2)go.transform.position);
+            Assert.That(go, Is.Not.Null);
+            Assert.That(go.name, Is.EqualTo("Circle"));
+            Assert.That((Vector2)go.transform.position, Is.EqualTo(position));
 
             var sr = go.GetComponent<SpriteRenderer>();
-            Assert.IsNotNull(sr);
+            Assert.That(sr, Is.Not.Null);
             // Sprite size for circle is diameter
-            Assert.AreEqual(new Vector2(3, 3), sr.size);
+            Assert.That(sr.size, Is.EqualTo(new Vector2(3, 3)));
 
             var col = go.GetComponent<CircleCollider2D>();
-            Assert.IsNotNull(col);
-            Assert.AreEqual(radius, col.radius);
+            Assert.That(col, Is.Not.Null);
+            Assert.That(col.radius, Is.EqualTo(radius));
 
             var rb = go.GetComponent<Rigidbody2D>();
-            Assert.IsNotNull(rb);
+            Assert.That(rb, Is.Not.Null);
         }
     }
 }

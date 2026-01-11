@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 using Core;
+using System.Reflection;
 
 namespace Gradiance.UnitTests
 {
@@ -12,10 +13,7 @@ namespace Gradiance.UnitTests
         [SetUp]
         public void SetUp()
         {
-            if (SimulationManager.Instance != null)
-            {
-                UnityEngine.Object.DestroyImmediate(SimulationManager.Instance.gameObject);
-            }
+            ResetSingleton();
 
             _simManagerGO = new GameObject("SimulationManager");
             _simulationManager = _simManagerGO.AddComponent<SimulationManager>();
@@ -30,43 +28,56 @@ namespace Gradiance.UnitTests
             }
             // Reset Time.timeScale to default
             Time.timeScale = 1.0f;
+            ResetSingleton();
+        }
+
+        private void ResetSingleton()
+        {
+             if (SimulationManager.Instance != null)
+            {
+                var instanceProp = typeof(SimulationManager).GetProperty("Instance", BindingFlags.Static | BindingFlags.Public);
+                if (instanceProp != null)
+                {
+                    instanceProp.SetValue(null, null);
+                }
+            }
         }
 
         [Test]
         public void Singleton_Exists()
         {
-            Assert.IsNotNull(SimulationManager.Instance);
-            Assert.AreEqual(_simulationManager, SimulationManager.Instance);
+            Assert.That(SimulationManager.Instance, Is.Not.Null);
+            Assert.That(SimulationManager.Instance, Is.EqualTo(_simulationManager));
         }
 
         [Test]
         public void TogglePause_ChangesTimeScale()
         {
             // Initial state
-            Assert.IsFalse(_simulationManager.IsPaused);
-            Assert.AreEqual(1.0f, Time.timeScale);
+            Assert.That(_simulationManager.IsPaused, Is.False);
+            Assert.That(Time.timeScale, Is.EqualTo(1.0f));
 
             // Pause
             _simulationManager.TogglePause();
-            Assert.IsTrue(_simulationManager.IsPaused);
-            Assert.AreEqual(0f, Time.timeScale);
+            Assert.That(_simulationManager.IsPaused, Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0f));
 
             // Unpause
             _simulationManager.TogglePause();
-            Assert.IsFalse(_simulationManager.IsPaused);
-            Assert.AreEqual(1.0f, Time.timeScale);
+            Assert.That(_simulationManager.IsPaused, Is.False);
+            Assert.That(Time.timeScale, Is.EqualTo(1.0f));
         }
 
         [Test]
         public void SetPaused_ExplicitlySetsState()
         {
             _simulationManager.SetPaused(true);
-            Assert.IsTrue(_simulationManager.IsPaused);
-            Assert.AreEqual(0f, Time.timeScale);
+            Assert.That(_simulationManager.IsPaused, Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0f));
 
             _simulationManager.SetPaused(false);
-            Assert.IsFalse(_simulationManager.IsPaused);
-            Assert.AreEqual(1.0f, Time.timeScale);
+            Assert.That(_simulationManager.IsPaused, Is.False);
+            Assert.That(Time.timeScale, Is.EqualTo(1.0f));
         }
 
         [Test]
@@ -75,7 +86,7 @@ namespace Gradiance.UnitTests
             Vector2 newGravity = new Vector2(0, -5.5f);
             _simulationManager.SetGravity(newGravity);
 
-            Assert.AreEqual(newGravity, Physics2D.gravity);
+            Assert.That(Physics2D.gravity, Is.EqualTo(newGravity));
         }
     }
 }

@@ -94,6 +94,7 @@ namespace UnityEngine
     {
         public string name;
         public static void Destroy(Object obj) { }
+        public static void DestroyImmediate(Object obj, bool allowDestroyingAssets = false) { }
         public static T Instantiate<T>(T original) where T : Object => original;
         public static T Instantiate<T>(T original, Transform parent) where T : Object => original;
         public static T FindObjectOfType<T>() where T : Object => null;
