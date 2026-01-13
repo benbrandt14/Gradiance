@@ -6,7 +6,10 @@ Gradiance is a 2D physics sandbox inspired by Algodoo, built in Unity. It featur
 
 ### Installation
 1.  Clone the repository.
-2.  Open the project in Unity (Version 2019.4 or later recommended).
+2.  Open the project using **Unity Hub**.
+3.  Add the project from the cloned directory.
+4.  Open the project with **Unity 6 (6000.3.3f1)**.
+5.  Wait for the Unity Package Manager to resolve dependencies. This might take a few minutes on the first open.
 
 ### Running the Project
 This project uses a code-driven initialization approach. You do **not** need to open a specific scene.
@@ -34,9 +37,7 @@ The codebase has been refactored for clarity and Unity best practices:
 *   `Assets/Scripts/Physics`: Physics object creation (`PhysicsObjectFactory`).
 *   `Assets/Scripts/Tools`: Tool system base classes and implementations (`ToolManager`, `BoxTool`, etc.).
 *   `Assets/Scripts/UI`: User Interface management (`UIManager`).
-*   `Assets/Scripts/Legacy`: Deprecated scripts from the previous iteration.
 
 ## Controls
 *   **Left Click + Drag**: Use the selected tool (e.g., draw a box).
 *   **UI Toolbar**: Select tools or control simulation at the top of the screen.
-
