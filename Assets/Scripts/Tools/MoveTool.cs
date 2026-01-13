@@ -1,3 +1,5 @@
+using Core;
+using Core.Commands;
 using UI;
 using UnityEngine;
 
@@ -7,6 +9,12 @@ namespace Tools
     {
         private Rigidbody2D? _draggingBody;
         private TargetJoint2D? _targetJoint;
+        private bool _isRotating;
+        private float _rotationOffset;
+
+        // Undo State Tracking
+        private Vector3 _startPosition;
+        private Quaternion _startRotation;
 
         private Rigidbody2D? _hoveredBody;
         private Rigidbody2D? _selectedBody;
@@ -67,11 +75,19 @@ namespace Tools
             {
                 HandleLeftClickDown(worldPos);
             }
-            else if (Input.GetMouseButton(0) && _targetJoint != null)
+            else if (Input.GetMouseButton(0))
             {
-                _targetJoint.target = worldPos;
+                if (_isRotating && _draggingBody != null)
+                {
+                    PerformRotation(worldPos);
+                }
+                else if (_targetJoint != null)
+                {
+                    _targetJoint.target = worldPos;
+                }
             }
-            else if (Input.GetMouseButtonUp(0) && _targetJoint != null)
+
+            if (Input.GetMouseButtonUp(0))
             {
                 StopDragging();
             }
@@ -90,18 +106,45 @@ namespace Tools
                 _draggingBody = _hoveredBody;
                 _selectedBody = _hoveredBody;
 
-                // Start Dragging
-                _targetJoint = _draggingBody.gameObject.AddComponent<TargetJoint2D>();
-                _targetJoint.anchor = _draggingBody.transform.InverseTransformPoint(worldPos);
-                _targetJoint.target = worldPos;
-                _targetJoint.frequency = 10f;
-                _targetJoint.dampingRatio = 1f;
+                // Capture start state for Undo
+                _startPosition = _draggingBody.transform.position;
+                _startRotation = _draggingBody.transform.rotation;
+
+                if (Input.GetKey(KeyCode.LeftShift))
+                {
+                    // Start Rotation
+                    _isRotating = true;
+                    Vector2 dir = worldPos - _draggingBody.position;
+                    float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+                    _rotationOffset = angle - _draggingBody.rotation;
+                }
+                else
+                {
+                    // Start Dragging
+                    _targetJoint = _draggingBody.gameObject.AddComponent<TargetJoint2D>();
+                    _targetJoint.anchor = _draggingBody.transform.InverseTransformPoint(worldPos);
+                    _targetJoint.target = worldPos;
+                    _targetJoint.frequency = 10f;
+                    _targetJoint.dampingRatio = 1f;
+                }
             }
             else
             {
                 // Clicked on nothing -> Deselect
                 _selectedBody = null;
             }
+        }
+
+        private void PerformRotation(Vector2 worldPos)
+        {
+            if (_draggingBody == null)
+            {
+                return;
+            }
+
+            Vector2 dir = worldPos - _draggingBody.position;
+            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            _draggingBody.MoveRotation(angle - _rotationOffset);
         }
 
         private void StopDragging()
@@ -112,6 +155,21 @@ namespace Tools
                 _targetJoint = null;
             }
 
+            // Register Undo if we actually moved/rotated
+            if (_draggingBody != null &&
+               (Vector3.Distance(_startPosition, _draggingBody.transform.position) > 0.001f ||
+                Quaternion.Angle(_startRotation, _draggingBody.transform.rotation) > 0.001f) &&
+                CommandManager.Instance != null)
+            {
+                CommandManager.Instance.ExecuteCommand(new MoveObjectCommand(
+                    _draggingBody.transform,
+                    _startPosition,
+                    _startRotation,
+                    _draggingBody.transform.position,
+                    _draggingBody.transform.rotation));
+            }
+
+            _isRotating = false;
             _draggingBody = null;
         }
 
@@ -168,7 +226,11 @@ namespace Tools
 
                 // Change color slightly if it's selection vs hover?
                 var sr = _selectionHalo.GetComponent<SpriteRenderer>();
-                if (_hoveredBody != null)
+                if (Input.GetKey(KeyCode.LeftShift) && (_hoveredBody != null || _selectedBody != null))
+                {
+                    sr.color = new Color(1, 1, 0, 0.5f); // Yellow for rotation
+                }
+                else if (_hoveredBody != null)
                 {
                     sr.color = new Color(1, 1, 1, 0.3f); // White hover
                 }

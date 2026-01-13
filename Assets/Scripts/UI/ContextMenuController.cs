@@ -1,3 +1,5 @@
+using Core;
+using Core.Commands;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -186,7 +188,19 @@ namespace UI
             {
                 if (_target != null)
                 {
-                    Destroy(_target.gameObject);
+                    var go = _target.gameObject;
+
+                    // Register Undo
+                    if (CommandManager.Instance != null)
+                    {
+                        CommandManager.Instance.ExecuteCommand(new DeleteObjectCommand(go));
+                    }
+                    else
+                    {
+                        // Fallback if no command manager
+                        Destroy(go);
+                    }
+
                     Hide();
                 }
             });
