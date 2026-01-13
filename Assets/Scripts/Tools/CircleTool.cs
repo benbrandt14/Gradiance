@@ -1,3 +1,5 @@
+using Core;
+using Core.Commands;
 using Physics;
 using UnityEngine;
 
@@ -57,6 +59,12 @@ namespace Tools
             if (sr)
             {
                 sr.color = Color.HSVToRGB(UnityEngine.Random.value, 0.6f, 0.9f);
+            }
+
+            // Register Undo
+            if (CommandManager.Instance != null)
+            {
+                CommandManager.Instance.ExecuteCommand(new CreateObjectCommand(previewObject));
             }
 
             previewObject = null;

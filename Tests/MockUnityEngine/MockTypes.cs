@@ -54,6 +54,14 @@ namespace UnityEngine
         public static Vector3 operator +(Vector3 a, Vector3 b) => new Vector3(a.x + b.x, a.y + b.y, a.z + b.z);
 
         public static Vector3 operator -(Vector3 a, Vector3 b) => new Vector3(a.x - b.x, a.y - b.y, a.z - b.z);
+
+        public static float Distance(Vector3 a, Vector3 b)
+        {
+            float dx = a.x - b.x;
+            float dy = a.y - b.y;
+            float dz = a.z - b.z;
+            return (float)Math.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+        }
     }
 
     public struct Bounds
@@ -69,9 +77,13 @@ namespace UnityEngine
         public float z;
         public float w;
 
+        public Vector3 eulerAngles => Vector3.zero;
+
         public static Quaternion identity => new Quaternion { w = 1 };
 
         public static Quaternion Euler(float x, float y, float z) => identity;
+
+        public static float Angle(Quaternion a, Quaternion b) => 0f;
     }
 
     public struct Color
@@ -148,6 +160,12 @@ namespace UnityEngine
         Backspace,
         Return,
         Escape,
+        LeftShift,
+        RightShift,
+        LeftControl,
+        RightControl,
+        Z,
+        Y,
     }
 
     public class Random
@@ -174,6 +192,8 @@ namespace UnityEngine
 
         public static float Max(float a, float b) => Math.Max(a, b);
 
+        public static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value));
+
         public static float Rad2Deg => 57.29578f;
     }
 
@@ -182,6 +202,8 @@ namespace UnityEngine
         None,
         InstanceID,
     }
+
+    public class SerializeField : Attribute { }
 
     // Object & Component System
     public class Object
@@ -357,9 +379,18 @@ namespace UnityEngine
 
         public float mass { get; set; }
 
+        public Vector2 linearVelocity { get; set; }
+
+        public float angularVelocity { get; set; }
+
         public RigidbodyType2D bodyType { get; set; }
 
         public PhysicsMaterial2D sharedMaterial { get; set; }
+
+        public void MoveRotation(float angle)
+        {
+            rotation = angle;
+        }
 
         public static implicit operator bool(Rigidbody2D rb) => rb != null;
     }
@@ -591,6 +622,10 @@ namespace UnityEngine
         public static bool GetMouseButton(int button) => false;
 
         public static bool GetKeyDown(KeyCode key) => false;
+
+        public static bool GetKey(KeyCode key) => false;
+
+        public static float GetAxis(string axisName) => 0f;
     }
 
     public class Resources

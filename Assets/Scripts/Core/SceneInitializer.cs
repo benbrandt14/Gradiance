@@ -22,20 +22,28 @@ namespace Core
             }
 
             // Ensure we have a Main Camera
-            if (Camera.main == null)
+            var mainCam = UnityEngine.Object.FindFirstObjectByType<Camera>();
+            if (mainCam == null)
             {
                 var cameraGo = new GameObject("Main Camera");
-                var cam = cameraGo.AddComponent<Camera>();
-                cam.orthographic = true;
-                cam.orthographicSize = 10;
-                cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = new Color(0.2f, 0.2f, 0.2f); // Dark background like Algodoo
+                mainCam = cameraGo.AddComponent<Camera>();
+                mainCam.orthographic = true;
+                mainCam.orthographicSize = 10;
+                mainCam.clearFlags = CameraClearFlags.SolidColor;
+                mainCam.backgroundColor = new Color(0.2f, 0.2f, 0.2f); // Dark background like Algodoo
                 cameraGo.tag = "MainCamera";
                 cameraGo.transform.position = new Vector3(0, 0, -10);
             }
 
+            // Ensure CameraController is attached
+            if (mainCam.gameObject.GetComponent<CameraController>() == null)
+            {
+                mainCam.gameObject.AddComponent<CameraController>();
+            }
+
             // Add Managers (We will add the components here as we create them)
             managersObject.AddComponent<SimulationManager>();
+            managersObject.AddComponent<CommandManager>();
             var toolManager = managersObject.AddComponent<Tools.ToolManager>();
             managersObject.AddComponent<UI.UIManager>();
 
