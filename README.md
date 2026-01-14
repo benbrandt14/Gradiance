@@ -1,43 +1,36 @@
 # Gradiance
 
-Gradiance is a 2D physics sandbox inspired by Algodoo, built in Unity. It features a runtime tool system for creating and interacting with physics objects.
+Gradiance is a 2D physics sandbox inspired by Algodoo, built in Rust using the [Bevy](https://bevyengine.org/) game engine and [Avian](https://github.com/Jondolf/avian) physics.
 
 ## Getting Started
 
-### Installation
-1.  Clone the repository.
-2.  Open the project using **Unity Hub**.
-3.  Add the project from the cloned directory.
-4.  Open the project with **Unity 6 (6000.3.3f1)**.
-5.  Wait for the Unity Package Manager to resolve dependencies. This might take a few minutes on the first open.
+### Prerequisites
+*   [Rust Toolchain](https://rustup.rs/) (Stable)
+*   System dependencies (Linux):
+    ```bash
+    sudo apt-get install g++ pkg-config libx11-dev libasound2-dev libudev-dev
+    ```
 
-### Running the Project
-This project uses a code-driven initialization approach. You do **not** need to open a specific scene.
-1.  Press the **Play** button in the Unity Editor.
-2.  The `SceneInitializer` script will automatically:
-    *   Set up the Main Camera.
-    *   Initialize the `SimulationManager` and `ToolManager`.
-    *   Create the UI (Toolbar).
+### Running
+```bash
+cargo run
+```
 
-## Features & Tools
+### Controls
+*   **Toolbar**: Select tools (Move, Box, Circle) or perform actions (Undo, Redo, Clear).
+*   **Pan**: Middle Mouse Drag.
+*   **Zoom**: Scroll Wheel.
+*   **Move Tool**:
+    *   **Drag**: Left Click and Drag to move objects physically.
+    *   **Rotate**: Hold `Shift` + Left Click to rotate objects.
+*   **Box/Circle Tool**: Left Click and Drag to create shapes.
 
-*   **Move Tool**: Select and move objects (Not fully implemented interaction yet).
-*   **Box Tool**: Click and drag to create rectangular physics objects.
-*   **Circle Tool**: Click and drag to create circular physics objects.
-*   **Hinge Tool**: (Placeholder) Create hinge joints.
-*   **Spring Tool**: (Placeholder) Create spring joints.
-*   **Play/Pause**: Toggle physics simulation.
-*   **Clear All**: Remove all physics objects from the scene.
+## Architecture
+*   **ECS**: Bevy Entity Component System.
+*   **Physics**: Avian2d (formerly `bevy_xpbd`).
+*   **UI**: `bevy_egui` (Immediate Mode GUI).
+*   **Tools**: State-based tool system (`ToolState`).
 
-## Project Structure
-
-The codebase has been refactored for clarity and Unity best practices:
-
-*   `Assets/Scripts/Core`: Core managers (`SceneInitializer`, `SimulationManager`).
-*   `Assets/Scripts/Physics`: Physics object creation (`PhysicsObjectFactory`).
-*   `Assets/Scripts/Tools`: Tool system base classes and implementations (`ToolManager`, `BoxTool`, etc.).
-*   `Assets/Scripts/UI`: User Interface management (`UIManager`).
-
-## Controls
-*   **Left Click + Drag**: Use the selected tool (e.g., draw a box).
-*   **UI Toolbar**: Select tools or control simulation at the top of the screen.
+## Development
+*   **Test**: `cargo test`
+*   **Lint**: `cargo clippy`
