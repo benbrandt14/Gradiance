@@ -1,61 +1,30 @@
 # Gradiance - Agent Guidelines
 
 ## Project Overview
-Gradiance is a Unity project aiming to recreate Algodoo-style interactive 2D physics. The goal is to build a robust, user-friendly physics sandbox with tools for creating, manipulating, and simulating 2D objects.
+Gradiance is a Rust/Bevy project recreating Algodoo-style physics.
 
-## Development Status
-*   **Core**: Basic `SimulationManager` and `SceneInitializer` exist.
-*   **Physics**: `PhysicsObjectFactory` handles creation of Boxes and Circles.
-*   **Tools**: Basic `ToolManager` and tool stubs (`BoxTool`, `CircleTool`, `MoveTool`, `HingeTool`, `SpringTool`) exist.
-*   **UI**: `UIManager` and basic Context Menu controller exist.
+## Architecture
+*   **Core**: `src/lib.rs` defines the `GamePlugin`.
+*   **Systems**: `src/systems/` contains specific logic (camera, physics setup).
+*   **Tools**: `src/tools/` implements the tool state machine and logic.
+    *   Each tool is a plugin that runs systems when in the corresponding `ToolState`.
+*   **UI**: `src/ui/` implements the `bevy_egui` toolbar.
+*   **Commands**: `src/commands.rs` implements the Undo/Redo stack using a Command Pattern.
 
-## Architectural Roadmap
-### Phase 1: Core Functionality (Immediate)
-*   **Move Tool**: Implement logic to select rigidbodies, drag them, and rotate them.
-*   **Joints**: Implement `HingeTool` and `SpringTool` to connect objects.
-*   **Selection**: Visual feedback for selected objects (outlines/bounding boxes).
-*   **Context Menu**: Functional right-click menu for object properties.
+## Physics
+*   We use `avian2d`.
+*   **Units**: 1 World Unit = 1 Pixel (approx). Gravity is scaled or physics scale is adjusted.
+*   **Interactions**: Use `SpatialQuery` for picking. Use `Joints` (Distance/Fixed) for dragging to respect physics.
 
-### Phase 2: Robustness & Data
-*   **Undo/Redo**: Implement the Command Pattern for all actions (creation, deletion, modification).
-*   **Serialization**: Save and Load scenes to/from JSON/XML.
-*   **Scene Management**: Better handling of clearing and reloading scenes.
+## Testing
+*   Use `cargo test`.
+*   Unit tests should cover `Command` logic and strictly functional components.
+*   Integration tests (running Bevy app) are heavier but possible.
 
-### Phase 3: Polish & Advanced Features
-*   **UI Inspector**: A property inspector panel for fine-tuning object values.
-*   **Camera Controls**: Pan and Zoom functionality.
-*   **CSG/Geometry**: Polygon tool and boolean operations.
-*   **Layers & Collision**: Configurable collision matrices.
+## Code Style
+*   Run `cargo fmt` and `cargo clippy` before committing.
+*   Prefer functional rust patterns.
+*   Use `bevy::prelude::*` for convenience in systems.
 
-## Environment & Testing
-*   **Testing**: Since this is a Unity project, standard NUnit tests are used. For CI/CD in headless environments (like this agent VM), we use a **Mock UnityEngine** approach.
-    *   **Run Tests**: `dotnet test Tests/Gradiance.UnitTests/Gradiance.UnitTests.csproj`
-    *   **Setup**: Run `bash setup.sh` to install the .NET SDK.
-*   **Compilation**: The `Verification.cs` script in `Assets/Scripts` is a compile-time check for the Unity Editor, but `dotnet test` serves as the primary CI verification tool.
-
-## Quality Assurance
-We enforce strict code quality using Roslyn Analyzers and StyleCop.
-*   **Tools**:
-    *   `StyleCop.Analyzers`: Enforces style consistency.
-    *   `SonarAnalyzer.CSharp`: Detects code smells and bugs.
-*   **Commands**:
-    *   `make setup`: Install dependencies.
-    *   `make build`: Build the project (Mock Engine and Tests).
-    *   `make test`: Run unit tests.
-    *   `make format`: Auto-format code using `dotnet format`.
-    *   `make lint`: Check for style violations (used in CI).
-*   **Strictness**: Warnings are treated as errors in the build. Ensure your code compiles cleanly.
-
-## Agent Instructions
-*   **Deep Planning**: Please use a "Deep Planning" mode where you iteratively ask questions to clarify requirements before setting a plan.
-*   **Functional Style**: Prefer functional programming patterns where applicable in C# (LINQ, immutability where sensible).
-*   **Code Organization**:
-    *   `Core`: Managers and singletons.
-    *   `Physics`: Factories and physics helpers.
-    *   `Tools`: Interaction logic.
-    *   `UI`: User interface logic.
-*   **Unity UI**: Use standard UGUI.
-*   **Scene Setup**: handled by `SceneInitializer`. Do not edit `.unity` files directly.
-
-## TODOs
-Codebase is annotated with `TODO` comments. Please verify `TODO.md` and inline comments before starting a task.
+## CI
+*   GitHub Actions workflow in `.github/workflows/rust.yml`.

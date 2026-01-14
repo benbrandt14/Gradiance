@@ -62,3 +62,8 @@ crashlytics-build.properties
 # Ignore bin/obj in Tests
 Tests/**/bin/
 Tests/**/obj/
+
+
+# Added by cargo
+
+/target
