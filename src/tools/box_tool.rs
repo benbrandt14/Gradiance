@@ -99,3 +99,40 @@ impl GameCommand for CreateBoxCommand {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    #[fixture]
+    fn world() -> World {
+        World::new()
+    }
+
+    #[rstest]
+    fn test_create_box_command(mut world: World) {
+        let mut cmd = CreateBoxCommand {
+            position: Vec2::new(10.0, 20.0),
+            size: Vec2::new(30.0, 40.0),
+            entity: None,
+        };
+
+        // Execute
+        cmd.execute(&mut world);
+
+        let entity = cmd.entity.expect("Entity should be set");
+        assert!(world.get_entity(entity).is_ok());
+
+        let transform = world.get::<Transform>(entity).unwrap();
+        assert_eq!(transform.translation, Vec3::new(10.0, 20.0, 0.0));
+
+        // Check for Collider presence (validating exact shape properties is harder without physics context)
+        assert!(world.get::<Collider>(entity).is_some());
+        assert!(world.get::<RigidBody>(entity).is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+        assert!(world.get_entity(entity).is_err());
+    }
+}

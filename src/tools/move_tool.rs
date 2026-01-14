@@ -186,3 +186,37 @@ impl GameCommand for TransformCommand {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    #[fixture]
+    fn world() -> World {
+        World::new()
+    }
+
+    #[rstest]
+    fn test_transform_command(mut world: World) {
+        let entity = world.spawn(Transform::from_xyz(0.0, 0.0, 0.0)).id();
+        let old_transform = Transform::from_xyz(0.0, 0.0, 0.0);
+        let new_transform = Transform::from_xyz(10.0, 10.0, 0.0);
+
+        let mut cmd = TransformCommand {
+            entity,
+            old_transform,
+            new_transform,
+        };
+
+        // Execute
+        cmd.execute(&mut world);
+        let t = world.get::<Transform>(entity).unwrap();
+        assert_eq!(t.translation, Vec3::new(10.0, 10.0, 0.0));
+
+        // Undo
+        cmd.undo(&mut world);
+        let t = world.get::<Transform>(entity).unwrap();
+        assert_eq!(t.translation, Vec3::new(0.0, 0.0, 0.0));
+    }
+}
