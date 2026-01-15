@@ -25,7 +25,8 @@ features = [
     "wayland",
     "png",
     "file_watcher",
-    "multi_threaded"
+    "multi_threaded",
+    "dynamic_linking",
 ]
 
 [dev-dependencies]
