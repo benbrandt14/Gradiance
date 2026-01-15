@@ -1,4 +1,4 @@
-use crate::commands::{GameCommand, SubmitGameCommand};
+use crate::commands::{DeleteCommand, GameCommand, SubmitGameCommand};
 use crate::tools::ToolState;
 use avian2d::prelude::*;
 use bevy::input::mouse::MouseButton;
@@ -16,6 +16,7 @@ impl Plugin for MoveToolPlugin {
 #[derive(Resource, Default)]
 struct MoveToolState {
     mode: MoveMode,
+    selected_entity: Option<Entity>,
 }
 
 #[derive(Default)]
@@ -51,6 +52,7 @@ fn move_tool_logic(
     spatial_query: SpatialQuery,
     mut state: ResMut<MoveToolState>,
     mut transforms: Query<&mut Transform>,
+    mut gizmos: Gizmos,
 ) {
     let Ok((camera, camera_transform)) = camera_q.get_single() else {
         return;
@@ -66,10 +68,38 @@ fn move_tool_logic(
         return;
     };
 
+    // Draw Selection Gizmo
+    if let Some(entity) = state.selected_entity {
+        if let Ok(transform) = transforms.get(entity) {
+            // Draw a yellow circle around the selected entity
+            // Ideally we'd match the collider shape, but a fixed circle is okay for now
+            gizmos.circle_2d(
+                transform.translation.truncate(),
+                40.0,
+                Color::srgb(1.0, 1.0, 0.0),
+            );
+        } else {
+            // Entity might be deleted or despawned
+            state.selected_entity = None;
+        }
+    }
+
+    // Handle Delete
+    if keyboard.just_pressed(KeyCode::Delete) || keyboard.just_pressed(KeyCode::Backspace) {
+        if let Some(entity) = state.selected_entity {
+            let cmd = DeleteCommand::new(entity);
+            commands.queue(SubmitGameCommand(Box::new(cmd)));
+            state.selected_entity = None;
+        }
+    }
+
     // Start Interaction
     if mouse.just_pressed(MouseButton::Left) {
         let hits = spatial_query.point_intersections(point, &SpatialQueryFilter::default());
         if let Some(&hit) = hits.first() {
+            // Update Selection
+            state.selected_entity = Some(hit);
+
             if let Ok(transform) = transforms.get(hit) {
                 let initial_transform = *transform;
 
@@ -117,6 +147,9 @@ fn move_tool_logic(
                     });
                 }
             }
+        } else {
+            // Clicked on nothing, deselect
+            state.selected_entity = None;
         }
     }
 

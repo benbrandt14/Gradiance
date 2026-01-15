@@ -92,6 +92,8 @@ impl GameCommand for CreateBoxCommand {
             .spawn((
                 RigidBody::Dynamic,
                 Collider::rectangle(self.size.x, self.size.y),
+                Friction::default(),
+                Restitution::new(0.5),
                 Transform::from_xyz(self.position.x, self.position.y, 0.0),
                 Sprite::from_color(Color::srgb(0.2, 0.7, 0.9), self.size),
             ))

@@ -37,6 +37,9 @@ fn ui_system(
                 if ui.button("Circle").clicked() {
                     tool_state.set(ToolState::Circle);
                 }
+                if ui.button("Plane").clicked() {
+                    tool_state.set(ToolState::Plane);
+                }
                 if ui.button("Hinge").clicked() {
                     tool_state.set(ToolState::Hinge);
                 }

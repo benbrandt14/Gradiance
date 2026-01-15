@@ -95,6 +95,8 @@ impl GameCommand for CreateCircleCommand {
             .spawn((
                 RigidBody::Dynamic,
                 Collider::circle(self.radius),
+                Friction::default(),
+                Restitution::new(0.5),
                 Mesh2d(mesh_handle),
                 MeshMaterial2d(mat_handle),
                 Transform::from_xyz(self.position.x, self.position.y, 0.0),

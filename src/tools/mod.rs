@@ -1,6 +1,7 @@
 pub mod box_tool;
 pub mod circle_tool;
 pub mod move_tool;
+pub mod plane_tool;
 
 use bevy::prelude::*;
 
@@ -10,6 +11,7 @@ pub enum ToolState {
     Move,
     Box,
     Circle,
+    Plane,
     Hinge,
     Spring,
 }
@@ -23,6 +25,7 @@ impl Plugin for ToolPlugin {
             box_tool::BoxToolPlugin,
             circle_tool::CircleToolPlugin,
             move_tool::MoveToolPlugin,
+            plane_tool::PlaneToolPlugin,
         ));
     }
 }
