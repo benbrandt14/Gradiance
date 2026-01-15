@@ -1,3 +1,5 @@
+export RUSTUP_PERMIT_COPY_RENAME=true
+
 .PHONY: all setup run test lint clean fmt
 
 all: test lint
