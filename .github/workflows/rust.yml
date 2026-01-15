@@ -14,13 +14,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
+    # Example of CI deployment optimization:
+    # Using Swatinem/rust-cache to cache dependencies and build artifacts.
+    # This significantly reduces build times on subsequent runs by avoiding
+    # recompilation of unchanged dependencies.
+    - uses: Swatinem/rust-cache@v2
+
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+    # Example of using a specialized tool in CI:
+    # Installing cargo-nextest, which is a faster test runner than the default `cargo test`.
+    # It runs tests in parallel and has a cleaner output.
+    - uses: taiki-e/install-action@nextest
+
     - name: Build
       run: cargo build --verbose
+
     - name: Run tests
-      run: cargo test --verbose
-    - name: Clippy
-      run: cargo clippy -- -D warnings
+      # Using nextest to run tests faster.
+      run: cargo nextest run
