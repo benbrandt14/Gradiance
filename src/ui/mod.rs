@@ -17,6 +17,7 @@ fn ui_system(
     mut tool_state: ResMut<NextState<ToolState>>,
     current_tool: Res<State<ToolState>>,
     mut commands: Commands,
+    mut time: ResMut<Time<Virtual>>,
 ) {
     egui::Window::new("Tools")
         .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
@@ -41,6 +42,19 @@ fn ui_system(
                 }
                 if ui.button("Spring").clicked() {
                     tool_state.set(ToolState::Spring);
+                }
+            });
+
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                let label = if time.is_paused() { "▶ Play" } else { "⏸ Pause" };
+                if ui.button(label).clicked() {
+                    if time.is_paused() {
+                        time.unpause();
+                    } else {
+                        time.pause();
+                    }
                 }
             });
 

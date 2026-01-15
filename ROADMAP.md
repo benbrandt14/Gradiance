@@ -1,0 +1,40 @@
+# Gradiance Roadmap
+
+## Features
+- [ ] right click menu on items
+- [ ] select / delete items
+- [ ] add hinge behavior
+- [ ] add fix behavior ( ie make static )
+- [ ] add collision layers
+- [ ] add infinite plane
+- [ ] add restitution and friction
+- [ ] add a lasso and square selection tools
+- [ ] add copy/paste shortcuts by holding CTRL and dragging
+- [ ] add tracers
+- [ ] add grid w/ locking
+- [ ] add ability to modify colors ( background and objects )
+- [ ] be able to modify attributes of multiple selected objects
+- [ ] add cutting tool and CSG operations ( later on )
+- [ ] add save/load behavior
+- [ ] document anything else that bevy/avian can expose as right clickable
+- [ ] mimic UI style of algodoo ( icons can be provided for some things )
+- [ ] add lasers / optics behavior
+- [ ] add translucency
+- [ ] add attraction/repulsion
+- [ ] be able to modify density & other physical attributes ( friction )
+- [ ] add sketch tool
+- [ ] add CAD style constraint-based sketching (much later)
+- [ ] add drag-and-drop SVG support (much later)
+- [ ] add particle-system type behaviors ( in a consistent way)
+- [ ] add rotation around points and other greebles
+- [ ] add distribute array-like physical alignment
+- [ ] add tweening and other animation polish
+- [ ] add some lighting / 2D shadow casting with shaders
+- [ ] add rockets & sliders
+- [ ] add fine control of constraints / damping / rotation limits / for nearly everything
+- [ ] add scripting support with a popup ( half-life style ) terminal
+- [ ] be able to control parameters by linking them to others ( ie restitution based on proximity ) + support math / functional notation in menus + visualize linkage between parameters (later on)
+- [ ] add play/pause button with stepping control and sim time control
+- [ ] add sensors for proximity and force, make them thematically match ( proximity might be capacitance )
+- [ ] add a settings pane for things to be modified
+- [ ] add support for chains and pulleys ( esp. physically correct pulleys w/ non colliding wires -- not part of original algodoo and easy to add )
