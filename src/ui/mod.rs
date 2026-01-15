@@ -1,4 +1,9 @@
-use crate::commands::{BatchCommand, CommandStack, GameCommand, SetFrictionCommand, SetRestitutionCommand, SubmitGameCommand};
+use crate::commands::property::{
+    SetColorCommand, SetFrictionCommand, SetRestitutionCommand, SetRigidBodyCommand,
+};
+use crate::commands::{
+    BatchCommand, CommandStack, GameCommand, SubmitGameCommand,
+};
 use crate::tools::move_tool::MoveToolState;
 use crate::tools::ToolState;
 use avian2d::prelude::*;
@@ -29,6 +34,7 @@ struct PropertyEditState {
     restitution_starts: HashMap<Entity, Restitution>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn context_menu_system(
     mut contexts: EguiContexts,
     mut menu_state: ResMut<ContextMenuState>,
@@ -37,7 +43,15 @@ fn context_menu_system(
     windows: Query<&Window>,
     move_tool_state: Res<MoveToolState>,
     mut commands: Commands,
-    mut query: Query<(Entity, Option<&mut Friction>, Option<&mut Restitution>)>,
+    mut query: Query<(
+        Entity,
+        Option<&mut Friction>,
+        Option<&mut Restitution>,
+        Option<&mut RigidBody>,
+        Option<&mut Sprite>,
+        Option<&MeshMaterial2d<ColorMaterial>>,
+    )>,
+    materials: Res<Assets<ColorMaterial>>,
 ) {
     let Ok(window) = windows.get_single() else {
         return;
@@ -74,9 +88,9 @@ fn context_menu_system(
 
                 let first_entity = entities[0];
 
-                // FRICTION
+                // --- FRICTION ---
                 let mut current_friction = 0.5;
-                if let Ok((_, f, _)) = query.get(first_entity) {
+                if let Ok((_, f, _, _, _, _)) = query.get(first_entity) {
                     if let Some(f) = f {
                         current_friction = f.dynamic_coefficient;
                     }
@@ -88,7 +102,7 @@ fn context_menu_system(
 
                 if response.drag_started() {
                     for &e in &entities {
-                        if let Ok((_, Some(f), _)) = query.get(e) {
+                        if let Ok((_, Some(f), _, _, _, _)) = query.get(e) {
                             edit_state.friction_starts.insert(e, *f);
                         }
                     }
@@ -97,11 +111,11 @@ fn context_menu_system(
                 if response.changed() {
                     for &e in &entities {
                         if !edit_state.friction_starts.contains_key(&e) {
-                            if let Ok((_, Some(f), _)) = query.get(e) {
+                            if let Ok((_, Some(f), _, _, _, _)) = query.get(e) {
                                 edit_state.friction_starts.insert(e, *f);
                             }
                         }
-                        if let Ok((_, Some(mut f), _)) = query.get_mut(e) {
+                        if let Ok((_, Some(mut f), _, _, _, _)) = query.get_mut(e) {
                             f.dynamic_coefficient = friction_val;
                             f.static_coefficient = friction_val;
                         }
@@ -112,7 +126,7 @@ fn context_menu_system(
                     let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
                     for &e in &entities {
                         let mut new_f = Friction::default();
-                        if let Ok((_, Some(f), _)) = query.get(e) {
+                        if let Ok((_, Some(f), _, _, _, _)) = query.get(e) {
                             new_f = *f;
                         }
                         let old_f = edit_state.friction_starts.remove(&e);
@@ -128,9 +142,9 @@ fn context_menu_system(
                     }
                 }
 
-                // RESTITUTION
+                // --- RESTITUTION ---
                 let mut current_restitution = 0.5;
-                if let Ok((_, _, r)) = query.get(first_entity) {
+                if let Ok((_, _, r, _, _, _)) = query.get(first_entity) {
                     if let Some(r) = r {
                         current_restitution = r.coefficient;
                     }
@@ -143,7 +157,7 @@ fn context_menu_system(
 
                 if response.drag_started() {
                     for &e in &entities {
-                        if let Ok((_, _, Some(r))) = query.get(e) {
+                        if let Ok((_, _, Some(r), _, _, _)) = query.get(e) {
                             edit_state.restitution_starts.insert(e, *r);
                         }
                     }
@@ -152,11 +166,11 @@ fn context_menu_system(
                 if response.changed() {
                     for &e in &entities {
                         if !edit_state.restitution_starts.contains_key(&e) {
-                            if let Ok((_, _, Some(r))) = query.get(e) {
+                            if let Ok((_, _, Some(r), _, _, _)) = query.get(e) {
                                 edit_state.restitution_starts.insert(e, *r);
                             }
                         }
-                        if let Ok((_, _, Some(mut r))) = query.get_mut(e) {
+                        if let Ok((_, _, Some(mut r), _, _, _)) = query.get_mut(e) {
                             r.coefficient = restitution_val;
                         }
                     }
@@ -166,7 +180,7 @@ fn context_menu_system(
                     let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
                     for &e in &entities {
                         let mut new_r = Restitution::default();
-                        if let Ok((_, _, Some(r))) = query.get(e) {
+                        if let Ok((_, _, Some(r), _, _, _)) = query.get(e) {
                             new_r = *r;
                         }
                         let old_r = edit_state.restitution_starts.remove(&e);
@@ -181,6 +195,111 @@ fn context_menu_system(
                         commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
                     }
                 }
+
+                // --- RIGID BODY ---
+                let mut current_rb = RigidBody::Dynamic;
+                if let Ok((_, _, _, rb, _, _)) = query.get(first_entity) {
+                    if let Some(rb) = rb {
+                        current_rb = *rb;
+                    }
+                }
+
+                let selected_text = match current_rb {
+                    RigidBody::Dynamic => "Dynamic",
+                    RigidBody::Static => "Static",
+                    RigidBody::Kinematic => "Kinematic",
+                };
+
+                ui.horizontal(|ui| {
+                    ui.label("Body Type");
+                    egui::ComboBox::from_id_salt("rb_combo")
+                        .selected_text(selected_text)
+                        .show_ui(ui, |ui| {
+                            let mut changed = false;
+                            let mut new_val = current_rb;
+
+                            if ui.selectable_label(current_rb == RigidBody::Dynamic, "Dynamic").clicked() {
+                                new_val = RigidBody::Dynamic;
+                                changed = true;
+                            }
+                            if ui.selectable_label(current_rb == RigidBody::Static, "Static").clicked() {
+                                new_val = RigidBody::Static;
+                                changed = true;
+                            }
+                            if ui.selectable_label(current_rb == RigidBody::Kinematic, "Kinematic").clicked() {
+                                new_val = RigidBody::Kinematic;
+                                changed = true;
+                            }
+
+                            if changed {
+                                let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
+                                for &e in &entities {
+                                    // Get old value for Undo
+                                    let mut old_rb = None;
+                                    if let Ok((_, _, _, Some(rb), _, _)) = query.get(e) {
+                                        old_rb = Some(*rb);
+                                    }
+
+                                    cmds.push(Box::new(SetRigidBodyCommand {
+                                        entity: e,
+                                        new_body_type: new_val,
+                                        old_body_type: old_rb,
+                                    }));
+                                }
+                                if !cmds.is_empty() {
+                                    commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
+                                }
+                            }
+                        });
+                });
+
+                // --- COLOR ---
+                // Try to get color from first entity
+                let mut current_color = Color::WHITE;
+                if let Ok((_, _, _, _, sprite, mat_handle)) = query.get(first_entity) {
+                    if let Some(s) = sprite {
+                        current_color = s.color;
+                    } else if let Some(h) = mat_handle {
+                         if let Some(mat) = materials.get(h) {
+                             current_color = mat.color;
+                         }
+                    }
+                }
+
+                let mut rgba = current_color.to_linear().to_f32_array();
+                ui.horizontal(|ui| {
+                    ui.label("Color");
+                    let response = ui.color_edit_button_rgba_unmultiplied(&mut rgba);
+
+                    if response.changed() {
+                        let new_color = Color::linear_rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+
+                        let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
+                        for &e in &entities {
+                            // Get old color
+                            let mut old_color = None;
+                             if let Ok((_, _, _, _, sprite, mat_handle)) = query.get(e) {
+                                if let Some(s) = sprite {
+                                    old_color = Some(s.color);
+                                } else if let Some(h) = mat_handle {
+                                     if let Some(mat) = materials.get(h) {
+                                         old_color = Some(mat.color);
+                                     }
+                                }
+                            }
+
+                            cmds.push(Box::new(SetColorCommand {
+                                entity: e,
+                                new_color,
+                                old_color,
+                            }));
+                        }
+                         if !cmds.is_empty() {
+                             commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
+                         }
+                    }
+                });
+
             });
 
         menu_state.open = open;

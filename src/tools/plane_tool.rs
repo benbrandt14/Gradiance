@@ -105,7 +105,7 @@ impl GameCommand for CreatePlaneCommand {
                 },
                 Sprite {
                     color: Color::WHITE,
-                    custom_size: Some(Vec2::new(100000.0, 1000.0)),
+                    custom_size: Some(Vec2::new(100000.0, 100000.0)),
                     anchor: Anchor::TopCenter,
                     ..default()
                 },
