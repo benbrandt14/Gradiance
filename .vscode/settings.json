@@ -11,5 +11,6 @@
         "**/.git": true,
         "**/.DS_Store": true,
         "target": true
-    }
+    },
+    "rust-analyzer.cargo.features": ["bevy/dynamic_linking"]
 }

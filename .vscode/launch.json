@@ -9,7 +9,8 @@
                 "args": [
                     "build",
                     "--bin=gradiance",
-                    "--package=gradiance"
+                    "--package=gradiance",
+                    "--features=bevy/dynamic_linking"
                 ],
                 "filter": {
                     "name": "gradiance",
@@ -17,7 +18,10 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
         },
         {
             "type": "lldb",
@@ -28,7 +32,8 @@
                     "test",
                     "--no-run",
                     "--bin=gradiance",
-                    "--package=gradiance"
+                    "--package=gradiance",
+                    "--features=bevy/dynamic_linking"
                 ],
                 "filter": {
                     "name": "gradiance",
@@ -36,7 +41,10 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
         }
     ]
 }
