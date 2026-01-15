@@ -100,3 +100,40 @@ impl GameCommand for CreateCircleCommand {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    #[fixture]
+    fn world() -> World {
+        let mut w = World::new();
+        w.init_resource::<Assets<Mesh>>();
+        w.init_resource::<Assets<ColorMaterial>>();
+        w
+    }
+
+    #[rstest]
+    fn test_create_circle_command(mut world: World) {
+        let mut cmd = CreateCircleCommand {
+            position: Vec2::new(50.0, 60.0),
+            radius: 15.0,
+            entity: None,
+        };
+
+        cmd.execute(&mut world);
+
+        let entity = cmd.entity.expect("Entity should be set");
+        assert!(world.get_entity(entity).is_ok());
+
+        let transform = world.get::<Transform>(entity).unwrap();
+        assert_eq!(transform.translation, Vec3::new(50.0, 60.0, 0.0));
+
+        assert!(world.get::<Collider>(entity).is_some());
+        assert!(world.get::<Mesh2d>(entity).is_some());
+
+        cmd.undo(&mut world);
+        assert!(world.get_entity(entity).is_err());
+    }
+}

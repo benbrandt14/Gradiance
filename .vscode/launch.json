@@ -2,9 +2,41 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Attach to Unity",
-            "type": "vstuc",
-            "request": "attach"
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Executable",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=gradiance",
+                    "--package=gradiance"
+                ],
+                "filter": {
+                    "name": "gradiance",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Unit Tests",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=gradiance",
+                    "--package=gradiance"
+                ],
+                "filter": {
+                    "name": "gradiance",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
         }
-     ]
+    ]
 }

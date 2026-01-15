@@ -5,6 +5,12 @@ pub mod ui;
 pub mod tools;
 pub mod commands;
 
+// TODO: Future Modules:
+// pub mod scripting;
+// pub mod csg;
+// pub mod lasers;
+// pub mod mechanisms; // Thrusters, Hinges, Springs
+
 use bevy::prelude::*;
 use avian2d::prelude::*;
 
@@ -24,6 +30,9 @@ impl Plugin for GamePlugin {
         .add_plugins(PhysicsDebugPlugin::default())
         .add_plugins(tools::ToolPlugin)
         .add_plugins(ui::UiPlugin)
+        // TODO: Add ScriptingPlugin
+        // TODO: Add CsgPlugin
+        // TODO: Add LasersPlugin
         .init_resource::<commands::CommandStack>()
         .add_systems(Startup, (systems::setup, systems::physics::spawn_ground))
         .add_systems(Update, systems::camera::camera_movement);
