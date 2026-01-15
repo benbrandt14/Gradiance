@@ -3,6 +3,12 @@ use bevy::prelude::*;
 pub mod delete;
 pub use delete::DeleteCommand;
 
+pub mod batch;
+pub use batch::BatchCommand;
+
+pub mod property;
+pub use property::{SetFrictionCommand, SetRestitutionCommand};
+
 pub trait GameCommand: Send + Sync {
     fn execute(&mut self, world: &mut World);
     fn undo(&mut self, world: &mut World);

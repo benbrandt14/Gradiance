@@ -1,8 +1,9 @@
-use crate::commands::{DeleteCommand, GameCommand, SubmitGameCommand};
+use crate::commands::{BatchCommand, DeleteCommand, GameCommand, SubmitGameCommand};
 use crate::tools::ToolState;
 use avian2d::prelude::*;
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
+use bevy::utils::{HashMap, HashSet};
 
 pub struct MoveToolPlugin;
 
@@ -14,9 +15,9 @@ impl Plugin for MoveToolPlugin {
 }
 
 #[derive(Resource, Default)]
-struct MoveToolState {
+pub struct MoveToolState {
     mode: MoveMode,
-    selected_entity: Option<Entity>,
+    pub selected_entities: HashSet<Entity>,
 }
 
 #[derive(Default)]
@@ -25,13 +26,27 @@ enum MoveMode {
     None,
     Drag(DragData),
     Rotate(RotateData),
+    Select(SelectData),
+}
+
+impl MoveMode {
+    fn is_none(&self) -> bool {
+        matches!(self, MoveMode::None)
+    }
 }
 
 struct DragData {
-    cursor_body: Entity,
-    joint: Entity,
-    target_body: Entity,
-    initial_transform: Transform,
+    // Entities being dragged
+    entities: Vec<Entity>,
+    // Initial transforms for undo
+    initial_transforms: HashMap<Entity, Transform>,
+    // Offset from cursor start
+    start_point: Vec2,
+    // Original rigid body types to restore
+    original_body_types: HashMap<Entity, RigidBody>,
+    // For throwing
+    last_mouse_pos: Vec2,
+    current_velocity: Vec2,
 }
 
 struct RotateData {
@@ -40,6 +55,11 @@ struct RotateData {
     initial_rotation: f32,
     initial_mouse_angle: f32,
     initial_transform: Transform,
+}
+
+struct SelectData {
+    start_pos: Vec2,
+    current_pos: Vec2,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -51,8 +71,9 @@ fn move_tool_logic(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     spatial_query: SpatialQuery,
     mut state: ResMut<MoveToolState>,
-    mut transforms: Query<&mut Transform>,
+    mut queries: Query<(&mut Transform, Option<&mut RigidBody>, Option<&mut LinearVelocity>)>,
     mut gizmos: Gizmos,
+    time: Res<Time>,
 ) {
     let Ok((camera, camera_transform)) = camera_q.get_single() else {
         return;
@@ -68,88 +89,109 @@ fn move_tool_logic(
         return;
     };
 
-    // Draw Selection Gizmo
-    if let Some(entity) = state.selected_entity {
-        if let Ok(transform) = transforms.get(entity) {
-            // Draw a yellow circle around the selected entity
-            // Ideally we'd match the collider shape, but a fixed circle is okay for now
+    // Draw Selection Gizmos
+    for &entity in state.selected_entities.iter() {
+        if let Ok((transform, _, _)) = queries.get(entity) {
             gizmos.circle_2d(
                 transform.translation.truncate(),
                 40.0,
                 Color::srgb(1.0, 1.0, 0.0),
             );
-        } else {
-            // Entity might be deleted or despawned
-            state.selected_entity = None;
         }
     }
 
     // Handle Delete
     if keyboard.just_pressed(KeyCode::Delete) || keyboard.just_pressed(KeyCode::Backspace) {
-        if let Some(entity) = state.selected_entity {
-            let cmd = DeleteCommand::new(entity);
-            commands.queue(SubmitGameCommand(Box::new(cmd)));
-            state.selected_entity = None;
+        if !state.selected_entities.is_empty() {
+            let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
+            for &entity in state.selected_entities.iter() {
+                cmds.push(Box::new(DeleteCommand::new(entity)));
+            }
+            if !cmds.is_empty() {
+                commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
+                state.selected_entities.clear();
+            }
         }
     }
 
     // Start Interaction
     if mouse.just_pressed(MouseButton::Left) {
         let hits = spatial_query.point_intersections(point, &SpatialQueryFilter::default());
+
         if let Some(&hit) = hits.first() {
-            // Update Selection
-            state.selected_entity = Some(hit);
-
-            if let Ok(transform) = transforms.get(hit) {
-                let initial_transform = *transform;
-
-                if keyboard.pressed(KeyCode::ShiftLeft) {
-                    // Rotate Mode
-                    let diff = point - transform.translation.truncate();
-                    let initial_mouse_angle = diff.y.atan2(diff.x);
-                    let (_, _, rotation_z) = transform.rotation.to_euler(EulerRot::XYZ);
-
-                    state.mode = MoveMode::Rotate(RotateData {
-                        entity: hit,
-                        _start_mouse_pos: point,
-                        initial_rotation: rotation_z,
-                        initial_mouse_angle,
-                        initial_transform,
-                    });
+            // Hit an entity
+            if keyboard.pressed(KeyCode::ShiftLeft) {
+                // Toggle Selection
+                if state.selected_entities.contains(&hit) {
+                    state.selected_entities.remove(&hit);
                 } else {
-                    // Drag Mode
-                    let cursor_body = commands
-                        .spawn((
-                            RigidBody::Kinematic,
-                            Transform::from_translation(point.extend(0.0)),
-                        ))
-                        .id();
-
-                    let local_anchor = transform.rotation.inverse()
-                        * (point - transform.translation.truncate()).extend(0.0);
-                    let local_anchor_2d = local_anchor.truncate();
-
-                    let joint = commands
-                        .spawn(
-                            DistanceJoint::new(cursor_body, hit)
-                                .with_local_anchor_1(Vec2::ZERO)
-                                .with_local_anchor_2(local_anchor_2d)
-                                .with_rest_length(0.0)
-                                .with_compliance(0.00001),
-                        )
-                        .id();
-
-                    state.mode = MoveMode::Drag(DragData {
-                        cursor_body,
-                        joint,
-                        target_body: hit,
-                        initial_transform,
-                    });
+                    state.selected_entities.insert(hit);
+                }
+            } else {
+                // Single Select (if not already selected)
+                if !state.selected_entities.contains(&hit) {
+                    state.selected_entities.clear();
+                    state.selected_entities.insert(hit);
                 }
             }
+
+            if !state.selected_entities.is_empty() {
+                 if keyboard.pressed(KeyCode::ShiftLeft) && state.mode.is_none() {
+                     // Check if only one entity is selected for rotation
+                     if state.selected_entities.len() == 1 {
+                        let entity = *state.selected_entities.iter().next().unwrap();
+                         if let Ok((transform, _, _)) = queries.get(entity) {
+                             let diff = point - transform.translation.truncate();
+                             let initial_mouse_angle = diff.y.atan2(diff.x);
+                             let (_, _, rotation_z) = transform.rotation.to_euler(EulerRot::XYZ);
+
+                             state.mode = MoveMode::Rotate(RotateData {
+                                 entity,
+                                 _start_mouse_pos: point,
+                                 initial_rotation: rotation_z,
+                                 initial_mouse_angle,
+                                 initial_transform: *transform,
+                             });
+                         }
+                     }
+                 } else {
+                    // Start Drag Mode (Kinematic)
+                    let mut entities = Vec::new();
+                    let mut initial_transforms = HashMap::new();
+                    let mut original_body_types = HashMap::new();
+
+                    for &e in state.selected_entities.iter() {
+                        if let Ok((transform, mut rb_opt, _)) = queries.get_mut(e) {
+                            entities.push(e);
+                            initial_transforms.insert(e, *transform);
+
+                            if let Some(mut rb) = rb_opt {
+                                original_body_types.insert(e, *rb);
+                                *rb = RigidBody::Kinematic;
+                            }
+                        }
+                    }
+
+                    state.mode = MoveMode::Drag(DragData {
+                        entities,
+                        initial_transforms,
+                        start_point: point,
+                        original_body_types,
+                        last_mouse_pos: point,
+                        current_velocity: Vec2::ZERO,
+                    });
+                 }
+            }
         } else {
-            // Clicked on nothing, deselect
-            state.selected_entity = None;
+            // Clicked on nothing
+            if !keyboard.pressed(KeyCode::ShiftLeft) {
+                state.selected_entities.clear();
+            }
+            // Start Select Mode
+            state.mode = MoveMode::Select(SelectData {
+                start_pos: point,
+                current_pos: point,
+            });
         }
     }
 
@@ -157,19 +199,42 @@ fn move_tool_logic(
     if mouse.pressed(MouseButton::Left) {
         match &mut state.mode {
             MoveMode::Drag(data) => {
-                if let Ok(mut t) = transforms.get_mut(data.cursor_body) {
-                    t.translation = point.extend(0.0);
+                let delta = point - data.start_point;
+
+                // Calculate velocity
+                let frame_delta = point - data.last_mouse_pos;
+                let dt = time.delta_secs();
+                if dt > 0.0001 {
+                    data.current_velocity = frame_delta / dt;
+                }
+                data.last_mouse_pos = point;
+
+                for &entity in &data.entities {
+                    if let Some(initial) = data.initial_transforms.get(&entity) {
+                        if let Ok((mut transform, _, _)) = queries.get_mut(entity) {
+                            transform.translation = initial.translation + delta.extend(0.0);
+                        }
+                    }
                 }
             }
             MoveMode::Rotate(data) => {
-                if let Ok(mut t) = transforms.get_mut(data.entity) {
-                    let diff = point - t.translation.truncate();
+                if let Ok((mut transform, _, _)) = queries.get_mut(data.entity) {
+                    let diff = point - transform.translation.truncate();
                     let current_mouse_angle = diff.y.atan2(diff.x);
                     let angle_delta = current_mouse_angle - data.initial_mouse_angle;
 
                     let new_rotation = data.initial_rotation + angle_delta;
-                    t.rotation = Quat::from_rotation_z(new_rotation);
+                    transform.rotation = Quat::from_rotation_z(new_rotation);
                 }
+            }
+            MoveMode::Select(data) => {
+                data.current_pos = point;
+                // Draw Gizmo
+                let min = data.start_pos.min(data.current_pos);
+                let max = data.start_pos.max(data.current_pos);
+                let size = max - min;
+                let center = min + size / 2.0;
+                gizmos.rect_2d(center, size, Color::srgb(0.0, 1.0, 1.0)); // Cyan for selection
             }
             MoveMode::None => {}
         }
@@ -177,37 +242,70 @@ fn move_tool_logic(
 
     // End Interaction
     if mouse.just_released(MouseButton::Left) {
-        match &state.mode {
+        match &mut state.mode {
             MoveMode::Drag(data) => {
-                commands.entity(data.cursor_body).despawn();
-                commands.entity(data.joint).despawn();
+                let mut cmd_list: Vec<Box<dyn GameCommand>> = Vec::new();
 
-                // Submit Command
-                if let Ok(new_transform) = transforms.get(data.target_body) {
-                    if new_transform.translation != data.initial_transform.translation
-                        || new_transform.rotation != data.initial_transform.rotation
-                    {
+                for &entity in &data.entities {
+                    if let Ok((mut transform, mut rb_opt, mut lin_vel_opt)) = queries.get_mut(entity) {
+                        // Restore Body Type
+                        if let Some(mut rb) = rb_opt {
+                            if let Some(&original) = data.original_body_types.get(&entity) {
+                                *rb = original;
+                            }
+                        }
+
+                        // Apply Velocity
+                        if let Some(mut lin_vel) = lin_vel_opt {
+                            lin_vel.0 = data.current_velocity;
+                        }
+
+                        // Submit Command
+                        if let Some(initial) = data.initial_transforms.get(&entity) {
+                             if transform.translation != initial.translation || transform.rotation != initial.rotation {
+                                 cmd_list.push(Box::new(TransformCommand {
+                                     entity,
+                                     old_transform: *initial,
+                                     new_transform: *transform,
+                                 }));
+                             }
+                        }
+                    }
+                }
+
+                if !cmd_list.is_empty() {
+                    commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmd_list))));
+                }
+            }
+            MoveMode::Rotate(data) => {
+                if let Ok((transform, _, _)) = queries.get(data.entity) {
+                    if transform.rotation != data.initial_transform.rotation {
                         let cmd = TransformCommand {
-                            entity: data.target_body,
+                            entity: data.entity,
                             old_transform: data.initial_transform,
-                            new_transform: *new_transform,
+                            new_transform: *transform,
                         };
                         commands.queue(SubmitGameCommand(Box::new(cmd)));
                     }
                 }
             }
-            MoveMode::Rotate(data) => {
-                // Submit Command
-                if let Ok(new_transform) = transforms.get(data.entity) {
-                    if new_transform.rotation != data.initial_transform.rotation {
-                        let cmd = TransformCommand {
-                            entity: data.entity,
-                            old_transform: data.initial_transform,
-                            new_transform: *new_transform,
-                        };
-                        commands.queue(SubmitGameCommand(Box::new(cmd)));
-                    }
-                }
+            MoveMode::Select(data) => {
+                 let min = data.start_pos.min(data.current_pos);
+                 let max = data.start_pos.max(data.current_pos);
+                 let size = max - min;
+                 let center = min + size / 2.0;
+
+                 // Spatial Query for selection
+                 let hits = spatial_query.shape_intersections(
+                     &Collider::rectangle(size.x, size.y),
+                     center,
+                     0.0,
+                     &SpatialQueryFilter::default()
+                 );
+
+                 for hit in hits {
+                     state.selected_entities.insert(hit);
+                 }
             }
             MoveMode::None => {}
         }
@@ -215,10 +313,10 @@ fn move_tool_logic(
     }
 }
 
-struct TransformCommand {
-    entity: Entity,
-    old_transform: Transform,
-    new_transform: Transform,
+pub struct TransformCommand {
+    pub entity: Entity,
+    pub old_transform: Transform,
+    pub new_transform: Transform,
 }
 
 impl GameCommand for TransformCommand {
