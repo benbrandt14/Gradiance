@@ -6,7 +6,5 @@ fn main() {
     // - Initialize Scripting Engine (Rhai/Lua)
     // - Initialize CSG Kernel
     // - Load User Settings
-    App::new()
-        .add_plugins(GamePlugin)
-        .run();
+    App::new().add_plugins(GamePlugin).run();
 }

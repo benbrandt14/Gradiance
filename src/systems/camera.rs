@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::prelude::*;
 
 #[derive(Component)]
 pub struct PanCam {
@@ -42,8 +42,8 @@ pub fn camera_movement(
         }
 
         if scroll != 0.0 {
-             projection.scale -= scroll * settings.zoom_speed * projection.scale;
-             projection.scale = projection.scale.clamp(0.1, 10.0);
+            projection.scale -= scroll * settings.zoom_speed * projection.scale;
+            projection.scale = projection.scale.clamp(0.1, 10.0);
         }
     }
 }

@@ -1,15 +1,18 @@
-use bevy::prelude::*;
-use bevy::input::mouse::MouseButton;
-use avian2d::prelude::*;
-use crate::tools::ToolState;
 use crate::commands::{GameCommand, SubmitGameCommand};
+use crate::tools::ToolState;
+use avian2d::prelude::*;
+use bevy::input::mouse::MouseButton;
+use bevy::prelude::*;
 
 pub struct CircleToolPlugin;
 
 impl Plugin for CircleToolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CircleToolState>();
-        app.add_systems(Update, circle_tool_logic.run_if(in_state(ToolState::Circle)));
+        app.add_systems(
+            Update,
+            circle_tool_logic.run_if(in_state(ToolState::Circle)),
+        );
     }
 }
 
@@ -27,42 +30,46 @@ fn circle_tool_logic(
     mut state: ResMut<CircleToolState>,
     mut gizmos: Gizmos,
 ) {
-    let Ok((camera, camera_transform)) = camera_q.get_single() else { return };
-    let Ok(window) = windows.get_single() else { return };
+    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+        return;
+    };
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
 
     if let Some(cursor_pos) = window.cursor_position() {
         if let Ok(point) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
-             if mouse.just_pressed(MouseButton::Left) {
-                 state.start_pos = Some(point);
-                 state.current_pos = Some(point);
-             }
+            if mouse.just_pressed(MouseButton::Left) {
+                state.start_pos = Some(point);
+                state.current_pos = Some(point);
+            }
 
-             if mouse.pressed(MouseButton::Left) {
-                 state.current_pos = Some(point);
-             }
+            if mouse.pressed(MouseButton::Left) {
+                state.current_pos = Some(point);
+            }
 
-             if mouse.just_released(MouseButton::Left) {
-                 if let (Some(start), Some(end)) = (state.start_pos, state.current_pos) {
-                     let radius = start.distance(end);
+            if mouse.just_released(MouseButton::Left) {
+                if let (Some(start), Some(end)) = (state.start_pos, state.current_pos) {
+                    let radius = start.distance(end);
 
-                     if radius > 5.0 {
-                         let cmd = CreateCircleCommand {
-                             position: start,
-                             radius,
-                             entity: None,
-                         };
-                         commands.queue(SubmitGameCommand(Box::new(cmd)));
-                     }
-                 }
-                 state.start_pos = None;
-                 state.current_pos = None;
-             }
+                    if radius > 5.0 {
+                        let cmd = CreateCircleCommand {
+                            position: start,
+                            radius,
+                            entity: None,
+                        };
+                        commands.queue(SubmitGameCommand(Box::new(cmd)));
+                    }
+                }
+                state.start_pos = None;
+                state.current_pos = None;
+            }
         }
     }
 
     if let (Some(start), Some(end)) = (state.start_pos, state.current_pos) {
-         let radius = start.distance(end);
-         gizmos.circle_2d(start, radius, Color::WHITE);
+        let radius = start.distance(end);
+        gizmos.circle_2d(start, radius, Color::WHITE);
     }
 }
 
@@ -84,13 +91,15 @@ impl GameCommand for CreateCircleCommand {
             materials.add(Color::srgb(0.9, 0.4, 0.3))
         };
 
-        let id = world.spawn((
-            RigidBody::Dynamic,
-            Collider::circle(self.radius),
-            Mesh2d(mesh_handle),
-            MeshMaterial2d(mat_handle),
-            Transform::from_xyz(self.position.x, self.position.y, 0.0),
-        )).id();
+        let id = world
+            .spawn((
+                RigidBody::Dynamic,
+                Collider::circle(self.radius),
+                Mesh2d(mesh_handle),
+                MeshMaterial2d(mat_handle),
+                Transform::from_xyz(self.position.x, self.position.y, 0.0),
+            ))
+            .id();
         self.entity = Some(id);
     }
 

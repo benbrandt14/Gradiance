@@ -1,9 +1,9 @@
-pub mod systems;
+pub mod commands;
 pub mod components;
 pub mod resources;
-pub mod ui;
+pub mod systems;
 pub mod tools;
-pub mod commands;
+pub mod ui;
 
 // TODO: Future Modules:
 // pub mod scripting;
@@ -11,8 +11,8 @@ pub mod commands;
 // pub mod lasers;
 // pub mod mechanisms; // Thrusters, Hinges, Springs
 
-use bevy::prelude::*;
 use avian2d::prelude::*;
+use bevy::prelude::*;
 
 pub struct GamePlugin;
 

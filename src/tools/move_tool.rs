@@ -1,8 +1,8 @@
-use bevy::prelude::*;
-use bevy::input::mouse::MouseButton;
-use avian2d::prelude::*;
-use crate::tools::ToolState;
 use crate::commands::{GameCommand, SubmitGameCommand};
+use crate::tools::ToolState;
+use avian2d::prelude::*;
+use bevy::input::mouse::MouseButton;
+use bevy::prelude::*;
 
 pub struct MoveToolPlugin;
 
@@ -52,11 +52,19 @@ fn move_tool_logic(
     mut state: ResMut<MoveToolState>,
     mut transforms: Query<&mut Transform>,
 ) {
-    let Ok((camera, camera_transform)) = camera_q.get_single() else { return };
-    let Ok(window) = windows.get_single() else { return };
+    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+        return;
+    };
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
 
-    let Some(cursor_pos) = window.cursor_position() else { return };
-    let Ok(point) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else { return };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Ok(point) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else {
+        return;
+    };
 
     // Start Interaction
     if mouse.just_pressed(MouseButton::Left) {
@@ -80,21 +88,26 @@ fn move_tool_logic(
                     });
                 } else {
                     // Drag Mode
-                    let cursor_body = commands.spawn((
-                         RigidBody::Kinematic,
-                         Transform::from_translation(point.extend(0.0)),
-                    )).id();
+                    let cursor_body = commands
+                        .spawn((
+                            RigidBody::Kinematic,
+                            Transform::from_translation(point.extend(0.0)),
+                        ))
+                        .id();
 
-                    let local_anchor = transform.rotation.inverse() * (point - transform.translation.truncate()).extend(0.0);
+                    let local_anchor = transform.rotation.inverse()
+                        * (point - transform.translation.truncate()).extend(0.0);
                     let local_anchor_2d = local_anchor.truncate();
 
-                    let joint = commands.spawn(
-                        DistanceJoint::new(cursor_body, hit)
-                        .with_local_anchor_1(Vec2::ZERO)
-                        .with_local_anchor_2(local_anchor_2d)
-                        .with_rest_length(0.0)
-                        .with_compliance(0.00001)
-                    ).id();
+                    let joint = commands
+                        .spawn(
+                            DistanceJoint::new(cursor_body, hit)
+                                .with_local_anchor_1(Vec2::ZERO)
+                                .with_local_anchor_2(local_anchor_2d)
+                                .with_rest_length(0.0)
+                                .with_compliance(0.00001),
+                        )
+                        .id();
 
                     state.mode = MoveMode::Drag(DragData {
                         cursor_body,
@@ -111,10 +124,10 @@ fn move_tool_logic(
     if mouse.pressed(MouseButton::Left) {
         match &mut state.mode {
             MoveMode::Drag(data) => {
-                 if let Ok(mut t) = transforms.get_mut(data.cursor_body) {
-                     t.translation = point.extend(0.0);
-                 }
-            },
+                if let Ok(mut t) = transforms.get_mut(data.cursor_body) {
+                    t.translation = point.extend(0.0);
+                }
+            }
             MoveMode::Rotate(data) => {
                 if let Ok(mut t) = transforms.get_mut(data.entity) {
                     let diff = point - t.translation.truncate();
@@ -124,8 +137,8 @@ fn move_tool_logic(
                     let new_rotation = data.initial_rotation + angle_delta;
                     t.rotation = Quat::from_rotation_z(new_rotation);
                 }
-            },
-            MoveMode::None => {},
+            }
+            MoveMode::None => {}
         }
     }
 
@@ -138,7 +151,9 @@ fn move_tool_logic(
 
                 // Submit Command
                 if let Ok(new_transform) = transforms.get(data.target_body) {
-                    if new_transform.translation != data.initial_transform.translation || new_transform.rotation != data.initial_transform.rotation {
+                    if new_transform.translation != data.initial_transform.translation
+                        || new_transform.rotation != data.initial_transform.rotation
+                    {
                         let cmd = TransformCommand {
                             entity: data.target_body,
                             old_transform: data.initial_transform,
@@ -147,7 +162,7 @@ fn move_tool_logic(
                         commands.queue(SubmitGameCommand(Box::new(cmd)));
                     }
                 }
-            },
+            }
             MoveMode::Rotate(data) => {
                 // Submit Command
                 if let Ok(new_transform) = transforms.get(data.entity) {
@@ -160,8 +175,8 @@ fn move_tool_logic(
                         commands.queue(SubmitGameCommand(Box::new(cmd)));
                     }
                 }
-            },
-            MoveMode::None => {},
+            }
+            MoveMode::None => {}
         }
         state.mode = MoveMode::None;
     }
@@ -181,7 +196,7 @@ impl GameCommand for TransformCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-         if let Some(mut t) = world.get_mut::<Transform>(self.entity) {
+        if let Some(mut t) = world.get_mut::<Transform>(self.entity) {
             *t = self.old_transform;
         }
     }

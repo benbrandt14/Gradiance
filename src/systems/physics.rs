@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use avian2d::prelude::*;
+use bevy::prelude::*;
 
 pub fn spawn_ground(mut commands: Commands) {
     commands.spawn((

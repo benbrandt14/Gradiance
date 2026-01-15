@@ -1,8 +1,8 @@
-use bevy::prelude::*;
-use bevy::input::mouse::MouseButton;
-use avian2d::prelude::*;
-use crate::tools::ToolState;
 use crate::commands::{GameCommand, SubmitGameCommand};
+use crate::tools::ToolState;
+use avian2d::prelude::*;
+use bevy::input::mouse::MouseButton;
+use bevy::prelude::*;
 
 pub struct BoxToolPlugin;
 
@@ -27,51 +27,55 @@ fn box_tool_logic(
     mut state: ResMut<BoxToolState>,
     mut gizmos: Gizmos,
 ) {
-    let Ok((camera, camera_transform)) = camera_q.get_single() else { return };
-    let Ok(window) = windows.get_single() else { return };
+    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+        return;
+    };
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
 
     if let Some(cursor_pos) = window.cursor_position() {
         if let Ok(point) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
-             // Handle Input
-             if mouse.just_pressed(MouseButton::Left) {
-                 state.start_pos = Some(point);
-                 state.current_pos = Some(point);
-             }
+            // Handle Input
+            if mouse.just_pressed(MouseButton::Left) {
+                state.start_pos = Some(point);
+                state.current_pos = Some(point);
+            }
 
-             if mouse.pressed(MouseButton::Left) {
-                 state.current_pos = Some(point);
-             }
+            if mouse.pressed(MouseButton::Left) {
+                state.current_pos = Some(point);
+            }
 
-             if mouse.just_released(MouseButton::Left) {
-                 if let (Some(start), Some(end)) = (state.start_pos, state.current_pos) {
-                     let min = start.min(end);
-                     let max = start.max(end);
-                     let size = max - min;
-                     let center = min + size / 2.0;
+            if mouse.just_released(MouseButton::Left) {
+                if let (Some(start), Some(end)) = (state.start_pos, state.current_pos) {
+                    let min = start.min(end);
+                    let max = start.max(end);
+                    let size = max - min;
+                    let center = min + size / 2.0;
 
-                     // Avoid tiny boxes
-                     if size.x > 5.0 && size.y > 5.0 {
-                         let cmd = CreateBoxCommand {
-                             position: center,
-                             size,
-                             entity: None,
-                         };
-                         commands.queue(SubmitGameCommand(Box::new(cmd)));
-                     }
-                 }
-                 state.start_pos = None;
-                 state.current_pos = None;
-             }
+                    // Avoid tiny boxes
+                    if size.x > 5.0 && size.y > 5.0 {
+                        let cmd = CreateBoxCommand {
+                            position: center,
+                            size,
+                            entity: None,
+                        };
+                        commands.queue(SubmitGameCommand(Box::new(cmd)));
+                    }
+                }
+                state.start_pos = None;
+                state.current_pos = None;
+            }
         }
     }
 
     // Draw Preview
     if let (Some(start), Some(end)) = (state.start_pos, state.current_pos) {
-         let min = start.min(end);
-         let max = start.max(end);
-         let size = max - min;
-         let center = min + size / 2.0;
-         gizmos.rect_2d(center, size, Color::WHITE);
+        let min = start.min(end);
+        let max = start.max(end);
+        let size = max - min;
+        let center = min + size / 2.0;
+        gizmos.rect_2d(center, size, Color::WHITE);
     }
 }
 
@@ -84,12 +88,14 @@ struct CreateBoxCommand {
 
 impl GameCommand for CreateBoxCommand {
     fn execute(&mut self, world: &mut World) {
-        let id = world.spawn((
-            RigidBody::Dynamic,
-            Collider::rectangle(self.size.x, self.size.y),
-            Transform::from_xyz(self.position.x, self.position.y, 0.0),
-            Sprite::from_color(Color::srgb(0.2, 0.7, 0.9), self.size),
-        )).id();
+        let id = world
+            .spawn((
+                RigidBody::Dynamic,
+                Collider::rectangle(self.size.x, self.size.y),
+                Transform::from_xyz(self.position.x, self.position.y, 0.0),
+                Sprite::from_color(Color::srgb(0.2, 0.7, 0.9), self.size),
+            ))
+            .id();
         self.entity = Some(id);
     }
 
