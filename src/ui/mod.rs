@@ -48,7 +48,11 @@ fn ui_system(
             ui.separator();
 
             ui.horizontal(|ui| {
-                let label = if time.is_paused() { "▶ Play" } else { "⏸ Pause" };
+                let label = if time.is_paused() {
+                    "▶ Play"
+                } else {
+                    "⏸ Pause"
+                };
                 if ui.button(label).clicked() {
                     if time.is_paused() {
                         time.unpause();
