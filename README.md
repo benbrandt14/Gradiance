@@ -21,7 +21,7 @@ We have recently undergone a full rewrite to modernize the codebase and prepare 
 *   [Rust Toolchain](https://rustup.rs/) (Stable)
 *   **Linux Dependencies**:
     ```bash
-    sudo apt-get install g++ pkg-config libx11-dev libasound2-dev libudev-dev
+    sudo apt-get install g++ pkg-config libx11-dev libasound2-dev libudev-dev clang lld
     ```
 
 ### Development
