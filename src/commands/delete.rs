@@ -65,10 +65,10 @@ impl GameCommand for DeleteCommand {
                     entity_mut.insert(col.clone());
                 }
                 if let Some(fr) = &components.friction {
-                    entity_mut.insert(fr.clone());
+                    entity_mut.insert(*fr);
                 }
                 if let Some(re) = &components.restitution {
-                    entity_mut.insert(re.clone());
+                    entity_mut.insert(*re);
                 }
 
                 // Restore visibility

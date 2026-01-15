@@ -29,6 +29,7 @@ struct PropertyEditState {
     restitution_starts: HashMap<Entity, Restitution>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn context_menu_system(
     mut contexts: EguiContexts,
     mut menu_state: ResMut<ContextMenuState>,
@@ -76,10 +77,8 @@ fn context_menu_system(
 
                 // FRICTION
                 let mut current_friction = 0.5;
-                if let Ok((_, f, _)) = query.get(first_entity) {
-                    if let Some(f) = f {
-                        current_friction = f.dynamic_coefficient;
-                    }
+                if let Ok((_, Some(f), _)) = query.get(first_entity) {
+                    current_friction = f.dynamic_coefficient;
                 }
 
                 let mut friction_val = current_friction;
@@ -130,10 +129,8 @@ fn context_menu_system(
 
                 // RESTITUTION
                 let mut current_restitution = 0.5;
-                if let Ok((_, _, r)) = query.get(first_entity) {
-                    if let Some(r) = r {
-                        current_restitution = r.coefficient;
-                    }
+                if let Ok((_, _, Some(r))) = query.get(first_entity) {
+                    current_restitution = r.coefficient;
                 }
 
                 let mut restitution_val = current_restitution;

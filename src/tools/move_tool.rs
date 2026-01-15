@@ -101,16 +101,16 @@ fn move_tool_logic(
     }
 
     // Handle Delete
-    if keyboard.just_pressed(KeyCode::Delete) || keyboard.just_pressed(KeyCode::Backspace) {
-        if !state.selected_entities.is_empty() {
-            let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
-            for &entity in state.selected_entities.iter() {
-                cmds.push(Box::new(DeleteCommand::new(entity)));
-            }
-            if !cmds.is_empty() {
-                commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
-                state.selected_entities.clear();
-            }
+    if (keyboard.just_pressed(KeyCode::Delete) || keyboard.just_pressed(KeyCode::Backspace))
+        && !state.selected_entities.is_empty()
+    {
+        let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
+        for &entity in state.selected_entities.iter() {
+            cmds.push(Box::new(DeleteCommand::new(entity)));
+        }
+        if !cmds.is_empty() {
+            commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
+            state.selected_entities.clear();
         }
     }
 
@@ -161,7 +161,7 @@ fn move_tool_logic(
                     let mut original_body_types = HashMap::new();
 
                     for &e in state.selected_entities.iter() {
-                        if let Ok((transform, mut rb_opt, _)) = queries.get_mut(e) {
+                        if let Ok((transform, rb_opt, _)) = queries.get_mut(e) {
                             entities.push(e);
                             initial_transforms.insert(e, *transform);
 
@@ -247,7 +247,7 @@ fn move_tool_logic(
                 let mut cmd_list: Vec<Box<dyn GameCommand>> = Vec::new();
 
                 for &entity in &data.entities {
-                    if let Ok((mut transform, mut rb_opt, mut lin_vel_opt)) = queries.get_mut(entity) {
+                    if let Ok((transform, rb_opt, lin_vel_opt)) = queries.get_mut(entity) {
                         // Restore Body Type
                         if let Some(mut rb) = rb_opt {
                             if let Some(&original) = data.original_body_types.get(&entity) {
