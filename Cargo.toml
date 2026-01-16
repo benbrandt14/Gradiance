@@ -22,7 +22,6 @@ features = [
     "bevy_gizmos",
     "bevy_state",
     "x11",
-    "wayland",
     "png",
     "file_watcher",
     "multi_threaded",

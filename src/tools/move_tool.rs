@@ -339,7 +339,7 @@ fn move_tool_logic(
                 let mut cmd_list: Vec<Box<dyn GameCommand>> = Vec::new();
 
                 for &entity in &data.entities {
-                    if let Ok((transform, rb_opt, lin_vel_opt)) = queries.get_mut(entity) {
+                    if let Ok((transform, rb_opt, lin_vel_opt, _, _)) = queries.get_mut(entity) {
                         // Restore Body Type
                         if let Some(mut rb) = rb_opt {
                             if let Some(&original) = data.original_body_types.get(&entity) {
