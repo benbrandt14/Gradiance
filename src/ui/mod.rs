@@ -2,11 +2,11 @@ use crate::commands::property::{
     SetColorCommand, SetFrictionCommand, SetRestitutionCommand, SetRigidBodyCommand,
 };
 use crate::commands::{BatchCommand, CommandStack, GameCommand, SubmitGameCommand};
-use crate::tools::move_tool::MoveToolState;
 use crate::tools::ToolState;
+use crate::tools::move_tool::MoveToolState;
 use avian2d::prelude::*;
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy_egui::{EguiContexts, EguiPlugin, egui};
 use std::collections::HashMap;
 
 pub struct UiPlugin;
