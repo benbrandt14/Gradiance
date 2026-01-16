@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-avian2d = "*"
-bevy_egui = "*"
+avian2d = "0.4.1"
+bevy_egui = ">0.17.0"
 bevy_firefly = "*"
 
 [dependencies.bevy]
-version = "*"
+version = "0.17.1"
 default-features = false
 features = [
     "bevy_asset",
