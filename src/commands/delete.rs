@@ -90,13 +90,15 @@ mod tests {
 
     #[rstest]
     fn test_delete_command(mut world: World) {
-        let entity = world.spawn((
-            RigidBody::Dynamic,
-            Collider::rectangle(10.0, 10.0),
-            Friction::new(0.5),
-            Restitution::new(0.5),
-            Visibility::Visible,
-        )).id();
+        let entity = world
+            .spawn((
+                RigidBody::Dynamic,
+                Collider::rectangle(10.0, 10.0),
+                Friction::new(0.5),
+                Restitution::new(0.5),
+                Visibility::Visible,
+            ))
+            .id();
 
         let mut cmd = DeleteCommand::new(entity);
 

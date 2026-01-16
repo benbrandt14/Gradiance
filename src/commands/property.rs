@@ -96,11 +96,12 @@ impl GameCommand for SetColorCommand {
 
         // Handle MeshMaterial2d<ColorMaterial>
         // We need to clone the handle id to release the borrow on world components
-        let handle_id = if let Some(handle) = world.get::<MeshMaterial2d<ColorMaterial>>(self.entity) {
-            Some(handle.id())
-        } else {
-            None
-        };
+        let handle_id =
+            if let Some(handle) = world.get::<MeshMaterial2d<ColorMaterial>>(self.entity) {
+                Some(handle.id())
+            } else {
+                None
+            };
 
         if let Some(id) = handle_id {
             let mut materials = world.resource_mut::<Assets<ColorMaterial>>();
@@ -114,7 +115,7 @@ impl GameCommand for SetColorCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-         // Handle Sprite
+        // Handle Sprite
         if let Some(mut sprite) = world.get_mut::<Sprite>(self.entity) {
             if let Some(old) = self.old_color {
                 sprite.color = old;
@@ -123,18 +124,19 @@ impl GameCommand for SetColorCommand {
         }
 
         // Handle MeshMaterial2d<ColorMaterial>
-        let handle_id = if let Some(handle) = world.get::<MeshMaterial2d<ColorMaterial>>(self.entity) {
-            Some(handle.id())
-        } else {
-            None
-        };
+        let handle_id =
+            if let Some(handle) = world.get::<MeshMaterial2d<ColorMaterial>>(self.entity) {
+                Some(handle.id())
+            } else {
+                None
+            };
 
         if let Some(id) = handle_id {
             let mut materials = world.resource_mut::<Assets<ColorMaterial>>();
             if let Some(mat) = materials.get_mut(id) {
-                 if let Some(old) = self.old_color {
-                     mat.color = old;
-                 }
+                if let Some(old) = self.old_color {
+                    mat.color = old;
+                }
             }
         }
     }

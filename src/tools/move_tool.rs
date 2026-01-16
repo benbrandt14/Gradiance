@@ -4,8 +4,8 @@ use avian2d::parry::shape::TypedShape;
 use avian2d::prelude::*;
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
-use std::collections::HashMap;
 use bevy_egui::EguiContexts;
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 pub struct MoveToolPlugin;
@@ -139,11 +139,11 @@ fn move_tool_logic(
                         drawn = true;
                     }
                     TypedShape::HalfSpace(_) => {
-                         // For infinite plane, draw a very long line?
-                         // Or just rely on the Sprite fallback (which we made huge)
-                         // Actually, Sprite fallback works better for "huge rect".
-                         // But if we want to outline the collider...
-                         // Let's fallback to sprite for now.
+                        // For infinite plane, draw a very long line?
+                        // Or just rely on the Sprite fallback (which we made huge)
+                        // Actually, Sprite fallback works better for "huge rect".
+                        // But if we want to outline the collider...
+                        // Let's fallback to sprite for now.
                     }
                     _ => {}
                 }
@@ -152,8 +152,8 @@ fn move_tool_logic(
             if !drawn {
                 if let Some(sprite) = sprite_opt {
                     if let Some(size) = sprite.custom_size {
-                         let half_size = size / 2.0;
-                         let corners = [
+                        let half_size = size / 2.0;
+                        let corners = [
                             Vec2::new(-half_size.x, -half_size.y),
                             Vec2::new(half_size.x, -half_size.y),
                             Vec2::new(half_size.x, half_size.y),
@@ -203,12 +203,12 @@ fn move_tool_logic(
         let mut max_z = f32::MIN;
 
         for &hit in &hits {
-             if let Ok((transform, _, _, _, _)) = queries.get(hit) {
-                 if transform.translation.z > max_z {
-                     max_z = transform.translation.z;
-                     best_hit = Some(hit);
-                 }
-             }
+            if let Ok((transform, _, _, _, _)) = queries.get(hit) {
+                if transform.translation.z > max_z {
+                    max_z = transform.translation.z;
+                    best_hit = Some(hit);
+                }
+            }
         }
 
         if let Some(hit) = best_hit {
@@ -229,25 +229,25 @@ fn move_tool_logic(
             }
 
             if !state.selected_entities.is_empty() {
-                 if keyboard.pressed(KeyCode::ShiftLeft) && state.mode.is_none() {
-                     // Check if only one entity is selected for rotation
-                     if state.selected_entities.len() == 1 {
+                if keyboard.pressed(KeyCode::ShiftLeft) && state.mode.is_none() {
+                    // Check if only one entity is selected for rotation
+                    if state.selected_entities.len() == 1 {
                         let entity = *state.selected_entities.iter().next().unwrap();
-                         if let Ok((transform, _, _, _, _)) = queries.get(entity) {
-                             let diff = point - transform.translation.truncate();
-                             let initial_mouse_angle = diff.y.atan2(diff.x);
-                             let (_, _, rotation_z) = transform.rotation.to_euler(EulerRot::XYZ);
+                        if let Ok((transform, _, _, _, _)) = queries.get(entity) {
+                            let diff = point - transform.translation.truncate();
+                            let initial_mouse_angle = diff.y.atan2(diff.x);
+                            let (_, _, rotation_z) = transform.rotation.to_euler(EulerRot::XYZ);
 
-                             state.mode = MoveMode::Rotate(RotateData {
-                                 entity,
-                                 _start_mouse_pos: point,
-                                 initial_rotation: rotation_z,
-                                 initial_mouse_angle,
-                                 initial_transform: *transform,
-                             });
-                         }
-                     }
-                 } else {
+                            state.mode = MoveMode::Rotate(RotateData {
+                                entity,
+                                _start_mouse_pos: point,
+                                initial_rotation: rotation_z,
+                                initial_mouse_angle,
+                                initial_transform: *transform,
+                            });
+                        }
+                    }
+                } else {
                     // Start Drag Mode (Kinematic)
                     let mut entities = Vec::new();
                     let mut initial_transforms = HashMap::new();
@@ -273,7 +273,7 @@ fn move_tool_logic(
                         last_mouse_pos: point,
                         current_velocity: Vec2::ZERO,
                     });
-                 }
+                }
             }
         } else {
             // Clicked on nothing
@@ -355,13 +355,15 @@ fn move_tool_logic(
 
                         // Submit Command
                         if let Some(initial) = data.initial_transforms.get(&entity) {
-                             if transform.translation != initial.translation || transform.rotation != initial.rotation {
-                                 cmd_list.push(Box::new(TransformCommand {
-                                     entity,
-                                     old_transform: *initial,
-                                     new_transform: *transform,
-                                 }));
-                             }
+                            if transform.translation != initial.translation
+                                || transform.rotation != initial.rotation
+                            {
+                                cmd_list.push(Box::new(TransformCommand {
+                                    entity,
+                                    old_transform: *initial,
+                                    new_transform: *transform,
+                                }));
+                            }
                         }
                     }
                 }
@@ -383,22 +385,22 @@ fn move_tool_logic(
                 }
             }
             MoveMode::Select(data) => {
-                 let min = data.start_pos.min(data.current_pos);
-                 let max = data.start_pos.max(data.current_pos);
-                 let size = max - min;
-                 let center = min + size / 2.0;
+                let min = data.start_pos.min(data.current_pos);
+                let max = data.start_pos.max(data.current_pos);
+                let size = max - min;
+                let center = min + size / 2.0;
 
-                 // Spatial Query for selection
-                 let hits = spatial_query.shape_intersections(
-                     &Collider::rectangle(size.x, size.y),
-                     center,
-                     0.0,
-                     &SpatialQueryFilter::default()
-                 );
+                // Spatial Query for selection
+                let hits = spatial_query.shape_intersections(
+                    &Collider::rectangle(size.x, size.y),
+                    center,
+                    0.0,
+                    &SpatialQueryFilter::default(),
+                );
 
-                 for hit in hits {
-                     state.selected_entities.insert(hit);
-                 }
+                for hit in hits {
+                    state.selected_entities.insert(hit);
+                }
             }
             MoveMode::None => {}
         }

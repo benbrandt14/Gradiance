@@ -1,15 +1,13 @@
 use crate::commands::property::{
     SetColorCommand, SetFrictionCommand, SetRestitutionCommand, SetRigidBodyCommand,
 };
-use crate::commands::{
-    BatchCommand, CommandStack, GameCommand, SubmitGameCommand,
-};
+use crate::commands::{BatchCommand, CommandStack, GameCommand, SubmitGameCommand};
 use crate::tools::move_tool::MoveToolState;
 use crate::tools::ToolState;
 use avian2d::prelude::*;
 use bevy::prelude::*;
-use std::collections::HashMap;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use std::collections::HashMap;
 
 pub struct UiPlugin;
 
@@ -153,9 +151,8 @@ fn context_menu_system(
                 }
 
                 let mut restitution_val = current_restitution;
-                let response = ui.add(
-                    egui::Slider::new(&mut restitution_val, 0.0..=1.0).text("Restitution"),
-                );
+                let response =
+                    ui.add(egui::Slider::new(&mut restitution_val, 0.0..=1.0).text("Restitution"));
 
                 if response.drag_started() {
                     for &e in &entities {
@@ -220,15 +217,24 @@ fn context_menu_system(
                             let mut changed = false;
                             let mut new_val = current_rb;
 
-                            if ui.selectable_label(current_rb == RigidBody::Dynamic, "Dynamic").clicked() {
+                            if ui
+                                .selectable_label(current_rb == RigidBody::Dynamic, "Dynamic")
+                                .clicked()
+                            {
                                 new_val = RigidBody::Dynamic;
                                 changed = true;
                             }
-                            if ui.selectable_label(current_rb == RigidBody::Static, "Static").clicked() {
+                            if ui
+                                .selectable_label(current_rb == RigidBody::Static, "Static")
+                                .clicked()
+                            {
                                 new_val = RigidBody::Static;
                                 changed = true;
                             }
-                            if ui.selectable_label(current_rb == RigidBody::Kinematic, "Kinematic").clicked() {
+                            if ui
+                                .selectable_label(current_rb == RigidBody::Kinematic, "Kinematic")
+                                .clicked()
+                            {
                                 new_val = RigidBody::Kinematic;
                                 changed = true;
                             }
@@ -262,9 +268,9 @@ fn context_menu_system(
                     if let Some(s) = sprite {
                         current_color = s.color;
                     } else if let Some(h) = mat_handle {
-                         if let Some(mat) = materials.get(h) {
-                             current_color = mat.color;
-                         }
+                        if let Some(mat) = materials.get(h) {
+                            current_color = mat.color;
+                        }
                     }
                 }
 
@@ -280,13 +286,13 @@ fn context_menu_system(
                         for &e in &entities {
                             // Get old color
                             let mut old_color = None;
-                             if let Ok((_, _, _, _, sprite, mat_handle)) = query.get(e) {
+                            if let Ok((_, _, _, _, sprite, mat_handle)) = query.get(e) {
                                 if let Some(s) = sprite {
                                     old_color = Some(s.color);
                                 } else if let Some(h) = mat_handle {
-                                     if let Some(mat) = materials.get(h) {
-                                         old_color = Some(mat.color);
-                                     }
+                                    if let Some(mat) = materials.get(h) {
+                                        old_color = Some(mat.color);
+                                    }
                                 }
                             }
 
@@ -296,12 +302,11 @@ fn context_menu_system(
                                 old_color,
                             }));
                         }
-                         if !cmds.is_empty() {
-                             commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
-                         }
+                        if !cmds.is_empty() {
+                            commands.queue(SubmitGameCommand(Box::new(BatchCommand(cmds))));
+                        }
                     }
                 });
-
             });
 
         menu_state.open = open;
