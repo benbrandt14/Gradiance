@@ -8,14 +8,16 @@ use crate::tools::move_tool::MoveToolState;
 use crate::tools::ToolState;
 use avian2d::prelude::*;
 use bevy::prelude::*;
-use bevy::utils::HashMap;
+use std::collections::HashMap;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(EguiPlugin);
+        app.add_plugins(EguiPlugin {
+            enable_multipass_for_primary_context: true,
+        });
         app.init_resource::<ContextMenuState>();
         app.init_resource::<PropertyEditState>();
         app.add_systems(Update, (ui_system, context_menu_system));

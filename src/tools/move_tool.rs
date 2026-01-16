@@ -4,8 +4,9 @@ use avian2d::parry::shape::TypedShape;
 use avian2d::prelude::*;
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
-use bevy::utils::{HashMap, HashSet};
+use std::collections::HashMap;
 use bevy_egui::EguiContexts;
+use std::collections::HashSet;
 
 pub struct MoveToolPlugin;
 
