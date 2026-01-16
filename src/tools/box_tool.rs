@@ -3,6 +3,7 @@ use crate::tools::ToolState;
 use avian2d::prelude::*;
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
+use bevy_firefly::prelude::*;
 
 pub struct BoxToolPlugin;
 
@@ -96,6 +97,7 @@ impl GameCommand for CreateBoxCommand {
                 Restitution::new(0.5),
                 Transform::from_xyz(self.position.x, self.position.y, 0.0),
                 Sprite::from_color(Color::srgb(0.2, 0.7, 0.9), self.size),
+                Occluder2d::rectangle(self.size.x, self.size.y),
             ))
             .id();
         self.entity = Some(id);
@@ -138,6 +140,7 @@ mod tests {
         // Check for Collider presence (validating exact shape properties is harder without physics context)
         assert!(world.get::<Collider>(entity).is_some());
         assert!(world.get::<RigidBody>(entity).is_some());
+        assert!(world.get::<Occluder2d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);

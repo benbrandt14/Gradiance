@@ -13,6 +13,7 @@ pub mod ui;
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use bevy_firefly::prelude::*;
 
 pub struct GamePlugin;
 
@@ -28,6 +29,7 @@ impl Plugin for GamePlugin {
         }))
         .add_plugins(PhysicsPlugins::default().with_length_unit(20.0))
         .add_plugins(PhysicsDebugPlugin::default())
+        .add_plugins(FireflyPlugin)
         .add_plugins(tools::ToolPlugin)
         .add_plugins(ui::UiPlugin)
         // TODO: Add ScriptingPlugin

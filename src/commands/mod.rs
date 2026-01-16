@@ -44,7 +44,7 @@ impl CommandStack {
 
 pub struct SubmitGameCommand(pub Box<dyn GameCommand>);
 
-impl bevy::ecs::world::Command for SubmitGameCommand {
+impl bevy::prelude::Command for SubmitGameCommand {
     fn apply(self, world: &mut World) {
         if let Some(mut stack) = world.remove_resource::<CommandStack>() {
             stack.push(self.0, world);

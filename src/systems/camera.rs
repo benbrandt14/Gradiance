@@ -17,7 +17,7 @@ impl Default for PanCam {
 }
 
 pub fn camera_movement(
-    mut query: Query<(&mut Transform, &mut OrthographicProjection, &PanCam)>,
+    mut query: Query<(&mut Transform, &mut Projection, &PanCam)>,
     mut mouse_motion_events: EventReader<MouseMotion>,
     mut mouse_wheel_events: EventReader<MouseWheel>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
@@ -36,14 +36,16 @@ pub fn camera_movement(
     }
 
     for (mut transform, mut projection, settings) in query.iter_mut() {
-        if delta != Vec2::ZERO {
-            transform.translation.x -= delta.x * settings.pan_speed * projection.scale;
-            transform.translation.y += delta.y * settings.pan_speed * projection.scale;
-        }
+        if let Projection::Orthographic(ref mut ortho) = *projection {
+            if delta != Vec2::ZERO {
+                transform.translation.x -= delta.x * settings.pan_speed * ortho.scale;
+                transform.translation.y += delta.y * settings.pan_speed * ortho.scale;
+            }
 
-        if scroll != 0.0 {
-            projection.scale -= scroll * settings.zoom_speed * projection.scale;
-            projection.scale = projection.scale.clamp(0.1, 10.0);
+            if scroll != 0.0 {
+                ortho.scale -= scroll * settings.zoom_speed * ortho.scale;
+                ortho.scale = ortho.scale.clamp(0.1, 10.0);
+            }
         }
     }
 }
