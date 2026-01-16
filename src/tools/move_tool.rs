@@ -39,15 +39,10 @@ impl MoveMode {
 }
 
 struct DragData {
-    // Entities being dragged
     entities: Vec<Entity>,
-    // Initial transforms for undo
     initial_transforms: HashMap<Entity, Transform>,
-    // Offset from cursor start
     start_point: Vec2,
-    // Original rigid body types to restore
     original_body_types: HashMap<Entity, RigidBody>,
-    // For throwing
     last_mouse_pos: Vec2,
     current_velocity: Vec2,
 }
@@ -77,7 +72,7 @@ fn move_tool_logic(
     mut state: ResMut<MoveToolState>,
     mut queries: Query<(
         &mut Transform,
-        Option<&mut RigidBody>,
+        Option<&RigidBody>, // Immutable access
         Option<&mut LinearVelocity>,
         Option<&Collider>,
         Option<&Sprite>,
@@ -85,15 +80,14 @@ fn move_tool_logic(
     mut gizmos: Gizmos,
     time: Res<Time>,
 ) {
-    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+    let Some((camera, camera_transform)) = camera_q.iter().next() else {
         return;
     };
-    let Ok(window) = windows.get_single() else {
+    let Some(window) = windows.iter().next() else {
         return;
     };
 
-    // Block interaction if over UI
-    if contexts.ctx_mut().is_pointer_over_area() {
+    if contexts.ctx_mut().expect("egui context").is_pointer_over_area() {
         return;
     }
 
@@ -112,11 +106,9 @@ fn move_tool_logic(
             let mut drawn = false;
 
             if let Some(collider) = collider_opt {
-                // Try to use Parry shape inspection
                 match collider.shape().as_typed_shape() {
                     TypedShape::Cuboid(c) => {
                         let half_size = Vec2::new(c.half_extents.x, c.half_extents.y);
-                        // Draw rotated box manually using lines
                         let corners = [
                             Vec2::new(-half_size.x, -half_size.y),
                             Vec2::new(half_size.x, -half_size.y),
@@ -137,13 +129,6 @@ fn move_tool_logic(
                     TypedShape::Ball(b) => {
                         gizmos.circle_2d(pos, b.radius, color);
                         drawn = true;
-                    }
-                    TypedShape::HalfSpace(_) => {
-                        // For infinite plane, draw a very long line?
-                        // Or just rely on the Sprite fallback (which we made huge)
-                        // Actually, Sprite fallback works better for "huge rect".
-                        // But if we want to outline the collider...
-                        // Let's fallback to sprite for now.
                     }
                     _ => {}
                 }
@@ -173,7 +158,6 @@ fn move_tool_logic(
                 }
             }
 
-            // Fallback default
             if !drawn {
                 gizmos.circle_2d(pos, 40.0, color);
             }
@@ -198,7 +182,6 @@ fn move_tool_logic(
     if mouse.just_pressed(MouseButton::Left) {
         let hits = spatial_query.point_intersections(point, &SpatialQueryFilter::default());
 
-        // Find best hit (highest Z)
         let mut best_hit = None;
         let mut max_z = f32::MIN;
 
@@ -212,16 +195,13 @@ fn move_tool_logic(
         }
 
         if let Some(hit) = best_hit {
-            // Hit an entity
             if keyboard.pressed(KeyCode::ShiftLeft) {
-                // Toggle Selection
                 if state.selected_entities.contains(&hit) {
                     state.selected_entities.remove(&hit);
                 } else {
                     state.selected_entities.insert(hit);
                 }
             } else {
-                // Single Select (if not already selected)
                 if !state.selected_entities.contains(&hit) {
                     state.selected_entities.clear();
                     state.selected_entities.insert(hit);
@@ -230,7 +210,6 @@ fn move_tool_logic(
 
             if !state.selected_entities.is_empty() {
                 if keyboard.pressed(KeyCode::ShiftLeft) && state.mode.is_none() {
-                    // Check if only one entity is selected for rotation
                     if state.selected_entities.len() == 1 {
                         let entity = *state.selected_entities.iter().next().unwrap();
                         if let Ok((transform, _, _, _, _)) = queries.get(entity) {
@@ -248,7 +227,6 @@ fn move_tool_logic(
                         }
                     }
                 } else {
-                    // Start Drag Mode (Kinematic)
                     let mut entities = Vec::new();
                     let mut initial_transforms = HashMap::new();
                     let mut original_body_types = HashMap::new();
@@ -258,9 +236,9 @@ fn move_tool_logic(
                             entities.push(e);
                             initial_transforms.insert(e, *transform);
 
-                            if let Some(mut rb) = rb_opt {
+                            if let Some(rb) = rb_opt {
                                 original_body_types.insert(e, *rb);
-                                *rb = RigidBody::Kinematic;
+                                commands.entity(e).insert(RigidBody::Kinematic);
                             }
                         }
                     }
@@ -276,11 +254,9 @@ fn move_tool_logic(
                 }
             }
         } else {
-            // Clicked on nothing
             if !keyboard.pressed(KeyCode::ShiftLeft) {
                 state.selected_entities.clear();
             }
-            // Start Select Mode
             state.mode = MoveMode::Select(SelectData {
                 start_pos: point,
                 current_pos: point,
@@ -288,13 +264,10 @@ fn move_tool_logic(
         }
     }
 
-    // Update Interaction
     if mouse.pressed(MouseButton::Left) {
         match &mut state.mode {
             MoveMode::Drag(data) => {
                 let delta = point - data.start_point;
-
-                // Calculate velocity
                 let frame_delta = point - data.last_mouse_pos;
                 let dt = time.delta_secs();
                 if dt > 0.0001 {
@@ -315,45 +288,37 @@ fn move_tool_logic(
                     let diff = point - transform.translation.truncate();
                     let current_mouse_angle = diff.y.atan2(diff.x);
                     let angle_delta = current_mouse_angle - data.initial_mouse_angle;
-
                     let new_rotation = data.initial_rotation + angle_delta;
                     transform.rotation = Quat::from_rotation_z(new_rotation);
                 }
             }
             MoveMode::Select(data) => {
                 data.current_pos = point;
-                // Draw Gizmo
                 let min = data.start_pos.min(data.current_pos);
                 let max = data.start_pos.max(data.current_pos);
                 let size = max - min;
                 let center = min + size / 2.0;
-                gizmos.rect_2d(center, size, Color::srgb(0.0, 1.0, 1.0)); // Cyan for selection
+                gizmos.rect_2d(center, size, Color::srgb(0.0, 1.0, 1.0));
             }
             MoveMode::None => {}
         }
     }
 
-    // End Interaction
     if mouse.just_released(MouseButton::Left) {
         match &mut state.mode {
             MoveMode::Drag(data) => {
                 let mut cmd_list: Vec<Box<dyn GameCommand>> = Vec::new();
 
                 for &entity in &data.entities {
-                    if let Ok((transform, rb_opt, lin_vel_opt, _, _)) = queries.get_mut(entity) {
-                        // Restore Body Type
-                        if let Some(mut rb) = rb_opt {
-                            if let Some(&original) = data.original_body_types.get(&entity) {
-                                *rb = original;
-                            }
+                    if let Ok((transform, _, lin_vel_opt, _, _)) = queries.get_mut(entity) {
+                        if let Some(&original) = data.original_body_types.get(&entity) {
+                            commands.entity(entity).insert(original);
                         }
 
-                        // Apply Velocity
                         if let Some(mut lin_vel) = lin_vel_opt {
                             lin_vel.0 = data.current_velocity;
                         }
 
-                        // Submit Command
                         if let Some(initial) = data.initial_transforms.get(&entity) {
                             if transform.translation != initial.translation
                                 || transform.rotation != initial.rotation
@@ -390,7 +355,6 @@ fn move_tool_logic(
                 let size = max - min;
                 let center = min + size / 2.0;
 
-                // Spatial Query for selection
                 let hits = spatial_query.shape_intersections(
                     &Collider::rectangle(size.x, size.y),
                     center,
@@ -450,12 +414,10 @@ mod tests {
             new_transform,
         };
 
-        // Execute
         cmd.execute(&mut world);
         let t = world.get::<Transform>(entity).unwrap();
         assert_eq!(t.translation, Vec3::new(10.0, 10.0, 0.0));
 
-        // Undo
         cmd.undo(&mut world);
         let t = world.get::<Transform>(entity).unwrap();
         assert_eq!(t.translation, Vec3::new(0.0, 0.0, 0.0));

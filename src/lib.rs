@@ -22,7 +22,8 @@ impl Plugin for GamePlugin {
         app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Gradiance".into(),
-                resolution: (1280.0, 720.0).into(),
+                // Resolution using u32 integers as per 0.17 environment requirement
+                resolution: (1280u32, 720u32).into(),
                 ..default()
             }),
             ..default()

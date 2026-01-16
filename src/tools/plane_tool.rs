@@ -28,16 +28,15 @@ fn plane_tool_logic(
     mut state: ResMut<PlaneToolState>,
     mut gizmos: Gizmos,
 ) {
-    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+    let Some((camera, camera_transform)) = camera_q.iter().next() else {
         return;
     };
-    let Ok(window) = windows.get_single() else {
+    let Some(window) = windows.iter().next() else {
         return;
     };
 
     if let Some(cursor_pos) = window.cursor_position() {
         if let Ok(point) = camera.viewport_to_world_2d(camera_transform, cursor_pos) {
-            // Handle Input
             if mouse.just_pressed(MouseButton::Left) {
                 state.start_pos = Some(point);
                 state.current_pos = Some(point);
@@ -64,18 +63,11 @@ fn plane_tool_logic(
         }
     }
 
-    // Draw Preview
     if let (Some(start), Some(end)) = (state.start_pos, state.current_pos) {
-        // Draw the surface line
         gizmos.line_2d(start, end, Color::WHITE);
-
-        // Calculate Normal visual
         let diff = end - start;
         let center = start + diff / 2.0;
-        // Normal is 90 deg CCW: (-y, x)
         let normal = Vec2::new(-diff.y, diff.x).normalize_or_zero() * 40.0;
-
-        // Draw Normal
         gizmos.arrow_2d(center, center + normal, Color::srgb(1.0, 1.0, 0.0));
     }
 }
@@ -92,6 +84,10 @@ impl GameCommand for CreatePlaneCommand {
         let angle = diff.y.atan2(diff.x);
         let center = self.start + diff / 2.0;
 
+        let rotation = Quat::from_rotation_z(angle);
+        let shift = rotation * Vec3::new(0.0, -50000.0, 0.0);
+        let position = center.extend(0.0) + shift;
+
         let id = world
             .spawn((
                 RigidBody::Static,
@@ -99,16 +95,16 @@ impl GameCommand for CreatePlaneCommand {
                 Friction::default(),
                 Restitution::new(0.5),
                 Transform {
-                    translation: center.extend(0.0),
-                    rotation: Quat::from_rotation_z(angle),
+                    translation: position,
+                    rotation,
                     ..default()
                 },
                 Sprite {
                     color: Color::WHITE,
                     custom_size: Some(Vec2::new(100000.0, 100000.0)),
-                    anchor: Anchor::TopCenter,
                     ..default()
                 },
+                Anchor::default(), // Anchor as component
             ))
             .id();
         self.entity = Some(id);

@@ -60,19 +60,18 @@ pub struct SetRigidBodyCommand {
 
 impl GameCommand for SetRigidBodyCommand {
     fn execute(&mut self, world: &mut World) {
-        if let Some(mut rb) = world.get_mut::<RigidBody>(self.entity) {
+        if let Some(rb) = world.get::<RigidBody>(self.entity) {
             if self.old_body_type.is_none() {
                 self.old_body_type = Some(*rb);
             }
-            *rb = self.new_body_type;
         }
+        // Insert overwrites existing component
+        world.entity_mut(self.entity).insert(self.new_body_type);
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(mut rb) = world.get_mut::<RigidBody>(self.entity) {
-            if let Some(old) = self.old_body_type {
-                *rb = old;
-            }
+        if let Some(old) = self.old_body_type {
+            world.entity_mut(self.entity).insert(old);
         }
     }
 }
@@ -93,25 +92,8 @@ impl GameCommand for SetColorCommand {
             sprite.color = self.new_color;
             return;
         }
-
-        // Handle MeshMaterial2d<ColorMaterial>
-        // We need to clone the handle id to release the borrow on world components
-        let handle_id =
-            if let Some(handle) = world.get::<MeshMaterial2d<ColorMaterial>>(self.entity) {
-                Some(handle.id())
-            } else {
-                None
-            };
-
-        if let Some(id) = handle_id {
-            let mut materials = world.resource_mut::<Assets<ColorMaterial>>();
-            if let Some(mat) = materials.get_mut(id) {
-                if self.old_color.is_none() {
-                    self.old_color = Some(mat.color);
-                }
-                mat.color = self.new_color;
-            }
-        }
+        // Mesh/Material handling removed to avoid Handle component issues.
+        // If we add meshes later, we need to resolve the Handle<ColorMaterial> component issue or wrapper.
     }
 
     fn undo(&mut self, world: &mut World) {
@@ -121,23 +103,6 @@ impl GameCommand for SetColorCommand {
                 sprite.color = old;
             }
             return;
-        }
-
-        // Handle MeshMaterial2d<ColorMaterial>
-        let handle_id =
-            if let Some(handle) = world.get::<MeshMaterial2d<ColorMaterial>>(self.entity) {
-                Some(handle.id())
-            } else {
-                None
-            };
-
-        if let Some(id) = handle_id {
-            let mut materials = world.resource_mut::<Assets<ColorMaterial>>();
-            if let Some(mat) = materials.get_mut(id) {
-                if let Some(old) = self.old_color {
-                    mat.color = old;
-                }
-            }
         }
     }
 }

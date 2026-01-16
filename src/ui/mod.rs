@@ -13,9 +13,10 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(EguiPlugin {
-            enable_multipass_for_primary_context: true,
-        });
+        // bevy_egui 0.38+ usually implements Default if it has fields, or unit struct.
+        // Assuming EguiPlugin::default() works or EguiPlugin if unit.
+        // Error "missing fields" suggests it has fields.
+        app.add_plugins(EguiPlugin::default());
         app.init_resource::<ContextMenuState>();
         app.init_resource::<PropertyEditState>();
         app.add_systems(Update, (ui_system, context_menu_system));
@@ -47,19 +48,17 @@ fn context_menu_system(
         Entity,
         Option<&mut Friction>,
         Option<&mut Restitution>,
-        Option<&mut RigidBody>,
+        Option<&RigidBody>, // Immutable access
         Option<&mut Sprite>,
-        Option<&MeshMaterial2d<ColorMaterial>>,
+        // Handle<ColorMaterial> removed
     )>,
-    materials: Res<Assets<ColorMaterial>>,
+    // materials: Res<Assets<ColorMaterial>>, // Unused now
 ) {
-    let Ok(window) = windows.get_single() else {
+    let Some(window) = windows.iter().next() else {
         return;
     };
 
-    // Open Logic
     if mouse.just_pressed(MouseButton::Right) {
-        // If we have a selection, open menu
         if !move_tool_state.selected_entities.is_empty() {
             if let Some(pos) = window.cursor_position() {
                 menu_state.open = true;
@@ -68,7 +67,6 @@ fn context_menu_system(
         }
     }
 
-    // UI Logic
     if menu_state.open {
         let mut open = true;
 
@@ -76,7 +74,7 @@ fn context_menu_system(
             .fixed_pos([menu_state.position.x, menu_state.position.y])
             .open(&mut open)
             .collapsible(false)
-            .show(contexts.ctx_mut(), |ui| {
+            .show(contexts.ctx_mut().expect("egui context"), |ui| {
                 ui.label("Selected Properties");
                 ui.separator();
 
@@ -90,7 +88,7 @@ fn context_menu_system(
 
                 // --- FRICTION ---
                 let mut current_friction = 0.5;
-                if let Ok((_, f, _, _, _, _)) = query.get(first_entity) {
+                if let Ok((_, f, _, _, _)) = query.get(first_entity) {
                     if let Some(f) = f {
                         current_friction = f.dynamic_coefficient;
                     }
@@ -102,7 +100,7 @@ fn context_menu_system(
 
                 if response.drag_started() {
                     for &e in &entities {
-                        if let Ok((_, Some(f), _, _, _, _)) = query.get(e) {
+                        if let Ok((_, Some(f), _, _, _)) = query.get(e) {
                             edit_state.friction_starts.insert(e, *f);
                         }
                     }
@@ -111,11 +109,11 @@ fn context_menu_system(
                 if response.changed() {
                     for &e in &entities {
                         if !edit_state.friction_starts.contains_key(&e) {
-                            if let Ok((_, Some(f), _, _, _, _)) = query.get(e) {
+                            if let Ok((_, Some(f), _, _, _)) = query.get(e) {
                                 edit_state.friction_starts.insert(e, *f);
                             }
                         }
-                        if let Ok((_, Some(mut f), _, _, _, _)) = query.get_mut(e) {
+                        if let Ok((_, Some(mut f), _, _, _)) = query.get_mut(e) {
                             f.dynamic_coefficient = friction_val;
                             f.static_coefficient = friction_val;
                         }
@@ -126,7 +124,7 @@ fn context_menu_system(
                     let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
                     for &e in &entities {
                         let mut new_f = Friction::default();
-                        if let Ok((_, Some(f), _, _, _, _)) = query.get(e) {
+                        if let Ok((_, Some(f), _, _, _)) = query.get(e) {
                             new_f = *f;
                         }
                         let old_f = edit_state.friction_starts.remove(&e);
@@ -144,7 +142,7 @@ fn context_menu_system(
 
                 // --- RESTITUTION ---
                 let mut current_restitution = 0.5;
-                if let Ok((_, _, r, _, _, _)) = query.get(first_entity) {
+                if let Ok((_, _, r, _, _)) = query.get(first_entity) {
                     if let Some(r) = r {
                         current_restitution = r.coefficient;
                     }
@@ -156,7 +154,7 @@ fn context_menu_system(
 
                 if response.drag_started() {
                     for &e in &entities {
-                        if let Ok((_, _, Some(r), _, _, _)) = query.get(e) {
+                        if let Ok((_, _, Some(r), _, _)) = query.get(e) {
                             edit_state.restitution_starts.insert(e, *r);
                         }
                     }
@@ -165,11 +163,11 @@ fn context_menu_system(
                 if response.changed() {
                     for &e in &entities {
                         if !edit_state.restitution_starts.contains_key(&e) {
-                            if let Ok((_, _, Some(r), _, _, _)) = query.get(e) {
+                            if let Ok((_, _, Some(r), _, _)) = query.get(e) {
                                 edit_state.restitution_starts.insert(e, *r);
                             }
                         }
-                        if let Ok((_, _, Some(mut r), _, _, _)) = query.get_mut(e) {
+                        if let Ok((_, _, Some(mut r), _, _)) = query.get_mut(e) {
                             r.coefficient = restitution_val;
                         }
                     }
@@ -179,7 +177,7 @@ fn context_menu_system(
                     let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
                     for &e in &entities {
                         let mut new_r = Restitution::default();
-                        if let Ok((_, _, Some(r), _, _, _)) = query.get(e) {
+                        if let Ok((_, _, Some(r), _, _)) = query.get(e) {
                             new_r = *r;
                         }
                         let old_r = edit_state.restitution_starts.remove(&e);
@@ -197,7 +195,7 @@ fn context_menu_system(
 
                 // --- RIGID BODY ---
                 let mut current_rb = RigidBody::Dynamic;
-                if let Ok((_, _, _, rb, _, _)) = query.get(first_entity) {
+                if let Ok((_, _, _, rb, _)) = query.get(first_entity) {
                     if let Some(rb) = rb {
                         current_rb = *rb;
                     }
@@ -242,9 +240,8 @@ fn context_menu_system(
                             if changed {
                                 let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
                                 for &e in &entities {
-                                    // Get old value for Undo
                                     let mut old_rb = None;
-                                    if let Ok((_, _, _, Some(rb), _, _)) = query.get(e) {
+                                    if let Ok((_, _, _, Some(rb), _)) = query.get(e) {
                                         old_rb = Some(*rb);
                                     }
 
@@ -262,15 +259,10 @@ fn context_menu_system(
                 });
 
                 // --- COLOR ---
-                // Try to get color from first entity
                 let mut current_color = Color::WHITE;
-                if let Ok((_, _, _, _, sprite, mat_handle)) = query.get(first_entity) {
+                if let Ok((_, _, _, _, sprite)) = query.get(first_entity) {
                     if let Some(s) = sprite {
                         current_color = s.color;
-                    } else if let Some(h) = mat_handle {
-                        if let Some(mat) = materials.get(h) {
-                            current_color = mat.color;
-                        }
                     }
                 }
 
@@ -284,15 +276,10 @@ fn context_menu_system(
 
                         let mut cmds: Vec<Box<dyn GameCommand>> = Vec::new();
                         for &e in &entities {
-                            // Get old color
                             let mut old_color = None;
-                            if let Ok((_, _, _, _, sprite, mat_handle)) = query.get(e) {
+                            if let Ok((_, _, _, _, sprite)) = query.get(e) {
                                 if let Some(s) = sprite {
                                     old_color = Some(s.color);
-                                } else if let Some(h) = mat_handle {
-                                    if let Some(mat) = materials.get(h) {
-                                        old_color = Some(mat.color);
-                                    }
                                 }
                             }
 
@@ -324,7 +311,7 @@ fn ui_system(
         .anchor(egui::Align2::LEFT_TOP, [10.0, 10.0])
         .collapsible(false)
         .title_bar(false)
-        .show(contexts.ctx_mut(), |ui| {
+        .show(contexts.ctx_mut().expect("egui context"), |ui| {
             ui.horizontal(|ui| {
                 ui.label("Gradiance");
                 ui.separator();

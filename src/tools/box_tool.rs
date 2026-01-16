@@ -28,10 +28,10 @@ fn box_tool_logic(
     mut state: ResMut<BoxToolState>,
     mut gizmos: Gizmos,
 ) {
-    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+    let Some((camera, camera_transform)) = camera_q.iter().next() else {
         return;
     };
-    let Ok(window) = windows.get_single() else {
+    let Some(window) = windows.iter().next() else {
         return;
     };
 
