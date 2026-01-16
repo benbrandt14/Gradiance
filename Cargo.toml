@@ -1,15 +1,15 @@
 [package]
 name = "gradiance"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-avian2d = "0.3.0"
-bevy_egui = "0.34"
-bevy_firefly = "0.16.13"
+avian2d = "*"
+bevy_egui = "*"
+bevy_firefly = "*"
 
 [dependencies.bevy]
-version = "0.16.1"
+version = "*"
 default-features = false
 features = [
     "bevy_asset",
@@ -30,7 +30,7 @@ features = [
 ]
 
 [dev-dependencies]
-rstest = "0.23"
+rstest = "*"
 
 [profile.dev]
 opt-level = 1
