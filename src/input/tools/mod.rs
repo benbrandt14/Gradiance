@@ -1,15 +1,19 @@
 use crate::prelude::*;
 
+pub mod box_tool;
+pub mod circle_tool;
+
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
-    fn build(&self, _app: &mut App) {
-        // Register individual tool systems here
+    fn build(&self, app: &mut App) {
+        app.add_plugins((
+            box_tool::BoxToolPlugin,
+            circle_tool::CircleToolPlugin,
+        ));
     }
 }
 
-// Trait for tools could go here, or just individual systems handling ToolState
 pub trait Tool {
     fn name(&self) -> &str;
-    // ...
 }
