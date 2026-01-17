@@ -7,7 +7,6 @@ edition = "2024"
 avian2d = { version = "0.5.0", default-features = false, features = ["2d", "f64", "parry-f64", "parallel", "simd"] }
 bevy = "0.18.0"
 bevy_console = "0.16.0"
-bevy_cursor = "0.7.1"
 bevy_egui = "0.39.0"
 bevy_firefly = "0.18.0"
 bevy_hanabi = "0.17.0"
