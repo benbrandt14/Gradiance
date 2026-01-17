@@ -1,9 +1,9 @@
-pub mod prelude;
-pub mod physics;
 pub mod geometry;
 pub mod input;
-pub mod ui;
+pub mod physics;
+pub mod prelude;
 pub mod scripting;
+pub mod ui;
 
 use bevy::prelude::*;
 

@@ -3,8 +3,8 @@ use crate::prelude::*;
 // Commented out due to version mismatch (bevy_mod_picking 0.20.1 targets Bevy 0.14).
 // Bevy 0.17+ has built-in picking.
 
-pub mod tools;
 pub mod cursor;
+pub mod tools;
 
 pub struct InputPlugin;
 

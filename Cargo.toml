@@ -24,7 +24,7 @@ bevy_vello = "0.12.1"
 clipper2 = "0.5.3"
 clippy = "0.0.302"
 moonshine-save = "0.6.0"
-rstest = "0.23.0"
+rstest = "0.26.1"
 vello = "0.7.0"
 
 # Enable a small amount of optimization in debug mode

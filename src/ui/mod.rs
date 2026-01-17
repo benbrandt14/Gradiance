@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use bevy_egui::{EguiPlugin, EguiContexts, egui};
+use bevy_egui::{EguiContexts, EguiPlugin, egui};
 
 pub struct UiPlugin;
 

@@ -1,14 +1,17 @@
-use crate::prelude::*;
 use crate::input::{ToolState, cursor::CursorWorldPos};
-use bevy_prototype_lyon::prelude::*;
+use crate::prelude::*;
 use bevy::math::DVec2;
+use bevy_prototype_lyon::prelude::*;
 
 pub struct CircleToolPlugin;
 
 impl Plugin for CircleToolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CircleToolData>();
-        app.add_systems(Update, circle_tool_update.run_if(in_state(ToolState::Circle)));
+        app.add_systems(
+            Update,
+            circle_tool_update.run_if(in_state(ToolState::Circle)),
+        );
         app.add_systems(OnExit(ToolState::Circle), circle_tool_reset);
     }
 }
@@ -46,7 +49,7 @@ fn circle_tool_update(
                 radius as f32,
                 Color::WHITE,
             );
-             gizmos.line_2d(
+            gizmos.line_2d(
                 Vec2::new(start.x as f32, start.y as f32),
                 Vec2::new(current_pos.x as f32, current_pos.y as f32),
                 Color::WHITE,
