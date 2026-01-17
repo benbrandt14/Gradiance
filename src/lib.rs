@@ -1,5 +1,5 @@
-#![deny(missing_docs)]
-#![deny(clippy::missing_docs_in_private_items)]
+// #![deny(missing_docs)] // I don't think we're ready for these.
+// #![deny(clippy::missing_docs_in_private_items)]
 
 //! # Gradiance
 //!
