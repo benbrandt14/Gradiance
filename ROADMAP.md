@@ -1,6 +1,6 @@
 # Gradiance Roadmap
 
-## Features
+## Initial Features, supporting core tools
 - [ ] right click menu on items
 - [ ] select / delete items
 - [ ] add hinge behavior
@@ -38,3 +38,95 @@
 - [ ] add sensors for proximity and force, make them thematically match ( proximity might be capacitance )
 - [ ] add a settings pane for things to be modified
 - [ ] add support for chains and pulleys ( esp. physically correct pulleys w/ non colliding wires -- not part of original algodoo and easy to add )
+
+## Core Tools ( Polish & Feature Complete )
+
+    [ ] Plane Tool: Spawns static infinite half-space.
+
+    [ ] Box Tool: Spawns Collider::cuboid.
+
+    [ ] Circle Tool: Spawns Collider::ball.
+
+    [ ] Polygon Tool: Click-to-place vertices, close loop to spawn.
+
+    [ ] Brush/Sketch Tool: Freehand draw -> simplify -> polygon.
+
+    [ ] Cut Tool: CSG difference operation on World geometry.
+
+    [ ] Drag Tool: MouseJoint implementation (Spring-based drag).
+
+    [ ] Scale/Rotate Tool: Gizmos for transforming entities (use bevy_transform_gizmo).
+
+Physics & Constraints
+
+    [ ] Hinge: RevoluteJoint.
+
+    [ ] Fixed: FixedJoint (Weld).
+
+    [ ] Spring: DistanceJoint with soft compliance.
+
+    [ ] Slider: PrismaticJoint with limits.
+
+    [ ] Chain: Procedurally generated linked bodies.
+
+    [ ] Rope (Pulley): Custom constraint (non-colliding length constraint).
+
+    [ ] Gear: Custom constraint (angular velocity ratio).
+
+    [ ] Collision Layers: UI to toggle collision masks (A collides with B).
+
+    [ ] Material Properties: Friction, Restitution (Bounciness), Density.
+
+Fluid & Particles
+
+    [ ] Liquify: Convert rigid body to particle cluster.
+
+    [ ] SPH Solver: Density/Pressure calculation.
+
+    [ ] Two-way Coupling: Particles push bodies; bodies push particles.
+
+    [ ] Buoyancy: Upward force on bodies intersecting fluid zone.
+
+    [ ] Soft Body: Convert Rigid Body to Soft
+
+Visuals
+
+    [ ] Tracers: Fade-out path visualization.
+
+    [ ] Lighting: Point lights, shadow casting (bevy_firefly).
+
+    [ ] Color: RGBA support with alpha blending.
+
+    [ ] Optics: Transmission and reflection of light.
+
+UI & UX
+
+    [ ] Context Menu: Right-click entity to show actions.
+
+    [ ] Inspector: Sidebar showing properties of selected object.
+
+    [ ] Grid: Snapping and visual grid.
+
+    [ ] Play/Pause: Global time scale control.
+
+    [ ] Step: Advance simulation 1 tick.
+
+    [ ] Undo/Redo: Command stack (using bevy_undo or custom).
+
+Scripting
+
+    [ ] Console: Toggleable overlay (~ key).
+
+    [ ] Entity Scripts: Attach.lua files to entities.
+
+    [ ] Events: on_hit, on_spawn, on_click hooks.
+
+    [ ] Variable Linking: entity.restitution = other.velocity.length * 0.1.
+
+System
+
+    [ ] Save/Load: RON file format.
+
+    [ ] SVG Import: Drag-and-drop support.
+
+    [ ] Performance Monitor: FPS and Body Count display.
