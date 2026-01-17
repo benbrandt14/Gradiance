@@ -40,8 +40,6 @@ fn resize_box(
             ..default()
         };
 
-        // Note: Cannot preserve Fill/Stroke due to bevy_prototype_lyon incompatibility with Bevy 0.18 Component trait query.
-        // Using defaults.
         commands.entity(entity)
             .insert(
                 ShapeBuilder::with(&shape)
@@ -75,5 +73,24 @@ fn resize_circle(
                     .build()
             )
             .insert(Collider::circle(editable.radius));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[test]
+    fn test_editable_box_creation() {
+        let e = EditableBox { width: 10.0, height: 20.0 };
+        assert_eq!(e.width, 10.0);
+        assert_eq!(e.height, 20.0);
+    }
+
+     #[test]
+    fn test_editable_circle_creation() {
+        let e = EditableCircle { radius: 5.0 };
+        assert_eq!(e.radius, 5.0);
     }
 }

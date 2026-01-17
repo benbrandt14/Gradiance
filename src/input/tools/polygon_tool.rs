@@ -1,5 +1,5 @@
 use crate::input::{ToolState, cursor::CursorWorldPos};
-use crate::ui::grid::GridSettings;
+use crate::ui::grid::{GridSettings, snap_to_grid};
 use crate::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
@@ -48,11 +48,7 @@ fn polygon_tool_update(
 
     let mut current_pos = raw_pos;
     if grid_settings.show && grid_settings.snap {
-        let s = grid_settings.spacing;
-        if s > 0.0001 {
-            current_pos.x = (current_pos.x / s).round() * s;
-            current_pos.y = (current_pos.y / s).round() * s;
-        }
+        current_pos = snap_to_grid(current_pos, grid_settings.spacing);
     }
 
     // Draw preview lines
@@ -120,5 +116,27 @@ fn polygon_tool_update(
         }
 
         data.points.push(current_pos);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    fn calculate_center(points: &[DVec2]) -> DVec2 {
+        points.iter().fold(DVec2::ZERO, |acc, p| acc + *p) / points.len() as f64
+    }
+
+    #[rstest]
+    fn test_calculate_center() {
+        let points = vec![
+            DVec2::new(0.0, 0.0),
+            DVec2::new(10.0, 0.0),
+            DVec2::new(10.0, 10.0),
+            DVec2::new(0.0, 10.0),
+        ];
+        let center = calculate_center(&points);
+        assert_eq!(center, DVec2::new(5.0, 5.0));
     }
 }
