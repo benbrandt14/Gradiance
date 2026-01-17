@@ -1,4 +1,6 @@
 use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::editable::EditableCircle;
+use crate::ui::grid::GridSettings;
 use crate::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
@@ -33,6 +35,7 @@ fn circle_tool_update(
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
+    grid_settings: Res<GridSettings>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut() {
         if ctx.is_pointer_over_area() {
@@ -40,9 +43,18 @@ fn circle_tool_update(
         }
     }
 
-    let Some(current_pos) = cursor_pos.0 else {
+    let Some(raw_pos) = cursor_pos.0 else {
         return;
     };
+
+    let mut current_pos = raw_pos;
+    if grid_settings.show && grid_settings.snap {
+        let s = grid_settings.spacing;
+        if s > 0.0001 {
+            current_pos.x = (current_pos.x / s).round() * s;
+            current_pos.y = (current_pos.y / s).round() * s;
+        }
+    }
 
     if mouse.just_pressed(MouseButton::Left) {
         data.drag_start = Some(current_pos);
@@ -78,6 +90,7 @@ fn circle_tool_update(
                         .build(),
                     RigidBody::Dynamic,
                     Collider::circle(radius),
+                    EditableCircle { radius },
                     Transform::from_xyz(start.x as f32, start.y as f32, 0.0),
                 ));
             }

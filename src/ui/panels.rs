@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use crate::input::ToolState;
+use crate::ui::grid::GridSettings;
 use bevy_egui::{EguiContexts, egui};
 
 pub struct PanelsPlugin;
@@ -26,10 +27,11 @@ fn sidebar_ui(
 
         let tools = [
             ("Select", ToolState::Select),
+            ("Drag", ToolState::Drag),
             ("Box", ToolState::Box),
             ("Circle", ToolState::Circle),
+            ("Polygon", ToolState::Polygon),
             // Placeholder for other tools
-            // ("Drag", ToolState::Drag),
             // ("Cut", ToolState::Cut),
             // ("Sketch", ToolState::Sketch),
         ];
@@ -46,6 +48,7 @@ fn sidebar_ui(
 fn top_panel_ui(
     mut contexts: EguiContexts,
     mut virtual_time: ResMut<Time<Virtual>>,
+    mut grid_settings: ResMut<GridSettings>,
 ) {
     let ctx = match contexts.ctx_mut() {
         Ok(ctx) => ctx,
@@ -63,6 +66,13 @@ fn top_panel_ui(
             }
 
             ui.label(format!("Speed: {:.2}x", virtual_time.relative_speed()));
+
+            ui.separator();
+            ui.checkbox(&mut grid_settings.show, "Grid");
+            if grid_settings.show {
+                 ui.checkbox(&mut grid_settings.snap, "Snap");
+                 ui.add(egui::DragValue::new(&mut grid_settings.spacing).speed(0.1).range(0.1..=100.0).prefix("Spacing: "));
+            }
         });
     });
 }

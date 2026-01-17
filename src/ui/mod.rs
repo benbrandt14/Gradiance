@@ -4,6 +4,7 @@ use bevy_egui::{EguiPlugin};
 pub mod context_menu;
 pub mod inspector;
 pub mod panels;
+pub mod grid;
 
 pub struct UiPlugin;
 
@@ -16,6 +17,7 @@ impl Plugin for UiPlugin {
             panels::PanelsPlugin,
             inspector::InspectorPlugin,
             context_menu::ContextMenuPlugin,
+            grid::GridPlugin,
         ));
     }
 }

@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use crate::input::selection::Selection;
+use crate::input::editable::{EditableBox, EditableCircle};
 use bevy_egui::{EguiContexts, egui};
 // use bevy_prototype_lyon::prelude::*;
 
@@ -20,6 +21,9 @@ fn inspector_ui(
         // Avian components:
         Option<&mut Friction>,
         Option<&mut Restitution>,
+        // Editable shapes
+        Option<&mut EditableBox>,
+        Option<&mut EditableCircle>,
         // TODO: Re-enable Fill and Stroke once bevy_prototype_lyon is compatible with Bevy 0.18 Component trait
         // Option<&mut Fill>,
         // Option<&mut Stroke>,
@@ -35,6 +39,8 @@ fn inspector_ui(
         rigid_body,
         mut friction,
         mut restitution,
+        mut editable_box,
+        mut editable_circle,
         // mut fill,
         // mut stroke
     )) = query.get_mut(entity) else {
@@ -69,6 +75,19 @@ fn inspector_ui(
                  t.rotation = Quat::from_rotation_z(rotation);
              }
              ui.separator();
+        }
+
+        if let Some(ref mut box_shape) = editable_box {
+            ui.heading("Box Dimensions");
+            ui.add(egui::DragValue::new(&mut box_shape.width).speed(0.1).prefix("Width: "));
+            ui.add(egui::DragValue::new(&mut box_shape.height).speed(0.1).prefix("Height: "));
+            ui.separator();
+        }
+
+        if let Some(ref mut circle_shape) = editable_circle {
+            ui.heading("Circle Dimensions");
+             ui.add(egui::DragValue::new(&mut circle_shape.radius).speed(0.1).prefix("Radius: "));
+            ui.separator();
         }
 
         if let Some(rb) = rigid_body {
