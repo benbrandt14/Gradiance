@@ -1367,16 +1367,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_cursor"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d55d78d3440ab9590bf52881b54c98df78538ac84f8a3fca6c927cced3d8698"
-dependencies = [
- "bevy 0.17.3",
- "smallvec",
-]
-
-[[package]]
 name = "bevy_derive"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6955,7 +6945,6 @@ dependencies = [
  "avian2d",
  "bevy 0.18.0",
  "bevy_console",
- "bevy_cursor",
  "bevy_egui 0.39.0",
  "bevy_firefly",
  "bevy_hanabi",

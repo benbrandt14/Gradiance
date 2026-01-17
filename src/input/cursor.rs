@@ -3,6 +3,10 @@ use bevy::math::DVec2;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
+/// Custom cursor position resource.
+/// We implement this manually instead of using a plugin like `bevy_cursor` because:
+/// 1. We need `DVec2` (f64) precision for Avian2d physics.
+/// 2. We need tight integration with `bevy_egui` to block cursor updates when hovering UI.
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct CursorWorldPos(pub Option<DVec2>);
 
