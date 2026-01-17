@@ -1,5 +1,6 @@
-use crate::prelude::*;
 use crate::input::ToolState;
+use crate::prelude::*;
+use crate::ui::grid::GridSettings;
 use bevy_egui::{EguiContexts, egui};
 
 pub struct PanelsPlugin;
@@ -26,17 +27,21 @@ fn sidebar_ui(
 
         let tools = [
             ("Select", ToolState::Select),
+            ("Drag", ToolState::Drag),
             ("Box", ToolState::Box),
             ("Circle", ToolState::Circle),
+            ("Polygon", ToolState::Polygon),
             // Placeholder for other tools
-            // ("Drag", ToolState::Drag),
             // ("Cut", ToolState::Cut),
             // ("Sketch", ToolState::Sketch),
         ];
 
         for (name, state) in tools {
             let is_selected = *current_tool_state.get() == state;
-            if ui.add(egui::Button::new(name).selected(is_selected)).clicked() {
+            if ui
+                .add(egui::Button::new(name).selected(is_selected))
+                .clicked()
+            {
                 next_tool_state.set(state);
             }
         }
@@ -46,6 +51,7 @@ fn sidebar_ui(
 fn top_panel_ui(
     mut contexts: EguiContexts,
     mut virtual_time: ResMut<Time<Virtual>>,
+    mut grid_settings: ResMut<GridSettings>,
 ) {
     let ctx = match contexts.ctx_mut() {
         Ok(ctx) => ctx,
@@ -54,7 +60,14 @@ fn top_panel_ui(
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            if ui.button(if virtual_time.is_paused() { "▶ Play" } else { "⏸ Pause" }).clicked() {
+            if ui
+                .button(if virtual_time.is_paused() {
+                    "▶ Play"
+                } else {
+                    "⏸ Pause"
+                })
+                .clicked()
+            {
                 if virtual_time.is_paused() {
                     virtual_time.unpause();
                 } else {
@@ -63,6 +76,18 @@ fn top_panel_ui(
             }
 
             ui.label(format!("Speed: {:.2}x", virtual_time.relative_speed()));
+
+            ui.separator();
+            ui.checkbox(&mut grid_settings.show, "Grid");
+            if grid_settings.show {
+                ui.checkbox(&mut grid_settings.snap, "Snap");
+                ui.add(
+                    egui::DragValue::new(&mut grid_settings.spacing)
+                        .speed(0.1)
+                        .range(0.1..=100.0)
+                        .prefix("Spacing: "),
+                );
+            }
         });
     });
 }

@@ -1,7 +1,8 @@
 use crate::prelude::*;
-use bevy_egui::{EguiPlugin};
+use bevy_egui::EguiPlugin;
 
 pub mod context_menu;
+pub mod grid;
 pub mod inspector;
 pub mod panels;
 
@@ -16,6 +17,7 @@ impl Plugin for UiPlugin {
             panels::PanelsPlugin,
             inspector::InspectorPlugin,
             context_menu::ContextMenuPlugin,
+            grid::GridPlugin,
         ));
     }
 }

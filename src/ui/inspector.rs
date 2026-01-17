@@ -1,5 +1,6 @@
-use crate::prelude::*;
+use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::selection::Selection;
+use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 // use bevy_prototype_lyon::prelude::*;
 
@@ -20,6 +21,9 @@ fn inspector_ui(
         // Avian components:
         Option<&mut Friction>,
         Option<&mut Restitution>,
+        // Editable shapes
+        Option<&mut EditableBox>,
+        Option<&mut EditableCircle>,
         // TODO: Re-enable Fill and Stroke once bevy_prototype_lyon is compatible with Bevy 0.18 Component trait
         // Option<&mut Fill>,
         // Option<&mut Stroke>,
@@ -35,9 +39,12 @@ fn inspector_ui(
         rigid_body,
         mut friction,
         mut restitution,
+        mut editable_box,
+        mut editable_circle,
         // mut fill,
         // mut stroke
-    )) = query.get_mut(entity) else {
+    )) = query.get_mut(entity)
+    else {
         return;
     };
 
@@ -51,35 +58,63 @@ fn inspector_ui(
         ui.separator();
 
         if let Some(ref mut t) = transform {
-             ui.heading("Transform");
-             ui.horizontal(|ui| {
-                 ui.label("Pos X:");
-                 ui.add(egui::DragValue::new(&mut t.translation.x).speed(0.1));
-                 ui.label("Pos Y:");
-                 ui.add(egui::DragValue::new(&mut t.translation.y).speed(0.1));
-             });
-             // Rotation z
-             let mut rotation = t.rotation.to_euler(EulerRot::XYZ).2;
-             let old_rotation = rotation;
-             ui.horizontal(|ui| {
+            ui.heading("Transform");
+            ui.horizontal(|ui| {
+                ui.label("Pos X:");
+                ui.add(egui::DragValue::new(&mut t.translation.x).speed(0.1));
+                ui.label("Pos Y:");
+                ui.add(egui::DragValue::new(&mut t.translation.y).speed(0.1));
+            });
+            // Rotation z
+            let mut rotation = t.rotation.to_euler(EulerRot::XYZ).2;
+            let old_rotation = rotation;
+            ui.horizontal(|ui| {
                 ui.label("Rotation:");
                 ui.drag_angle(&mut rotation);
-             });
-             if (rotation - old_rotation).abs() > 0.0001 {
-                 t.rotation = Quat::from_rotation_z(rotation);
-             }
-             ui.separator();
+            });
+            if (rotation - old_rotation).abs() > 0.0001 {
+                t.rotation = Quat::from_rotation_z(rotation);
+            }
+            ui.separator();
+        }
+
+        if let Some(ref mut box_shape) = editable_box {
+            ui.heading("Box Dimensions");
+            ui.add(
+                egui::DragValue::new(&mut box_shape.width)
+                    .speed(0.1)
+                    .prefix("Width: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut box_shape.height)
+                    .speed(0.1)
+                    .prefix("Height: "),
+            );
+            ui.separator();
+        }
+
+        if let Some(ref mut circle_shape) = editable_circle {
+            ui.heading("Circle Dimensions");
+            ui.add(
+                egui::DragValue::new(&mut circle_shape.radius)
+                    .speed(0.1)
+                    .prefix("Radius: "),
+            );
+            ui.separator();
         }
 
         if let Some(rb) = rigid_body {
-             ui.heading("Rigid Body");
-             let mut current = *rb;
-             let options = [RigidBody::Dynamic, RigidBody::Static, RigidBody::Kinematic];
-             egui::ComboBox::from_label("Type")
+            ui.heading("Rigid Body");
+            let mut current = *rb;
+            let options = [RigidBody::Dynamic, RigidBody::Static, RigidBody::Kinematic];
+            egui::ComboBox::from_label("Type")
                 .selected_text(format!("{:?}", current))
                 .show_ui(ui, |ui| {
                     for option in options {
-                        if ui.selectable_value(&mut current, option, format!("{:?}", option)).clicked() {
+                        if ui
+                            .selectable_value(&mut current, option, format!("{:?}", option))
+                            .clicked()
+                        {
                             // Avian requires removing old and inserting new for RigidBody change usually?
                             // Or just overwriting the component.
                             // Since RigidBody is a component, we can just insert the new one.

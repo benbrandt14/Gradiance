@@ -1,5 +1,5 @@
-use crate::prelude::*;
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
+use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
 #[derive(Resource, Default)]
@@ -25,37 +25,39 @@ fn context_menu_input(
     spatial_query: SpatialQuery,
     mut contexts: EguiContexts,
 ) {
-     if let Ok(ctx) = contexts.ctx_mut() {
+    if let Ok(ctx) = contexts.ctx_mut() {
         // If over area, don't trigger game context menu unless we are already showing it (logic handled later)
         if ctx.is_pointer_over_area() {
-             // If we are showing the menu, we might be over the menu itself.
-             // So we continue only if we want to open a NEW menu, which we don't if over UI.
-             // But if we right click on UI, standard egui behavior.
-             // So if over area, we just return.
-             // BUT, if we have a context menu open, `is_pointer_over_area` will be true when hovering it.
-             // So we shouldn't close it or prevent interaction.
-             // The input handling for opening is `just_pressed(Right)`.
-             // If we right click OVER UI, we return.
-             if mouse.just_pressed(MouseButton::Right) {
-                 return;
-             }
+            // If we are showing the menu, we might be over the menu itself.
+            // So we continue only if we want to open a NEW menu, which we don't if over UI.
+            // But if we right click on UI, standard egui behavior.
+            // So if over area, we just return.
+            // BUT, if we have a context menu open, `is_pointer_over_area` will be true when hovering it.
+            // So we shouldn't close it or prevent interaction.
+            // The input handling for opening is `just_pressed(Right)`.
+            // If we right click OVER UI, we return.
+            if mouse.just_pressed(MouseButton::Right) {
+                return;
+            }
         }
     }
 
     if mouse.just_pressed(MouseButton::Right) {
-        let Some(world_pos) = cursor_pos.0 else { return };
+        let Some(world_pos) = cursor_pos.0 else {
+            return;
+        };
 
         // Raycast to find entity
         let filter = SpatialQueryFilter::default();
         if let Some(hit) = spatial_query.project_point(world_pos, true, &filter) {
-             selection.0 = Some(hit.entity);
+            selection.0 = Some(hit.entity);
 
-             if let Ok(ctx) = contexts.ctx_mut() {
-                 if let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                      state.position = Some(pointer_pos);
-                      state.entity = Some(hit.entity);
-                 }
-             }
+            if let Ok(ctx) = contexts.ctx_mut() {
+                if let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                    state.position = Some(pointer_pos);
+                    state.entity = Some(hit.entity);
+                }
+            }
         } else {
             // Clicked empty space
             state.position = None;
@@ -67,10 +69,10 @@ fn context_menu_input(
         // If we click outside, `is_pointer_over_area` might be false (game world).
         // So:
         if let Ok(ctx) = contexts.ctx_mut() {
-             if !ctx.is_pointer_over_area() {
-                 state.position = None;
-                 state.entity = None;
-             }
+            if !ctx.is_pointer_over_area() {
+                state.position = None;
+                state.entity = None;
+            }
         }
     }
 }
@@ -97,22 +99,22 @@ fn context_menu_ui(
         .title_bar(false)
         .frame(egui::Frame::popup(ctx.style().as_ref()))
         .show(ctx, |ui| {
-             if ui.button("Properties").clicked() {
-                 // Inspector handles selection.
-                 state.position = None;
-             }
-             if ui.button("Delete").clicked() {
-                 commands.entity(entity).despawn();
-                 selection.0 = None;
-                 state.position = None;
-                 state.entity = None;
-             }
-             if ui.button("Freeze/Unfreeze").clicked() {
-                  // Toggle static/dynamic
-                  // Need to query current body type?
-                  // We can't easily do it without query.
-                  // For now skip or use commands with a closure if bevy allowed it (it doesn't easily).
-                  // I'll leave it for now.
-             }
+            if ui.button("Properties").clicked() {
+                // Inspector handles selection.
+                state.position = None;
+            }
+            if ui.button("Delete").clicked() {
+                commands.entity(entity).despawn();
+                selection.0 = None;
+                state.position = None;
+                state.entity = None;
+            }
+            if ui.button("Freeze/Unfreeze").clicked() {
+                // Toggle static/dynamic
+                // Need to query current body type?
+                // We can't easily do it without query.
+                // For now skip or use commands with a closure if bevy allowed it (it doesn't easily).
+                // I'll leave it for now.
+            }
         });
 }

@@ -4,6 +4,7 @@ use crate::prelude::*;
 // Bevy 0.17+ has built-in picking.
 
 pub mod cursor;
+pub mod editable;
 pub mod selection;
 pub mod tools;
 
@@ -20,13 +21,16 @@ impl Plugin for InputPlugin {
         app.add_systems(PreUpdate, cursor::update_cursor_pos);
 
         // Selection
-        app.init_resource::<selection::Selection>();
+        app.add_plugins(selection::SelectionPlugin);
 
         // Tool state
         app.init_state::<ToolState>();
 
         // Tools
         app.add_plugins(tools::ToolsPlugin);
+
+        // Editable shapes
+        app.add_plugins(editable::EditablePlugin);
     }
 }
 
@@ -39,5 +43,6 @@ pub enum ToolState {
     Sketch,
     Box,
     Circle,
+    Polygon,
     // Add more as needed
 }
