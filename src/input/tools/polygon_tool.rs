@@ -1,3 +1,8 @@
+//! Tool for creating polygon rigid bodies.
+//!
+//! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
+//! Uses Convex Hull decomposition for colliders.
+
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
@@ -5,6 +10,7 @@ use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
 
+/// Plugin for the Polygon Tool.
 pub struct PolygonToolPlugin;
 
 impl Plugin for PolygonToolPlugin {

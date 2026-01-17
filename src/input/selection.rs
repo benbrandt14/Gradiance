@@ -1,10 +1,16 @@
+//! Entity selection management.
+//!
+//! Handles the currently selected entity and renders a highlight gizmo around it.
+
 use crate::input::editable::{EditableBox, EditableCircle};
 use bevy::prelude::*;
 // use avian2d::prelude::*; // Not needed directly here if using standard math
 
+/// Resource storing the currently selected entity, if any.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Selection(pub Option<Entity>);
 
+/// Plugin for selection visualization.
 pub struct SelectionPlugin;
 
 impl Plugin for SelectionPlugin {
@@ -14,6 +20,9 @@ impl Plugin for SelectionPlugin {
     }
 }
 
+/// System that draws a yellow outline around the selected entity.
+///
+/// Supports `EditableBox` and `EditableCircle` shapes.
 fn draw_selection_highlight(
     selection: Res<Selection>,
     query: Query<(&Transform, Option<&EditableBox>, Option<&EditableCircle>)>,

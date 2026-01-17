@@ -1,3 +1,8 @@
+//! Input handling and tool state management.
+//!
+//! This module coordinates user input, mouse picking, tool selection (Select, Box, Drag, etc.),
+//! and the state machine that governs tool behavior.
+
 use crate::prelude::*;
 // use bevy_mod_picking::DefaultPickingPlugins;
 // Commented out due to version mismatch (bevy_mod_picking 0.20.1 targets Bevy 0.14).
@@ -8,6 +13,9 @@ pub mod editable;
 pub mod selection;
 pub mod tools;
 
+/// Plugin for Input and Tools.
+///
+/// Initializes the cursor, selection, tool state, and specific tool plugins.
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
@@ -34,15 +42,25 @@ impl Plugin for InputPlugin {
     }
 }
 
+/// The active tool state.
+///
+/// Determines which tool logic is active in the `Update` loop.
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ToolState {
+    /// Select and inspect objects.
     #[default]
     Select,
+    /// Drag and throw objects.
     Drag,
+    /// Cut geometry (Laser/Knife).
     Cut,
+    /// Freehand sketch tool.
     Sketch,
+    /// Create box shapes.
     Box,
+    /// Create circle shapes.
     Circle,
+    /// Create polygon shapes.
     Polygon,
     // Add more as needed
 }

@@ -1,7 +1,12 @@
+//! Tool for selecting entities.
+//!
+//! Simply allows clicking on entities to populate the `Selection` resource.
+
 use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
 use bevy_egui::EguiContexts;
 
+/// Plugin for the Select Tool.
 pub struct SelectToolPlugin;
 
 impl Plugin for SelectToolPlugin {

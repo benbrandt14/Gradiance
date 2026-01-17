@@ -1,3 +1,8 @@
+//! Context menu system.
+//!
+//! Provides a right-click context menu for entities, allowing actions like deletion,
+//! property inspection, and state toggling.
+
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -8,6 +13,7 @@ struct ContextMenuState {
     entity: Option<Entity>,
 }
 
+/// Plugin that handles the context menu logic and UI.
 pub struct ContextMenuPlugin;
 
 impl Plugin for ContextMenuPlugin {
@@ -17,6 +23,9 @@ impl Plugin for ContextMenuPlugin {
     }
 }
 
+/// Handles input for opening and closing the context menu.
+///
+/// Detects right-clicks on entities to open the menu, and clicks outside to close it.
 fn context_menu_input(
     mut state: ResMut<ContextMenuState>,
     mut selection: ResMut<Selection>,
@@ -77,6 +86,7 @@ fn context_menu_input(
     }
 }
 
+/// Renders the context menu UI if active.
 fn context_menu_ui(
     mut state: ResMut<ContextMenuState>,
     mut contexts: EguiContexts,

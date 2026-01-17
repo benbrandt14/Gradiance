@@ -1,9 +1,18 @@
+//! Physics configuration and integration for Gradiance.
+//!
+//! This module configures the [Avian](https://github.com/Jondolf/avian) physics engine with settings
+//! optimized for mechanical simulation, such as high precision (`f64`) and increased substeps.
+
 use crate::prelude::*;
 use bevy::math::DVec2;
 
 pub mod config;
 pub mod constraints;
 
+/// Plugin that configures the physics simulation.
+///
+/// This plugin initializes Avian, sets gravity, configures substeps for stability,
+/// and registers custom constraints.
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
