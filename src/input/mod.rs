@@ -4,6 +4,7 @@ use crate::prelude::*;
 // Bevy 0.17+ has built-in picking.
 
 pub mod tools;
+pub mod cursor;
 
 pub struct InputPlugin;
 
@@ -12,6 +13,10 @@ impl Plugin for InputPlugin {
         // Picking setup
         // app.add_plugins(DefaultPickingPlugins);
         // Using Bevy's built-in picking (included in DefaultPlugins)
+
+        // Cursor
+        app.init_resource::<cursor::CursorWorldPos>();
+        app.add_systems(PreUpdate, cursor::update_cursor_pos);
 
         // Tool state
         app.init_state::<ToolState>();
