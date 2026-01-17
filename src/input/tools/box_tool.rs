@@ -1,7 +1,7 @@
-use crate::prelude::*;
 use crate::input::{ToolState, cursor::CursorWorldPos};
-use bevy_prototype_lyon::prelude::*;
+use crate::prelude::*;
 use bevy::math::DVec2;
+use bevy_prototype_lyon::prelude::*;
 
 pub struct BoxToolPlugin;
 
@@ -88,8 +88,18 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case(DVec2::new(0.0, 0.0), DVec2::new(10.0, 10.0), DVec2::new(10.0, 10.0), DVec2::new(5.0, 5.0))]
-    #[case(DVec2::new(10.0, 10.0), DVec2::new(0.0, 0.0), DVec2::new(10.0, 10.0), DVec2::new(5.0, 5.0))]
+    #[case(
+        DVec2::new(0.0, 0.0),
+        DVec2::new(10.0, 10.0),
+        DVec2::new(10.0, 10.0),
+        DVec2::new(5.0, 5.0)
+    )]
+    #[case(
+        DVec2::new(10.0, 10.0),
+        DVec2::new(0.0, 0.0),
+        DVec2::new(10.0, 10.0),
+        DVec2::new(5.0, 5.0)
+    )]
     #[case(DVec2::new(-5.0, -5.0), DVec2::new(5.0, 5.0), DVec2::new(10.0, 10.0), DVec2::new(0.0, 0.0))]
     fn test_calculate_box_geometry(
         #[case] start: DVec2,

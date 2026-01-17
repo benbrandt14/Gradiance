@@ -24,9 +24,9 @@ pub struct GearJoint {
 // See SPEC.md Section 3.3
 #[derive(Component)]
 pub struct PulleyJoint {
-     pub entity_a: Entity,
-     pub entity_b: Entity,
-     pub anchor_a: Vec2,
-     pub anchor_b: Vec2,
-     pub length: f64,
+    pub entity_a: Entity,
+    pub entity_b: Entity,
+    pub anchor_a: Vec2,
+    pub anchor_b: Vec2,
+    pub length: f64,
 }

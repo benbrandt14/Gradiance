@@ -1,7 +1,7 @@
 use crate::prelude::*;
+use bevy::math::DVec2;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
-use bevy::math::DVec2;
 
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct CursorWorldPos(pub Option<DVec2>);
@@ -13,8 +13,12 @@ pub fn update_cursor_pos(
     mut contexts: EguiContexts,
 ) {
     // Use iter().next() instead of get_single() as per AGENTS.md/memory
-    let Some(window) = q_window.iter().next() else { return };
-    let Some((camera, camera_transform)) = q_camera.iter().next() else { return };
+    let Some(window) = q_window.iter().next() else {
+        return;
+    };
+    let Some((camera, camera_transform)) = q_camera.iter().next() else {
+        return;
+    };
 
     // Check if mouse is over UI
     // In Bevy 0.18 / Egui 0.39, ctx_mut might return a Result.
