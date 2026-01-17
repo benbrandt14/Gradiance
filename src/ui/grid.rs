@@ -6,7 +6,10 @@ pub struct GridPlugin;
 impl Plugin for GridPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GridSettings>();
-        app.add_systems(Update, draw_grid.run_if(|settings: Res<GridSettings>| settings.show));
+        app.add_systems(
+            Update,
+            draw_grid.run_if(|settings: Res<GridSettings>| settings.show),
+        );
     }
 }
 

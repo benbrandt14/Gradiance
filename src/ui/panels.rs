@@ -1,5 +1,5 @@
-use crate::prelude::*;
 use crate::input::ToolState;
+use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy_egui::{EguiContexts, egui};
 
@@ -38,7 +38,10 @@ fn sidebar_ui(
 
         for (name, state) in tools {
             let is_selected = *current_tool_state.get() == state;
-            if ui.add(egui::Button::new(name).selected(is_selected)).clicked() {
+            if ui
+                .add(egui::Button::new(name).selected(is_selected))
+                .clicked()
+            {
                 next_tool_state.set(state);
             }
         }
@@ -57,7 +60,14 @@ fn top_panel_ui(
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            if ui.button(if virtual_time.is_paused() { "▶ Play" } else { "⏸ Pause" }).clicked() {
+            if ui
+                .button(if virtual_time.is_paused() {
+                    "▶ Play"
+                } else {
+                    "⏸ Pause"
+                })
+                .clicked()
+            {
                 if virtual_time.is_paused() {
                     virtual_time.unpause();
                 } else {
@@ -70,8 +80,13 @@ fn top_panel_ui(
             ui.separator();
             ui.checkbox(&mut grid_settings.show, "Grid");
             if grid_settings.show {
-                 ui.checkbox(&mut grid_settings.snap, "Snap");
-                 ui.add(egui::DragValue::new(&mut grid_settings.spacing).speed(0.1).range(0.1..=100.0).prefix("Spacing: "));
+                ui.checkbox(&mut grid_settings.snap, "Snap");
+                ui.add(
+                    egui::DragValue::new(&mut grid_settings.spacing)
+                        .speed(0.1)
+                        .range(0.1..=100.0)
+                        .prefix("Spacing: "),
+                );
             }
         });
     });

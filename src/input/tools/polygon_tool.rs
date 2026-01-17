@@ -1,6 +1,6 @@
 use crate::input::{ToolState, cursor::CursorWorldPos};
-use crate::ui::grid::{GridSettings, snap_to_grid};
 use crate::prelude::*;
+use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
@@ -74,7 +74,7 @@ fn polygon_tool_update(
         let start = data.points[0];
         gizmos.circle_2d(
             Isometry2d::from_translation(Vec2::new(start.x as f32, start.y as f32)),
-            0.2, // snap radius visual
+            0.2,                        // snap radius visual
             Color::srgb(0.0, 1.0, 0.0), // Green
         );
     }
@@ -82,24 +82,30 @@ fn polygon_tool_update(
     if mouse.just_pressed(MouseButton::Left) {
         // Check if closing loop
         if !data.points.is_empty() {
-             let start = data.points[0];
-             // Allow closing loop even if snapped, but check distance to (snapped) start
-             if start.distance(current_pos) < 0.5 { // Snap distance
-                 if data.points.len() >= 3 {
-                     // Close loop and spawn
-                     let center = data.points.iter().fold(DVec2::ZERO, |acc, p| acc + *p) / data.points.len() as f64;
+            let start = data.points[0];
+            // Allow closing loop even if snapped, but check distance to (snapped) start
+            if start.distance(current_pos) < 0.5 {
+                // Snap distance
+                if data.points.len() >= 3 {
+                    // Close loop and spawn
+                    let center = data.points.iter().fold(DVec2::ZERO, |acc, p| acc + *p)
+                        / data.points.len() as f64;
 
-                     // Points relative to center
-                     let relative_points: Vec<DVec2> = data.points.iter().map(|p| *p - center).collect();
-                     let vec2_points: Vec<Vec2> = relative_points.iter().map(|p| Vec2::new(p.x as f32, p.y as f32)).collect();
+                    // Points relative to center
+                    let relative_points: Vec<DVec2> =
+                        data.points.iter().map(|p| *p - center).collect();
+                    let vec2_points: Vec<Vec2> = relative_points
+                        .iter()
+                        .map(|p| Vec2::new(p.x as f32, p.y as f32))
+                        .collect();
 
-                     // Create shape
-                     let shape = shapes::Polygon {
-                         points: vec2_points.clone(),
-                         closed: true,
-                     };
+                    // Create shape
+                    let shape = shapes::Polygon {
+                        points: vec2_points.clone(),
+                        closed: true,
+                    };
 
-                     commands.spawn((
+                    commands.spawn((
                         ShapeBuilder::with(&shape)
                             .fill(Color::srgb(0.5, 1.0, 0.5))
                             .stroke(Stroke::new(Color::BLACK, 0.1))
@@ -107,12 +113,12 @@ fn polygon_tool_update(
                         RigidBody::Dynamic,
                         Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0)), // Fallback
                         Transform::from_xyz(center.x as f32, center.y as f32, 0.0),
-                     ));
+                    ));
 
-                     data.points.clear();
-                 }
-                 return;
-             }
+                    data.points.clear();
+                }
+                return;
+            }
         }
 
         data.points.push(current_pos);

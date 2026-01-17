@@ -4,9 +4,9 @@ use crate::prelude::*;
 // Bevy 0.17+ has built-in picking.
 
 pub mod cursor;
+pub mod editable;
 pub mod selection;
 pub mod tools;
-pub mod editable;
 
 pub struct InputPlugin;
 

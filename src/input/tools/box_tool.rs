@@ -1,7 +1,7 @@
-use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::input::editable::EditableBox;
-use crate::ui::grid::GridSettings;
+use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
+use crate::ui::grid::GridSettings;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
@@ -93,7 +93,10 @@ fn box_tool_update(
                         .build(),
                     RigidBody::Dynamic,
                     Collider::rectangle(size.x, size.y),
-                    EditableBox { width: size.x, height: size.y },
+                    EditableBox {
+                        width: size.x,
+                        height: size.y,
+                    },
                     Transform::from_xyz(center.x as f32, center.y as f32, 0.0),
                 ));
             }

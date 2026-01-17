@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use avian2d::prelude::*;
+use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
 #[derive(Component, Reflect, Default, Debug)]
@@ -25,10 +25,7 @@ impl Plugin for EditablePlugin {
     }
 }
 
-fn resize_box(
-    mut commands: Commands,
-    query: Query<(Entity, &EditableBox), Changed<EditableBox>>,
-) {
+fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Changed<EditableBox>>) {
     for (entity, editable) in query.iter() {
         if editable.width <= 0.0 || editable.height <= 0.0 {
             continue;
@@ -40,12 +37,13 @@ fn resize_box(
             ..default()
         };
 
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .insert(
                 ShapeBuilder::with(&shape)
                     .fill(Color::srgb(0.5, 0.5, 1.0))
                     .stroke(Stroke::new(Color::BLACK, 0.1))
-                    .build()
+                    .build(),
             )
             .insert(Collider::rectangle(editable.width, editable.height));
     }
@@ -65,12 +63,13 @@ fn resize_circle(
             center: Vec2::ZERO,
         };
 
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .insert(
-                 ShapeBuilder::with(&shape)
+                ShapeBuilder::with(&shape)
                     .fill(Color::srgb(1.0, 0.5, 0.5))
                     .stroke(Stroke::new(Color::BLACK, 0.1))
-                    .build()
+                    .build(),
             )
             .insert(Collider::circle(editable.radius));
     }
@@ -79,16 +78,18 @@ fn resize_circle(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
 
     #[test]
     fn test_editable_box_creation() {
-        let e = EditableBox { width: 10.0, height: 20.0 };
+        let e = EditableBox {
+            width: 10.0,
+            height: 20.0,
+        };
         assert_eq!(e.width, 10.0);
         assert_eq!(e.height, 20.0);
     }
 
-     #[test]
+    #[test]
     fn test_editable_circle_creation() {
         let e = EditableCircle { radius: 5.0 };
         assert_eq!(e.radius, 5.0);

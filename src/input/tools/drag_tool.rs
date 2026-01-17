@@ -9,10 +9,7 @@ pub struct DragToolPlugin;
 impl Plugin for DragToolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DragToolData>();
-        app.add_systems(
-            Update,
-            drag_tool_update.run_if(in_state(ToolState::Drag)),
-        );
+        app.add_systems(Update, drag_tool_update.run_if(in_state(ToolState::Drag)));
         app.add_systems(OnExit(ToolState::Drag), drag_tool_reset);
     }
 }
@@ -65,7 +62,7 @@ fn drag_tool_update(
                 // Rotate back: x' = x cos + y sin, y' = -x sin + y cos
                 data.local_anchor = DVec2::new(
                     relative.x * cos + relative.y * sin,
-                    -relative.x * sin + relative.y * cos
+                    -relative.x * sin + relative.y * cos,
                 );
             }
         }
@@ -91,7 +88,7 @@ fn drag_tool_update(
             // Rotate forward: x' = x cos - y sin, y' = x sin + y cos
             let rotated_anchor = DVec2::new(
                 data.local_anchor.x * cos - data.local_anchor.y * sin,
-                data.local_anchor.x * sin + data.local_anchor.y * cos
+                data.local_anchor.x * sin + data.local_anchor.y * cos,
             );
 
             let current_anchor_pos = translation + rotated_anchor;
@@ -122,7 +119,7 @@ fn drag_tool_update(
             force.set_torque(torque as f32);
             */
         } else {
-             data.dragged_entity = None;
+            data.dragged_entity = None;
         }
     }
 }
