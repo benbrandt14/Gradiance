@@ -1,0 +1,34 @@
+use crate::prelude::*;
+// use bevy_mod_picking::DefaultPickingPlugins;
+// Commented out due to version mismatch (bevy_mod_picking 0.20.1 targets Bevy 0.14).
+// Bevy 0.17+ has built-in picking.
+
+pub mod tools;
+
+pub struct InputPlugin;
+
+impl Plugin for InputPlugin {
+    fn build(&self, app: &mut App) {
+        // Picking setup
+        // app.add_plugins(DefaultPickingPlugins);
+        // Using Bevy's built-in picking (included in DefaultPlugins)
+
+        // Tool state
+        app.init_state::<ToolState>();
+
+        // Tools
+        app.add_plugins(tools::ToolsPlugin);
+    }
+}
+
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ToolState {
+    #[default]
+    Select,
+    Drag,
+    Cut,
+    Sketch,
+    Box,
+    Circle,
+    // Add more as needed
+}

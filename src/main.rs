@@ -1,3 +1,9 @@
+use bevy::prelude::*;
+use gradiance::GamePlugin;
+
 fn main() {
-    println!("Hello, world!");
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins(GamePlugin)
+        .run();
 }
