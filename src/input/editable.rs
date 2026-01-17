@@ -4,7 +4,6 @@
 //! of visual shapes (`bevy_prototype_lyon`) and physics colliders (`Avian`) when changed.
 
 use avian2d::prelude::*;
-
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 

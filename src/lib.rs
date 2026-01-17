@@ -34,6 +34,12 @@ impl Plugin for GamePlugin {
             input::InputPlugin,
             ui::UiPlugin,
             scripting::ScriptingPlugin,
-        ));
+        ))
+        .add_systems(Startup, setup_camera);
     }
+}
+
+/// Spawns the main 2D camera.
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2dBundle::default());
 }

@@ -1,5 +1,4 @@
 // Run with: cargo run --example gen_graph > schedule.dot
-
 use bevy::prelude::*;
 use bevy_mod_debugdump::schedule_graph::Settings;
 use gradiance::GamePlugin;

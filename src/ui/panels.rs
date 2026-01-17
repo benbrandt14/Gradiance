@@ -4,7 +4,6 @@
 //! (Play/Pause, Grid settings, Time control).
 
 use crate::input::ToolState;
-
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy_egui::{EguiContexts, egui};
