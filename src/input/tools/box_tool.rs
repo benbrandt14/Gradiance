@@ -4,6 +4,7 @@
 
 use crate::input::editable::EditableBox;
 use crate::input::{ToolState, cursor::CursorWorldPos};
+
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::math::DVec2;
@@ -48,9 +49,10 @@ fn box_tool_update(
     grid_settings: Res<GridSettings>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() {
-            return;
-        }
+        && ctx.is_pointer_over_area()
+    {
+        return;
+    }
 
     let Some(raw_pos) = cursor_pos.0 else {
         return;

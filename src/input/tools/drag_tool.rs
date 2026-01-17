@@ -5,6 +5,7 @@
 //! application is temporarily disabled pending `ExternalForce` integration.
 
 use crate::input::{ToolState, cursor::CursorWorldPos};
+
 use crate::prelude::*;
 use avian2d::prelude::*;
 use bevy::math::DVec2;
@@ -44,9 +45,11 @@ fn drag_tool_update(
     mut contexts: EguiContexts,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() && data.dragged_entity.is_none() {
-            return;
-        }
+        && ctx.is_pointer_over_area()
+        && data.dragged_entity.is_none()
+    {
+        return;
+    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -55,22 +58,23 @@ fn drag_tool_update(
     if mouse.just_pressed(MouseButton::Left) {
         let filter = SpatialQueryFilter::default();
         if let Some(hit) = spatial_query.project_point(current_pos, true, &filter)
-            && let Ok((transform, _, _)) = query.get(hit.entity) {
-                data.dragged_entity = Some(hit.entity);
-                // Calculate local anchor
-                // inverse transform
-                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
-                let translation = transform.translation.truncate().as_dvec2();
-                let relative = current_pos - translation;
+            && let Ok((transform, _, _)) = query.get(hit.entity)
+        {
+            data.dragged_entity = Some(hit.entity);
+            // Calculate local anchor
+            // inverse transform
+            let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
+            let translation = transform.translation.truncate().as_dvec2();
+            let relative = current_pos - translation;
 
-                let cos = rotation.cos();
-                let sin = rotation.sin();
-                // Rotate back: x' = x cos + y sin, y' = -x sin + y cos
-                data.local_anchor = DVec2::new(
-                    relative.x * cos + relative.y * sin,
-                    -relative.x * sin + relative.y * cos,
-                );
-            }
+            let cos = rotation.cos();
+            let sin = rotation.sin();
+            // Rotate back: x' = x cos + y sin, y' = -x sin + y cos
+            data.local_anchor = DVec2::new(
+                relative.x * cos + relative.y * sin,
+                -relative.x * sin + relative.y * cos,
+            );
+        }
     }
 
     if mouse.just_released(MouseButton::Left) {

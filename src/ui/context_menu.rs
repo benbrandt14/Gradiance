@@ -4,6 +4,7 @@
 //! property inspection, and state toggling.
 
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
+
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
@@ -62,10 +63,11 @@ fn context_menu_input(
             selection.0 = Some(hit.entity);
 
             if let Ok(ctx) = contexts.ctx_mut()
-                && let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                    state.position = Some(pointer_pos);
-                    state.entity = Some(hit.entity);
-                }
+                && let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos())
+            {
+                state.position = Some(pointer_pos);
+                state.entity = Some(hit.entity);
+            }
         } else {
             // Clicked empty space
             state.position = None;
@@ -77,10 +79,11 @@ fn context_menu_input(
         // If we click outside, `is_pointer_over_area` might be false (game world).
         // So:
         if let Ok(ctx) = contexts.ctx_mut()
-            && !ctx.is_pointer_over_area() {
-                state.position = None;
-                state.entity = None;
-            }
+            && !ctx.is_pointer_over_area()
+        {
+            state.position = None;
+            state.entity = None;
+        }
     }
 }
 

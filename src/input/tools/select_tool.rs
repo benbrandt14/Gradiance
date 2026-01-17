@@ -3,6 +3,7 @@
 //! Simply allows clicking on entities to populate the `Selection` resource.
 
 use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
+
 use crate::prelude::*;
 use bevy_egui::EguiContexts;
 
@@ -27,9 +28,10 @@ fn select_tool_update(
 ) {
     // Prevent selection if over UI
     if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() {
-            return;
-        }
+        && ctx.is_pointer_over_area()
+    {
+        return;
+    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
