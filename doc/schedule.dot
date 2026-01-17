@@ -1,0 +1,33 @@
+digraph "" {
+	"compound"="true";
+	"splines"="spline";
+	"rankdir"="LR";
+	"bgcolor"="#0d1117";
+	"fontname"="Helvetica";
+	"nodesep"="0.15";
+	edge ["penwidth"="2"];
+	node ["shape"="box", "style"="filled"];
+	"node_System(SystemKey(1v1))" ["label"="close_when_requested", "tooltip"="bevy_window::system::close_when_requested"]
+	"node_System(SystemKey(2v1))" ["label"="TerminalCtrlCHandlerPlugin::exit_on_flag", "tooltip"="bevy_app::terminal_ctrl_c_handler::TerminalCtrlCHandlerPlugin::exit_on_flag"]
+	"node_System(SystemKey(3v1))" ["label"="trigger_screenshots", "tooltip"="bevy_render::view::window::screenshot::trigger_screenshots"]
+	"node_System(SystemKey(4v1))" ["label"="check_msaa", "tooltip"="bevy_core_pipeline::oit::check_msaa"]
+	"node_System(SystemKey(5v1))" ["label"="update_tilemap_chunk_indices", "tooltip"="bevy_sprite_render::tilemap_chunk::update_tilemap_chunk_indices"]
+	"node_System(SystemKey(6v1))" ["label"="prepare_atmosphere_probe_components", "tooltip"="bevy_pbr::atmosphere::environment::prepare_atmosphere_probe_components"]
+	"node_System(SystemKey(7v1))" ["label"="init_collider_constructors", "tooltip"="avian2d::collision::collider::backend::init_collider_constructors"]
+	"node_System(SystemKey(8v1))" ["label"="init_collider_constructor_hierarchies", "tooltip"="avian2d::collision::collider::backend::init_collider_constructor_hierarchies"]
+	"node_System(SystemKey(9v1))" ["label"="draw_selection_highlight", "tooltip"="gradiance::input::selection::draw_selection_highlight"]
+	"node_System(SystemKey(10v1))" ["label"="box_tool_update", "tooltip"="gradiance::input::tools::box_tool::box_tool_update"]
+	"node_System(SystemKey(11v1))" ["label"="circle_tool_update", "tooltip"="gradiance::input::tools::circle_tool::circle_tool_update"]
+	"node_System(SystemKey(12v1))" ["label"="select_tool_update", "tooltip"="gradiance::input::tools::select_tool::select_tool_update"]
+	"node_System(SystemKey(13v1))" ["label"="polygon_tool_update", "tooltip"="gradiance::input::tools::polygon_tool::polygon_tool_update"]
+	"node_System(SystemKey(14v1))" ["label"="drag_tool_update", "tooltip"="gradiance::input::tools::drag_tool::drag_tool_update"]
+	"node_System(SystemKey(15v1))" ["label"="resize_box", "tooltip"="gradiance::input::editable::resize_box"]
+	"node_System(SystemKey(16v1))" ["label"="resize_circle", "tooltip"="gradiance::input::editable::resize_circle"]
+	"node_System(SystemKey(17v1))" ["label"="sidebar_ui", "tooltip"="gradiance::ui::panels::sidebar_ui"]
+	"node_System(SystemKey(18v1))" ["label"="top_panel_ui", "tooltip"="gradiance::ui::panels::top_panel_ui"]
+	"node_System(SystemKey(19v1))" ["label"="inspector_ui", "tooltip"="gradiance::ui::inspector::inspector_ui"]
+	"node_System(SystemKey(20v1))" ["label"="context_menu_input", "tooltip"="gradiance::ui::context_menu::context_menu_input"]
+	"node_System(SystemKey(21v1))" ["label"="context_menu_ui", "tooltip"="gradiance::ui::context_menu::context_menu_ui"]
+	"node_System(SystemKey(22v1))" ["label"="draw_grid", "tooltip"="gradiance::ui::grid::draw_grid"]
+}
+

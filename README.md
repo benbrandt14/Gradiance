@@ -1,6 +1,17 @@
+<!-- cargo-rdme start -->
+
 # Gradiance
 
-**Gradiance** is a modern, open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [Avian](https://github.com/Jondolf/avian) physics.
+A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [Avian](https://github.com/Jondolf/avian) physics.
+
+## Status
+* **Documentation**: Enforced via `deny(missing_docs)`.
+* **Ordering**: Visualized via `bevy_mod_debugdump`.
+
+//! ## Bevy Schedule Graph
+![Schedule Graph](doc/architecture.png)
+
+<!-- cargo-rdme end -->
 
 ## Architecture
 

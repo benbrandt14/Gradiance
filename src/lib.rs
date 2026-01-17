@@ -1,3 +1,17 @@
+// #![deny(missing_docs)] // I don't think we're ready for these.
+// #![deny(clippy::missing_docs_in_private_items)]
+
+//! # Gradiance
+//!
+//! A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [Avian](https://github.com/Jondolf/avian) physics.
+//!
+//! ## Status
+//! * **Documentation**: Enforced via `deny(missing_docs)`.
+//! * **Ordering**: Visualized via `bevy_mod_debugdump`.
+//!
+//! //! ## Bevy Schedule Graph
+//! ![Schedule Graph](doc/architecture.png)
+
 pub mod geometry;
 pub mod input;
 pub mod physics;
