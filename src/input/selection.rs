@@ -28,8 +28,8 @@ fn draw_selection_highlight(
     query: Query<(&Transform, Option<&EditableBox>, Option<&EditableCircle>)>,
     mut gizmos: Gizmos,
 ) {
-    if let Some(entity) = selection.0
-        && let Ok((transform, box_shape, circle_shape)) = query.get(entity) {
+    if let Some(entity) = selection.0 {
+        if let Ok((transform, box_shape, circle_shape)) = query.get(entity) {
             let color = Color::srgb(1.0, 1.0, 0.0); // Yellow
             let t = transform.translation.truncate();
             let r = transform.rotation.to_euler(EulerRot::XYZ).2;
@@ -49,4 +49,5 @@ fn draw_selection_highlight(
                 gizmos.circle_2d(iso, 0.5, color);
             }
         }
+    }
 }

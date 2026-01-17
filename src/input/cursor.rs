@@ -37,11 +37,12 @@ pub fn update_cursor_pos(
 
     // Check if mouse is over UI
     // In Bevy 0.18 / Egui 0.39, ctx_mut might return a Result.
-    if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() {
+    if let Ok(ctx) = contexts.ctx_mut() {
+        if ctx.is_pointer_over_area() {
             cursor_pos.0 = None;
             return;
         }
+    }
 
     if let Some(screen_pos) = window.cursor_position() {
         if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos) {

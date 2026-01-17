@@ -61,11 +61,12 @@ fn context_menu_input(
         if let Some(hit) = spatial_query.project_point(world_pos, true, &filter) {
             selection.0 = Some(hit.entity);
 
-            if let Ok(ctx) = contexts.ctx_mut()
-                && let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
+            if let Ok(ctx) = contexts.ctx_mut() {
+                if let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
                     state.position = Some(pointer_pos);
                     state.entity = Some(hit.entity);
                 }
+            }
         } else {
             // Clicked empty space
             state.position = None;
@@ -76,11 +77,12 @@ fn context_menu_input(
         // If we click on the context menu, `is_pointer_over_area` is true.
         // If we click outside, `is_pointer_over_area` might be false (game world).
         // So:
-        if let Ok(ctx) = contexts.ctx_mut()
-            && !ctx.is_pointer_over_area() {
+        if let Ok(ctx) = contexts.ctx_mut() {
+            if !ctx.is_pointer_over_area() {
                 state.position = None;
                 state.entity = None;
             }
+        }
     }
 }
 

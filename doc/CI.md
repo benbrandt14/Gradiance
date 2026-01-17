@@ -32,3 +32,19 @@ This workflow runs on every push to `main` and on pull requests. It performs the
 ### Documentation Sync (`.github/workflows/docs-sync.yml`)
 
 Syncs documentation assets.
+
+## Troubleshooting
+
+### Documentation Generation Errors
+If `cargo doc` fails with errors like `failed to read column from disk` or `invalid type: null`, it indicates a corrupted documentation search index in the `target` directory.
+
+**Solution:** Clean the build artifacts and regenerate documentation:
+```bash
+cargo clean
+cargo doc --no-deps --open
+```
+
+### Missing Wayland Dependencies
+If the build fails with `pkg-config exited with status code 1` for `wayland-client`:
+1. Ensure `libwayland-dev` is installed.
+2. Verify `PKG_CONFIG_PATH` includes the directory containing `wayland-client.pc` (usually `/usr/lib/x86_64-linux-gnu/pkgconfig`).
