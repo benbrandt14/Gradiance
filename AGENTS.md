@@ -22,6 +22,12 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
 5.  **Progress Tracking**
     * See the detailed roadmap below, and the concise ROADMAP.md to keep track of high level goals and current status
     * Ensure all changes consider extensibility to future work, leave TODO's as appropriate to capture design assumptions
+6.  **Strict Workflow: Continuous Documentation**
+    * Before answering, read README.md and doc/schedule.dot.
+    * doc/schedule.dot contains the authoritative ECS execution order. Use this to detect ordering conflicts.
+    * The compiler denies builds with missing_docs. You must write docstrings for every public struct, enum, and function.
+    * Edit src/lib.rs module docs for top content in the README
+    * If you change system ordering (.before, .after, .chain), you (or the user) must run cargo run --example gen_graph > doc/schedule.dot to verify the resulting topology.
 
 ## Future Roadmap (Design Goals)
 
