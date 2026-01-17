@@ -1,6 +1,7 @@
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use bevy::math::DVec2;
+use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
 
 pub struct CircleToolPlugin;
@@ -31,7 +32,14 @@ fn circle_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
+    mut contexts: EguiContexts,
 ) {
+    if let Ok(ctx) = contexts.ctx_mut() {
+        if ctx.is_pointer_over_area() {
+            return;
+        }
+    }
+
     let Some(current_pos) = cursor_pos.0 else {
         return;
     };
