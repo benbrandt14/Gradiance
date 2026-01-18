@@ -1,3 +1,7 @@
+//! Tool for creating circular rigid bodies.
+//!
+//! Click and drag to define the radius of a new circle.
+
 use crate::input::editable::EditableCircle;
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -6,6 +10,7 @@ use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
 
+/// Plugin for the Circle Tool.
 pub struct CircleToolPlugin;
 
 impl Plugin for CircleToolPlugin {

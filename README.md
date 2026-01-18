@@ -69,3 +69,5 @@ src/
 *   **Check**: `cargo check` (Fast verification)
 *   **Lint**: `cargo clippy`
 *   **Format**: `cargo fmt`
+
+For details on the Continuous Integration setup, see [doc/CI.md](doc/CI.md).

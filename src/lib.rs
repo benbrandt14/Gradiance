@@ -1,4 +1,4 @@
-// #![deny(missing_docs)] // I don't think we're ready for these.
+#![deny(missing_docs)]
 // #![deny(clippy::missing_docs_in_private_items)]
 
 //! # Gradiance
@@ -21,6 +21,9 @@ pub mod ui;
 
 use bevy::prelude::*;
 
+/// The primary plugin for the Gradiance game.
+///
+/// This plugin initializes all sub-systems including physics, geometry, input, UI, and scripting.
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
@@ -31,6 +34,12 @@ impl Plugin for GamePlugin {
             input::InputPlugin,
             ui::UiPlugin,
             scripting::ScriptingPlugin,
-        ));
+        ))
+        .add_systems(Startup, setup_camera);
     }
+}
+
+/// Spawns the main 2D camera.
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2d::default());
 }

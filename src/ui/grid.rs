@@ -1,6 +1,11 @@
+//! Infinite grid system.
+//!
+//! Visualizes a grid on the background and provides snapping utility functions.
+
 use crate::prelude::*;
 use bevy::math::DVec2;
 
+/// Plugin for rendering the grid and handling grid settings.
 pub struct GridPlugin;
 
 impl Plugin for GridPlugin {
@@ -13,11 +18,15 @@ impl Plugin for GridPlugin {
     }
 }
 
+/// Settings for grid visibility and snapping.
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
 pub struct GridSettings {
+    /// Whether to render the grid lines.
     pub show: bool,
+    /// Whether tools should snap positions to the grid.
     pub snap: bool,
+    /// The distance between grid lines (in world units).
     pub spacing: f64,
 }
 
@@ -31,6 +40,16 @@ impl Default for GridSettings {
     }
 }
 
+/// Snaps a position to the nearest grid intersection based on the given spacing.
+///
+/// # Arguments
+///
+/// * `pos` - The raw world position.
+/// * `spacing` - The grid spacing interval.
+///
+/// # Returns
+///
+/// The snapped position.
 pub fn snap_to_grid(pos: DVec2, spacing: f64) -> DVec2 {
     if spacing <= 0.0001 {
         return pos;

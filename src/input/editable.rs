@@ -1,20 +1,31 @@
+//! Components for live-editable shapes.
+//!
+//! Provides `EditableBox` and `EditableCircle` components that drive the regeneration
+//! of visual shapes (`bevy_prototype_lyon`) and physics colliders (`Avian`) when changed.
+
 use avian2d::prelude::*;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
+/// A component representing a box that can be resized.
 #[derive(Component, Reflect, Default, Debug)]
 #[reflect(Component)]
 pub struct EditableBox {
+    /// The width of the box.
     pub width: f64,
+    /// The height of the box.
     pub height: f64,
 }
 
+/// A component representing a circle that can be resized.
 #[derive(Component, Reflect, Default, Debug)]
 #[reflect(Component)]
 pub struct EditableCircle {
+    /// The radius of the circle.
     pub radius: f64,
 }
 
+/// Plugin that handles updates to editable shapes.
 pub struct EditablePlugin;
 
 impl Plugin for EditablePlugin {
@@ -25,6 +36,7 @@ impl Plugin for EditablePlugin {
     }
 }
 
+/// System to update the collider and visual shape when `EditableBox` changes.
 fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Changed<EditableBox>>) {
     for (entity, editable) in query.iter() {
         if editable.width <= 0.0 || editable.height <= 0.0 {
@@ -49,6 +61,7 @@ fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Chang
     }
 }
 
+/// System to update the collider and visual shape when `EditableCircle` changes.
 fn resize_circle(
     mut commands: Commands,
     query: Query<(Entity, &EditableCircle), Changed<EditableCircle>>,

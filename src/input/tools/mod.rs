@@ -1,3 +1,7 @@
+//! Implementations of specific tools.
+//!
+//! Includes logic for Select, Box, Circle, Polygon, and Drag tools.
+
 use crate::prelude::*;
 
 pub mod box_tool;
@@ -6,6 +10,7 @@ pub mod drag_tool;
 pub mod polygon_tool;
 pub mod select_tool;
 
+/// Plugin that registers all tool sub-plugins.
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
@@ -20,6 +25,8 @@ impl Plugin for ToolsPlugin {
     }
 }
 
+/// Common trait for tool behavior (optional, currently unused structure).
 pub trait Tool {
+    /// Returns the name of the tool.
     fn name(&self) -> &str;
 }

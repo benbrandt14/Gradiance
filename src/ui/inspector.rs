@@ -1,9 +1,15 @@
+//! Inspector panel for editing entity properties.
+//!
+//! Provides an Egui sidebar that allows modifying properties of selected entities,
+//! such as Transform, RigidBody type, Friction, and Restitution.
+
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::selection::Selection;
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 // use bevy_prototype_lyon::prelude::*;
 
+/// Plugin for the Inspector UI.
 pub struct InspectorPlugin;
 
 impl Plugin for InspectorPlugin {

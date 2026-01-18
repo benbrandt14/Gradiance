@@ -1,9 +1,16 @@
+//! Tool for dragging dynamic objects (the "Hand" tool).
+//!
+//! Allows the user to grab and move dynamic bodies using a mouse joint-like mechanic.
+//! Currently implemented by calculating a target anchor and drawing lines, but physics force
+//! application is temporarily disabled pending `ExternalForce` integration.
+
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use avian2d::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 
+/// Plugin for the Drag Tool.
 pub struct DragToolPlugin;
 
 impl Plugin for DragToolPlugin {

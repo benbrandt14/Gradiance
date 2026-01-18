@@ -1,15 +1,26 @@
+//! Cursor position tracking.
+//!
+//! Tracks the mouse cursor's world position, accounting for camera transforms and UI blocking.
+
 use crate::prelude::*;
 use bevy::math::DVec2;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
 /// Custom cursor position resource.
+///
+/// Stores the world-space coordinates of the mouse cursor.
+///
 /// We implement this manually instead of using a plugin like `bevy_cursor` because:
 /// 1. We need `DVec2` (f64) precision for Avian2d physics.
 /// 2. We need tight integration with `bevy_egui` to block cursor updates when hovering UI.
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct CursorWorldPos(pub Option<DVec2>);
 
+/// Updates the `CursorWorldPos` resource.
+///
+/// Projects the window cursor position to world coordinates.
+/// Returns `None` if the cursor is over an Egui UI area.
 pub fn update_cursor_pos(
     mut cursor_pos: ResMut<CursorWorldPos>,
     q_window: Query<&Window, With<PrimaryWindow>>,

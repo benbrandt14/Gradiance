@@ -1,8 +1,14 @@
+//! Main UI panels (Sidebar and Top bar).
+//!
+//! Handles the layout and logic for the tool selection sidebar and the top control bar
+//! (Play/Pause, Grid settings, Time control).
+
 use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy_egui::{EguiContexts, egui};
 
+/// Plugin for the main UI panels.
 pub struct PanelsPlugin;
 
 impl Plugin for PanelsPlugin {

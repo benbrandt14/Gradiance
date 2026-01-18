@@ -1,3 +1,7 @@
+//! Tool for creating rectangular rigid bodies.
+//!
+//! Click and drag to define the extents of a new box.
+
 use crate::input::editable::EditableBox;
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -6,6 +10,7 @@ use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
 
+/// Plugin for the Box Tool.
 pub struct BoxToolPlugin;
 
 impl Plugin for BoxToolPlugin {
