@@ -6,7 +6,7 @@
 //! - Sorts overlapping bodies by Z-depth.
 //! - Spawns visual indicators parented to the bodies.
 
-use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
+use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
@@ -84,12 +84,7 @@ fn update_connector(
         // Find entities using shape intersection for better robustness
         let shape = Collider::circle(0.1);
         let filter = SpatialQueryFilter::default();
-        let intersections = spatial_query.shape_intersections(
-            &shape,
-            pos,
-            0.0,
-            &filter
-        );
+        let intersections = spatial_query.shape_intersections(&shape, pos, 0.0, &filter);
 
         // Resolve to bodies and sort
         let sorted_bodies = resolve_sorted_bodies(&intersections, &bodies, &parents);
@@ -118,7 +113,7 @@ fn update_connector(
                 &global_transforms,
                 &rigid_bodies,
                 connector_type,
-                sorted_bodies[0], // Top
+                sorted_bodies[0],       // Top
                 Some(sorted_bodies[1]), // Bottom
                 pos,
             );
@@ -188,12 +183,15 @@ fn create_joint(
             (b, entity_a) // Attach Top to Bottom
         };
 
-        if let (Ok(p_global), Ok(c_global)) = (global_transforms.get(parent), global_transforms.get(child)) {
+        if let (Ok(p_global), Ok(c_global)) =
+            (global_transforms.get(parent), global_transforms.get(child))
+        {
             // Re-parenting logic
             // We use set_parent_in_place to preserve GlobalTransform.
             // We also strip RigidBody and Velocity components to merge the physics body.
 
-            commands.entity(child)
+            commands
+                .entity(child)
                 .remove::<RigidBody>()
                 .remove::<LinearVelocity>()
                 .remove::<AngularVelocity>()
@@ -205,7 +203,7 @@ fn create_joint(
             // Spawn Visual on Parent at anchor
             let visual_anchor_local = calculate_local_anchor_from_global(p_global, anchor_world);
 
-             spawn_visual(commands, parent, visual_anchor_local, connector_type);
+            spawn_visual(commands, parent, visual_anchor_local, connector_type);
         }
         return;
     }
@@ -235,25 +233,27 @@ fn create_joint(
                     RevoluteJoint::new(entity_a, entity_b)
                         .with_local_anchor1(anchor_a)
                         .with_local_anchor2(anchor_b)
-                        .with_point_compliance(0.0)
+                        .with_point_compliance(0.0),
                 );
             }
             ConnectorType::Fix => {
                 // Should not happen here due to early return, but kept for safety/fallback
-                 commands.entity(visual_entity).insert(
+                commands.entity(visual_entity).insert(
                     FixedJoint::new(entity_a, entity_b)
                         .with_local_anchor1(anchor_a)
                         .with_local_anchor2(anchor_b)
-                        .with_local_basis2(Rot2::radians((rot_a - rot_b) as f32))
+                        .with_local_basis2(Rot2::radians((rot_a - rot_b) as f32)),
                 );
             }
         }
     } else {
         // Connect to World (Pin)
-        let pin = commands.spawn((
-            RigidBody::Static,
-            Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
-        )).id();
+        let pin = commands
+            .spawn((
+                RigidBody::Static,
+                Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
+            ))
+            .id();
 
         let anchor_b = DVec2::ZERO;
 
@@ -263,7 +263,7 @@ fn create_joint(
                     RevoluteJoint::new(entity_a, pin)
                         .with_local_anchor1(anchor_a)
                         .with_local_anchor2(anchor_b)
-                        .with_point_compliance(0.0)
+                        .with_point_compliance(0.0),
                 );
             }
             ConnectorType::Fix => {
@@ -271,14 +271,17 @@ fn create_joint(
                     FixedJoint::new(entity_a, pin)
                         .with_local_anchor1(anchor_a)
                         .with_local_anchor2(anchor_b)
-                        .with_local_basis2(Rot2::radians(rot_a as f32))
+                        .with_local_basis2(Rot2::radians(rot_a as f32)),
                 );
             }
         }
     }
 }
 
-fn calculate_local_anchor_from_global(global_transform: &GlobalTransform, world_point: DVec2) -> DVec2 {
+fn calculate_local_anchor_from_global(
+    global_transform: &GlobalTransform,
+    world_point: DVec2,
+) -> DVec2 {
     let transform = global_transform.compute_transform();
     calculate_local_anchor(&transform, world_point)
 }
@@ -303,38 +306,44 @@ fn spawn_visual(
 
     match connector_type {
         ConnectorType::Hinge => {
-            commands.entity(visual_entity).insert((
-                ShapeBuilder::with(&shapes::Circle {
+            commands
+                .entity(visual_entity)
+                .insert((ShapeBuilder::with(&shapes::Circle {
                     radius: 5.0,
                     ..default()
                 })
                 .fill(Color::BLACK)
-                .build(),
-            ));
-            let inner = commands.spawn((
-                ShapeBuilder::with(&shapes::Circle {
-                    radius: 2.0,
-                    ..default()
-                })
-                .fill(Color::WHITE)
-                .build(),
-                Transform::from_translation(Vec3::Z * 0.1),
-            )).id();
+                .build(),));
+            let inner = commands
+                .spawn((
+                    ShapeBuilder::with(&shapes::Circle {
+                        radius: 2.0,
+                        ..default()
+                    })
+                    .fill(Color::WHITE)
+                    .build(),
+                    Transform::from_translation(Vec3::Z * 0.1),
+                ))
+                .id();
             commands.entity(visual_entity).add_child(inner);
         }
         ConnectorType::Fix => {
-            let v1 = commands.spawn((
-                ShapeBuilder::with(&shapes::Line(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)))
-                    .stroke(Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0))
-                    .build(),
-                 Transform::from_translation(Vec3::Z * 0.1),
-            )).id();
-            let v2 = commands.spawn((
-                ShapeBuilder::with(&shapes::Line(Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0)))
-                    .stroke(Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0))
-                    .build(),
-                 Transform::from_translation(Vec3::Z * 0.1),
-            )).id();
+            let v1 = commands
+                .spawn((
+                    ShapeBuilder::with(&shapes::Line(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)))
+                        .stroke(Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0))
+                        .build(),
+                    Transform::from_translation(Vec3::Z * 0.1),
+                ))
+                .id();
+            let v2 = commands
+                .spawn((
+                    ShapeBuilder::with(&shapes::Line(Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0)))
+                        .stroke(Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0))
+                        .build(),
+                    Transform::from_translation(Vec3::Z * 0.1),
+                ))
+                .id();
             commands.entity(visual_entity).add_children(&[v1, v2]);
         }
     }
@@ -350,7 +359,10 @@ mod tests {
     #[case(ToolState::RevoluteJoint, Some(ConnectorType::Hinge))]
     #[case(ToolState::Weld, Some(ConnectorType::Fix))]
     #[case(ToolState::Select, None)]
-    fn test_connector_type_from_state(#[case] state: ToolState, #[case] expected: Option<ConnectorType>) {
+    fn test_connector_type_from_state(
+        #[case] state: ToolState,
+        #[case] expected: Option<ConnectorType>,
+    ) {
         assert_eq!(ConnectorType::from_tool_state(&state), expected);
     }
 }
