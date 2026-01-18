@@ -31,11 +31,8 @@ pub fn calculate_local_anchor(transform: &Transform, world_point: DVec2) -> DVec
 /// Returns true if the pointer is over an Egui area, false otherwise.
 /// Returns false if the context cannot be accessed.
 pub fn is_pointer_over_ui(contexts: &mut EguiContexts) -> bool {
-    if let Ok(ctx) = contexts.ctx_mut() {
-        ctx.is_pointer_over_area()
-    } else {
-        false
-    }
+    let ctx = contexts.ctx_mut();
+    ctx.is_pointer_over_area()
 }
 
 #[cfg(test)]

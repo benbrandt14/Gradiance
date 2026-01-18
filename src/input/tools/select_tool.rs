@@ -43,7 +43,7 @@ fn select_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    spatial_query: SpatialQuery,
+    rapier_context: Res<RapierContext>,
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
     mut query: Query<&mut Transform>,
@@ -52,10 +52,10 @@ fn select_tool_update(
     grid_settings: Res<GridSettings>,
 ) {
     // Prevent selection if over UI
-    if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() && !data.is_moving && data.drag_start.is_none() {
-            return;
-        }
+    let ctx = contexts.ctx_mut();
+    if ctx.is_pointer_over_area() && !data.is_moving && data.drag_start.is_none() {
+        return;
+    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -66,23 +66,24 @@ fn select_tool_update(
     if mouse.just_pressed(MouseButton::Left) {
         data.drag_start_pos = current_pos;
 
-        let filter = SpatialQueryFilter::default();
-        if let Some(hit) = spatial_query.project_point(current_pos, true, &filter) {
+        let point = Vec2::new(current_pos.x as f32, current_pos.y as f32);
+        let filter = QueryFilter::default();
+        if let Some((entity, _proj)) = rapier_context.project_point(point, true, filter) {
             // Clicked on something
 
             // If shift not held and entity not in selection, clear selection
-            if !shift && !selection.0.contains(&hit.entity) {
+            if !shift && !selection.0.contains(&entity) {
                 selection.clear();
             }
 
             if shift {
-                selection.toggle(hit.entity);
-            } else if !selection.0.contains(&hit.entity) {
-                selection.add(hit.entity);
+                selection.toggle(entity);
+            } else if !selection.0.contains(&entity) {
+                selection.add(entity);
             }
 
             // Initiate Move for all selected
-            if selection.0.contains(&hit.entity) {
+            if selection.0.contains(&entity) {
                 data.is_moving = true;
                 data.initial_positions.clear();
                 for &entity in &selection.0 {
@@ -125,7 +126,8 @@ fn select_tool_update(
             let center = (min + max) / 2.0;
 
             gizmos.rect_2d(
-                Isometry2d::from_translation(Vec2::new(center.x as f32, center.y as f32)),
+                Vec2::new(center.x as f32, center.y as f32),
+                0.0,
                 Vec2::new(size.x as f32, size.y as f32),
                 Color::srgb(0.0, 1.0, 1.0),
             );

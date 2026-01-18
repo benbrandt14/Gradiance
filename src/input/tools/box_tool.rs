@@ -74,9 +74,10 @@ fn box_tool_update(
         let (size, center) = calculate_box_geometry(start, current_pos);
 
         if mouse.pressed(MouseButton::Left) {
-            // Draw preview
+            // Bevy 0.14 Gizmos::rect_2d(position, rotation, size, color)
             gizmos.rect_2d(
-                Isometry2d::from_translation(Vec2::new(center.x as f32, center.y as f32)),
+                Vec2::new(center.x as f32, center.y as f32),
+                0.0,
                 Vec2::new(size.x as f32, size.y as f32),
                 Color::WHITE,
             );
@@ -92,17 +93,21 @@ fn box_tool_update(
                 };
 
                 commands.spawn((
-                    ShapeBuilder::with(&shape)
-                        .fill(Color::srgb(0.5, 0.5, 1.0))
-                        .stroke(Stroke::new(Color::BLACK, 0.1))
-                        .build(),
+                    ShapeBundle {
+                        path: GeometryBuilder::build_as(&shape),
+                        ..default()
+                    },
+                    Fill::color(Color::srgb(0.5, 0.5, 1.0)),
+                    Stroke::new(Color::BLACK, 0.1),
                     RigidBody::Dynamic,
-                    Collider::rectangle(size.x, size.y),
+                    Collider::cuboid(size.x as f32 / 2.0, size.y as f32 / 2.0),
                     EditableBox {
                         width: size.x,
                         height: size.y,
                     },
                     Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
+                    GlobalTransform::default(),
+                    VisibilityBundle::default(),
                 ));
             }
 

@@ -74,7 +74,7 @@ fn circle_tool_update(
 
         if mouse.pressed(MouseButton::Left) {
             gizmos.circle_2d(
-                Isometry2d::from_translation(Vec2::new(start.x as f32, start.y as f32)),
+                Vec2::new(start.x as f32, start.y as f32),
                 radius as f32,
                 Color::WHITE,
             );
@@ -93,14 +93,18 @@ fn circle_tool_update(
                 };
 
                 commands.spawn((
-                    ShapeBuilder::with(&shape)
-                        .fill(Color::srgb(1.0, 0.5, 0.5))
-                        .stroke(Stroke::new(Color::BLACK, 0.1))
-                        .build(),
+                    ShapeBundle {
+                        path: GeometryBuilder::build_as(&shape),
+                        ..default()
+                    },
+                    Fill::color(Color::srgb(1.0, 0.5, 0.5)),
+                    Stroke::new(Color::BLACK, 0.1),
                     RigidBody::Dynamic,
-                    Collider::circle(radius),
+                    Collider::ball(radius as f32),
                     EditableCircle { radius },
                     Transform::from_xyz(start.x as f32, start.y as f32, z_index.next()),
+                    GlobalTransform::default(),
+                    VisibilityBundle::default(),
                 ));
             }
 

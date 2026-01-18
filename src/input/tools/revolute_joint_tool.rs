@@ -5,33 +5,8 @@
 use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
-use avian2d::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
-
-// We need to disable collision for joined bodies to prevent explosion.
-// Avian 0.5 doesn't have collide_connected on joint.
-// We'll use CollisionLayers.
-// For now, simple approach: If two dynamic bodies are joined, we might need to put them in a group that doesn't collide with itself?
-// Or we just accept they might push each other if not carefully placed.
-// But the user specifically asked for "not collide".
-// Since we can't easily dynamically allocate layers, we will add a component `Joined` and maybe handle it later,
-// OR we just set collision layers if possible.
-//
-// Plan: Using CollisionLayers is complex without a robust layer manager.
-// However, Avian allows disabling collisions between specific entities? No.
-//
-// Let's implement a workaround:
-// If we join them, we assume they are distinct enough or the user wants them to interact.
-// But if they are overlapping at the pin, they will explode.
-//
-// The "Pin" (Static Body) has a collider. If we join Entity A to Pin, Entity A collides with Pin.
-// Entity A is dynamic, Pin is static. They overlap. Explosion.
-// FIX: The Pin should NOT have a collider, or it should be a Sensor, or in a non-colliding layer.
-//
-// The visual pin circles are fine. The RigidBody Pin is for the joint anchor.
-// Does the RigidBody need a collider to exist? No.
-// So we can remove `Collider::circle(0.1)` from the Pin entity!
 use bevy_prototype_lyon::prelude::*;
 
 /// Plugin for the Revolute Joint Tool.
@@ -47,7 +22,7 @@ fn revolute_joint_tool_update(
     mut commands: Commands,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
-    spatial_query: SpatialQuery,
+    rapier_context: Res<RapierContext>,
     mut contexts: EguiContexts,
     transforms: Query<&Transform>,
 ) {
@@ -61,24 +36,26 @@ fn revolute_joint_tool_update(
 
     if mouse.just_pressed(MouseButton::Left) {
         // Find entities at cursor
-        let filter = SpatialQueryFilter::default();
-        let intersections = spatial_query.point_intersections(current_pos, &filter);
+        let point = Vec2::new(current_pos.x as f32, current_pos.y as f32);
+        let mut intersections = Vec::new();
+        rapier_context.intersections_with_point(point, QueryFilter::default(), |e| {
+            intersections.push(e);
+            true
+        });
 
         if intersections.is_empty() {
             return;
         }
 
-        let point = current_pos;
-
         if intersections.len() == 1 {
             let entity = intersections[0];
             // Connect entity to "World" (Static Pin)
-            spawn_pin_joint(&mut commands, &transforms, entity, None, point);
+            spawn_pin_joint(&mut commands, &transforms, entity, None, current_pos);
         } else {
             // Connect first two
             let entity_a = intersections[0];
             let entity_b = intersections[1];
-            spawn_pin_joint(&mut commands, &transforms, entity_a, Some(entity_b), point);
+            spawn_pin_joint(&mut commands, &transforms, entity_a, Some(entity_b), current_pos);
         }
     }
 }
@@ -91,88 +68,96 @@ fn spawn_pin_joint(
     anchor_world: DVec2,
 ) {
     // Helper to get local anchor
-    let get_local = |e: Entity| -> DVec2 {
+    let get_local = |e: Entity| -> Vec2 {
         if let Ok(t) = transforms.get(e) {
-            calculate_local_anchor(t, anchor_world)
+            let local = calculate_local_anchor(t, anchor_world);
+            Vec2::new(local.x as f32, local.y as f32)
         } else {
-            DVec2::ZERO
+            Vec2::ZERO
         }
     };
 
     let anchor_a = get_local(entity_a);
 
     // Pin visual construction helper
-    // Returns a bundle or spawns children to an entity
     let spawn_visuals = |commands: &mut Commands, parent: Entity| {
         let v1 = commands
             .spawn((
-                ShapeBuilder::with(&shapes::Circle {
-                    radius: 5.0,
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shapes::Circle {
+                        radius: 5.0,
+                        ..default()
+                    }),
                     ..default()
-                })
-                .fill(Color::BLACK)
-                .build(),
+                },
+                Fill::color(Color::BLACK),
                 Transform::from_translation(Vec3::Z * 0.1),
+                GlobalTransform::default(),
+                VisibilityBundle::default(),
             ))
             .id();
 
         let v2 = commands
             .spawn((
-                ShapeBuilder::with(&shapes::Circle {
-                    radius: 2.0,
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shapes::Circle {
+                        radius: 2.0,
+                        ..default()
+                    }),
                     ..default()
-                })
-                .fill(Color::WHITE)
-                .build(),
+                },
+                Fill::color(Color::WHITE),
                 Transform::from_translation(Vec3::Z * 0.2),
+                GlobalTransform::default(),
+                VisibilityBundle::default(),
             ))
             .id();
 
-        commands.entity(parent).add_children(&[v1, v2]);
+        commands.entity(parent).add_child(v1).add_child(v2);
     };
 
     if let Some(entity_b) = entity_b {
         let anchor_b = get_local(entity_b);
-        let joint_entity = commands
+
+        let axle = commands
             .spawn((
-                RevoluteJoint::new(entity_a, entity_b)
-                    .with_local_anchor1(anchor_a)
-                    .with_local_anchor2(anchor_b)
-                    .with_point_compliance(0.0), // Rigid
+                RigidBody::Dynamic,
+                AdditionalMassProperties::Mass(0.01),
                 Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 10.0),
                 GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
-                // Add sensor collider for selection
-                Collider::circle(0.5),
+                VisibilityBundle::default(),
+                Collider::ball(0.5),
                 Sensor,
             ))
             .id();
 
-        spawn_visuals(commands, joint_entity);
+        spawn_visuals(commands, axle);
+
+        commands.entity(axle).insert(
+            ImpulseJoint::new(entity_a, FixedJointBuilder::new().local_anchor1(Vec2::ZERO).local_anchor2(anchor_a))
+        );
+
+        commands.entity(entity_b).insert(
+            ImpulseJoint::new(axle, RevoluteJointBuilder::new().local_anchor1(anchor_b).local_anchor2(Vec2::ZERO))
+        );
+
     } else {
         // Connect to World (Static Body)
-        // Spawn a static body at anchor_world
         let pin = commands
             .spawn((
-                RigidBody::Static,
+                RigidBody::Fixed,
                 Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
-                // Add sensor collider for selection
-                Collider::circle(0.5),
+                Collider::ball(0.5),
                 Sensor,
+                GlobalTransform::default(),
+                VisibilityBundle::default(),
             ))
             .id();
 
         spawn_visuals(commands, pin);
 
-        let anchor_b = DVec2::ZERO;
-
-        commands.spawn((
-            RevoluteJoint::new(entity_a, pin)
-                .with_local_anchor1(anchor_a)
-                .with_local_anchor2(anchor_b)
-                .with_point_compliance(0.0),
-        ));
+        commands.entity(entity_a).insert(
+            ImpulseJoint::new(pin, RevoluteJointBuilder::new().local_anchor1(anchor_a).local_anchor2(Vec2::ZERO))
+        );
     }
 }

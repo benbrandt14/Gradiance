@@ -3,7 +3,7 @@
 
 //! # Gradiance
 //!
-//! A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [Avian](https://github.com/Jondolf/avian) physics.
+//! A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [Rapier](https://rapier.rs) physics.
 //!
 //! ## Status
 //! * **Documentation**: Enforced via `deny(missing_docs)`.
@@ -20,7 +20,6 @@ pub mod scripting;
 pub mod ui;
 
 use crate::prelude::*;
-use bevy::math::DVec2;
 use bevy_prototype_lyon::prelude::*;
 
 /// The primary plugin for the Gradiance game.
@@ -43,7 +42,7 @@ impl Plugin for GamePlugin {
 
 /// Spawns the main 2D camera.
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
+    commands.spawn(Camera2dBundle::default());
 }
 
 /// Marker component for the infinite ground plane.
@@ -54,13 +53,12 @@ pub struct GroundPlane;
 fn setup_ground(mut commands: Commands) {
     // Visual representation (very wide rectangle to simulate infinity)
     let w = 100_000.0;
-    let depth = 1000.0; // Deep enough to look like "ground"
     // Vertices such that the top edge is at y=0
     let points = vec![
-        Vec2::new(-w, -depth),
-        Vec2::new(w, -depth),
-        Vec2::new(w, 0.0),
-        Vec2::new(-w, 0.0),
+        Vec2::new(-w, -500.0),
+        Vec2::new(w, -500.0),
+        Vec2::new(w, 500.0),
+        Vec2::new(-w, 500.0),
     ];
 
     let shape = shapes::Polygon {
@@ -69,16 +67,20 @@ fn setup_ground(mut commands: Commands) {
     };
 
     commands.spawn((
-        ShapeBuilder::with(&shape)
-            .fill(Color::srgb(0.2, 0.2, 0.2))
-            .stroke(Stroke::new(Color::BLACK, 1.0))
-            .build(),
-        RigidBody::Static,
-        // Infinite half-space collider pointing up (Normal = Y)
-        Collider::half_space(DVec2::new(0.0, 1.0)),
-        Friction::new(0.5),
-        Restitution::new(0.0),
+        ShapeBundle {
+            path: GeometryBuilder::build_as(&shape),
+            ..default()
+        },
+        Fill::color(Color::srgb(0.2, 0.2, 0.2)),
+        Stroke::new(Color::BLACK, 1.0),
+        RigidBody::Fixed,
+        // Rapier Cuboid
+        Collider::cuboid(100000.0, 500.0),
+        Friction::coefficient(0.5),
+        Restitution::coefficient(0.0),
         GroundPlane,
-        Transform::from_xyz(0.0, -200.0, 0.0),
+        Transform::from_xyz(0.0, -700.0, 0.0),
+        GlobalTransform::default(),
+        VisibilityBundle::default(),
     ));
 }

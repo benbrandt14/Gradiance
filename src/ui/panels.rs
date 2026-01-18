@@ -1,127 +1,81 @@
-//! Main UI panels (Sidebar and Top bar).
-//!
-//! Handles the layout and logic for the tool selection sidebar and the top control bar
-//! (Play/Pause, Grid settings, Time control).
+//! UI Panels configuration (Sidebar, Bottom Bar).
 
 use crate::input::ToolState;
 use crate::prelude::*;
-use crate::ui::grid::GridSettings;
-use bevy::window::PrimaryWindow;
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use bevy_egui::{EguiContexts, egui};
 
 /// Plugin for the main UI panels.
 pub struct PanelsPlugin;
 
 impl Plugin for PanelsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(EguiPrimaryContextPass, (sidebar_ui, top_panel_ui));
+        app.add_systems(Update, (sidebar_ui, bottom_bar_ui));
     }
 }
 
 fn sidebar_ui(
     mut contexts: EguiContexts,
-    mut next_tool_state: ResMut<NextState<ToolState>>,
-    current_tool_state: Res<State<ToolState>>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
+    current_tool: Res<State<ToolState>>,
+    mut next_tool: ResMut<NextState<ToolState>>,
 ) {
-    let Some(window) = window_query.iter().next() else {
-        return;
-    };
+    let ctx = contexts.ctx_mut();
 
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
-        return;
-    }
+    egui::SidePanel::left("tools_panel")
+        .resizable(false)
+        .default_width(50.0)
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.heading("Tools");
+                ui.separator();
 
-    let ctx = match contexts.ctx_mut() {
-        Ok(ctx) => ctx,
-        _ => return,
-    };
+                let tools = [
+                    ("Select", ToolState::Select),
+                    ("Drag", ToolState::Drag),
+                    ("Box", ToolState::Box),
+                    ("Circle", ToolState::Circle),
+                    ("Poly", ToolState::Polygon),
+                    ("Axle", ToolState::RevoluteJoint),
+                    ("Weld", ToolState::Weld),
+                ];
 
-    egui::SidePanel::left("tools_panel").show(ctx, |ui| {
-        ui.heading("Tools");
-        ui.separator();
-
-        let tools = [
-            ("Select", ToolState::Select),
-            ("Drag", ToolState::Drag),
-            ("Box", ToolState::Box),
-            ("Circle", ToolState::Circle),
-            ("Polygon", ToolState::Polygon),
-            ("Axle", ToolState::RevoluteJoint),
-            ("Fix", ToolState::Weld),
-            // Placeholder for other tools
-            // ("Cut", ToolState::Cut),
-            // ("Sketch", ToolState::Sketch),
-        ];
-
-        for (name, state) in tools {
-            let is_selected = *current_tool_state.get() == state;
-            if ui
-                .add(egui::Button::new(name).selected(is_selected))
-                .clicked()
-            {
-                next_tool_state.set(state);
-            }
-        }
-    });
+                for (name, state) in tools {
+                    let is_selected = *current_tool.get() == state;
+                    if ui.selectable_label(is_selected, name).clicked() {
+                        next_tool.set(state);
+                    }
+                }
+            });
+        });
 }
 
-fn top_panel_ui(
+fn bottom_bar_ui(
     mut contexts: EguiContexts,
-    mut virtual_time: ResMut<Time<Virtual>>,
-    mut grid_settings: ResMut<GridSettings>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
+    mut time: ResMut<Time<Virtual>>,
 ) {
-    let Some(window) = window_query.iter().next() else {
-        return;
-    };
+    let ctx = contexts.ctx_mut();
 
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
-        return;
-    }
-
-    let ctx = match contexts.ctx_mut() {
-        Ok(ctx) => ctx,
-        _ => return,
-    };
-
-    egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+    egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            if ui
-                .button(if virtual_time.is_paused() {
-                    "▶ Play"
+            if ui.button(if time.is_paused() { "▶ Play" } else { "⏸ Pause" }).clicked() {
+                if time.is_paused() {
+                    time.unpause();
                 } else {
-                    "⏸ Pause"
-                })
-                .clicked()
-            {
-                if virtual_time.is_paused() {
-                    virtual_time.unpause();
-                } else {
-                    virtual_time.pause();
+                    time.pause();
                 }
             }
 
-            ui.label(format!("Speed: {:.2}x", virtual_time.relative_speed()));
+            ui.label(format!("Time Scale: {:.1}x", time.relative_speed()));
 
-            ui.separator();
-            ui.checkbox(&mut grid_settings.show, "Grid");
-            if grid_settings.show {
-                ui.checkbox(&mut grid_settings.snap, "Snap");
-                ui.add(
-                    egui::DragValue::new(&mut grid_settings.spacing)
-                        .speed(0.1)
-                        .range(0.1..=100.0)
-                        .prefix("Spacing: "),
-                );
+            if ui.button("<<").clicked() {
+                 let s = (time.relative_speed() - 0.1).max(0.0);
+                 time.set_relative_speed(s);
+            }
+            if ui.button(">>").clicked() {
+                 let s = time.relative_speed() + 0.1;
+                 time.set_relative_speed(s);
+            }
+            if ui.button("Reset").clicked() {
+                time.set_relative_speed(1.0);
             }
         });
     });

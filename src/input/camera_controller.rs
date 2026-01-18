@@ -1,69 +1,47 @@
-//! Camera controller for panning and zooming.
-//!
-//! Provides WASD movement, Mouse Drag panning, and Scroll zooming.
+//! Camera controller (pan/zoom).
 
 use crate::prelude::*;
-use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
+use bevy::input::mouse::{MouseMotion, MouseWheel};
 
-/// Plugin for camera control.
+/// Plugin that handles camera movement (pan/zoom).
 pub struct CameraControllerPlugin;
 
 impl Plugin for CameraControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (camera_pan, camera_zoom));
+        app.add_systems(Update, camera_controller);
     }
 }
 
-fn camera_pan(
-    mut query: Query<(&mut Transform, &Camera), With<Camera2d>>,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    mouse_motion: Res<AccumulatedMouseMotion>,
+fn camera_controller(
+    mut query: Query<(&mut Transform, &mut OrthographicProjection), With<Camera2d>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut motion_evr: EventReader<MouseMotion>,
+    mut scroll_evr: EventReader<MouseWheel>,
+    _time: Res<Time>,
 ) {
-    // Check if Right or Middle mouse button is held
-    if !mouse_buttons.pressed(MouseButton::Right) && !mouse_buttons.pressed(MouseButton::Middle) {
-        return;
-    }
+    let (mut transform, mut projection) = match query.get_single_mut() {
+        Ok(q) => q,
+        Err(_) => return,
+    };
 
-    let delta = mouse_motion.delta;
-    if delta == Vec2::ZERO {
-        return;
-    }
-
-    for (mut transform, _camera) in query.iter_mut() {
-        // We need to scale the delta by the current zoom level (scale.x)
-        // to keep panning speed consistent relative to the world.
-        // Also invert x and y because dragging mouse right means moving camera left to keep world "under" cursor.
-        let zoom = transform.scale.x;
-
-        // However, we want to move the camera opposite to mouse drag to "grab" the world.
-        transform.translation.x -= delta.x * zoom;
-        transform.translation.y += delta.y * zoom;
-    }
-}
-
-fn camera_zoom(
-    mut query: Query<&mut Transform, With<Camera2d>>,
-    scroll_events: Res<AccumulatedMouseScroll>,
-) {
-    let scroll = scroll_events.delta.y;
-    if scroll == 0.0 {
-        return;
-    }
-
-    for mut transform in query.iter_mut() {
-        let mut scale = transform.scale.x;
-
-        // Zoom speed
-        let sensitivity = 0.1;
-        if scroll > 0.0 {
-            scale /= 1.0 + sensitivity;
-        } else {
-            scale *= 1.0 + sensitivity;
+    // Pan
+    if mouse.pressed(MouseButton::Right) || mouse.pressed(MouseButton::Middle) {
+        let mut delta = Vec2::ZERO;
+        for ev in motion_evr.read() {
+            delta += ev.delta;
         }
 
-        // Clamp zoom
-        scale = scale.clamp(0.01, 1000.0);
+        // Scale pan speed by zoom
+        transform.translation.x -= delta.x * projection.scale;
+        transform.translation.y += delta.y * projection.scale;
+    }
 
-        transform.scale = Vec3::splat(scale);
+    // Zoom
+    for ev in scroll_evr.read() {
+        // Logarithmic zoom
+        let zoom_speed = 0.1;
+        let zoom_factor = 1.0 - ev.y * zoom_speed;
+        projection.scale *= zoom_factor;
+        projection.scale = projection.scale.clamp(0.1, 100.0);
     }
 }

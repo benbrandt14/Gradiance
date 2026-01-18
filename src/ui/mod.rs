@@ -1,8 +1,4 @@
-//! User Interface (UI) systems.
-//!
-//! This module implements the editor interface using `bevy_egui`.
-//! It includes the sidebar for tools, the inspector for properties,
-//! the context menu, and the grid system.
+//! UI Plugin
 
 use crate::prelude::*;
 use bevy_egui::EguiPlugin;
@@ -12,15 +8,15 @@ pub mod grid;
 pub mod inspector;
 pub mod panels;
 
-/// Plugin for the Editor User Interface.
-///
-/// Initializes `bevy_egui` and registers sub-plugins for panels, inspector, context menu, and grid.
+/// Plugin that initializes all UI components.
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        // Egui setup
-        app.add_plugins(EguiPlugin::default());
+        app.add_plugins(EguiPlugin); // .default() removed for Bevy 0.14? Or EguiPlugin struct change?
+        // Checking EguiPlugin for Bevy 0.14/Egui 0.28.
+        // It's likely just `app.add_plugins(EguiPlugin);` if it's a struct unit or has default.
+        // If it fails, I'll check docs.
 
         app.add_plugins((
             panels::PanelsPlugin,

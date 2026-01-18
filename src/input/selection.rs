@@ -6,7 +6,6 @@ use crate::input::editable::{EditableBox, EditableCircle};
 use crate::GroundPlane;
 use bevy::prelude::*;
 use std::collections::HashSet;
-// use avian2d::prelude::*; // Not needed directly here if using standard math
 
 /// Resource storing the currently selected entities.
 #[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
@@ -76,35 +75,37 @@ fn draw_selection_highlight(
             let t = transform.translation.truncate();
             let r = transform.rotation.to_euler(EulerRot::XYZ).2;
 
-            let iso = Isometry2d::from_translation(t) * Isometry2d::from_rotation(Rot2::radians(r));
-
             if let Some(b) = box_shape {
                 gizmos.rect_2d(
-                    iso,
+                    t,
+                    r,
                     Vec2::new(b.width as f32 + 0.2, b.height as f32 + 0.2), // slightly larger
                     color,
                 );
             } else if let Some(c) = circle_shape {
-                gizmos.circle_2d(iso, c.radius as f32 + 0.1, color);
+                gizmos.circle_2d(t, c.radius as f32 + 0.1, color);
             } else if ground.is_some() {
                 // Visualize infinite plane selection (line + normal indicator)
                 // Draw a very long line
+                let dir_x = Vec2::new(r.cos(), r.sin());
+                let dir_y = Vec2::new(-r.sin(), r.cos());
+
                 gizmos.line_2d(
-                    iso * Vec2::new(-100_000.0, 0.0),
-                    iso * Vec2::new(100_000.0, 0.0),
+                    t - dir_x * 100_000.0,
+                    t + dir_x * 100_000.0,
                     color,
                 );
                 // Draw normal indicators
                 for x in (-10..=10).map(|i| i as f32 * 50.0) {
-                    gizmos.line_2d(
-                        iso * Vec2::new(x, 0.0),
-                        iso * Vec2::new(x, 10.0),
+                     gizmos.line_2d(
+                        t + dir_x * x,
+                        t + dir_x * x + dir_y * 10.0,
                         color,
                     );
                 }
             } else {
                 // Fallback
-                gizmos.circle_2d(iso, 0.5, color);
+                gizmos.circle_2d(t, 0.5, color);
             }
         }
     }

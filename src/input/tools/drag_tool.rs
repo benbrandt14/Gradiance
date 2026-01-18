@@ -1,14 +1,11 @@
 //! Tool for dragging dynamic objects (the "Hand" tool).
 //!
 //! Allows the user to grab and move dynamic bodies using a mouse joint-like mechanic.
-//! Currently implemented by calculating a target anchor and drawing lines, but physics force
-//! application is temporarily disabled pending `ExternalForce` integration.
 
 use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::GroundPlane;
-use avian2d::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 
@@ -43,9 +40,9 @@ fn drag_tool_update(
     mut data: ResMut<DragToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
-    spatial_query: SpatialQuery,
-    mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
-    mut hand_query: Query<(&mut Transform, &mut LinearVelocity), (With<RigidBody>, Without<Collider>)>,
+    rapier_context: Res<RapierContext>,
+    mut query: Query<(&mut Transform, &Velocity), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
+    mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     virtual_time: Res<Time<Virtual>>,
@@ -60,30 +57,31 @@ fn drag_tool_update(
     };
 
     if mouse.just_pressed(MouseButton::Left) {
-        let filter = SpatialQueryFilter::default();
-        if let Some(hit) = spatial_query.project_point(current_pos, true, &filter)
-            && let Ok((transform, _, _)) = query.get(hit.entity)
+        let point = Vec2::new(current_pos.x as f32, current_pos.y as f32);
+        let filter = QueryFilter::default();
+        if let Some((entity, _proj)) = rapier_context.project_point(point, true, filter)
+            && let Ok((transform, _)) = query.get(entity)
         {
-            data.dragged_entity = Some(hit.entity);
+            data.dragged_entity = Some(entity);
 
             // Calculate local anchor on the body
             data.local_anchor = calculate_local_anchor(transform, current_pos);
+            let local_anchor_f32 = Vec2::new(data.local_anchor.x as f32, data.local_anchor.y as f32);
 
             // Spawn "Hand" kinematic body
             let hand = commands.spawn((
-                RigidBody::Kinematic,
+                RigidBody::KinematicPositionBased,
                 Transform::from_xyz(current_pos.x as f32, current_pos.y as f32, 0.0),
+                GlobalTransform::default(),
+                VisibilityBundle::default(),
+                Velocity::default(),
             )).id();
             data.hand_entity = Some(hand);
 
             // Create RevoluteJoint (Mouse Joint) between Hand and Body
-            commands.spawn((
-                RevoluteJoint::new(hand, hit.entity)
-                    .with_local_anchor1(DVec2::ZERO)
-                    .with_local_anchor2(data.local_anchor)
-                    // Set 0 compliance for a rigid connection (more responsive)
-                    .with_point_compliance(0.0),
-            ));
+            commands.entity(hand).insert(
+                ImpulseJoint::new(entity, RevoluteJointBuilder::new().local_anchor1(Vec2::ZERO).local_anchor2(local_anchor_f32))
+            );
         }
     }
 
@@ -104,21 +102,19 @@ fn drag_tool_update(
             t.translation.y = current_pos.y as f32;
 
             // Update velocity for correct physics interaction (kinematic body)
-            if time.delta_secs() > 0.0001 {
-                let velocity = (current_pos - old_pos) / time.delta_secs_f64();
-                v.x = velocity.x;
-                v.y = velocity.y;
+            if time.delta_seconds() > 0.0001 {
+                let velocity = (current_pos - old_pos) / time.delta_seconds_f64();
+                v.linvel = Vec2::new(velocity.x as f32, velocity.y as f32);
             } else {
-                v.x = 0.0;
-                v.y = 0.0;
+                v.linvel = Vec2::ZERO;
             }
         }
     }
 
-    // Handle dragging
+    // Handle dragging visuals
     if let Some(entity) = data.dragged_entity {
         match query.get_mut(entity) {
-            Ok((mut transform, _, _)) => {
+            Ok((mut transform, _)) => {
                 let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
 
                 // If paused, manually move the object to follow cursor

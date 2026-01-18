@@ -1,9 +1,8 @@
 //! Components for live-editable shapes.
 //!
-//! Provides `EditableBox` and `EditableCircle` components that drive the regeneration
-//! of visual shapes (`bevy_prototype_lyon`) and physics colliders (`Avian`) when changed.
+//! Provides `EditableBox` and `EditableCircle` components.
 
-use avian2d::prelude::*;
+use bevy_rapier2d::prelude::*;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -52,12 +51,14 @@ fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Chang
         commands
             .entity(entity)
             .insert(
-                ShapeBuilder::with(&shape)
-                    .fill(Color::srgb(0.5, 0.5, 1.0))
-                    .stroke(Stroke::new(Color::BLACK, 0.1))
-                    .build(),
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shape),
+                    ..default()
+                },
             )
-            .insert(Collider::rectangle(editable.width, editable.height));
+            .insert(Fill::color(Color::srgb(0.5, 0.5, 1.0)))
+            .insert(Stroke::new(Color::BLACK, 0.1))
+            .insert(Collider::cuboid(editable.width as f32 / 2.0, editable.height as f32 / 2.0));
     }
 }
 
@@ -79,12 +80,14 @@ fn resize_circle(
         commands
             .entity(entity)
             .insert(
-                ShapeBuilder::with(&shape)
-                    .fill(Color::srgb(1.0, 0.5, 0.5))
-                    .stroke(Stroke::new(Color::BLACK, 0.1))
-                    .build(),
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shape),
+                    ..default()
+                },
             )
-            .insert(Collider::circle(editable.radius));
+            .insert(Fill::color(Color::srgb(1.0, 0.5, 0.5)))
+            .insert(Stroke::new(Color::BLACK, 0.1))
+            .insert(Collider::ball(editable.radius as f32));
     }
 }
 

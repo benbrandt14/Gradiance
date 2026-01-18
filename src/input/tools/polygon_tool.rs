@@ -1,7 +1,6 @@
 //! Tool for creating polygon rigid bodies.
 //!
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
-//! Uses Convex Hull decomposition for colliders.
 
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
@@ -92,7 +91,7 @@ fn polygon_tool_update(
         // Draw start point marker
         let start = data.points[0];
         gizmos.circle_2d(
-            Isometry2d::from_translation(Vec2::new(start.x as f32, start.y as f32)),
+            Vec2::new(start.x as f32, start.y as f32),
             0.5,                        // snap radius visual (increased)
             Color::srgb(0.0, 1.0, 0.0), // Green
         );
@@ -167,9 +166,9 @@ fn polygon_tool_update(
                     &options,
                     &mut vertex_builder
                 ).is_ok() {
-                // Convert buffers to Avian Triangle Mesh
-                let vertices: Vec<DVec2> = buffers.vertices.iter()
-                    .map(|p| DVec2::new(p.x as f64, p.y as f64))
+                // Convert buffers to Rapier Triangle Mesh
+                let vertices: Vec<Vec2> = buffers.vertices.iter()
+                    .map(|p| Vec2::new(p.x, p.y))
                     .collect();
 
                 let indices: Vec<[u32; 3]> = buffers.indices.chunks(3)
@@ -178,17 +177,23 @@ fn polygon_tool_update(
 
                 Collider::trimesh(vertices, indices)
             } else {
-                 Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0))
+                 // relative_points is DVec2, convert to Vec2
+                 let points_f32: Vec<Vec2> = relative_points.iter().map(|p| Vec2::new(p.x as f32, p.y as f32)).collect();
+                 Collider::convex_hull(&points_f32).unwrap_or(Collider::ball(1.0))
             };
 
             commands.spawn((
-                ShapeBuilder::with(&shape)
-                    .fill(Color::srgb(0.5, 1.0, 0.5))
-                    .stroke(Stroke::new(Color::BLACK, 0.1))
-                    .build(),
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shape),
+                    ..default()
+                },
+                Fill::color(Color::srgb(0.5, 1.0, 0.5)),
+                Stroke::new(Color::BLACK, 0.1),
                 RigidBody::Dynamic,
                 collider,
                 Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
+                GlobalTransform::default(),
+                VisibilityBundle::default(),
             ));
 
             data.points.clear();

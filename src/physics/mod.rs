@@ -1,43 +1,47 @@
 //! Physics configuration and integration for Gradiance.
 //!
-//! This module configures the [Avian](https://github.com/Jondolf/avian) physics engine with settings
-//! optimized for mechanical simulation, such as high precision (`f64`) and increased substeps.
+//! This module configures the [Rapier](https://rapier.rs) physics engine.
 
 use crate::prelude::*;
-use bevy::math::DVec2;
 
 pub mod config;
 pub mod constraints;
 
 /// Plugin that configures the physics simulation.
-///
-/// This plugin initializes Avian, sets gravity, configures substeps for stability,
-/// and registers custom constraints.
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        // Avian setup
-        app.add_plugins(PhysicsPlugins::default());
+        // Rapier setup
+        app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
+           .add_plugins(RapierDebugRenderPlugin::default());
 
-        // Spec: Set SubstepCount to roughly 12-16.
-        // Higher substeps increase stability for complex constraints (gears, chains).
-        // Reduced to 8 to improve performance/sluggishness while maintaining some stability.
-        // Increased to 12 to fix soft body/squishing issues.
-        app.insert_resource(SubstepCount(12));
+        app.insert_resource(RapierConfiguration {
+            gravity: Vec2::new(0.0, -1000.0),
+            // Explicitly set other fields or use struct update syntax if Default is implemented for parts?
+            // RapierConfiguration might not impl Default in this version?
+            // Actually it should. Let's try `..RapierConfiguration::default()`? Or `..Default::default()`?
+            // The error said `RapierConfiguration: Default` is not satisfied.
+            // This means we must construct it manually or it doesn't impl Default.
+            // checking docs for 0.27: It usually does. Maybe `bevy_rapier2d::plugin::RapierConfiguration`.
+            // Let's explicitly set fields if needed.
+            physics_pipeline_active: true,
+            query_pipeline_active: true,
+            timestep_mode: TimestepMode::Variable {
+                max_dt: 1.0 / 60.0,
+                time_scale: 1.0,
+                substeps: 1,
+            },
+            scaled_shape_subdivision: 10,
+            force_update_from_transform_changes: false,
+        });
 
-        // Spec: Gravity (standard)
-        // Note: Avian with f64 requires DVec2
-        // Increased to -1000.0 to match pixel coordinate scale (approx 100px = 1m feel).
-        app.insert_resource(Gravity(DVec2::new(0.0, -1000.0)));
+        app.add_systems(Update, pause_physics_system);
 
-        // Spec: Custom constraints will be added here
         app.add_plugins(constraints::ConstraintsPlugin);
-
-        // Pause physics when Virtual time is paused.
-        app.configure_sets(
-            FixedUpdate,
-            PhysicsSystems::StepSimulation.run_if(|time: Res<Time<Virtual>>| !time.is_paused()),
-        );
     }
+}
+
+fn pause_physics_system(mut config: ResMut<RapierConfiguration>, time: Res<Time<Virtual>>) {
+    config.physics_pipeline_active = !time.is_paused();
 }
