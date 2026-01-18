@@ -5,7 +5,7 @@
 
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
-use bevy_egui::{EguiContexts, egui, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 #[derive(Resource, Default)]
 struct ContextMenuState {
@@ -19,7 +19,10 @@ pub struct ContextMenuPlugin;
 impl Plugin for ContextMenuPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ContextMenuState>();
-        app.add_systems(EguiPrimaryContextPass, (context_menu_input, context_menu_ui));
+        app.add_systems(
+            EguiPrimaryContextPass,
+            (context_menu_input, context_menu_ui),
+        );
     }
 }
 

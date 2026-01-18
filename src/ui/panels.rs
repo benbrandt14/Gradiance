@@ -7,7 +7,7 @@ use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::window::PrimaryWindow;
-use bevy_egui::{EguiContexts, egui, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 /// Plugin for the main UI panels.
 pub struct PanelsPlugin;

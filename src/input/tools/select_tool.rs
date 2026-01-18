@@ -125,12 +125,8 @@ fn select_tool_update(
                     let position = center;
                     let rotation = 0.0;
                     let filter = SpatialQueryFilter::default();
-                    let hits = spatial_query.shape_intersections(
-                        &shape,
-                        position,
-                        rotation,
-                        &filter,
-                    );
+                    let hits =
+                        spatial_query.shape_intersections(&shape, position, rotation, &filter);
 
                     if let Some(entity) = hits.first() {
                         selection.0 = Some(*entity);

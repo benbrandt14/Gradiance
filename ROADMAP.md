@@ -38,6 +38,7 @@
 - [ ] add sensors for proximity and force, make them thematically match ( proximity might be capacitance )
 - [ ] add a settings pane for things to be modified
 - [ ] add support for chains and pulleys ( esp. physically correct pulleys w/ non colliding wires -- not part of original algodoo and easy to add )
+- [ ] add support for arbitrary coordinate frames ( req plotters )
 
 ## Core Tools ( Polish & Feature Complete )
 

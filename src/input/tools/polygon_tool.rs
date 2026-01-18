@@ -110,12 +110,11 @@ fn polygon_tool_update(
     if should_close {
         if data.points.len() >= 3 {
             // Close loop and spawn
-            let center = data.points.iter().fold(DVec2::ZERO, |acc, p| acc + *p)
-                / data.points.len() as f64;
+            let center =
+                data.points.iter().fold(DVec2::ZERO, |acc, p| acc + *p) / data.points.len() as f64;
 
             // Points relative to center
-            let relative_points: Vec<DVec2> =
-                data.points.iter().map(|p| *p - center).collect();
+            let relative_points: Vec<DVec2> = data.points.iter().map(|p| *p - center).collect();
             let vec2_points: Vec<Vec2> = relative_points
                 .iter()
                 .map(|p| Vec2::new(p.x as f32, p.y as f32))
