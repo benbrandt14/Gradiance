@@ -18,7 +18,7 @@ jobs:
   test:
     name: Test & Lint
     # matches the label you added during setup
-    runs-on: [self-hosted, linux-desktop] 
+    runs-on: self-hosted 
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3

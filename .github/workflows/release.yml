@@ -12,7 +12,7 @@ env:
 
 jobs:
   release-linux:
-    runs-on: [self-hosted, linux-desktop]
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
 
