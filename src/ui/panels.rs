@@ -6,6 +6,7 @@
 use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
+use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
 
 /// Plugin for the main UI panels.
@@ -21,7 +22,16 @@ fn sidebar_ui(
     mut contexts: EguiContexts,
     mut next_tool_state: ResMut<NextState<ToolState>>,
     current_tool_state: Res<State<ToolState>>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
 ) {
+    let Ok(window) = window_query.get_single() else {
+        return;
+    };
+
+    if window.width() <= 0.0 || window.height() <= 0.0 {
+        return;
+    }
+
     let ctx = match contexts.ctx_mut() {
         Ok(ctx) => ctx,
         _ => return,
@@ -58,7 +68,16 @@ fn top_panel_ui(
     mut contexts: EguiContexts,
     mut virtual_time: ResMut<Time<Virtual>>,
     mut grid_settings: ResMut<GridSettings>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
 ) {
+    let Ok(window) = window_query.get_single() else {
+        return;
+    };
+
+    if window.width() <= 0.0 || window.height() <= 0.0 {
+        return;
+    }
+
     let ctx = match contexts.ctx_mut() {
         Ok(ctx) => ctx,
         _ => return,
