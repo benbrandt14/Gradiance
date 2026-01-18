@@ -11,6 +11,7 @@ use crate::GroundPlane;
 use avian2d::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
+use bevy_picking::prelude::*;
 
 /// Plugin for the Drag Tool.
 pub struct DragToolPlugin;
@@ -43,7 +44,7 @@ fn drag_tool_update(
     mut data: ResMut<DragToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
-    spatial_query: SpatialQuery,
+    mut pointer_events: EventReader<Pointer<Down>>,
     mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
     mut hand_query: Query<(&mut Transform, &mut LinearVelocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
@@ -59,31 +60,35 @@ fn drag_tool_update(
         return;
     };
 
-    if mouse.just_pressed(MouseButton::Left) {
-        let filter = SpatialQueryFilter::default();
-        if let Some(hit) = spatial_query.project_point(current_pos, true, &filter)
-            && let Ok((transform, _, _)) = query.get(hit.entity)
-        {
-            data.dragged_entity = Some(hit.entity);
+    // Handle picking events
+    for event in pointer_events.read() {
+        if event.button == PointerButton::Primary {
+            let entity = event.target;
+            if let Ok((transform, _, _)) = query.get(entity) {
+                data.dragged_entity = Some(entity);
 
-            // Calculate local anchor on the body
-            data.local_anchor = calculate_local_anchor(transform, current_pos);
+                // Use hit position from event if available, otherwise fallback to cursor pos
+                let hit_pos = event.hit.position.map(|p| DVec2::new(p.x as f64, p.y as f64)).unwrap_or(current_pos);
 
-            // Spawn "Hand" kinematic body
-            let hand = commands.spawn((
-                RigidBody::Kinematic,
-                Transform::from_xyz(current_pos.x as f32, current_pos.y as f32, 0.0),
-            )).id();
-            data.hand_entity = Some(hand);
+                // Calculate local anchor on the body
+                data.local_anchor = calculate_local_anchor(transform, hit_pos);
 
-            // Create RevoluteJoint (Mouse Joint) between Hand and Body
-            commands.spawn((
-                RevoluteJoint::new(hand, hit.entity)
-                    .with_local_anchor1(DVec2::ZERO)
-                    .with_local_anchor2(data.local_anchor)
-                    // Set 0 compliance for a rigid connection (more responsive)
-                    .with_point_compliance(0.0),
-            ));
+                // Spawn "Hand" kinematic body
+                let hand = commands.spawn((
+                    RigidBody::Kinematic,
+                    Transform::from_xyz(hit_pos.x as f32, hit_pos.y as f32, 0.0),
+                )).id();
+                data.hand_entity = Some(hand);
+
+                // Create RevoluteJoint (Mouse Joint) between Hand and Body
+                commands.spawn((
+                    RevoluteJoint::new(hand, entity)
+                        .with_local_anchor1(DVec2::ZERO)
+                        .with_local_anchor2(data.local_anchor)
+                        // Set 0 compliance for a rigid connection (more responsive)
+                        .with_point_compliance(0.0),
+                ));
+            }
         }
     }
 

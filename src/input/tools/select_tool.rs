@@ -8,6 +8,7 @@ use crate::GroundPlane;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
+use bevy_picking::prelude::*;
 
 /// Plugin for the Select Tool.
 pub struct SelectToolPlugin;
@@ -43,7 +44,7 @@ fn select_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    spatial_query: SpatialQuery,
+    mut pointer_events: EventReader<Pointer<Down>>,
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
     mut query: Query<&mut Transform>,
@@ -63,42 +64,46 @@ fn select_tool_update(
 
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
 
-    if mouse.just_pressed(MouseButton::Left) {
-        data.drag_start_pos = current_pos;
+    let mut clicked_entity = false;
 
-        let filter = SpatialQueryFilter::default();
-        if let Some(hit) = spatial_query.project_point(current_pos, true, &filter) {
-            // Clicked on something
+    // Handle picking events
+    for event in pointer_events.read() {
+        if event.button == PointerButton::Primary {
+            clicked_entity = true;
+            data.drag_start_pos = current_pos;
+            let entity = event.target;
 
             // If shift not held and entity not in selection, clear selection
-            if !shift && !selection.0.contains(&hit.entity) {
+            if !shift && !selection.0.contains(&entity) {
                 selection.clear();
             }
 
             if shift {
-                selection.toggle(hit.entity);
-            } else if !selection.0.contains(&hit.entity) {
-                selection.add(hit.entity);
+                selection.toggle(entity);
+            } else if !selection.0.contains(&entity) {
+                selection.add(entity);
             }
 
             // Initiate Move for all selected
-            if selection.0.contains(&hit.entity) {
+            if selection.0.contains(&entity) {
                 data.is_moving = true;
                 data.initial_positions.clear();
-                for &entity in &selection.0 {
-                    if let Ok(t) = query.get(entity) {
-                        data.initial_positions.push((entity, t.translation.truncate().as_dvec2()));
+                for &e in &selection.0 {
+                    if let Ok(t) = query.get(e) {
+                        data.initial_positions.push((e, t.translation.truncate().as_dvec2()));
                     }
                 }
             }
-        } else {
-            // Clicked on empty space -> Box Select
-            if !shift {
-                selection.clear();
-            }
-            data.is_moving = false;
-            data.drag_start = Some(current_pos);
         }
+    }
+
+    if mouse.just_pressed(MouseButton::Left) && !clicked_entity {
+        // Clicked on empty space -> Box Select
+        if !shift {
+            selection.clear();
+        }
+        data.is_moving = false;
+        data.drag_start = Some(current_pos);
     }
 
     if mouse.pressed(MouseButton::Left) {
