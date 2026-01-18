@@ -3,21 +3,13 @@
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
 //! Uses Convex Hull decomposition for colliders.
 
+use crate::input::commands::{CommandStack, SpawnPolygonCommand};
 use crate::input::tools::utils::is_pointer_over_ui;
-use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
+use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
-use bevy_prototype_lyon::prelude::*;
-
-use bevy_prototype_lyon::prelude::tess::{
-    FillOptions, VertexBuffers,
-    geometry_builder::simple_builder,
-    math::Point,
-    FillTessellator,
-    path::Path,
-};
 
 /// Plugin for the Polygon Tool.
 pub struct PolygonToolPlugin;
@@ -55,7 +47,6 @@ fn polygon_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
-    mut z_index: ResMut<ZIndex>,
 ) {
     if is_pointer_over_ui(&mut contexts) {
         return;
@@ -125,71 +116,23 @@ fn polygon_tool_update(
             let center =
                 data.points.iter().fold(DVec2::ZERO, |acc, p| acc + *p) / data.points.len() as f64;
 
-            // Points relative to center
-            let relative_points: Vec<DVec2> = data.points.iter().map(|p| *p - center).collect();
-            let vec2_points: Vec<Vec2> = relative_points
+            // Points relative to center (as Vec2 for Polygon command)
+            let relative_points: Vec<Vec2> = data.points
                 .iter()
-                .map(|p| Vec2::new(p.x as f32, p.y as f32))
+                .map(|p| (*p - center).as_vec2())
                 .collect();
 
-            // Create shape
-            let shape = shapes::Polygon {
-                points: vec2_points.clone(),
-                closed: true,
+            let cmd = SpawnPolygonCommand {
+                position: center.as_vec2(),
+                vertices: relative_points,
+                entity: None,
             };
 
-            // Triangle mesh collider for non-convex support
-            let mut buffers: VertexBuffers<Point, u16> = VertexBuffers::new();
-            let mut vertex_builder = simple_builder(&mut buffers);
-            let mut tessellator = FillTessellator::new();
-            let options = FillOptions::default();
-
-            // Convert Vec2 points to Lyon Points
-            let lyon_points: Vec<Point> = vec2_points
-                .iter()
-                .map(|p| Point::new(p.x, p.y))
-                .collect();
-
-            // Build Path
-            let mut path_builder = Path::builder();
-            if let Some(first) = lyon_points.first() {
-                path_builder.begin(*first);
-                for p in lyon_points.iter().skip(1) {
-                    path_builder.line_to(*p);
-                }
-                path_builder.close();
-            }
-            let path = path_builder.build();
-
-            // Tessellate
-            let collider = if tessellator.tessellate_path(
-                    &path,
-                    &options,
-                    &mut vertex_builder
-                ).is_ok() {
-                // Convert buffers to Avian Triangle Mesh
-                let vertices: Vec<DVec2> = buffers.vertices.iter()
-                    .map(|p| DVec2::new(p.x as f64, p.y as f64))
-                    .collect();
-
-                let indices: Vec<[u32; 3]> = buffers.indices.chunks(3)
-                    .map(|c| [c[0] as u32, c[1] as u32, c[2] as u32])
-                    .collect();
-
-                Collider::trimesh(vertices, indices)
-            } else {
-                 Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0))
-            };
-
-            commands.spawn((
-                ShapeBuilder::with(&shape)
-                    .fill(Color::srgb(0.5, 1.0, 0.5))
-                    .stroke(Stroke::new(Color::BLACK, 0.1))
-                    .build(),
-                RigidBody::Dynamic,
-                collider,
-                Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
-            ));
+            commands.queue(move |world: &mut World| {
+                world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                    stack.push(Box::new(cmd), world);
+                });
+            });
 
             data.points.clear();
         }
