@@ -81,9 +81,15 @@ fn update_connector(
             raw_pos
         };
 
-        // Find entities
+        // Find entities using shape intersection for better robustness
+        let shape = Collider::circle(0.1);
         let filter = SpatialQueryFilter::default();
-        let intersections = spatial_query.point_intersections(pos, &filter);
+        let intersections = spatial_query.shape_intersections(
+            &shape,
+            pos,
+            0.0,
+            &filter
+        );
 
         // Resolve to bodies and sort
         let sorted_bodies = resolve_sorted_bodies(&intersections, &bodies, &parents);
@@ -183,14 +189,18 @@ fn create_joint(
         };
 
         if let (Ok(p_global), Ok(c_global)) = (global_transforms.get(parent), global_transforms.get(child)) {
-            let p_affine = p_global.affine();
-            let c_affine = c_global.affine();
-            let local_affine = p_affine.inverse() * c_affine;
+            // Re-parenting logic
+            // We use set_parent_in_place to preserve GlobalTransform.
+            // We also strip RigidBody and Velocity components to merge the physics body.
 
             commands.entity(child)
                 .remove::<RigidBody>()
-                .set_parent_in_place(parent)
-                .insert(Transform::from_matrix(local_affine.into()));
+                .remove::<LinearVelocity>()
+                .remove::<AngularVelocity>()
+                .set_parent_in_place(parent);
+
+            // Note: set_parent_in_place automatically calculates the correct local Transform.
+            // We do not need to manually insert it.
 
             // Spawn Visual on Parent at anchor
             let visual_anchor_local = calculate_local_anchor_from_global(p_global, anchor_world);
