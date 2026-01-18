@@ -6,7 +6,7 @@
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::selection::Selection;
 use crate::prelude::*;
-use bevy_egui::{EguiContexts, egui};
+use bevy_egui::{EguiContexts, egui, EguiPrimaryContextPass};
 // use bevy_prototype_lyon::prelude::*;
 
 /// Plugin for the Inspector UI.
@@ -14,7 +14,7 @@ pub struct InspectorPlugin;
 
 impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, inspector_ui);
+        app.add_systems(EguiPrimaryContextPass, inspector_ui);
     }
 }
 
