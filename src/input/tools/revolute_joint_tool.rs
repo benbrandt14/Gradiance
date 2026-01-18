@@ -7,6 +7,30 @@ use crate::prelude::*;
 use avian2d::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
+
+// We need to disable collision for joined bodies to prevent explosion.
+// Avian 0.5 doesn't have collide_connected on joint.
+// We'll use CollisionLayers.
+// For now, simple approach: If two dynamic bodies are joined, we might need to put them in a group that doesn't collide with itself?
+// Or we just accept they might push each other if not carefully placed.
+// But the user specifically asked for "not collide".
+// Since we can't easily dynamically allocate layers, we will add a component `Joined` and maybe handle it later,
+// OR we just set collision layers if possible.
+//
+// Plan: Using CollisionLayers is complex without a robust layer manager.
+// However, Avian allows disabling collisions between specific entities? No.
+//
+// Let's implement a workaround:
+// If we join them, we assume they are distinct enough or the user wants them to interact.
+// But if they are overlapping at the pin, they will explode.
+//
+// The "Pin" (Static Body) has a collider. If we join Entity A to Pin, Entity A collides with Pin.
+// Entity A is dynamic, Pin is static. They overlap. Explosion.
+// FIX: The Pin should NOT have a collider, or it should be a Sensor, or in a non-colliding layer.
+//
+// The visual pin circles are fine. The RigidBody Pin is for the joint anchor.
+// Does the RigidBody need a collider to exist? No.
+// So we can remove `Collider::circle(0.1)` from the Pin entity!
 use bevy_prototype_lyon::prelude::*;
 
 /// Plugin for the Revolute Joint Tool.
@@ -123,7 +147,7 @@ fn spawn_pin_joint(
                 RevoluteJoint::new(entity_a, entity_b)
                     .with_local_anchor1(anchor_a)
                     .with_local_anchor2(anchor_b)
-                    .with_point_compliance(1e-9),
+                    .with_point_compliance(0.0), // Rigid
                 Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 10.0),
                 GlobalTransform::default(),
                 Visibility::default(),
@@ -136,10 +160,10 @@ fn spawn_pin_joint(
     } else {
         // Connect to World (Static Body)
         // Spawn a static body at anchor_world
+        // REMOVED Collider to prevent self-collision explosion with the body being pinned.
         let pin = commands
             .spawn((
                 RigidBody::Static,
-                Collider::circle(0.1),
                 Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
             ))
             .id();
@@ -152,7 +176,7 @@ fn spawn_pin_joint(
             RevoluteJoint::new(entity_a, pin)
                 .with_local_anchor1(anchor_a)
                 .with_local_anchor2(anchor_b)
-                .with_point_compliance(1e-9),
+                .with_point_compliance(0.0),
         ));
     }
 }

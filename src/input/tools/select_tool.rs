@@ -26,7 +26,9 @@ impl Plugin for SelectToolPlugin {
 struct SelectToolData {
     drag_start: Option<DVec2>,
     is_moving: bool,
-    initial_transform_pos: DVec2,
+    // Store offsets for multiple entities
+    // Map Entity -> Initial DVec2
+    initial_positions: Vec<(Entity, DVec2)>,
     drag_start_pos: DVec2,
 }
 
@@ -39,6 +41,7 @@ fn select_tool_update(
     mut data: ResMut<SelectToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     spatial_query: SpatialQuery,
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
@@ -55,24 +58,41 @@ fn select_tool_update(
         return;
     };
 
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+
     if mouse.just_pressed(MouseButton::Left) {
         data.drag_start_pos = current_pos;
 
         let filter = SpatialQueryFilter::default();
         if let Some(hit) = spatial_query.project_point(current_pos, true, &filter) {
             // Clicked on something
-            if selection.0 != Some(hit.entity) {
-                selection.0 = Some(hit.entity);
+
+            // If shift not held and entity not in selection, clear selection
+            if !shift && !selection.0.contains(&hit.entity) {
+                selection.clear();
             }
 
-            // Initiate Move
-            data.is_moving = true;
-            if let Ok(t) = query.get(hit.entity) {
-                data.initial_transform_pos = t.translation.truncate().as_dvec2();
+            if shift {
+                selection.toggle(hit.entity);
+            } else if !selection.0.contains(&hit.entity) {
+                selection.add(hit.entity);
+            }
+
+            // Initiate Move for all selected
+            if selection.0.contains(&hit.entity) {
+                data.is_moving = true;
+                data.initial_positions.clear();
+                for &entity in &selection.0 {
+                    if let Ok(t) = query.get(entity) {
+                        data.initial_positions.push((entity, t.translation.truncate().as_dvec2()));
+                    }
+                }
             }
         } else {
             // Clicked on empty space -> Box Select
-            selection.0 = None;
+            if !shift {
+                selection.clear();
+            }
             data.is_moving = false;
             data.drag_start = Some(current_pos);
         }
@@ -80,19 +100,20 @@ fn select_tool_update(
 
     if mouse.pressed(MouseButton::Left) {
         if data.is_moving {
-            // Move the entity
-            if let Some(entity) = selection.0
-                && let Ok(mut t) = query.get_mut(entity) {
-                    let delta = current_pos - data.drag_start_pos;
-                    let mut new_pos = data.initial_transform_pos + delta;
+            // Move the entities
+            let delta = current_pos - data.drag_start_pos;
 
+            for (entity, initial_pos) in &data.initial_positions {
+                 if let Ok(mut t) = query.get_mut(*entity) {
+                    let mut new_pos = *initial_pos + delta;
                     if grid_settings.show && grid_settings.snap {
                         new_pos = snap_to_grid(new_pos, grid_settings.spacing);
                     }
-
                     t.translation.x = new_pos.x as f32;
                     t.translation.y = new_pos.y as f32;
-                }
+                 }
+            }
+
         } else if let Some(start) = data.drag_start {
             // Draw Box
             let min = start.min(current_pos);
@@ -126,13 +147,14 @@ fn select_tool_update(
                     let hits =
                         spatial_query.shape_intersections(&shape, position, rotation, &filter);
 
-                    if let Some(entity) = hits.first() {
-                        selection.0 = Some(*entity);
+                    for entity in hits {
+                        selection.add(entity);
                     }
                 }
             }
 
         data.is_moving = false;
         data.drag_start = None;
+        data.initial_positions.clear();
     }
 }

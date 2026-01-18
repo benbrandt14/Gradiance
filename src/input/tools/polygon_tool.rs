@@ -10,6 +10,14 @@ use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
 
+use bevy_prototype_lyon::prelude::tess::{
+    FillOptions, BuffersBuilder, VertexBuffers,
+    geometry_builder::simple_builder,
+    math::Point,
+    FillTessellator,
+    path::Path,
+};
+
 /// Plugin for the Polygon Tool.
 pub struct PolygonToolPlugin;
 
@@ -126,10 +134,48 @@ fn polygon_tool_update(
                 closed: true,
             };
 
-            // NOTE: Currently using convex_hull.
-            // Ideally we would tessellate concave polygons into a trimesh or compound collider,
-            // but accessing lyon_tessellation in bevy_prototype_lyon 0.16.0 proved difficult.
-            let collider = Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0));
+            // Triangle mesh collider for non-convex support
+            let mut buffers: VertexBuffers<Point, u16> = VertexBuffers::new();
+            let mut vertex_builder = simple_builder(&mut buffers);
+            let mut tessellator = FillTessellator::new();
+            let options = FillOptions::default();
+
+            // Convert Vec2 points to Lyon Points
+            let lyon_points: Vec<Point> = vec2_points
+                .iter()
+                .map(|p| Point::new(p.x, p.y))
+                .collect();
+
+            // Build Path
+            let mut path_builder = Path::builder();
+            if let Some(first) = lyon_points.first() {
+                path_builder.begin(*first);
+                for p in lyon_points.iter().skip(1) {
+                    path_builder.line_to(*p);
+                }
+                path_builder.close();
+            }
+            let path = path_builder.build();
+
+            // Tessellate
+            let collider = if tessellator.tessellate_path(
+                    &path,
+                    &options,
+                    &mut vertex_builder
+                ).is_ok() {
+                // Convert buffers to Avian Triangle Mesh
+                let vertices: Vec<DVec2> = buffers.vertices.iter()
+                    .map(|p| DVec2::new(p.x as f64, p.y as f64))
+                    .collect();
+
+                let indices: Vec<[u32; 3]> = buffers.indices.chunks(3)
+                    .map(|c| [c[0] as u32, c[1] as u32, c[2] as u32])
+                    .collect();
+
+                Collider::trimesh(vertices, indices)
+            } else {
+                 Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0))
+            };
 
             commands.spawn((
                 ShapeBuilder::with(&shape)

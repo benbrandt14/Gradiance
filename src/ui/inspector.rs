@@ -36,7 +36,8 @@ fn inspector_ui(
     )>,
     mut commands: Commands,
 ) {
-    let Some(entity) = selection.0 else {
+    // Inspect the first selected entity, or return if none.
+    let Some(&entity) = selection.0.iter().next() else {
         return;
     };
 

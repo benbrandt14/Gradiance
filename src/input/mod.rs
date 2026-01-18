@@ -96,5 +96,7 @@ pub enum ToolState {
     Polygon,
     /// Create revolute joints (Axles).
     RevoluteJoint,
+    /// Create fixed joints (Welds).
+    Weld,
     // Add more as needed
 }
