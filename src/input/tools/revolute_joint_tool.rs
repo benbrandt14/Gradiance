@@ -2,6 +2,7 @@
 //!
 //! Allows connecting two bodies with a pivot point, or pinning a body to the background.
 
+use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use avian2d::prelude::*;
@@ -50,10 +51,9 @@ fn revolute_joint_tool_update(
     mut contexts: EguiContexts,
     transforms: Query<&Transform>,
 ) {
-    if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() {
-            return;
-        }
+    if is_pointer_over_ui(&mut contexts) {
+        return;
+    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -93,16 +93,7 @@ fn spawn_pin_joint(
     // Helper to get local anchor
     let get_local = |e: Entity| -> DVec2 {
         if let Ok(t) = transforms.get(e) {
-            let rotation = t.rotation.to_euler(EulerRot::XYZ).2 as f64;
-            let translation = t.translation.truncate().as_dvec2();
-            let relative = anchor_world - translation;
-            let cos = rotation.cos();
-            let sin = rotation.sin();
-            // Rotate back
-            DVec2::new(
-                relative.x * cos + relative.y * sin,
-                -relative.x * sin + relative.y * cos,
-            )
+            calculate_local_anchor(t, anchor_world)
         } else {
             DVec2::ZERO
         }

@@ -3,6 +3,7 @@
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
 //! Uses Convex Hull decomposition for colliders.
 
+use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
@@ -56,10 +57,9 @@ fn polygon_tool_update(
     grid_settings: Res<GridSettings>,
     mut z_index: ResMut<ZIndex>,
 ) {
-    if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() {
-            return;
-        }
+    if is_pointer_over_ui(&mut contexts) {
+        return;
+    }
 
     let Some(raw_pos) = cursor_pos.0 else {
         return;

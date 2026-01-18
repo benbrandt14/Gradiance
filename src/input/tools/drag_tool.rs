@@ -4,6 +4,7 @@
 //! Currently implemented by calculating a target anchor and drawing lines, but physics force
 //! application is temporarily disabled pending `ExternalForce` integration.
 
+use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use avian2d::prelude::*;
@@ -48,10 +49,7 @@ fn drag_tool_update(
     mut contexts: EguiContexts,
     virtual_time: Res<Time<Virtual>>,
 ) {
-    if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area()
-        && data.dragged_entity.is_none()
-    {
+    if is_pointer_over_ui(&mut contexts) && data.dragged_entity.is_none() {
         return;
     }
 
@@ -67,16 +65,7 @@ fn drag_tool_update(
             data.dragged_entity = Some(hit.entity);
 
             // Calculate local anchor on the body
-            let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
-            let translation = transform.translation.truncate().as_dvec2();
-            let relative = current_pos - translation;
-
-            let cos = rotation.cos();
-            let sin = rotation.sin();
-            data.local_anchor = DVec2::new(
-                relative.x * cos + relative.y * sin,
-                -relative.x * sin + relative.y * cos,
-            );
+            data.local_anchor = calculate_local_anchor(transform, current_pos);
 
             // Spawn "Hand" kinematic body
             let hand = commands.spawn((
