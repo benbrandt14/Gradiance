@@ -41,6 +41,10 @@ fn polygon_tool_reset(mut data: ResMut<PolygonToolData>) {
     data.points.clear();
 }
 
+fn should_close_loop(start: DVec2, current: DVec2) -> bool {
+    start.distance(current) < 0.5
+}
+
 fn polygon_tool_update(
     mut commands: Commands,
     mut data: ResMut<PolygonToolData>,
@@ -101,7 +105,7 @@ fn polygon_tool_update(
         if !data.points.is_empty() {
             let start = data.points[0];
             // Allow closing loop even if snapped, but check distance to (snapped) start
-            if start.distance(current_pos) < 0.5 {
+            if should_close_loop(start, current_pos) {
                 should_close = true;
             } else {
                 data.points.push(current_pos);
@@ -210,5 +214,13 @@ mod tests {
         ];
         let center = calculate_center(&points);
         assert_eq!(center, DVec2::new(5.0, 5.0));
+    }
+
+    #[rstest]
+    #[case(DVec2::ZERO, DVec2::new(0.4, 0.0), true)]
+    #[case(DVec2::ZERO, DVec2::new(0.5, 0.0), false)]
+    #[case(DVec2::ZERO, DVec2::new(0.6, 0.0), false)]
+    fn test_should_close_loop(#[case] start: DVec2, #[case] current: DVec2, #[case] expected: bool) {
+        assert_eq!(should_close_loop(start, current), expected);
     }
 }

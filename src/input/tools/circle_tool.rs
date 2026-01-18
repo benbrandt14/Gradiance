@@ -33,6 +33,14 @@ fn circle_tool_reset(mut data: ResMut<CircleToolData>) {
     data.drag_start = None;
 }
 
+fn calculate_radius(start: DVec2, end: DVec2) -> f64 {
+    start.distance(end)
+}
+
+fn should_spawn_circle(radius: f64) -> bool {
+    radius > 0.01
+}
+
 fn circle_tool_update(
     mut commands: Commands,
     mut data: ResMut<CircleToolData>,
@@ -66,7 +74,7 @@ fn circle_tool_update(
     }
 
     if let Some(start) = data.drag_start {
-        let radius = start.distance(current_pos);
+        let radius = calculate_radius(start, current_pos);
 
         if mouse.pressed(MouseButton::Left) {
             gizmos.circle_2d(
@@ -82,7 +90,7 @@ fn circle_tool_update(
         }
 
         if mouse.just_released(MouseButton::Left) {
-            if radius > 0.01 {
+            if should_spawn_circle(radius) {
                 let shape = shapes::Circle {
                     radius: radius as f32,
                     center: Vec2::ZERO,
@@ -102,5 +110,30 @@ fn circle_tool_update(
 
             data.drag_start = None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(DVec2::ZERO, DVec2::new(1.0, 0.0), 1.0)]
+    #[case(DVec2::ZERO, DVec2::new(0.0, 2.0), 2.0)]
+    #[case(DVec2::new(1.0, 1.0), DVec2::new(4.0, 5.0), 5.0)] // 3-4-5 triangle
+    fn test_calculate_radius(#[case] start: DVec2, #[case] end: DVec2, #[case] expected: f64) {
+        let radius = calculate_radius(start, end);
+        assert!((radius - expected).abs() < 1e-6);
+    }
+
+    #[rstest]
+    #[case(1.0, true)]
+    #[case(0.02, true)]
+    #[case(0.01, false)] // > 0.01
+    #[case(0.009, false)]
+    #[case(0.0, false)]
+    fn test_should_spawn_circle(#[case] radius: f64, #[case] expected: bool) {
+        assert_eq!(should_spawn_circle(radius), expected);
     }
 }
