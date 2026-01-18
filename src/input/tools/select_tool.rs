@@ -4,6 +4,7 @@
 
 use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
+use crate::GroundPlane;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
@@ -46,6 +47,8 @@ fn select_tool_update(
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
     mut query: Query<&mut Transform>,
+    // Add query for box selection fallback
+    selectable_query: Query<(Entity, &GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
     grid_settings: Res<GridSettings>,
 ) {
     // Prevent selection if over UI
@@ -138,17 +141,17 @@ fn select_tool_update(
                 let size = max - min;
 
                 if size.x > 0.1 && size.y > 0.1 {
-                    let center = (min + max) / 2.0;
-                    // Avian 0.5.0: Collider::rectangle takes width, height
-                    let shape = Collider::rectangle(size.x, size.y);
-                    let position = center;
-                    let rotation = 0.0;
-                    let filter = SpatialQueryFilter::default();
-                    let hits =
-                        spatial_query.shape_intersections(&shape, position, rotation, &filter);
+                    let min_x = min.x;
+                    let max_x = max.x;
+                    let min_y = min.y;
+                    let max_y = max.y;
 
-                    for entity in hits {
-                        selection.add(entity);
+                    // Manual AABB check against all selectable entities
+                    for (entity, global_transform) in &selectable_query {
+                        let t = global_transform.translation().truncate().as_dvec2();
+                        if t.x >= min_x && t.x <= max_x && t.y >= min_y && t.y <= max_y {
+                            selection.add(entity);
+                        }
                     }
                 }
             }

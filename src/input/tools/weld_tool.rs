@@ -132,6 +132,9 @@ fn spawn_weld(
             Visibility::default(),
             InheritedVisibility::default(),
             ViewVisibility::default(),
+            // Add sensor collider for selection
+            Collider::circle(0.5),
+            Sensor,
         )).id();
         spawn_visuals(commands, joint_entity);
 
@@ -140,6 +143,9 @@ fn spawn_weld(
         let pin = commands.spawn((
             RigidBody::Static,
             Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
+            // Add sensor collider for selection
+            Collider::circle(0.5),
+            Sensor,
         )).id();
         spawn_visuals(commands, pin);
 
