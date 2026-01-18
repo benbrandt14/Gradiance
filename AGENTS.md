@@ -29,6 +29,65 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
     * Edit src/lib.rs module docs for top content in the README
     * If you change system ordering (.before, .after, .chain), you (or the user) must run cargo run --example gen_graph > doc/schedule.dot to verify the resulting topology.
 
+## Technical Context & Patterns
+
+### 1. Physics (Avian 2D)
+*   **Precision**: We use `f64` precision (double precision). Always use `DVec2` instead of `Vec2` for physics calculations.
+*   **Components**: Use `RigidBody`, `Collider` (from `avian2d::prelude`).
+*   **Joints**: Use `RevoluteJoint`, `PrismaticJoint`, etc.
+
+### 2. Standard Tool Pattern
+Tools should be implemented as separate plugins following this pattern:
+```rust
+pub struct MyToolPlugin;
+
+impl Plugin for MyToolPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<MyToolData>();
+        app.add_systems(Update, my_tool_update.run_if(in_state(ToolState::MyTool)));
+        app.add_systems(OnExit(ToolState::MyTool), my_tool_reset);
+    }
+}
+
+// Data specific to the tool's operation (e.g., drag start point)
+#[derive(Resource, Default)]
+struct MyToolData { ... }
+
+// Reset state when switching tools
+fn my_tool_reset(mut data: ResMut<MyToolData>) { ... }
+
+// Main update loop
+fn my_tool_update(
+    mut commands: Commands,
+    mut data: ResMut<MyToolData>,
+    cursor_pos: Res<CursorWorldPos>,
+    mut contexts: EguiContexts,
+) {
+    // 1. Block input if over UI
+    if let Ok(ctx) = contexts.ctx_mut() && ctx.is_pointer_over_area() { return; }
+
+    // 2. Get cursor position
+    let Some(pos) = cursor_pos.0 else { return; };
+
+    // 3. Handle Input (Mouse/Keyboard)
+    // 4. Update Visuals (Gizmos)
+    // 5. Apply Changes (Commands)
+}
+```
+
+### 3. Rendering (Bevy Prototype Lyon)
+*   **Hack Warning**: Due to compatibility issues with Bevy 0.18, we use a specific pattern to spawn shapes:
+    ```rust
+    commands.spawn((
+        ShapeBuilder::with(&shape)
+            .fill(Color::srgb(...))
+            .stroke(Stroke::new(...))
+            .build(),
+        ...
+    ));
+    ```
+    Do not try to add `Fill` or `Stroke` components separately if it causes issues.
+
 ## Future Roadmap (Design Goals)
 
 Phase 1: The Substrate (Months 1–2)
