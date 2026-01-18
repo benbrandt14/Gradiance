@@ -38,6 +38,10 @@ fn calculate_box_geometry(start: DVec2, end: DVec2) -> (DVec2, DVec2) {
     (size, center)
 }
 
+fn should_spawn_box(size: DVec2) -> bool {
+    size.x > 0.01 && size.y > 0.01
+}
+
 fn box_tool_update(
     mut commands: Commands,
     mut data: ResMut<BoxToolData>,
@@ -84,7 +88,7 @@ fn box_tool_update(
 
         if mouse.just_released(MouseButton::Left) {
             // Spawn
-            if size.x > 0.01 && size.y > 0.01 {
+            if should_spawn_box(size) {
                 let shape = shapes::Rectangle {
                     extents: Vec2::new(size.x as f32, size.y as f32),
                     origin: shapes::RectangleOrigin::Center,
@@ -139,5 +143,16 @@ mod tests {
         let (size, center) = calculate_box_geometry(start, end);
         assert_eq!(size, expected_size);
         assert_eq!(center, expected_center);
+    }
+
+    #[rstest]
+    #[case(DVec2::new(1.0, 1.0), true)]
+    #[case(DVec2::new(0.02, 0.02), true)]
+    #[case(DVec2::new(0.01, 0.01), false)]
+    #[case(DVec2::new(0.009, 0.009), false)]
+    #[case(DVec2::new(1.0, 0.009), false)]
+    #[case(DVec2::new(0.009, 1.0), false)]
+    fn test_should_spawn_box(#[case] size: DVec2, #[case] expected: bool) {
+        assert_eq!(should_spawn_box(size), expected);
     }
 }
