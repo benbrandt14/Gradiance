@@ -12,7 +12,7 @@ use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
 
 use bevy_prototype_lyon::prelude::tess::{
-    FillOptions, BuffersBuilder, VertexBuffers,
+    FillOptions, VertexBuffers,
     geometry_builder::simple_builder,
     math::Point,
     FillTessellator,

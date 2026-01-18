@@ -43,7 +43,7 @@ fn drag_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     spatial_query: SpatialQuery,
-    mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), With<RigidBody>>,
+    mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), (With<RigidBody>, With<Collider>)>,
     mut hand_query: Query<&mut Transform, (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
