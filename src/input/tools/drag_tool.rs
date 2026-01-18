@@ -12,6 +12,8 @@ use avian2d::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_picking::prelude::*;
+use bevy_picking::events::Down;
+use bevy::prelude::EventReader;
 
 /// Plugin for the Drag Tool.
 pub struct DragToolPlugin;

@@ -9,6 +9,8 @@ use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_picking::prelude::*;
+use bevy_picking::events::Down;
+use bevy::prelude::EventReader;
 
 /// Plugin for the Select Tool.
 pub struct SelectToolPlugin;

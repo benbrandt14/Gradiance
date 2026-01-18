@@ -40,16 +40,16 @@ impl Plugin for PhysicsPlugin {
             PhysicsSystems::StepSimulation.run_if(|time: Res<Time<Virtual>>| !time.is_paused()),
         );
 
-        app.add_systems(Update, toggle_physics_debug);
+        // app.add_systems(Update, toggle_physics_debug);
     }
 }
 
-/// System to toggle physics debug rendering.
-fn toggle_physics_debug(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut config: ResMut<PhysicsDebugConfig>,
-) {
-    if keys.just_pressed(KeyCode::F1) {
-        config.enabled = !config.enabled;
-    }
-}
+// System to toggle physics debug rendering.
+// fn toggle_physics_debug(
+//     keys: Res<ButtonInput<KeyCode>>,
+//     mut config: ResMut<PhysicsDebugConfig>,
+// ) {
+//     if keys.just_pressed(KeyCode::F1) {
+//         config.enabled = !config.enabled;
+//     }
+// }
