@@ -308,7 +308,7 @@ impl GameCommand for SpawnJointCommand {
         self.visual_entity = Some(visual_id);
 
         if let Some(e_b) = self.entity_b {
-            world.entity_mut(self.entity_a).insert(
+            world.entity_mut(visual_id).insert(
                 RevoluteJoint::new(self.entity_a, e_b)
                     .with_local_anchor1(self.anchor_a)
                     .with_local_anchor2(self.anchor_b)
@@ -327,12 +327,12 @@ impl GameCommand for SpawnJointCommand {
             self.pin_entity = Some(pin_id);
 
             if let Some(visual_id) = self.visual_entity {
-                if let Ok(mut connector) = world.get_mut::<Connector>(visual_id) {
+                if let Some(mut connector) = world.get_mut::<Connector>(visual_id) {
                     connector.entity_b = Some(pin_id);
                 }
             }
 
-            world.entity_mut(self.entity_a).insert(
+            world.entity_mut(visual_id).insert(
                  RevoluteJoint::new(self.entity_a, pin_id)
                     .with_local_anchor1(self.anchor_a)
                     .with_local_anchor2(DVec2::ZERO)
@@ -347,9 +347,7 @@ impl GameCommand for SpawnJointCommand {
              self.visual_entity = None;
         }
 
-        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-            e.remove::<RevoluteJoint>();
-        }
+        // Joint component is on visual_entity, so despawning it removes the joint.
 
         if let Some(p) = self.pin_entity {
              if let Ok(e) = world.get_entity_mut(p) { e.despawn(); }
@@ -416,7 +414,7 @@ impl GameCommand for SpawnFixedJointCommand {
         let basis = Rot2::radians((self.rot_a - self.rot_b) as f32);
 
         if let Some(e_b) = self.entity_b {
-             world.entity_mut(self.entity_a).insert(
+             world.entity_mut(visual_id).insert(
                 FixedJoint::new(self.entity_a, e_b)
                     .with_local_anchor1(self.anchor_a)
                     .with_local_anchor2(self.anchor_b)
@@ -435,12 +433,12 @@ impl GameCommand for SpawnFixedJointCommand {
             self.pin_entity = Some(pin_id);
 
             if let Some(visual_id) = self.visual_entity {
-                if let Ok(mut connector) = world.get_mut::<Connector>(visual_id) {
+                if let Some(mut connector) = world.get_mut::<Connector>(visual_id) {
                     connector.entity_b = Some(pin_id);
                 }
             }
 
-            world.entity_mut(self.entity_a).insert(
+            world.entity_mut(visual_id).insert(
                 FixedJoint::new(self.entity_a, pin_id)
                     .with_local_anchor1(self.anchor_a)
                     .with_local_anchor2(DVec2::ZERO)
@@ -456,9 +454,7 @@ impl GameCommand for SpawnFixedJointCommand {
              self.visual_entity = None;
         }
 
-        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-            e.remove::<FixedJoint>();
-        }
+        // Joint component is on visual_entity, so despawning it removes the joint.
 
         if let Some(p) = self.pin_entity {
              if let Ok(e) = world.get_entity_mut(p) { e.despawn(); }
