@@ -7,6 +7,7 @@
 use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
+use crate::GroundPlane;
 use avian2d::prelude::*;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
@@ -43,7 +44,7 @@ fn drag_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     spatial_query: SpatialQuery,
-    mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), (With<RigidBody>, With<Collider>)>,
+    mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
     mut hand_query: Query<(&mut Transform, &mut LinearVelocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
@@ -80,10 +81,8 @@ fn drag_tool_update(
                 RevoluteJoint::new(hand, hit.entity)
                     .with_local_anchor1(DVec2::ZERO)
                     .with_local_anchor2(data.local_anchor)
-                    // High compliance = springy, Low = rigid.
-                    // We want it to be somewhat springy to avoid instability, but stiff enough to drag.
-                    // 0.00001 is fairly stiff.
-                    .with_point_compliance(1e-5),
+                    // Set 0 compliance for a rigid connection (more responsive)
+                    .with_point_compliance(0.0),
             ));
         }
     }

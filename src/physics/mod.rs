@@ -23,7 +23,8 @@ impl Plugin for PhysicsPlugin {
         // Spec: Set SubstepCount to roughly 12-16.
         // Higher substeps increase stability for complex constraints (gears, chains).
         // Reduced to 8 to improve performance/sluggishness while maintaining some stability.
-        app.insert_resource(SubstepCount(8));
+        // Increased to 12 to fix soft body/squishing issues.
+        app.insert_resource(SubstepCount(12));
 
         // Spec: Gravity (standard)
         // Note: Avian with f64 requires DVec2
