@@ -3,6 +3,7 @@
 //! Handles the currently selected entity and renders a highlight gizmo around it.
 
 use crate::input::editable::{EditableBox, EditableCircle};
+use crate::GroundPlane;
 use bevy::prelude::*;
 use std::collections::HashSet;
 // use avian2d::prelude::*; // Not needed directly here if using standard math
@@ -51,21 +52,26 @@ fn handle_delete_key(
 ) {
     if keys.just_pressed(KeyCode::Delete) || keys.just_pressed(KeyCode::Backspace) {
         for entity in selection.0.drain() {
-             commands.entity(entity).despawn_recursive();
+             commands.entity(entity).despawn();
         }
     }
 }
 
 /// System that draws a yellow outline around the selected entities.
 ///
-/// Supports `EditableBox` and `EditableCircle` shapes.
+/// Supports `EditableBox`, `EditableCircle`, and `GroundPlane`.
 fn draw_selection_highlight(
     selection: Res<Selection>,
-    query: Query<(&Transform, Option<&EditableBox>, Option<&EditableCircle>)>,
+    query: Query<(
+        &Transform,
+        Option<&EditableBox>,
+        Option<&EditableCircle>,
+        Option<&GroundPlane>,
+    )>,
     mut gizmos: Gizmos,
 ) {
     for &entity in &selection.0 {
-        if let Ok((transform, box_shape, circle_shape)) = query.get(entity) {
+        if let Ok((transform, box_shape, circle_shape, ground)) = query.get(entity) {
             let color = Color::srgb(1.0, 1.0, 0.0); // Yellow
             let t = transform.translation.truncate();
             let r = transform.rotation.to_euler(EulerRot::XYZ).2;
@@ -80,6 +86,22 @@ fn draw_selection_highlight(
                 );
             } else if let Some(c) = circle_shape {
                 gizmos.circle_2d(iso, c.radius as f32 + 0.1, color);
+            } else if ground.is_some() {
+                // Visualize infinite plane selection (line + normal indicator)
+                // Draw a very long line
+                gizmos.line_2d(
+                    iso * Vec2::new(-100_000.0, 0.0),
+                    iso * Vec2::new(100_000.0, 0.0),
+                    color,
+                );
+                // Draw normal indicators
+                for x in (-10..=10).map(|i| i as f32 * 50.0) {
+                    gizmos.line_2d(
+                        iso * Vec2::new(x, 0.0),
+                        iso * Vec2::new(x, 10.0),
+                        color,
+                    );
+                }
             } else {
                 // Fallback
                 gizmos.circle_2d(iso, 0.5, color);

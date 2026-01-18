@@ -19,6 +19,16 @@ impl Plugin for GridPlugin {
     }
 }
 
+/// Enum for different grid types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect, Default)]
+pub enum GridType {
+    /// Standard rectangular grid.
+    #[default]
+    Rectangular,
+    /// Isometric grid (30 degrees).
+    Isometric,
+}
+
 /// Settings for grid visibility and snapping.
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
@@ -29,6 +39,8 @@ pub struct GridSettings {
     pub snap: bool,
     /// The distance between grid lines (in world units).
     pub spacing: f64,
+    /// The type of grid to display.
+    pub grid_type: GridType,
 }
 
 impl Default for GridSettings {
@@ -37,6 +49,7 @@ impl Default for GridSettings {
             show: true,
             snap: true,
             spacing: 1.0,
+            grid_type: GridType::Rectangular,
         }
     }
 }
@@ -63,7 +76,7 @@ pub fn snap_to_grid(pos: DVec2, spacing: f64) -> DVec2 {
 
 fn draw_grid(
     settings: Res<GridSettings>,
-    camera_query: Query<(&Camera, &GlobalTransform, &OrthographicProjection), With<Camera2d>>,
+    camera_query: Query<(&Camera, &GlobalTransform, &Projection), With<Camera2d>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     mut gizmos: Gizmos,
 ) {
@@ -97,20 +110,35 @@ fn draw_grid(
         return;
     }
 
+    match settings.grid_type {
+        GridType::Rectangular => draw_rectangular_grid(projection, left, right, bottom, top, &mut gizmos),
+        GridType::Isometric => {
+            // Placeholder for future implementation
+        }
+    }
+}
+
+fn draw_rectangular_grid(
+    projection: &Projection,
+    left: f32,
+    right: f32,
+    bottom: f32,
+    top: f32,
+    gizmos: &mut Gizmos,
+) {
     // Dynamic Spacing Calculation based on Zoom
     // We want major grid lines approx every 100 screen pixels.
-    // scale = world_units / screen_pixels (Wait, no. scale = 1.0 means 1:1?)
-    // OrthographicProjection.scale scales the world.
-    // larger scale = zoomed out (more world units per pixel).
-    // ideal_world_spacing = 100_pixels * scale.
-
-    let scale = projection.scale;
+    let scale = if let Projection::Orthographic(ortho) = projection {
+        ortho.scale
+    } else {
+        1.0
+    };
     let target_spacing = 100.0 * scale;
     let exponent = target_spacing.log10().floor();
     let major_spacing = 10.0_f32.powf(exponent);
     let minor_spacing = major_spacing / 10.0;
 
-    let draw_lines = |spacing: f32, alpha: f32, mut gizmos: &mut Gizmos| {
+    let draw_lines = |spacing: f32, alpha: f32, gizmos: &mut Gizmos| {
         let start_x = (left / spacing).floor() * spacing;
         let start_y = (bottom / spacing).floor() * spacing;
         let count_x = ((right - left) / spacing).ceil() as i32 + 1;
@@ -130,11 +158,11 @@ fn draw_grid(
 
     // Draw minor lines (faint)
     if minor_spacing > 0.001 {
-        draw_lines(minor_spacing, 0.05, &mut gizmos);
+        draw_lines(minor_spacing, 0.05, gizmos);
     }
 
     // Draw major lines (stronger)
-    draw_lines(major_spacing, 0.15, &mut gizmos);
+    draw_lines(major_spacing, 0.15, gizmos);
 }
 
 #[cfg(test)]
