@@ -24,7 +24,7 @@ fn sidebar_ui(
     current_tool_state: Res<State<ToolState>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let Ok(window) = window_query.get_single() else {
+    let Some(window) = window_query.iter().next() else {
         return;
     };
 
@@ -70,7 +70,7 @@ fn top_panel_ui(
     mut grid_settings: ResMut<GridSettings>,
     window_query: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let Ok(window) = window_query.get_single() else {
+    let Some(window) = window_query.iter().next() else {
         return;
     };
 
