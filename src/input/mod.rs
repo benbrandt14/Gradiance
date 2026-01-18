@@ -9,6 +9,7 @@ use crate::prelude::*;
 // Bevy 0.17+ has built-in picking.
 
 pub mod camera_controller;
+pub mod commands;
 pub mod cursor;
 pub mod editable;
 pub mod selection;
@@ -35,6 +36,9 @@ impl Plugin for InputPlugin {
         // Selection
         app.add_plugins(selection::SelectionPlugin);
 
+        // Commands
+        app.init_resource::<commands::CommandStack>();
+
         // Tool state
         app.init_state::<ToolState>();
 
@@ -48,7 +52,40 @@ impl Plugin for InputPlugin {
         app.init_resource::<ZIndex>();
 
         // Global shortcuts
-        app.add_systems(Update, toggle_pause);
+        app.add_systems(Update, (toggle_pause, handle_undo_redo_input));
+    }
+}
+
+fn handle_undo_redo_input(world: &mut World) {
+    let mut undo = false;
+    let mut redo = false;
+
+    if let Some(keys) = world.get_resource::<ButtonInput<KeyCode>>() {
+        let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+        let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+
+        if ctrl && keys.just_pressed(KeyCode::KeyZ) {
+            if shift {
+                redo = true;
+            } else {
+                undo = true;
+            }
+        }
+        if ctrl && keys.just_pressed(KeyCode::KeyY) {
+            redo = true;
+        }
+    }
+
+    if undo {
+        world.resource_scope(|world, mut stack: Mut<commands::CommandStack>| {
+            stack.undo(world);
+        });
+    }
+
+    if redo {
+        world.resource_scope(|world, mut stack: Mut<commands::CommandStack>| {
+            stack.redo(world);
+        });
     }
 }
 

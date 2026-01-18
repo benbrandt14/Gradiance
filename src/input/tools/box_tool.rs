@@ -2,14 +2,13 @@
 //!
 //! Click and drag to define the extents of a new box.
 
-use crate::input::editable::EditableBox;
 use crate::input::tools::utils::is_pointer_over_ui;
-use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
+use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::commands::{CommandStack, SpawnBoxCommand};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
-use bevy_prototype_lyon::prelude::*;
 
 /// Plugin for the Box Tool.
 pub struct BoxToolPlugin;
@@ -51,7 +50,6 @@ fn box_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
-    mut z_index: ResMut<ZIndex>,
 ) {
     if is_pointer_over_ui(&mut contexts) {
         return;
@@ -85,25 +83,17 @@ fn box_tool_update(
         if mouse.just_released(MouseButton::Left) {
             // Spawn
             if should_spawn_box(size) {
-                let shape = shapes::Rectangle {
-                    extents: Vec2::new(size.x as f32, size.y as f32),
-                    origin: shapes::RectangleOrigin::Center,
-                    ..default()
-                };
+                let cmd = SpawnBoxCommand::new(
+                    Vec2::new(center.x as f32, center.y as f32),
+                    size.x as f32,
+                    size.y as f32,
+                );
 
-                commands.spawn((
-                    ShapeBuilder::with(&shape)
-                        .fill(Color::srgb(0.5, 0.5, 1.0))
-                        .stroke(Stroke::new(Color::BLACK, 0.1))
-                        .build(),
-                    RigidBody::Dynamic,
-                    Collider::rectangle(size.x, size.y),
-                    EditableBox {
-                        width: size.x,
-                        height: size.y,
-                    },
-                    Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
-                ));
+                commands.queue(move |world: &mut World| {
+                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                        stack.push(Box::new(cmd), world);
+                    });
+                });
             }
 
             data.drag_start = None;
