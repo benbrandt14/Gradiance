@@ -42,10 +42,11 @@ fn drag_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     spatial_query: SpatialQuery,
-    query: Query<(&Transform, &LinearVelocity, &AngularVelocity), With<RigidBody>>,
+    mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), With<RigidBody>>,
     mut hand_query: Query<&mut Transform, (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
+    virtual_time: Res<Time<Virtual>>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
         && ctx.is_pointer_over_area()
@@ -111,26 +112,41 @@ fn drag_tool_update(
             t.translation.x = current_pos.x as f32;
             t.translation.y = current_pos.y as f32;
         }
+    }
 
-        // Draw line
-        if let Some(entity) = data.dragged_entity {
-             if let Ok((transform, _, _)) = query.get(entity) {
-                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
-                let translation = transform.translation.truncate().as_dvec2();
+    // Handle dragging
+    if let Some(entity) = data.dragged_entity {
+        if let Ok((mut transform, _, _)) = query.get_mut(entity) {
+            let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
+
+            // If paused, manually move the object to follow cursor
+            if virtual_time.is_paused() {
                 let cos = rotation.cos();
                 let sin = rotation.sin();
                 let rotated_anchor = DVec2::new(
                     data.local_anchor.x * cos - data.local_anchor.y * sin,
                     data.local_anchor.x * sin + data.local_anchor.y * cos,
                 );
-                let current_anchor_pos = translation + rotated_anchor;
 
-                 gizmos.line_2d(
-                    Vec2::new(current_anchor_pos.x as f32, current_anchor_pos.y as f32),
-                    Vec2::new(current_pos.x as f32, current_pos.y as f32),
-                    Color::WHITE,
-                );
-             }
+                let new_pos = current_pos - rotated_anchor;
+                transform.translation.x = new_pos.x as f32;
+                transform.translation.y = new_pos.y as f32;
+            }
+
+            // Draw line
+            let cos = rotation.cos();
+            let sin = rotation.sin();
+            let rotated_anchor = DVec2::new(
+                data.local_anchor.x * cos - data.local_anchor.y * sin,
+                data.local_anchor.x * sin + data.local_anchor.y * cos,
+            );
+            let current_anchor_pos = transform.translation.truncate().as_dvec2() + rotated_anchor;
+
+            gizmos.line_2d(
+                Vec2::new(current_anchor_pos.x as f32, current_anchor_pos.y as f32),
+                Vec2::new(current_pos.x as f32, current_pos.y as f32),
+                Color::WHITE,
+            );
         }
     }
 }

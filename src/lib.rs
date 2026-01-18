@@ -20,6 +20,7 @@ pub mod scripting;
 pub mod ui;
 
 use crate::prelude::*;
+use bevy::math::DVec2;
 use bevy_prototype_lyon::prelude::*;
 
 /// The primary plugin for the Gradiance game.
@@ -45,15 +46,21 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
+/// Marker component for the infinite ground plane.
+#[derive(Component)]
+pub struct GroundPlane;
+
 /// Spawns a static ground plane.
 fn setup_ground(mut commands: Commands) {
-    let w = 500.0;
-    let h = 25.0;
+    // Visual representation (very wide rectangle to simulate infinity)
+    let w = 100_000.0;
+    let depth = 1000.0; // Deep enough to look like "ground"
+    // Vertices such that the top edge is at y=0
     let points = vec![
-        Vec2::new(-w, -h),
-        Vec2::new(w, -h),
-        Vec2::new(w, h),
-        Vec2::new(-w, h),
+        Vec2::new(-w, -depth),
+        Vec2::new(w, -depth),
+        Vec2::new(w, 0.0),
+        Vec2::new(-w, 0.0),
     ];
 
     let shape = shapes::Polygon {
@@ -67,7 +74,11 @@ fn setup_ground(mut commands: Commands) {
             .stroke(Stroke::new(Color::BLACK, 1.0))
             .build(),
         RigidBody::Static,
-        Collider::rectangle(1000.0, 50.0),
+        // Infinite half-space collider pointing up (Normal = Y)
+        Collider::half_space(DVec2::new(0.0, 1.0)),
+        Friction::new(0.5),
+        Restitution::new(0.0),
+        GroundPlane,
         Transform::from_xyz(0.0, -200.0, 0.0),
     ));
 }
