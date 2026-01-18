@@ -47,8 +47,9 @@ fn setup_camera(mut commands: Commands) {
 
 /// Spawns a static ground plane.
 fn setup_ground(mut commands: Commands) {
-    let w = 500.0;
-    let h = 25.0;
+    // Visual representation (very wide rectangle to simulate infinity)
+    let w = 100_000.0;
+    let h = 50.0;
     let points = vec![
         Vec2::new(-w, -h),
         Vec2::new(w, -h),
@@ -67,7 +68,8 @@ fn setup_ground(mut commands: Commands) {
             .stroke(Stroke::new(Color::BLACK, 1.0))
             .build(),
         RigidBody::Static,
-        Collider::rectangle(1000.0, 50.0),
+        // Infinite half-space collider pointing up (Normal = Y)
+        Collider::half_space(Vec2::Y),
         Transform::from_xyz(0.0, -200.0, 0.0),
     ));
 }

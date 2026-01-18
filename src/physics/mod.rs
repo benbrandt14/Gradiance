@@ -32,5 +32,11 @@ impl Plugin for PhysicsPlugin {
 
         // Spec: Custom constraints will be added here
         app.add_plugins(constraints::ConstraintsPlugin);
+
+        // Pause physics when Virtual time is paused.
+        app.configure_sets(
+            FixedUpdate,
+            PhysicsSet::StepSimulation.run_if(|time: Res<Time<Virtual>>| !time.is_paused()),
+        );
     }
 }

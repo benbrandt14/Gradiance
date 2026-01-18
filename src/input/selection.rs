@@ -51,7 +51,7 @@ fn handle_delete_key(
 ) {
     if keys.just_pressed(KeyCode::Delete) || keys.just_pressed(KeyCode::Backspace) {
         for entity in selection.0.drain() {
-             commands.entity(entity).despawn();
+             commands.entity(entity).despawn_recursive();
         }
     }
 }

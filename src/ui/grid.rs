@@ -63,11 +63,11 @@ pub fn snap_to_grid(pos: DVec2, spacing: f64) -> DVec2 {
 
 fn draw_grid(
     settings: Res<GridSettings>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    camera_query: Query<(&Camera, &GlobalTransform, &OrthographicProjection), With<Camera2d>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     mut gizmos: Gizmos,
 ) {
-    let Some((camera, transform)) = camera_query.iter().next() else {
+    let Some((camera, transform, projection)) = camera_query.iter().next() else {
         return;
     };
 
@@ -93,29 +93,48 @@ fn draw_grid(
     let bottom = top_left.y.min(bottom_right.y);
     let top = top_left.y.max(bottom_right.y);
 
-    let spacing = settings.spacing as f32;
-    if spacing <= 0.001 {
+    if !settings.show {
         return;
     }
 
-    // Snap start to spacing
-    let start_x = (left / spacing).floor() * spacing;
-    let start_y = (bottom / spacing).floor() * spacing;
+    // Dynamic Spacing Calculation based on Zoom
+    // We want major grid lines approx every 100 screen pixels.
+    // scale = world_units / screen_pixels (Wait, no. scale = 1.0 means 1:1?)
+    // OrthographicProjection.scale scales the world.
+    // larger scale = zoomed out (more world units per pixel).
+    // ideal_world_spacing = 100_pixels * scale.
 
-    let count_x = ((right - left) / spacing).ceil() as i32 + 1;
-    let count_y = ((top - bottom) / spacing).ceil() as i32 + 1;
+    let scale = projection.scale;
+    let target_spacing = 100.0 * scale;
+    let exponent = target_spacing.log10().floor();
+    let major_spacing = 10.0_f32.powf(exponent);
+    let minor_spacing = major_spacing / 10.0;
 
-    let color = Color::srgba(1.0, 1.0, 1.0, 0.1);
+    let draw_lines = |spacing: f32, alpha: f32, mut gizmos: &mut Gizmos| {
+        let start_x = (left / spacing).floor() * spacing;
+        let start_y = (bottom / spacing).floor() * spacing;
+        let count_x = ((right - left) / spacing).ceil() as i32 + 1;
+        let count_y = ((top - bottom) / spacing).ceil() as i32 + 1;
+        let color = Color::srgba(1.0, 1.0, 1.0, alpha);
 
-    for i in 0..=count_x {
-        let x = start_x + (i as f32) * spacing;
-        gizmos.line_2d(Vec2::new(x, bottom), Vec2::new(x, top), color);
+        for i in 0..=count_x {
+            let x = start_x + (i as f32) * spacing;
+            gizmos.line_2d(Vec2::new(x, bottom), Vec2::new(x, top), color);
+        }
+
+        for i in 0..=count_y {
+            let y = start_y + (i as f32) * spacing;
+            gizmos.line_2d(Vec2::new(left, y), Vec2::new(right, y), color);
+        }
+    };
+
+    // Draw minor lines (faint)
+    if minor_spacing > 0.001 {
+        draw_lines(minor_spacing, 0.05, &mut gizmos);
     }
 
-    for i in 0..=count_y {
-        let y = start_y + (i as f32) * spacing;
-        gizmos.line_2d(Vec2::new(left, y), Vec2::new(right, y), color);
-    }
+    // Draw major lines (stronger)
+    draw_lines(major_spacing, 0.15, &mut gizmos);
 }
 
 #[cfg(test)]
