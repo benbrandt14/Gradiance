@@ -62,7 +62,8 @@ fn context_menu_input(
         // Raycast to find entity
         let filter = SpatialQueryFilter::default();
         if let Some(hit) = spatial_query.project_point(world_pos, true, &filter) {
-            selection.0 = Some(hit.entity);
+            selection.clear();
+            selection.add(hit.entity);
 
             if let Ok(ctx) = contexts.ctx_mut()
                 && let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
@@ -116,7 +117,7 @@ fn context_menu_ui(
             }
             if ui.button("Delete").clicked() {
                 commands.entity(entity).despawn();
-                selection.0 = None;
+                selection.remove(entity);
                 state.position = None;
                 state.entity = None;
             }

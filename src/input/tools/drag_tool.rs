@@ -24,27 +24,35 @@ impl Plugin for DragToolPlugin {
 #[derive(Resource, Default)]
 struct DragToolData {
     dragged_entity: Option<Entity>,
+    hand_entity: Option<Entity>,
     local_anchor: DVec2,
 }
 
-fn drag_tool_reset(mut data: ResMut<DragToolData>) {
+fn drag_tool_reset(mut commands: Commands, mut data: ResMut<DragToolData>) {
+    if let Some(hand) = data.hand_entity {
+        commands.entity(hand).despawn();
+    }
     data.dragged_entity = None;
+    data.hand_entity = None;
 }
 
 fn drag_tool_update(
-    _commands: Commands,
+    mut commands: Commands,
     mut data: ResMut<DragToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     spatial_query: SpatialQuery,
-    mut query: Query<(&Transform, &mut LinearVelocity, &mut AngularVelocity), With<RigidBody>>,
+    query: Query<(&Transform, &LinearVelocity, &AngularVelocity), With<RigidBody>>,
+    mut hand_query: Query<&mut Transform, (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() && data.dragged_entity.is_none() {
-            return;
-        }
+        && ctx.is_pointer_over_area()
+        && data.dragged_entity.is_none()
+    {
+        return;
+    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -53,64 +61,76 @@ fn drag_tool_update(
     if mouse.just_pressed(MouseButton::Left) {
         let filter = SpatialQueryFilter::default();
         if let Some(hit) = spatial_query.project_point(current_pos, true, &filter)
-            && let Ok((transform, _, _)) = query.get(hit.entity) {
-                data.dragged_entity = Some(hit.entity);
-                // Calculate local anchor
-                // inverse transform
-                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
-                let translation = transform.translation.truncate().as_dvec2();
-                let relative = current_pos - translation;
+            && let Ok((transform, _, _)) = query.get(hit.entity)
+        {
+            data.dragged_entity = Some(hit.entity);
 
-                let cos = rotation.cos();
-                let sin = rotation.sin();
-                // Rotate back: x' = x cos + y sin, y' = -x sin + y cos
-                data.local_anchor = DVec2::new(
-                    relative.x * cos + relative.y * sin,
-                    -relative.x * sin + relative.y * cos,
-                );
-            }
-    }
-
-    if mouse.just_released(MouseButton::Left) {
-        // if let Some(entity) = data.dragged_entity {
-        //     if let Ok((_, mut force, _, _)) = query.get_mut(entity) {
-        //         force.set_force(Vec2::ZERO);
-        //         force.set_torque(0.0);
-        //     }
-        // }
-        data.dragged_entity = None;
-    }
-
-    if let Some(entity) = data.dragged_entity {
-        if let Ok((transform, mut lin_vel, mut ang_vel)) = query.get_mut(entity) {
+            // Calculate local anchor on the body
             let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
             let translation = transform.translation.truncate().as_dvec2();
+            let relative = current_pos - translation;
 
             let cos = rotation.cos();
             let sin = rotation.sin();
-            // Rotate forward: x' = x cos - y sin, y' = x sin + y cos
-            let rotated_anchor = DVec2::new(
-                data.local_anchor.x * cos - data.local_anchor.y * sin,
-                data.local_anchor.x * sin + data.local_anchor.y * cos,
+            data.local_anchor = DVec2::new(
+                relative.x * cos + relative.y * sin,
+                -relative.x * sin + relative.y * cos,
             );
 
-            let current_anchor_pos = translation + rotated_anchor;
+            // Spawn "Hand" kinematic body
+            let hand = commands.spawn((
+                RigidBody::Kinematic,
+                Transform::from_xyz(current_pos.x as f32, current_pos.y as f32, 0.0),
+            )).id();
+            data.hand_entity = Some(hand);
 
-            gizmos.line_2d(
-                Vec2::new(current_anchor_pos.x as f32, current_anchor_pos.y as f32),
-                Vec2::new(current_pos.x as f32, current_pos.y as f32),
-                Color::WHITE,
-            );
+            // Create RevoluteJoint (Mouse Joint) between Hand and Body
+            commands.spawn((
+                RevoluteJoint::new(hand, hit.entity)
+                    .with_local_anchor1(DVec2::ZERO)
+                    .with_local_anchor2(data.local_anchor)
+                    // High compliance = springy, Low = rigid.
+                    // We want it to be somewhat springy to avoid instability, but stiff enough to drag.
+                    // 0.00001 is fairly stiff.
+                    .with_point_compliance(1e-5),
+            ));
+        }
+    }
 
-            // Kinematic grab implementation
-            let delta = current_pos - current_anchor_pos;
+    if mouse.just_released(MouseButton::Left) {
+        if let Some(hand) = data.hand_entity {
+            commands.entity(hand).despawn();
+        }
+        data.hand_entity = None;
+        data.dragged_entity = None;
+    }
 
-            // Simple P-controller: move towards target
-            // This ignores correct torque application for now but allows moving objects.
-            lin_vel.0 = delta * 15.0;
-            ang_vel.0 *= 0.95; // Damping rotation
-        } else {
-            data.dragged_entity = None;
+    if let Some(hand) = data.hand_entity {
+        // Move hand to cursor
+        if let Ok(mut t) = hand_query.get_mut(hand) {
+            t.translation.x = current_pos.x as f32;
+            t.translation.y = current_pos.y as f32;
+        }
+
+        // Draw line
+        if let Some(entity) = data.dragged_entity {
+             if let Ok((transform, _, _)) = query.get(entity) {
+                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
+                let translation = transform.translation.truncate().as_dvec2();
+                let cos = rotation.cos();
+                let sin = rotation.sin();
+                let rotated_anchor = DVec2::new(
+                    data.local_anchor.x * cos - data.local_anchor.y * sin,
+                    data.local_anchor.x * sin + data.local_anchor.y * cos,
+                );
+                let current_anchor_pos = translation + rotated_anchor;
+
+                 gizmos.line_2d(
+                    Vec2::new(current_anchor_pos.x as f32, current_anchor_pos.y as f32),
+                    Vec2::new(current_pos.x as f32, current_pos.y as f32),
+                    Color::WHITE,
+                );
+             }
         }
     }
 }

@@ -44,8 +44,23 @@ impl Plugin for InputPlugin {
         // Editable shapes
         app.add_plugins(editable::EditablePlugin);
 
+        // Z-Index management
+        app.init_resource::<ZIndex>();
+
         // Global shortcuts
         app.add_systems(Update, toggle_pause);
+    }
+}
+
+/// Resource to manage Z-index to prevent Z-fighting.
+#[derive(Resource, Default)]
+pub struct ZIndex(pub f32);
+
+impl ZIndex {
+    /// Get the next Z-index value and increment.
+    pub fn next(&mut self) -> f32 {
+        self.0 += 0.001;
+        self.0
     }
 }
 
@@ -79,5 +94,9 @@ pub enum ToolState {
     Circle,
     /// Create polygon shapes.
     Polygon,
+    /// Create revolute joints (Axles).
+    RevoluteJoint,
+    /// Create fixed joints (Welds).
+    Weld,
     // Add more as needed
 }

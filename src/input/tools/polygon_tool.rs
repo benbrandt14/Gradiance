@@ -3,12 +3,20 @@
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
 //! Uses Convex Hull decomposition for colliders.
 
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
+
+use bevy_prototype_lyon::prelude::tess::{
+    FillOptions, BuffersBuilder, VertexBuffers,
+    geometry_builder::simple_builder,
+    math::Point,
+    FillTessellator,
+    path::Path,
+};
 
 /// Plugin for the Polygon Tool.
 pub struct PolygonToolPlugin;
@@ -42,6 +50,7 @@ fn polygon_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
+    mut z_index: ResMut<ZIndex>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
         && ctx.is_pointer_over_area() {
@@ -125,14 +134,57 @@ fn polygon_tool_update(
                 closed: true,
             };
 
+            // Triangle mesh collider for non-convex support
+            let mut buffers: VertexBuffers<Point, u16> = VertexBuffers::new();
+            let mut vertex_builder = simple_builder(&mut buffers);
+            let mut tessellator = FillTessellator::new();
+            let options = FillOptions::default();
+
+            // Convert Vec2 points to Lyon Points
+            let lyon_points: Vec<Point> = vec2_points
+                .iter()
+                .map(|p| Point::new(p.x, p.y))
+                .collect();
+
+            // Build Path
+            let mut path_builder = Path::builder();
+            if let Some(first) = lyon_points.first() {
+                path_builder.begin(*first);
+                for p in lyon_points.iter().skip(1) {
+                    path_builder.line_to(*p);
+                }
+                path_builder.close();
+            }
+            let path = path_builder.build();
+
+            // Tessellate
+            let collider = if tessellator.tessellate_path(
+                    &path,
+                    &options,
+                    &mut vertex_builder
+                ).is_ok() {
+                // Convert buffers to Avian Triangle Mesh
+                let vertices: Vec<DVec2> = buffers.vertices.iter()
+                    .map(|p| DVec2::new(p.x as f64, p.y as f64))
+                    .collect();
+
+                let indices: Vec<[u32; 3]> = buffers.indices.chunks(3)
+                    .map(|c| [c[0] as u32, c[1] as u32, c[2] as u32])
+                    .collect();
+
+                Collider::trimesh(vertices, indices)
+            } else {
+                 Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0))
+            };
+
             commands.spawn((
                 ShapeBuilder::with(&shape)
                     .fill(Color::srgb(0.5, 1.0, 0.5))
                     .stroke(Stroke::new(Color::BLACK, 0.1))
                     .build(),
                 RigidBody::Dynamic,
-                Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0)), // Fallback
-                Transform::from_xyz(center.x as f32, center.y as f32, 0.0),
+                collider,
+                Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
             ));
 
             data.points.clear();

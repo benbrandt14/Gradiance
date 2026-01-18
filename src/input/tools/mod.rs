@@ -8,7 +8,9 @@ pub mod box_tool;
 pub mod circle_tool;
 pub mod drag_tool;
 pub mod polygon_tool;
+pub mod revolute_joint_tool;
 pub mod select_tool;
+pub mod weld_tool;
 
 /// Plugin that registers all tool sub-plugins.
 pub struct ToolsPlugin;
@@ -21,6 +23,8 @@ impl Plugin for ToolsPlugin {
             select_tool::SelectToolPlugin,
             polygon_tool::PolygonToolPlugin,
             drag_tool::DragToolPlugin,
+            revolute_joint_tool::RevoluteJointToolPlugin,
+            weld_tool::WeldToolPlugin,
         ));
     }
 }
