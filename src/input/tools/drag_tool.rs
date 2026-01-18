@@ -41,11 +41,10 @@ fn drag_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
 ) {
-    if let Ok(ctx) = contexts.ctx_mut() {
-        if ctx.is_pointer_over_area() && data.dragged_entity.is_none() {
+    if let Ok(ctx) = contexts.ctx_mut()
+        && ctx.is_pointer_over_area() && data.dragged_entity.is_none() {
             return;
         }
-    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -53,8 +52,8 @@ fn drag_tool_update(
 
     if mouse.just_pressed(MouseButton::Left) {
         let filter = SpatialQueryFilter::default();
-        if let Some(hit) = spatial_query.project_point(current_pos, true, &filter) {
-            if let Ok((transform, _, _)) = query.get(hit.entity) {
+        if let Some(hit) = spatial_query.project_point(current_pos, true, &filter)
+            && let Ok((transform, _, _)) = query.get(hit.entity) {
                 data.dragged_entity = Some(hit.entity);
                 // Calculate local anchor
                 // inverse transform
@@ -70,7 +69,6 @@ fn drag_tool_update(
                     -relative.x * sin + relative.y * cos,
                 );
             }
-        }
     }
 
     if mouse.just_released(MouseButton::Left) {

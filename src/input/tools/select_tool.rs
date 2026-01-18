@@ -46,11 +46,10 @@ fn select_tool_update(
     grid_settings: Res<GridSettings>,
 ) {
     // Prevent selection if over UI
-    if let Ok(ctx) = contexts.ctx_mut() {
-        if ctx.is_pointer_over_area() && !data.is_moving && data.drag_start.is_none() {
+    if let Ok(ctx) = contexts.ctx_mut()
+        && ctx.is_pointer_over_area() && !data.is_moving && data.drag_start.is_none() {
             return;
         }
-    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -82,8 +81,8 @@ fn select_tool_update(
     if mouse.pressed(MouseButton::Left) {
         if data.is_moving {
             // Move the entity
-            if let Some(entity) = selection.0 {
-                if let Ok(mut t) = query.get_mut(entity) {
+            if let Some(entity) = selection.0
+                && let Ok(mut t) = query.get_mut(entity) {
                     let delta = current_pos - data.drag_start_pos;
                     let mut new_pos = data.initial_transform_pos + delta;
 
@@ -94,7 +93,6 @@ fn select_tool_update(
                     t.translation.x = new_pos.x as f32;
                     t.translation.y = new_pos.y as f32;
                 }
-            }
         } else if let Some(start) = data.drag_start {
             // Draw Box
             let min = start.min(current_pos);
@@ -111,8 +109,8 @@ fn select_tool_update(
     }
 
     if mouse.just_released(MouseButton::Left) {
-        if !data.is_moving {
-            if let Some(start) = data.drag_start {
+        if !data.is_moving
+            && let Some(start) = data.drag_start {
                 // Box Select Finalize
                 let min = start.min(current_pos);
                 let max = start.max(current_pos);
@@ -133,7 +131,6 @@ fn select_tool_update(
                     }
                 }
             }
-        }
 
         data.is_moving = false;
         data.drag_start = None;
