@@ -123,7 +123,8 @@ fn draw_grid(
     let minor_spacing = major_spacing / 10.0;
 
     // Update grid settings with current spacing for tools to use
-    settings.spacing = major_spacing as f64;
+    // Use minor spacing for finer snapping
+    settings.spacing = minor_spacing as f64;
 
     match settings.grid_type {
         GridType::Rectangular => draw_rectangular_grid(major_spacing, minor_spacing, left, right, bottom, top, &mut gizmos),

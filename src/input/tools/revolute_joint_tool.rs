@@ -144,6 +144,9 @@ fn spawn_pin_joint(
                 Visibility::default(),
                 InheritedVisibility::default(),
                 ViewVisibility::default(),
+                // Add sensor collider for selection
+                Collider::circle(0.5),
+                Sensor,
             ))
             .id();
 
@@ -151,11 +154,13 @@ fn spawn_pin_joint(
     } else {
         // Connect to World (Static Body)
         // Spawn a static body at anchor_world
-        // REMOVED Collider to prevent self-collision explosion with the body being pinned.
         let pin = commands
             .spawn((
                 RigidBody::Static,
                 Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
+                // Add sensor collider for selection
+                Collider::circle(0.5),
+                Sensor,
             ))
             .id();
 

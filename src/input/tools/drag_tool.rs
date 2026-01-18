@@ -44,10 +44,11 @@ fn drag_tool_update(
     mouse: Res<ButtonInput<MouseButton>>,
     spatial_query: SpatialQuery,
     mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), (With<RigidBody>, With<Collider>)>,
-    mut hand_query: Query<&mut Transform, (With<RigidBody>, Without<Collider>)>,
+    mut hand_query: Query<(&mut Transform, &mut LinearVelocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     virtual_time: Res<Time<Virtual>>,
+    time: Res<Time>,
 ) {
     if is_pointer_over_ui(&mut contexts) && data.dragged_entity.is_none() {
         return;
@@ -97,9 +98,21 @@ fn drag_tool_update(
 
     if let Some(hand) = data.hand_entity {
         // Move hand to cursor
-        if let Ok(mut t) = hand_query.get_mut(hand) {
+        if let Ok((mut t, mut v)) = hand_query.get_mut(hand) {
+            // Update transform for visual/logic consistency
+            let old_pos = t.translation.truncate().as_dvec2();
             t.translation.x = current_pos.x as f32;
             t.translation.y = current_pos.y as f32;
+
+            // Update velocity for correct physics interaction (kinematic body)
+            if time.delta_secs() > 0.0001 {
+                let velocity = (current_pos - old_pos) / time.delta_secs_f64();
+                v.x = velocity.x;
+                v.y = velocity.y;
+            } else {
+                v.x = 0.0;
+                v.y = 0.0;
+            }
         }
     }
 
