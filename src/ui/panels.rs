@@ -7,14 +7,14 @@ use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::window::PrimaryWindow;
-use bevy_egui::{EguiContexts, egui};
+use bevy_egui::{EguiContexts, egui, EguiPrimaryContextPass};
 
 /// Plugin for the main UI panels.
 pub struct PanelsPlugin;
 
 impl Plugin for PanelsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (sidebar_ui, top_panel_ui));
+        app.add_systems(EguiPrimaryContextPass, (sidebar_ui, top_panel_ui));
     }
 }
 
@@ -40,10 +40,6 @@ fn sidebar_ui(
         Ok(ctx) => ctx,
         _ => return,
     };
-
-    if ctx.input(|i| i.screen_rect().is_none()) {
-        return;
-    }
 
     egui::SidePanel::left("tools_panel").show(ctx, |ui| {
         ui.heading("Tools");
@@ -94,10 +90,6 @@ fn top_panel_ui(
         Ok(ctx) => ctx,
         _ => return,
     };
-
-    if ctx.input(|i| i.screen_rect().is_none()) {
-        return;
-    }
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         ui.horizontal(|ui| {
