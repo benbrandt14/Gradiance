@@ -117,3 +117,24 @@ impl<T: Tool + Default + Resource> Plugin for ToolPlugin<T> {
 3.  Introduce `Tool` trait and `ToolManager`.
 4.  Wrap `BoxTool` logic into `impl Tool for BoxTool`.
 5.  Replace `ToolState` based switching with `ToolManager` switching.
+
+## 7. Joint Visualization & The "Connector Pattern"
+
+To resolve issues where joint visuals (hinges, welds) do not follow the connected bodies or are improperly placed, we will adopt a **Connector Pattern**:
+
+1.  **Connector Component**: A component attached to the Joint Entity (or a child visual).
+    ```rust
+    #[derive(Component)]
+    struct Connector {
+        entity_a: Entity,
+        entity_b: Option<Entity>, // None = World
+        local_anchor_a: Vec2,
+        local_anchor_b: Vec2,
+    }
+    ```
+2.  **Visual Update System**: A global system that runs in `PostUpdate` to synchronize the Connector's `Transform` with the connected bodies.
+    - Calculates the world position of anchors based on `entity_a` and `entity_b` transforms.
+    - Moves the visual representation to the midpoint or primary anchor.
+    - Handles rotation (aligning with Body A or averaging).
+
+This ensures that tools (like `RevoluteJointTool`) only need to spawn the logical joint and the visual entity with a `Connector` component. The framework handles the continuous visual synchronization.
