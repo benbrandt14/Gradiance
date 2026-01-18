@@ -3,7 +3,7 @@
 //! Click and drag to define the radius of a new circle.
 
 use crate::input::editable::EditableCircle;
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::math::DVec2;
@@ -41,6 +41,7 @@ fn circle_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
+    mut z_index: ResMut<ZIndex>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
         && ctx.is_pointer_over_area() {
@@ -95,7 +96,7 @@ fn circle_tool_update(
                     RigidBody::Dynamic,
                     Collider::circle(radius),
                     EditableCircle { radius },
-                    Transform::from_xyz(start.x as f32, start.y as f32, 0.0),
+                    Transform::from_xyz(start.x as f32, start.y as f32, z_index.next()),
                 ));
             }
 

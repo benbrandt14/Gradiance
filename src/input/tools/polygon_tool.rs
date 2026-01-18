@@ -3,7 +3,7 @@
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
 //! Uses Convex Hull decomposition for colliders.
 
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
@@ -42,6 +42,7 @@ fn polygon_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
+    mut z_index: ResMut<ZIndex>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
         && ctx.is_pointer_over_area() {
@@ -125,14 +126,19 @@ fn polygon_tool_update(
                 closed: true,
             };
 
+            // NOTE: Currently using convex_hull.
+            // Ideally we would tessellate concave polygons into a trimesh or compound collider,
+            // but accessing lyon_tessellation in bevy_prototype_lyon 0.16.0 proved difficult.
+            let collider = Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0));
+
             commands.spawn((
                 ShapeBuilder::with(&shape)
                     .fill(Color::srgb(0.5, 1.0, 0.5))
                     .stroke(Stroke::new(Color::BLACK, 0.1))
                     .build(),
                 RigidBody::Dynamic,
-                Collider::convex_hull(relative_points).unwrap_or(Collider::circle(1.0)), // Fallback
-                Transform::from_xyz(center.x as f32, center.y as f32, 0.0),
+                collider,
+                Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
             ));
 
             data.points.clear();

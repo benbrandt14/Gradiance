@@ -123,7 +123,7 @@ fn spawn_pin_joint(
                 RevoluteJoint::new(entity_a, entity_b)
                     .with_local_anchor1(anchor_a)
                     .with_local_anchor2(anchor_b)
-                    .with_point_compliance(0.0),
+                    .with_point_compliance(1e-9),
                 Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 10.0),
                 GlobalTransform::default(),
                 Visibility::default(),
@@ -152,7 +152,7 @@ fn spawn_pin_joint(
             RevoluteJoint::new(entity_a, pin)
                 .with_local_anchor1(anchor_a)
                 .with_local_anchor2(anchor_b)
-                .with_point_compliance(0.0),
+                .with_point_compliance(1e-9),
         ));
     }
 }

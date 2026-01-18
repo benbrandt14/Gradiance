@@ -3,7 +3,7 @@
 //! Click and drag to define the extents of a new box.
 
 use crate::input::editable::EditableBox;
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::math::DVec2;
@@ -46,6 +46,7 @@ fn box_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
+    mut z_index: ResMut<ZIndex>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut()
         && ctx.is_pointer_over_area() {
@@ -101,7 +102,7 @@ fn box_tool_update(
                         width: size.x,
                         height: size.y,
                     },
-                    Transform::from_xyz(center.x as f32, center.y as f32, 0.0),
+                    Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
                 ));
             }
 
