@@ -41,7 +41,7 @@ fn sidebar_ui(
         _ => return,
     };
 
-    if ctx.input(|i| i.screen_rect.is_none()) {
+    if ctx.input(|i| i.screen_rect().is_none()) {
         return;
     }
 
@@ -95,7 +95,7 @@ fn top_panel_ui(
         _ => return,
     };
 
-    if ctx.input(|i| i.screen_rect.is_none()) {
+    if ctx.input(|i| i.screen_rect().is_none()) {
         return;
     }
 
