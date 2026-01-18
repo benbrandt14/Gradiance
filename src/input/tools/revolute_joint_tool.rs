@@ -38,10 +38,10 @@ fn revolute_joint_tool_update(
     if mouse.just_pressed(MouseButton::Left) {
         // Find entities at cursor
         let filter = SpatialQueryFilter::default();
-        let intersections = spatial_query.point_intersection(current_pos, &filter);
+        let intersections = spatial_query.point_intersections(current_pos, &filter);
 
         if intersections.is_empty() {
-             return;
+            return;
         }
 
         let point = current_pos;
@@ -86,49 +86,73 @@ fn spawn_pin_joint(
 
     let anchor_a = get_local(entity_a);
 
-    // Pin visual construction
-    let pin_visual = |parent: &mut ChildBuilder| {
-             parent.spawn((
-                ShapeBuilder::with(&shapes::Circle { radius: 5.0, ..default() })
-                    .fill(Color::BLACK)
-                    .build(),
+    // Pin visual construction helper
+    // Returns a bundle or spawns children to an entity
+    let spawn_visuals = |commands: &mut Commands, parent: Entity| {
+        let v1 = commands
+            .spawn((
+                ShapeBuilder::with(&shapes::Circle {
+                    radius: 5.0,
+                    ..default()
+                })
+                .fill(Color::BLACK)
+                .build(),
                 Transform::from_translation(Vec3::Z * 0.1),
-             ));
-             parent.spawn((
-                ShapeBuilder::with(&shapes::Circle { radius: 2.0, ..default() })
-                    .fill(Color::WHITE)
-                    .build(),
-                 Transform::from_translation(Vec3::Z * 0.2),
-             ));
+            ))
+            .id();
+
+        let v2 = commands
+            .spawn((
+                ShapeBuilder::with(&shapes::Circle {
+                    radius: 2.0,
+                    ..default()
+                })
+                .fill(Color::WHITE)
+                .build(),
+                Transform::from_translation(Vec3::Z * 0.2),
+            ))
+            .id();
+
+        commands.entity(parent).add_children(&[v1, v2]);
     };
 
     if let Some(entity_b) = entity_b {
         let anchor_b = get_local(entity_b);
-        commands.spawn((
-            RevoluteJoint::new(entity_a, entity_b)
-                .with_local_anchor_1(anchor_a)
-                .with_local_anchor_2(anchor_b)
-                .with_compliance(0.0),
-            Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 10.0),
-            GlobalTransform::default(),
-            VisibilityBundle::default(),
-        )).with_children(pin_visual);
+        let joint_entity = commands
+            .spawn((
+                RevoluteJoint::new(entity_a, entity_b)
+                    .with_local_anchor1(anchor_a)
+                    .with_local_anchor2(anchor_b)
+                    .with_point_compliance(0.0),
+                Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 10.0),
+                GlobalTransform::default(),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+            ))
+            .id();
+
+        spawn_visuals(commands, joint_entity);
     } else {
         // Connect to World (Static Body)
         // Spawn a static body at anchor_world
-        let pin = commands.spawn((
-            RigidBody::Static,
-            Collider::circle(0.1),
-            Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
-        )).with_children(pin_visual).id();
+        let pin = commands
+            .spawn((
+                RigidBody::Static,
+                Collider::circle(0.1),
+                Transform::from_xyz(anchor_world.x as f32, anchor_world.y as f32, 0.0),
+            ))
+            .id();
+
+        spawn_visuals(commands, pin);
 
         let anchor_b = DVec2::ZERO;
 
         commands.spawn((
             RevoluteJoint::new(entity_a, pin)
-                .with_local_anchor_1(anchor_a)
-                .with_local_anchor_2(anchor_b)
-                .with_compliance(0.0),
+                .with_local_anchor1(anchor_a)
+                .with_local_anchor2(anchor_b)
+                .with_point_compliance(0.0),
         ));
     }
 }

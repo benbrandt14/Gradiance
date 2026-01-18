@@ -32,21 +32,12 @@ fn drag_tool_reset(mut data: ResMut<DragToolData>) {
 }
 
 fn drag_tool_update(
-    mut commands: Commands,
+    _commands: Commands,
     mut data: ResMut<DragToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     spatial_query: SpatialQuery,
-    mut query: Query<
-        (
-            &Transform,
-            &LinearVelocity,
-            &AngularVelocity,
-            Option<&mut ExternalForce>,
-            Option<&CenterOfMass>,
-        ),
-        With<RigidBody>,
-    >,
+    mut query: Query<(&Transform, &mut LinearVelocity, &mut AngularVelocity), With<RigidBody>>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
 ) {
@@ -64,16 +55,9 @@ fn drag_tool_update(
     if mouse.just_pressed(MouseButton::Left) {
         let filter = SpatialQueryFilter::default();
         if let Some(hit) = spatial_query.project_point(current_pos, true, &filter)
-            && let Ok((transform, _, _, force, _)) = query.get(hit.entity)
+            && let Ok((transform, _, _)) = query.get(hit.entity)
         {
             data.dragged_entity = Some(hit.entity);
-
-            // Ensure ExternalForce exists
-            if force.is_none() {
-                commands
-                    .entity(hit.entity)
-                    .insert(ExternalForce::default().with_persistence(false));
-            }
 
             // Calculate local anchor
             // inverse transform
@@ -96,8 +80,7 @@ fn drag_tool_update(
     }
 
     if let Some(entity) = data.dragged_entity {
-        if let Ok((transform, lin_vel, ang_vel, force_opt, com)) = query.get_mut(entity) {
-            // Draw gizmo line regardless of physics application (feedback for user)
+        if let Ok((transform, mut lin_vel, mut ang_vel)) = query.get_mut(entity) {
             let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
             let translation = transform.translation.truncate().as_dvec2();
 
@@ -117,55 +100,11 @@ fn drag_tool_update(
                 Color::WHITE,
             );
 
-            if let Some(mut force) = force_opt {
-                // Force persistence needs to be false for this control method, or we need to reset it every frame.
-                // If we added it with persistence(false), it clears itself.
-                // But if it was already there (and maybe true), we might be accumulating.
-                // Safer to set it to zero first if we are controlling it.
-                force.clear();
+            // Kinematic Velocity Control (Fallback for ExternalForce)
+            let delta = current_pos - current_anchor_pos;
+            lin_vel.0 = delta * 15.0;
+            ang_vel.0 *= 0.95;
 
-                let delta = current_pos - current_anchor_pos;
-
-                // PD Controller parameters
-                let stiffness = 200.0;
-                let damping = 10.0;
-
-                // Calculate velocity of the anchor point
-                // V_point = V_com + w x r
-                // Note: lin_vel is velocity of Center of Mass (usually).
-                // rotated_anchor is relative to Transform origin.
-                // If CoM != Transform origin, we need to adjust.
-                // But usually for simple shapes they are close.
-                // Let's assume Transform origin ~ CoM for now or that rotated_anchor is roughly correct relative to CoM.
-                // If we have CoM:
-                let com_offset = if let Some(com) = com {
-                    com.0
-                } else {
-                    DVec2::ZERO
-                };
-                // The anchor vector relative to CoM is (rotated_anchor_relative_to_transform_origin - com_offset_rotated?)
-                // Actually CoM component is local offset from Transform.
-                // So rotated_anchor (relative to Transform) - rotated_com = anchor relative to CoM.
-
-                // For simplicity, let's stick to using linear velocity of the body and approximating point velocity.
-                // V_p = V_b + w x r_from_b
-                let r = rotated_anchor; // Vector from Transform origin to anchor.
-                let point_velocity = lin_vel.0 + DVec2::new(-ang_vel.0 * r.y, ang_vel.0 * r.x);
-
-                let force_vector = delta * stiffness - point_velocity * damping;
-
-                // Apply force at point
-                // ExternalForce::apply_force_at_point args: (force, point, center_of_mass)
-                // point: Point where force is applied relative to body origin (Transform).
-                // center_of_mass: Center of mass relative to body origin.
-
-                let com_rotated = DVec2::new(
-                    com_offset.x * cos - com_offset.y * sin,
-                    com_offset.x * sin + com_offset.y * cos,
-                );
-
-                force.apply_force_at_point(force_vector, rotated_anchor, com_rotated);
-            }
         } else {
             // Entity doesn't exist anymore or logic failed
             data.dragged_entity = None;
