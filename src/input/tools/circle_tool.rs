@@ -2,14 +2,13 @@
 //!
 //! Click and drag to define the radius of a new circle.
 
-use crate::input::editable::EditableCircle;
+use crate::input::commands::{CommandStack, SpawnCircleCommand};
 use crate::input::tools::utils::is_pointer_over_ui;
-use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
+use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
-use bevy_prototype_lyon::prelude::*;
 
 /// Plugin for the Circle Tool.
 pub struct CircleToolPlugin;
@@ -50,7 +49,6 @@ fn circle_tool_update(
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
-    mut z_index: ResMut<ZIndex>,
 ) {
     if is_pointer_over_ui(&mut contexts) {
         return;
@@ -87,21 +85,17 @@ fn circle_tool_update(
 
         if mouse.just_released(MouseButton::Left) {
             if should_spawn_circle(radius) {
-                let shape = shapes::Circle {
+                let cmd = SpawnCircleCommand {
+                    position: Vec2::new(start.x as f32, start.y as f32),
                     radius: radius as f32,
-                    center: Vec2::ZERO,
+                    entity: None,
                 };
 
-                commands.spawn((
-                    ShapeBuilder::with(&shape)
-                        .fill(Color::srgb(1.0, 0.5, 0.5))
-                        .stroke(Stroke::new(Color::BLACK, 0.1))
-                        .build(),
-                    RigidBody::Dynamic,
-                    Collider::circle(radius),
-                    EditableCircle { radius },
-                    Transform::from_xyz(start.x as f32, start.y as f32, z_index.next()),
-                ));
+                commands.queue(move |world: &mut World| {
+                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                        stack.push(Box::new(cmd), world);
+                    });
+                });
             }
 
             data.drag_start = None;
