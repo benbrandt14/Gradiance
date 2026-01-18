@@ -37,14 +37,12 @@ fn drag_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     spatial_query: SpatialQuery,
-    // ExternalForce missing? Commented out for now to allow compilation.
-    // mut query: Query<(&Transform, &mut ExternalForce, &LinearVelocity, &AngularVelocity), With<RigidBody>>,
-    mut query: Query<(&Transform, &LinearVelocity, &AngularVelocity), With<RigidBody>>,
+    mut query: Query<(&Transform, &mut LinearVelocity, &mut AngularVelocity), With<RigidBody>>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
 ) {
     if let Ok(ctx) = contexts.ctx_mut() {
-        if ctx.is_pointer_over_area() && !data.dragged_entity.is_some() {
+        if ctx.is_pointer_over_area() && data.dragged_entity.is_none() {
             return;
         }
     }
@@ -86,7 +84,7 @@ fn drag_tool_update(
     }
 
     if let Some(entity) = data.dragged_entity {
-        if let Ok((transform, _lin_vel, _ang_vel)) = query.get_mut(entity) {
+        if let Ok((transform, mut lin_vel, mut ang_vel)) = query.get_mut(entity) {
             let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
             let translation = transform.translation.truncate().as_dvec2();
 
@@ -106,25 +104,13 @@ fn drag_tool_update(
                 Color::WHITE,
             );
 
-            // TODO: Re-enable physics force when ExternalForce is resolved
-            /*
-            // Spring parameters
-            let k = 500.0;
-            let b = 10.0;
-
+            // Kinematic grab implementation
             let delta = current_pos - current_anchor_pos;
 
-            // Velocity at anchor point
-            let r = rotated_anchor;
-            let w = ang_vel.0;
-            let point_vel = lin_vel.0 + DVec2::new(-w * r.y, w * r.x);
-
-            let f = k * delta - b * point_vel;
-            let torque = r.perp_dot(f);
-
-            force.set_force(Vec2::new(f.x as f32, f.y as f32));
-            force.set_torque(torque as f32);
-            */
+            // Simple P-controller: move towards target
+            // This ignores correct torque application for now but allows moving objects.
+            lin_vel.0 = delta * 15.0;
+            ang_vel.0 *= 0.95; // Damping rotation
         } else {
             data.dragged_entity = None;
         }

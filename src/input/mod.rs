@@ -8,6 +8,7 @@ use crate::prelude::*;
 // Commented out due to version mismatch (bevy_mod_picking 0.20.1 targets Bevy 0.14).
 // Bevy 0.17+ has built-in picking.
 
+pub mod camera_controller;
 pub mod cursor;
 pub mod editable;
 pub mod selection;
@@ -28,6 +29,9 @@ impl Plugin for InputPlugin {
         app.init_resource::<cursor::CursorWorldPos>();
         app.add_systems(PreUpdate, cursor::update_cursor_pos);
 
+        // Camera Controller
+        app.add_plugins(camera_controller::CameraControllerPlugin);
+
         // Selection
         app.add_plugins(selection::SelectionPlugin);
 
@@ -39,6 +43,19 @@ impl Plugin for InputPlugin {
 
         // Editable shapes
         app.add_plugins(editable::EditablePlugin);
+
+        // Global shortcuts
+        app.add_systems(Update, toggle_pause);
+    }
+}
+
+fn toggle_pause(keys: Res<ButtonInput<KeyCode>>, mut virtual_time: ResMut<Time<Virtual>>) {
+    if keys.just_pressed(KeyCode::Space) {
+        if virtual_time.is_paused() {
+            virtual_time.unpause();
+        } else {
+            virtual_time.pause();
+        }
     }
 }
 

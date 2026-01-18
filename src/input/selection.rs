@@ -16,7 +16,20 @@ pub struct SelectionPlugin;
 impl Plugin for SelectionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Selection>();
-        app.add_systems(Update, draw_selection_highlight);
+        app.add_systems(Update, (draw_selection_highlight, handle_delete_key));
+    }
+}
+
+fn handle_delete_key(
+    mut commands: Commands,
+    mut selection: ResMut<Selection>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if keys.just_pressed(KeyCode::Delete) || keys.just_pressed(KeyCode::Backspace) {
+        if let Some(entity) = selection.0 {
+            commands.entity(entity).despawn();
+            selection.0 = None;
+        }
     }
 }
 
