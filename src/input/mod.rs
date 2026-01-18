@@ -79,5 +79,7 @@ pub enum ToolState {
     Circle,
     /// Create polygon shapes.
     Polygon,
+    /// Create revolute joints (Axles).
+    RevoluteJoint,
     // Add more as needed
 }

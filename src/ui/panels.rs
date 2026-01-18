@@ -51,6 +51,7 @@ fn sidebar_ui(
             ("Box", ToolState::Box),
             ("Circle", ToolState::Circle),
             ("Polygon", ToolState::Polygon),
+            ("Axle", ToolState::RevoluteJoint),
             // Placeholder for other tools
             // ("Cut", ToolState::Cut),
             // ("Sketch", ToolState::Sketch),
