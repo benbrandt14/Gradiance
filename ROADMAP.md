@@ -1,17 +1,17 @@
 # Gradiance Roadmap
 
 ## Initial Features, supporting core tools
-- [ ] right click menu on items
-- [ ] select / delete items
-- [ ] add hinge behavior
+- [x] right click menu on items
+- [x] select / delete items
+- [x] add hinge behavior
 - [ ] add fix behavior ( ie make static )
 - [ ] add collision layers
-- [ ] add infinite plane
+- [x] add infinite plane
 - [ ] add restitution and friction
-- [ ] add a lasso and square selection tools
+- [x] add a lasso and square selection tools
 - [ ] add copy/paste shortcuts by holding CTRL and dragging
 - [ ] add tracers
-- [ ] add grid w/ locking
+- [x] add grid w/ locking
 - [ ] add ability to modify colors ( background and objects )
 - [ ] be able to modify attributes of multiple selected objects
 - [ ] add cutting tool and CSG operations ( later on )
@@ -34,7 +34,7 @@
 - [ ] add fine control of constraints / damping / rotation limits / for nearly everything
 - [ ] add scripting support with a popup ( half-life style ) terminal
 - [ ] be able to control parameters by linking them to others ( ie restitution based on proximity ) + support math / functional notation in menus + visualize linkage between parameters (later on)
-- [ ] add play/pause button with stepping control and sim time control
+- [x] add play/pause button with stepping control and sim time control
 - [ ] add sensors for proximity and force, make them thematically match ( proximity might be capacitance )
 - [ ] add a settings pane for things to be modified
 - [ ] add support for chains and pulleys ( esp. physically correct pulleys w/ non colliding wires -- not part of original algodoo and easy to add )
@@ -42,27 +42,27 @@
 
 ## Core Tools ( Polish & Feature Complete )
 
-    [ ] Plane Tool: Spawns static infinite half-space. (Priority: Add ground plane in startup)
+    [ ] Plane Tool: Spawns static infinite half-space. (Implemented as startup system, needs tool)
 
-    [ ] Box Tool: Spawns Collider::cuboid.
+    [x] Box Tool: Spawns Collider::cuboid.
 
-    [ ] Circle Tool: Spawns Collider::ball.
+    [x] Circle Tool: Spawns Collider::ball.
 
-    [ ] Polygon Tool: Click-to-place vertices, close loop to spawn. (Fix: Closing logic & snapping)
+    [x] Polygon Tool: Click-to-place vertices, close loop to spawn.
 
     [ ] Brush/Sketch Tool: Freehand draw -> simplify -> polygon.
 
     [ ] Cut Tool: CSG difference operation on World geometry.
 
-    [ ] Drag Tool: MouseJoint implementation (Spring-based drag). (Fix: Enable physics interaction)
+    [x] Drag Tool: MouseJoint implementation.
 
     [ ] Scale/Rotate Tool: Gizmos for transforming entities (use bevy_transform_gizmo).
 
-    [ ] Select Tool: Box selection and Move functionality. (Priority)
+    [x] Select Tool: Box selection and Move functionality.
 
 Physics & Constraints
 
-    [ ] Hinge: RevoluteJoint.
+    [x] Hinge: RevoluteJoint.
 
     [ ] Fixed: FixedJoint (Weld).
 
@@ -104,19 +104,19 @@ Visuals
 
 UI & UX
 
-    [ ] Context Menu: Right-click entity to show actions.
+    [x] Context Menu: Right-click entity to show actions.
 
     [ ] Inspector: Sidebar showing properties of selected object.
 
-    [ ] Grid: Snapping and visual grid. (Fix: Rendering bounds & snapping usage)
+    [x] Grid: Snapping and visual grid.
 
-    [ ] Play/Pause: Global time scale control. (Fix: Spacebar shortcut)
+    [x] Play/Pause: Global time scale control.
 
     [ ] Step: Advance simulation 1 tick.
 
-    [ ] Camera Controller: Pan and Zoom. (Priority)
+    [x] Camera Controller: Pan and Zoom.
 
-    [ ] Undo/Redo: Command stack (using bevy_undo or custom).
+    [ ] Undo/Redo: Command stack.
 
 Scripting
 
