@@ -19,7 +19,8 @@ pub mod prelude;
 pub mod scripting;
 pub mod ui;
 
-use bevy::prelude::*;
+use crate::prelude::*;
+use bevy_prototype_lyon::prelude::*;
 
 /// The primary plugin for the Gradiance game.
 ///
@@ -35,11 +36,38 @@ impl Plugin for GamePlugin {
             ui::UiPlugin,
             scripting::ScriptingPlugin,
         ))
-        .add_systems(Startup, setup_camera);
+        .add_systems(Startup, (setup_camera, setup_ground));
     }
 }
 
 /// Spawns the main 2D camera.
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d::default());
+    commands.spawn(Camera2d);
+}
+
+/// Spawns a static ground plane.
+fn setup_ground(mut commands: Commands) {
+    let w = 500.0;
+    let h = 25.0;
+    let points = vec![
+        Vec2::new(-w, -h),
+        Vec2::new(w, -h),
+        Vec2::new(w, h),
+        Vec2::new(-w, h),
+    ];
+
+    let shape = shapes::Polygon {
+        points,
+        closed: true,
+    };
+
+    commands.spawn((
+        ShapeBuilder::with(&shape)
+            .fill(Color::srgb(0.2, 0.2, 0.2))
+            .stroke(Stroke::new(Color::BLACK, 1.0))
+            .build(),
+        RigidBody::Static,
+        Collider::rectangle(1000.0, 50.0),
+        Transform::from_xyz(0.0, -200.0, 0.0),
+    ));
 }

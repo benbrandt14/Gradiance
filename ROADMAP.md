@@ -38,24 +38,27 @@
 - [ ] add sensors for proximity and force, make them thematically match ( proximity might be capacitance )
 - [ ] add a settings pane for things to be modified
 - [ ] add support for chains and pulleys ( esp. physically correct pulleys w/ non colliding wires -- not part of original algodoo and easy to add )
+- [ ] add support for arbitrary coordinate frames ( req plotters )
 
 ## Core Tools ( Polish & Feature Complete )
 
-    [ ] Plane Tool: Spawns static infinite half-space.
+    [ ] Plane Tool: Spawns static infinite half-space. (Priority: Add ground plane in startup)
 
     [ ] Box Tool: Spawns Collider::cuboid.
 
     [ ] Circle Tool: Spawns Collider::ball.
 
-    [ ] Polygon Tool: Click-to-place vertices, close loop to spawn.
+    [ ] Polygon Tool: Click-to-place vertices, close loop to spawn. (Fix: Closing logic & snapping)
 
     [ ] Brush/Sketch Tool: Freehand draw -> simplify -> polygon.
 
     [ ] Cut Tool: CSG difference operation on World geometry.
 
-    [ ] Drag Tool: MouseJoint implementation (Spring-based drag).
+    [ ] Drag Tool: MouseJoint implementation (Spring-based drag). (Fix: Enable physics interaction)
 
     [ ] Scale/Rotate Tool: Gizmos for transforming entities (use bevy_transform_gizmo).
+
+    [ ] Select Tool: Box selection and Move functionality. (Priority)
 
 Physics & Constraints
 
@@ -105,11 +108,13 @@ UI & UX
 
     [ ] Inspector: Sidebar showing properties of selected object.
 
-    [ ] Grid: Snapping and visual grid.
+    [ ] Grid: Snapping and visual grid. (Fix: Rendering bounds & snapping usage)
 
-    [ ] Play/Pause: Global time scale control.
+    [ ] Play/Pause: Global time scale control. (Fix: Spacebar shortcut)
 
     [ ] Step: Advance simulation 1 tick.
+
+    [ ] Camera Controller: Pan and Zoom. (Priority)
 
     [ ] Undo/Redo: Command stack (using bevy_undo or custom).
 

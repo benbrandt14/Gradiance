@@ -1,5 +1,6 @@
 name: Docs & Architecture Sync
 on: [push]
+  branches: [main]
 
 permissions:
   contents: write

@@ -4,6 +4,7 @@
 
 use crate::prelude::*;
 use bevy::math::DVec2;
+use bevy::window::PrimaryWindow;
 
 /// Plugin for rendering the grid and handling grid settings.
 pub struct GridPlugin;
@@ -63,40 +64,46 @@ pub fn snap_to_grid(pos: DVec2, spacing: f64) -> DVec2 {
 fn draw_grid(
     settings: Res<GridSettings>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
     mut gizmos: Gizmos,
-    // window_query: Query<&Window>, // Unused
 ) {
-    // Bevy 0.18: get_single returns Result. If not found, check traits.
-    // Fallback to iter().next() just to be safe and avoid compilation error if get_single is iffy in this version/setup.
-    let Some((_, transform)) = camera_query.iter().next() else {
+    let Some((camera, transform)) = camera_query.iter().next() else {
         return;
     };
 
-    // Calculate visible area
-    // Simplified: Just draw a large enough grid around camera position.
-    // Better: Viewport calculation.
+    let Some(window) = window_query.iter().next() else {
+        return;
+    };
 
-    // For now, let's draw a grid around the camera center, covering typical screen size.
-    let center = transform.translation().truncate();
-    let zoom = transform.scale().x; // Assuming uniform scale
+    // Calculate visible area using viewport_to_world_2d
+    // We get the world position of the top-left and bottom-right corners of the screen.
+    let top_left_screen = Vec2::ZERO;
+    let bottom_right_screen = Vec2::new(window.width(), window.height());
 
-    // Estimate view bounds (rough)
-    let width = 100.0 * zoom; // Arbitrary large number
-    let height = 100.0 * zoom;
+    let Ok(top_left) = camera.viewport_to_world_2d(transform, top_left_screen) else {
+        return;
+    };
+    let Ok(bottom_right) = camera.viewport_to_world_2d(transform, bottom_right_screen) else {
+        return;
+    };
 
-    let left = center.x - width;
-    let right = center.x + width;
-    let bottom = center.y - height;
-    let top = center.y + height;
+    // Construct the bounds
+    let left = top_left.x.min(bottom_right.x);
+    let right = top_left.x.max(bottom_right.x);
+    let bottom = top_left.y.min(bottom_right.y);
+    let top = top_left.y.max(bottom_right.y);
 
     let spacing = settings.spacing as f32;
+    if spacing <= 0.001 {
+        return;
+    }
 
     // Snap start to spacing
     let start_x = (left / spacing).floor() * spacing;
     let start_y = (bottom / spacing).floor() * spacing;
 
-    let count_x = ((right - left) / spacing).ceil() as i32;
-    let count_y = ((top - bottom) / spacing).ceil() as i32;
+    let count_x = ((right - left) / spacing).ceil() as i32 + 1;
+    let count_y = ((top - bottom) / spacing).ceil() as i32 + 1;
 
     let color = Color::srgba(1.0, 1.0, 1.0, 0.1);
 

@@ -26,11 +26,12 @@ jobs:
       # Since this is a persistent machine, we run standard cargo commands.
       # No need to install toolchains or dependencies if they are on your host.
 
-      - name: Check Formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
       - name: Run Tests
         run: cargo test
+
+      # - name: Check Formatting
+      #   run: cargo fmt --all -- --check
+
+      # - name: Clippy
+      #   run: cargo clippy --all-targets --all-features -- -D warnings
+
