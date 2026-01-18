@@ -11,6 +11,7 @@ use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use avian2d::prelude::*;
+use bevy::ecs::relationship::Relationship;
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
@@ -23,7 +24,9 @@ impl Plugin for ConnectorToolPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            update_connector.run_if(in_state(ToolState::RevoluteJoint).or_else(in_state(ToolState::Weld))),
+            update_connector.run_if(|state: Res<State<ToolState>>| {
+                matches!(state.get(), ToolState::RevoluteJoint | ToolState::Weld)
+            }),
         );
     }
 }
@@ -53,7 +56,7 @@ fn update_connector(
     grid_settings: Res<GridSettings>,
     tool_state: Res<State<ToolState>>,
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
-    parents: Query<&Parent>,
+    parents: Query<&ChildOf>,
     transforms: Query<&Transform>,
     global_transforms: Query<&GlobalTransform>,
     rigid_bodies: Query<&RigidBody>,
@@ -122,7 +125,7 @@ fn update_connector(
 fn resolve_sorted_bodies(
     intersections: &[Entity],
     bodies: &Query<(Entity, &GlobalTransform), With<RigidBody>>,
-    parents: &Query<&Parent>,
+    parents: &Query<&ChildOf>,
 ) -> Vec<Entity> {
     let mut resolved = Vec::new();
 
@@ -186,7 +189,7 @@ fn create_joint(
 
             commands.entity(child)
                 .remove::<RigidBody>()
-                .set_parent(parent)
+                .set_parent_in_place(parent)
                 .insert(Transform::from_matrix(local_affine.into()));
 
             // Spawn Visual on Parent at anchor
@@ -285,7 +288,7 @@ fn spawn_visual(
             Collider::circle(0.5),
             Sensor,
         ))
-        .set_parent(parent)
+        .set_parent_in_place(parent)
         .id();
 
     match connector_type {
