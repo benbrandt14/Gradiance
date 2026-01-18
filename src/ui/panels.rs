@@ -41,6 +41,10 @@ fn sidebar_ui(
         _ => return,
     };
 
+    if ctx.input(|i| i.screen_rect.is_none()) {
+        return;
+    }
+
     egui::SidePanel::left("tools_panel").show(ctx, |ui| {
         ui.heading("Tools");
         ui.separator();
@@ -90,6 +94,10 @@ fn top_panel_ui(
         Ok(ctx) => ctx,
         _ => return,
     };
+
+    if ctx.input(|i| i.screen_rect.is_none()) {
+        return;
+    }
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         ui.horizontal(|ui| {
