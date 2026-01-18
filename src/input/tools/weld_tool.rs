@@ -2,6 +2,7 @@
 //!
 //! Allows fixing two bodies together or fixing a body to the background.
 
+use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use avian2d::prelude::*;
@@ -26,10 +27,9 @@ fn weld_tool_update(
     mut contexts: EguiContexts,
     transforms: Query<&Transform>,
 ) {
-    if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() {
-            return;
-        }
+    if is_pointer_over_ui(&mut contexts) {
+        return;
+    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -66,14 +66,7 @@ fn spawn_weld(
     let get_local = |e: Entity| -> (DVec2, f64) {
         if let Ok(t) = transforms.get(e) {
             let rotation = t.rotation.to_euler(EulerRot::XYZ).2 as f64;
-            let translation = t.translation.truncate().as_dvec2();
-            let relative = anchor_world - translation;
-            let cos = rotation.cos();
-            let sin = rotation.sin();
-            let local_anchor = DVec2::new(
-                relative.x * cos + relative.y * sin,
-                -relative.x * sin + relative.y * cos,
-            );
+            let local_anchor = calculate_local_anchor(t, anchor_world);
             (local_anchor, rotation)
         } else {
             (DVec2::ZERO, 0.0)

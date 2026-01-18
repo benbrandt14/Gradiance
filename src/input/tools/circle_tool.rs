@@ -3,9 +3,10 @@
 //! Click and drag to define the radius of a new circle.
 
 use crate::input::editable::EditableCircle;
+use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
-use crate::ui::grid::GridSettings;
+use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::*;
@@ -51,10 +52,9 @@ fn circle_tool_update(
     grid_settings: Res<GridSettings>,
     mut z_index: ResMut<ZIndex>,
 ) {
-    if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.is_pointer_over_area() {
-            return;
-        }
+    if is_pointer_over_ui(&mut contexts) {
+        return;
+    }
 
     let Some(raw_pos) = cursor_pos.0 else {
         return;
@@ -62,11 +62,7 @@ fn circle_tool_update(
 
     let mut current_pos = raw_pos;
     if grid_settings.show && grid_settings.snap {
-        let s = grid_settings.spacing;
-        if s > 0.0001 {
-            current_pos.x = (current_pos.x / s).round() * s;
-            current_pos.y = (current_pos.y / s).round() * s;
-        }
+        current_pos = snap_to_grid(current_pos, grid_settings.spacing);
     }
 
     if mouse.just_pressed(MouseButton::Left) {
