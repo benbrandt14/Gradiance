@@ -75,7 +75,7 @@ pub fn snap_to_grid(pos: DVec2, spacing: f64) -> DVec2 {
 }
 
 fn draw_grid(
-    settings: Res<GridSettings>,
+    mut settings: ResMut<GridSettings>,
     camera_query: Query<(&Camera, &GlobalTransform, &Projection), With<Camera2d>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     mut gizmos: Gizmos,
@@ -110,22 +110,6 @@ fn draw_grid(
         return;
     }
 
-    match settings.grid_type {
-        GridType::Rectangular => draw_rectangular_grid(projection, left, right, bottom, top, &mut gizmos),
-        GridType::Isometric => {
-            // Placeholder for future implementation
-        }
-    }
-}
-
-fn draw_rectangular_grid(
-    projection: &Projection,
-    left: f32,
-    right: f32,
-    bottom: f32,
-    top: f32,
-    gizmos: &mut Gizmos,
-) {
     // Dynamic Spacing Calculation based on Zoom
     // We want major grid lines approx every 100 screen pixels.
     let scale = if let Projection::Orthographic(ortho) = projection {
@@ -138,6 +122,26 @@ fn draw_rectangular_grid(
     let major_spacing = 10.0_f32.powf(exponent);
     let minor_spacing = major_spacing / 10.0;
 
+    // Update grid settings with current spacing for tools to use
+    settings.spacing = major_spacing as f64;
+
+    match settings.grid_type {
+        GridType::Rectangular => draw_rectangular_grid(major_spacing, minor_spacing, left, right, bottom, top, &mut gizmos),
+        GridType::Isometric => {
+            // Placeholder for future implementation
+        }
+    }
+}
+
+fn draw_rectangular_grid(
+    major_spacing: f32,
+    minor_spacing: f32,
+    left: f32,
+    right: f32,
+    bottom: f32,
+    top: f32,
+    gizmos: &mut Gizmos,
+) {
     let draw_lines = |spacing: f32, alpha: f32, gizmos: &mut Gizmos| {
         let start_x = (left / spacing).floor() * spacing;
         let start_y = (bottom / spacing).floor() * spacing;

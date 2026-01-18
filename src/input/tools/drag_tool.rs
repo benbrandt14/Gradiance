@@ -105,37 +105,47 @@ fn drag_tool_update(
 
     // Handle dragging
     if let Some(entity) = data.dragged_entity {
-        if let Ok((mut transform, _, _)) = query.get_mut(entity) {
-            let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
+        match query.get_mut(entity) {
+            Ok((mut transform, _, _)) => {
+                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
 
-            // If paused, manually move the object to follow cursor
-            if virtual_time.is_paused() {
+                // If paused, manually move the object to follow cursor
+                if virtual_time.is_paused() {
+                    let cos = rotation.cos();
+                    let sin = rotation.sin();
+                    let rotated_anchor = DVec2::new(
+                        data.local_anchor.x * cos - data.local_anchor.y * sin,
+                        data.local_anchor.x * sin + data.local_anchor.y * cos,
+                    );
+
+                    let new_pos = current_pos - rotated_anchor;
+                    transform.translation.x = new_pos.x as f32;
+                    transform.translation.y = new_pos.y as f32;
+                }
+
+                // Draw line
                 let cos = rotation.cos();
                 let sin = rotation.sin();
                 let rotated_anchor = DVec2::new(
                     data.local_anchor.x * cos - data.local_anchor.y * sin,
                     data.local_anchor.x * sin + data.local_anchor.y * cos,
                 );
+                let current_anchor_pos = transform.translation.truncate().as_dvec2() + rotated_anchor;
 
-                let new_pos = current_pos - rotated_anchor;
-                transform.translation.x = new_pos.x as f32;
-                transform.translation.y = new_pos.y as f32;
+                gizmos.line_2d(
+                    Vec2::new(current_anchor_pos.x as f32, current_anchor_pos.y as f32),
+                    Vec2::new(current_pos.x as f32, current_pos.y as f32),
+                    Color::WHITE,
+                );
             }
-
-            // Draw line
-            let cos = rotation.cos();
-            let sin = rotation.sin();
-            let rotated_anchor = DVec2::new(
-                data.local_anchor.x * cos - data.local_anchor.y * sin,
-                data.local_anchor.x * sin + data.local_anchor.y * cos,
-            );
-            let current_anchor_pos = transform.translation.truncate().as_dvec2() + rotated_anchor;
-
-            gizmos.line_2d(
-                Vec2::new(current_anchor_pos.x as f32, current_anchor_pos.y as f32),
-                Vec2::new(current_pos.x as f32, current_pos.y as f32),
-                Color::WHITE,
-            );
+            Err(_) => {
+                // Entity lost. Cleanup.
+                if let Some(hand) = data.hand_entity {
+                    commands.entity(hand).despawn();
+                }
+                data.hand_entity = None;
+                data.dragged_entity = None;
+            }
         }
     }
 }
