@@ -2,6 +2,7 @@
 //!
 //! Click and drag to define the radius of a new circle.
 
+use crate::commands::{CommandStack, GameCommand};
 use crate::input::editable::EditableCircle;
 use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
@@ -31,6 +32,55 @@ struct CircleToolData {
 
 fn circle_tool_reset(mut data: ResMut<CircleToolData>) {
     data.drag_start = None;
+}
+
+struct SpawnCircleCommand {
+    radius: f64,
+    x: f32,
+    y: f32,
+    entity: Option<Entity>,
+}
+
+impl SpawnCircleCommand {
+    fn new(radius: f64, x: f32, y: f32) -> Self {
+        Self {
+            radius,
+            x,
+            y,
+            entity: None,
+        }
+    }
+}
+
+impl GameCommand for SpawnCircleCommand {
+    fn execute(&mut self, world: &mut World) {
+        let shape = shapes::Circle {
+            radius: self.radius as f32,
+            center: Vec2::ZERO,
+        };
+
+        let bundle = (
+            ShapeBuilder::with(&shape)
+                .fill(Color::srgb(1.0, 0.5, 0.5))
+                .stroke(Stroke::new(Color::BLACK, 0.1))
+                .build(),
+            RigidBody::Dynamic,
+            Collider::circle(self.radius),
+            EditableCircle { radius: self.radius },
+            Transform::from_xyz(self.x, self.y, 0.0),
+        );
+
+        self.entity = Some(world.spawn(bundle).id());
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if let Some(e) = self.entity {
+            if world.get_entity(e).is_ok() {
+                world.despawn(e);
+            }
+            self.entity = None;
+        }
+    }
 }
 
 fn circle_tool_update(
@@ -98,6 +148,12 @@ fn circle_tool_update(
                     EditableCircle { radius },
                     Transform::from_xyz(start.x as f32, start.y as f32, z_index.next()),
                 ));
+                let cmd = SpawnCircleCommand::new(radius, start.x as f32, start.y as f32);
+                commands.queue(move |world: &mut World| {
+                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                        stack.push(Box::new(cmd), world);
+                    });
+                });
             }
 
             data.drag_start = None;

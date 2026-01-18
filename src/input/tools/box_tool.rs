@@ -2,6 +2,7 @@
 //!
 //! Click and drag to define the extents of a new box.
 
+use crate::commands::{CommandStack, GameCommand};
 use crate::input::editable::EditableBox;
 use crate::input::{ToolState, cursor::CursorWorldPos, ZIndex};
 use crate::prelude::*;
@@ -38,8 +39,63 @@ fn calculate_box_geometry(start: DVec2, end: DVec2) -> (DVec2, DVec2) {
     (size, center)
 }
 
+struct SpawnBoxCommand {
+    width: f64,
+    height: f64,
+    x: f32,
+    y: f32,
+    entity: Option<Entity>,
+}
+
+impl SpawnBoxCommand {
+    fn new(width: f64, height: f64, x: f32, y: f32) -> Self {
+        Self {
+            width,
+            height,
+            x,
+            y,
+            entity: None,
+        }
+    }
+}
+
+impl GameCommand for SpawnBoxCommand {
+    fn execute(&mut self, world: &mut World) {
+        let shape = shapes::Rectangle {
+            extents: Vec2::new(self.width as f32, self.height as f32),
+            origin: shapes::RectangleOrigin::Center,
+            ..default()
+        };
+
+        let bundle = (
+            ShapeBuilder::with(&shape)
+                .fill(Color::srgb(0.5, 0.5, 1.0))
+                .stroke(Stroke::new(Color::BLACK, 0.1))
+                .build(),
+            RigidBody::Dynamic,
+            Collider::rectangle(self.width, self.height),
+            EditableBox {
+                width: self.width,
+                height: self.height,
+            },
+            Transform::from_xyz(self.x, self.y, 0.0),
+        );
+
+        self.entity = Some(world.spawn(bundle).id());
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if let Some(e) = self.entity {
+            if world.get_entity(e).is_ok() {
+                world.despawn(e);
+            }
+            self.entity = None;
+        }
+    }
+}
+
 fn box_tool_update(
-    mut commands: Commands,
+    mut commands: Commands, // Kept for other things if needed, but we use CommandStack now
     mut data: ResMut<BoxToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -83,7 +139,6 @@ fn box_tool_update(
         }
 
         if mouse.just_released(MouseButton::Left) {
-            // Spawn
             if size.x > 0.01 && size.y > 0.01 {
                 let shape = shapes::Rectangle {
                     extents: Vec2::new(size.x as f32, size.y as f32),
@@ -104,6 +159,27 @@ fn box_tool_update(
                     },
                     Transform::from_xyz(center.x as f32, center.y as f32, z_index.next()),
                 ));
+                // Execute command via CommandStack
+                // Note: CommandStack::push requires &mut World.
+                // We are in a system, so we can't get &mut World directly.
+                // We need to use `commands.add` to defer this action or run it as an exclusive system.
+                // But CommandStack is a Resource.
+
+                // Wait, CommandStack::push(&mut self, command, &mut World).
+                // I can't call it from here because I don't have &mut World.
+
+                // Solution: Make `CommandStack::push` NOT take `&mut World`, but `Commands`?
+                // No, `execute` needs `&mut World`.
+
+                // Standard Bevy pattern: Custom Command.
+                // bevy::ecs::system::Command
+
+                let cmd = SpawnBoxCommand::new(size.x, size.y, center.x as f32, center.y as f32);
+                commands.queue(move |world: &mut World| {
+                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                        stack.push(Box::new(cmd), world);
+                    });
+                });
             }
 
             data.drag_start = None;
