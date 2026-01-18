@@ -12,6 +12,7 @@
 //! //! ## Bevy Schedule Graph
 //! ![Schedule Graph](doc/architecture.png)
 
+pub mod commands;
 pub mod geometry;
 pub mod input;
 pub mod physics;
@@ -30,6 +31,7 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            commands::CommandsPlugin,
             physics::PhysicsPlugin,
             geometry::GeometryPlugin,
             input::InputPlugin,
