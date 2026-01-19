@@ -13,6 +13,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_TARGET_DIR: /home/brandtb/Developments/RustRunner_Gitlab/.persistent-cargo-target
+  SCCACHE_DIR: /home/brandtb/.cache/sccache
+  RUSTC_WRAPPER: /home/brandtb/.cargo/bin/sccache
 
 jobs:
   test:
