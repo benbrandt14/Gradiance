@@ -42,7 +42,7 @@ fn select_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    // rapier_context: Res<RapierContext>, // Removed to fix build
+    rapier_context_query: Query<&RapierContext>,
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
     mut query: Query<&mut Transform>,
@@ -65,15 +65,16 @@ fn select_tool_update(
     if mouse.just_pressed(MouseButton::Left) {
         data.drag_start_pos = current_pos;
 
-        let _filter = QueryFilter::default();
-        let hit_entity: Option<Entity> = None;
-        // TODO: Re-enable query when correct API is identified for bevy_rapier2d 0.29
-        /*
+        let Some(rapier_context) = rapier_context_query.iter().next() else {
+            return;
+        };
+        let filter = QueryFilter::default().exclude_sensors();
+        let mut hit_entity: Option<Entity> = None;
+
         rapier_context.intersections_with_point(current_pos, filter, |entity| {
             hit_entity = Some(entity);
             false
         });
-        */
 
         if let Some(entity) = hit_entity {
             // Clicked on something

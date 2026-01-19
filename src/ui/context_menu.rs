@@ -31,7 +31,7 @@ fn context_menu_input(
     mut selection: ResMut<Selection>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
-    // rapier_context: Res<RapierContext>,
+    rapier_context_query: Query<&RapierContext>,
     mut contexts: EguiContexts,
 ) {
     let ctx = contexts.ctx_mut();
@@ -43,20 +43,21 @@ fn context_menu_input(
     }
 
     if mouse.just_pressed(MouseButton::Right) {
-        let Some(_world_pos) = cursor_pos.0 else {
+        let Some(world_pos) = cursor_pos.0 else {
+            return;
+        };
+        let Some(rapier_context) = rapier_context_query.iter().next() else {
             return;
         };
 
         // Raycast to find entity
-        let _filter = QueryFilter::default();
-        let hit_entity: Option<Entity> = None;
-        // TODO: Re-enable query
-        /*
+        let filter = QueryFilter::default().exclude_sensors();
+        let mut hit_entity: Option<Entity> = None;
+
         rapier_context.intersections_with_point(world_pos, filter, |entity| {
             hit_entity = Some(entity);
             false
         });
-        */
 
         if let Some(entity) = hit_entity {
             selection.clear();
