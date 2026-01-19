@@ -53,32 +53,40 @@ fn update_connector_visuals(
 ) {
     for (mut transform, connector, parent) in &mut visuals {
         if let Ok(parent_global) = global_transforms.get(parent.get()) {
-             // Calculate world anchors
-             let anchor_a_world = if let Ok(t_a) = global_transforms.get(connector.entity_a) {
-                 let t = t_a.compute_transform();
-                 t.transform_point(Vec3::new(connector.local_anchor_a.x, connector.local_anchor_a.y, 0.0))
-             } else {
-                 continue;
-             };
+            // Calculate world anchors
+            let anchor_a_world = if let Ok(t_a) = global_transforms.get(connector.entity_a) {
+                let t = t_a.compute_transform();
+                t.transform_point(Vec3::new(
+                    connector.local_anchor_a.x,
+                    connector.local_anchor_a.y,
+                    0.0,
+                ))
+            } else {
+                continue;
+            };
 
-             let anchor_b_world = if let Some(e_b) = connector.entity_b {
-                 if let Ok(t_b) = global_transforms.get(e_b) {
-                      let t = t_b.compute_transform();
-                      t.transform_point(Vec3::new(connector.local_anchor_b.x, connector.local_anchor_b.y, 0.0))
-                 } else {
-                     anchor_a_world
-                 }
-             } else {
-                 Vec3::new(connector.local_anchor_b.x, connector.local_anchor_b.y, 0.0)
-             };
+            let anchor_b_world = if let Some(e_b) = connector.entity_b {
+                if let Ok(t_b) = global_transforms.get(e_b) {
+                    let t = t_b.compute_transform();
+                    t.transform_point(Vec3::new(
+                        connector.local_anchor_b.x,
+                        connector.local_anchor_b.y,
+                        0.0,
+                    ))
+                } else {
+                    anchor_a_world
+                }
+            } else {
+                Vec3::new(connector.local_anchor_b.x, connector.local_anchor_b.y, 0.0)
+            };
 
-             let midpoint = (anchor_a_world + anchor_b_world) * 0.5;
+            let midpoint = (anchor_a_world + anchor_b_world) * 0.5;
 
-             let parent_inv = parent_global.affine().inverse();
-             let local_midpoint = parent_inv.transform_point3(midpoint);
+            let parent_inv = parent_global.affine().inverse();
+            let local_midpoint = parent_inv.transform_point3(midpoint);
 
-             transform.translation.x = local_midpoint.x;
-             transform.translation.y = local_midpoint.y;
+            transform.translation.x = local_midpoint.x;
+            transform.translation.y = local_midpoint.y;
         }
     }
 }
@@ -250,7 +258,6 @@ fn resolve_sorted_bodies(
 
     resolved.into_iter().map(|(e, _)| e).collect()
 }
-
 
 #[cfg(test)]
 mod tests {

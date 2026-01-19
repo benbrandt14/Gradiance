@@ -75,11 +75,7 @@ fn circle_tool_update(
                 radius,
                 Color::WHITE,
             );
-            gizmos.line_2d(
-                start,
-                current_pos,
-                Color::WHITE,
-            );
+            gizmos.line_2d(start, current_pos, Color::WHITE);
         }
 
         if mouse.just_released(MouseButton::Left) {

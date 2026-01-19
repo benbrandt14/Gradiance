@@ -2,9 +2,9 @@
 //!
 //! Simply allows clicking on entities to populate the `Selection` resource.
 
+use crate::GroundPlane;
 use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
-use crate::GroundPlane;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy_egui::EguiContexts;
 
@@ -53,8 +53,8 @@ fn select_tool_update(
     // Prevent selection if over UI
     let ctx = contexts.ctx_mut();
     if ctx.is_pointer_over_area() && !data.is_moving && data.drag_start.is_none() {
-            return;
-        }
+        return;
+    }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
@@ -71,7 +71,7 @@ fn select_tool_update(
         /*
         rapier_context.intersections_with_point(current_pos, filter, |entity| {
             hit_entity = Some(entity);
-            false 
+            false
         });
         */
 
@@ -95,7 +95,8 @@ fn select_tool_update(
                 data.initial_positions.clear();
                 for &entity in &selection.0 {
                     if let Ok(t) = query.get(entity) {
-                        data.initial_positions.push((entity, t.translation.truncate()));
+                        data.initial_positions
+                            .push((entity, t.translation.truncate()));
                     }
                 }
             }
@@ -115,16 +116,15 @@ fn select_tool_update(
             let delta = current_pos - data.drag_start_pos;
 
             for (entity, initial_pos) in &data.initial_positions {
-                 if let Ok(mut t) = query.get_mut(*entity) {
+                if let Ok(mut t) = query.get_mut(*entity) {
                     let mut new_pos = *initial_pos + delta;
                     if grid_settings.show && grid_settings.snap {
                         new_pos = snap_to_grid(new_pos, grid_settings.spacing);
                     }
                     t.translation.x = new_pos.x;
                     t.translation.y = new_pos.y;
-                 }
+                }
             }
-
         } else if let Some(start) = data.drag_start {
             // Draw Box
             let min = start.min(current_pos);
@@ -142,27 +142,28 @@ fn select_tool_update(
 
     if mouse.just_released(MouseButton::Left) {
         if !data.is_moving
-            && let Some(start) = data.drag_start {
-                // Box Select Finalize
-                let min = start.min(current_pos);
-                let max = start.max(current_pos);
-                let size = max - min;
+            && let Some(start) = data.drag_start
+        {
+            // Box Select Finalize
+            let min = start.min(current_pos);
+            let max = start.max(current_pos);
+            let size = max - min;
 
-                if size.x > 0.1 && size.y > 0.1 {
-                    let min_x = min.x;
-                    let max_x = max.x;
-                    let min_y = min.y;
-                    let max_y = max.y;
+            if size.x > 0.1 && size.y > 0.1 {
+                let min_x = min.x;
+                let max_x = max.x;
+                let min_y = min.y;
+                let max_y = max.y;
 
-                    // Manual AABB check against all selectable entities
-                    for (entity, global_transform) in &selectable_query {
-                        let t = global_transform.translation().truncate();
-                        if t.x >= min_x && t.x <= max_x && t.y >= min_y && t.y <= max_y {
-                            selection.add(entity);
-                        }
+                // Manual AABB check against all selectable entities
+                for (entity, global_transform) in &selectable_query {
+                    let t = global_transform.translation().truncate();
+                    if t.x >= min_x && t.x <= max_x && t.y >= min_y && t.y <= max_y {
+                        selection.add(entity);
                     }
                 }
             }
+        }
 
         data.is_moving = false;
         data.drag_start = None;

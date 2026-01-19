@@ -65,19 +65,11 @@ fn polygon_tool_update(
         for i in 0..data.points.len() - 1 {
             let p1 = data.points[i];
             let p2 = data.points[i + 1];
-            gizmos.line_2d(
-                p1,
-                p2,
-                Color::WHITE,
-            );
+            gizmos.line_2d(p1, p2, Color::WHITE);
         }
         // Line to cursor
         let last = data.points.last().unwrap();
-        gizmos.line_2d(
-            *last,
-            current_pos,
-            Color::WHITE,
-        );
+        gizmos.line_2d(*last, current_pos, Color::WHITE);
 
         // Draw start point marker
         let start = data.points[0];
@@ -109,32 +101,28 @@ fn polygon_tool_update(
         should_close = true;
     }
 
-    if should_close
-        && data.points.len() >= 3 {
-            // Close loop and spawn
-            let center =
-                data.points.iter().fold(Vec2::ZERO, |acc, p| acc + *p) / data.points.len() as f32;
+    if should_close && data.points.len() >= 3 {
+        // Close loop and spawn
+        let center =
+            data.points.iter().fold(Vec2::ZERO, |acc, p| acc + *p) / data.points.len() as f32;
 
-            // Points relative to center
-            let relative_points: Vec<Vec2> = data.points
-                .iter()
-                .map(|p| (*p - center))
-                .collect();
+        // Points relative to center
+        let relative_points: Vec<Vec2> = data.points.iter().map(|p| *p - center).collect();
 
-            let cmd = SpawnPolygonCommand {
-                position: center,
-                vertices: relative_points,
-                entity: None,
-            };
+        let cmd = SpawnPolygonCommand {
+            position: center,
+            vertices: relative_points,
+            entity: None,
+        };
 
-            commands.queue(move |world: &mut World| {
-                world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                    stack.push(Box::new(cmd), world);
-                });
+        commands.queue(move |world: &mut World| {
+            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                stack.push(Box::new(cmd), world);
             });
+        });
 
-            data.points.clear();
-        }
+        data.points.clear();
+    }
 }
 
 #[cfg(test)]

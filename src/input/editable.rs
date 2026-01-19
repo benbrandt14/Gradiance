@@ -66,7 +66,10 @@ fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Chang
                 ..default()
             })
             // Rapier uses half-extents
-            .insert(Collider::cuboid((editable.width / 2.0) as f32, (editable.height / 2.0) as f32));
+            .insert(Collider::cuboid(
+                (editable.width / 2.0) as f32,
+                (editable.height / 2.0) as f32,
+            ));
     }
 }
 
@@ -98,7 +101,10 @@ fn resize_circle(
             )
             */
             .insert(Sprite {
-                custom_size: Some(Vec2::new(editable.radius as f32 * 2.0, editable.radius as f32 * 2.0)),
+                custom_size: Some(Vec2::new(
+                    editable.radius as f32 * 2.0,
+                    editable.radius as f32 * 2.0,
+                )),
                 ..default()
             })
             .insert(Collider::ball(editable.radius as f32));

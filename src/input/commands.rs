@@ -2,10 +2,10 @@
 //!
 //! Defines the `GameCommand` trait and the `CommandStack` resource.
 
-use crate::prelude::*;
+use crate::input::ZIndex;
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::tools::connector::Connector;
-use crate::input::ZIndex;
+use crate::prelude::*;
 // use bevy_prototype_lyon::prelude::*;
 /*
 use bevy_prototype_lyon::prelude::tess::{
@@ -107,30 +107,32 @@ impl GameCommand for SpawnBoxCommand {
         };
         */
 
-        let entity = world.spawn((
-            /*
-            ShapeBundle {
-                path: GeometryBuilder::build_as(&shape),
-                ..default()
-            },
-            Fill::color(Color::srgb(0.5, 0.5, 1.0)),
-            Stroke::new(Color::BLACK, 0.1),
-            */
-            Sprite {
-                color: Color::srgb(0.5, 0.5, 1.0),
-                custom_size: Some(Vec2::new(self.width, self.height)),
-                ..default()
-            },
-            RigidBody::Dynamic,
-            // Rapier uses half-extents
-            Collider::cuboid(self.width / 2.0, self.height / 2.0),
-            EditableBox {
-                width: self.width as f64,
-                height: self.height as f64,
-            },
-            Transform::from_xyz(self.position.x, self.position.y, z),
-            // PickableBundle::default(), // Picking disabled due to incompatibility
-        )).id();
+        let entity = world
+            .spawn((
+                /*
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shape),
+                    ..default()
+                },
+                Fill::color(Color::srgb(0.5, 0.5, 1.0)),
+                Stroke::new(Color::BLACK, 0.1),
+                */
+                Sprite {
+                    color: Color::srgb(0.5, 0.5, 1.0),
+                    custom_size: Some(Vec2::new(self.width, self.height)),
+                    ..default()
+                },
+                RigidBody::Dynamic,
+                // Rapier uses half-extents
+                Collider::cuboid(self.width / 2.0, self.height / 2.0),
+                EditableBox {
+                    width: self.width as f64,
+                    height: self.height as f64,
+                },
+                Transform::from_xyz(self.position.x, self.position.y, z),
+                // PickableBundle::default(), // Picking disabled due to incompatibility
+            ))
+            .id();
 
         self.entity = Some(entity);
     }
@@ -166,27 +168,31 @@ impl GameCommand for SpawnCircleCommand {
         };
         */
 
-        let id = world.spawn((
-            /*
-            ShapeBundle {
-                path: GeometryBuilder::build_as(&shape),
-                ..default()
-            },
-            Fill::color(Color::srgb(1.0, 0.5, 0.5)),
-            Stroke::new(Color::BLACK, 0.1),
-            */
-            Sprite {
-                color: Color::srgb(1.0, 0.5, 0.5),
-                // Approximating circle with square sprite for now
-                custom_size: Some(Vec2::new(self.radius * 2.0, self.radius * 2.0)),
-                ..default()
-            },
-            RigidBody::Dynamic,
-            Collider::ball(self.radius),
-            EditableCircle { radius: self.radius as f64 },
-            Transform::from_xyz(self.position.x, self.position.y, z),
-            // PickableBundle::default(),
-        )).id();
+        let id = world
+            .spawn((
+                /*
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shape),
+                    ..default()
+                },
+                Fill::color(Color::srgb(1.0, 0.5, 0.5)),
+                Stroke::new(Color::BLACK, 0.1),
+                */
+                Sprite {
+                    color: Color::srgb(1.0, 0.5, 0.5),
+                    // Approximating circle with square sprite for now
+                    custom_size: Some(Vec2::new(self.radius * 2.0, self.radius * 2.0)),
+                    ..default()
+                },
+                RigidBody::Dynamic,
+                Collider::ball(self.radius),
+                EditableCircle {
+                    radius: self.radius as f64,
+                },
+                Transform::from_xyz(self.position.x, self.position.y, z),
+                // PickableBundle::default(),
+            ))
+            .id();
 
         self.entity = Some(id);
     }
@@ -213,9 +219,9 @@ pub struct SpawnPolygonCommand {
 
 impl GameCommand for SpawnPolygonCommand {
     fn apply(&mut self, world: &mut World) {
-         let z = world.resource_mut::<ZIndex>().next();
+        let z = world.resource_mut::<ZIndex>().next();
 
-         /*
+        /*
          let shape = shapes::Polygon {
             points: self.vertices.clone(),
             closed: true,
@@ -223,35 +229,37 @@ impl GameCommand for SpawnPolygonCommand {
         */
 
         // Tessellation logic removed
-        
+
         let collider = Collider::convex_hull(&self.vertices).unwrap_or(Collider::ball(1.0));
 
-        let id = world.spawn((
-            /*
-            ShapeBundle {
-                path: GeometryBuilder::build_as(&shape),
-                ..default()
-            },
-            Fill::color(Color::srgb(0.5, 1.0, 0.5)),
-            Stroke::new(Color::BLACK, 0.1),
-            */
-            Sprite {
-                color: Color::srgb(0.5, 1.0, 0.5),
-                // No easy polygon sprite, just a dot for now
-                custom_size: Some(Vec2::new(10.0, 10.0)),
-                ..default()
-            },
-            RigidBody::Dynamic,
-            collider,
-            Transform::from_xyz(self.position.x, self.position.y, z),
-            // PickableBundle::default(),
-        )).id();
+        let id = world
+            .spawn((
+                /*
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shape),
+                    ..default()
+                },
+                Fill::color(Color::srgb(0.5, 1.0, 0.5)),
+                Stroke::new(Color::BLACK, 0.1),
+                */
+                Sprite {
+                    color: Color::srgb(0.5, 1.0, 0.5),
+                    // No easy polygon sprite, just a dot for now
+                    custom_size: Some(Vec2::new(10.0, 10.0)),
+                    ..default()
+                },
+                RigidBody::Dynamic,
+                collider,
+                Transform::from_xyz(self.position.x, self.position.y, z),
+                // PickableBundle::default(),
+            ))
+            .id();
 
         self.entity = Some(id);
     }
 
     fn undo(&mut self, world: &mut World) {
-         if let Some(e) = self.entity {
+        if let Some(e) = self.entity {
             if let Ok(e_ref) = world.get_entity_mut(e) {
                 e_ref.despawn();
             }
@@ -281,20 +289,23 @@ pub struct SpawnJointCommand {
 impl GameCommand for SpawnJointCommand {
     fn apply(&mut self, world: &mut World) {
         // Visual
-        let visual_id = world.spawn((
-            Transform::from_xyz(self.anchor_a.x, self.anchor_a.y, 0.1),
-            Visibility::default(),
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-            Collider::ball(0.5),
-            Sensor,
-            Connector {
-                entity_a: self.entity_a,
-                entity_b: self.entity_b,
-                local_anchor_a: self.anchor_a,
-                local_anchor_b: self.anchor_b,
-            },
-        )).set_parent_in_place(self.entity_a).id();
+        let visual_id = world
+            .spawn((
+                Transform::from_xyz(self.anchor_a.x, self.anchor_a.y, 0.1),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+                Collider::ball(0.5),
+                Sensor,
+                Connector {
+                    entity_a: self.entity_a,
+                    entity_b: self.entity_b,
+                    local_anchor_a: self.anchor_a,
+                    local_anchor_b: self.anchor_b,
+                },
+            ))
+            .set_parent_in_place(self.entity_a)
+            .id();
 
         /*
         let circle_outer = GeometryBuilder::build_as(&shapes::Circle { radius: 5.0, ..default() });
@@ -302,7 +313,7 @@ impl GameCommand for SpawnJointCommand {
             ShapeBundle { path: circle_outer, ..default() },
             Fill::color(Color::BLACK)
         ));
-        
+
         let circle_inner = GeometryBuilder::build_as(&shapes::Circle { radius: 2.0, ..default() });
         let inner = world.spawn((
              ShapeBundle { path: circle_inner, ..default() },
@@ -311,7 +322,7 @@ impl GameCommand for SpawnJointCommand {
         )).id();
         world.entity_mut(visual_id).add_child(inner);
         */
-        
+
         // Simple sprite replacement
         world.entity_mut(visual_id).insert(Sprite {
             color: Color::BLACK,
@@ -324,21 +335,23 @@ impl GameCommand for SpawnJointCommand {
         // Physics Joint
         let target_entity;
         let joint_data;
-        
+
         if let Some(e_b) = self.entity_b {
             target_entity = e_b;
             joint_data = RevoluteJointBuilder::new()
                 .local_anchor1(self.anchor_a)
                 .local_anchor2(self.anchor_b);
         } else {
-             // Pin logic
-            let t_a = world.get::<GlobalTransform>(self.entity_a).map(|t| t.compute_transform()).unwrap_or_default();
+            // Pin logic
+            let t_a = world
+                .get::<GlobalTransform>(self.entity_a)
+                .map(|t| t.compute_transform())
+                .unwrap_or_default();
             let world_pos = t_a.transform_point(Vec3::new(self.anchor_a.x, self.anchor_a.y, 0.0));
 
-            let pin_id = world.spawn((
-                RigidBody::Fixed,
-                Transform::from_translation(world_pos),
-            )).id();
+            let pin_id = world
+                .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
+                .id();
 
             self.pin_entity = Some(pin_id);
             target_entity = pin_id;
@@ -348,20 +361,24 @@ impl GameCommand for SpawnJointCommand {
                     connector.entity_b = Some(pin_id);
                 }
             }
-            
+
             joint_data = RevoluteJointBuilder::new()
                 .local_anchor1(self.anchor_a)
                 .local_anchor2(Vec2::ZERO);
         }
-        
+
         // Attach ImpulseJoint to entity_a
-        world.entity_mut(self.entity_a).insert(ImpulseJoint::new(target_entity, joint_data));
+        world
+            .entity_mut(self.entity_a)
+            .insert(ImpulseJoint::new(target_entity, joint_data));
     }
 
     fn undo(&mut self, world: &mut World) {
         if let Some(v) = self.visual_entity {
-             if let Ok(e) = world.get_entity_mut(v) { e.despawn(); }
-             self.visual_entity = None;
+            if let Ok(e) = world.get_entity_mut(v) {
+                e.despawn();
+            }
+            self.visual_entity = None;
         }
 
         // Remove Joint from entity_a
@@ -370,8 +387,10 @@ impl GameCommand for SpawnJointCommand {
         }
 
         if let Some(p) = self.pin_entity {
-             if let Ok(e) = world.get_entity_mut(p) { e.despawn(); }
-             self.pin_entity = None;
+            if let Ok(e) = world.get_entity_mut(p) {
+                e.despawn();
+            }
+            self.pin_entity = None;
         }
     }
 }
@@ -400,20 +419,23 @@ pub struct SpawnFixedJointCommand {
 
 impl GameCommand for SpawnFixedJointCommand {
     fn apply(&mut self, world: &mut World) {
-        let visual_id = world.spawn((
-            Transform::from_xyz(self.anchor_a.x, self.anchor_a.y, 0.1),
-            Visibility::default(),
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-            Collider::ball(0.5),
-            Sensor,
-            Connector {
-                entity_a: self.entity_a,
-                entity_b: self.entity_b,
-                local_anchor_a: self.anchor_a,
-                local_anchor_b: self.anchor_b,
-            },
-        )).set_parent_in_place(self.entity_a).id();
+        let visual_id = world
+            .spawn((
+                Transform::from_xyz(self.anchor_a.x, self.anchor_a.y, 0.1),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+                Collider::ball(0.5),
+                Sensor,
+                Connector {
+                    entity_a: self.entity_a,
+                    entity_b: self.entity_b,
+                    local_anchor_a: self.anchor_a,
+                    local_anchor_b: self.anchor_b,
+                },
+            ))
+            .set_parent_in_place(self.entity_a)
+            .id();
 
         /*
         let line1 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)));
@@ -422,7 +444,7 @@ impl GameCommand for SpawnFixedJointCommand {
                 Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
                 Transform::from_translation(Vec3::Z * 0.1),
         )).id();
-        
+
         let line2 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0)));
         let v2 = world.spawn((
                 ShapeBundle { path: line2, ..default() },
@@ -448,13 +470,15 @@ impl GameCommand for SpawnFixedJointCommand {
                 .local_anchor1(self.anchor_a)
                 .local_anchor2(self.anchor_b);
         } else {
-             let t_a = world.get::<GlobalTransform>(self.entity_a).map(|t| t.compute_transform()).unwrap_or_default();
+            let t_a = world
+                .get::<GlobalTransform>(self.entity_a)
+                .map(|t| t.compute_transform())
+                .unwrap_or_default();
             let world_pos = t_a.transform_point(Vec3::new(self.anchor_a.x, self.anchor_a.y, 0.0));
 
-            let pin_id = world.spawn((
-                RigidBody::Fixed,
-                Transform::from_translation(world_pos),
-            )).id();
+            let pin_id = world
+                .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
+                .id();
 
             self.pin_entity = Some(pin_id);
             target_entity = pin_id;
@@ -464,28 +488,34 @@ impl GameCommand for SpawnFixedJointCommand {
                     connector.entity_b = Some(pin_id);
                 }
             }
-            
+
             joint_data = FixedJointBuilder::new()
                 .local_anchor1(self.anchor_a)
                 .local_anchor2(Vec2::ZERO);
         }
-        
-        world.entity_mut(self.entity_a).insert(ImpulseJoint::new(target_entity, joint_data));
+
+        world
+            .entity_mut(self.entity_a)
+            .insert(ImpulseJoint::new(target_entity, joint_data));
     }
 
     fn undo(&mut self, world: &mut World) {
-         if let Some(v) = self.visual_entity {
-             if let Ok(e) = world.get_entity_mut(v) { e.despawn(); }
-             self.visual_entity = None;
+        if let Some(v) = self.visual_entity {
+            if let Ok(e) = world.get_entity_mut(v) {
+                e.despawn();
+            }
+            self.visual_entity = None;
         }
 
         if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-             e.remove::<ImpulseJoint>();
+            e.remove::<ImpulseJoint>();
         }
 
         if let Some(p) = self.pin_entity {
-             if let Ok(e) = world.get_entity_mut(p) { e.despawn(); }
-             self.pin_entity = None;
+            if let Ok(e) = world.get_entity_mut(p) {
+                e.despawn();
+            }
+            self.pin_entity = None;
         }
     }
 }

@@ -58,7 +58,7 @@ fn setup_ground(mut commands: Commands) {
     // Visual representation (very wide rectangle to simulate infinity)
     let w = 100_000.0;
     let depth = 1000.0; // Deep enough to look like "ground"
-    
+
     // Centered rectangle for visual and collider alignment
     /*
     let shape = shapes::Rectangle {

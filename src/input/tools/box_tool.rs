@@ -2,9 +2,9 @@
 //!
 //! Click and drag to define the extents of a new box.
 
+use crate::input::commands::{CommandStack, SpawnBoxCommand};
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos};
-use crate::input::commands::{CommandStack, SpawnBoxCommand};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy_egui::EguiContexts;
@@ -82,11 +82,7 @@ fn box_tool_update(
         if mouse.just_released(MouseButton::Left) {
             // Spawn
             if should_spawn_box(size) {
-                let cmd = SpawnBoxCommand::new(
-                    center,
-                    size.x,
-                    size.y,
-                );
+                let cmd = SpawnBoxCommand::new(center, size.x, size.y);
 
                 commands.queue(move |world: &mut World| {
                     world.resource_scope(|world, mut stack: Mut<CommandStack>| {

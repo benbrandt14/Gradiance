@@ -126,7 +126,15 @@ fn draw_grid(
     settings.spacing = minor_spacing;
 
     match settings.grid_type {
-        GridType::Rectangular => draw_rectangular_grid(major_spacing, minor_spacing, left, right, bottom, top, &mut gizmos),
+        GridType::Rectangular => draw_rectangular_grid(
+            major_spacing,
+            minor_spacing,
+            left,
+            right,
+            bottom,
+            top,
+            &mut gizmos,
+        ),
         GridType::Isometric => {
             // Placeholder for future implementation
         }

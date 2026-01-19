@@ -3,10 +3,10 @@
 //! Allows the user to grab and move dynamic bodies using a mouse joint-like mechanic.
 //! Currently implemented by calculating a target anchor and drawing lines.
 
-use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
+use crate::GroundPlane;
+use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
-use crate::GroundPlane;
 use bevy_egui::EguiContexts;
 
 /// Plugin for the Drag Tool.
@@ -41,7 +41,10 @@ fn drag_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     // rapier_context: Res<RapierContext>,
-    mut query: Query<(&mut Transform, &Velocity), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
+    mut query: Query<
+        (&mut Transform, &Velocity),
+        (With<RigidBody>, With<Collider>, Without<GroundPlane>),
+    >,
     mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
@@ -63,31 +66,35 @@ fn drag_tool_update(
         /*
         rapier_context.intersections_with_point(current_pos, filter, |entity| {
             hit_entity = Some(entity);
-            false 
+            false
         });
         */
 
         if let Some(entity) = hit_entity {
-             if let Ok((transform, _)) = query.get(entity) {
+            if let Ok((transform, _)) = query.get(entity) {
                 data.dragged_entity = Some(entity);
 
                 // Calculate local anchor on the body
                 data.local_anchor = calculate_local_anchor(transform, current_pos);
 
                 // Spawn "Hand" kinematic body
-                let hand = commands.spawn((
-                    RigidBody::KinematicPositionBased,
-                    Transform::from_xyz(current_pos.x, current_pos.y, 0.0),
-                    Velocity::default(),
-                )).id();
+                let hand = commands
+                    .spawn((
+                        RigidBody::KinematicPositionBased,
+                        Transform::from_xyz(current_pos.x, current_pos.y, 0.0),
+                        Velocity::default(),
+                    ))
+                    .id();
                 data.hand_entity = Some(hand);
 
                 // Create RevoluteJoint (Mouse Joint) between Hand and Body
                 let joint = RevoluteJointBuilder::new()
                     .local_anchor1(Vec2::ZERO)
                     .local_anchor2(data.local_anchor);
-                
-                commands.entity(hand).insert(ImpulseJoint::new(entity, joint));
+
+                commands
+                    .entity(hand)
+                    .insert(ImpulseJoint::new(entity, joint));
             }
         }
     }
@@ -149,11 +156,7 @@ fn drag_tool_update(
                 );
                 let current_anchor_pos = transform.translation.truncate() + rotated_anchor;
 
-                gizmos.line_2d(
-                    current_anchor_pos,
-                    current_pos,
-                    Color::WHITE,
-                );
+                gizmos.line_2d(current_anchor_pos, current_pos, Color::WHITE);
             }
             Err(_) => {
                 // Entity lost. Cleanup.

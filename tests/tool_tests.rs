@@ -1,24 +1,24 @@
-use bevy::prelude::*;
-use bevy::math::DVec2;
 use bevy::gizmos::GizmoPlugin;
-use bevy::state::app::StatesPlugin;
 use bevy::input::InputPlugin as BevyInputPlugin;
+use bevy::math::DVec2;
+use bevy::prelude::*;
+use bevy::state::app::StatesPlugin;
 
-use gradiance::prelude::*; // avian2d, bevy
+use bevy_prototype_lyon::plugin::ShapePlugin;
 use gradiance::input::ToolState;
-use gradiance::input::cursor::CursorWorldPos;
-use gradiance::input::commands::CommandStack;
-use gradiance::input::selection::Selection;
-use gradiance::ui::grid::GridSettings;
 use gradiance::input::ZIndex;
+use gradiance::input::commands::CommandStack;
+use gradiance::input::cursor::CursorWorldPos;
+use gradiance::input::editable::{EditableBox, EditableCircle};
+use gradiance::input::selection::Selection;
 use gradiance::input::tools::box_tool::BoxToolPlugin;
 use gradiance::input::tools::circle_tool::CircleToolPlugin;
+use gradiance::input::tools::connector::ConnectorToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
-use gradiance::input::tools::connector::ConnectorToolPlugin;
-use gradiance::input::editable::{EditableBox, EditableCircle};
-use bevy_prototype_lyon::plugin::ShapePlugin;
-use rstest::{rstest, fixture};
+use gradiance::prelude::*; // avian2d, bevy
+use gradiance::ui::grid::GridSettings;
+use rstest::{fixture, rstest};
 
 #[fixture]
 fn app() -> App {
@@ -80,7 +80,9 @@ fn mouse_up(app: &mut App, button: MouseButton) {
 }
 
 fn set_tool(app: &mut App, state: ToolState) {
-    app.world_mut().resource_mut::<NextState<ToolState>>().set(state);
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(state);
     app.update(); // Process state change
 }
 
@@ -100,7 +102,9 @@ fn test_box_tool_spawn(mut app: App) {
     app.update(); // Process command
 
     // Verify
-    let mut query = app.world_mut().query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
+    let mut query = app
+        .world_mut()
+        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
     assert_eq!(query.iter(app.world()).count(), 1);
 }
 
@@ -120,7 +124,9 @@ fn test_circle_tool_spawn(mut app: App) {
     app.update(); // Process command
 
     // Verify
-    let mut query = app.world_mut().query_filtered::<Entity, (With<EditableCircle>, With<RigidBody>)>();
+    let mut query = app
+        .world_mut()
+        .query_filtered::<Entity, (With<EditableCircle>, With<RigidBody>)>();
     assert_eq!(query.iter(app.world()).count(), 1);
 }
 
@@ -159,7 +165,9 @@ fn test_polygon_tool_spawn(mut app: App) {
     app.update(); // Process command
 
     // Verify
-    let mut query = app.world_mut().query_filtered::<Entity, (With<RigidBody>, With<Collider>)>();
+    let mut query = app
+        .world_mut()
+        .query_filtered::<Entity, (With<RigidBody>, With<Collider>)>();
     // Note: We expect 1 entity.
     // Depending on pre-existing entities (ground?), count might be higher?
     // The fixture does NOT spawn ground.
@@ -169,13 +177,19 @@ fn test_polygon_tool_spawn(mut app: App) {
 #[rstest]
 fn test_selection_tool(mut app: App) {
     // 1. Spawn a box manually
-    let box_entity = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Collider::rectangle(2.0, 2.0),
-        Transform::from_xyz(10.0, 10.0, 0.0),
-        GlobalTransform::default(), // Important for spatial query
-        EditableBox { width: 2.0, height: 2.0 },
-    )).id();
+    let box_entity = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::rectangle(2.0, 2.0),
+            Transform::from_xyz(10.0, 10.0, 0.0),
+            GlobalTransform::default(), // Important for spatial query
+            EditableBox {
+                width: 2.0,
+                height: 2.0,
+            },
+        ))
+        .id();
 
     // Run physics update to populate spatial index
     // Needs multiple updates to ensure transform propagation and broadphase update
@@ -211,13 +225,19 @@ fn test_selection_tool(mut app: App) {
 #[rstest]
 fn test_joint_tool_pin(mut app: App) {
     // 1. Spawn a box
-    let box_entity = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Collider::rectangle(2.0, 2.0),
-        Transform::from_xyz(5.0, 5.0, 0.0),
-        GlobalTransform::default(),
-        EditableBox { width: 2.0, height: 2.0 },
-    )).id();
+    let box_entity = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::rectangle(2.0, 2.0),
+            Transform::from_xyz(5.0, 5.0, 0.0),
+            GlobalTransform::default(),
+            EditableBox {
+                width: 2.0,
+                height: 2.0,
+            },
+        ))
+        .id();
 
     // Update physics
     for _ in 0..5 {
@@ -242,10 +262,16 @@ fn test_joint_tool_pin(mut app: App) {
     // Then adds RevoluteJoint to visual_entity connecting entity_a and pin_entity.
 
     // So we check if box_entity has a child with RevoluteJoint.
-    let children = app.world().get::<Children>(box_entity).expect("Box should have children (visual)");
-    let has_joint = children.iter().any(|child| {
-         app.world().get::<RevoluteJoint>(child).is_some()
-    });
+    let children = app
+        .world()
+        .get::<Children>(box_entity)
+        .expect("Box should have children (visual)");
+    let has_joint = children
+        .iter()
+        .any(|child| app.world().get::<RevoluteJoint>(child).is_some());
 
-    assert!(has_joint, "Should have created a RevoluteJoint on a child entity");
+    assert!(
+        has_joint,
+        "Should have created a RevoluteJoint on a child entity"
+    );
 }

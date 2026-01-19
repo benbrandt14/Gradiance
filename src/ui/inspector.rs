@@ -110,7 +110,11 @@ fn inspector_ui(
         if let Some(rb) = rigid_body {
             ui.heading("Rigid Body");
             let mut current = *rb;
-            let options = [RigidBody::Dynamic, RigidBody::Fixed, RigidBody::KinematicPositionBased];
+            let options = [
+                RigidBody::Dynamic,
+                RigidBody::Fixed,
+                RigidBody::KinematicPositionBased,
+            ];
             egui::ComboBox::from_label("Type")
                 .selected_text(format!("{:?}", current))
                 .show_ui(ui, |ui| {
