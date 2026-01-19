@@ -16,7 +16,7 @@ use gradiance::input::tools::circle_tool::CircleToolPlugin;
 use gradiance::input::tools::connector::ConnectorToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
-use gradiance::prelude::*; // avian2d, bevy
+use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
 use rstest::{fixture, rstest};
 

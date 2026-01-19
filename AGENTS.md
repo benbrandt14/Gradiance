@@ -31,9 +31,9 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
 
 ## Technical Context & Patterns
 
-### 1. Physics (Avian 2D)
+### 1. Physics (avian( TODO convert to rapier) 2D)
 *   **Precision**: We use `f64` precision (double precision). Always use `DVec2` instead of `Vec2` for physics calculations.
-*   **Components**: Use `RigidBody`, `Collider` (from `avian2d::prelude`).
+*   **Components**: Use `RigidBody`, `Collider` (from `avian( TODO convert to rapier)2d::prelude`).
 *   **Joints**: Use `RevoluteJoint`, `PrismaticJoint`, etc.
 
 ### 2. Standard Tool Pattern
@@ -96,7 +96,7 @@ Goal: A stable infinite 2D world where you can spawn rigid bodies and move the c
 
 Milestones:
 
-    Core scaffolding: Bevy 0.18 app structure with avian2d (f64 precision enabled).
+    Core scaffolding: Bevy 0.18 app structure with avian( TODO convert to rapier)2d (f64 precision enabled).
 
     Input/Camera: Pan/Zoom camera and Mouse Picking.
 
@@ -104,7 +104,7 @@ Milestones:
 
 Tasks:
 
-    [ ] Initialize project with bevy, avian2d (feature: f64, parry-f64), bevy_egui.
+    [ ] Initialize project with bevy, avian( TODO convert to rapier)2d (feature: f64, parry-f64), bevy_egui.
 
     [ ] Implement Camera2dBundle with custom Pan/Zoom system (Orthographic scale).
 
@@ -174,7 +174,7 @@ Tasks:
 
     [ ] Implement Polygon Decomposition:
 
-        Use parry2d's convex decomposition on resulting shapes to generate valid Avian colliders.
+        Use parry2d's convex decomposition on resulting shapes to generate valid avian( TODO convert to rapier) colliders.
 
 Phase 3: The Mechanical Engineer (Months 5–6)
 
@@ -204,7 +204,7 @@ Tasks:
 
     [ ] Custom Constraint: Gear Joint:
 
-        Implement GeneralizedConstraint trait in Avian.
+        Implement GeneralizedConstraint trait in avian( TODO convert to rapier).
 
         Constraint Eq: ΔθA​+rΔθB​=0.
 
@@ -246,7 +246,7 @@ Tasks:
 
         Solver: Density constraint ρi​=∑W(rij​). Pressure force −∇p.
 
-        Coupling: Raycast from particles to Avian bodies. Apply impulse to body; reflect particle.
+        Coupling: Raycast from particles to avian( TODO convert to rapier) bodies. Apply impulse to body; reflect particle.
 
     [ ] Laser/Optics System:
 
@@ -320,7 +320,7 @@ Tasks:
 
         Integrate moonshine_save.
 
-        Serialize Avian components and Lyon paths to RON.
+        Serialize avian( TODO convert to rapier) components and Lyon paths to RON.
 
         Handle Entity ID remapping for Joints.
 

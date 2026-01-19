@@ -6,7 +6,6 @@ use crate::GroundPlane;
 use crate::input::editable::{EditableBox, EditableCircle};
 use bevy::prelude::*;
 use std::collections::HashSet;
-// use avian2d::prelude::*; // Not needed directly here if using standard math
 
 /// Resource storing the currently selected entities.
 #[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]

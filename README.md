@@ -2,7 +2,7 @@
 
 # Gradiance
 
-A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [Avian](https://github.com/Jondolf/avian) physics.
+A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [avian( TODO convert to rapier)](https://github.com/Jondolf/avian( TODO convert to rapier)) physics.
 
 ## Status
 * **Documentation**: Enforced via `deny(missing_docs)`.
@@ -19,7 +19,7 @@ Gradiance leverages Bevy's Entity-Component-System (ECS) architecture to create 
 
 ### Core Modules
 
-*   **`src/physics`**: Manages the Avian physics simulation.
+*   **`src/physics`**: Manages the avian( TODO convert to rapier) physics simulation.
     *   Configured for `f64` precision (double precision) to ensure stability in large worlds and complex mechanisms.
     *   High substep count (12-16) for stiff constraints.
     *   Will house custom constraints like Gears and Pulleys.
@@ -35,7 +35,7 @@ Gradiance leverages Bevy's Entity-Component-System (ECS) architecture to create 
 
 ### Physics Configuration
 
-*   **Engine**: Avian 2D (0.5)
+*   **Engine**: avian( TODO convert to rapier) 2D (0.5)
 *   **Precision**: `f64` (parry-f64)
 *   **Integrator**: XPBD (Extended Position-Based Dynamics)
 
@@ -45,7 +45,7 @@ Gradiance leverages Bevy's Entity-Component-System (ECS) architecture to create 
 src/
 ├── lib.rs          # GamePlugin definition (Root Plugin)
 ├── main.rs         # App entry point
-├── prelude.rs      # Common imports (Bevy, Avian, Gradiance types)
+├── prelude.rs      # Common imports (Bevy, avian( TODO convert to rapier), Gradiance types)
 ├── physics/        # Physics configuration & Custom Constraints
 ├── geometry/       # CSG & Vector Rendering
 ├── input/          # Tool State & Picking
