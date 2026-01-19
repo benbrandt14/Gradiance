@@ -16,7 +16,7 @@
 - [ ] be able to modify attributes of multiple selected objects
 - [ ] add cutting tool and CSG operations ( later on )
 - [ ] add save/load behavior
-- [ ] document anything else that bevy/avian can expose as right clickable
+- [ ] document anything else that bevy/avian( TODO convert to rapier) can expose as right clickable
 - [ ] mimic UI style of algodoo ( icons can be provided for some things )
 - [ ] add lasers / optics behavior
 - [ ] add translucency

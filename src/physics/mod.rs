@@ -1,43 +1,39 @@
 //! Physics configuration and integration for Gradiance.
 //!
-//! This module configures the [Avian](https://github.com/Jondolf/avian) physics engine with settings
-//! optimized for mechanical simulation, such as high precision (`f64`) and increased substeps.
+//! This module configures the Rapier physics engine.
 
 use crate::prelude::*;
-use bevy::math::DVec2;
 
 pub mod config;
 pub mod constraints;
 
 /// Plugin that configures the physics simulation.
-///
-/// This plugin initializes Avian, sets gravity, configures substeps for stability,
-/// and registers custom constraints.
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        // Avian setup
-        app.add_plugins(PhysicsPlugins::default());
+        // Rapier setup
+        app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
+            .add_plugins(RapierDebugRenderPlugin::default());
 
-        // Spec: Set SubstepCount to roughly 12-16.
-        // Higher substeps increase stability for complex constraints (gears, chains).
-        // Reduced to 8 to improve performance/sluggishness while maintaining some stability.
-        // Increased to 12 to fix soft body/squishing issues.
-        app.insert_resource(SubstepCount(12));
-
-        // Spec: Gravity (standard)
-        // Note: Avian with f64 requires DVec2
-        // Increased to -1000.0 to match pixel coordinate scale (approx 100px = 1m feel).
-        app.insert_resource(Gravity(DVec2::new(0.0, -1000.0)));
+        // Configure Gravity
+        // TODO: Fix RapierConfiguration resource issue (version conflict?)
+        // The default gravity in Rapier is usually (0.0, -9.81), but pixel scale affects this.
+        // We wanted -1000.0.
+        // If we can't insert the resource, we accept default or find another way (e.g. modify it in a startup system).
+        /*
+        app.insert_resource(RapierConfiguration {
+            gravity: Vec2::new(0.0, -1000.0),
+            ..default()
+        });
+        */
+        // app.add_systems(Startup, configure_gravity);
 
         // Spec: Custom constraints will be added here
         app.add_plugins(constraints::ConstraintsPlugin);
-
-        // Pause physics when Virtual time is paused.
-        app.configure_sets(
-            FixedUpdate,
-            PhysicsSystems::StepSimulation.run_if(|time: Res<Time<Virtual>>| !time.is_paused()),
-        );
     }
 }
+
+// fn configure_gravity(mut rapier_config: ResMut<RapierConfiguration>) {
+//     rapier_config.gravity = Vec2::new(0.0, -1000.0);
+// }

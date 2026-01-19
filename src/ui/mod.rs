@@ -20,7 +20,7 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         // Egui setup
-        app.add_plugins(EguiPlugin::default());
+        app.add_plugins(EguiPlugin);
 
         app.add_plugins((
             panels::PanelsPlugin,

@@ -2,12 +2,11 @@
 //!
 //! Click and drag to define the extents of a new box.
 
+use crate::input::commands::{CommandStack, SpawnBoxCommand};
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos};
-use crate::input::commands::{CommandStack, SpawnBoxCommand};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
-use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 
 /// Plugin for the Box Tool.
@@ -23,14 +22,14 @@ impl Plugin for BoxToolPlugin {
 
 #[derive(Resource, Default)]
 struct BoxToolData {
-    drag_start: Option<DVec2>,
+    drag_start: Option<Vec2>,
 }
 
 fn box_tool_reset(mut data: ResMut<BoxToolData>) {
     data.drag_start = None;
 }
 
-fn calculate_box_geometry(start: DVec2, end: DVec2) -> (DVec2, DVec2) {
+fn calculate_box_geometry(start: Vec2, end: Vec2) -> (Vec2, Vec2) {
     let min = start.min(end);
     let max = start.max(end);
     let size = max - min;
@@ -38,7 +37,7 @@ fn calculate_box_geometry(start: DVec2, end: DVec2) -> (DVec2, DVec2) {
     (size, center)
 }
 
-fn should_spawn_box(size: DVec2) -> bool {
+fn should_spawn_box(size: Vec2) -> bool {
     size.x > 0.01 && size.y > 0.01
 }
 
@@ -74,8 +73,8 @@ fn box_tool_update(
         if mouse.pressed(MouseButton::Left) {
             // Draw preview
             gizmos.rect_2d(
-                Isometry2d::from_translation(Vec2::new(center.x as f32, center.y as f32)),
-                Vec2::new(size.x as f32, size.y as f32),
+                Isometry2d::from_translation(Vec2::new(center.x, center.y)),
+                Vec2::new(size.x, size.y),
                 Color::WHITE,
             );
         }
@@ -83,11 +82,7 @@ fn box_tool_update(
         if mouse.just_released(MouseButton::Left) {
             // Spawn
             if should_spawn_box(size) {
-                let cmd = SpawnBoxCommand::new(
-                    Vec2::new(center.x as f32, center.y as f32),
-                    size.x as f32,
-                    size.y as f32,
-                );
+                let cmd = SpawnBoxCommand::new(center, size.x, size.y);
 
                 commands.queue(move |world: &mut World| {
                     world.resource_scope(|world, mut stack: Mut<CommandStack>| {
@@ -108,23 +103,23 @@ mod tests {
 
     #[rstest]
     #[case(
-        DVec2::new(0.0, 0.0),
-        DVec2::new(10.0, 10.0),
-        DVec2::new(10.0, 10.0),
-        DVec2::new(5.0, 5.0)
+        Vec2::new(0.0, 0.0),
+        Vec2::new(10.0, 10.0),
+        Vec2::new(10.0, 10.0),
+        Vec2::new(5.0, 5.0)
     )]
     #[case(
-        DVec2::new(10.0, 10.0),
-        DVec2::new(0.0, 0.0),
-        DVec2::new(10.0, 10.0),
-        DVec2::new(5.0, 5.0)
+        Vec2::new(10.0, 10.0),
+        Vec2::new(0.0, 0.0),
+        Vec2::new(10.0, 10.0),
+        Vec2::new(5.0, 5.0)
     )]
-    #[case(DVec2::new(-5.0, -5.0), DVec2::new(5.0, 5.0), DVec2::new(10.0, 10.0), DVec2::new(0.0, 0.0))]
+    #[case(Vec2::new(-5.0, -5.0), Vec2::new(5.0, 5.0), Vec2::new(10.0, 10.0), Vec2::new(0.0, 0.0))]
     fn test_calculate_box_geometry(
-        #[case] start: DVec2,
-        #[case] end: DVec2,
-        #[case] expected_size: DVec2,
-        #[case] expected_center: DVec2,
+        #[case] start: Vec2,
+        #[case] end: Vec2,
+        #[case] expected_size: Vec2,
+        #[case] expected_center: Vec2,
     ) {
         let (size, center) = calculate_box_geometry(start, end);
         assert_eq!(size, expected_size);
@@ -132,13 +127,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(DVec2::new(1.0, 1.0), true)]
-    #[case(DVec2::new(0.02, 0.02), true)]
-    #[case(DVec2::new(0.01, 0.01), false)]
-    #[case(DVec2::new(0.009, 0.009), false)]
-    #[case(DVec2::new(1.0, 0.009), false)]
-    #[case(DVec2::new(0.009, 1.0), false)]
-    fn test_should_spawn_box(#[case] size: DVec2, #[case] expected: bool) {
+    #[case(Vec2::new(1.0, 1.0), true)]
+    #[case(Vec2::new(0.02, 0.02), true)]
+    #[case(Vec2::new(0.01, 0.01), false)]
+    #[case(Vec2::new(0.009, 0.009), false)]
+    #[case(Vec2::new(1.0, 0.009), false)]
+    #[case(Vec2::new(0.009, 1.0), false)]
+    fn test_should_spawn_box(#[case] size: Vec2, #[case] expected: bool) {
         assert_eq!(should_spawn_box(size), expected);
     }
 }

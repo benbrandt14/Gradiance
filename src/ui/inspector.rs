@@ -6,7 +6,7 @@
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::selection::Selection;
 use crate::prelude::*;
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use bevy_egui::{EguiContexts, egui};
 // use bevy_prototype_lyon::prelude::*;
 
 /// Plugin for the Inspector UI.
@@ -14,7 +14,7 @@ pub struct InspectorPlugin;
 
 impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(EguiPrimaryContextPass, inspector_ui);
+        app.add_systems(Update, inspector_ui);
     }
 }
 
@@ -23,14 +23,11 @@ fn inspector_ui(
     selection: Res<Selection>,
     mut query: Query<(
         Option<&mut Transform>,
-        Option<&RigidBody>, // Avian RigidBody is usually changed by command, but let's see.
-        // Avian components:
+        Option<&RigidBody>,
         Option<&mut Friction>,
         Option<&mut Restitution>,
-        // Editable shapes
         Option<&mut EditableBox>,
         Option<&mut EditableCircle>,
-        // TODO: Re-enable Fill and Stroke once bevy_prototype_lyon is compatible with Bevy 0.18 Component trait
         // Option<&mut Fill>,
         // Option<&mut Stroke>,
     )>,
@@ -55,10 +52,7 @@ fn inspector_ui(
         return;
     };
 
-    let ctx = match contexts.ctx_mut() {
-        Ok(ctx) => ctx,
-        _ => return,
-    };
+    let ctx = contexts.ctx_mut();
 
     egui::SidePanel::right("inspector_panel").show(ctx, |ui| {
         ui.heading("Inspector");
@@ -87,6 +81,9 @@ fn inspector_ui(
 
         if let Some(ref mut box_shape) = editable_box {
             ui.heading("Box Dimensions");
+            // box_shape is EditableBox { width: f64, height: f64 }
+            // Egui DragValue works with f64 or f32.
+            // If EditableBox uses f64, fine.
             ui.add(
                 egui::DragValue::new(&mut box_shape.width)
                     .speed(0.1)
@@ -113,7 +110,11 @@ fn inspector_ui(
         if let Some(rb) = rigid_body {
             ui.heading("Rigid Body");
             let mut current = *rb;
-            let options = [RigidBody::Dynamic, RigidBody::Static, RigidBody::Kinematic];
+            let options = [
+                RigidBody::Dynamic,
+                RigidBody::Fixed,
+                RigidBody::KinematicPositionBased,
+            ];
             egui::ComboBox::from_label("Type")
                 .selected_text(format!("{:?}", current))
                 .show_ui(ui, |ui| {
@@ -122,9 +123,6 @@ fn inspector_ui(
                             .selectable_value(&mut current, option, format!("{:?}", option))
                             .clicked()
                         {
-                            // Avian requires removing old and inserting new for RigidBody change usually?
-                            // Or just overwriting the component.
-                            // Since RigidBody is a component, we can just insert the new one.
                             commands.entity(entity).insert(current);
                         }
                     }
@@ -134,8 +132,7 @@ fn inspector_ui(
 
         if let Some(ref mut f) = friction {
             ui.heading("Friction");
-            ui.add(egui::Slider::new(&mut f.dynamic_coefficient, 0.0..=1.0).text("Dynamic"));
-            ui.add(egui::Slider::new(&mut f.static_coefficient, 0.0..=1.0).text("Static"));
+            ui.add(egui::Slider::new(&mut f.coefficient, 0.0..=1.0).text("Coefficient"));
             ui.separator();
         }
 
@@ -145,39 +142,33 @@ fn inspector_ui(
             ui.separator();
         }
 
-        // if let Some(ref mut f) = fill {
-        //     ui.heading("Fill Color");
-        //     // Bevy Color to Egui Color
-        //     // Color is an enum in Bevy 0.18 (Srgba, etc.)
-        //     // We need to convert back and forth.
-        //     // Simplified: assume Srgba or convert to LinearRgba
-        //     let mut color_linear = f.color.to_linear();
-        //     let mut rgba = [color_linear.red, color_linear.green, color_linear.blue, color_linear.alpha];
-        //     if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-        //          f.color = Color::LinearRgba(LinearRgba::from_f32_array(rgba));
-        //     }
-        //     ui.separator();
-        // }
+        /*
+        if let Some(ref mut f) = fill {
+            ui.heading("Fill Color");
+            // Color is usually Srgba in 0.15.
+            if let Color::Srgba(c) = &mut f.color {
+                let mut rgba = [c.red, c.green, c.blue, c.alpha];
+                if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+                     f.color = Color::srgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+                }
+            } else {
+                 // Fallback or conversion
+                 ui.label("Complex Color (TODO)");
+            }
+            ui.separator();
+        }
 
-        // if let Some(ref mut s) = stroke {
-        //     ui.heading("Stroke");
-        //      let mut color_linear = s.color.to_linear();
-        //     let mut rgba = [color_linear.red, color_linear.green, color_linear.blue, color_linear.alpha];
-        //     if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
-        //          s.color = Color::LinearRgba(LinearRgba::from_f32_array(rgba));
-        //     }
-        //     // Options is private in Stroke?
-        //     // Stroke options are checked via options().
-        //     // But we can recreate the stroke.
-        //     // Stroke::new(color, width)
-        //     // But width is not easily accessible if options are private?
-        //     // bevy_prototype_lyon Stroke struct has `pub options: StrokeOptions`.
-        //     // Wait, I should check docs or source if possible.
-        //     // Assuming I can't easily edit width without potentially reconstructing, I'll stick to color.
-        //     // Or I can try to access options.
-        //     // Let's assume options are public for now.
-        //      ui.add(egui::DragValue::new(&mut s.options.line_width).speed(0.1).prefix("Width: "));
-        //     ui.separator();
-        // }
+        if let Some(ref mut s) = stroke {
+            ui.heading("Stroke");
+             if let Color::Srgba(c) = &mut s.color {
+                let mut rgba = [c.red, c.green, c.blue, c.alpha];
+                if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+                     s.color = Color::srgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+                }
+            }
+             ui.add(egui::DragValue::new(&mut s.options.line_width).speed(0.1).prefix("Width: "));
+            ui.separator();
+        }
+        */
     });
 }

@@ -3,7 +3,6 @@
 //! Visualizes a grid on the background and provides snapping utility functions.
 
 use crate::prelude::*;
-use bevy::math::DVec2;
 use bevy::window::PrimaryWindow;
 
 /// Plugin for rendering the grid and handling grid settings.
@@ -38,7 +37,7 @@ pub struct GridSettings {
     /// Whether tools should snap positions to the grid.
     pub snap: bool,
     /// The distance between grid lines (in world units).
-    pub spacing: f64,
+    pub spacing: f32,
     /// The type of grid to display.
     pub grid_type: GridType,
 }
@@ -64,11 +63,11 @@ impl Default for GridSettings {
 /// # Returns
 ///
 /// The snapped position.
-pub fn snap_to_grid(pos: DVec2, spacing: f64) -> DVec2 {
+pub fn snap_to_grid(pos: Vec2, spacing: f32) -> Vec2 {
     if spacing <= 0.0001 {
         return pos;
     }
-    DVec2::new(
+    Vec2::new(
         (pos.x / spacing).round() * spacing,
         (pos.y / spacing).round() * spacing,
     )
@@ -124,10 +123,18 @@ fn draw_grid(
 
     // Update grid settings with current spacing for tools to use
     // Use minor spacing for finer snapping
-    settings.spacing = minor_spacing as f64;
+    settings.spacing = minor_spacing;
 
     match settings.grid_type {
-        GridType::Rectangular => draw_rectangular_grid(major_spacing, minor_spacing, left, right, bottom, top, &mut gizmos),
+        GridType::Rectangular => draw_rectangular_grid(
+            major_spacing,
+            minor_spacing,
+            left,
+            right,
+            bottom,
+            top,
+            &mut gizmos,
+        ),
         GridType::Isometric => {
             // Placeholder for future implementation
         }
@@ -176,11 +183,11 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case(DVec2::new(1.1, 1.1), 1.0, DVec2::new(1.0, 1.0))]
-    #[case(DVec2::new(1.6, 1.6), 1.0, DVec2::new(2.0, 2.0))]
-    #[case(DVec2::new(0.0, 0.0), 1.0, DVec2::new(0.0, 0.0))]
-    #[case(DVec2::new(1.0, 1.0), 0.0, DVec2::new(1.0, 1.0))] // Spacing 0 should not snap
-    fn test_snap_to_grid(#[case] pos: DVec2, #[case] spacing: f64, #[case] expected: DVec2) {
+    #[case(Vec2::new(1.1, 1.1), 1.0, Vec2::new(1.0, 1.0))]
+    #[case(Vec2::new(1.6, 1.6), 1.0, Vec2::new(2.0, 2.0))]
+    #[case(Vec2::new(0.0, 0.0), 1.0, Vec2::new(0.0, 0.0))]
+    #[case(Vec2::new(1.0, 1.0), 0.0, Vec2::new(1.0, 1.0))] // Spacing 0 should not snap
+    fn test_snap_to_grid(#[case] pos: Vec2, #[case] spacing: f32, #[case] expected: Vec2) {
         let result = snap_to_grid(pos, spacing);
         assert!((result.x - expected.x).abs() < 0.0001);
         assert!((result.y - expected.y).abs() < 0.0001);

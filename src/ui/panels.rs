@@ -7,14 +7,14 @@ use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::window::PrimaryWindow;
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use bevy_egui::{EguiContexts, egui};
 
 /// Plugin for the main UI panels.
 pub struct PanelsPlugin;
 
 impl Plugin for PanelsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(EguiPrimaryContextPass, (sidebar_ui, top_panel_ui));
+        app.add_systems(Update, (sidebar_ui, top_panel_ui));
     }
 }
 
@@ -36,10 +36,7 @@ fn sidebar_ui(
         return;
     }
 
-    let ctx = match contexts.ctx_mut() {
-        Ok(ctx) => ctx,
-        _ => return,
-    };
+    let ctx = contexts.ctx_mut();
 
     egui::SidePanel::left("tools_panel").show(ctx, |ui| {
         ui.heading("Tools");
@@ -53,9 +50,6 @@ fn sidebar_ui(
             ("Polygon", ToolState::Polygon),
             ("Axle", ToolState::RevoluteJoint),
             ("Fix", ToolState::Weld),
-            // Placeholder for other tools
-            // ("Cut", ToolState::Cut),
-            // ("Sketch", ToolState::Sketch),
         ];
 
         for (name, state) in tools {
@@ -88,10 +82,7 @@ fn top_panel_ui(
         return;
     }
 
-    let ctx = match contexts.ctx_mut() {
-        Ok(ctx) => ctx,
-        _ => return,
-    };
+    let ctx = contexts.ctx_mut();
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         ui.horizontal(|ui| {

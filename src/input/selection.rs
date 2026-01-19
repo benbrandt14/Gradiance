@@ -2,11 +2,10 @@
 //!
 //! Handles the currently selected entity and renders a highlight gizmo around it.
 
-use crate::input::editable::{EditableBox, EditableCircle};
 use crate::GroundPlane;
+use crate::input::editable::{EditableBox, EditableCircle};
 use bevy::prelude::*;
 use std::collections::HashSet;
-// use avian2d::prelude::*; // Not needed directly here if using standard math
 
 /// Resource storing the currently selected entities.
 #[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
@@ -52,7 +51,7 @@ fn handle_delete_key(
 ) {
     if keys.just_pressed(KeyCode::Delete) || keys.just_pressed(KeyCode::Backspace) {
         for entity in selection.0.drain() {
-             commands.entity(entity).despawn();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -96,11 +95,7 @@ fn draw_selection_highlight(
                 );
                 // Draw normal indicators
                 for x in (-10..=10).map(|i| i as f32 * 50.0) {
-                    gizmos.line_2d(
-                        iso * Vec2::new(x, 0.0),
-                        iso * Vec2::new(x, 10.0),
-                        color,
-                    );
+                    gizmos.line_2d(iso * Vec2::new(x, 0.0), iso * Vec2::new(x, 10.0), color);
                 }
             } else {
                 // Fallback

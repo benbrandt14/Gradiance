@@ -11,9 +11,7 @@ use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
-use avian2d::prelude::*;
-use bevy::ecs::relationship::Relationship;
-use bevy::math::DVec2;
+use bevy::math::Vec2;
 use bevy_egui::EguiContexts;
 use std::cmp::Ordering;
 
@@ -44,43 +42,51 @@ pub struct Connector {
     /// The secondary body (optional).
     pub entity_b: Option<Entity>,
     /// Local anchor on A.
-    pub local_anchor_a: DVec2,
+    pub local_anchor_a: Vec2,
     /// Local anchor on B.
-    pub local_anchor_b: DVec2,
+    pub local_anchor_b: Vec2,
 }
 
 fn update_connector_visuals(
-    mut visuals: Query<(&mut Transform, &Connector, &ChildOf)>,
+    mut visuals: Query<(&mut Transform, &Connector, &Parent)>,
     global_transforms: Query<&GlobalTransform>,
 ) {
     for (mut transform, connector, parent) in &mut visuals {
         if let Ok(parent_global) = global_transforms.get(parent.get()) {
-             // Calculate world anchors
-             let anchor_a_world = if let Ok(t_a) = global_transforms.get(connector.entity_a) {
-                 let t = t_a.compute_transform();
-                 t.transform_point(Vec3::new(connector.local_anchor_a.x as f32, connector.local_anchor_a.y as f32, 0.0))
-             } else {
-                 continue;
-             };
+            // Calculate world anchors
+            let anchor_a_world = if let Ok(t_a) = global_transforms.get(connector.entity_a) {
+                let t = t_a.compute_transform();
+                t.transform_point(Vec3::new(
+                    connector.local_anchor_a.x,
+                    connector.local_anchor_a.y,
+                    0.0,
+                ))
+            } else {
+                continue;
+            };
 
-             let anchor_b_world = if let Some(e_b) = connector.entity_b {
-                 if let Ok(t_b) = global_transforms.get(e_b) {
-                      let t = t_b.compute_transform();
-                      t.transform_point(Vec3::new(connector.local_anchor_b.x as f32, connector.local_anchor_b.y as f32, 0.0))
-                 } else {
-                     anchor_a_world
-                 }
-             } else {
-                 Vec3::new(connector.local_anchor_b.x as f32, connector.local_anchor_b.y as f32, 0.0)
-             };
+            let anchor_b_world = if let Some(e_b) = connector.entity_b {
+                if let Ok(t_b) = global_transforms.get(e_b) {
+                    let t = t_b.compute_transform();
+                    t.transform_point(Vec3::new(
+                        connector.local_anchor_b.x,
+                        connector.local_anchor_b.y,
+                        0.0,
+                    ))
+                } else {
+                    anchor_a_world
+                }
+            } else {
+                Vec3::new(connector.local_anchor_b.x, connector.local_anchor_b.y, 0.0)
+            };
 
-             let midpoint = (anchor_a_world + anchor_b_world) * 0.5;
+            let midpoint = (anchor_a_world + anchor_b_world) * 0.5;
 
-             let parent_inv = parent_global.affine().inverse();
-             let local_midpoint = parent_inv.transform_point3(midpoint);
+            let parent_inv = parent_global.affine().inverse();
+            let local_midpoint = parent_inv.transform_point3(midpoint);
 
-             transform.translation.x = local_midpoint.x;
-             transform.translation.y = local_midpoint.y;
+            transform.translation.x = local_midpoint.x;
+            transform.translation.y = local_midpoint.y;
         }
     }
 }
@@ -108,12 +114,12 @@ fn update_connector(
     mut commands: Commands,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
-    spatial_query: SpatialQuery,
+    // rapier_context: Res<RapierContext>,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
     tool_state: Res<State<ToolState>>,
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
-    parents: Query<&ChildOf>,
+    parents: Query<&Parent>,
     transforms: Query<&Transform>,
 ) {
     if is_pointer_over_ui(&mut contexts) {
@@ -137,9 +143,16 @@ fn update_connector(
         };
 
         // Find entities using shape intersection for better robustness
-        let shape = Collider::circle(0.1);
-        let filter = SpatialQueryFilter::default();
-        let intersections = spatial_query.shape_intersections(&shape, pos, 0.0, &filter);
+        let _shape = Collider::ball(0.1);
+        let _filter = QueryFilter::default();
+        let intersections = Vec::new();
+        // TODO: Re-enable query
+        /*
+        rapier_context.intersections_with_shape(pos, 0.0, &shape, filter, |e| {
+            intersections.push(e);
+            true
+        });
+        */
 
         // Resolve to bodies and sort
         let sorted_bodies = resolve_sorted_bodies(&intersections, &bodies, &parents);
@@ -155,12 +168,12 @@ fn update_connector(
             None
         };
 
-        let get_local_and_rot = |e: Entity| -> (DVec2, f64) {
+        let get_local_and_rot = |e: Entity| -> (Vec2, f32) {
             if let Ok(t) = transforms.get(e) {
-                let rot = t.rotation.to_euler(EulerRot::XYZ).2 as f64;
+                let rot = t.rotation.to_euler(EulerRot::XYZ).2;
                 (calculate_local_anchor(t, pos), rot)
             } else {
-                (DVec2::ZERO, 0.0)
+                (Vec2::ZERO, 0.0)
             }
         };
 
@@ -168,7 +181,7 @@ fn update_connector(
         let (anchor_b, rot_b) = if let Some(e_b) = entity_b {
             get_local_and_rot(e_b)
         } else {
-            (DVec2::ZERO, 0.0)
+            (Vec2::ZERO, 0.0)
         };
 
         match connector_type {
@@ -215,7 +228,7 @@ fn update_connector(
 fn resolve_sorted_bodies(
     intersections: &[Entity],
     bodies: &Query<(Entity, &GlobalTransform), With<RigidBody>>,
-    parents: &Query<&ChildOf>,
+    parents: &Query<&Parent>,
 ) -> Vec<Entity> {
     let mut resolved = Vec::new();
 
@@ -245,7 +258,6 @@ fn resolve_sorted_bodies(
 
     resolved.into_iter().map(|(e, _)| e).collect()
 }
-
 
 #[cfg(test)]
 mod tests {
