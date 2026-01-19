@@ -286,9 +286,12 @@ impl GameCommand for SpawnJointCommand {
 
         let circle_inner = GeometryBuilder::build_as(&shapes::Circle { radius: 2.0, ..default() });
         let inner = world.spawn((
-             ShapeBundle { path: circle_inner, ..default() },
+             ShapeBundle {
+                 path: circle_inner,
+                 transform: Transform::from_translation(Vec3::Z * 0.1),
+                 ..default()
+             },
              Fill::color(Color::WHITE),
-             Transform::from_translation(Vec3::Z * 0.1),
         )).id();
         world.entity_mut(visual_id).add_child(inner);
 
@@ -401,16 +404,22 @@ impl GameCommand for SpawnFixedJointCommand {
 
         let line1 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)));
         let v1 = world.spawn((
-                ShapeBundle { path: line1, ..default() },
+                ShapeBundle {
+                    path: line1,
+                    transform: Transform::from_translation(Vec3::Z * 0.1),
+                    ..default()
+                },
                 Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
-                Transform::from_translation(Vec3::Z * 0.1),
         )).id();
 
         let line2 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0)));
         let v2 = world.spawn((
-                ShapeBundle { path: line2, ..default() },
+                ShapeBundle {
+                    path: line2,
+                    transform: Transform::from_translation(Vec3::Z * 0.1),
+                    ..default()
+                },
                 Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
-                Transform::from_translation(Vec3::Z * 0.1),
         )).id();
         world.entity_mut(visual_id).add_children(&[v1, v2]);
 
