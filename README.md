@@ -2,7 +2,7 @@
 
 # Gradiance
 
-A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine and [avian( TODO convert to rapier)](https://github.com/Jondolf/avian( TODO convert to rapier)) physics.
+A sloppy open-source 2D physics sandbox inspired by **Algodoo**, built in **Rust** using the [Bevy](https://bevyengine.org/) game engine (v0.15.3) and [Rapier2d](https://rapier.rs/) physics.
 
 ## Status
 * **Documentation**: Enforced via `deny(missing_docs)`.
@@ -19,12 +19,12 @@ Gradiance leverages Bevy's Entity-Component-System (ECS) architecture to create 
 
 ### Core Modules
 
-*   **`src/physics`**: Manages the avian( TODO convert to rapier) physics simulation.
-    *   Configured for `f64` precision (double precision) to ensure stability in large worlds and complex mechanisms.
+*   **`src/physics`**: Manages the Rapier2d physics simulation.
+    *   Uses `f32` precision (Rapier2d default).
     *   High substep count (12-16) for stiff constraints.
     *   Will house custom constraints like Gears and Pulleys.
 *   **`src/geometry`**: Handles vector rendering and Constructive Solid Geometry (CSG).
-    *   Uses `bevy_prototype_lyon` for vector graphics.
+    *   Uses `bevy_prototype_lyon` (currently disabled due to compatibility issues) for vector graphics.
     *   Uses `clipper2` for boolean operations (Cut/Weld) on geometry.
 *   **`src/input`**: Manages user interaction and tool states.
     *   Implements a `ToolState` machine (Select, Drag, Cut, Sketch, etc.).
@@ -35,9 +35,9 @@ Gradiance leverages Bevy's Entity-Component-System (ECS) architecture to create 
 
 ### Physics Configuration
 
-*   **Engine**: avian( TODO convert to rapier) 2D (0.5)
-*   **Precision**: `f64` (parry-f64)
-*   **Integrator**: XPBD (Extended Position-Based Dynamics)
+*   **Engine**: Rapier2d (0.28)
+*   **Precision**: `f32` (Rapier2d default)
+*   **Integrator**: Impulse-based (Projected Gauss-Seidel)
 
 ## File Structure
 
@@ -45,7 +45,7 @@ Gradiance leverages Bevy's Entity-Component-System (ECS) architecture to create 
 src/
 ├── lib.rs          # GamePlugin definition (Root Plugin)
 ├── main.rs         # App entry point
-├── prelude.rs      # Common imports (Bevy, avian( TODO convert to rapier), Gradiance types)
+├── prelude.rs      # Common imports (Bevy, Rapier2d, Gradiance types)
 ├── physics/        # Physics configuration & Custom Constraints
 ├── geometry/       # CSG & Vector Rendering
 ├── input/          # Tool State & Picking
