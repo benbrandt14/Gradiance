@@ -9,6 +9,7 @@ use bevy_egui::EguiPlugin;
 
 pub mod context_menu;
 pub mod grid;
+pub mod icons;
 pub mod inspector;
 pub mod panels;
 
@@ -23,6 +24,7 @@ impl Plugin for UiPlugin {
         app.add_plugins(EguiPlugin);
 
         app.add_plugins((
+            icons::IconsPlugin,
             panels::PanelsPlugin,
             inspector::InspectorPlugin,
             context_menu::ContextMenuPlugin,
