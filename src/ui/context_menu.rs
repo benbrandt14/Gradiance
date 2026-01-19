@@ -3,6 +3,7 @@
 //! Provides a right-click context menu for entities, allowing actions like deletion,
 //! property inspection, and state toggling.
 
+use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -34,9 +35,8 @@ fn context_menu_input(
     rapier_context_query: Query<&RapierContext>,
     mut contexts: EguiContexts,
 ) {
-    let ctx = contexts.ctx_mut();
     // If over area, don't trigger game context menu unless we are already showing it (logic handled later)
-    if ctx.is_pointer_over_area() {
+    if is_pointer_over_ui(&mut contexts) {
         if mouse.just_pressed(MouseButton::Right) {
             return;
         }
@@ -74,8 +74,7 @@ fn context_menu_input(
             state.entity = None;
         }
     } else if mouse.just_pressed(MouseButton::Left) {
-        let ctx = contexts.ctx_mut();
-        if !ctx.is_pointer_over_area() {
+        if !is_pointer_over_ui(&mut contexts) {
             state.position = None;
             state.entity = None;
         }

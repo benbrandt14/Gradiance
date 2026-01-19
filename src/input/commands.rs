@@ -102,6 +102,7 @@ impl GameCommand for SpawnBoxCommand {
             .spawn((
                 ShapeBundle {
                     path: GeometryBuilder::build_as(&shape),
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
                     ..default()
                 },
                 Fill::color(Color::srgb(0.5, 0.5, 1.0)),
@@ -113,7 +114,6 @@ impl GameCommand for SpawnBoxCommand {
                     width: self.width as f64,
                     height: self.height as f64,
                 },
-                Transform::from_xyz(self.position.x, self.position.y, z),
                 // PickableBundle::default(), // Picking disabled due to incompatibility
             ))
             .id();
@@ -154,6 +154,7 @@ impl GameCommand for SpawnCircleCommand {
             .spawn((
                 ShapeBundle {
                     path: GeometryBuilder::build_as(&shape),
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
                     ..default()
                 },
                 Fill::color(Color::srgb(1.0, 0.5, 0.5)),
@@ -163,7 +164,6 @@ impl GameCommand for SpawnCircleCommand {
                 EditableCircle {
                     radius: self.radius as f64,
                 },
-                Transform::from_xyz(self.position.x, self.position.y, z),
                 // PickableBundle::default(),
             ))
             .id();
@@ -215,13 +215,13 @@ impl GameCommand for SpawnPolygonCommand {
             .spawn((
                 ShapeBundle {
                     path: GeometryBuilder::build_as(&shape),
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
                     ..default()
                 },
                 Fill::color(Color::srgb(0.5, 1.0, 0.5)),
                 Stroke::new(Color::BLACK, 0.1),
                 RigidBody::Dynamic,
                 collider,
-                Transform::from_xyz(self.position.x, self.position.y, z),
                 // PickableBundle::default(),
             ))
             .id();

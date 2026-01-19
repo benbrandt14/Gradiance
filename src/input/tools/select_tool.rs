@@ -3,6 +3,7 @@
 //! Simply allows clicking on entities to populate the `Selection` resource.
 
 use crate::GroundPlane;
+use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
@@ -51,8 +52,7 @@ fn select_tool_update(
     grid_settings: Res<GridSettings>,
 ) {
     // Prevent selection if over UI
-    let ctx = contexts.ctx_mut();
-    if ctx.is_pointer_over_area() && !data.is_moving && data.drag_start.is_none() {
+    if is_pointer_over_ui(&mut contexts) && !data.is_moving && data.drag_start.is_none() {
         return;
     }
 
