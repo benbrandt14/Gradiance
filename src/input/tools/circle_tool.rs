@@ -7,7 +7,6 @@ use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
-use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 
 /// Plugin for the Circle Tool.
@@ -26,18 +25,18 @@ impl Plugin for CircleToolPlugin {
 
 #[derive(Resource, Default)]
 struct CircleToolData {
-    drag_start: Option<DVec2>,
+    drag_start: Option<Vec2>,
 }
 
 fn circle_tool_reset(mut data: ResMut<CircleToolData>) {
     data.drag_start = None;
 }
 
-fn calculate_radius(start: DVec2, end: DVec2) -> f64 {
+fn calculate_radius(start: Vec2, end: Vec2) -> f32 {
     start.distance(end)
 }
 
-fn should_spawn_circle(radius: f64) -> bool {
+fn should_spawn_circle(radius: f32) -> bool {
     radius > 0.01
 }
 
@@ -72,13 +71,13 @@ fn circle_tool_update(
 
         if mouse.pressed(MouseButton::Left) {
             gizmos.circle_2d(
-                Isometry2d::from_translation(Vec2::new(start.x as f32, start.y as f32)),
-                radius as f32,
+                Isometry2d::from_translation(Vec2::new(start.x, start.y)),
+                radius,
                 Color::WHITE,
             );
             gizmos.line_2d(
-                Vec2::new(start.x as f32, start.y as f32),
-                Vec2::new(current_pos.x as f32, current_pos.y as f32),
+                start,
+                current_pos,
                 Color::WHITE,
             );
         }
@@ -86,8 +85,8 @@ fn circle_tool_update(
         if mouse.just_released(MouseButton::Left) {
             if should_spawn_circle(radius) {
                 let cmd = SpawnCircleCommand {
-                    position: Vec2::new(start.x as f32, start.y as f32),
-                    radius: radius as f32,
+                    position: start,
+                    radius,
                     entity: None,
                 };
 
@@ -109,10 +108,10 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case(DVec2::ZERO, DVec2::new(1.0, 0.0), 1.0)]
-    #[case(DVec2::ZERO, DVec2::new(0.0, 2.0), 2.0)]
-    #[case(DVec2::new(1.0, 1.0), DVec2::new(4.0, 5.0), 5.0)] // 3-4-5 triangle
-    fn test_calculate_radius(#[case] start: DVec2, #[case] end: DVec2, #[case] expected: f64) {
+    #[case(Vec2::ZERO, Vec2::new(1.0, 0.0), 1.0)]
+    #[case(Vec2::ZERO, Vec2::new(0.0, 2.0), 2.0)]
+    #[case(Vec2::new(1.0, 1.0), Vec2::new(4.0, 5.0), 5.0)] // 3-4-5 triangle
+    fn test_calculate_radius(#[case] start: Vec2, #[case] end: Vec2, #[case] expected: f32) {
         let radius = calculate_radius(start, end);
         assert!((radius - expected).abs() < 1e-6);
     }
@@ -123,7 +122,7 @@ mod tests {
     #[case(0.01, false)] // > 0.01
     #[case(0.009, false)]
     #[case(0.0, false)]
-    fn test_should_spawn_circle(#[case] radius: f64, #[case] expected: bool) {
+    fn test_should_spawn_circle(#[case] radius: f32, #[case] expected: bool) {
         assert_eq!(should_spawn_circle(radius), expected);
     }
 }

@@ -1,15 +1,12 @@
 //! Tool for dragging dynamic objects (the "Hand" tool).
 //!
 //! Allows the user to grab and move dynamic bodies using a mouse joint-like mechanic.
-//! Currently implemented by calculating a target anchor and drawing lines, but physics force
-//! application is temporarily disabled pending `ExternalForce` integration.
+//! Currently implemented by calculating a target anchor and drawing lines.
 
 use crate::input::tools::utils::{is_pointer_over_ui, calculate_local_anchor};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::GroundPlane;
-use avian2d::prelude::*;
-use bevy::math::DVec2;
 use bevy_egui::EguiContexts;
 
 /// Plugin for the Drag Tool.
@@ -27,7 +24,7 @@ impl Plugin for DragToolPlugin {
 struct DragToolData {
     dragged_entity: Option<Entity>,
     hand_entity: Option<Entity>,
-    local_anchor: DVec2,
+    local_anchor: Vec2,
 }
 
 fn drag_tool_reset(mut commands: Commands, mut data: ResMut<DragToolData>) {
@@ -43,9 +40,9 @@ fn drag_tool_update(
     mut data: ResMut<DragToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
-    spatial_query: SpatialQuery,
-    mut query: Query<(&mut Transform, &LinearVelocity, &AngularVelocity), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
-    mut hand_query: Query<(&mut Transform, &mut LinearVelocity), (With<RigidBody>, Without<Collider>)>,
+    // rapier_context: Res<RapierContext>,
+    mut query: Query<(&mut Transform, &Velocity), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
+    mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     virtual_time: Res<Time<Virtual>>,
@@ -60,30 +57,38 @@ fn drag_tool_update(
     };
 
     if mouse.just_pressed(MouseButton::Left) {
-        let filter = SpatialQueryFilter::default();
-        if let Some(hit) = spatial_query.project_point(current_pos, true, &filter)
-            && let Ok((transform, _, _)) = query.get(hit.entity)
-        {
-            data.dragged_entity = Some(hit.entity);
+        let _filter = QueryFilter::default();
+        let hit_entity: Option<Entity> = None;
+        // TODO: Re-enable query
+        /*
+        rapier_context.intersections_with_point(current_pos, filter, |entity| {
+            hit_entity = Some(entity);
+            false 
+        });
+        */
 
-            // Calculate local anchor on the body
-            data.local_anchor = calculate_local_anchor(transform, current_pos);
+        if let Some(entity) = hit_entity {
+             if let Ok((transform, _)) = query.get(entity) {
+                data.dragged_entity = Some(entity);
 
-            // Spawn "Hand" kinematic body
-            let hand = commands.spawn((
-                RigidBody::Kinematic,
-                Transform::from_xyz(current_pos.x as f32, current_pos.y as f32, 0.0),
-            )).id();
-            data.hand_entity = Some(hand);
+                // Calculate local anchor on the body
+                data.local_anchor = calculate_local_anchor(transform, current_pos);
 
-            // Create RevoluteJoint (Mouse Joint) between Hand and Body
-            commands.spawn((
-                RevoluteJoint::new(hand, hit.entity)
-                    .with_local_anchor1(DVec2::ZERO)
-                    .with_local_anchor2(data.local_anchor)
-                    // Set 0 compliance for a rigid connection (more responsive)
-                    .with_point_compliance(0.0),
-            ));
+                // Spawn "Hand" kinematic body
+                let hand = commands.spawn((
+                    RigidBody::KinematicPositionBased,
+                    Transform::from_xyz(current_pos.x, current_pos.y, 0.0),
+                    Velocity::default(),
+                )).id();
+                data.hand_entity = Some(hand);
+
+                // Create RevoluteJoint (Mouse Joint) between Hand and Body
+                let joint = RevoluteJointBuilder::new()
+                    .local_anchor1(Vec2::ZERO)
+                    .local_anchor2(data.local_anchor);
+                
+                commands.entity(hand).insert(ImpulseJoint::new(entity, joint));
+            }
         }
     }
 
@@ -99,18 +104,18 @@ fn drag_tool_update(
         // Move hand to cursor
         if let Ok((mut t, mut v)) = hand_query.get_mut(hand) {
             // Update transform for visual/logic consistency
-            let old_pos = t.translation.truncate().as_dvec2();
-            t.translation.x = current_pos.x as f32;
-            t.translation.y = current_pos.y as f32;
+            let old_pos = t.translation.truncate();
+            t.translation.x = current_pos.x;
+            t.translation.y = current_pos.y;
 
             // Update velocity for correct physics interaction (kinematic body)
             if time.delta_secs() > 0.0001 {
-                let velocity = (current_pos - old_pos) / time.delta_secs_f64();
-                v.x = velocity.x;
-                v.y = velocity.y;
+                let velocity = (current_pos - old_pos) / time.delta_secs();
+                v.linvel = velocity;
+                v.angvel = 0.0;
             } else {
-                v.x = 0.0;
-                v.y = 0.0;
+                v.linvel = Vec2::ZERO;
+                v.angvel = 0.0;
             }
         }
     }
@@ -118,35 +123,35 @@ fn drag_tool_update(
     // Handle dragging
     if let Some(entity) = data.dragged_entity {
         match query.get_mut(entity) {
-            Ok((mut transform, _, _)) => {
-                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2 as f64;
+            Ok((mut transform, _)) => {
+                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2;
 
                 // If paused, manually move the object to follow cursor
                 if virtual_time.is_paused() {
                     let cos = rotation.cos();
                     let sin = rotation.sin();
-                    let rotated_anchor = DVec2::new(
+                    let rotated_anchor = Vec2::new(
                         data.local_anchor.x * cos - data.local_anchor.y * sin,
                         data.local_anchor.x * sin + data.local_anchor.y * cos,
                     );
 
                     let new_pos = current_pos - rotated_anchor;
-                    transform.translation.x = new_pos.x as f32;
-                    transform.translation.y = new_pos.y as f32;
+                    transform.translation.x = new_pos.x;
+                    transform.translation.y = new_pos.y;
                 }
 
                 // Draw line
                 let cos = rotation.cos();
                 let sin = rotation.sin();
-                let rotated_anchor = DVec2::new(
+                let rotated_anchor = Vec2::new(
                     data.local_anchor.x * cos - data.local_anchor.y * sin,
                     data.local_anchor.x * sin + data.local_anchor.y * cos,
                 );
-                let current_anchor_pos = transform.translation.truncate().as_dvec2() + rotated_anchor;
+                let current_anchor_pos = transform.translation.truncate() + rotated_anchor;
 
                 gizmos.line_2d(
-                    Vec2::new(current_anchor_pos.x as f32, current_anchor_pos.y as f32),
-                    Vec2::new(current_pos.x as f32, current_pos.y as f32),
+                    current_anchor_pos,
+                    current_pos,
                     Color::WHITE,
                 );
             }
