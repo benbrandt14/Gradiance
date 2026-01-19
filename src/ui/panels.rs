@@ -24,10 +24,17 @@ fn sidebar_ui(
     current_tool_state: Res<State<ToolState>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
 ) {
-    // Ensure window exists
-    if window_query.iter().next().is_none() {
+    let Some(window) = window_query.iter().next() else {
         return;
     };
+
+    if window.width() <= 0.0
+        || window.height() <= 0.0
+        || window.physical_width() == 0
+        || window.physical_height() == 0
+    {
+        return;
+    }
 
     let ctx = contexts.ctx_mut();
 
@@ -63,10 +70,17 @@ fn top_panel_ui(
     mut grid_settings: ResMut<GridSettings>,
     window_query: Query<&Window, With<PrimaryWindow>>,
 ) {
-    // Ensure window exists
-    if window_query.iter().next().is_none() {
+    let Some(window) = window_query.iter().next() else {
         return;
     };
+
+    if window.width() <= 0.0
+        || window.height() <= 0.0
+        || window.physical_width() == 0
+        || window.physical_height() == 0
+    {
+        return;
+    }
 
     let ctx = contexts.ctx_mut();
 
