@@ -6,16 +6,9 @@ use crate::input::ZIndex;
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::tools::connector::Connector;
 use crate::prelude::*;
-// use bevy_prototype_lyon::prelude::*;
-/*
-use bevy_prototype_lyon::prelude::tess::{
-    FillOptions, VertexBuffers,
-    geometry_builder::simple_builder,
-    math::Point,
-    FillTessellator,
-    path::Path,
-};
-*/
+use bevy_prototype_lyon::prelude::*;
+use bevy_rapier2d::rapier::geometry::SharedShape;
+use nalgebra::Point2;
 
 /// A trait for game commands that support Undo/Redo.
 pub trait GameCommand: Send + Sync {
@@ -99,29 +92,21 @@ impl GameCommand for SpawnBoxCommand {
     fn apply(&mut self, world: &mut World) {
         let z = world.resource_mut::<ZIndex>().next();
 
-        /*
         let shape = shapes::Rectangle {
             extents: Vec2::new(self.width, self.height),
             origin: shapes::RectangleOrigin::Center,
             ..default()
         };
-        */
 
         let entity = world
             .spawn((
-                /*
                 ShapeBundle {
                     path: GeometryBuilder::build_as(&shape),
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
                     ..default()
                 },
                 Fill::color(Color::srgb(0.5, 0.5, 1.0)),
                 Stroke::new(Color::BLACK, 0.1),
-                */
-                Sprite {
-                    color: Color::srgb(0.5, 0.5, 1.0),
-                    custom_size: Some(Vec2::new(self.width, self.height)),
-                    ..default()
-                },
                 RigidBody::Dynamic,
                 // Rapier uses half-extents
                 Collider::cuboid(self.width / 2.0, self.height / 2.0),
@@ -129,7 +114,6 @@ impl GameCommand for SpawnBoxCommand {
                     width: self.width as f64,
                     height: self.height as f64,
                 },
-                Transform::from_xyz(self.position.x, self.position.y, z),
                 // PickableBundle::default(), // Picking disabled due to incompatibility
             ))
             .id();
@@ -161,35 +145,25 @@ impl GameCommand for SpawnCircleCommand {
     fn apply(&mut self, world: &mut World) {
         let z = world.resource_mut::<ZIndex>().next();
 
-        /*
         let shape = shapes::Circle {
             radius: self.radius,
             center: Vec2::ZERO,
         };
-        */
 
         let id = world
             .spawn((
-                /*
                 ShapeBundle {
                     path: GeometryBuilder::build_as(&shape),
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
                     ..default()
                 },
                 Fill::color(Color::srgb(1.0, 0.5, 0.5)),
                 Stroke::new(Color::BLACK, 0.1),
-                */
-                Sprite {
-                    color: Color::srgb(1.0, 0.5, 0.5),
-                    // Approximating circle with square sprite for now
-                    custom_size: Some(Vec2::new(self.radius * 2.0, self.radius * 2.0)),
-                    ..default()
-                },
                 RigidBody::Dynamic,
                 Collider::ball(self.radius),
                 EditableCircle {
                     radius: self.radius as f64,
                 },
-                Transform::from_xyz(self.position.x, self.position.y, z),
                 // PickableBundle::default(),
             ))
             .id();
@@ -221,36 +195,33 @@ impl GameCommand for SpawnPolygonCommand {
     fn apply(&mut self, world: &mut World) {
         let z = world.resource_mut::<ZIndex>().next();
 
-        /*
-         let shape = shapes::Polygon {
+        let shape = shapes::Polygon {
             points: self.vertices.clone(),
             closed: true,
         };
-        */
 
-        // Tessellation logic removed
+        let vertices: Vec<Point2<f32>> = self.vertices
+            .iter()
+            .map(|v| Point2::new(v.x, v.y))
+            .collect();
+        let indices: Vec<[u32; 2]> = (0..vertices.len())
+            .map(|i| [i as u32, ((i + 1) % vertices.len()) as u32])
+            .collect();
 
-        let collider = Collider::convex_hull(&self.vertices).unwrap_or(Collider::ball(1.0));
+        let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
+        let collider = Collider::from(rapier_shape);
 
         let id = world
             .spawn((
-                /*
                 ShapeBundle {
                     path: GeometryBuilder::build_as(&shape),
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
                     ..default()
                 },
                 Fill::color(Color::srgb(0.5, 1.0, 0.5)),
                 Stroke::new(Color::BLACK, 0.1),
-                */
-                Sprite {
-                    color: Color::srgb(0.5, 1.0, 0.5),
-                    // No easy polygon sprite, just a dot for now
-                    custom_size: Some(Vec2::new(10.0, 10.0)),
-                    ..default()
-                },
                 RigidBody::Dynamic,
                 collider,
-                Transform::from_xyz(self.position.x, self.position.y, z),
                 // PickableBundle::default(),
             ))
             .id();
@@ -307,7 +278,6 @@ impl GameCommand for SpawnJointCommand {
             .set_parent_in_place(self.entity_a)
             .id();
 
-        /*
         let circle_outer = GeometryBuilder::build_as(&shapes::Circle { radius: 5.0, ..default() });
         world.entity_mut(visual_id).insert((
             ShapeBundle { path: circle_outer, ..default() },
@@ -321,14 +291,6 @@ impl GameCommand for SpawnJointCommand {
              Transform::from_translation(Vec3::Z * 0.1),
         )).id();
         world.entity_mut(visual_id).add_child(inner);
-        */
-
-        // Simple sprite replacement
-        world.entity_mut(visual_id).insert(Sprite {
-            color: Color::BLACK,
-            custom_size: Some(Vec2::new(10.0, 10.0)),
-            ..default()
-        });
 
         self.visual_entity = Some(visual_id);
 
@@ -437,7 +399,6 @@ impl GameCommand for SpawnFixedJointCommand {
             .set_parent_in_place(self.entity_a)
             .id();
 
-        /*
         let line1 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)));
         let v1 = world.spawn((
                 ShapeBundle { path: line1, ..default() },
@@ -452,12 +413,6 @@ impl GameCommand for SpawnFixedJointCommand {
                 Transform::from_translation(Vec3::Z * 0.1),
         )).id();
         world.entity_mut(visual_id).add_children(&[v1, v2]);
-        */
-        world.entity_mut(visual_id).insert(Sprite {
-            color: Color::srgb(1.0, 0.0, 0.0),
-            custom_size: Some(Vec2::new(6.0, 6.0)),
-            ..default()
-        });
 
         self.visual_entity = Some(visual_id);
 

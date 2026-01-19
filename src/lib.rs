@@ -20,7 +20,7 @@ pub mod scripting;
 pub mod ui;
 
 use crate::prelude::*;
-// use bevy_prototype_lyon::prelude::*;
+use bevy_prototype_lyon::prelude::*;
 // use bevy_mod_picking::DefaultPickingPlugins;
 // use bevy_mod_picking::backends::rapier::RapierBackend;
 
@@ -32,6 +32,7 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            ShapePlugin,
             // DefaultPickingPlugins,
             // RapierBackend,
             physics::PhysicsPlugin,

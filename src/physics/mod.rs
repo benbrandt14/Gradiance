@@ -17,23 +17,15 @@ impl Plugin for PhysicsPlugin {
             .add_plugins(RapierDebugRenderPlugin::default());
 
         // Configure Gravity
-        // TODO: Fix RapierConfiguration resource issue (version conflict?)
-        // The default gravity in Rapier is usually (0.0, -9.81), but pixel scale affects this.
-        // We wanted -1000.0.
-        // If we can't insert the resource, we accept default or find another way (e.g. modify it in a startup system).
-        /*
-        app.insert_resource(RapierConfiguration {
-            gravity: Vec2::new(0.0, -1000.0),
-            ..default()
-        });
-        */
-        // app.add_systems(Startup, configure_gravity);
+        app.add_systems(Startup, configure_gravity);
 
         // Spec: Custom constraints will be added here
         app.add_plugins(constraints::ConstraintsPlugin);
     }
 }
 
-// fn configure_gravity(mut rapier_config: ResMut<RapierConfiguration>) {
-//     rapier_config.gravity = Vec2::new(0.0, -1000.0);
-// }
+fn configure_gravity(mut config: Query<&mut RapierConfiguration>) {
+    for mut config in &mut config {
+        config.gravity = Vec2::new(0.0, -1000.0);
+    }
+}

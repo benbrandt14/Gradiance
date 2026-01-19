@@ -114,7 +114,7 @@ fn update_connector(
     mut commands: Commands,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
-    // rapier_context: Res<RapierContext>,
+    rapier_context_query: Query<&RapierContext>,
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
     tool_state: Res<State<ToolState>>,
@@ -143,16 +143,18 @@ fn update_connector(
         };
 
         // Find entities using shape intersection for better robustness
-        let _shape = Collider::ball(0.1);
-        let _filter = QueryFilter::default();
-        let intersections = Vec::new();
-        // TODO: Re-enable query
-        /*
+        let Some(rapier_context) = rapier_context_query.iter().next() else {
+            return;
+        };
+
+        let shape = Collider::ball(0.1);
+        let filter = QueryFilter::default().exclude_sensors();
+        let mut intersections = Vec::new();
+
         rapier_context.intersections_with_shape(pos, 0.0, &shape, filter, |e| {
             intersections.push(e);
             true
         });
-        */
 
         // Resolve to bodies and sort
         let sorted_bodies = resolve_sorted_bodies(&intersections, &bodies, &parents);

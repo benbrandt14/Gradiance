@@ -1,7 +1,8 @@
 use bevy::gizmos::GizmoPlugin;
 use bevy::input::InputPlugin as BevyInputPlugin;
-use bevy::math::DVec2;
 use bevy::prelude::*;
+use bevy::window::{WindowPlugin, PrimaryWindow, WindowScaleFactorChanged, WindowResized, WindowCreated};
+use bevy::asset::AssetEvent;
 use bevy::state::app::StatesPlugin;
 
 use bevy_prototype_lyon::plugin::ShapePlugin;
@@ -19,6 +20,7 @@ use gradiance::input::tools::select_tool::SelectToolPlugin;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
 use rstest::{fixture, rstest};
+use bevy_egui::EguiUserTextures;
 
 #[fixture]
 fn app() -> App {
@@ -27,28 +29,39 @@ fn app() -> App {
     // Core plugins
     app.add_plugins(MinimalPlugins);
     app.add_plugins(AssetPlugin::default());
-    // app.add_plugins(bevy_hierarchy::HierarchyPlugin); // TODO: Fix unresolved import
+    app.add_plugins(bevy::hierarchy::HierarchyPlugin);
     app.add_plugins(TransformPlugin);
     app.add_plugins(StatesPlugin);
     app.add_plugins(BevyInputPlugin);
+    // WindowPlugin defines Window events and components
+    app.add_plugins(WindowPlugin {
+        primary_window: None,
+        exit_condition: bevy::window::ExitCondition::DontExit,
+        close_when_requested: false,
+    });
 
     // Physics
-    app.add_plugins(PhysicsPlugins::default());
+    app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
 
-    // Rendering / Shapes (headless but needed for components)
+    // Manual resource initialization for headless plugins
+    app.init_resource::<Assets<Shader>>();
+    app.init_resource::<Assets<Mesh>>();
+    app.init_resource::<Assets<Image>>();
+    app.init_resource::<Assets<ColorMaterial>>();
+
+    app.init_resource::<EguiUserTextures>();
+    app.init_resource::<Events<bevy::picking::backend::PointerHits>>();
+    // WindowPlugin usually adds these, but initing them is safe idempotent
+    app.init_resource::<Events<WindowScaleFactorChanged>>();
+    app.init_resource::<Events<WindowResized>>();
+    app.init_resource::<Events<WindowCreated>>();
+    app.init_resource::<Events<AssetEvent<Image>>>();
+
+    // Plugins that rely on Render/Assets/Window but can run headless if resources exist
     app.add_plugins(GizmoPlugin);
     app.add_plugins(ShapePlugin);
 
-    // Resources usually added by InputPlugin or UiPlugin
-    app.init_resource::<ButtonInput<MouseButton>>();
-    app.init_resource::<ButtonInput<KeyCode>>();
-    app.init_resource::<CursorWorldPos>();
-    app.init_resource::<CommandStack>();
-    app.init_resource::<GridSettings>();
-    app.init_resource::<ZIndex>();
-    app.init_resource::<Selection>(); // For SelectTool
-
-    // Tool Plugins
+    // Tools
     app.add_plugins(BoxToolPlugin);
     app.add_plugins(CircleToolPlugin);
     app.add_plugins(PolygonToolPlugin);
@@ -58,13 +71,31 @@ fn app() -> App {
     // Initial State
     app.init_state::<ToolState>();
 
-    // Initial update to register everything
+    // Resources
+    app.init_resource::<CursorWorldPos>();
+    app.init_resource::<CommandStack>();
+    app.init_resource::<GridSettings>();
+    app.init_resource::<ZIndex>();
+    app.init_resource::<Selection>();
+
+    // Initial update
+    app.update();
+
+    // Spawn Primary Window for cursor mapping
+    app.world_mut().spawn((
+        Window {
+            title: "Headless Test Window".into(),
+            ..default()
+        },
+        PrimaryWindow,
+        // EguiContext not needed if is_pointer_over_ui uses try_ctx_mut
+    ));
     app.update();
 
     app
 }
 
-fn set_cursor(app: &mut App, pos: DVec2) {
+fn set_cursor(app: &mut App, pos: Vec2) {
     let mut cursor = app.world_mut().resource_mut::<CursorWorldPos>();
     cursor.0 = Some(pos);
 }
@@ -91,11 +122,11 @@ fn test_box_tool_spawn(mut app: App) {
     set_tool(&mut app, ToolState::Box);
 
     // Drag from (0,0) to (10,10)
-    set_cursor(&mut app, DVec2::ZERO);
+    set_cursor(&mut app, Vec2::ZERO);
     mouse_down(&mut app, MouseButton::Left);
     app.update();
 
-    set_cursor(&mut app, DVec2::new(10.0, 10.0));
+    set_cursor(&mut app, Vec2::new(10.0, 10.0));
     app.update();
 
     mouse_up(&mut app, MouseButton::Left);
@@ -113,11 +144,11 @@ fn test_circle_tool_spawn(mut app: App) {
     set_tool(&mut app, ToolState::Circle);
 
     // Drag from (0,0) to (5,0) -> Radius 5
-    set_cursor(&mut app, DVec2::ZERO);
+    set_cursor(&mut app, Vec2::ZERO);
     mouse_down(&mut app, MouseButton::Left);
     app.update();
 
-    set_cursor(&mut app, DVec2::new(5.0, 0.0));
+    set_cursor(&mut app, Vec2::new(5.0, 0.0));
     app.update();
 
     mouse_up(&mut app, MouseButton::Left);
@@ -137,28 +168,28 @@ fn test_polygon_tool_spawn(mut app: App) {
     // Triangle: (0,0) -> (10,0) -> (0,10) -> (0,0)
 
     // Point 1
-    set_cursor(&mut app, DVec2::ZERO);
+    set_cursor(&mut app, Vec2::ZERO);
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
     // Point 2
-    set_cursor(&mut app, DVec2::new(10.0, 0.0));
+    set_cursor(&mut app, Vec2::new(10.0, 0.0));
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
     // Point 3
-    set_cursor(&mut app, DVec2::new(0.0, 10.0));
+    set_cursor(&mut app, Vec2::new(0.0, 10.0));
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
     // Close loop (click near start)
-    set_cursor(&mut app, DVec2::new(0.1, 0.1));
+    set_cursor(&mut app, Vec2::new(0.1, 0.1));
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
@@ -181,7 +212,7 @@ fn test_selection_tool(mut app: App) {
         .world_mut()
         .spawn((
             RigidBody::Dynamic,
-            Collider::rectangle(2.0, 2.0),
+            Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(10.0, 10.0, 0.0),
             GlobalTransform::default(), // Important for spatial query
             EditableBox {
@@ -200,7 +231,7 @@ fn test_selection_tool(mut app: App) {
     set_tool(&mut app, ToolState::Select);
 
     // 2. Click on the box
-    set_cursor(&mut app, DVec2::new(10.0, 10.0));
+    set_cursor(&mut app, Vec2::new(10.0, 10.0));
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
@@ -211,7 +242,7 @@ fn test_selection_tool(mut app: App) {
     assert!(selection.0.contains(&box_entity), "Box should be selected");
 
     // 3. Click elsewhere
-    set_cursor(&mut app, DVec2::new(0.0, 0.0));
+    set_cursor(&mut app, Vec2::new(0.0, 0.0));
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
@@ -229,7 +260,7 @@ fn test_joint_tool_pin(mut app: App) {
         .world_mut()
         .spawn((
             RigidBody::Dynamic,
-            Collider::rectangle(2.0, 2.0),
+            Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(5.0, 5.0, 0.0),
             GlobalTransform::default(),
             EditableBox {
@@ -247,7 +278,7 @@ fn test_joint_tool_pin(mut app: App) {
     set_tool(&mut app, ToolState::RevoluteJoint);
 
     // 2. Click on the box to pin it
-    set_cursor(&mut app, DVec2::new(5.0, 5.0));
+    set_cursor(&mut app, Vec2::new(5.0, 5.0));
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
@@ -261,17 +292,15 @@ fn test_joint_tool_pin(mut app: App) {
     // Wait, if pin_entity (None entity_b), it spawns a Static pin_entity.
     // Then adds RevoluteJoint to visual_entity connecting entity_a and pin_entity.
 
-    // So we check if box_entity has a child with RevoluteJoint.
-    let children = app
-        .world()
-        .get::<Children>(box_entity)
-        .expect("Box should have children (visual)");
-    let has_joint = children
-        .iter()
-        .any(|child| app.world().get::<RevoluteJoint>(child).is_some());
+    // So we check if box_entity has a child with ImpulseJoint (RevoluteJoint is part of ImpulseJoint in Rapier2D).
+    // Or, did we attach ImpulseJoint directly to box_entity?
+    // SpawnJointCommand:
+    // world.entity_mut(self.entity_a).insert(ImpulseJoint::new(target_entity, joint_data));
+
+    let has_joint = app.world().get::<ImpulseJoint>(box_entity).is_some();
 
     assert!(
         has_joint,
-        "Should have created a RevoluteJoint on a child entity"
+        "Should have created an ImpulseJoint on the entity"
     );
 }

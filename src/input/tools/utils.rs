@@ -28,9 +28,13 @@ pub fn calculate_local_anchor(transform: &Transform, world_point: Vec2) -> Vec2 
 /// Checks if the mouse pointer is currently over an Egui area (window/panel).
 ///
 /// Returns true if the pointer is over an Egui area, false otherwise.
+/// Returns false if Egui context is not available (e.g. headless tests).
 pub fn is_pointer_over_ui(contexts: &mut EguiContexts) -> bool {
-    let ctx = contexts.ctx_mut();
-    ctx.is_pointer_over_area()
+    if let Some(ctx) = contexts.try_ctx_mut() {
+        ctx.is_pointer_over_area()
+    } else {
+        false
+    }
 }
 
 #[cfg(test)]
