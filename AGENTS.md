@@ -10,7 +10,7 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
     *   **Massive Coverage**: Aim for high test coverage, especially for `GameCommand` implementations and tool logic.
     *   Use `rstest` for expressive testing fixtures.
 3.  **Code Style**:
-    *   Use updated information about bevy (https://docs.rs/bevy/0.18.0/bevy/)
+    *   Use updated information about Bevy 0.15.3 (https://docs.rs/bevy/0.15.3/bevy/)
     *   Use best practices in bevy & prioritize developer experience (DX).
     *   Keep systems small and focused, minimize indirection.
     *   Use `clippy` to ensure idiomatic Rust.
@@ -31,10 +31,10 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
 
 ## Technical Context & Patterns
 
-### 1. Physics (avian( TODO convert to rapier) 2D)
-*   **Precision**: We use `f64` precision (double precision). Always use `DVec2` instead of `Vec2` for physics calculations.
-*   **Components**: Use `RigidBody`, `Collider` (from `avian( TODO convert to rapier)2d::prelude`).
-*   **Joints**: Use `RevoluteJoint`, `PrismaticJoint`, etc.
+### 1. Physics (Rapier2d)
+*   **Precision**: We use `f32` precision (Rapier2d default).
+*   **Components**: Use `RigidBody`, `Collider` (from `bevy_rapier2d::prelude`).
+*   **Joints**: Use `ImpulseJoint` (Revolute, Fixed, etc.) or `MultibodyJoint`.
 
 ### 2. Standard Tool Pattern
 Tools should be implemented as separate plugins following this pattern:
@@ -71,22 +71,14 @@ fn my_tool_update(
 
     // 3. Handle Input (Mouse/Keyboard)
     // 4. Update Visuals (Gizmos)
-    // 5. Apply Changes (Commands)
+    // 5. Apply Changes (Commands - NOT direct mutations)
+    // commands.queue(move |world: &mut World| { ... });
 }
 ```
 
-### 3. Rendering (Bevy Prototype Lyon)
-*   **Hack Warning**: Due to compatibility issues with Bevy 0.18, we use a specific pattern to spawn shapes:
-    ```rust
-    commands.spawn((
-        ShapeBuilder::with(&shape)
-            .fill(Color::srgb(...))
-            .stroke(Stroke::new(...))
-            .build(),
-        ...
-    ));
-    ```
-    Do not try to add `Fill` or `Stroke` components separately if it causes issues.
+### 3. Rendering (Bevy Prototype Lyon - Disabled)
+*   **Status**: `bevy_prototype_lyon` is currently **disabled** due to compatibility issues with Bevy 0.15.3.
+*   **Workaround**: Use `Sprite` components or Bevy `Gizmos` for visualization until this is resolved.
 
 ## Future Roadmap (Design Goals)
 
@@ -96,7 +88,7 @@ Goal: A stable infinite 2D world where you can spawn rigid bodies and move the c
 
 Milestones:
 
-    Core scaffolding: Bevy 0.18 app structure with avian( TODO convert to rapier)2d (f64 precision enabled).
+    Core scaffolding: Bevy 0.15.3 app structure with Rapier2d.
 
     Input/Camera: Pan/Zoom camera and Mouse Picking.
 
@@ -104,7 +96,7 @@ Milestones:
 
 Tasks:
 
-    [ ] Initialize project with bevy, avian( TODO convert to rapier)2d (feature: f64, parry-f64), bevy_egui.
+    [ ] Initialize project with bevy, Rapier2d, bevy_egui.
 
     [ ] Implement Camera2dBundle with custom Pan/Zoom system (Orthographic scale).
 
@@ -144,7 +136,7 @@ Milestones:
 
 Tasks:
 
-    [ ] Integrate bevy_prototype_lyon:
+    [ ] Integrate bevy_prototype_lyon (When compatible):
 
         Create VectorMesh component (holds path data separate from Bevy Mesh).
 
@@ -174,7 +166,7 @@ Tasks:
 
     [ ] Implement Polygon Decomposition:
 
-        Use parry2d's convex decomposition on resulting shapes to generate valid avian( TODO convert to rapier) colliders.
+        Use parry2d's convex decomposition on resulting shapes to generate valid Rapier colliders.
 
 Phase 3: The Mechanical Engineer (Months 5–6)
 
@@ -204,7 +196,7 @@ Tasks:
 
     [ ] Custom Constraint: Gear Joint:
 
-        Implement GeneralizedConstraint trait in avian( TODO convert to rapier).
+        Implement GeneralizedConstraint trait in Rapier (if supported) or manually via forces.
 
         Constraint Eq: ΔθA​+rΔθB​=0.
 
@@ -246,7 +238,7 @@ Tasks:
 
         Solver: Density constraint ρi​=∑W(rij​). Pressure force −∇p.
 
-        Coupling: Raycast from particles to avian( TODO convert to rapier) bodies. Apply impulse to body; reflect particle.
+        Coupling: Raycast from particles to Rapier bodies. Apply impulse to body; reflect particle.
 
     [ ] Laser/Optics System:
 
@@ -320,7 +312,7 @@ Tasks:
 
         Integrate moonshine_save.
 
-        Serialize avian( TODO convert to rapier) components and Lyon paths to RON.
+        Serialize Rapier components and Lyon paths to RON.
 
         Handle Entity ID remapping for Joints.
 
