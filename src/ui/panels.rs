@@ -6,9 +6,8 @@
 use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
-use crate::ui::icons::GameIcons;
 use bevy::window::PrimaryWindow;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 
 /// Plugin for the main UI panels.
 pub struct PanelsPlugin;
@@ -24,57 +23,11 @@ fn sidebar_ui(
     mut next_tool_state: ResMut<NextState<ToolState>>,
     current_tool_state: Res<State<ToolState>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
-    game_icons: Res<GameIcons>,
 ) {
-    let Some(window) = window_query.iter().next() else {
+    // Ensure window exists
+    if window_query.iter().next().is_none() {
         return;
     };
-
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
-        return;
-    }
-
-    let tools = [
-        (
-            ToolState::Select,
-            contexts.add_image(game_icons.select.clone_weak()),
-            "Select",
-        ),
-        (
-            ToolState::Drag,
-            contexts.add_image(game_icons.drag.clone_weak()),
-            "Drag",
-        ),
-        (
-            ToolState::Box,
-            contexts.add_image(game_icons.box_tool.clone_weak()),
-            "Box",
-        ),
-        (
-            ToolState::Circle,
-            contexts.add_image(game_icons.circle_tool.clone_weak()),
-            "Circle",
-        ),
-        (
-            ToolState::Polygon,
-            contexts.add_image(game_icons.polygon_tool.clone_weak()),
-            "Polygon",
-        ),
-        (
-            ToolState::RevoluteJoint,
-            contexts.add_image(game_icons.revolute_joint.clone_weak()),
-            "Axle",
-        ),
-        (
-            ToolState::Weld,
-            contexts.add_image(game_icons.weld.clone_weak()),
-            "Fix",
-        ),
-    ];
 
     let ctx = contexts.ctx_mut();
 
@@ -82,14 +35,20 @@ fn sidebar_ui(
         ui.heading("Tools");
         ui.separator();
 
-        for (state, texture_id, name) in tools {
+        let tools = [
+            ("Select", ToolState::Select),
+            ("Drag", ToolState::Drag),
+            ("Box", ToolState::Box),
+            ("Circle", ToolState::Circle),
+            ("Polygon", ToolState::Polygon),
+            ("Axle", ToolState::RevoluteJoint),
+            ("Fix", ToolState::Weld),
+        ];
+
+        for (name, state) in tools {
             let is_selected = *current_tool_state.get() == state;
             if ui
-                .add(
-                    egui::ImageButton::new((texture_id, egui::Vec2::new(32.0, 32.0)))
-                        .selected(is_selected),
-                )
-                .on_hover_text(name)
+                .add(egui::Button::new(name).selected(is_selected))
                 .clicked()
             {
                 next_tool_state.set(state);
@@ -103,40 +62,22 @@ fn top_panel_ui(
     mut virtual_time: ResMut<Time<Virtual>>,
     mut grid_settings: ResMut<GridSettings>,
     window_query: Query<&Window, With<PrimaryWindow>>,
-    game_icons: Res<GameIcons>,
 ) {
-    let Some(window) = window_query.iter().next() else {
+    // Ensure window exists
+    if window_query.iter().next().is_none() {
         return;
     };
-
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
-        return;
-    }
-
-    let play_icon = contexts.add_image(game_icons.play.clone_weak());
-    let pause_icon = contexts.add_image(game_icons.pause.clone_weak());
-    let snap_icon = contexts.add_image(game_icons.snap.clone_weak());
 
     let ctx = contexts.ctx_mut();
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            let (icon, tooltip) = if virtual_time.is_paused() {
-                (play_icon, "Play")
-            } else {
-                (pause_icon, "Pause")
-            };
-
             if ui
-                .add(egui::ImageButton::new((
-                    icon,
-                    egui::Vec2::new(24.0, 24.0),
-                )))
-                .on_hover_text(tooltip)
+                .button(if virtual_time.is_paused() {
+                    "▶ Play"
+                } else {
+                    "⏸ Pause"
+                })
                 .clicked()
             {
                 if virtual_time.is_paused() {
@@ -151,16 +92,7 @@ fn top_panel_ui(
             ui.separator();
             ui.checkbox(&mut grid_settings.show, "Grid");
             if grid_settings.show {
-                if ui
-                    .add(
-                        egui::ImageButton::new((snap_icon, egui::Vec2::new(24.0, 24.0)))
-                            .selected(grid_settings.snap),
-                    )
-                    .on_hover_text("Snap to Grid")
-                    .clicked()
-                {
-                    grid_settings.snap = !grid_settings.snap;
-                }
+                ui.checkbox(&mut grid_settings.snap, "Snap");
                 ui.add(
                     egui::DragValue::new(&mut grid_settings.spacing)
                         .speed(0.1)
