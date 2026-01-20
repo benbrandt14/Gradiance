@@ -95,7 +95,7 @@ impl GameCommand for SpawnBoxCommand {
         let shape = shapes::Rectangle {
             extents: Vec2::new(self.width, self.height),
             origin: shapes::RectangleOrigin::Center,
-            ..default()
+            radii: None,
         };
 
         let entity = world
@@ -196,6 +196,10 @@ pub struct SpawnPolygonCommand {
 
 impl GameCommand for SpawnPolygonCommand {
     fn apply(&mut self, world: &mut World) {
+        if self.vertices.len() < 3 {
+            return;
+        }
+
         let z = world.resource_mut::<ZIndex>().next();
 
         let shape = shapes::Polygon {
@@ -484,5 +488,200 @@ impl GameCommand for SpawnFixedJointCommand {
             }
             self.pin_entity = None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::prelude::*;
+    use bevy_rapier2d::prelude::*;
+    use rstest::{fixture, rstest};
+    use crate::input::ZIndex as GameZIndex;
+    use crate::input::tools::connector::Connector;
+
+    #[fixture]
+    fn world() -> World {
+        let mut world = World::new();
+        world.init_resource::<GameZIndex>();
+        world
+    }
+
+    #[rstest]
+    fn test_spawn_box_command(mut world: World) {
+        let mut cmd = SpawnBoxCommand::new(Vec2::new(10.0, 20.0), 5.0, 5.0);
+
+        // Apply
+        cmd.apply(&mut world);
+
+        assert!(cmd.entity.is_some());
+        let entity = cmd.entity.unwrap();
+
+        let transform = world.get::<Transform>(entity);
+        assert!(transform.is_some());
+        assert_eq!(transform.unwrap().translation.truncate(), Vec2::new(10.0, 20.0));
+
+        assert!(world.get::<RigidBody>(entity).is_some());
+        assert!(world.get::<Collider>(entity).is_some());
+        assert!(world.get::<EditableBox>(entity).is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        // In Bevy 0.15+, get_entity returns a Result. If despawned, it should be Err.
+        assert!(world.get_entity(entity).is_err());
+        assert!(cmd.entity.is_none());
+    }
+
+    #[rstest]
+    fn test_spawn_circle_command(mut world: World) {
+        let mut cmd = SpawnCircleCommand {
+            position: Vec2::new(-5.0, 5.0),
+            radius: 3.0,
+            entity: None,
+        };
+
+        // Apply
+        cmd.apply(&mut world);
+
+        assert!(cmd.entity.is_some());
+        let entity = cmd.entity.unwrap();
+
+        let transform = world.get::<Transform>(entity);
+        assert!(transform.is_some());
+        assert_eq!(transform.unwrap().translation.truncate(), Vec2::new(-5.0, 5.0));
+
+        assert!(world.get::<RigidBody>(entity).is_some());
+        assert!(world.get::<Collider>(entity).is_some());
+        assert!(world.get::<EditableCircle>(entity).is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        assert!(world.get_entity(entity).is_err());
+        assert!(cmd.entity.is_none());
+    }
+
+    #[rstest]
+    fn test_spawn_joint_command(mut world: World) {
+        // Setup entity_a
+        let entity_a = world.spawn(Transform::default()).id();
+
+        let mut cmd = SpawnJointCommand {
+            entity_a,
+            entity_b: None, // Pin to world
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            compliance: 0.0,
+            visual_entity: None,
+            pin_entity: None,
+        };
+
+        // Apply
+        cmd.apply(&mut world);
+
+        // Check ImpulseJoint on entity_a
+        assert!(world.get::<ImpulseJoint>(entity_a).is_some());
+
+        // Check visual entity spawned (child of entity_a)
+        let children = world.get::<Children>(entity_a);
+        assert!(children.is_some());
+        // Since we don't know if there are other children, we look for one with Connector
+        let visual_id = children.unwrap().iter().find(|&&child| world.get::<Connector>(child).is_some());
+        assert!(visual_id.is_some());
+        let visual_id = *visual_id.unwrap();
+
+        // Check pin entity
+        assert!(cmd.pin_entity.is_some());
+        let pin_id = cmd.pin_entity.unwrap();
+        assert!(world.get::<RigidBody>(pin_id).is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        // Check ImpulseJoint removed
+        assert!(world.get::<ImpulseJoint>(entity_a).is_none());
+
+        // Check visual entity despawned
+        assert!(world.get_entity(visual_id).is_err());
+
+        // Check pin entity despawned
+        assert!(world.get_entity(pin_id).is_err());
+    }
+
+    #[rstest]
+    fn test_spawn_polygon_command(mut world: World) {
+        let vertices = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(10.0, 0.0),
+            Vec2::new(0.0, 10.0),
+        ];
+        let mut cmd = SpawnPolygonCommand {
+            position: Vec2::new(0.0, 0.0),
+            vertices: vertices.clone(),
+            entity: None,
+        };
+
+        // Apply
+        cmd.apply(&mut world);
+
+        assert!(cmd.entity.is_some());
+        let entity = cmd.entity.unwrap();
+
+        assert!(world.get::<RigidBody>(entity).is_some());
+        assert!(world.get::<Collider>(entity).is_some());
+        // Verify shape bundle exists (checking Transform as proxy)
+        assert!(world.get::<Transform>(entity).is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        assert!(world.get_entity(entity).is_err());
+        assert!(cmd.entity.is_none());
+    }
+
+    #[rstest]
+    fn test_command_stack(mut world: World) {
+        let mut stack = CommandStack::default();
+
+        // 1. Push Box
+        let box_cmd = Box::new(SpawnBoxCommand::new(Vec2::ZERO, 1.0, 1.0));
+        stack.push(box_cmd, &mut world);
+
+        assert_eq!(stack.index, 1);
+        assert_eq!(stack.history.len(), 1);
+        assert_eq!(world.entities().len(), 1);
+
+        // 2. Undo
+        stack.undo(&mut world);
+        assert_eq!(stack.index, 0);
+        assert_eq!(stack.history.len(), 1);
+        assert_eq!(world.entities().len(), 0);
+
+        // 3. Redo
+        stack.redo(&mut world);
+        assert_eq!(stack.index, 1);
+        assert_eq!(world.entities().len(), 1);
+
+        // 4. Undo again
+        stack.undo(&mut world);
+        assert_eq!(stack.index, 0);
+        assert_eq!(world.entities().len(), 0);
+
+        // 5. Push new command (Circle), should truncate history
+        let circle_cmd = Box::new(SpawnCircleCommand {
+            position: Vec2::new(10.0, 0.0),
+            radius: 1.0,
+            entity: None,
+        });
+        stack.push(circle_cmd, &mut world);
+
+        assert_eq!(stack.index, 1);
+        assert_eq!(stack.history.len(), 1); // Previous box command should be removed
+        assert_eq!(world.entities().len(), 1);
+
+        // Verify it is indeed the circle (by checking component)
+        let entity = world.iter_entities().next().unwrap().id();
+        assert!(world.get::<EditableCircle>(entity).is_some());
     }
 }
