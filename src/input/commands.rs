@@ -13,10 +13,13 @@ use nalgebra::Point2;
 /// A trait for game commands that support Undo/Redo.
 pub trait GameCommand: Send + Sync {
     /// Apply the command to the world.
-    fn apply(&mut self, world: &mut World);
+    fn apply(&mut self, world: &mut World) -> Result<(), String>;
 
     /// Revert the command's effects.
     fn undo(&mut self, world: &mut World);
+
+    /// Returns the name of the command.
+    fn name(&self) -> String;
 }
 
 /// Resource handling the stack of executed commands.
@@ -38,9 +41,16 @@ impl CommandStack {
             self.history.truncate(self.index);
         }
 
-        command.apply(world);
-        self.history.push(command);
-        self.index += 1;
+        match command.apply(world) {
+            Ok(_) => {
+                info!("Command Applied: {}", command.name());
+                self.history.push(command);
+                self.index += 1;
+            }
+            Err(e) => {
+                warn!("Command Failed: {}: {}", command.name(), e);
+            }
+        }
     }
 
     /// Undoes the last command.
@@ -48,6 +58,7 @@ impl CommandStack {
         if self.index > 0 {
             self.index -= 1;
             if let Some(command) = self.history.get_mut(self.index) {
+                info!("Undo: {}", command.name());
                 command.undo(world);
             }
         }
@@ -57,7 +68,11 @@ impl CommandStack {
     pub fn redo(&mut self, world: &mut World) {
         if self.index < self.history.len() {
             if let Some(command) = self.history.get_mut(self.index) {
-                command.apply(world);
+                if let Err(e) = command.apply(world) {
+                    warn!("Redo Failed: {}: {}", command.name(), e);
+                } else {
+                    info!("Redo: {}", command.name());
+                }
             }
             self.index += 1;
         }
@@ -89,7 +104,11 @@ impl SpawnBoxCommand {
 }
 
 impl GameCommand for SpawnBoxCommand {
-    fn apply(&mut self, world: &mut World) {
+    fn name(&self) -> String {
+        "Spawn Box".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
         let z = world.resource_mut::<ZIndex>().next();
 
         let shape = shapes::Rectangle {
@@ -119,6 +138,7 @@ impl GameCommand for SpawnBoxCommand {
             .id();
 
         self.entity = Some(entity);
+        Ok(())
     }
 
     fn undo(&mut self, world: &mut World) {
@@ -142,7 +162,11 @@ pub struct SpawnCircleCommand {
 }
 
 impl GameCommand for SpawnCircleCommand {
-    fn apply(&mut self, world: &mut World) {
+    fn name(&self) -> String {
+        "Spawn Circle".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
         let z = world.resource_mut::<ZIndex>().next();
 
         let shape = shapes::Circle {
@@ -172,6 +196,7 @@ impl GameCommand for SpawnCircleCommand {
             .id();
 
         self.entity = Some(id);
+        Ok(())
     }
 
     fn undo(&mut self, world: &mut World) {
@@ -195,9 +220,13 @@ pub struct SpawnPolygonCommand {
 }
 
 impl GameCommand for SpawnPolygonCommand {
-    fn apply(&mut self, world: &mut World) {
+    fn name(&self) -> String {
+        "Spawn Polygon".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
         if self.vertices.len() < 3 {
-            return;
+            return Err("Polygon must have at least 3 vertices".to_string());
         }
 
         let z = world.resource_mut::<ZIndex>().next();
@@ -234,6 +263,7 @@ impl GameCommand for SpawnPolygonCommand {
             .id();
 
         self.entity = Some(id);
+        Ok(())
     }
 
     fn undo(&mut self, world: &mut World) {
@@ -265,7 +295,11 @@ pub struct SpawnJointCommand {
 }
 
 impl GameCommand for SpawnJointCommand {
-    fn apply(&mut self, world: &mut World) {
+    fn name(&self) -> String {
+        "Spawn Joint".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
         // Visual
         let visual_id = world
             .spawn((
@@ -343,6 +377,7 @@ impl GameCommand for SpawnJointCommand {
         world
             .entity_mut(self.entity_a)
             .insert(ImpulseJoint::new(target_entity, joint_data));
+        Ok(())
     }
 
     fn undo(&mut self, world: &mut World) {
@@ -390,7 +425,11 @@ pub struct SpawnFixedJointCommand {
 }
 
 impl GameCommand for SpawnFixedJointCommand {
-    fn apply(&mut self, world: &mut World) {
+    fn name(&self) -> String {
+        "Spawn Fixed Joint".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
         let visual_id = world
             .spawn((
                 Transform::from_xyz(self.anchor_a.x, self.anchor_a.y, 0.1),
@@ -468,6 +507,7 @@ impl GameCommand for SpawnFixedJointCommand {
         world
             .entity_mut(self.entity_a)
             .insert(ImpulseJoint::new(target_entity, joint_data));
+        Ok(())
     }
 
     fn undo(&mut self, world: &mut World) {
@@ -508,11 +548,30 @@ mod tests {
     }
 
     #[rstest]
+    fn test_spawn_polygon_command_failure(mut world: World) {
+        let vertices = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(10.0, 0.0),
+        ]; // Only 2 vertices
+        let mut cmd = SpawnPolygonCommand {
+            position: Vec2::new(0.0, 0.0),
+            vertices: vertices.clone(),
+            entity: None,
+        };
+
+        // Apply should fail
+        let result = cmd.apply(&mut world);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Polygon must have at least 3 vertices");
+        assert!(cmd.entity.is_none());
+    }
+
+    #[rstest]
     fn test_spawn_box_command(mut world: World) {
         let mut cmd = SpawnBoxCommand::new(Vec2::new(10.0, 20.0), 5.0, 5.0);
 
         // Apply
-        cmd.apply(&mut world);
+        assert!(cmd.apply(&mut world).is_ok());
 
         assert!(cmd.entity.is_some());
         let entity = cmd.entity.unwrap();
@@ -542,7 +601,7 @@ mod tests {
         };
 
         // Apply
-        cmd.apply(&mut world);
+        assert!(cmd.apply(&mut world).is_ok());
 
         assert!(cmd.entity.is_some());
         let entity = cmd.entity.unwrap();
@@ -578,7 +637,7 @@ mod tests {
         };
 
         // Apply
-        cmd.apply(&mut world);
+        assert!(cmd.apply(&mut world).is_ok());
 
         // Check ImpulseJoint on entity_a
         assert!(world.get::<ImpulseJoint>(entity_a).is_some());
@@ -623,7 +682,7 @@ mod tests {
         };
 
         // Apply
-        cmd.apply(&mut world);
+        assert!(cmd.apply(&mut world).is_ok());
 
         assert!(cmd.entity.is_some());
         let entity = cmd.entity.unwrap();

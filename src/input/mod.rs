@@ -52,7 +52,15 @@ impl Plugin for InputPlugin {
         app.init_resource::<ZIndex>();
 
         // Global shortcuts
-        app.add_systems(Update, (toggle_pause, handle_undo_redo_input));
+        app.add_systems(Update, (toggle_pause, handle_undo_redo_input, log_tool_transitions));
+    }
+}
+
+fn log_tool_transitions(mut events: EventReader<StateTransitionEvent<ToolState>>) {
+    for event in events.read() {
+        if let Some(state) = event.entered {
+            info!("Tool Changed to: {:?}", state);
+        }
     }
 }
 
