@@ -78,6 +78,109 @@ impl CommandStack {
     }
 }
 
+/// Helper to spawn a shape entity with common components.
+fn spawn_shape_entity(
+    world: &mut World,
+    position: Vec2,
+    shape: &impl bevy_prototype_lyon::geometry::Geometry,
+    collider: Collider,
+    fill: Fill,
+    extra_bundle: impl Bundle,
+) -> Entity {
+    let z = world.resource_mut::<ZIndex>().next();
+
+    world
+        .spawn((
+            ShapeBundle {
+                path: GeometryBuilder::build_as(shape),
+                transform: Transform::from_xyz(position.x, position.y, z),
+                ..default()
+            },
+            fill,
+            Stroke::new(Color::BLACK, 0.1),
+            RigidBody::Dynamic,
+            collider,
+            extra_bundle,
+        ))
+        .id()
+}
+
+/// Helper to resolve joint targets and handle pinning.
+fn resolve_joint_targets(
+    world: &mut World,
+    entity_a: Entity,
+    entity_b: Option<Entity>,
+    anchor_a: Vec2,
+    anchor_b: Vec2,
+    visual_entity: Option<Entity>,
+) -> (Entity, Option<Entity>, Vec2, Vec2) {
+    let mut pin_entity = None;
+    let target_entity;
+    let local_anchor_1 = anchor_a;
+    let local_anchor_2;
+
+    if let Some(e_b) = entity_b {
+        target_entity = e_b;
+        local_anchor_2 = anchor_b;
+    } else {
+        // Pin logic
+        let t_a = world
+            .get::<GlobalTransform>(entity_a)
+            .map(|t| t.compute_transform())
+            .unwrap_or_default();
+        let world_pos = t_a.transform_point(Vec3::new(anchor_a.x, anchor_a.y, 0.0));
+
+        let pin_id = world
+            .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
+            .id();
+
+        pin_entity = Some(pin_id);
+        target_entity = pin_id;
+        local_anchor_2 = Vec2::ZERO;
+
+        if let Some(v_id) = visual_entity {
+            if let Some(mut connector) = world.get_mut::<Connector>(v_id) {
+                connector.entity_b = Some(pin_id);
+            }
+        }
+    }
+
+    (target_entity, pin_entity, local_anchor_1, local_anchor_2)
+}
+
+/// Helper to spawn connector visual.
+fn spawn_connector_visual(
+    world: &mut World,
+    entity_a: Entity,
+    entity_b: Option<Entity>,
+    anchor_a: Vec2,
+    anchor_b: Vec2,
+    children_builder: impl FnOnce(&mut World, Entity),
+) -> Entity {
+     let visual_id = world
+        .spawn((
+            Transform::from_xyz(anchor_a.x, anchor_a.y, 0.1),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+            Collider::ball(0.5),
+            Sensor,
+            Connector {
+                entity_a,
+                entity_b,
+                local_anchor_a: anchor_a,
+                local_anchor_b: anchor_b,
+            },
+        ))
+        .set_parent_in_place(entity_a)
+        .id();
+
+    children_builder(world, visual_id);
+
+    visual_id
+}
+
+
 /// Command to spawn a box.
 pub struct SpawnBoxCommand {
     /// Position of the box.
@@ -108,24 +211,23 @@ impl GameCommand for SpawnBoxCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let z = world.resource_mut::<ZIndex>().next();
+        let shape = shapes::Rectangle {
+            extents: Vec2::new(self.width, self.height),
+            origin: shapes::RectangleOrigin::Center,
+            radii: None,
+        };
 
-        let entity = world
-            .spawn((
-                Transform::from_xyz(self.position.x, self.position.y, z),
-                GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
-                RigidBody::Dynamic,
-                // Rapier uses half-extents
-                Collider::cuboid(self.width / 2.0, self.height / 2.0),
-                EditableBox {
-                    width: self.width as f64,
-                    height: self.height as f64,
-                },
-            ))
-            .id();
+        let entity = spawn_shape_entity(
+            world,
+            self.position,
+            &shape,
+            Collider::cuboid(self.width / 2.0, self.height / 2.0),
+            Fill::color(Color::srgb(0.5, 0.5, 1.0)),
+            EditableBox {
+                width: self.width as f64,
+                height: self.height as f64,
+            },
+        );
 
         self.entity = Some(entity);
         Ok(())
@@ -157,24 +259,26 @@ impl GameCommand for SpawnCircleCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let z = world.resource_mut::<ZIndex>().next();
+        let shape = shapes::Circle {
+            radius: self.radius,
+            center: Vec2::ZERO,
+        };
 
-        let id = world
-            .spawn((
-                Transform::from_xyz(self.position.x, self.position.y, z),
-                GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
-                RigidBody::Dynamic,
-                Collider::ball(self.radius),
-                EditableCircle {
-                    radius: self.radius as f64,
-                },
-            ))
-            .id();
+        let entity = spawn_shape_entity(
+            world,
+            self.position,
+            &shape,
+            Collider::ball(self.radius),
+            Fill {
+                color: Color::srgb(1.0, 0.5, 0.5),
+                options: FillOptions::default().with_tolerance(0.001),
+            },
+            EditableCircle {
+                radius: self.radius as f64,
+            },
+        );
 
-        self.entity = Some(id);
+        self.entity = Some(entity);
         Ok(())
     }
 
@@ -208,7 +312,10 @@ impl GameCommand for SpawnPolygonCommand {
             return Err("Polygon must have at least 3 vertices".to_string());
         }
 
-        let z = world.resource_mut::<ZIndex>().next();
+        let shape = shapes::Polygon {
+            points: self.vertices.clone(),
+            closed: true,
+        };
 
         let vertices: Vec<Point2<f32>> = self.vertices
             .iter()
@@ -221,19 +328,16 @@ impl GameCommand for SpawnPolygonCommand {
         let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
         let collider = Collider::from(rapier_shape);
 
-        let id = world
-            .spawn((
-                Transform::from_xyz(self.position.x, self.position.y, z),
-                GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
-                RigidBody::Dynamic,
-                collider,
-            ))
-            .id();
+        let entity = spawn_shape_entity(
+            world,
+            self.position,
+            &shape,
+            collider,
+            Fill::color(Color::srgb(0.5, 1.0, 0.5)),
+            (),
+        );
 
-        self.entity = Some(id);
+        self.entity = Some(entity);
         Ok(())
     }
 
@@ -269,34 +373,48 @@ impl GameCommand for SpawnJointCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
+        // Visual
+        let visual_id = spawn_connector_visual(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            |world, visual_id| {
+                let circle_outer = GeometryBuilder::build_as(&shapes::Circle { radius: 5.0, ..default() });
+                world.entity_mut(visual_id).insert((
+                    ShapeBundle { path: circle_outer, ..default() },
+                    Fill::color(Color::BLACK)
+                ));
+
+                let circle_inner = GeometryBuilder::build_as(&shapes::Circle { radius: 2.0, ..default() });
+                let inner = world.spawn((
+                     ShapeBundle {
+                         path: circle_inner,
+                         transform: Transform::from_translation(Vec3::Z * 0.1),
+                         ..default()
+                     },
+                     Fill::color(Color::WHITE),
+                )).id();
+                world.entity_mut(visual_id).add_child(inner);
+            }
+        );
+        self.visual_entity = Some(visual_id);
+
         // Physics Joint
-        let target_entity;
-        let joint_data;
+        let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            Some(visual_id)
+        );
+        self.pin_entity = pin_entity;
 
-        if let Some(e_b) = self.entity_b {
-            target_entity = e_b;
-            joint_data = RevoluteJointBuilder::new()
-                .local_anchor1(self.anchor_a)
-                .local_anchor2(self.anchor_b);
-        } else {
-            // Pin logic
-            let t_a = world
-                .get::<GlobalTransform>(self.entity_a)
-                .map(|t| t.compute_transform())
-                .unwrap_or_default();
-            let world_pos = t_a.transform_point(Vec3::new(self.anchor_a.x, self.anchor_a.y, 0.0));
-
-            let pin_id = world
-                .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
-                .id();
-
-            self.pin_entity = Some(pin_id);
-            target_entity = pin_id;
-
-            joint_data = RevoluteJointBuilder::new()
-                .local_anchor1(self.anchor_a)
-                .local_anchor2(Vec2::ZERO);
-        }
+        let joint_data = RevoluteJointBuilder::new()
+            .local_anchor1(local_anchor_1)
+            .local_anchor2(local_anchor_2);
 
         // Attach ImpulseJoint to entity_a
         world
@@ -346,32 +464,50 @@ impl GameCommand for SpawnFixedJointCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let target_entity;
-        let joint_data;
+        let visual_id = spawn_connector_visual(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            |world, visual_id| {
+                let line1 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)));
+                let v1 = world.spawn((
+                        ShapeBundle {
+                            path: line1,
+                            transform: Transform::from_translation(Vec3::Z * 0.1),
+                            ..default()
+                        },
+                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                )).id();
 
-        if let Some(e_b) = self.entity_b {
-            target_entity = e_b;
-            joint_data = FixedJointBuilder::new()
-                .local_anchor1(self.anchor_a)
-                .local_anchor2(self.anchor_b);
-        } else {
-            let t_a = world
-                .get::<GlobalTransform>(self.entity_a)
-                .map(|t| t.compute_transform())
-                .unwrap_or_default();
-            let world_pos = t_a.transform_point(Vec3::new(self.anchor_a.x, self.anchor_a.y, 0.0));
+                let line2 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0)));
+                let v2 = world.spawn((
+                        ShapeBundle {
+                            path: line2,
+                            transform: Transform::from_translation(Vec3::Z * 0.1),
+                            ..default()
+                        },
+                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                )).id();
+                world.entity_mut(visual_id).add_children(&[v1, v2]);
+            }
+        );
+        self.visual_entity = Some(visual_id);
 
-            let pin_id = world
-                .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
-                .id();
+        let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            Some(visual_id)
+        );
+        self.pin_entity = pin_entity;
 
-            self.pin_entity = Some(pin_id);
-            target_entity = pin_id;
-
-            joint_data = FixedJointBuilder::new()
-                .local_anchor1(self.anchor_a)
-                .local_anchor2(Vec2::ZERO);
-        }
+        let joint_data = FixedJointBuilder::new()
+            .local_anchor1(local_anchor_1)
+            .local_anchor2(local_anchor_2);
 
         world
             .entity_mut(self.entity_a)
