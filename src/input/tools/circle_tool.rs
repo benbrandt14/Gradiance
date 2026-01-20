@@ -17,7 +17,9 @@ impl Plugin for CircleToolPlugin {
         app.init_resource::<CircleToolData>();
         app.add_systems(
             Update,
-            circle_tool_update.run_if(in_state(ToolState::Circle)),
+            circle_tool_update
+                .run_if(in_state(ToolState::Circle))
+                .in_set(GameSystemSet::Tools),
         );
         app.add_systems(OnExit(ToolState::Circle), circle_tool_reset);
     }

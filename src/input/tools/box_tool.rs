@@ -15,7 +15,12 @@ pub struct BoxToolPlugin;
 impl Plugin for BoxToolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BoxToolData>();
-        app.add_systems(Update, box_tool_update.run_if(in_state(ToolState::Box)));
+        app.add_systems(
+            Update,
+            box_tool_update
+                .run_if(in_state(ToolState::Box))
+                .in_set(GameSystemSet::Tools),
+        );
         app.add_systems(OnExit(ToolState::Box), box_tool_reset);
     }
 }

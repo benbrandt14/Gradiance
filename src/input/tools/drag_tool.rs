@@ -15,7 +15,12 @@ pub struct DragToolPlugin;
 impl Plugin for DragToolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DragToolData>();
-        app.add_systems(Update, drag_tool_update.run_if(in_state(ToolState::Drag)));
+        app.add_systems(
+            Update,
+            drag_tool_update
+                .run_if(in_state(ToolState::Drag))
+                .in_set(GameSystemSet::Tools),
+        );
         app.add_systems(OnExit(ToolState::Drag), drag_tool_reset);
     }
 }

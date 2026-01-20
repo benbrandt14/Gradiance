@@ -17,7 +17,9 @@ impl Plugin for SelectToolPlugin {
         app.init_resource::<SelectToolData>();
         app.add_systems(
             Update,
-            select_tool_update.run_if(in_state(ToolState::Select)),
+            select_tool_update
+                .run_if(in_state(ToolState::Select))
+                .in_set(GameSystemSet::Tools),
         );
         app.add_systems(OnExit(ToolState::Select), select_tool_reset);
     }

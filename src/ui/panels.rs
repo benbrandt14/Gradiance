@@ -15,7 +15,10 @@ pub struct PanelsPlugin;
 
 impl Plugin for PanelsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (sidebar_ui, top_panel_ui));
+        app.add_systems(
+            Update,
+            (sidebar_ui, top_panel_ui).in_set(GameSystemSet::Ui),
+        );
     }
 }
 

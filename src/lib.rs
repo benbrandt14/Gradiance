@@ -24,6 +24,15 @@ use bevy_prototype_lyon::prelude::*;
 // use bevy_mod_picking::DefaultPickingPlugins;
 // use bevy_mod_picking::backends::rapier::RapierBackend;
 
+/// System sets for ordering execution.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GameSystemSet {
+    /// UI systems (drawing panels, handling clicks).
+    Ui,
+    /// Tool logic (checking pointer, creating shapes).
+    Tools,
+}
+
 /// The primary plugin for the Gradiance game.
 ///
 /// This plugin initializes all sub-systems including physics, geometry, input, UI, and scripting.
@@ -31,6 +40,8 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        app.configure_sets(Update, GameSystemSet::Tools.after(GameSystemSet::Ui));
+
         app.add_plugins((
             ShapePlugin,
             // DefaultPickingPlugins,

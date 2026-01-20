@@ -18,7 +18,9 @@ impl Plugin for PolygonToolPlugin {
         app.init_resource::<PolygonToolData>();
         app.add_systems(
             Update,
-            polygon_tool_update.run_if(in_state(ToolState::Polygon)),
+            polygon_tool_update
+                .run_if(in_state(ToolState::Polygon))
+                .in_set(GameSystemSet::Tools),
         );
         app.add_systems(OnExit(ToolState::Polygon), polygon_tool_reset);
     }
