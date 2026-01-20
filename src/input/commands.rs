@@ -548,6 +548,56 @@ impl GameCommand for SpawnFixedJointCommand {
     }
 }
 
+/// Command to move an entity.
+pub struct MoveEntityCommand {
+    /// The entity being moved.
+    pub entity: Entity,
+    /// Old position.
+    pub old_position: Vec2,
+    /// New position.
+    pub new_position: Vec2,
+    /// Old rotation (radians).
+    pub old_rotation: f32,
+    /// New rotation (radians).
+    pub new_rotation: f32,
+}
+
+impl GameCommand for MoveEntityCommand {
+    fn name(&self) -> String {
+        "Move Entity".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+        if let Ok(mut transform) = world.get_mut::<Transform>(self.entity) {
+            transform.translation.x = self.new_position.x;
+            transform.translation.y = self.new_position.y;
+            transform.rotation = Quat::from_rotation_z(self.new_rotation);
+        } else {
+            return Err("Entity not found".to_string());
+        }
+
+        // Wake up body if it exists
+        if let Some(mut activation) = world.get_mut::<Sleeping>(self.entity) {
+            activation.sleeping = false;
+        }
+
+        Ok(())
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if let Ok(mut transform) = world.get_mut::<Transform>(self.entity) {
+            transform.translation.x = self.old_position.x;
+            transform.translation.y = self.old_position.y;
+            transform.rotation = Quat::from_rotation_z(self.old_rotation);
+        }
+
+        // Wake up body if it exists
+        if let Some(mut activation) = world.get_mut::<Sleeping>(self.entity) {
+            activation.sleeping = false;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

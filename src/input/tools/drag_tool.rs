@@ -6,6 +6,7 @@
 use crate::physics::floor::GroundPlane;
 use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::commands::{CommandStack, MoveEntityCommand};
 use crate::prelude::*;
 use bevy_egui::EguiContexts;
 
@@ -25,6 +26,7 @@ struct DragToolData {
     dragged_entity: Option<Entity>,
     hand_entity: Option<Entity>,
     local_anchor: Vec2,
+    initial_transform: Transform,
 }
 
 fn drag_tool_reset(mut commands: Commands, mut data: ResMut<DragToolData>) {
@@ -75,6 +77,7 @@ fn drag_tool_update(
         if let Some(entity) = hit_entity {
             if let Ok((transform, _)) = query.get(entity) {
                 data.dragged_entity = Some(entity);
+                data.initial_transform = *transform;
 
                 // Calculate local anchor on the body
                 data.local_anchor = calculate_local_anchor(transform, current_pos);
@@ -105,6 +108,30 @@ fn drag_tool_update(
         if let Some(hand) = data.hand_entity {
             commands.entity(hand).despawn();
         }
+
+        if let Some(entity) = data.dragged_entity {
+            if let Ok((transform, _)) = query.get(entity) {
+                let dist = transform.translation.truncate().distance(data.initial_transform.translation.truncate());
+                let rot_diff = transform.rotation.angle_between(data.initial_transform.rotation);
+
+                if dist > 0.001 || rot_diff > 0.001 {
+                    let cmd = MoveEntityCommand {
+                        entity,
+                        old_position: data.initial_transform.translation.truncate(),
+                        new_position: transform.translation.truncate(),
+                        old_rotation: data.initial_transform.rotation.to_euler(EulerRot::XYZ).2,
+                        new_rotation: transform.rotation.to_euler(EulerRot::XYZ).2,
+                    };
+
+                    commands.queue(move |world: &mut World| {
+                        world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                            stack.push(Box::new(cmd), world);
+                        });
+                    });
+                }
+            }
+        }
+
         data.hand_entity = None;
         data.dragged_entity = None;
     }
@@ -162,12 +189,7 @@ fn drag_tool_update(
 }
 
 fn calculate_rotated_anchor(local_anchor: Vec2, rotation: f32) -> Vec2 {
-    let cos = rotation.cos();
-    let sin = rotation.sin();
-    Vec2::new(
-        local_anchor.x * cos - local_anchor.y * sin,
-        local_anchor.x * sin + local_anchor.y * cos,
-    )
+    local_anchor.rotate(Vec2::from_angle(rotation))
 }
 
 #[cfg(test)]
