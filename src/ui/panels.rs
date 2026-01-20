@@ -30,11 +30,7 @@ fn sidebar_ui(
         return;
     };
 
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
+    if window.width() <= 0.0 || window.height() <= 0.0 {
         return;
     }
 
@@ -109,11 +105,7 @@ fn top_panel_ui(
         return;
     };
 
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
+    if window.width() <= 0.0 || window.height() <= 0.0 {
         return;
     }
 

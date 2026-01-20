@@ -17,8 +17,8 @@ impl Plugin for PhysicsPlugin {
         app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
             .add_plugins(RapierDebugRenderPlugin::default());
 
-        // Configure Gravity
-        app.add_systems(Startup, configure_gravity);
+        // Configure Physics (Gravity)
+        app.add_systems(Startup, configure_physics);
 
         // Spec: Custom constraints will be added here
         app.add_plugins(constraints::ConstraintsPlugin);
@@ -28,7 +28,7 @@ impl Plugin for PhysicsPlugin {
     }
 }
 
-fn configure_gravity(mut config: Query<&mut RapierConfiguration>) {
+fn configure_physics(mut config: Query<&mut RapierConfiguration>) {
     for mut config in &mut config {
         config.gravity = Vec2::new(0.0, -1000.0);
     }
