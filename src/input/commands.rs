@@ -157,7 +157,10 @@ impl GameCommand for SpawnCircleCommand {
                     transform: Transform::from_xyz(self.position.x, self.position.y, z),
                     ..default()
                 },
-                Fill::color(Color::srgb(1.0, 0.5, 0.5)),
+                Fill {
+                    color: Color::srgb(1.0, 0.5, 0.5),
+                    options: FillOptions::default().with_tolerance(0.001),
+                },
                 Stroke::new(Color::BLACK, 0.1),
                 RigidBody::Dynamic,
                 Collider::ball(self.radius),
