@@ -14,22 +14,31 @@ pub struct Selection(pub HashSet<Entity>);
 impl Selection {
     /// Clears selection.
     pub fn clear(&mut self) {
-        self.0.clear();
+        if !self.0.is_empty() {
+            info!("Selection: Cleared");
+            self.0.clear();
+        }
     }
     /// Adds an entity.
     pub fn add(&mut self, entity: Entity) {
-        self.0.insert(entity);
+        if self.0.insert(entity) {
+            info!("Selection: Added entity {:?}", entity);
+        }
     }
     /// Removes an entity.
     pub fn remove(&mut self, entity: Entity) {
-        self.0.remove(&entity);
+        if self.0.remove(&entity) {
+            info!("Selection: Removed entity {:?}", entity);
+        }
     }
     /// Toggles an entity.
     pub fn toggle(&mut self, entity: Entity) {
         if self.0.contains(&entity) {
             self.0.remove(&entity);
+            info!("Selection: Removed entity {:?}", entity);
         } else {
             self.0.insert(entity);
+            info!("Selection: Added entity {:?}", entity);
         }
     }
 }
@@ -50,8 +59,12 @@ fn handle_delete_key(
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     if keys.just_pressed(KeyCode::Delete) || keys.just_pressed(KeyCode::Backspace) {
-        for entity in selection.0.drain() {
-            commands.entity(entity).despawn();
+        let count = selection.0.len();
+        if count > 0 {
+            info!("Deleted {} entities", count);
+            for entity in selection.0.drain() {
+                commands.entity(entity).despawn_recursive();
+            }
         }
     }
 }

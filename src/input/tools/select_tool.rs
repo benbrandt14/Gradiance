@@ -156,14 +156,25 @@ fn select_tool_update(
                 let min_y = min.y;
                 let max_y = max.y;
 
+                let mut count = 0;
                 // Manual AABB check against all selectable entities
                 for (entity, global_transform) in &selectable_query {
                     let t = global_transform.translation().truncate();
                     if t.x >= min_x && t.x <= max_x && t.y >= min_y && t.y <= max_y {
-                        selection.add(entity);
+                        // Insert directly to avoid spamming "Added entity" logs
+                        if selection.0.insert(entity) {
+                            count += 1;
+                        }
                     }
                 }
+                if count > 0 {
+                    info!("Select Tool: Box Selected {} entities", count);
+                }
             }
+        }
+
+        if data.is_moving {
+            info!("Select Tool: Moved {} entities", selection.0.len());
         }
 
         data.is_moving = false;
