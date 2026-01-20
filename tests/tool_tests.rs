@@ -1,7 +1,7 @@
 use bevy::gizmos::GizmoPlugin;
 use bevy::input::InputPlugin as BevyInputPlugin;
 use bevy::prelude::*;
-use bevy::window::{WindowPlugin, PrimaryWindow, WindowScaleFactorChanged, WindowResized, WindowCreated};
+use bevy::window::{PrimaryWindow, WindowScaleFactorChanged, WindowResized, WindowCreated};
 use bevy::asset::AssetEvent;
 use bevy::state::app::StatesPlugin;
 
@@ -17,6 +17,7 @@ use gradiance::input::tools::circle_tool::CircleToolPlugin;
 use gradiance::input::tools::connector::ConnectorToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
+use gradiance::input::tools::drag_tool::DragToolPlugin;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
 use rstest::{fixture, rstest};
@@ -33,12 +34,7 @@ fn app() -> App {
     app.add_plugins(TransformPlugin);
     app.add_plugins(StatesPlugin);
     app.add_plugins(BevyInputPlugin);
-    // WindowPlugin defines Window events and components
-    app.add_plugins(WindowPlugin {
-        primary_window: None,
-        exit_condition: bevy::window::ExitCondition::DontExit,
-        close_when_requested: false,
-    });
+    // WindowPlugin is NOT added to avoid Winit/Window creation issues in headless env.
 
     // Physics
     app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
@@ -51,7 +47,8 @@ fn app() -> App {
 
     app.init_resource::<EguiUserTextures>();
     app.init_resource::<Events<bevy::picking::backend::PointerHits>>();
-    // WindowPlugin usually adds these, but initing them is safe idempotent
+
+    // Manually init Window events
     app.init_resource::<Events<WindowScaleFactorChanged>>();
     app.init_resource::<Events<WindowResized>>();
     app.init_resource::<Events<WindowCreated>>();
@@ -67,6 +64,7 @@ fn app() -> App {
     app.add_plugins(PolygonToolPlugin);
     app.add_plugins(SelectToolPlugin);
     app.add_plugins(ConnectorToolPlugin);
+    app.add_plugins(DragToolPlugin);
 
     // Initial State
     app.init_state::<ToolState>();
@@ -81,14 +79,13 @@ fn app() -> App {
     // Initial update
     app.update();
 
-    // Spawn Primary Window for cursor mapping
+    // Spawn Primary Window entity (headless) for systems that query it
     app.world_mut().spawn((
         Window {
             title: "Headless Test Window".into(),
             ..default()
         },
         PrimaryWindow,
-        // EguiContext not needed if is_pointer_over_ui uses try_ctx_mut
     ));
     app.update();
 
@@ -100,14 +97,25 @@ fn set_cursor(app: &mut App, pos: Vec2) {
     cursor.0 = Some(pos);
 }
 
+use bevy::input::mouse::MouseButtonInput;
+use bevy::input::ButtonState;
+
 fn mouse_down(app: &mut App, button: MouseButton) {
-    let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
-    input.press(button);
+    let window = app.world_mut().query_filtered::<Entity, With<PrimaryWindow>>().single(app.world());
+    app.world_mut().send_event(MouseButtonInput {
+        button,
+        state: ButtonState::Pressed,
+        window,
+    });
 }
 
 fn mouse_up(app: &mut App, button: MouseButton) {
-    let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
-    input.release(button);
+    let window = app.world_mut().query_filtered::<Entity, With<PrimaryWindow>>().single(app.world());
+    app.world_mut().send_event(MouseButtonInput {
+        button,
+        state: ButtonState::Released,
+        window,
+    });
 }
 
 fn set_tool(app: &mut App, state: ToolState) {
@@ -303,4 +311,109 @@ fn test_joint_tool_pin(mut app: App) {
         has_joint,
         "Should have created an ImpulseJoint on the entity"
     );
+}
+
+#[rstest]
+fn test_drag_tool(mut app: App) {
+    // 1. Spawn a dynamic box
+    let _box_entity = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 1.0),
+            Transform::from_xyz(5.0, 5.0, 0.0),
+            GlobalTransform::default(),
+            Velocity::default(),
+            EditableBox {
+                width: 2.0,
+                height: 2.0,
+            },
+        ))
+        .id();
+
+    // Update physics
+    for _ in 0..5 {
+        app.update();
+    }
+
+    set_tool(&mut app, ToolState::Drag);
+
+    // 2. Click on the box
+    set_cursor(&mut app, Vec2::new(5.0, 5.0));
+    mouse_down(&mut app, MouseButton::Left);
+    app.update(); // Trigger spawn of hand entity
+
+    // Verify hand entity exists
+    let mut hand_query = app.world_mut().query_filtered::<Entity, (With<RigidBody>, Without<Collider>)>();
+    // There should be one hand entity (KinematicPositionBased)
+    let hands: Vec<Entity> = hand_query.iter(app.world()).collect();
+    // Filter to ensure it's not the box (Box has Collider)
+    assert_eq!(hands.len(), 1, "Should have spawned one hand entity");
+
+    // 3. Move cursor
+    let target_pos = Vec2::new(10.0, 10.0);
+    set_cursor(&mut app, target_pos);
+    app.update(); // Hand should move
+
+    // Verify hand moved
+    let hand_entity = hands[0];
+    let hand_transform = app.world().get::<Transform>(hand_entity).unwrap();
+    assert_eq!(hand_transform.translation.truncate(), target_pos, "Hand should follow cursor");
+
+    // 4. Release mouse
+    mouse_up(&mut app, MouseButton::Left);
+    app.update();
+
+    // Verify hand is despawned
+    assert!(app.world().get_entity(hand_entity).is_err(), "Hand should be despawned");
+}
+
+#[rstest]
+fn test_undo_redo(mut app: App) {
+    set_tool(&mut app, ToolState::Box);
+
+    // 1. Spawn a box
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse_down(&mut app, MouseButton::Left);
+    app.update();
+
+    set_cursor(&mut app, Vec2::new(10.0, 10.0));
+    app.update();
+
+    mouse_up(&mut app, MouseButton::Left);
+    app.update(); // Process command
+
+    // Verify box exists
+    let mut query = app
+        .world_mut()
+        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
+    let entities: Vec<Entity> = query.iter(app.world()).collect();
+    assert_eq!(entities.len(), 1, "Box should be spawned");
+    let _box_id = entities[0];
+
+    // 2. Undo
+    // CommandStack requires mutable access to world to undo
+    app.world_mut().resource_scope(|world, mut stack: Mut<CommandStack>| {
+        stack.undo(world);
+    });
+    app.update(); // Process any despawns
+
+    // Verify box is gone
+    // Note: Undo might just despawn the entity, so we check query count
+    let mut query = app
+        .world_mut()
+        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
+    assert_eq!(query.iter(app.world()).count(), 0, "Box should be removed after undo");
+
+    // 3. Redo
+    app.world_mut().resource_scope(|world, mut stack: Mut<CommandStack>| {
+        stack.redo(world);
+    });
+    app.update();
+
+    // Verify box is back
+    let mut query = app
+        .world_mut()
+        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
+    assert_eq!(query.iter(app.world()).count(), 1, "Box should be restored after redo");
 }
