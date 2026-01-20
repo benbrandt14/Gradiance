@@ -3,10 +3,10 @@
 //! Click and drag to define the radius of a new circle.
 
 use crate::input::commands::{CommandStack, SpawnCircleCommand};
-use crate::input::tools::utils::is_pointer_over_ui;
+use crate::input::tools::utils::{handle_drag_input, DragStatus};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
-use crate::ui::grid::{GridSettings, snap_to_grid};
+use crate::ui::grid::GridSettings;
 use bevy_egui::EguiContexts;
 
 /// Plugin for the Circle Tool.
@@ -46,42 +46,34 @@ fn circle_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
-    mut contexts: EguiContexts,
+    contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
 ) {
-    if is_pointer_over_ui(&mut contexts) {
-        return;
-    }
-
-    let Some(raw_pos) = cursor_pos.0 else {
+    let Some(drag) = handle_drag_input(
+        cursor_pos,
+        mouse,
+        grid_settings,
+        contexts,
+        &mut data.drag_start,
+    ) else {
         return;
     };
 
-    let mut current_pos = raw_pos;
-    if grid_settings.show && grid_settings.snap {
-        current_pos = snap_to_grid(current_pos, grid_settings.spacing);
-    }
+    let radius = calculate_radius(drag.start, drag.current);
 
-    if mouse.just_pressed(MouseButton::Left) {
-        data.drag_start = Some(current_pos);
-    }
-
-    if let Some(start) = data.drag_start {
-        let radius = calculate_radius(start, current_pos);
-
-        if mouse.pressed(MouseButton::Left) {
+    match drag.status {
+        DragStatus::Dragging => {
             gizmos.circle_2d(
-                Isometry2d::from_translation(Vec2::new(start.x, start.y)),
+                Isometry2d::from_translation(Vec2::new(drag.start.x, drag.start.y)),
                 radius,
                 Color::WHITE,
             );
-            gizmos.line_2d(start, current_pos, Color::WHITE);
+            gizmos.line_2d(drag.start, drag.current, Color::WHITE);
         }
-
-        if mouse.just_released(MouseButton::Left) {
+        DragStatus::Finished => {
             if should_spawn_circle(radius) {
                 let cmd = SpawnCircleCommand {
-                    position: start,
+                    position: drag.start,
                     radius,
                     entity: None,
                 };
@@ -92,9 +84,8 @@ fn circle_tool_update(
                     });
                 });
             }
-
-            data.drag_start = None;
         }
+        _ => {}
     }
 }
 

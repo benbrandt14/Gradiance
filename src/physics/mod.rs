@@ -6,6 +6,7 @@ use crate::prelude::*;
 
 pub mod config;
 pub mod constraints;
+pub mod floor;
 
 /// Plugin that configures the physics simulation.
 pub struct PhysicsPlugin;
@@ -21,6 +22,9 @@ impl Plugin for PhysicsPlugin {
 
         // Spec: Custom constraints will be added here
         app.add_plugins(constraints::ConstraintsPlugin);
+
+        // Setup Floor
+        app.add_plugins(floor::FloorPlugin);
     }
 }
 

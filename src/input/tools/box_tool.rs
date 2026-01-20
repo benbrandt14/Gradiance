@@ -3,10 +3,10 @@
 //! Click and drag to define the extents of a new box.
 
 use crate::input::commands::{CommandStack, SpawnBoxCommand};
-use crate::input::tools::utils::is_pointer_over_ui;
+use crate::input::tools::utils::{handle_drag_input, DragStatus};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
-use crate::ui::grid::{GridSettings, snap_to_grid};
+use crate::ui::grid::GridSettings;
 use bevy_egui::EguiContexts;
 
 /// Plugin for the Box Tool.
@@ -47,30 +47,23 @@ fn box_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
-    mut contexts: EguiContexts,
+    contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
 ) {
-    if is_pointer_over_ui(&mut contexts) {
-        return;
-    }
-
-    let Some(raw_pos) = cursor_pos.0 else {
+    let Some(drag) = handle_drag_input(
+        cursor_pos,
+        mouse,
+        grid_settings,
+        contexts,
+        &mut data.drag_start,
+    ) else {
         return;
     };
 
-    let mut current_pos = raw_pos;
-    if grid_settings.show && grid_settings.snap {
-        current_pos = snap_to_grid(current_pos, grid_settings.spacing);
-    }
+    let (size, center) = calculate_box_geometry(drag.start, drag.current);
 
-    if mouse.just_pressed(MouseButton::Left) {
-        data.drag_start = Some(current_pos);
-    }
-
-    if let Some(start) = data.drag_start {
-        let (size, center) = calculate_box_geometry(start, current_pos);
-
-        if mouse.pressed(MouseButton::Left) {
+    match drag.status {
+        DragStatus::Dragging => {
             // Draw preview
             gizmos.rect_2d(
                 Isometry2d::from_translation(Vec2::new(center.x, center.y)),
@@ -78,9 +71,7 @@ fn box_tool_update(
                 Color::WHITE,
             );
         }
-
-        if mouse.just_released(MouseButton::Left) {
-            // Spawn
+        DragStatus::Finished => {
             if should_spawn_box(size) {
                 let cmd = SpawnBoxCommand::new(center, size.x, size.y);
 
@@ -90,9 +81,8 @@ fn box_tool_update(
                     });
                 });
             }
-
-            data.drag_start = None;
         }
+        _ => {}
     }
 }
 
