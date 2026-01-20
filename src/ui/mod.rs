@@ -8,6 +8,7 @@ use crate::prelude::*;
 use bevy_egui::EguiPlugin;
 
 pub mod context_menu;
+pub mod diagnostics;
 pub mod grid;
 pub mod icons;
 pub mod inspector;
@@ -29,6 +30,7 @@ impl Plugin for UiPlugin {
             inspector::InspectorPlugin,
             context_menu::ContextMenuPlugin,
             grid::GridPlugin,
+            diagnostics::DiagnosticsPlugin,
         ));
     }
 }
