@@ -2,7 +2,7 @@
 //!
 //! Simply allows clicking on entities to populate the `Selection` resource.
 
-use crate::GroundPlane;
+use crate::physics::floor::GroundPlane;
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
