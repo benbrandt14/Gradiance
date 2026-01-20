@@ -6,7 +6,8 @@
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
-use bevy_egui::{EguiContexts, egui};
+use crate::ui::icons::GameIcons;
+use bevy_egui::{egui, EguiContexts};
 
 #[derive(Resource, Default)]
 struct ContextMenuState {
@@ -87,9 +88,18 @@ fn context_menu_ui(
     mut contexts: EguiContexts,
     mut commands: Commands,
     mut selection: ResMut<Selection>,
+    game_icons: Res<GameIcons>,
 ) {
-    let Some(pos) = state.position else { return };
-    let Some(entity) = state.entity else { return };
+    let Some(pos) = state.position else {
+        return;
+    };
+    let Some(entity) = state.entity else {
+        return;
+    };
+
+    let settings_icon = contexts.add_image(game_icons.settings.clone_weak());
+    let delete_icon = contexts.add_image(game_icons.delete.clone_weak());
+    let freeze_icon = contexts.add_image(game_icons.freeze.clone_weak());
 
     let ctx = contexts.ctx_mut();
 
@@ -101,17 +111,35 @@ fn context_menu_ui(
         .title_bar(false)
         .frame(egui::Frame::popup(ctx.style().as_ref()))
         .show(ctx, |ui| {
-            if ui.button("Properties").clicked() {
+            if ui
+                .add(egui::Button::image_and_text(
+                    (settings_icon, egui::Vec2::new(16.0, 16.0)),
+                    "Properties",
+                ))
+                .clicked()
+            {
                 // Inspector handles selection.
                 state.position = None;
             }
-            if ui.button("Delete").clicked() {
+            if ui
+                .add(egui::Button::image_and_text(
+                    (delete_icon, egui::Vec2::new(16.0, 16.0)),
+                    "Delete",
+                ))
+                .clicked()
+            {
                 commands.entity(entity).despawn_recursive();
                 selection.remove(entity);
                 state.position = None;
                 state.entity = None;
             }
-            if ui.button("Freeze/Unfreeze").clicked() {
+            if ui
+                .add(egui::Button::image_and_text(
+                    (freeze_icon, egui::Vec2::new(16.0, 16.0)),
+                    "Freeze/Unfreeze",
+                ))
+                .clicked()
+            {
                 // Toggle static/dynamic logic would go here
             }
         });
