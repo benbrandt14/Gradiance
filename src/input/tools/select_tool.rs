@@ -151,16 +151,11 @@ fn select_tool_update(
             let size = max - min;
 
             if size.x > 0.1 && size.y > 0.1 {
-                let min_x = min.x;
-                let max_x = max.x;
-                let min_y = min.y;
-                let max_y = max.y;
-
                 let mut count = 0;
                 // Manual AABB check against all selectable entities
                 for (entity, global_transform) in &selectable_query {
                     let t = global_transform.translation().truncate();
-                    if t.x >= min_x && t.x <= max_x && t.y >= min_y && t.y <= max_y {
+                    if is_point_in_box(t, min, max) {
                         // Insert directly to avoid spamming "Added entity" logs
                         if selection.0.insert(entity) {
                             count += 1;
@@ -180,5 +175,32 @@ fn select_tool_update(
         data.is_moving = false;
         data.drag_start = None;
         data.initial_positions.clear();
+    }
+}
+
+fn is_point_in_box(point: Vec2, min: Vec2, max: Vec2) -> bool {
+    point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(Vec2::ZERO, Vec2::new(10.0, 10.0), Vec2::new(5.0, 5.0), true)]
+    #[case(Vec2::ZERO, Vec2::new(10.0, 10.0), Vec2::new(-5.0, 5.0), false)]
+    #[case(Vec2::ZERO, Vec2::new(10.0, 10.0), Vec2::new(15.0, 5.0), false)]
+    #[case(Vec2::ZERO, Vec2::new(10.0, 10.0), Vec2::new(5.0, 15.0), false)]
+    fn test_box_selection_logic(
+        #[case] start: Vec2,
+        #[case] end: Vec2,
+        #[case] point: Vec2,
+        #[case] expected: bool,
+    ) {
+        let min = start.min(end);
+        let max = start.max(end);
+        let contained = is_point_in_box(point, min, max);
+        assert_eq!(contained, expected);
     }
 }

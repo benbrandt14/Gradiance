@@ -137,25 +137,14 @@ fn drag_tool_update(
 
                 // If paused, manually move the object to follow cursor
                 if virtual_time.is_paused() {
-                    let cos = rotation.cos();
-                    let sin = rotation.sin();
-                    let rotated_anchor = Vec2::new(
-                        data.local_anchor.x * cos - data.local_anchor.y * sin,
-                        data.local_anchor.x * sin + data.local_anchor.y * cos,
-                    );
-
+                    let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
                     let new_pos = current_pos - rotated_anchor;
                     transform.translation.x = new_pos.x;
                     transform.translation.y = new_pos.y;
                 }
 
                 // Draw line
-                let cos = rotation.cos();
-                let sin = rotation.sin();
-                let rotated_anchor = Vec2::new(
-                    data.local_anchor.x * cos - data.local_anchor.y * sin,
-                    data.local_anchor.x * sin + data.local_anchor.y * cos,
-                );
+                let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
                 let current_anchor_pos = transform.translation.truncate() + rotated_anchor;
 
                 gizmos.line_2d(current_anchor_pos, current_pos, Color::WHITE);
@@ -169,5 +158,36 @@ fn drag_tool_update(
                 data.dragged_entity = None;
             }
         }
+    }
+}
+
+fn calculate_rotated_anchor(local_anchor: Vec2, rotation: f32) -> Vec2 {
+    let cos = rotation.cos();
+    let sin = rotation.sin();
+    Vec2::new(
+        local_anchor.x * cos - local_anchor.y * sin,
+        local_anchor.x * sin + local_anchor.y * cos,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+    use std::f32::consts::PI;
+
+    #[rstest]
+    #[case(Vec2::new(1.0, 0.0), 0.0, Vec2::new(1.0, 0.0))]
+    #[case(Vec2::new(1.0, 0.0), PI / 2.0, Vec2::new(0.0, 1.0))]
+    #[case(Vec2::new(1.0, 0.0), PI, Vec2::new(-1.0, 0.0))]
+    #[case(Vec2::new(0.0, 1.0), PI / 2.0, Vec2::new(-1.0, 0.0))]
+    fn test_calculate_rotated_anchor(
+        #[case] local: Vec2,
+        #[case] rot: f32,
+        #[case] expected: Vec2,
+    ) {
+        let result = calculate_rotated_anchor(local, rot);
+        assert!((result.x - expected.x).abs() < 1e-5);
+        assert!((result.y - expected.y).abs() < 1e-5);
     }
 }
