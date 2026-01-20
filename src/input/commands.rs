@@ -519,7 +519,8 @@ impl GameCommand for SpawnFixedJointCommand {
 
         let joint_data = FixedJointBuilder::new()
             .local_anchor1(local_anchor_1)
-            .local_anchor2(local_anchor_2);
+            .local_anchor2(local_anchor_2)
+            .local_basis2(self.rot_a - self.rot_b);
 
         world
             .entity_mut(self.entity_a)
@@ -759,5 +760,37 @@ mod tests {
         // Verify it is indeed the circle (by checking component)
         let entity = world.iter_entities().next().unwrap().id();
         assert!(world.get::<EditableCircle>(entity).is_some());
+    }
+
+    #[rstest]
+    fn test_spawn_fixed_joint_rotation(mut world: World) {
+        // Spawn Entity A with rotation 0
+        let entity_a = world.spawn(Transform::default()).id();
+
+        // Spawn Entity B with rotation PI/4 (45 degrees)
+        let entity_b = world.spawn(Transform::from_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_4))).id();
+
+        let mut cmd = SpawnFixedJointCommand {
+            entity_a,
+            entity_b: Some(entity_b),
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            compliance: 0.0,
+            visual_entity: None,
+            pin_entity: None,
+            rot_a: 0.0,
+            rot_b: std::f32::consts::FRAC_PI_4,
+        };
+
+        // Apply
+        assert!(cmd.apply(&mut world).is_ok());
+
+        // Check ImpulseJoint on entity_a
+        let joint = world.get::<ImpulseJoint>(entity_a).expect("Joint not found");
+
+        let frame2_rot = joint.data.local_frame2.rotation.angle();
+        let expected = 0.0 - std::f32::consts::FRAC_PI_4;
+
+        assert!((frame2_rot - expected).abs() < 1e-5, "Expected {}, got {}", expected, frame2_rot);
     }
 }

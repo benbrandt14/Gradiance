@@ -97,6 +97,9 @@ fn drag_tool_update(
                 commands
                     .entity(hand)
                     .insert(ImpulseJoint::new(entity, joint));
+
+                // Ensure the dragged entity is awake and doesn't sleep while dragging
+                commands.entity(entity).insert(Sleeping::disabled());
             }
         }
     }
@@ -104,6 +107,10 @@ fn drag_tool_update(
     if mouse.just_released(MouseButton::Left) {
         if let Some(hand) = data.hand_entity {
             commands.entity(hand).despawn();
+        }
+        // Allow the entity to sleep again
+        if let Some(entity) = data.dragged_entity {
+            commands.entity(entity).remove::<Sleeping>();
         }
         data.hand_entity = None;
         data.dragged_entity = None;
@@ -118,7 +125,12 @@ fn drag_tool_update(
             t.translation.y = current_pos.y;
 
             // Update velocity for correct physics interaction (kinematic body)
-            if time.delta_secs() > 0.0001 {
+            if virtual_time.is_paused() {
+                // In pause mode, force velocity to zero to prevent launching the object
+                // when unpaused due to accumulated high velocity from mouse movement.
+                v.linvel = Vec2::ZERO;
+                v.angvel = 0.0;
+            } else if time.delta_secs() > 0.0001 {
                 let velocity = (current_pos - old_pos) / time.delta_secs();
                 v.linvel = velocity;
                 v.angvel = 0.0;
