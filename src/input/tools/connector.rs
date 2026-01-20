@@ -22,72 +22,10 @@ impl Plugin for ConnectorToolPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                update_connector.run_if(|state: Res<State<ToolState>>| {
-                    matches!(state.get(), ToolState::RevoluteJoint | ToolState::Weld)
-                }),
-                update_connector_visuals,
-            ),
+            update_connector.run_if(|state: Res<State<ToolState>>| {
+                matches!(state.get(), ToolState::RevoluteJoint | ToolState::Weld)
+            }),
         );
-    }
-}
-
-/// Component that links a visual indicator to a joint's anchors.
-///
-/// Ensures the visual stays at the midpoint of the anchors even if the joint stretches.
-#[derive(Component)]
-pub struct Connector {
-    /// The primary body (parent of the visual).
-    pub entity_a: Entity,
-    /// The secondary body (optional).
-    pub entity_b: Option<Entity>,
-    /// Local anchor on A.
-    pub local_anchor_a: Vec2,
-    /// Local anchor on B.
-    pub local_anchor_b: Vec2,
-}
-
-fn update_connector_visuals(
-    mut visuals: Query<(&mut Transform, &Connector, &Parent)>,
-    global_transforms: Query<&GlobalTransform>,
-) {
-    for (mut transform, connector, parent) in &mut visuals {
-        if let Ok(parent_global) = global_transforms.get(parent.get()) {
-            // Calculate world anchors
-            let anchor_a_world = if let Ok(t_a) = global_transforms.get(connector.entity_a) {
-                let t = t_a.compute_transform();
-                t.transform_point(Vec3::new(
-                    connector.local_anchor_a.x,
-                    connector.local_anchor_a.y,
-                    0.0,
-                ))
-            } else {
-                continue;
-            };
-
-            let anchor_b_world = if let Some(e_b) = connector.entity_b {
-                if let Ok(t_b) = global_transforms.get(e_b) {
-                    let t = t_b.compute_transform();
-                    t.transform_point(Vec3::new(
-                        connector.local_anchor_b.x,
-                        connector.local_anchor_b.y,
-                        0.0,
-                    ))
-                } else {
-                    anchor_a_world
-                }
-            } else {
-                Vec3::new(connector.local_anchor_b.x, connector.local_anchor_b.y, 0.0)
-            };
-
-            let midpoint = (anchor_a_world + anchor_b_world) * 0.5;
-
-            let parent_inv = parent_global.affine().inverse();
-            let local_midpoint = parent_inv.transform_point3(midpoint);
-
-            transform.translation.x = local_midpoint.x;
-            transform.translation.y = local_midpoint.y;
-        }
     }
 }
 
@@ -194,7 +132,6 @@ fn update_connector(
                     anchor_a,
                     anchor_b,
                     compliance: 0.0,
-                    visual_entity: None,
                     pin_entity: None,
                 };
                 commands.queue(move |world: &mut World| {
@@ -210,7 +147,6 @@ fn update_connector(
                     anchor_a,
                     anchor_b,
                     compliance: 0.0,
-                    visual_entity: None,
                     pin_entity: None,
                     rot_a,
                     rot_b,
