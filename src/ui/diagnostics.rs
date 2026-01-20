@@ -6,7 +6,7 @@ use bevy::diagnostic::{
     SystemInformationDiagnosticsPlugin,
 };
 use bevy_egui::{egui, EguiContexts};
-use bevy_rapier2d::render::DebugRenderContext;
+use bevy_rapier2d::render::{DebugRenderContext, DebugRenderMode};
 
 /// State for the diagnostics display.
 #[derive(Default, Resource)]
@@ -54,8 +54,14 @@ fn diagnostics_ui(
     diagnostics_state: Res<DiagnosticsState>,
     diagnostics: Res<DiagnosticsStore>,
     mut contexts: EguiContexts,
+    debug_render_context: Option<ResMut<DebugRenderContext>>,
 ) {
-    if !diagnostics_state.show_fps && !diagnostics_state.show_stats {
+    let debug_enabled = debug_render_context
+        .as_ref()
+        .map(|ctx| ctx.enabled)
+        .unwrap_or(false);
+
+    if !diagnostics_state.show_fps && !diagnostics_state.show_stats && !debug_enabled {
         return;
     }
 
@@ -67,7 +73,9 @@ fn diagnostics_ui(
         .title_bar(false)
         .auto_sized()
         .show(ctx, |ui| {
+            let mut shown = false;
             if diagnostics_state.show_fps {
+                shown = true;
                 if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
                     if let Some(value) = fps.smoothed() {
                         ui.label(format!("FPS: {:.1}", value));
@@ -81,9 +89,10 @@ fn diagnostics_ui(
             }
 
             if diagnostics_state.show_stats {
-                if diagnostics_state.show_fps {
+                if shown {
                     ui.separator();
                 }
+                shown = true;
 
                 if let Some(count) = diagnostics.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT) {
                     if let Some(value) = count.values().last() {
@@ -99,6 +108,47 @@ fn diagnostics_ui(
                 if let Some(mem) = diagnostics.get(&SystemInformationDiagnosticsPlugin::MEM_USAGE) {
                     if let Some(value) = mem.values().last() {
                          ui.label(format!("MEM: {:.1}%", value));
+                    }
+                }
+            }
+
+            if debug_enabled {
+                if let Some(mut ctx) = debug_render_context {
+                    if shown {
+                        ui.separator();
+                    }
+                    ui.label(egui::RichText::new("Physics Debug").strong());
+
+                    let mode = &mut ctx.pipeline.mode;
+
+                    let mut shapes = mode.contains(DebugRenderMode::COLLIDER_SHAPES);
+                    if ui.checkbox(&mut shapes, "Shapes").changed() {
+                        mode.set(DebugRenderMode::COLLIDER_SHAPES, shapes);
+                    }
+
+                    let mut aabbs = mode.contains(DebugRenderMode::COLLIDER_AABBS);
+                    if ui.checkbox(&mut aabbs, "AABBs").changed() {
+                        mode.set(DebugRenderMode::COLLIDER_AABBS, aabbs);
+                    }
+
+                    let mut axes = mode.contains(DebugRenderMode::RIGID_BODY_AXES);
+                    if ui.checkbox(&mut axes, "Axes").changed() {
+                        mode.set(DebugRenderMode::RIGID_BODY_AXES, axes);
+                    }
+
+                    let mut joints = mode.contains(DebugRenderMode::JOINTS);
+                    if ui.checkbox(&mut joints, "Joints").changed() {
+                        mode.set(DebugRenderMode::JOINTS, joints);
+                    }
+
+                    let mut contacts = mode.contains(DebugRenderMode::CONTACTS);
+                    if ui.checkbox(&mut contacts, "Contacts").changed() {
+                        mode.set(DebugRenderMode::CONTACTS, contacts);
+                    }
+
+                    let mut solver = mode.contains(DebugRenderMode::SOLVER_CONTACTS);
+                    if ui.checkbox(&mut solver, "Solver Contacts").changed() {
+                        mode.set(DebugRenderMode::SOLVER_CONTACTS, solver);
                     }
                 }
             }
