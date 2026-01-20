@@ -256,9 +256,13 @@ fn resolve_sorted_bodies(
     resolved.dedup_by_key(|k| k.0);
 
     // Sort by Z (Descending)
-    resolved.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+    sort_bodies_by_z(&mut resolved);
 
     resolved.into_iter().map(|(e, _)| e).collect()
+}
+
+fn sort_bodies_by_z(bodies: &mut Vec<(Entity, f32)>) {
+    bodies.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 }
 
 #[cfg(test)]
@@ -275,5 +279,24 @@ mod tests {
         #[case] expected: Option<ConnectorType>,
     ) {
         assert_eq!(ConnectorType::from_tool_state(&state), expected);
+    }
+
+    #[test]
+    fn test_sort_bodies_by_z() {
+        let e1 = Entity::from_raw(1);
+        let e2 = Entity::from_raw(2);
+        let e3 = Entity::from_raw(3);
+
+        let mut bodies = vec![
+            (e1, 1.0), // Low
+            (e2, 5.0), // High
+            (e3, 2.0), // Mid
+        ];
+
+        sort_bodies_by_z(&mut bodies);
+
+        assert_eq!(bodies[0].0, e2);
+        assert_eq!(bodies[1].0, e3);
+        assert_eq!(bodies[2].0, e1);
     }
 }
