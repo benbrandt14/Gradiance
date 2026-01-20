@@ -1,10 +1,9 @@
 //! Components for live-editable shapes.
 //!
 //! Provides `EditableBox` and `EditableCircle` components.
-//! (Visual/Collider updates temporarily disabled due to dependency conflicts).
 
 use crate::prelude::*;
-// use bevy_prototype_lyon::prelude::*;
+use bevy_prototype_lyon::prelude::*;
 
 /// A component representing a box that can be resized.
 #[derive(Component, Reflect, Default, Debug)]
@@ -42,30 +41,15 @@ fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Chang
             continue;
         }
 
-        /*
         let shape = shapes::Rectangle {
             extents: Vec2::new(editable.width as f32, editable.height as f32),
             origin: shapes::RectangleOrigin::Center,
-            ..default()
+            radii: None,
         };
-        */
 
         commands
             .entity(entity)
-            /*
-            .insert(
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&shape),
-                    ..default()
-                }
-            )
-            */
-            // Update Sprite instead?
-            .insert(Sprite {
-                custom_size: Some(Vec2::new(editable.width as f32, editable.height as f32)),
-                ..default()
-            })
-            // Rapier uses half-extents
+            .insert(GeometryBuilder::build_as(&shape))
             .insert(Collider::cuboid(
                 (editable.width / 2.0) as f32,
                 (editable.height / 2.0) as f32,
@@ -83,30 +67,14 @@ fn resize_circle(
             continue;
         }
 
-        /*
         let shape = shapes::Circle {
             radius: editable.radius as f32,
             center: Vec2::ZERO,
         };
-        */
 
         commands
             .entity(entity)
-            /*
-            .insert(
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&shape),
-                    ..default()
-                }
-            )
-            */
-            .insert(Sprite {
-                custom_size: Some(Vec2::new(
-                    editable.radius as f32 * 2.0,
-                    editable.radius as f32 * 2.0,
-                )),
-                ..default()
-            })
+            .insert(GeometryBuilder::build_as(&shape))
             .insert(Collider::ball(editable.radius as f32));
     }
 }
