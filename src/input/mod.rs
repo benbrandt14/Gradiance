@@ -146,5 +146,7 @@ pub enum ToolState {
     RevoluteJoint,
     /// Create fixed joints (Welds).
     Weld,
+    /// Create infinite ground plane.
+    Ground,
     // Add more as needed
 }

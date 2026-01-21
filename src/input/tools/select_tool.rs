@@ -46,7 +46,7 @@ fn select_tool_update(
     rapier_context_query: Query<&RapierContext>,
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
-    mut query: Query<&mut Transform>,
+    mut query: Query<(Entity, &mut Transform, Option<&GroundPlane>)>,
     // Add query for box selection fallback
     selectable_query: Query<(Entity, &GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
     grid_settings: Res<GridSettings>,
@@ -69,14 +69,38 @@ fn select_tool_update(
             return;
         };
         let filter = QueryFilter::default().exclude_sensors();
-        let mut hit_entity: Option<Entity> = None;
 
+        // Collect all hits
+        let mut hits = Vec::new();
         rapier_context.intersections_with_point(current_pos, filter, |entity| {
-            hit_entity = Some(entity);
-            false
+            hits.push(entity);
+            true
         });
 
-        if let Some(entity) = hit_entity {
+        // Sort hits: Non-ground first, then by Z index (descending)
+        hits.sort_by(|&a, &b| {
+            let info_a = query.get(a);
+            let info_b = query.get(b);
+
+            if let (Ok((_, t_a, g_a)), Ok((_, t_b, g_b))) = (info_a, info_b) {
+                // Non-ground (None) > Ground (Some)
+                // We want None < Some (asc) so None comes first?
+                // is_some(): None=false, Some=true. false < true.
+                // So None comes first. Correct.
+                let ground_order = g_a.is_some().cmp(&g_b.is_some());
+                if ground_order != std::cmp::Ordering::Equal {
+                     return ground_order;
+                }
+
+                // Z index: Higher is better (comes first).
+                // Sort descending: b.cmp(a)
+                t_b.translation.z.partial_cmp(&t_a.translation.z).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+
+        if let Some(&entity) = hits.first() {
             // Clicked on something
 
             // If shift not held and entity not in selection, clear selection
@@ -95,7 +119,7 @@ fn select_tool_update(
                 data.is_moving = true;
                 data.initial_positions.clear();
                 for &entity in &selection.0 {
-                    if let Ok(t) = query.get(entity) {
+                    if let Ok((_, t, _)) = query.get(entity) {
                         data.initial_positions
                             .push((entity, t.translation.truncate()));
                     }
@@ -117,7 +141,7 @@ fn select_tool_update(
             let delta = current_pos - data.drag_start_pos;
 
             for (entity, initial_pos) in &data.initial_positions {
-                if let Ok(mut t) = query.get_mut(*entity) {
+                if let Ok((_, mut t, _)) = query.get_mut(*entity) {
                     let mut new_pos = *initial_pos + delta;
                     if grid_settings.show && grid_settings.snap {
                         new_pos = snap_to_grid(new_pos, grid_settings.spacing);
