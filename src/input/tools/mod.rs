@@ -11,6 +11,7 @@ pub mod drag_tool;
 pub mod ground_tool;
 pub mod polygon_tool;
 pub mod select_tool;
+pub mod spring;
 pub mod utils;
 
 /// Plugin that registers all tool sub-plugins.
@@ -25,6 +26,7 @@ impl Plugin for ToolsPlugin {
             polygon_tool::PolygonToolPlugin,
             drag_tool::DragToolPlugin,
             connector::ConnectorToolPlugin,
+            spring::SpringToolPlugin,
             ground_tool::GroundToolPlugin,
         ));
     }

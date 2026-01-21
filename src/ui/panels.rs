@@ -75,6 +75,11 @@ fn sidebar_ui(
             "Fix",
         ),
         (
+            ToolState::Spring,
+            contexts.add_image(game_icons.spring.clone_weak()),
+            "Spring",
+        ),
+        (
             ToolState::Ground,
             contexts.add_image(game_icons.ground.clone_weak()),
             "Ground",

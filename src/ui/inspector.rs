@@ -3,6 +3,7 @@
 //! Provides an Egui sidebar that allows modifying properties of selected entities,
 //! such as Transform, RigidBody type, Friction, and Restitution.
 
+use crate::input::commands::SpringProperties;
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::selection::Selection;
 use crate::prelude::*;
@@ -37,6 +38,7 @@ fn inspector_ui(
         Option<&mut ColliderMassProperties>,
         Option<&mut GravityScale>,
         Option<&mut Sleeping>,
+        Option<&mut SpringProperties>,
     )>,
     mut commands: Commands,
 ) {
@@ -46,9 +48,6 @@ fn inspector_ui(
 
     // Inspect the first selected entity for initial values
     let first_entity = *selection.0.iter().next().unwrap();
-
-    // We need to extract values. We can't hold the borrow while doing UI if we want to write later.
-    // So we verify existence and copy values.
 
     // Check what components the first entity has
     let has_transform;
@@ -82,10 +81,13 @@ fn inspector_ui(
     let mut local_locked_axes = LockedAxes::empty();
 
     let has_mass_props;
-    let mut local_density = 1.0; // We usually edit density via ColliderMassProperties::Density
+    let mut local_density = 1.0;
 
     let has_gravity;
     let mut local_gravity = 1.0;
+
+    let has_spring;
+    let mut local_spring = SpringProperties::default();
 
     {
         let Ok((
@@ -102,7 +104,8 @@ fn inspector_ui(
             locked,
             mass,
             grav,
-            _
+            _,
+            spring,
         )) = query.get(first_entity) else {
             return;
         };
@@ -144,6 +147,9 @@ fn inspector_ui(
 
         has_gravity = grav.is_some();
         if let Some(v) = grav { local_gravity = v.0; }
+
+        has_spring = spring.is_some();
+        if let Some(v) = spring { local_spring = *v; }
     }
 
     let ctx = contexts.ctx_mut();
@@ -177,11 +183,8 @@ fn inspector_ui(
             if changed {
                 for &e in &selection.0 {
                     if let Ok((_, Some(mut t), ..)) = query.get_mut(e) {
-                         // For transform, we might want relative movement, but here we set absolute.
-                         // Setting absolute is fine for inspector.
                          t.translation = local_transform.translation;
                          t.rotation = local_transform.rotation;
-                         // Wake up body if exists
                          if let Ok((_, _, Some(_), ..)) = query.get(e) {
                              commands.entity(e).insert(Sleeping::disabled());
                          }
@@ -202,10 +205,6 @@ fn inspector_ui(
                 for &e in &selection.0 {
                     if let Ok((_, _, _, _, _, Some(mut b), ..)) = query.get_mut(e) {
                         *b = local_box;
-                        // Note: Resizing shape logic might be handled by another system observing changes
-                        // or we might need to regenerate collider/shape path here.
-                        // Assuming systems handle change detection or user must trigger update.
-                        // But typically `EditableBox` change should trigger a system.
                     }
                 }
             }
@@ -249,9 +248,7 @@ fn inspector_ui(
         }
 
         // Sensor
-        // We always show Sensor toggle if it has a rigid body or collider
-        if has_rb || query.get(first_entity).map(|c| c.11.is_some()).unwrap_or(false) { // checking collider mass props presence as proxy for collider?
-             // Actually sensor is a component on its own.
+        if has_rb || query.get(first_entity).map(|c| c.11.is_some()).unwrap_or(false) {
              let mut is_sensor = local_sensor;
              if ui.checkbox(&mut is_sensor, "Sensor").clicked() {
                  for &e in &selection.0 {
@@ -375,6 +372,24 @@ fn inspector_ui(
                     if let Ok((_, _, _, _, _, _, _, _, Some(mut s), ..)) = query.get_mut(e) {
                         s.color = local_stroke.color;
                         s.options.line_width = local_stroke.options.line_width;
+                    }
+                }
+            }
+            ui.separator();
+        }
+
+        // Spring Properties
+        if has_spring {
+            ui.heading("Spring Properties");
+            let mut changed = false;
+            if ui.add(egui::DragValue::new(&mut local_spring.stiffness).speed(0.1).prefix("Stiffness: ")).changed() { changed = true; }
+            if ui.add(egui::DragValue::new(&mut local_spring.damping).speed(0.01).prefix("Damping: ")).changed() { changed = true; }
+            if ui.add(egui::DragValue::new(&mut local_spring.rest_length).speed(0.1).prefix("Rest Length: ")).changed() { changed = true; }
+
+            if changed {
+                for &e in &selection.0 {
+                    if let Ok((.., Some(mut s))) = query.get_mut(e) {
+                        *s = local_spring;
                     }
                 }
             }

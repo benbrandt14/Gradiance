@@ -21,6 +21,8 @@ pub struct GameIcons {
     pub revolute_joint: Handle<Image>,
     /// Icon for the Weld (Fix) tool.
     pub weld: Handle<Image>,
+    /// Icon for the Spring tool.
+    pub spring: Handle<Image>,
     /// Icon for the Ground tool.
     pub ground: Handle<Image>,
     /// Icon for the Play button.
@@ -55,6 +57,8 @@ fn load_icons(mut icons: ResMut<GameIcons>, asset_server: Res<AssetServer>) {
     icons.polygon_tool = asset_server.load("icons/polygon.png");
     icons.revolute_joint = asset_server.load("icons/hinge (3).png");
     icons.weld = asset_server.load("icons/fixjoint (2).png");
+    // Placeholder for spring tool
+    icons.spring = asset_server.load("icons/hinge (3).png");
     // Placeholder for ground tool
     icons.ground = asset_server.load("icons/box (2).png");
 

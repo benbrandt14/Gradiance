@@ -80,6 +80,49 @@ impl CommandStack {
     }
 }
 
+/// Component for spring properties.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SpringProperties {
+    /// Spring constant (k).
+    pub stiffness: f32,
+    /// Damping coefficient (c).
+    pub damping: f32,
+    /// The equilibrium length of the spring.
+    pub rest_length: f32,
+    /// Attachment point on the owning entity (local space).
+    pub local_anchor_a: Vec2,
+    /// Attachment point on the connected entity (local space).
+    pub local_anchor_b: Vec2,
+    /// The entity this spring connects to.
+    pub connection_b: Entity,
+}
+
+impl Default for SpringProperties {
+    fn default() -> Self {
+        Self {
+            stiffness: 10.0,
+            damping: 0.5,
+            rest_length: 1.0,
+            local_anchor_a: Vec2::ZERO,
+            local_anchor_b: Vec2::ZERO,
+            connection_b: Entity::PLACEHOLDER,
+        }
+    }
+}
+
+/// Component to tag the visual entity of a spring.
+#[derive(Component)]
+pub struct SpringVisual {
+    /// The start entity.
+    pub entity_a: Entity,
+    /// The end entity (optional).
+    pub entity_b: Option<Entity>,
+    /// Start anchor (local).
+    pub local_anchor_a: Vec2,
+    /// End anchor (local).
+    pub local_anchor_b: Vec2,
+}
+
 /// Helper to spawn a shape entity with common components.
 fn spawn_shape_entity(
     world: &mut World,
@@ -108,7 +151,7 @@ fn spawn_shape_entity(
 }
 
 /// Helper to resolve joint targets and handle pinning.
-fn resolve_joint_targets(
+pub fn resolve_joint_targets(
     world: &mut World,
     entity_a: Entity,
     entity_b: Option<Entity>,
@@ -150,7 +193,7 @@ fn resolve_joint_targets(
 }
 
 /// Helper to spawn connector visual.
-fn spawn_connector_visual(
+pub fn spawn_connector_visual(
     world: &mut World,
     entity_a: Entity,
     entity_b: Option<Entity>,
@@ -558,6 +601,141 @@ impl GameCommand for SpawnFixedJointCommand {
 
         if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
             e.remove::<ImpulseJoint>();
+        }
+
+        if let Some(p) = self.pin_entity {
+            if let Ok(e) = world.get_entity_mut(p) {
+                e.despawn();
+            }
+            self.pin_entity = None;
+        }
+    }
+}
+
+/// Command to spawn a Spring.
+pub struct SpawnSpringCommand {
+    /// The first body.
+    pub entity_a: Entity,
+    /// The second body (optional).
+    pub entity_b: Option<Entity>,
+    /// Anchor on body A (local).
+    pub anchor_a: Vec2,
+    /// Anchor on body B (local).
+    pub anchor_b: Vec2,
+    /// Spring stiffness.
+    pub stiffness: f32,
+    /// Spring damping.
+    pub damping: f32,
+    /// The visual entity ID.
+    pub visual_entity: Option<Entity>,
+    /// The pin entity ID.
+    pub pin_entity: Option<Entity>,
+}
+
+impl GameCommand for SpawnSpringCommand {
+    fn name(&self) -> String {
+        "Spawn Spring".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+        // Create Visual
+        let visual_id = spawn_connector_visual(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            |world, visual_id| {
+                // Initial line, will be updated by SpringVisual system
+                let line = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::ZERO,
+                    Vec2::X * 10.0, // placeholder
+                ));
+                world.entity_mut(visual_id).insert((
+                    ShapeBundle {
+                        path: line,
+                        ..default()
+                    },
+                    Stroke::new(Color::BLACK, 0.1),
+                    SpringVisual {
+                        entity_a: self.entity_a,
+                        entity_b: self.entity_b,
+                        local_anchor_a: self.anchor_a,
+                        local_anchor_b: self.anchor_b,
+                    },
+                ));
+            },
+        );
+        self.visual_entity = Some(visual_id);
+
+        // Resolve Targets and Pin
+        let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            Some(visual_id),
+        );
+        self.pin_entity = pin_entity;
+
+        // Calculate initial rest length
+        let t_a = world.get::<GlobalTransform>(self.entity_a)
+            .map(|t| t.compute_transform())
+            .unwrap_or_default();
+        let world_a = t_a.transform_point(Vec3::new(local_anchor_1.x, local_anchor_1.y, 0.0));
+
+        let world_b = if let Some(e_b) = target_entity.into() {
+             if let Some(t_b) = world.get::<GlobalTransform>(e_b) {
+                let t = t_b.compute_transform();
+                t.transform_point(Vec3::new(local_anchor_2.x, local_anchor_2.y, 0.0))
+            } else {
+                 Vec3::new(local_anchor_2.x, local_anchor_2.y, 0.0)
+            }
+        } else {
+             Vec3::new(local_anchor_2.x, local_anchor_2.y, 0.0)
+        };
+
+        let rest_length = world_a.distance(world_b);
+
+        // Add SpringProperties and ExternalForce if missing
+        world.entity_mut(self.entity_a)
+            .insert(SpringProperties {
+                stiffness: self.stiffness,
+                damping: self.damping,
+                rest_length,
+                local_anchor_a: local_anchor_1,
+                local_anchor_b: local_anchor_2,
+                connection_b: target_entity,
+            });
+
+        // Ensure ExternalForce exists
+        if world.get::<ExternalForce>(self.entity_a).is_none() {
+            world.entity_mut(self.entity_a).insert(ExternalForce::default());
+        }
+
+        // Also ensure target has ExternalForce if it is dynamic?
+        // Actually, if target is a pin (Fixed), ExternalForce does nothing.
+        // If target is another body, we want to apply force to it too.
+        if let Ok(mut e) = world.get_entity_mut(target_entity) {
+            if e.get::<ExternalForce>().is_none() {
+                e.insert(ExternalForce::default());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if let Some(v) = self.visual_entity {
+            if let Ok(e) = world.get_entity_mut(v) {
+                e.despawn();
+            }
+            self.visual_entity = None;
+        }
+
+        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+            e.remove::<SpringProperties>();
         }
 
         if let Some(p) = self.pin_entity {
@@ -978,5 +1156,47 @@ mod tests {
         cmd.undo(&mut world);
 
         assert!(world.get_entity(entity).is_err());
+    }
+
+    #[rstest]
+    fn test_spawn_spring_command(mut world: World) {
+        let entity_a = world.spawn(Transform::default()).id();
+
+        let mut cmd = SpawnSpringCommand {
+            entity_a,
+            entity_b: None,
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            stiffness: 10.0,
+            damping: 0.5,
+            visual_entity: None,
+            pin_entity: None,
+        };
+
+        // Apply
+        assert!(cmd.apply(&mut world).is_ok());
+
+        // Check SpringProperties
+        let props = world.get::<SpringProperties>(entity_a);
+        assert!(props.is_some());
+        assert_eq!(props.unwrap().stiffness, 10.0);
+
+        // Check ExternalForce
+        assert!(world.get::<ExternalForce>(entity_a).is_some());
+
+        // Check Visual
+        let children = world.get::<Children>(entity_a);
+        assert!(children.is_some());
+        let visual_id = children
+            .unwrap()
+            .iter()
+            .find(|&&child| world.get::<SpringVisual>(child).is_some());
+        assert!(visual_id.is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        assert!(world.get::<SpringProperties>(entity_a).is_none());
+        assert!(world.get_entity(*visual_id.unwrap()).is_err());
     }
 }
