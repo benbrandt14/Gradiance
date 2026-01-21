@@ -75,6 +75,67 @@ impl DragResult {
     }
 }
 
+/// Pure logic for drag input handling, separated for testing.
+pub fn handle_drag_input_logic(
+    cursor_pos: Option<Vec2>,
+    mouse_just_pressed: bool,
+    mouse_pressed: bool,
+    mouse_just_released: bool,
+    is_pointer_over_ui: bool,
+    grid_settings_show: bool,
+    grid_settings_snap: bool,
+    grid_settings_spacing: f32,
+    drag_start: &mut Option<Vec2>,
+) -> Option<DragResult> {
+    // If not dragging, check UI block
+    if drag_start.is_none() && is_pointer_over_ui {
+        return None;
+    }
+
+    let raw_pos = cursor_pos?;
+
+    let mut current_pos = raw_pos;
+    if grid_settings_show && grid_settings_snap {
+        current_pos = snap_to_grid(current_pos, grid_settings_spacing);
+    }
+
+    // State Transition Logic
+    if let Some(start) = *drag_start {
+        // Currently Dragging
+        if mouse_just_released {
+            *drag_start = None;
+            Some(DragResult {
+                start,
+                current: current_pos,
+                status: DragStatus::Finished,
+            })
+        } else if mouse_pressed {
+            Some(DragResult {
+                start,
+                current: current_pos,
+                status: DragStatus::Dragging,
+            })
+        } else {
+            // Mouse not pressed and not just released? (e.g. lost focus or released outside)
+            // Treat as cancelled or just reset.
+            *drag_start = None;
+            None
+        }
+    } else {
+        // Not Dragging
+        if mouse_just_pressed {
+            *drag_start = Some(current_pos);
+            Some(DragResult {
+                start: current_pos,
+                current: current_pos,
+                status: DragStatus::Started,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 /// Handles common input logic for drag-based creation tools (e.g. Box, Circle).
 ///
 /// This function:
@@ -91,53 +152,23 @@ pub fn handle_drag_input(
     // State
     drag_start: &mut Option<Vec2>,
 ) -> Option<DragResult> {
-    // If not dragging, check UI block
-    if drag_start.is_none() && is_pointer_over_ui(&mut contexts) {
-        return None;
-    }
-
-    let raw_pos = cursor_pos.0?;
-
-    let mut current_pos = raw_pos;
-    if grid_settings.show && grid_settings.snap {
-        current_pos = snap_to_grid(current_pos, grid_settings.spacing);
-    }
-
-    // State Transition Logic
-    if let Some(start) = *drag_start {
-        // Currently Dragging
-        if mouse.just_released(MouseButton::Left) {
-            *drag_start = None;
-            Some(DragResult {
-                start,
-                current: current_pos,
-                status: DragStatus::Finished,
-            })
-        } else if mouse.pressed(MouseButton::Left) {
-            Some(DragResult {
-                start,
-                current: current_pos,
-                status: DragStatus::Dragging,
-            })
-        } else {
-            // Mouse not pressed and not just released? (e.g. lost focus or released outside)
-            // Treat as cancelled or just reset.
-            *drag_start = None;
-            None
-        }
+    let is_over_ui = if drag_start.is_none() {
+        is_pointer_over_ui(&mut contexts)
     } else {
-        // Not Dragging
-        if mouse.just_pressed(MouseButton::Left) {
-            *drag_start = Some(current_pos);
-            Some(DragResult {
-                start: current_pos,
-                current: current_pos,
-                status: DragStatus::Started,
-            })
-        } else {
-            None
-        }
-    }
+        false
+    };
+
+    handle_drag_input_logic(
+        cursor_pos.0,
+        mouse.just_pressed(MouseButton::Left),
+        mouse.pressed(MouseButton::Left),
+        mouse.just_released(MouseButton::Left),
+        is_over_ui,
+        grid_settings.show,
+        grid_settings.snap,
+        grid_settings.spacing,
+        drag_start,
+    )
 }
 
 #[cfg(test)]
@@ -165,5 +196,97 @@ mod tests {
         let result = calculate_local_anchor(&transform, world_point);
         assert!((result.x - expected.x).abs() < 1e-5);
         assert!((result.y - expected.y).abs() < 1e-5);
+    }
+
+    #[rstest]
+    #[case::start_drag(
+        Some(Vec2::new(10.0, 10.0)), // cursor
+        true, false, false, // just_pressed, pressed, just_released
+        false, // over_ui
+        false, false, 1.0, // grid show, snap, spacing
+        None, // initial drag_start
+        Some(DragResult { // expected result
+            start: Vec2::new(10.0, 10.0),
+            current: Vec2::new(10.0, 10.0),
+            status: DragStatus::Started
+        }),
+        Some(Vec2::new(10.0, 10.0)) // expected drag_start after
+    )]
+    #[case::over_ui(
+        Some(Vec2::new(10.0, 10.0)),
+        true, false, false,
+        true, // over_ui
+        false, false, 1.0,
+        None,
+        None, // Expected None
+        None // Expected None
+    )]
+    #[case::dragging(
+        Some(Vec2::new(20.0, 20.0)),
+        false, true, false, // pressed (held)
+        false,
+        false, false, 1.0,
+        Some(Vec2::new(10.0, 10.0)), // existing drag start
+        Some(DragResult {
+            start: Vec2::new(10.0, 10.0),
+            current: Vec2::new(20.0, 20.0),
+            status: DragStatus::Dragging
+        }),
+        Some(Vec2::new(10.0, 10.0))
+    )]
+    #[case::finish_drag(
+        Some(Vec2::new(30.0, 30.0)),
+        false, false, true, // released
+        false,
+        false, false, 1.0,
+        Some(Vec2::new(10.0, 10.0)),
+        Some(DragResult {
+            start: Vec2::new(10.0, 10.0),
+            current: Vec2::new(30.0, 30.0),
+            status: DragStatus::Finished
+        }),
+        None // reset
+    )]
+    #[case::grid_snap(
+        Some(Vec2::new(10.2, 10.8)),
+        true, false, false,
+        false,
+        true, true, 1.0, // Snap enabled, spacing 1.0
+        None,
+        Some(DragResult {
+            start: Vec2::new(10.0, 11.0), // Snapped
+            current: Vec2::new(10.0, 11.0),
+            status: DragStatus::Started
+        }),
+        Some(Vec2::new(10.0, 11.0))
+    )]
+    fn test_handle_drag_input_logic(
+        #[case] cursor_pos: Option<Vec2>,
+        #[case] just_pressed: bool,
+        #[case] pressed: bool,
+        #[case] just_released: bool,
+        #[case] is_over_ui: bool,
+        #[case] grid_show: bool,
+        #[case] grid_snap: bool,
+        #[case] grid_spacing: f32,
+        #[case] initial_drag_start: Option<Vec2>,
+        #[case] expected_result: Option<DragResult>,
+        #[case] expected_drag_start: Option<Vec2>,
+    ) {
+        let mut drag_start = initial_drag_start;
+        let result = handle_drag_input_logic(
+            cursor_pos,
+            just_pressed,
+            pressed,
+            just_released,
+            is_over_ui,
+            grid_show,
+            grid_snap,
+            grid_spacing,
+            &mut drag_start,
+        );
+
+        assert_eq!(result, expected_result);
+        assert_eq!(drag_start, expected_drag_start);
     }
 }

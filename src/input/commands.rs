@@ -760,4 +760,90 @@ mod tests {
         let entity = world.iter_entities().next().unwrap().id();
         assert!(world.get::<EditableCircle>(entity).is_some());
     }
+
+    #[rstest]
+    fn test_spawn_fixed_joint_command(mut world: World) {
+        let entity_a = world.spawn(Transform::default()).id();
+
+        let mut cmd = SpawnFixedJointCommand {
+            entity_a,
+            entity_b: None,
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            compliance: 0.0,
+            visual_entity: None,
+            pin_entity: None,
+            rot_a: 0.0,
+            rot_b: 0.0,
+        };
+
+        // Apply
+        assert!(cmd.apply(&mut world).is_ok());
+
+        // Check ImpulseJoint
+        assert!(world.get::<ImpulseJoint>(entity_a).is_some());
+
+        // Check visual entity
+        let children = world.get::<Children>(entity_a);
+        assert!(children.is_some());
+        let visual_id = *children.unwrap().iter().find(|&&child| world.get::<Connector>(child).is_some()).unwrap();
+
+        // Check pin entity
+        assert!(cmd.pin_entity.is_some());
+        let pin_id = cmd.pin_entity.unwrap();
+        assert!(world.get::<RigidBody>(pin_id).is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        // Check ImpulseJoint removed
+        assert!(world.get::<ImpulseJoint>(entity_a).is_none());
+
+        // Check entities despawned
+        assert!(world.get_entity(pin_id).is_err());
+        assert!(world.get_entity(visual_id).is_err());
+    }
+
+    #[rstest]
+    fn test_spawn_joint_command_two_bodies(mut world: World) {
+        let entity_a = world.spawn(Transform::default()).id();
+        let entity_b = world.spawn(Transform::default()).id();
+
+        let mut cmd = SpawnJointCommand {
+            entity_a,
+            entity_b: Some(entity_b),
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            compliance: 0.0,
+            visual_entity: None,
+            pin_entity: None,
+        };
+
+        // Apply
+        assert!(cmd.apply(&mut world).is_ok());
+
+        // Check ImpulseJoint on entity_a
+        assert!(world.get::<ImpulseJoint>(entity_a).is_some());
+
+        // Verify joint connects to entity_b, not a pin
+        let joint = world.get::<ImpulseJoint>(entity_a).unwrap();
+        assert_eq!(joint.parent, entity_b);
+
+        // Check visual entity
+        let children = world.get::<Children>(entity_a);
+        assert!(children.is_some());
+        let visual_id = *children.unwrap().iter().find(|&&child| world.get::<Connector>(child).is_some()).unwrap();
+
+        // Check NO pin entity created
+        assert!(cmd.pin_entity.is_none());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        // Check ImpulseJoint removed
+        assert!(world.get::<ImpulseJoint>(entity_a).is_none());
+
+        // Check visual entity despawned
+        assert!(world.get_entity(visual_id).is_err());
+    }
 }
