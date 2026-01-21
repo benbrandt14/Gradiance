@@ -3,7 +3,7 @@
 //! Click and drag to define the extents of a new box.
 
 use crate::input::commands::{CommandStack, SpawnBoxCommand};
-use crate::input::tools::utils::{handle_drag_input, DragStatus};
+use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;

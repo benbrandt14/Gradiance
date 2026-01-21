@@ -158,7 +158,7 @@ fn spawn_connector_visual(
     anchor_b: Vec2,
     children_builder: impl FnOnce(&mut World, Entity),
 ) -> Entity {
-     let visual_id = world
+    let visual_id = world
         .spawn((
             Transform::from_xyz(anchor_a.x, anchor_a.y, 0.1),
             Visibility::default(),
@@ -180,7 +180,6 @@ fn spawn_connector_visual(
 
     visual_id
 }
-
 
 /// Command to spawn a box.
 pub struct SpawnBoxCommand {
@@ -318,7 +317,8 @@ impl GameCommand for SpawnPolygonCommand {
             closed: true,
         };
 
-        let vertices: Vec<Point2<f32>> = self.vertices
+        let vertices: Vec<Point2<f32>> = self
+            .vertices
             .iter()
             .map(|v| Point2::new(v.x, v.y))
             .collect();
@@ -384,23 +384,34 @@ impl GameCommand for SpawnJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                let circle_outer = GeometryBuilder::build_as(&shapes::Circle { radius: 5.0, ..default() });
+                let circle_outer = GeometryBuilder::build_as(&shapes::Circle {
+                    radius: 5.0,
+                    ..default()
+                });
                 world.entity_mut(visual_id).insert((
-                    ShapeBundle { path: circle_outer, ..default() },
-                    Fill::color(Color::BLACK)
+                    ShapeBundle {
+                        path: circle_outer,
+                        ..default()
+                    },
+                    Fill::color(Color::BLACK),
                 ));
 
-                let circle_inner = GeometryBuilder::build_as(&shapes::Circle { radius: 2.0, ..default() });
-                let inner = world.spawn((
-                     ShapeBundle {
-                         path: circle_inner,
-                         transform: Transform::from_translation(Vec3::Z * 0.1),
-                         ..default()
-                     },
-                     Fill::color(Color::WHITE),
-                )).id();
+                let circle_inner = GeometryBuilder::build_as(&shapes::Circle {
+                    radius: 2.0,
+                    ..default()
+                });
+                let inner = world
+                    .spawn((
+                        ShapeBundle {
+                            path: circle_inner,
+                            transform: Transform::from_translation(Vec3::Z * 0.1),
+                            ..default()
+                        },
+                        Fill::color(Color::WHITE),
+                    ))
+                    .id();
                 world.entity_mut(visual_id).add_child(inner);
-            }
+            },
         );
         self.visual_entity = Some(visual_id);
 
@@ -411,7 +422,7 @@ impl GameCommand for SpawnJointCommand {
             self.entity_b,
             self.anchor_a,
             self.anchor_b,
-            Some(visual_id)
+            Some(visual_id),
         );
         self.pin_entity = pin_entity;
 
@@ -483,27 +494,37 @@ impl GameCommand for SpawnFixedJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                let line1 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)));
-                let v1 = world.spawn((
+                let line1 = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::new(-3.0, -3.0),
+                    Vec2::new(3.0, 3.0),
+                ));
+                let v1 = world
+                    .spawn((
                         ShapeBundle {
                             path: line1,
                             transform: Transform::from_translation(Vec3::Z * 0.1),
                             ..default()
                         },
                         Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
-                )).id();
+                    ))
+                    .id();
 
-                let line2 = GeometryBuilder::build_as(&shapes::Line(Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0)));
-                let v2 = world.spawn((
+                let line2 = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::new(-3.0, 3.0),
+                    Vec2::new(3.0, -3.0),
+                ));
+                let v2 = world
+                    .spawn((
                         ShapeBundle {
                             path: line2,
                             transform: Transform::from_translation(Vec3::Z * 0.1),
                             ..default()
                         },
                         Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
-                )).id();
+                    ))
+                    .id();
                 world.entity_mut(visual_id).add_children(&[v1, v2]);
-            }
+            },
         );
         self.visual_entity = Some(visual_id);
 
@@ -513,7 +534,7 @@ impl GameCommand for SpawnFixedJointCommand {
             self.entity_b,
             self.anchor_a,
             self.anchor_b,
-            Some(visual_id)
+            Some(visual_id),
         );
         self.pin_entity = pin_entity;
 
@@ -551,11 +572,11 @@ impl GameCommand for SpawnFixedJointCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::ZIndex as GameZIndex;
+    use crate::input::tools::connector::Connector;
     use bevy::prelude::*;
     use bevy_rapier2d::prelude::*;
     use rstest::{fixture, rstest};
-    use crate::input::ZIndex as GameZIndex;
-    use crate::input::tools::connector::Connector;
 
     #[fixture]
     fn world() -> World {
@@ -566,10 +587,7 @@ mod tests {
 
     #[rstest]
     fn test_spawn_polygon_command_failure(mut world: World) {
-        let vertices = vec![
-            Vec2::new(0.0, 0.0),
-            Vec2::new(10.0, 0.0),
-        ]; // Only 2 vertices
+        let vertices = vec![Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0)]; // Only 2 vertices
         let mut cmd = SpawnPolygonCommand {
             position: Vec2::new(0.0, 0.0),
             vertices: vertices.clone(),
@@ -595,7 +613,10 @@ mod tests {
 
         let transform = world.get::<Transform>(entity);
         assert!(transform.is_some());
-        assert_eq!(transform.unwrap().translation.truncate(), Vec2::new(10.0, 20.0));
+        assert_eq!(
+            transform.unwrap().translation.truncate(),
+            Vec2::new(10.0, 20.0)
+        );
 
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
@@ -625,7 +646,10 @@ mod tests {
 
         let transform = world.get::<Transform>(entity);
         assert!(transform.is_some());
-        assert_eq!(transform.unwrap().translation.truncate(), Vec2::new(-5.0, 5.0));
+        assert_eq!(
+            transform.unwrap().translation.truncate(),
+            Vec2::new(-5.0, 5.0)
+        );
 
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
@@ -663,7 +687,10 @@ mod tests {
         let children = world.get::<Children>(entity_a);
         assert!(children.is_some());
         // Since we don't know if there are other children, we look for one with Connector
-        let visual_id = children.unwrap().iter().find(|&&child| world.get::<Connector>(child).is_some());
+        let visual_id = children
+            .unwrap()
+            .iter()
+            .find(|&&child| world.get::<Connector>(child).is_some());
         assert!(visual_id.is_some());
         let visual_id = *visual_id.unwrap();
 
@@ -786,7 +813,11 @@ mod tests {
         // Check visual entity
         let children = world.get::<Children>(entity_a);
         assert!(children.is_some());
-        let visual_id = *children.unwrap().iter().find(|&&child| world.get::<Connector>(child).is_some()).unwrap();
+        let visual_id = *children
+            .unwrap()
+            .iter()
+            .find(|&&child| world.get::<Connector>(child).is_some())
+            .unwrap();
 
         // Check pin entity
         assert!(cmd.pin_entity.is_some());
@@ -832,7 +863,11 @@ mod tests {
         // Check visual entity
         let children = world.get::<Children>(entity_a);
         assert!(children.is_some());
-        let visual_id = *children.unwrap().iter().find(|&&child| world.get::<Connector>(child).is_some()).unwrap();
+        let visual_id = *children
+            .unwrap()
+            .iter()
+            .find(|&&child| world.get::<Connector>(child).is_some())
+            .unwrap();
 
         // Check NO pin entity created
         assert!(cmd.pin_entity.is_none());

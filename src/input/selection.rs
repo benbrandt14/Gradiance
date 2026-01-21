@@ -2,8 +2,8 @@
 //!
 //! Handles the currently selected entity and renders a highlight gizmo around it.
 
-use crate::physics::floor::GroundPlane;
 use crate::input::editable::{EditableBox, EditableCircle};
+use crate::physics::floor::GroundPlane;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
