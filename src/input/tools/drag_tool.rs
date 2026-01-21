@@ -3,10 +3,10 @@
 //! Allows the user to grab and move dynamic bodies using a mouse joint-like mechanic.
 //! Currently implemented by calculating a target anchor and drawing lines.
 
-use crate::physics::floor::GroundPlane;
+use crate::input::commands::{CommandStack, MoveEntityCommand};
 use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
-use crate::input::commands::{CommandStack, MoveEntityCommand};
+use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use bevy_egui::EguiContexts;
 
@@ -111,8 +111,13 @@ fn drag_tool_update(
 
         if let Some(entity) = data.dragged_entity {
             if let Ok((transform, _)) = query.get(entity) {
-                let dist = transform.translation.truncate().distance(data.initial_transform.translation.truncate());
-                let rot_diff = transform.rotation.angle_between(data.initial_transform.rotation);
+                let dist = transform
+                    .translation
+                    .truncate()
+                    .distance(data.initial_transform.translation.truncate());
+                let rot_diff = transform
+                    .rotation
+                    .angle_between(data.initial_transform.rotation);
 
                 if dist > 0.001 || rot_diff > 0.001 {
                     let cmd = MoveEntityCommand {

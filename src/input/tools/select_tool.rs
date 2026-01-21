@@ -2,9 +2,9 @@
 //!
 //! Simply allows clicking on entities to populate the `Selection` resource.
 
-use crate::physics::floor::GroundPlane;
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
+use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy_egui::EguiContexts;

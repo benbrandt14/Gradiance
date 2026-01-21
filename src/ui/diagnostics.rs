@@ -5,7 +5,7 @@ use bevy::diagnostic::{
     DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
     SystemInformationDiagnosticsPlugin,
 };
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 use bevy_rapier2d::render::{DebugRenderContext, DebugRenderMode};
 
 /// State for the diagnostics display.
@@ -96,18 +96,18 @@ fn diagnostics_ui(
 
                 if let Some(count) = diagnostics.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT) {
                     if let Some(value) = count.values().last() {
-                         ui.label(format!("Entities: {:.0}", value));
+                        ui.label(format!("Entities: {:.0}", value));
                     }
                 }
 
                 if let Some(cpu) = diagnostics.get(&SystemInformationDiagnosticsPlugin::CPU_USAGE) {
                     if let Some(value) = cpu.values().last() {
-                         ui.label(format!("CPU: {:.1}%", value));
+                        ui.label(format!("CPU: {:.1}%", value));
                     }
                 }
                 if let Some(mem) = diagnostics.get(&SystemInformationDiagnosticsPlugin::MEM_USAGE) {
                     if let Some(value) = mem.values().last() {
-                         ui.label(format!("MEM: {:.1}%", value));
+                        ui.label(format!("MEM: {:.1}%", value));
                     }
                 }
             }

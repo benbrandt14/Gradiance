@@ -52,7 +52,10 @@ impl Plugin for InputPlugin {
         app.init_resource::<ZIndex>();
 
         // Global shortcuts
-        app.add_systems(Update, (toggle_pause, handle_undo_redo_input, log_tool_transitions));
+        app.add_systems(
+            Update,
+            (toggle_pause, handle_undo_redo_input, log_tool_transitions),
+        );
     }
 }
 

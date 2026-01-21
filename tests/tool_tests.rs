@@ -1,10 +1,11 @@
+use bevy::asset::AssetEvent;
 use bevy::gizmos::GizmoPlugin;
 use bevy::input::InputPlugin as BevyInputPlugin;
 use bevy::prelude::*;
-use bevy::window::{PrimaryWindow, WindowScaleFactorChanged, WindowResized, WindowCreated};
-use bevy::asset::AssetEvent;
 use bevy::state::app::StatesPlugin;
+use bevy::window::{PrimaryWindow, WindowCreated, WindowResized, WindowScaleFactorChanged};
 
+use bevy_egui::EguiUserTextures;
 use bevy_prototype_lyon::plugin::ShapePlugin;
 use gradiance::input::ToolState;
 use gradiance::input::ZIndex;
@@ -15,13 +16,12 @@ use gradiance::input::selection::Selection;
 use gradiance::input::tools::box_tool::BoxToolPlugin;
 use gradiance::input::tools::circle_tool::CircleToolPlugin;
 use gradiance::input::tools::connector::ConnectorToolPlugin;
+use gradiance::input::tools::drag_tool::DragToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
-use gradiance::input::tools::drag_tool::DragToolPlugin;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
 use rstest::{fixture, rstest};
-use bevy_egui::EguiUserTextures;
 
 #[fixture]
 fn app() -> App {
@@ -97,11 +97,14 @@ fn set_cursor(app: &mut App, pos: Vec2) {
     cursor.0 = Some(pos);
 }
 
-use bevy::input::mouse::MouseButtonInput;
 use bevy::input::ButtonState;
+use bevy::input::mouse::MouseButtonInput;
 
 fn mouse_down(app: &mut App, button: MouseButton) {
-    let window = app.world_mut().query_filtered::<Entity, With<PrimaryWindow>>().single(app.world());
+    let window = app
+        .world_mut()
+        .query_filtered::<Entity, With<PrimaryWindow>>()
+        .single(app.world());
     app.world_mut().send_event(MouseButtonInput {
         button,
         state: ButtonState::Pressed,
@@ -110,7 +113,10 @@ fn mouse_down(app: &mut App, button: MouseButton) {
 }
 
 fn mouse_up(app: &mut App, button: MouseButton) {
-    let window = app.world_mut().query_filtered::<Entity, With<PrimaryWindow>>().single(app.world());
+    let window = app
+        .world_mut()
+        .query_filtered::<Entity, With<PrimaryWindow>>()
+        .single(app.world());
     app.world_mut().send_event(MouseButtonInput {
         button,
         state: ButtonState::Released,
@@ -344,7 +350,9 @@ fn test_drag_tool(mut app: App) {
     app.update(); // Trigger spawn of hand entity
 
     // Verify hand entity exists
-    let mut hand_query = app.world_mut().query_filtered::<Entity, (With<RigidBody>, Without<Collider>)>();
+    let mut hand_query = app
+        .world_mut()
+        .query_filtered::<Entity, (With<RigidBody>, Without<Collider>)>();
     // There should be one hand entity (KinematicPositionBased)
     let hands: Vec<Entity> = hand_query.iter(app.world()).collect();
     // Filter to ensure it's not the box (Box has Collider)
@@ -358,14 +366,21 @@ fn test_drag_tool(mut app: App) {
     // Verify hand moved
     let hand_entity = hands[0];
     let hand_transform = app.world().get::<Transform>(hand_entity).unwrap();
-    assert_eq!(hand_transform.translation.truncate(), target_pos, "Hand should follow cursor");
+    assert_eq!(
+        hand_transform.translation.truncate(),
+        target_pos,
+        "Hand should follow cursor"
+    );
 
     // 4. Release mouse
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
     // Verify hand is despawned
-    assert!(app.world().get_entity(hand_entity).is_err(), "Hand should be despawned");
+    assert!(
+        app.world().get_entity(hand_entity).is_err(),
+        "Hand should be despawned"
+    );
 }
 
 #[rstest]
@@ -393,9 +408,10 @@ fn test_undo_redo(mut app: App) {
 
     // 2. Undo
     // CommandStack requires mutable access to world to undo
-    app.world_mut().resource_scope(|world, mut stack: Mut<CommandStack>| {
-        stack.undo(world);
-    });
+    app.world_mut()
+        .resource_scope(|world, mut stack: Mut<CommandStack>| {
+            stack.undo(world);
+        });
     app.update(); // Process any despawns
 
     // Verify box is gone
@@ -403,17 +419,26 @@ fn test_undo_redo(mut app: App) {
     let mut query = app
         .world_mut()
         .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
-    assert_eq!(query.iter(app.world()).count(), 0, "Box should be removed after undo");
+    assert_eq!(
+        query.iter(app.world()).count(),
+        0,
+        "Box should be removed after undo"
+    );
 
     // 3. Redo
-    app.world_mut().resource_scope(|world, mut stack: Mut<CommandStack>| {
-        stack.redo(world);
-    });
+    app.world_mut()
+        .resource_scope(|world, mut stack: Mut<CommandStack>| {
+            stack.redo(world);
+        });
     app.update();
 
     // Verify box is back
     let mut query = app
         .world_mut()
         .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
-    assert_eq!(query.iter(app.world()).count(), 1, "Box should be restored after redo");
+    assert_eq!(
+        query.iter(app.world()).count(),
+        1,
+        "Box should be restored after redo"
+    );
 }

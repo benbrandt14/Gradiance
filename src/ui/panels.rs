@@ -8,7 +8,7 @@ use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use crate::ui::icons::GameIcons;
 use bevy::window::PrimaryWindow;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 
 /// Plugin for the main UI panels.
 pub struct PanelsPlugin;
@@ -132,10 +132,7 @@ fn top_panel_ui(
             };
 
             if ui
-                .add(egui::ImageButton::new((
-                    icon,
-                    egui::Vec2::new(24.0, 24.0),
-                )))
+                .add(egui::ImageButton::new((icon, egui::Vec2::new(24.0, 24.0))))
                 .on_hover_text(tooltip)
                 .clicked()
             {

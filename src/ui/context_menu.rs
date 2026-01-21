@@ -7,7 +7,7 @@ use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 
 #[derive(Resource, Default)]
 struct ContextMenuState {

@@ -1,7 +1,7 @@
 //! Shared utilities for tools.
 
 use crate::input::cursor::CursorWorldPos;
-use crate::ui::grid::{snap_to_grid, GridSettings};
+use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
