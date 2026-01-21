@@ -74,6 +74,11 @@ fn sidebar_ui(
             contexts.add_image(game_icons.weld.clone_weak()),
             "Fix",
         ),
+        (
+            ToolState::Ground,
+            contexts.add_image(game_icons.ground.clone_weak()),
+            "Ground",
+        ),
     ];
 
     let ctx = contexts.ctx_mut();

@@ -8,6 +8,7 @@ pub mod box_tool;
 pub mod circle_tool;
 pub mod connector;
 pub mod drag_tool;
+pub mod ground_tool;
 pub mod polygon_tool;
 pub mod select_tool;
 pub mod utils;
@@ -24,6 +25,7 @@ impl Plugin for ToolsPlugin {
             polygon_tool::PolygonToolPlugin,
             drag_tool::DragToolPlugin,
             connector::ConnectorToolPlugin,
+            ground_tool::GroundToolPlugin,
         ));
     }
 }

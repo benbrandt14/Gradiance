@@ -5,6 +5,7 @@
 use crate::input::ZIndex;
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::tools::connector::Connector;
+use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::rapier::geometry::SharedShape;
@@ -568,6 +569,79 @@ impl GameCommand for SpawnFixedJointCommand {
     }
 }
 
+/// Command to spawn an infinite ground plane.
+pub struct SpawnGroundCommand {
+    /// Position of the ground (center of surface).
+    pub position: Vec2,
+    /// Rotation angle (radians).
+    pub rotation: f32,
+    /// The spawned entity ID.
+    pub entity: Option<Entity>,
+}
+
+impl GameCommand for SpawnGroundCommand {
+    fn name(&self) -> String {
+        "Spawn Ground".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+        let width = 100_000.0;
+        let depth = 1000.0;
+
+        // Visual shape: Huge rectangle
+        let shape = shapes::Rectangle {
+            extents: Vec2::new(width, depth),
+            origin: shapes::RectangleOrigin::Center,
+            radii: None,
+        };
+
+        // Offset: the visual rectangle is centered at (0,0).
+        // The collider is centered at (0,0).
+        // But we want the "surface" (top edge) to be at `position` aligned with `rotation`.
+        // The box center is at (0, -depth/2) relative to the surface.
+        // So we rotate (0, -depth/2) by `rotation` and add to `position`.
+
+        let rot = Quat::from_rotation_z(self.rotation);
+        let offset = rot * Vec3::new(0.0, -depth / 2.0, 0.0);
+        let center = Vec3::new(self.position.x, self.position.y, 0.0) + offset;
+
+        let z = -1.0; // Force ground to be behind
+
+        let entity = world
+            .spawn((
+                // Shape Bundle
+                ShapeBundle {
+                    path: GeometryBuilder::build_as(&shape),
+                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
+                        .with_rotation(rot),
+                    ..default()
+                },
+                Fill::color(Color::srgb(0.2, 0.2, 0.2)), // Dark grey
+                Stroke::new(Color::BLACK, 2.0),
+                // Physics
+                RigidBody::Fixed,
+                Collider::cuboid(width / 2.0, depth / 2.0),
+                Friction::coefficient(0.5),
+                Restitution::coefficient(0.0),
+                GroundPlane,
+                Name::new("Ground"),
+            ))
+            .id();
+
+        self.entity = Some(entity);
+        Ok(())
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if let Some(e) = self.entity {
+            if let Ok(e_ref) = world.get_entity_mut(e) {
+                e_ref.despawn();
+            }
+            self.entity = None;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -879,5 +953,30 @@ mod tests {
 
         // Check visual entity despawned
         assert!(world.get_entity(visual_id).is_err());
+    }
+
+    #[rstest]
+    fn test_spawn_ground_command(mut world: World) {
+        let mut cmd = SpawnGroundCommand {
+            position: Vec2::new(10.0, 10.0),
+            rotation: 0.0,
+            entity: None,
+        };
+
+        // Apply
+        assert!(cmd.apply(&mut world).is_ok());
+
+        assert!(cmd.entity.is_some());
+        let entity = cmd.entity.unwrap();
+
+        assert!(world.get::<RigidBody>(entity).is_some());
+        assert!(world.get::<Collider>(entity).is_some());
+        assert!(world.get::<GroundPlane>(entity).is_some());
+        assert!(world.get::<Transform>(entity).is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+
+        assert!(world.get_entity(entity).is_err());
     }
 }
