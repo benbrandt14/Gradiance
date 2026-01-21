@@ -139,11 +139,10 @@ fn resolve_joint_targets(
         target_entity = pin_id;
         local_anchor_2 = Vec2::ZERO;
 
-        if let Some(v_id) = visual_entity {
-            if let Some(mut connector) = world.get_mut::<Connector>(v_id) {
+        if let Some(v_id) = visual_entity
+            && let Some(mut connector) = world.get_mut::<Connector>(v_id) {
                 connector.entity_b = Some(pin_id);
             }
-        }
     }
 
     (target_entity, pin_entity, local_anchor_1, local_anchor_2)

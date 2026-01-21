@@ -37,11 +37,10 @@ fn context_menu_input(
     mut contexts: EguiContexts,
 ) {
     // If over area, don't trigger game context menu unless we are already showing it (logic handled later)
-    if is_pointer_over_ui(&mut contexts) {
-        if mouse.just_pressed(MouseButton::Right) {
+    if is_pointer_over_ui(&mut contexts)
+        && mouse.just_pressed(MouseButton::Right) {
             return;
         }
-    }
 
     if mouse.just_pressed(MouseButton::Right) {
         let Some(world_pos) = cursor_pos.0 else {
@@ -74,12 +73,11 @@ fn context_menu_input(
             state.position = None;
             state.entity = None;
         }
-    } else if mouse.just_pressed(MouseButton::Left) {
-        if !is_pointer_over_ui(&mut contexts) {
+    } else if mouse.just_pressed(MouseButton::Left)
+        && !is_pointer_over_ui(&mut contexts) {
             state.position = None;
             state.entity = None;
         }
-    }
 }
 
 /// Renders the context menu UI if active.

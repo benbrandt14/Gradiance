@@ -74,8 +74,8 @@ fn drag_tool_update(
             false
         });
 
-        if let Some(entity) = hit_entity {
-            if let Ok((transform, _)) = query.get(entity) {
+        if let Some(entity) = hit_entity
+            && let Ok((transform, _)) = query.get(entity) {
                 data.dragged_entity = Some(entity);
                 data.initial_transform = *transform;
 
@@ -101,7 +101,6 @@ fn drag_tool_update(
                     .entity(hand)
                     .insert(ImpulseJoint::new(entity, joint));
             }
-        }
     }
 
     if mouse.just_released(MouseButton::Left) {
@@ -109,8 +108,8 @@ fn drag_tool_update(
             commands.entity(hand).despawn();
         }
 
-        if let Some(entity) = data.dragged_entity {
-            if let Ok((transform, _)) = query.get(entity) {
+        if let Some(entity) = data.dragged_entity
+            && let Ok((transform, _)) = query.get(entity) {
                 let dist = transform
                     .translation
                     .truncate()
@@ -135,7 +134,6 @@ fn drag_tool_update(
                     });
                 }
             }
-        }
 
         data.hand_entity = None;
         data.dragged_entity = None;

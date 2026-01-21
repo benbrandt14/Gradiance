@@ -24,9 +24,9 @@ impl Plugin for DiagnosticsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DiagnosticsState>()
             .add_plugins((
-                FrameTimeDiagnosticsPlugin::default(),
-                EntityCountDiagnosticsPlugin::default(),
-                SystemInformationDiagnosticsPlugin::default(),
+                FrameTimeDiagnosticsPlugin,
+                EntityCountDiagnosticsPlugin,
+                SystemInformationDiagnosticsPlugin,
             ))
             .add_systems(Update, (toggle_diagnostics, diagnostics_ui));
     }
@@ -37,11 +37,10 @@ fn toggle_diagnostics(
     mut debug_render_context: Option<ResMut<DebugRenderContext>>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
-    if keys.just_pressed(KeyCode::F1) {
-        if let Some(ref mut ctx) = debug_render_context {
+    if keys.just_pressed(KeyCode::F1)
+        && let Some(ref mut ctx) = debug_render_context {
             ctx.enabled = !ctx.enabled;
         }
-    }
     if keys.just_pressed(KeyCode::F2) {
         diagnostics_state.show_fps = !diagnostics_state.show_fps;
     }
@@ -76,16 +75,14 @@ fn diagnostics_ui(
             let mut shown = false;
             if diagnostics_state.show_fps {
                 shown = true;
-                if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
-                    if let Some(value) = fps.smoothed() {
+                if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS)
+                    && let Some(value) = fps.smoothed() {
                         ui.label(format!("FPS: {:.1}", value));
                     }
-                }
-                if let Some(frame_time) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME) {
-                    if let Some(value) = frame_time.smoothed() {
+                if let Some(frame_time) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+                    && let Some(value) = frame_time.smoothed() {
                         ui.label(format!("Frame Time: {:.2} ms", value));
                     }
-                }
             }
 
             if diagnostics_state.show_stats {
@@ -94,26 +91,23 @@ fn diagnostics_ui(
                 }
                 shown = true;
 
-                if let Some(count) = diagnostics.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT) {
-                    if let Some(value) = count.values().last() {
+                if let Some(count) = diagnostics.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT)
+                    && let Some(value) = count.values().last() {
                         ui.label(format!("Entities: {:.0}", value));
                     }
-                }
 
-                if let Some(cpu) = diagnostics.get(&SystemInformationDiagnosticsPlugin::CPU_USAGE) {
-                    if let Some(value) = cpu.values().last() {
+                if let Some(cpu) = diagnostics.get(&SystemInformationDiagnosticsPlugin::CPU_USAGE)
+                    && let Some(value) = cpu.values().last() {
                         ui.label(format!("CPU: {:.1}%", value));
                     }
-                }
-                if let Some(mem) = diagnostics.get(&SystemInformationDiagnosticsPlugin::MEM_USAGE) {
-                    if let Some(value) = mem.values().last() {
+                if let Some(mem) = diagnostics.get(&SystemInformationDiagnosticsPlugin::MEM_USAGE)
+                    && let Some(value) = mem.values().last() {
                         ui.label(format!("MEM: {:.1}%", value));
                     }
-                }
             }
 
-            if debug_enabled {
-                if let Some(mut ctx) = debug_render_context {
+            if debug_enabled
+                && let Some(mut ctx) = debug_render_context {
                     if shown {
                         ui.separator();
                     }
@@ -151,6 +145,5 @@ fn diagnostics_ui(
                         mode.set(DebugRenderMode::SOLVER_CONTACTS, solver);
                     }
                 }
-            }
         });
 }
