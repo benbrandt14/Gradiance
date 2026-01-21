@@ -5,6 +5,7 @@
 
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
+use crate::physics::layers::{DisableSelfCollision, PhysicsLayers};
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
 use bevy_egui::{EguiContexts, egui};
@@ -89,6 +90,8 @@ fn context_menu_ui(
         Option<&Sleeping>,
     )>,
     mut fill_q: Query<&mut Fill>,
+    mut physics_layers_q: Query<&mut PhysicsLayers>,
+    mut group_id_counter: Local<u32>,
 ) {
     let Some(pos) = state.position else {
         return;
@@ -252,6 +255,53 @@ fn context_menu_ui(
                         }
                          commands.entity(e).insert(Sleeping::disabled());
                     }
+                }
+
+                ui.separator();
+                ui.label("Collision Layers");
+
+                let layers = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+                for (i, &layer_char) in layers.iter().enumerate() {
+                    let mask = 1 << i;
+                    let first = selection.0.iter().next().unwrap();
+                    let mut has_layer = if let Ok(l) = physics_layers_q.get(*first) {
+                        (l.0 & mask) != 0
+                    } else {
+                        // Default if missing is Layer A (1)
+                        (1 & mask) != 0
+                    };
+
+                    if ui.checkbox(&mut has_layer, format!("Layer {}", layer_char)).clicked() {
+                        for &e in &selection.0 {
+                            if let Ok(mut l) = physics_layers_q.get_mut(e) {
+                                if has_layer {
+                                    l.0 |= mask;
+                                } else {
+                                    l.0 &= !mask;
+                                }
+                            } else {
+                                let mut base = 1; // Default
+                                if has_layer { base |= mask; } else { base &= !mask; }
+                                commands.entity(e).insert(PhysicsLayers(base));
+                            }
+                            // Wake up body to apply changes?
+                            // Changing collision groups usually works immediately in Rapier
+                            // but Bevy Rapier might need wake up if sleeping?
+                            // Safe to wake up.
+                            commands.entity(e).insert(Sleeping::disabled());
+                        }
+                    }
+                }
+
+                ui.separator();
+                if ui.button("Disable Self Collisions").clicked() {
+                    *group_id_counter += 1;
+                    let new_id = *group_id_counter;
+                    for &e in &selection.0 {
+                        commands.entity(e).insert(DisableSelfCollision(new_id));
+                        commands.entity(e).insert(Sleeping::disabled());
+                    }
+                    ui.close_menu();
                 }
             });
 
