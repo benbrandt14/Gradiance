@@ -72,8 +72,8 @@ fn drag_tool_update(
             false
         });
 
-        if let Some(entity) = hit_entity {
-            if let Ok((transform, _)) = query.get(entity) {
+        if let Some(entity) = hit_entity
+            && let Ok((transform, _)) = query.get(entity) {
                 data.dragged_entity = Some(entity);
 
                 // Calculate local anchor on the body
@@ -98,7 +98,6 @@ fn drag_tool_update(
                     .entity(hand)
                     .insert(ImpulseJoint::new(entity, joint));
             }
-        }
     }
 
     if mouse.just_released(MouseButton::Left) {
