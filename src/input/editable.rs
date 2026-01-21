@@ -6,7 +6,7 @@ use crate::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
 /// A component representing a box that can be resized.
-#[derive(Component, Reflect, Default, Debug)]
+#[derive(Component, Reflect, Default, Debug, Clone, Copy)]
 #[reflect(Component)]
 pub struct EditableBox {
     /// The width of the box.
@@ -16,7 +16,7 @@ pub struct EditableBox {
 }
 
 /// A component representing a circle that can be resized.
-#[derive(Component, Reflect, Default, Debug)]
+#[derive(Component, Reflect, Default, Debug, Clone, Copy)]
 #[reflect(Component)]
 pub struct EditableCircle {
     /// The radius of the circle.
