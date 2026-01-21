@@ -1,6 +1,9 @@
 //! Command pattern implementation for Undo/Redo.
 //!
 //! Defines the `GameCommand` trait and the `CommandStack` resource.
+//! WARNING MERGE CONFLICT
+//! THIS FILE HAS BEEN REFACTORED INTO src/input/commands/*
+//! NEED TO PORT OVER NEW CONTENT FROM HERE INTO THE NEW LOCATION
 
 use crate::input::ZIndex;
 use crate::input::editable::{EditableBox, EditableCircle};
@@ -148,9 +151,10 @@ fn resolve_joint_targets(
         local_anchor_2 = Vec2::ZERO;
 
         if let Some(v_id) = visual_entity
-            && let Some(mut connector) = world.get_mut::<Connector>(v_id) {
-                connector.entity_b = Some(pin_id);
-            }
+            && let Some(mut connector) = world.get_mut::<Connector>(v_id)
+        {
+            connector.entity_b = Some(pin_id);
+        }
     }
 
     (target_entity, pin_entity, local_anchor_1, local_anchor_2)
