@@ -6,9 +6,11 @@
 - [x] add hinge behavior
 - [ ] add fix behavior ( ie make static )
 - [ ] add collision layers
-- [x] add infinite plane
+- [ ] add infinite plane tool
 - [ ] add restitution and friction
-- [x] add a lasso and square selection tools
+- [x] add square selection tool
+- [ ] add a lasso selection tool
+- [ ] add multiselect with shift+click
 - [ ] add copy/paste shortcuts by holding CTRL and dragging
 - [ ] add tracers
 - [x] add grid w/ locking
@@ -62,7 +64,7 @@
 
 Physics & Constraints
 
-    [x] Hinge: RevoluteJoint.
+    [x] Hinge: RevoluteJoint ( Half Implemented )
 
     [ ] Fixed: FixedJoint (Weld).
 
