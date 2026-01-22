@@ -75,6 +75,21 @@ fn sidebar_ui(
             "Fix",
         ),
         (
+            ToolState::PrismaticJoint,
+            contexts.add_image(game_icons.prismatic.clone_weak()),
+            "Slider",
+        ),
+        (
+            ToolState::SpringJoint,
+            contexts.add_image(game_icons.spring.clone_weak()),
+            "Spring",
+        ),
+        (
+            ToolState::RopeJoint,
+            contexts.add_image(game_icons.rope.clone_weak()),
+            "Rope",
+        ),
+        (
             ToolState::Ground,
             contexts.add_image(game_icons.ground.clone_weak()),
             "Ground",
