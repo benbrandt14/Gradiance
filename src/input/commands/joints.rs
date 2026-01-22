@@ -11,12 +11,12 @@ use bevy_rapier2d::rapier::dynamics::{
     RevoluteJointBuilder as RapierRevoluteJointBuilder,
     RopeJointBuilder as RapierRopeJointBuilder, SpringJointBuilder as RapierSpringJointBuilder,
 };
-use nalgebra::{Point2, Vector2};
+use nalgebra::{Isometry2, Point2, Vector2};
 
 /// Helper to resolve joint targets and handle pinning.
 fn resolve_joint_targets(
     world: &mut World,
-    entity_a: Entity,
+    _entity_a: Entity,
     entity_b: Option<Entity>,
     anchor_a: Vec2,
     anchor_b: Vec2,
@@ -32,11 +32,9 @@ fn resolve_joint_targets(
         local_anchor_2 = anchor_b;
     } else {
         // Pin logic
-        let t_a = world
-            .get::<GlobalTransform>(entity_a)
-            .map(|t| t.compute_transform())
-            .unwrap_or_default();
-        let world_pos = t_a.transform_point(Vec3::new(anchor_a.x, anchor_a.y, 0.0));
+        // If pinning to world (entity_b is None), anchor_b represents the world position of the pin.
+        // We spawn the pin at that world position.
+        let world_pos = Vec3::new(anchor_b.x, anchor_b.y, 0.0);
 
         let pin_id = world
             .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
@@ -274,9 +272,13 @@ impl GameCommand for SpawnFixedJointCommand {
         );
         self.pin_entity = pin_entity;
 
+        let frame2 = Isometry2::new(
+            Vector2::new(local_anchor_2.x, local_anchor_2.y),
+            self.rot_a - self.rot_b,
+        );
         let builder = RapierFixedJointBuilder::new()
             .local_anchor1(Point2::new(local_anchor_1.x, local_anchor_1.y))
-            .local_anchor2(Point2::new(local_anchor_2.x, local_anchor_2.y));
+            .local_frame2(frame2);
         let mut joint_data = GenericJoint::from(builder);
         joint_data.set_contacts_enabled(false);
 
@@ -634,5 +636,36 @@ mod tests {
 
         cmd.undo(&mut world);
         assert!(world.get::<ImpulseJoint>(entity_a).is_none());
+    }
+
+    #[rstest]
+    fn test_spawn_spring_joint_pin_location(mut world: World) {
+        // Body A at (0,0)
+        let entity_a = world.spawn((Transform::default(), GlobalTransform::default())).id();
+
+        // Target pin location at (10, 10) in world space
+        let pin_loc = Vec2::new(10.0, 10.0);
+
+        let mut cmd = SpawnSpringJointCommand {
+            entity_a,
+            entity_b: None,
+            anchor_a: Vec2::ZERO, // Local to A
+            anchor_b: pin_loc,    // World location (since B is None)
+            stiffness: 10.0,
+            damping: 0.5,
+            length: 10.0,
+            visual_entity: None,
+            pin_entity: None,
+        };
+
+        assert!(cmd.apply(&mut world).is_ok());
+
+        let joint = world.get::<ImpulseJoint>(entity_a).unwrap();
+        let pin_entity = joint.data.target;
+        let pin_transform = world.get::<Transform>(pin_entity).unwrap();
+
+        // Expect pin to be at (10, 10)
+        assert!((pin_transform.translation.x - 10.0).abs() < 1e-5);
+        assert!((pin_transform.translation.y - 10.0).abs() < 1e-5);
     }
 }

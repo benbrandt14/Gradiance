@@ -307,12 +307,15 @@ fn update_connector(
                         });
                     }
                     ConnectorType::Prismatic => {
-                        let axis = if is_drag {
+                        let axis_world = if is_drag {
                              let dir = (anchor_b_world - anchor_a_world).normalize_or_zero();
                              if dir == Vec2::ZERO { Vec2::Y } else { dir }
                         } else {
                              Vec2::Y
                         };
+                        // Convert axis to local space of A
+                        let axis = axis_world.rotate(Vec2::from_angle(-rot_a));
+
                         let cmd = SpawnPrismaticJointCommand {
                             entity_a: e_a,
                             entity_b,
