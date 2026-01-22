@@ -667,4 +667,100 @@ mod tests {
         assert!((pin_transform.translation.x - 10.0).abs() < 1e-5);
         assert!((pin_transform.translation.y - 10.0).abs() < 1e-5);
     }
+
+    #[rstest]
+    fn test_spawn_spring_joint_command_undo(mut world: World) {
+        let entity_a = world.spawn(Transform::default()).id();
+
+        let mut cmd = SpawnSpringJointCommand {
+            entity_a,
+            entity_b: None,
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            stiffness: 10.0,
+            damping: 0.5,
+            length: 10.0,
+            visual_entity: None,
+            pin_entity: None,
+        };
+
+        // Apply
+        assert!(cmd.apply(&mut world).is_ok());
+        assert!(world.get::<ImpulseJoint>(entity_a).is_some());
+        assert!(cmd.visual_entity.is_some());
+        assert!(cmd.pin_entity.is_some());
+
+        let pin_id = cmd.pin_entity.unwrap();
+        assert!(world.get_entity(pin_id).is_ok());
+
+        // Undo
+        cmd.undo(&mut world);
+        assert!(world.get::<ImpulseJoint>(entity_a).is_none());
+        assert!(world.get_entity(pin_id).is_err()); // Pin should be despawned
+    }
+
+    #[rstest]
+    fn test_spawn_fixed_joint_command(mut world: World) {
+        let entity_a = world.spawn(Transform::default()).id();
+
+        // Rotations: A = 90 deg, B = 0 deg
+        let rot_a = std::f32::consts::FRAC_PI_2;
+        let rot_b = 0.0;
+
+        let mut cmd = SpawnFixedJointCommand {
+            entity_a,
+            entity_b: None,
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            visual_entity: None,
+            pin_entity: None,
+            rot_a,
+            rot_b,
+        };
+
+        assert!(cmd.apply(&mut world).is_ok());
+
+        let joint = world.get::<ImpulseJoint>(entity_a).expect("Joint not found");
+        match &joint.data {
+            TypedJoint::GenericJoint(g) => {
+                // Fixed joint sets relative frame.
+                // Rapier stores this in internal data structure, exposed via `raw`.
+                // Checking specific fields might be brittle if Rapier changes internals,
+                // but we can check if it's the right type (implicitly via builder usage).
+                // Actually `GenericJoint` is generic.
+                // We can check if contacts are disabled as we set it.
+                assert!(!g.raw.contacts_enabled);
+            }
+            _ => panic!("Wrong joint type"),
+        }
+
+        // Undo
+        cmd.undo(&mut world);
+        assert!(world.get::<ImpulseJoint>(entity_a).is_none());
+    }
+
+    #[rstest]
+    fn test_spawn_rope_joint_command(mut world: World) {
+        let entity_a = world.spawn(Transform::default()).id();
+        let length = 5.0;
+
+        let mut cmd = SpawnRopeJointCommand {
+            entity_a,
+            entity_b: None,
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            length,
+            visual_entity: None,
+            pin_entity: None,
+        };
+
+        assert!(cmd.apply(&mut world).is_ok());
+
+        let joint = world.get::<ImpulseJoint>(entity_a).expect("Joint not found");
+        // We trust Rapier builder, but we verify the component exists.
+
+        // Undo
+        cmd.undo(&mut world);
+        assert!(world.get::<ImpulseJoint>(entity_a).is_none());
+    }
 }
