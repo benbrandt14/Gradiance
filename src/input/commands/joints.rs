@@ -586,7 +586,6 @@ impl GameCommand for SpawnRopeJointCommand {
 mod tests {
     use super::*;
     use crate::input::ZIndex as GameZIndex;
-    use crate::input::tools::connector::Connector;
     use rstest::{fixture, rstest};
 
     #[fixture]
@@ -661,7 +660,7 @@ mod tests {
         assert!(cmd.apply(&mut world).is_ok());
 
         let joint = world.get::<ImpulseJoint>(entity_a).unwrap();
-        let pin_entity = joint.data.target;
+        let pin_entity = joint.parent;
         let pin_transform = world.get::<Transform>(pin_entity).unwrap();
 
         // Expect pin to be at (10, 10)
