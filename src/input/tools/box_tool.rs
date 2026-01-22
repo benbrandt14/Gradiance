@@ -68,7 +68,7 @@ fn box_tool_update(
             gizmos.rect_2d(
                 Isometry2d::from_translation(Vec2::new(center.x, center.y)),
                 Vec2::new(size.x, size.y),
-                Color::WHITE,
+                Color::srgb(1.0, 1.0, 1.0),
             );
         }
         DragStatus::Finished => {

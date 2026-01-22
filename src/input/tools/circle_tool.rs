@@ -66,9 +66,9 @@ fn circle_tool_update(
             gizmos.circle_2d(
                 Isometry2d::from_translation(Vec2::new(drag.start.x, drag.start.y)),
                 radius,
-                Color::WHITE,
+                Color::srgb(1.0, 1.0, 1.0),
             );
-            gizmos.line_2d(drag.start, drag.current, Color::WHITE);
+            gizmos.line_2d(drag.start, drag.current, Color::srgb(1.0, 1.0, 1.0));
         }
         DragStatus::Finished => {
             if should_spawn_circle(radius) {

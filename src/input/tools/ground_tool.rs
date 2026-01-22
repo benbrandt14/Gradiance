@@ -51,7 +51,7 @@ fn ground_tool_update(
     match drag.status {
         DragStatus::Dragging => {
             // Draw preview line
-            gizmos.line_2d(drag.start, drag.current, Color::WHITE);
+            gizmos.line_2d(drag.start, drag.current, Color::srgb(1.0, 1.0, 1.0));
             // Draw normal to show "down" direction (where the ground body will be)
             let mid = (drag.start + drag.current) / 2.0;
             let dir = drag.current - drag.start;

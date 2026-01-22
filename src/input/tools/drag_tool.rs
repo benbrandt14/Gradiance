@@ -146,7 +146,7 @@ fn drag_tool_update(
                 let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
                 let current_anchor_pos = transform.translation.truncate() + rotated_anchor;
 
-                gizmos.line_2d(current_anchor_pos, current_pos, Color::WHITE);
+                gizmos.line_2d(current_anchor_pos, current_pos, Color::srgb(1.0, 1.0, 1.0));
             }
             Err(_) => {
                 // Entity lost. Cleanup.
