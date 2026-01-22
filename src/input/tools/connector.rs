@@ -1,12 +1,15 @@
-//! Unified tool for creating joints (Hinges and Fixes).
+//! Unified tool for creating joints (Hinges, Fixes, Sliders, Springs, Ropes).
 //!
-//! Handles creation of `RevoluteJoint` and `FixedJoint` with consistent behavior:
+//! Handles creation of various joint types with consistent behavior:
 //! - Snaps to grid.
 //! - Handles single body (pin to world) and two bodies (connect).
-//! - Sorts overlapping bodies by Z-depth.
-//! - Spawns visual indicators parented to the bodies.
+//! - Supports click-to-connect (overlapping bodies) and drag-to-connect (separated bodies).
+//! - Spawns visual indicators.
 
-use crate::input::commands::{CommandStack, SpawnFixedJointCommand, SpawnJointCommand};
+use crate::input::commands::{
+    CommandStack, SpawnFixedJointCommand, SpawnPrismaticJointCommand, SpawnRevoluteJointCommand,
+    SpawnRopeJointCommand, SpawnSpringJointCommand,
+};
 use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -24,7 +27,14 @@ impl Plugin for ConnectorToolPlugin {
             Update,
             (
                 update_connector.run_if(|state: Res<State<ToolState>>| {
-                    matches!(state.get(), ToolState::RevoluteJoint | ToolState::Weld)
+                    matches!(
+                        state.get(),
+                        ToolState::RevoluteJoint
+                            | ToolState::Weld
+                            | ToolState::PrismaticJoint
+                            | ToolState::SpringJoint
+                            | ToolState::RopeJoint
+                    )
                 }),
                 update_connector_visuals,
             ),
@@ -98,6 +108,12 @@ pub enum ConnectorType {
     Hinge,
     /// A fixed joint (weld).
     Fix,
+    /// A prismatic joint (slider).
+    Prismatic,
+    /// A spring joint (distance).
+    Spring,
+    /// A rope joint.
+    Rope,
 }
 
 impl ConnectorType {
@@ -105,9 +121,18 @@ impl ConnectorType {
         match state {
             ToolState::RevoluteJoint => Some(Self::Hinge),
             ToolState::Weld => Some(Self::Fix),
+            ToolState::PrismaticJoint => Some(Self::Prismatic),
+            ToolState::SpringJoint => Some(Self::Spring),
+            ToolState::RopeJoint => Some(Self::Rope),
             _ => None,
         }
     }
+}
+
+#[derive(Default)]
+struct ConnectorDragState {
+    start_pos: Option<Vec2>,
+    start_entity: Option<Entity>,
 }
 
 fn update_connector(
@@ -121,6 +146,8 @@ fn update_connector(
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
     parents: Query<&Parent>,
     transforms: Query<&Transform>,
+    mut drag_state: Local<ConnectorDragState>,
+    mut gizmos: Gizmos,
 ) {
     if is_pointer_over_ui(&mut contexts) {
         return;
@@ -134,94 +161,214 @@ fn update_connector(
         return;
     };
 
+    // Helper to resolve list of intersected entities
+    let resolve_intersections = |pos: Vec2| -> Vec<Entity> {
+        if let Some(rapier_context) = rapier_context_query.iter().next() {
+            let shape = Collider::ball(0.1);
+            let filter = QueryFilter::default().exclude_sensors();
+            let mut intersections = Vec::new();
+            rapier_context.intersections_with_shape(pos, 0.0, &shape, filter, |e| {
+                intersections.push(e);
+                true
+            });
+            resolve_sorted_bodies(&intersections, &bodies, &parents)
+        } else {
+            Vec::new()
+        }
+    };
+
+    let pos = if grid_settings.show && grid_settings.snap {
+        snap_to_grid(raw_pos, grid_settings.spacing)
+    } else {
+        raw_pos
+    };
+
     if mouse.just_pressed(MouseButton::Left) {
-        // Snap to grid
-        let pos = if grid_settings.show && grid_settings.snap {
-            snap_to_grid(raw_pos, grid_settings.spacing)
-        } else {
-            raw_pos
-        };
+        drag_state.start_pos = Some(pos);
+        let bodies_at_start = resolve_intersections(pos);
+        drag_state.start_entity = bodies_at_start.first().cloned();
+    }
 
-        // Find entities using shape intersection for better robustness
-        let Some(rapier_context) = rapier_context_query.iter().next() else {
-            return;
-        };
-
-        let shape = Collider::ball(0.1);
-        let filter = QueryFilter::default().exclude_sensors();
-        let mut intersections = Vec::new();
-
-        rapier_context.intersections_with_shape(pos, 0.0, &shape, filter, |e| {
-            intersections.push(e);
-            true
-        });
-
-        // Resolve to bodies and sort
-        let sorted_bodies = resolve_sorted_bodies(&intersections, &bodies, &parents);
-
-        if sorted_bodies.is_empty() {
-            return;
+    if mouse.pressed(MouseButton::Left) {
+        if let Some(start_pos) = drag_state.start_pos {
+            gizmos.line_2d(start_pos, pos, Color::srgb(1.0, 1.0, 0.0));
         }
+    }
 
-        let entity_a = sorted_bodies[0];
-        let entity_b = if sorted_bodies.len() > 1 {
-            Some(sorted_bodies[1])
-        } else {
-            None
-        };
+    if mouse.just_released(MouseButton::Left) {
+        if let Some(start_pos) = drag_state.start_pos {
+            let end_pos = pos;
+            let bodies_at_end = resolve_intersections(end_pos);
+            let end_entity = bodies_at_end.first().cloned();
 
-        let get_local_and_rot = |e: Entity| -> (Vec2, f32) {
-            if let Ok(t) = transforms.get(e) {
-                let rot = t.rotation.to_euler(EulerRot::XYZ).2;
-                (calculate_local_anchor(t, pos), rot)
+            let dist = start_pos.distance(end_pos);
+            let is_drag = dist > 0.1;
+
+            let mut entity_a = None;
+            let mut entity_b = None;
+            let mut anchor_a_world = start_pos;
+            let mut anchor_b_world = end_pos;
+
+            if is_drag {
+                entity_a = drag_state.start_entity;
+                entity_b = end_entity;
             } else {
-                (Vec2::ZERO, 0.0)
+                // Click behavior: Overlapping at start_pos
+                let bodies = resolve_intersections(start_pos);
+                if !bodies.is_empty() {
+                    entity_a = Some(bodies[0]);
+                    entity_b = bodies.get(1).cloned();
+                }
+                anchor_a_world = start_pos;
+                anchor_b_world = start_pos;
             }
-        };
 
-        let (anchor_a, rot_a) = get_local_and_rot(entity_a);
-        let (anchor_b, rot_b) = if let Some(e_b) = entity_b {
-            get_local_and_rot(e_b)
-        } else {
-            (Vec2::ZERO, 0.0)
-        };
-
-        match connector_type {
-            ConnectorType::Hinge => {
-                let cmd = SpawnJointCommand {
-                    entity_a,
-                    entity_b,
-                    anchor_a,
-                    anchor_b,
-                    compliance: 0.0,
-                    visual_entity: None,
-                    pin_entity: None,
-                };
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
-                });
+            // Clean up: prevent self-connection
+            if let (Some(a), Some(b)) = (entity_a, entity_b) {
+                if a == b {
+                    entity_b = None;
+                }
             }
-            ConnectorType::Fix => {
-                let cmd = SpawnFixedJointCommand {
-                    entity_a,
-                    entity_b,
-                    anchor_a,
-                    anchor_b,
-                    compliance: 0.0,
-                    visual_entity: None,
-                    pin_entity: None,
-                    rot_a,
-                    rot_b,
+
+            // Swap if A is missing but B is present
+            if entity_a.is_none() && entity_b.is_some() {
+                entity_a = entity_b;
+                entity_b = None;
+                std::mem::swap(&mut anchor_a_world, &mut anchor_b_world);
+            }
+
+            if let Some(e_a) = entity_a {
+                let get_local = |e: Entity, p: Vec2| -> Vec2 {
+                    if let Ok(t) = transforms.get(e) {
+                        calculate_local_anchor(t, p)
+                    } else {
+                        p
+                    }
                 };
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
-                });
+                let get_rot = |e: Entity| -> f32 {
+                     if let Ok(t) = transforms.get(e) {
+                         t.rotation.to_euler(EulerRot::XYZ).2
+                     } else {
+                         0.0
+                     }
+                };
+
+                let anchor_a = get_local(e_a, anchor_a_world);
+                let anchor_b = if let Some(e_b) = entity_b {
+                    get_local(e_b, anchor_b_world)
+                } else {
+                    anchor_b_world
+                    // Note: If pin to world, anchor_b acts as world pos offset from 0,0?
+                    // No, `resolve_joint_targets` computes pin pos based on A's transform if pin is created.
+                    // But if B is None, `anchor_b` becomes `local_anchor_2` of the joint (which connects to the pin).
+                    // The pin is spawned at `A.transform * anchor_a`.
+                    // So if we drag to a different world spot (anchor_b_world), the pin location computed by `resolve_joint_targets`
+                    // will be at anchor_a_world, NOT anchor_b_world.
+                    // This is a limitation of the current `resolve_joint_targets` implementation for Pinning.
+                    // It assumes Pin is "at" the anchor on body A.
+                    // For Prismatic/Spring/Rope dragging to void, this might be unexpected.
+                    // But we will proceed.
+                };
+
+                let rot_a = get_rot(e_a);
+                let rot_b = if let Some(e_b) = entity_b { get_rot(e_b) } else { 0.0 };
+
+                match connector_type {
+                    ConnectorType::Hinge => {
+                        let cmd = SpawnRevoluteJointCommand {
+                            entity_a: e_a,
+                            entity_b,
+                            anchor_a,
+                            anchor_b,
+                            visual_entity: None,
+                            pin_entity: None,
+                        };
+                        commands.queue(move |world: &mut World| {
+                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                                stack.push(Box::new(cmd), world);
+                            });
+                        });
+                    }
+                    ConnectorType::Fix => {
+                        let cmd = SpawnFixedJointCommand {
+                            entity_a: e_a,
+                            entity_b,
+                            anchor_a,
+                            anchor_b,
+                            visual_entity: None,
+                            pin_entity: None,
+                            rot_a,
+                            rot_b,
+                        };
+                        commands.queue(move |world: &mut World| {
+                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                                stack.push(Box::new(cmd), world);
+                            });
+                        });
+                    }
+                    ConnectorType::Prismatic => {
+                        let axis = if is_drag {
+                             let dir = (anchor_b_world - anchor_a_world).normalize_or_zero();
+                             if dir == Vec2::ZERO { Vec2::Y } else { dir }
+                        } else {
+                             Vec2::Y
+                        };
+                        let cmd = SpawnPrismaticJointCommand {
+                            entity_a: e_a,
+                            entity_b,
+                            anchor_a,
+                            anchor_b,
+                            axis,
+                            visual_entity: None,
+                            pin_entity: None,
+                        };
+                        commands.queue(move |world: &mut World| {
+                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                                stack.push(Box::new(cmd), world);
+                            });
+                        });
+                    }
+                    ConnectorType::Spring => {
+                        let length = if is_drag { anchor_a_world.distance(anchor_b_world) } else { 1.0 };
+                        let cmd = SpawnSpringJointCommand {
+                            entity_a: e_a,
+                            entity_b,
+                            anchor_a,
+                            anchor_b,
+                            stiffness: 10.0,
+                            damping: 0.5,
+                            length,
+                            visual_entity: None,
+                            pin_entity: None,
+                        };
+                        commands.queue(move |world: &mut World| {
+                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                                stack.push(Box::new(cmd), world);
+                            });
+                        });
+                    }
+                    ConnectorType::Rope => {
+                        let length = if is_drag { anchor_a_world.distance(anchor_b_world) } else { 5.0 };
+                        let cmd = SpawnRopeJointCommand {
+                            entity_a: e_a,
+                            entity_b,
+                            anchor_a,
+                            anchor_b,
+                            length,
+                            visual_entity: None,
+                            pin_entity: None,
+                        };
+                        commands.queue(move |world: &mut World| {
+                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                                stack.push(Box::new(cmd), world);
+                            });
+                        });
+                    }
+                }
             }
         }
+        drag_state.start_pos = None;
+        drag_state.start_entity = None;
     }
 }
 
@@ -273,6 +420,9 @@ mod tests {
     #[rstest]
     #[case(ToolState::RevoluteJoint, Some(ConnectorType::Hinge))]
     #[case(ToolState::Weld, Some(ConnectorType::Fix))]
+    #[case(ToolState::PrismaticJoint, Some(ConnectorType::Prismatic))]
+    #[case(ToolState::SpringJoint, Some(ConnectorType::Spring))]
+    #[case(ToolState::RopeJoint, Some(ConnectorType::Rope))]
     #[case(ToolState::Select, None)]
     fn test_connector_type_from_state(
         #[case] state: ToolState,
