@@ -170,11 +170,11 @@ fn draw_rectangular_grid(
 
     // Draw minor lines (faint)
     if minor_spacing > 0.001 {
-        draw_lines(minor_spacing, 0.05, gizmos);
+        draw_lines(minor_spacing, 0.1, gizmos);
     }
 
     // Draw major lines (stronger)
-    draw_lines(major_spacing, 0.15, gizmos);
+    draw_lines(major_spacing, 0.3, gizmos);
 }
 
 #[cfg(test)]

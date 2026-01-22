@@ -42,7 +42,12 @@ fn drag_tool_update(
     mouse: Res<ButtonInput<MouseButton>>,
     rapier_context_query: Query<&RapierContext>,
     mut query: Query<
-        (&mut Transform, &Velocity),
+        (
+            &mut Transform,
+            &GlobalTransform,
+            &Velocity,
+            Option<&mut Sleeping>,
+        ),
         (With<RigidBody>, With<Collider>, Without<GroundPlane>),
     >,
     mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
@@ -73,11 +78,26 @@ fn drag_tool_update(
         });
 
         if let Some(entity) = hit_entity
-            && let Ok((transform, _)) = query.get(entity) {
+            && let Ok((_transform, global_transform, _, sleeping)) = query.get_mut(entity) {
                 data.dragged_entity = Some(entity);
 
-                // Calculate local anchor on the body
-                data.local_anchor = calculate_local_anchor(transform, current_pos);
+                // Calculate local anchor on the body using GlobalTransform
+                let (scale, rotation, translation) =
+                    global_transform.to_scale_rotation_translation();
+                // Create a temporary Transform to use the util function
+                let transform_struct = Transform {
+                    translation,
+                    rotation,
+                    scale,
+                };
+                data.local_anchor = calculate_local_anchor(&transform_struct, current_pos);
+
+                // Wake up the body to ensure joint takes effect immediately
+                if let Some(mut s) = sleeping {
+                    s.sleeping = false;
+                } else {
+                    commands.entity(entity).insert(Sleeping::disabled());
+                }
 
                 // Spawn "Hand" kinematic body
                 let hand = commands
@@ -131,7 +151,7 @@ fn drag_tool_update(
     // Handle dragging
     if let Some(entity) = data.dragged_entity {
         match query.get_mut(entity) {
-            Ok((mut transform, _)) => {
+            Ok((mut transform, _, _, _)) => {
                 let rotation = transform.rotation.to_euler(EulerRot::XYZ).2;
 
                 // If paused, manually move the object to follow cursor

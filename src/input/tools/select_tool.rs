@@ -31,6 +31,11 @@ struct SelectToolData {
     // Map Entity -> Initial Vec2
     initial_positions: Vec<(Entity, Vec2)>,
     drag_start_pos: Vec2,
+
+    // Rotation
+    is_rotating: bool,
+    initial_rotations: Vec<(Entity, f32)>,
+    rotation_start_pos: Vec2,
 }
 
 /// Information needed to sort hits.
@@ -71,6 +76,7 @@ fn select_tool_reset(mut data: ResMut<SelectToolData>) {
 }
 
 fn select_tool_update(
+    mut commands: Commands,
     mut selection: ResMut<Selection>,
     mut data: ResMut<SelectToolData>,
     cursor_pos: Res<CursorWorldPos>,
@@ -85,13 +91,52 @@ fn select_tool_update(
     grid_settings: Res<GridSettings>,
 ) {
     // Prevent selection if over UI
-    if is_pointer_over_ui(&mut contexts) && !data.is_moving && data.drag_start.is_none() {
+    if is_pointer_over_ui(&mut contexts) && !data.is_moving && !data.is_rotating && data.drag_start.is_none() {
         return;
     }
 
     let Some(current_pos) = cursor_pos.0 else {
         return;
     };
+
+    // Right Click Rotate
+    if mouse.just_pressed(MouseButton::Right) {
+        data.rotation_start_pos = current_pos;
+        data.initial_rotations.clear();
+
+        if !selection.0.is_empty() {
+            for &entity in &selection.0 {
+                if let Ok((_, t, _)) = query.get(entity) {
+                    let rot = t.rotation.to_euler(EulerRot::XYZ).2;
+                    data.initial_rotations.push((entity, rot));
+                }
+            }
+            if !data.initial_rotations.is_empty() {
+                data.is_rotating = true;
+            }
+        }
+    }
+
+    if mouse.pressed(MouseButton::Right) && data.is_rotating {
+        let delta = current_pos - data.rotation_start_pos;
+        // Sensitivity: 0.01 radians per pixel
+        let angle_delta = delta.x * 0.01;
+
+        for (entity, initial_rot) in &data.initial_rotations {
+            if let Ok((_, mut t, _)) = query.get_mut(*entity) {
+                let new_rot = initial_rot + angle_delta;
+                t.rotation = Quat::from_rotation_z(new_rot);
+
+                // Wake up to ensure physics updates
+                commands.entity(*entity).insert(Sleeping::disabled());
+            }
+        }
+    }
+
+    if mouse.just_released(MouseButton::Right) {
+        data.is_rotating = false;
+        data.initial_rotations.clear();
+    }
 
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
 
