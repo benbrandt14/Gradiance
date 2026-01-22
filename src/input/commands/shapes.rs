@@ -1,34 +1,30 @@
 //! Commands for spawning shapes (Box, Circle, Polygon, Ground).
 
+use crate::geometry::DebugColor;
 use crate::input::ZIndex;
 use crate::input::commands::{GameCommand, undo_despawn_recursive};
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
-use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::rapier::geometry::SharedShape;
 use nalgebra::Point2;
 
-/// Helper to spawn a shape entity with common components.
-fn spawn_shape_entity(
+/// Helper to spawn a physics entity with common components.
+fn spawn_physics_entity(
     world: &mut World,
     position: Vec2,
-    shape: &impl bevy_prototype_lyon::geometry::Geometry,
     collider: Collider,
-    fill: Fill,
     extra_bundle: impl Bundle,
 ) -> Entity {
     let z = world.resource_mut::<ZIndex>().next();
 
     world
         .spawn((
-            ShapeBundle {
-                path: GeometryBuilder::build_as(shape),
-                transform: Transform::from_xyz(position.x, position.y, z),
-                ..default()
-            },
-            fill,
-            Stroke::new(Color::srgb(0.0, 0.0, 0.0), 0.1),
+            Transform::from_xyz(position.x, position.y, z),
+            GlobalTransform::default(),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
             RigidBody::Dynamic,
             collider,
             extra_bundle,
@@ -66,22 +62,17 @@ impl GameCommand for SpawnBoxCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(self.width, self.height),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
-
-        let entity = spawn_shape_entity(
+        let entity = spawn_physics_entity(
             world,
             self.position,
-            &shape,
             Collider::cuboid(self.width / 2.0, self.height / 2.0),
-            Fill::color(Color::srgb(0.5, 0.5, 1.0)),
-            EditableBox {
-                width: self.width as f64,
-                height: self.height as f64,
-            },
+            (
+                EditableBox {
+                    width: self.width as f64,
+                    height: self.height as f64,
+                },
+                DebugColor(Color::srgb(0.5, 0.5, 1.0)),
+            ),
         );
 
         self.entity = Some(entity);
@@ -109,23 +100,16 @@ impl GameCommand for SpawnCircleCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let shape = shapes::Circle {
-            radius: self.radius,
-            center: Vec2::ZERO,
-        };
-
-        let entity = spawn_shape_entity(
+        let entity = spawn_physics_entity(
             world,
             self.position,
-            &shape,
             Collider::ball(self.radius),
-            Fill {
-                color: Color::srgb(1.0, 0.5, 0.5),
-                options: FillOptions::default().with_tolerance(0.001),
-            },
-            EditableCircle {
-                radius: self.radius as f64,
-            },
+            (
+                EditableCircle {
+                    radius: self.radius as f64,
+                },
+                DebugColor(Color::srgb(1.0, 0.5, 0.5)),
+            ),
         );
 
         self.entity = Some(entity);
@@ -157,11 +141,6 @@ impl GameCommand for SpawnPolygonCommand {
             return Err("Polygon must have at least 3 vertices".to_string());
         }
 
-        let shape = shapes::Polygon {
-            points: self.vertices.clone(),
-            closed: true,
-        };
-
         let vertices: Vec<Point2<f32>> = self
             .vertices
             .iter()
@@ -174,13 +153,11 @@ impl GameCommand for SpawnPolygonCommand {
         let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
         let collider = Collider::from(rapier_shape);
 
-        let entity = spawn_shape_entity(
+        let entity = spawn_physics_entity(
             world,
             self.position,
-            &shape,
             collider,
-            Fill::color(Color::srgb(0.5, 1.0, 0.5)),
-            (),
+            DebugColor(Color::srgb(0.5, 1.0, 0.5)),
         );
 
         self.entity = Some(entity);
@@ -212,13 +189,6 @@ impl GameCommand for SpawnGroundCommand {
         let depth = 1000.0;
 
         // Visual shape: Huge rectangle
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(width, depth),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
-
-        // Offset: the visual rectangle is centered at (0,0).
         // The collider is centered at (0,0).
         // But we want the "surface" (top edge) to be at `position` aligned with `rotation`.
         // The box center is at (0, -depth/2) relative to the surface.
@@ -232,15 +202,12 @@ impl GameCommand for SpawnGroundCommand {
 
         let entity = world
             .spawn((
-                // Shape Bundle
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&shape),
-                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
-                        .with_rotation(rot),
-                    ..default()
-                },
-                Fill::color(Color::srgb(0.2, 0.2, 0.2)), // Dark grey
-                Stroke::new(Color::srgb(0.0, 0.0, 0.0), 2.0),
+                Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
+                    .with_rotation(rot),
+                GlobalTransform::default(),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
                 // Physics
                 RigidBody::Fixed,
                 Collider::cuboid(width / 2.0, depth / 2.0),
@@ -248,6 +215,7 @@ impl GameCommand for SpawnGroundCommand {
                 Restitution::coefficient(0.0),
                 GroundPlane,
                 Name::new("Ground"),
+                DebugColor(Color::srgb(0.2, 0.2, 0.2)),
             ))
             .id();
 

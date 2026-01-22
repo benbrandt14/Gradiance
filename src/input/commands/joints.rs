@@ -37,7 +37,11 @@ fn resolve_joint_targets(
         let world_pos = Vec3::new(anchor_b.x, anchor_b.y, 0.0);
 
         let pin_id = world
-            .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
+            .spawn((
+                RigidBody::Fixed,
+                Transform::from_translation(world_pos),
+                Collider::ball(0.1), // Small physical presence
+            ))
             .id();
 
         pin_entity = Some(pin_id);

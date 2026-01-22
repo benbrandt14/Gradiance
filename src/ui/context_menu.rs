@@ -16,6 +16,8 @@ use bevy_prototype_lyon::prelude::Fill;
 pub struct ContextMenuState {
     /// The screen position where the context menu was opened.
     pub position: Option<egui::Pos2>,
+    /// The world position where the right mouse button was pressed.
+    pub press_start: Option<Vec2>,
 }
 
 /// Plugin that handles the context menu logic and UI.
@@ -42,9 +44,24 @@ fn context_menu_input(
     }
 
     if mouse.just_pressed(MouseButton::Right) {
+        state.press_start = cursor_pos.0;
+    }
+
+    if mouse.just_released(MouseButton::Right) {
+        let Some(start_pos) = state.press_start else {
+            return;
+        };
+        state.press_start = None;
+
         let Some(world_pos) = cursor_pos.0 else {
             return;
         };
+
+        // If dragged significantly, don't open context menu (allow Rotate tool to handle it)
+        if world_pos.distance(start_pos) > 10.0 {
+            return;
+        }
+
         let Some(rapier_context) = rapier_context_query.iter().next() else {
             return;
         };
@@ -70,9 +87,10 @@ fn context_menu_input(
             state.position = None;
         }
     } else if mouse.just_pressed(MouseButton::Left)
-        && !is_pointer_over_ui(&mut contexts) {
-            state.position = None;
-        }
+        && !is_pointer_over_ui(&mut contexts)
+    {
+        state.position = None;
+    }
 }
 
 /// Renders the context menu UI if active.
