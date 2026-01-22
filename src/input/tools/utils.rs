@@ -14,17 +14,7 @@ pub fn calculate_local_anchor(transform: &Transform, world_point: Vec2) -> Vec2 
     let translation = transform.translation.truncate();
     let relative = world_point - translation;
 
-    let cos = rotation.cos();
-    let sin = rotation.sin();
-
-    // Rotate relative vector by -rotation (inverse rotation)
-    // R^-1 = R^T
-    // [ cos  sin ] [ x ]   [ x cos + y sin ]
-    // [ -sin cos ] [ y ]   [ -x sin + y cos ]
-    Vec2::new(
-        relative.x * cos + relative.y * sin,
-        -relative.x * sin + relative.y * cos,
-    )
+    relative.rotate(Vec2::from_angle(-rotation))
 }
 
 /// Checks if the mouse pointer is currently over an Egui area (window/panel).
