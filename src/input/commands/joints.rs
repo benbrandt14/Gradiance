@@ -4,6 +4,12 @@ use crate::input::commands::GameCommand;
 use crate::input::tools::connector::Connector;
 use crate::prelude::*;
 use bevy_prototype_lyon::prelude::*;
+use bevy_rapier2d::dynamics::TypedJoint;
+use bevy_rapier2d::rapier::dynamics::{
+    FixedJointBuilder as RapierFixedJointBuilder, GenericJoint,
+    RevoluteJointBuilder as RapierRevoluteJointBuilder,
+};
+use nalgebra::Point2;
 
 /// Helper to resolve joint targets and handle pinning.
 fn resolve_joint_targets(
@@ -153,14 +159,17 @@ impl GameCommand for SpawnJointCommand {
         );
         self.pin_entity = pin_entity;
 
-        let joint_data = RevoluteJointBuilder::new()
-            .local_anchor1(local_anchor_1)
-            .local_anchor2(local_anchor_2);
+        let builder = RapierRevoluteJointBuilder::new()
+            .local_anchor1(Point2::new(local_anchor_1.x, local_anchor_1.y))
+            .local_anchor2(Point2::new(local_anchor_2.x, local_anchor_2.y));
+        let mut joint_data = GenericJoint::from(builder);
+        joint_data.set_contacts_enabled(false);
 
         // Attach ImpulseJoint to entity_a
-        world
-            .entity_mut(self.entity_a)
-            .insert(ImpulseJoint::new(target_entity, joint_data));
+        world.entity_mut(self.entity_a).insert(ImpulseJoint::new(
+            target_entity,
+            TypedJoint::GenericJoint(bevy_rapier2d::dynamics::GenericJoint { raw: joint_data }),
+        ));
         Ok(())
     }
 
@@ -265,13 +274,16 @@ impl GameCommand for SpawnFixedJointCommand {
         );
         self.pin_entity = pin_entity;
 
-        let joint_data = FixedJointBuilder::new()
-            .local_anchor1(local_anchor_1)
-            .local_anchor2(local_anchor_2);
+        let builder = RapierFixedJointBuilder::new()
+            .local_anchor1(Point2::new(local_anchor_1.x, local_anchor_1.y))
+            .local_anchor2(Point2::new(local_anchor_2.x, local_anchor_2.y));
+        let mut joint_data = GenericJoint::from(builder);
+        joint_data.set_contacts_enabled(false);
 
-        world
-            .entity_mut(self.entity_a)
-            .insert(ImpulseJoint::new(target_entity, joint_data));
+        world.entity_mut(self.entity_a).insert(ImpulseJoint::new(
+            target_entity,
+            TypedJoint::GenericJoint(bevy_rapier2d::dynamics::GenericJoint { raw: joint_data }),
+        ));
         Ok(())
     }
 
