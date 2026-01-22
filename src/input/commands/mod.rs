@@ -22,6 +22,17 @@ pub trait GameCommand: Send + Sync {
     fn name(&self) -> String;
 }
 
+/// Helper to despawn an entity recursively and clear the option.
+/// This is used by `GameCommand::undo` implementations.
+pub fn undo_despawn_recursive(world: &mut World, entity: &mut Option<Entity>) {
+    if let Some(e) = *entity {
+        if let Ok(e_ref) = world.get_entity_mut(e) {
+            e_ref.despawn_recursive();
+        }
+        *entity = None;
+    }
+}
+
 /// Resource handling the stack of executed commands.
 #[derive(Resource, Default)]
 pub struct CommandStack {

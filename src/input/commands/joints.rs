@@ -1,6 +1,6 @@
 //! Commands for spawning joints (Revolute, Fixed, Prismatic, Spring, Rope).
 
-use crate::input::commands::GameCommand;
+use crate::input::commands::{GameCommand, undo_despawn_recursive};
 use crate::input::tools::connector::Connector;
 use crate::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -91,6 +91,20 @@ fn spawn_connector_visual(
     visual_id
 }
 
+/// Helper to undo a joint command.
+fn undo_joint(
+    world: &mut World,
+    entity_a: Entity,
+    visual_entity: &mut Option<Entity>,
+    pin_entity: &mut Option<Entity>,
+) {
+    undo_despawn_recursive(world, visual_entity);
+    if let Ok(mut e) = world.get_entity_mut(entity_a) {
+        e.remove::<ImpulseJoint>();
+    }
+    undo_despawn_recursive(world, pin_entity);
+}
+
 /// Command to spawn a Revolute Joint (Hinge).
 pub struct SpawnRevoluteJointCommand {
     /// The first body.
@@ -177,21 +191,7 @@ impl GameCommand for SpawnRevoluteJointCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(v) = self.visual_entity {
-            if let Ok(e) = world.get_entity_mut(v) {
-                e.despawn();
-            }
-            self.visual_entity = None;
-        }
-        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-            e.remove::<ImpulseJoint>();
-        }
-        if let Some(p) = self.pin_entity {
-            if let Ok(e) = world.get_entity_mut(p) {
-                e.despawn();
-            }
-            self.pin_entity = None;
-        }
+        undo_joint(world, self.entity_a, &mut self.visual_entity, &mut self.pin_entity);
     }
 }
 
@@ -290,21 +290,7 @@ impl GameCommand for SpawnFixedJointCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(v) = self.visual_entity {
-            if let Ok(e) = world.get_entity_mut(v) {
-                e.despawn();
-            }
-            self.visual_entity = None;
-        }
-        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-            e.remove::<ImpulseJoint>();
-        }
-        if let Some(p) = self.pin_entity {
-            if let Ok(e) = world.get_entity_mut(p) {
-                e.despawn();
-            }
-            self.pin_entity = None;
-        }
+        undo_joint(world, self.entity_a, &mut self.visual_entity, &mut self.pin_entity);
     }
 }
 
@@ -381,21 +367,7 @@ impl GameCommand for SpawnPrismaticJointCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(v) = self.visual_entity {
-            if let Ok(e) = world.get_entity_mut(v) {
-                e.despawn();
-            }
-            self.visual_entity = None;
-        }
-        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-            e.remove::<ImpulseJoint>();
-        }
-        if let Some(p) = self.pin_entity {
-            if let Ok(e) = world.get_entity_mut(p) {
-                e.despawn();
-            }
-            self.pin_entity = None;
-        }
+        undo_joint(world, self.entity_a, &mut self.visual_entity, &mut self.pin_entity);
     }
 }
 
@@ -476,21 +448,7 @@ impl GameCommand for SpawnSpringJointCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(v) = self.visual_entity {
-            if let Ok(e) = world.get_entity_mut(v) {
-                e.despawn();
-            }
-            self.visual_entity = None;
-        }
-        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-            e.remove::<ImpulseJoint>();
-        }
-        if let Some(p) = self.pin_entity {
-            if let Ok(e) = world.get_entity_mut(p) {
-                e.despawn();
-            }
-            self.pin_entity = None;
-        }
+        undo_joint(world, self.entity_a, &mut self.visual_entity, &mut self.pin_entity);
     }
 }
 
@@ -564,21 +522,7 @@ impl GameCommand for SpawnRopeJointCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(v) = self.visual_entity {
-            if let Ok(e) = world.get_entity_mut(v) {
-                e.despawn();
-            }
-            self.visual_entity = None;
-        }
-        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-            e.remove::<ImpulseJoint>();
-        }
-        if let Some(p) = self.pin_entity {
-            if let Ok(e) = world.get_entity_mut(p) {
-                e.despawn();
-            }
-            self.pin_entity = None;
-        }
+        undo_joint(world, self.entity_a, &mut self.visual_entity, &mut self.pin_entity);
     }
 }
 

@@ -1,7 +1,7 @@
 //! Commands for spawning shapes (Box, Circle, Polygon, Ground).
 
 use crate::input::ZIndex;
-use crate::input::commands::GameCommand;
+use crate::input::commands::{GameCommand, undo_despawn_recursive};
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
@@ -89,12 +89,7 @@ impl GameCommand for SpawnBoxCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(entity) = self.entity {
-            if let Ok(entity_ref) = world.get_entity_mut(entity) {
-                entity_ref.despawn();
-            }
-            self.entity = None;
-        }
+        undo_despawn_recursive(world, &mut self.entity);
     }
 }
 
@@ -138,12 +133,7 @@ impl GameCommand for SpawnCircleCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(e) = self.entity {
-            if let Ok(e_ref) = world.get_entity_mut(e) {
-                e_ref.despawn();
-            }
-            self.entity = None;
-        }
+        undo_despawn_recursive(world, &mut self.entity);
     }
 }
 
@@ -198,12 +188,7 @@ impl GameCommand for SpawnPolygonCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(e) = self.entity {
-            if let Ok(e_ref) = world.get_entity_mut(e) {
-                e_ref.despawn();
-            }
-            self.entity = None;
-        }
+        undo_despawn_recursive(world, &mut self.entity);
     }
 }
 
@@ -271,12 +256,7 @@ impl GameCommand for SpawnGroundCommand {
     }
 
     fn undo(&mut self, world: &mut World) {
-        if let Some(e) = self.entity {
-            if let Ok(e_ref) = world.get_entity_mut(e) {
-                e_ref.despawn();
-            }
-            self.entity = None;
-        }
+        undo_despawn_recursive(world, &mut self.entity);
     }
 }
 
