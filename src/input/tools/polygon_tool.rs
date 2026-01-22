@@ -143,11 +143,11 @@ fn polygon_tool_update(
                 for i in 0..data.points.len() - 1 {
                     let p1 = data.points[i];
                     let p2 = data.points[i + 1];
-                    gizmos.line_2d(p1, p2, Color::WHITE);
+                    gizmos.line_2d(p1, p2, Color::srgb(1.0, 1.0, 1.0));
                 }
                 // Line to cursor
                 let last = data.points.last().unwrap();
-                gizmos.line_2d(*last, current_pos, Color::WHITE);
+                gizmos.line_2d(*last, current_pos, Color::srgb(1.0, 1.0, 1.0));
 
                 // Draw start point marker
                 let start = data.points[0];

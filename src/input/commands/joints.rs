@@ -130,7 +130,7 @@ impl GameCommand for SpawnRevoluteJointCommand {
                         path: circle_outer,
                         ..default()
                     },
-                    Fill::color(Color::BLACK),
+                    Fill::color(Color::srgb(0.0, 0.0, 0.0)),
                 ));
 
                 let circle_inner = GeometryBuilder::build_as(&shapes::Circle {
@@ -144,7 +144,7 @@ impl GameCommand for SpawnRevoluteJointCommand {
                             transform: Transform::from_translation(Vec3::Z * 0.1),
                             ..default()
                         },
-                        Fill::color(Color::WHITE),
+                        Fill::color(Color::srgb(1.0, 1.0, 1.0)),
                     ))
                     .id();
                 world.entity_mut(visual_id).add_child(inner);

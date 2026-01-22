@@ -28,7 +28,7 @@ fn spawn_shape_entity(
                 ..default()
             },
             fill,
-            Stroke::new(Color::BLACK, 0.1),
+            Stroke::new(Color::srgb(0.0, 0.0, 0.0), 0.1),
             RigidBody::Dynamic,
             collider,
             extra_bundle,
@@ -255,7 +255,7 @@ impl GameCommand for SpawnGroundCommand {
                     ..default()
                 },
                 Fill::color(Color::srgb(0.2, 0.2, 0.2)), // Dark grey
-                Stroke::new(Color::BLACK, 2.0),
+                Stroke::new(Color::srgb(0.0, 0.0, 0.0), 2.0),
                 // Physics
                 RigidBody::Fixed,
                 Collider::cuboid(width / 2.0, depth / 2.0),

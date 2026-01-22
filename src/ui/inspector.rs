@@ -70,10 +70,10 @@ fn inspector_ui(
     let mut local_restitution = Restitution::default();
 
     let has_fill;
-    let mut local_fill = Fill::color(Color::BLACK);
+    let mut local_fill = Fill::color(Color::srgb(0.0, 0.0, 0.0));
 
     let has_stroke;
-    let mut local_stroke = Stroke::new(Color::BLACK, 1.0);
+    let mut local_stroke = Stroke::new(Color::srgb(0.0, 0.0, 0.0), 1.0);
 
     let _has_sensor;
     let mut local_sensor = false;

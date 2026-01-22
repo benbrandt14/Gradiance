@@ -138,13 +138,13 @@ fn context_menu_ui(
                 if ui.button("Yellow").clicked() { color_to_set = Some(Color::srgb(1.0, 1.0, 0.0)); ui.close_menu(); }
                 if ui.button("Cyan").clicked() { color_to_set = Some(Color::srgb(0.0, 1.0, 1.0)); ui.close_menu(); }
                 if ui.button("Magenta").clicked() { color_to_set = Some(Color::srgb(1.0, 0.0, 1.0)); ui.close_menu(); }
-                if ui.button("White").clicked() { color_to_set = Some(Color::WHITE); ui.close_menu(); }
-                if ui.button("Black").clicked() { color_to_set = Some(Color::BLACK); ui.close_menu(); }
+                if ui.button("White").clicked() { color_to_set = Some(Color::srgb(1.0, 1.0, 1.0)); ui.close_menu(); }
+                if ui.button("Black").clicked() { color_to_set = Some(Color::srgb(0.0, 0.0, 0.0)); ui.close_menu(); }
 
                 ui.separator();
 
                 // Custom Color Picker
-                let mut current_color = Color::BLACK;
+                let mut current_color = Color::srgb(0.0, 0.0, 0.0);
                 if let Some(&first_e) = selection.0.iter().next() {
                     if let Ok(fill) = fill_q.get(first_e) {
                          current_color = fill.color;
