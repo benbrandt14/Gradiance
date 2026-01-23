@@ -6,9 +6,11 @@
 use crate::prelude::*;
 
 pub mod camera_controller;
-pub mod commands;
 pub mod cursor;
 pub mod editable;
+pub mod event_handlers;
+/// Events for tool interactions.
+pub mod events;
 pub mod selection;
 pub mod tools;
 
@@ -19,6 +21,33 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
+        // Events
+        app.add_event::<events::SpawnBoxEvent>()
+            .add_event::<events::SpawnCircleEvent>()
+            .add_event::<events::SpawnPolygonEvent>()
+            .add_event::<events::SpawnGroundEvent>()
+            .add_event::<events::SpawnJointEvent>()
+            .add_event::<events::ModifyTransformEvent>()
+            .add_event::<events::ModifyPhysicsEvent>()
+            .add_event::<events::ModifyShapeEvent>()
+            .add_event::<events::ModifyRenderEvent>();
+
+        // Event Handlers
+        app.add_systems(
+            Update,
+            (
+                event_handlers::handle_spawn_box,
+                event_handlers::handle_spawn_circle,
+                event_handlers::handle_spawn_polygon,
+                event_handlers::handle_spawn_ground,
+                event_handlers::handle_spawn_joint,
+                event_handlers::handle_modify_transform,
+                event_handlers::handle_modify_physics,
+                event_handlers::handle_modify_shape,
+                event_handlers::handle_modify_render,
+            ),
+        );
+
         // Cursor
         app.init_resource::<cursor::CursorWorldPos>();
         app.add_systems(PreUpdate, cursor::update_cursor_pos);
@@ -28,9 +57,6 @@ impl Plugin for InputPlugin {
 
         // Selection
         app.add_plugins(selection::SelectionPlugin);
-
-        // Commands
-        app.init_resource::<commands::CommandStack>();
 
         // Tool state
         app.init_state::<ToolState>();
@@ -45,10 +71,7 @@ impl Plugin for InputPlugin {
         app.init_resource::<ZIndex>();
 
         // Global shortcuts
-        app.add_systems(
-            Update,
-            (toggle_pause, handle_undo_redo_input, log_tool_transitions),
-        );
+        app.add_systems(Update, (toggle_pause, log_tool_transitions));
     }
 }
 
@@ -60,38 +83,6 @@ fn log_tool_transitions(mut events: EventReader<StateTransitionEvent<ToolState>>
     }
 }
 
-fn handle_undo_redo_input(world: &mut World) {
-    let mut undo = false;
-    let mut redo = false;
-
-    if let Some(keys) = world.get_resource::<ButtonInput<KeyCode>>() {
-        let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
-        let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-
-        if ctrl && keys.just_pressed(KeyCode::KeyZ) {
-            if shift {
-                redo = true;
-            } else {
-                undo = true;
-            }
-        }
-        if ctrl && keys.just_pressed(KeyCode::KeyY) {
-            redo = true;
-        }
-    }
-
-    if undo {
-        world.resource_scope(|world, mut stack: Mut<commands::CommandStack>| {
-            stack.undo(world);
-        });
-    }
-
-    if redo {
-        world.resource_scope(|world, mut stack: Mut<commands::CommandStack>| {
-            stack.redo(world);
-        });
-    }
-}
 
 /// Resource to manage Z-index to prevent Z-fighting.
 #[derive(Resource, Default)]

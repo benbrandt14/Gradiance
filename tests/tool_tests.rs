@@ -9,7 +9,6 @@ use bevy_egui::EguiUserTextures;
 use bevy_prototype_lyon::plugin::ShapePlugin;
 use gradiance::input::ToolState;
 use gradiance::input::ZIndex;
-use gradiance::input::commands::CommandStack;
 use gradiance::input::cursor::CursorWorldPos;
 use gradiance::input::editable::{EditableBox, EditableCircle};
 use gradiance::input::selection::Selection;
@@ -19,6 +18,8 @@ use gradiance::input::tools::connector::ConnectorToolPlugin;
 use gradiance::input::tools::drag_tool::DragToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
+use gradiance::input::event_handlers;
+use gradiance::input::events;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
 use rstest::{fixture, rstest};
@@ -71,10 +72,36 @@ fn app() -> App {
 
     // Resources
     app.init_resource::<CursorWorldPos>();
-    app.init_resource::<CommandStack>();
     app.init_resource::<GridSettings>();
     app.init_resource::<ZIndex>();
     app.init_resource::<Selection>();
+
+    // Events and Handlers
+    app.add_event::<events::SpawnBoxEvent>()
+        .add_event::<events::SpawnCircleEvent>()
+        .add_event::<events::SpawnPolygonEvent>()
+        .add_event::<events::SpawnGroundEvent>()
+        .add_event::<events::SpawnJointEvent>()
+        .add_event::<events::ModifyTransformEvent>()
+        .add_event::<events::ModifyPhysicsEvent>()
+        .add_event::<events::ModifyShapeEvent>()
+        .add_event::<events::ModifyRenderEvent>();
+
+    app.add_systems(
+        Update,
+        (
+            event_handlers::handle_spawn_box,
+            event_handlers::handle_spawn_circle,
+            event_handlers::handle_spawn_polygon,
+            event_handlers::handle_spawn_ground,
+            event_handlers::handle_spawn_joint,
+            event_handlers::handle_modify_transform,
+            event_handlers::handle_modify_physics,
+            event_handlers::handle_modify_shape,
+            event_handlers::handle_modify_render,
+        ),
+    );
+
 
     // Initial update
     app.update();
@@ -144,7 +171,8 @@ fn test_box_tool_spawn(mut app: App) {
     app.update();
 
     mouse_up(&mut app, MouseButton::Left);
-    app.update(); // Process command
+    app.update(); // Emit Event
+    app.update(); // Process Event
 
     // Verify
     let mut query = app
@@ -166,7 +194,8 @@ fn test_circle_tool_spawn(mut app: App) {
     app.update();
 
     mouse_up(&mut app, MouseButton::Left);
-    app.update(); // Process command
+    app.update(); // Emit Event
+    app.update(); // Process Event
 
     // Verify
     let mut query = app
@@ -207,15 +236,13 @@ fn test_polygon_tool_spawn(mut app: App) {
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
-    app.update(); // Process command
+    app.update(); // Emit Event
+    app.update(); // Process Event
 
     // Verify
     let mut query = app
         .world_mut()
         .query_filtered::<Entity, (With<RigidBody>, With<Collider>)>();
-    // Note: We expect 1 entity.
-    // Depending on pre-existing entities (ground?), count might be higher?
-    // The fixture does NOT spawn ground.
     assert_eq!(query.iter(app.world()).count(), 1);
 }
 
@@ -296,21 +323,10 @@ fn test_joint_tool_pin(mut app: App) {
     mouse_down(&mut app, MouseButton::Left);
     app.update();
     mouse_up(&mut app, MouseButton::Left);
-    app.update();
+    app.update(); // Emit
+    app.update(); // Process
 
     // Verify:
-    // A RevoluteJoint component should be added to a new visual entity which is child of box_entity,
-    // OR directly to box_entity?
-    // Looking at connector.rs: SpawnJointCommand spawns a visual_entity, sets parent to entity_a.
-    // Adds RevoluteJoint to visual_entity (if entity_b exists) OR pin_entity.
-    // Wait, if pin_entity (None entity_b), it spawns a Static pin_entity.
-    // Then adds RevoluteJoint to visual_entity connecting entity_a and pin_entity.
-
-    // So we check if box_entity has a child with ImpulseJoint (RevoluteJoint is part of ImpulseJoint in Rapier2D).
-    // Or, did we attach ImpulseJoint directly to box_entity?
-    // SpawnJointCommand:
-    // world.entity_mut(self.entity_a).insert(ImpulseJoint::new(target_entity, joint_data));
-
     let has_joint = app.world().get::<ImpulseJoint>(box_entity).is_some();
 
     assert!(
@@ -380,65 +396,5 @@ fn test_drag_tool(mut app: App) {
     assert!(
         app.world().get_entity(hand_entity).is_err(),
         "Hand should be despawned"
-    );
-}
-
-#[rstest]
-fn test_undo_redo(mut app: App) {
-    set_tool(&mut app, ToolState::Box);
-
-    // 1. Spawn a box
-    set_cursor(&mut app, Vec2::ZERO);
-    mouse_down(&mut app, MouseButton::Left);
-    app.update();
-
-    set_cursor(&mut app, Vec2::new(10.0, 10.0));
-    app.update();
-
-    mouse_up(&mut app, MouseButton::Left);
-    app.update(); // Process command
-
-    // Verify box exists
-    let mut query = app
-        .world_mut()
-        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
-    let entities: Vec<Entity> = query.iter(app.world()).collect();
-    assert_eq!(entities.len(), 1, "Box should be spawned");
-    let _box_id = entities[0];
-
-    // 2. Undo
-    // CommandStack requires mutable access to world to undo
-    app.world_mut()
-        .resource_scope(|world, mut stack: Mut<CommandStack>| {
-            stack.undo(world);
-        });
-    app.update(); // Process any despawns
-
-    // Verify box is gone
-    // Note: Undo might just despawn the entity, so we check query count
-    let mut query = app
-        .world_mut()
-        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
-    assert_eq!(
-        query.iter(app.world()).count(),
-        0,
-        "Box should be removed after undo"
-    );
-
-    // 3. Redo
-    app.world_mut()
-        .resource_scope(|world, mut stack: Mut<CommandStack>| {
-            stack.redo(world);
-        });
-    app.update();
-
-    // Verify box is back
-    let mut query = app
-        .world_mut()
-        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
-    assert_eq!(
-        query.iter(app.world()).count(),
-        1,
-        "Box should be restored after redo"
     );
 }

@@ -6,10 +6,7 @@
 //! - Supports click-to-connect (overlapping bodies) and drag-to-connect (separated bodies).
 //! - Spawns visual indicators.
 
-use crate::input::commands::{
-    CommandStack, SpawnFixedJointCommand, SpawnPrismaticJointCommand, SpawnRevoluteJointCommand,
-    SpawnRopeJointCommand, SpawnSpringJointCommand,
-};
+use crate::input::events::{JointType, SpawnJointEvent};
 use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -136,7 +133,7 @@ struct ConnectorDragState {
 }
 
 fn update_connector(
-    mut commands: Commands,
+    mut event_writer: EventWriter<SpawnJointEvent>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     rapier_context_query: Query<&RapierContext>,
@@ -275,96 +272,75 @@ fn update_connector(
 
                 match connector_type {
                     ConnectorType::Hinge => {
-                        let cmd = SpawnRevoluteJointCommand {
+                        event_writer.send(SpawnJointEvent {
+                            joint_type: JointType::Revolute,
                             entity_a: e_a,
                             entity_b,
                             anchor_a,
                             anchor_b,
-                            visual_entity: None,
-                            pin_entity: None,
-                        };
-                        commands.queue(move |world: &mut World| {
-                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                                stack.push(Box::new(cmd), world);
-                            });
                         });
                     }
                     ConnectorType::Fix => {
-                        let cmd = SpawnFixedJointCommand {
+                        event_writer.send(SpawnJointEvent {
+                            joint_type: JointType::Fixed { rot_a, rot_b },
                             entity_a: e_a,
                             entity_b,
                             anchor_a,
                             anchor_b,
-                            visual_entity: None,
-                            pin_entity: None,
-                            rot_a,
-                            rot_b,
-                        };
-                        commands.queue(move |world: &mut World| {
-                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                                stack.push(Box::new(cmd), world);
-                            });
                         });
                     }
                     ConnectorType::Prismatic => {
                         let axis_world = if is_drag {
-                             let dir = (anchor_b_world - anchor_a_world).normalize_or_zero();
-                             if dir == Vec2::ZERO { Vec2::Y } else { dir }
+                            let dir = (anchor_b_world - anchor_a_world).normalize_or_zero();
+                            if dir == Vec2::ZERO {
+                                Vec2::Y
+                            } else {
+                                dir
+                            }
                         } else {
-                             Vec2::Y
+                            Vec2::Y
                         };
                         // Convert axis to local space of A
                         let axis = axis_world.rotate(Vec2::from_angle(-rot_a));
 
-                        let cmd = SpawnPrismaticJointCommand {
+                        event_writer.send(SpawnJointEvent {
+                            joint_type: JointType::Prismatic { axis },
                             entity_a: e_a,
                             entity_b,
                             anchor_a,
                             anchor_b,
-                            axis,
-                            visual_entity: None,
-                            pin_entity: None,
-                        };
-                        commands.queue(move |world: &mut World| {
-                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                                stack.push(Box::new(cmd), world);
-                            });
                         });
                     }
                     ConnectorType::Spring => {
-                        let length = if is_drag { anchor_a_world.distance(anchor_b_world) } else { 1.0 };
-                        let cmd = SpawnSpringJointCommand {
+                        let length = if is_drag {
+                            anchor_a_world.distance(anchor_b_world)
+                        } else {
+                            1.0
+                        };
+                        event_writer.send(SpawnJointEvent {
+                            joint_type: JointType::Spring {
+                                stiffness: 10.0,
+                                damping: 0.5,
+                                length,
+                            },
                             entity_a: e_a,
                             entity_b,
                             anchor_a,
                             anchor_b,
-                            stiffness: 10.0,
-                            damping: 0.5,
-                            length,
-                            visual_entity: None,
-                            pin_entity: None,
-                        };
-                        commands.queue(move |world: &mut World| {
-                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                                stack.push(Box::new(cmd), world);
-                            });
                         });
                     }
                     ConnectorType::Rope => {
-                        let length = if is_drag { anchor_a_world.distance(anchor_b_world) } else { 5.0 };
-                        let cmd = SpawnRopeJointCommand {
+                        let length = if is_drag {
+                            anchor_a_world.distance(anchor_b_world)
+                        } else {
+                            5.0
+                        };
+                        event_writer.send(SpawnJointEvent {
+                            joint_type: JointType::Rope { length },
                             entity_a: e_a,
                             entity_b,
                             anchor_a,
                             anchor_b,
-                            length,
-                            visual_entity: None,
-                            pin_entity: None,
-                        };
-                        commands.queue(move |world: &mut World| {
-                            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                                stack.push(Box::new(cmd), world);
-                            });
                         });
                     }
                 }

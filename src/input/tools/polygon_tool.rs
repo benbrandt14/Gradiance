@@ -3,7 +3,7 @@
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
 //! Uses Convex Hull decomposition for colliders.
 
-use crate::input::commands::{CommandStack, SpawnPolygonCommand};
+use crate::input::events::SpawnPolygonEvent;
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -116,7 +116,7 @@ pub fn handle_polygon_input_logic(
 }
 
 fn polygon_tool_update(
-    mut commands: Commands,
+    mut event_writer: EventWriter<SpawnPolygonEvent>,
     mut data: ResMut<PolygonToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -159,17 +159,7 @@ fn polygon_tool_update(
             }
         }
         PolygonToolAction::Spawn { position, vertices } => {
-            let cmd = SpawnPolygonCommand {
-                position,
-                vertices,
-                entity: None,
-            };
-
-            commands.queue(move |world: &mut World| {
-                world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                    stack.push(Box::new(cmd), world);
-                });
-            });
+            event_writer.send(SpawnPolygonEvent { position, vertices });
         }
     }
 }
