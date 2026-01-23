@@ -2,7 +2,7 @@
 //!
 //! Click and drag to define the surface and rotation of the ground.
 
-use crate::input::commands::{CommandStack, SpawnGroundCommand};
+use crate::input::events::SpawnGroundEvent;
 use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -30,7 +30,7 @@ fn ground_tool_reset(mut data: ResMut<GroundToolData>) {
 }
 
 fn ground_tool_update(
-    mut commands: Commands,
+    mut event_writer: EventWriter<SpawnGroundEvent>,
     mut data: ResMut<GroundToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -73,16 +73,9 @@ fn ground_tool_update(
             let rotation = diff.to_angle();
             let center = (start + current) / 2.0;
 
-            let cmd = SpawnGroundCommand {
+            event_writer.send(SpawnGroundEvent {
                 position: center,
                 rotation,
-                entity: None,
-            };
-
-            commands.queue(move |world: &mut World| {
-                world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                    stack.push(Box::new(cmd), world);
-                });
             });
         }
         _ => {}

@@ -2,7 +2,7 @@
 //!
 //! Click and drag to define the radius of a new circle.
 
-use crate::input::commands::{CommandStack, SpawnCircleCommand};
+use crate::input::events::SpawnCircleEvent;
 use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -41,7 +41,7 @@ fn should_spawn_circle(radius: f32) -> bool {
 }
 
 fn circle_tool_update(
-    mut commands: Commands,
+    mut event_writer: EventWriter<SpawnCircleEvent>,
     mut data: ResMut<CircleToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -72,16 +72,9 @@ fn circle_tool_update(
         }
         DragStatus::Finished => {
             if should_spawn_circle(radius) {
-                let cmd = SpawnCircleCommand {
+                event_writer.send(SpawnCircleEvent {
                     position: drag.start,
                     radius,
-                    entity: None,
-                };
-
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
                 });
             }
         }
