@@ -4,6 +4,7 @@
 
 use crate::prelude::*;
 
+pub mod attraction;
 pub mod config;
 pub mod constraints;
 pub mod floor;
@@ -37,6 +38,9 @@ impl Plugin for PhysicsPlugin {
 
         // Setup Floor
         app.add_plugins(floor::FloorPlugin);
+
+        // Setup Attraction
+        app.add_plugins(attraction::AttractionPlugin);
     }
 }
 

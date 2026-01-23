@@ -30,7 +30,8 @@ impl Plugin for InputPlugin {
             .add_event::<events::ModifyTransformEvent>()
             .add_event::<events::ModifyPhysicsEvent>()
             .add_event::<events::ModifyShapeEvent>()
-            .add_event::<events::ModifyRenderEvent>();
+            .add_event::<events::ModifyRenderEvent>()
+            .add_event::<events::ModifyAttractionEvent>();
 
         // Event Handlers
         app.add_systems(
@@ -45,6 +46,7 @@ impl Plugin for InputPlugin {
                 event_handlers::handle_modify_physics,
                 event_handlers::handle_modify_shape,
                 event_handlers::handle_modify_render,
+                event_handlers::handle_modify_attraction,
             ),
         );
 
