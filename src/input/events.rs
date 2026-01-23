@@ -147,3 +147,14 @@ pub struct ModifyRenderEvent {
     /// The new stroke width.
     pub stroke_width: Option<f32>,
 }
+
+/// Event to modify an entity's attraction properties.
+#[derive(Event)]
+pub struct ModifyAttractionEvent {
+    /// The entity to modify.
+    pub entity: Entity,
+    /// The new strength.
+    pub strength: Option<f32>,
+    /// The new range.
+    pub range: Option<f32>,
+}

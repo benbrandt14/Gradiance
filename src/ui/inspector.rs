@@ -5,9 +5,11 @@
 
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::events::{
-    ModifyPhysicsEvent, ModifyRenderEvent, ModifyShapeEvent, ModifyTransformEvent,
+    ModifyAttractionEvent, ModifyPhysicsEvent, ModifyRenderEvent, ModifyShapeEvent,
+    ModifyTransformEvent,
 };
 use crate::input::selection::Selection;
+use crate::physics::attraction::Attractor;
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use bevy_prototype_lyon::prelude::*;
@@ -39,11 +41,13 @@ fn inspector_ui(
         Option<&LockedAxes>,
         Option<&ColliderMassProperties>,
         Option<&GravityScale>,
+        Option<&Attractor>,
     )>,
     mut ev_transform: EventWriter<ModifyTransformEvent>,
     mut ev_physics: EventWriter<ModifyPhysicsEvent>,
     mut ev_shape: EventWriter<ModifyShapeEvent>,
     mut ev_render: EventWriter<ModifyRenderEvent>,
+    mut ev_attraction: EventWriter<ModifyAttractionEvent>,
 ) {
     if selection.0.is_empty() {
         return;
@@ -89,6 +93,9 @@ fn inspector_ui(
     let has_gravity;
     let mut local_gravity = 1.0;
 
+    let has_attractor;
+    let mut local_attractor = Attractor::default();
+
     {
         let Ok((
             _,
@@ -104,6 +111,7 @@ fn inspector_ui(
             locked,
             mass,
             grav,
+            att,
         )) = query.get(first_entity) else {
             return;
         };
@@ -167,6 +175,11 @@ fn inspector_ui(
         if let Some(v) = grav {
             local_gravity = v.0;
         }
+
+        has_attractor = att.is_some();
+        if let Some(v) = att {
+            local_attractor = *v;
+        }
     }
 
     let ctx = contexts.ctx_mut();
@@ -212,6 +225,41 @@ fn inspector_ui(
                         entity: e,
                         translation: Some(local_transform.translation),
                         rotation: Some(local_transform.rotation),
+                    });
+                }
+            }
+            ui.separator();
+        }
+
+        // Attraction
+        if has_attractor || has_rb {
+            ui.heading("Attraction");
+            let mut changed = false;
+            ui.horizontal(|ui| {
+                ui.label("Strength:");
+                if ui
+                    .add(egui::DragValue::new(&mut local_attractor.strength).speed(10.0))
+                    .changed()
+                {
+                    changed = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("Range:");
+                if ui
+                    .add(egui::DragValue::new(&mut local_attractor.range).speed(10.0))
+                    .changed()
+                {
+                    changed = true;
+                }
+            });
+
+            if changed {
+                for &e in &selection.0 {
+                    ev_attraction.send(ModifyAttractionEvent {
+                        entity: e,
+                        strength: Some(local_attractor.strength),
+                        range: Some(local_attractor.range),
                     });
                 }
             }

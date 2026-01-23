@@ -6,6 +6,7 @@ use crate::geometry::DebugColor;
 use crate::input::events::*;
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::tools::connector::Connector;
+use crate::physics::attraction::Attractor;
 use crate::input::ZIndex;
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
@@ -36,6 +37,7 @@ fn spawn_physics_entity(
             InheritedVisibility::default(),
             ViewVisibility::default(),
             RigidBody::Dynamic,
+            ExternalForce::default(),
             collider,
             extra_bundle,
         ))
@@ -453,6 +455,36 @@ pub fn handle_modify_transform(
             }
             // Wake up body
             commands.entity(event.entity).insert(Sleeping::disabled());
+        }
+    }
+}
+
+/// System to handle `ModifyAttractionEvent`.
+pub fn handle_modify_attraction(
+    mut events: EventReader<ModifyAttractionEvent>,
+    mut commands: Commands,
+    mut query: Query<Option<&mut Attractor>>,
+) {
+    for event in events.read() {
+        if let Ok(attractor_opt) = query.get_mut(event.entity) {
+            if let Some(mut attractor) = attractor_opt {
+                if let Some(strength) = event.strength {
+                    attractor.strength = strength;
+                }
+                if let Some(range) = event.range {
+                    attractor.range = range;
+                }
+            } else {
+                // If Attractor doesn't exist, insert it with defaults overwritten by event
+                let mut attractor = Attractor::default();
+                if let Some(strength) = event.strength {
+                    attractor.strength = strength;
+                }
+                if let Some(range) = event.range {
+                    attractor.range = range;
+                }
+                commands.entity(event.entity).insert(attractor);
+            }
         }
     }
 }
