@@ -42,7 +42,8 @@ fn spawn_physics_entity(
         .id()
 }
 
-pub(crate) fn handle_spawn_box(
+/// System to handle `SpawnBoxEvent`.
+pub fn handle_spawn_box(
     mut events: EventReader<SpawnBoxEvent>,
     mut commands: Commands,
     mut z_index: ResMut<ZIndex>,
@@ -64,7 +65,8 @@ pub(crate) fn handle_spawn_box(
     }
 }
 
-pub(crate) fn handle_spawn_circle(
+/// System to handle `SpawnCircleEvent`.
+pub fn handle_spawn_circle(
     mut events: EventReader<SpawnCircleEvent>,
     mut commands: Commands,
     mut z_index: ResMut<ZIndex>,
@@ -85,7 +87,8 @@ pub(crate) fn handle_spawn_circle(
     }
 }
 
-pub(crate) fn handle_spawn_polygon(
+/// System to handle `SpawnPolygonEvent`.
+pub fn handle_spawn_polygon(
     mut events: EventReader<SpawnPolygonEvent>,
     mut commands: Commands,
     mut z_index: ResMut<ZIndex>,
@@ -118,7 +121,8 @@ pub(crate) fn handle_spawn_polygon(
     }
 }
 
-pub(crate) fn handle_spawn_ground(
+/// System to handle `SpawnGroundEvent`.
+pub fn handle_spawn_ground(
     mut events: EventReader<SpawnGroundEvent>,
     mut commands: Commands,
 ) {
@@ -223,7 +227,8 @@ fn spawn_connector_visual(
     visual_id
 }
 
-pub(crate) fn handle_spawn_joint(
+/// System to handle `SpawnJointEvent`.
+pub fn handle_spawn_joint(
     mut events: EventReader<SpawnJointEvent>,
     mut commands: Commands,
 ) {
@@ -432,7 +437,8 @@ pub(crate) fn handle_spawn_joint(
     }
 }
 
-pub(crate) fn handle_modify_transform(
+/// System to handle `ModifyTransformEvent`.
+pub fn handle_modify_transform(
     mut events: EventReader<ModifyTransformEvent>,
     mut commands: Commands,
     mut query: Query<&mut Transform>,
@@ -451,7 +457,8 @@ pub(crate) fn handle_modify_transform(
     }
 }
 
-pub(crate) fn handle_modify_physics(
+/// System to handle `ModifyPhysicsEvent`.
+pub fn handle_modify_physics(
     mut events: EventReader<ModifyPhysicsEvent>,
     mut commands: Commands,
 ) {
@@ -486,7 +493,8 @@ pub(crate) fn handle_modify_physics(
     }
 }
 
-pub(crate) fn handle_modify_shape(
+/// System to handle `ModifyShapeEvent`.
+pub fn handle_modify_shape(
     mut events: EventReader<ModifyShapeEvent>,
     mut commands: Commands,
     mut query: Query<(Option<&mut EditableBox>, Option<&mut EditableCircle>)>,
@@ -515,7 +523,8 @@ pub(crate) fn handle_modify_shape(
     }
 }
 
-pub(crate) fn handle_modify_render(
+/// System to handle `ModifyRenderEvent`.
+pub fn handle_modify_render(
     mut events: EventReader<ModifyRenderEvent>,
     mut query: Query<(Option<&mut Fill>, Option<&mut Stroke>)>,
 ) {

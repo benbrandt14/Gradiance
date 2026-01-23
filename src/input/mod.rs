@@ -9,6 +9,7 @@ pub mod camera_controller;
 pub mod cursor;
 pub mod editable;
 pub mod event_handlers;
+/// Events for tool interactions.
 pub mod events;
 pub mod selection;
 pub mod tools;
