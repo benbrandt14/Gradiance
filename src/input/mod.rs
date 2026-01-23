@@ -27,11 +27,15 @@ impl Plugin for InputPlugin {
             .add_event::<events::SpawnPolygonEvent>()
             .add_event::<events::SpawnGroundEvent>()
             .add_event::<events::SpawnJointEvent>()
+            .add_event::<events::SpawnGearEvent>()
+            .add_event::<events::SpawnPulleyEvent>()
+            .add_event::<events::SpawnChainEvent>()
             .add_event::<events::ModifyTransformEvent>()
             .add_event::<events::ModifyPhysicsEvent>()
             .add_event::<events::ModifyShapeEvent>()
             .add_event::<events::ModifyRenderEvent>()
-            .add_event::<events::ModifyAttractionEvent>();
+            .add_event::<events::ModifyAttractionEvent>()
+            .add_event::<events::ModifyJointEvent>();
 
         // Event Handlers
         app.add_systems(
@@ -42,11 +46,15 @@ impl Plugin for InputPlugin {
                 event_handlers::handle_spawn_polygon,
                 event_handlers::handle_spawn_ground,
                 event_handlers::handle_spawn_joint,
+                event_handlers::handle_spawn_gear,
+                event_handlers::handle_spawn_pulley,
+                event_handlers::handle_spawn_chain,
                 event_handlers::handle_modify_transform,
                 event_handlers::handle_modify_physics,
                 event_handlers::handle_modify_shape,
                 event_handlers::handle_modify_render,
                 event_handlers::handle_modify_attraction,
+                event_handlers::handle_modify_joint,
             ),
         );
 

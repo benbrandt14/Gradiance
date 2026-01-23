@@ -34,8 +34,10 @@ struct SelectToolData {
 
     // Rotation
     is_rotating: bool,
-    initial_rotations: Vec<(Entity, f32)>,
+    // (Entity, InitialRotation, InitialPos, OffsetFromCentroid)
+    rotation_data: Vec<(Entity, f32, Vec2, Vec2)>,
     rotation_start_pos: Vec2,
+    centroid: Vec2,
 }
 
 /// Information needed to sort hits.
@@ -102,17 +104,38 @@ fn select_tool_update(
     // Right Click Rotate
     if mouse.just_pressed(MouseButton::Right) {
         data.rotation_start_pos = current_pos;
-        data.initial_rotations.clear();
+        data.rotation_data.clear();
 
         if !selection.0.is_empty() {
+             // Calculate Centroid
+            let mut sum_pos = Vec2::ZERO;
+            let mut count = 0;
+            let mut entities = Vec::new();
+
             for &entity in &selection.0 {
                 if let Ok((_, t, _)) = query.get(entity) {
-                    let rot = t.rotation.to_euler(EulerRot::XYZ).2;
-                    data.initial_rotations.push((entity, rot));
+                    sum_pos += t.translation.truncate();
+                    count += 1;
+                    entities.push(entity);
                 }
             }
-            if !data.initial_rotations.is_empty() {
-                data.is_rotating = true;
+
+            if count > 0 {
+                let centroid = sum_pos / count as f32;
+                data.centroid = centroid;
+
+                for entity in entities {
+                     if let Ok((_, t, _)) = query.get(entity) {
+                        let pos = t.translation.truncate();
+                        let rot = t.rotation.to_euler(EulerRot::XYZ).2;
+                        let offset = pos - centroid;
+                        data.rotation_data.push((entity, rot, pos, offset));
+                    }
+                }
+
+                if !data.rotation_data.is_empty() {
+                    data.is_rotating = true;
+                }
             }
         }
     }
@@ -122,10 +145,23 @@ fn select_tool_update(
         // Sensitivity: 0.01 radians per pixel
         let angle_delta = delta.x * 0.01;
 
-        for (entity, initial_rot) in &data.initial_rotations {
+        for (entity, initial_rot, _initial_pos, offset) in &data.rotation_data {
             if let Ok((_, mut t, _)) = query.get_mut(*entity) {
+                // Rotate the entity itself
                 let new_rot = initial_rot + angle_delta;
                 t.rotation = Quat::from_rotation_z(new_rot);
+
+                // Rotate the position around centroid
+                // NewOffset = Rot(angle) * Offset
+                let rot_sin = angle_delta.sin();
+                let rot_cos = angle_delta.cos();
+                let new_offset_x = offset.x * rot_cos - offset.y * rot_sin;
+                let new_offset_y = offset.x * rot_sin + offset.y * rot_cos;
+                let new_offset = Vec2::new(new_offset_x, new_offset_y);
+
+                let new_pos = data.centroid + new_offset;
+                t.translation.x = new_pos.x;
+                t.translation.y = new_pos.y;
 
                 // Wake up to ensure physics updates
                 commands.entity(*entity).insert(Sleeping::disabled());
@@ -135,7 +171,7 @@ fn select_tool_update(
 
     if mouse.just_released(MouseButton::Right) {
         data.is_rotating = false;
-        data.initial_rotations.clear();
+        data.rotation_data.clear();
     }
 
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);

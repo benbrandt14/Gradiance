@@ -158,3 +158,57 @@ pub struct ModifyAttractionEvent {
     /// The new range.
     pub range: Option<f32>,
 }
+
+/// Event to modify a joint's properties.
+#[derive(Event)]
+pub struct ModifyJointEvent {
+    /// The entity holding the ImpulseJoint.
+    pub entity: Entity,
+    /// The new limits (min, max) for Revolute/Prismatic.
+    pub limits: Option<(f32, f32)>,
+    /// Drive stiffness (Spring/Motor).
+    pub drive_stiffness: Option<f32>,
+    /// Drive damping (Spring/Motor).
+    pub drive_damping: Option<f32>,
+    /// Drive target position.
+    pub drive_position: Option<f32>,
+    /// Drive target velocity.
+    pub drive_velocity: Option<f32>,
+    /// Rest length for Spring/Rope.
+    pub length: Option<f32>,
+}
+
+/// Event to spawn a gear constraint.
+#[derive(Event)]
+pub struct SpawnGearEvent {
+    /// The first body.
+    pub entity_a: Entity,
+    /// The second body.
+    pub entity_b: Entity,
+    /// The ratio.
+    pub ratio: f32,
+}
+
+/// Event to spawn a pulley constraint.
+#[derive(Event)]
+pub struct SpawnPulleyEvent {
+    /// The first body.
+    pub entity_a: Entity,
+    /// The second body.
+    pub entity_b: Entity,
+    /// Anchor A (world space).
+    pub anchor_a: Vec2,
+    /// Anchor B (world space).
+    pub anchor_b: Vec2,
+    /// Max length.
+    pub length: f32,
+}
+
+/// Event to spawn a chain.
+#[derive(Event)]
+pub struct SpawnChainEvent {
+    /// The points defining the chain.
+    pub vertices: Vec<Vec2>,
+    /// Width of chain links.
+    pub width: f32,
+}

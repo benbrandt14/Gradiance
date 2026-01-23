@@ -10,6 +10,7 @@ use crate::physics::attraction::Attractor;
 use crate::input::ZIndex;
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
+use crate::physics::constraints::{GearJoint, PulleyJoint};
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::dynamics::TypedJoint;
 use bevy_rapier2d::rapier::dynamics::{
@@ -17,6 +18,7 @@ use bevy_rapier2d::rapier::dynamics::{
     PrismaticJointBuilder as RapierPrismaticJointBuilder,
     RevoluteJointBuilder as RapierRevoluteJointBuilder,
     RopeJointBuilder as RapierRopeJointBuilder, SpringJointBuilder as RapierSpringJointBuilder,
+    JointAxis, MotorModel,
 };
 use bevy_rapier2d::rapier::geometry::SharedShape;
 use nalgebra::{Isometry2, Point2, Vector2};
@@ -575,6 +577,165 @@ pub fn handle_modify_render(
                     stroke.options.line_width = width;
                 }
             }
+        }
+    }
+}
+
+/// System to handle `ModifyJointEvent`.
+pub fn handle_modify_joint(
+    mut events: EventReader<ModifyJointEvent>,
+    mut commands: Commands,
+    mut query: Query<&mut ImpulseJoint>,
+) {
+    for event in events.read() {
+        if let Ok(mut joint) = query.get_mut(event.entity) {
+            match &mut joint.data {
+                TypedJoint::GenericJoint(generic) => {
+                    let mut changed = false;
+
+                    // Iterate over possible axes (X, Y, Ang) to find free ones to modify
+                    let axes = [JointAxis::X, JointAxis::Y, JointAxis::Ang];
+                    for axis in axes {
+                         if !generic.raw.is_locked(axis) {
+                             // Limits
+                             if let Some((min, max)) = event.limits {
+                                 // Only apply to first free axis we encounter for now?
+                                 // Or all? Usually only 1 free axis for revolute/prismatic.
+                                 generic.raw.set_limits(axis, [min.into(), max.into()]);
+                                 changed = true;
+                             }
+
+                             // Motor
+                             if event.drive_stiffness.is_some() || event.drive_damping.is_some()
+                                || event.drive_position.is_some() || event.drive_velocity.is_some() {
+
+                                 // Get existing motor params if possible, or default
+                                 // GenericJoint doesn't easily expose "get_motor".
+                                 // But we can just overwrite.
+
+                                 let stiffness = event.drive_stiffness.unwrap_or(0.0) as f64;
+                                 let damping = event.drive_damping.unwrap_or(0.0) as f64;
+                                 let target_pos = event.drive_position.unwrap_or(0.0) as f64;
+                                 let target_vel = event.drive_velocity.unwrap_or(0.0) as f64;
+
+                                 generic.raw.set_motor(axis, target_pos, target_vel, stiffness, damping);
+                                 generic.raw.set_motor_model(axis, MotorModel::ForceBased); // Default to ForceBased?
+                                 changed = true;
+                             }
+                         }
+                    }
+
+                    if changed {
+                        commands.entity(event.entity).insert(Sleeping::disabled());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// System to handle `SpawnGearEvent`.
+pub fn handle_spawn_gear(
+    mut events: EventReader<SpawnGearEvent>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        commands.spawn((
+            GearJoint {
+                entity_a: event.entity_a,
+                entity_b: event.entity_b,
+                ratio: event.ratio,
+            },
+            Name::new("GearJoint"),
+        ));
+    }
+}
+
+/// System to handle `SpawnPulleyEvent`.
+pub fn handle_spawn_pulley(
+    mut events: EventReader<SpawnPulleyEvent>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        commands.spawn((
+            PulleyJoint {
+                entity_a: event.entity_a,
+                entity_b: event.entity_b,
+                anchor_a: event.anchor_a,
+                anchor_b: event.anchor_b,
+                length: event.length,
+            },
+            Name::new("PulleyJoint"),
+        ));
+    }
+}
+
+/// System to handle `SpawnChainEvent`.
+pub fn handle_spawn_chain(
+    mut events: EventReader<SpawnChainEvent>,
+    mut commands: Commands,
+    mut z_index: ResMut<ZIndex>,
+) {
+    for event in events.read() {
+        if event.vertices.len() < 2 {
+            warn!("Chain must have at least 2 vertices");
+            continue;
+        }
+
+        let width = event.width.max(0.1);
+        let mut prev_entity: Option<Entity> = None;
+        let mut prev_half_len = 0.0;
+
+        for i in 0..event.vertices.len() - 1 {
+            let start = event.vertices[i];
+            let end = event.vertices[i + 1];
+
+            let diff = end - start;
+            let length = diff.length();
+            if length < 0.001 { continue; }
+
+            let mid = (start + end) / 2.0;
+            let angle = diff.y.atan2(diff.x);
+
+            let half_len = length / 2.0;
+
+            let current_entity = commands
+                .spawn((
+                    Transform::from_xyz(mid.x, mid.y, z_index.next()).with_rotation(Quat::from_rotation_z(angle)),
+                    GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                    RigidBody::Dynamic,
+                    ExternalForce::default(),
+                    Collider::cuboid(half_len, width / 2.0),
+                     EditableBox {
+                         width: length as f64,
+                         height: width as f64,
+                    },
+                    DebugColor(Color::srgb(0.7, 0.7, 0.7)),
+                ))
+                .id();
+
+
+            if let Some(prev) = prev_entity {
+                // Connect prev and current at `start`.
+                // `start` is local to Prev: (prev_half_len, 0).
+                // `start` is local to Current: (-half_len, 0).
+
+                let joint = RapierRevoluteJointBuilder::new()
+                    .local_anchor1(Point2::new(prev_half_len, 0.0))
+                    .local_anchor2(Point2::new(-half_len, 0.0));
+
+                commands.entity(current_entity).insert(ImpulseJoint::new(
+                    prev,
+                    TypedJoint::GenericJoint(GenericJoint::from(joint)),
+                ));
+            }
+
+            prev_entity = Some(current_entity);
+            prev_half_len = half_len;
         }
     }
 }

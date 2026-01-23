@@ -5,14 +5,16 @@
 
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::events::{
-    ModifyAttractionEvent, ModifyPhysicsEvent, ModifyRenderEvent, ModifyShapeEvent,
+    ModifyAttractionEvent, ModifyJointEvent, ModifyPhysicsEvent, ModifyRenderEvent, ModifyShapeEvent,
     ModifyTransformEvent,
 };
 use crate::input::selection::Selection;
+use crate::input::tools::connector::Connector;
 use crate::physics::attraction::Attractor;
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use bevy_prototype_lyon::prelude::*;
+use bevy_rapier2d::dynamics::ImpulseJoint;
 
 /// Plugin for the Inspector UI.
 pub struct InspectorPlugin;
@@ -42,12 +44,16 @@ fn inspector_ui(
         Option<&ColliderMassProperties>,
         Option<&GravityScale>,
         Option<&Attractor>,
+        Option<&Connector>,
+        Option<&ImpulseJoint>,
     )>,
     mut ev_transform: EventWriter<ModifyTransformEvent>,
     mut ev_physics: EventWriter<ModifyPhysicsEvent>,
     mut ev_shape: EventWriter<ModifyShapeEvent>,
     mut ev_render: EventWriter<ModifyRenderEvent>,
     mut ev_attraction: EventWriter<ModifyAttractionEvent>,
+    mut ev_joint: EventWriter<ModifyJointEvent>,
+    joint_query: Query<&ImpulseJoint>, // Separate query to look up joint on parent if connector selected
 ) {
     if selection.0.is_empty() {
         return;
@@ -96,6 +102,10 @@ fn inspector_ui(
     let has_attractor;
     let mut local_attractor = Attractor::default();
 
+    // Joint Logic
+    let mut joint_entity = None;
+    let mut has_joint = false;
+
     {
         let Ok((
             _,
@@ -112,6 +122,8 @@ fn inspector_ui(
             mass,
             grav,
             att,
+            connector,
+            joint,
         )) = query.get(first_entity) else {
             return;
         };
@@ -180,6 +192,18 @@ fn inspector_ui(
         if let Some(v) = att {
             local_attractor = *v;
         }
+
+        // Determine Joint Entity
+        if let Some(c) = connector {
+             // If we selected a connector, the joint is on entity_a
+             if joint_query.get(c.entity_a).is_ok() {
+                 joint_entity = Some(c.entity_a);
+                 has_joint = true;
+             }
+        } else if joint.is_some() {
+            joint_entity = Some(first_entity);
+            has_joint = true;
+        }
     }
 
     let ctx = contexts.ctx_mut();
@@ -188,6 +212,84 @@ fn inspector_ui(
         ui.heading("Inspector");
         ui.label(format!("Selected: {} entities", selection.0.len()));
         ui.separator();
+
+        // Joint Inspector
+        if has_joint {
+             if let Some(e) = joint_entity {
+                 ui.heading("Joint");
+                 ui.label(format!("Joint on Entity: {:?}", e));
+
+                 // Inputs for limits/motor
+                 // We don't read current values because extracting them from GenericJoint is hard/verbose without knowing axis.
+                 // We provide "write-only" or "last-known" fields?
+                 // For now, let's provide DragValues that default to 0 but allow changing.
+                 // Better: "Modify Limits" section.
+
+                 let mut limits_changed = false;
+                 let mut min_limit = -1.0;
+                 let mut max_limit = 1.0;
+                 // Note: Ideally we'd persist this state or read it.
+                 // Since we can't easily read, this UI is a bit "blind".
+                 // But for a tool, "blind" setters are sometimes acceptable if they just apply changes.
+                 // A better UX would be to store these properties in a separate Component that syncs to Rapier.
+                 // For Phase 3, we'll expose the controls.
+
+                 ui.collapsing("Limits", |ui| {
+                     ui.horizontal(|ui| {
+                         ui.label("Min:");
+                         if ui.add(egui::DragValue::new(&mut min_limit).speed(0.1)).changed() {
+                             limits_changed = true;
+                         }
+                         ui.label("Max:");
+                         if ui.add(egui::DragValue::new(&mut max_limit).speed(0.1)).changed() {
+                             limits_changed = true;
+                         }
+                     });
+                     if limits_changed {
+                         ev_joint.send(ModifyJointEvent {
+                             entity: e,
+                             limits: Some((min_limit, max_limit)),
+                             drive_stiffness: None,
+                             drive_damping: None,
+                             drive_position: None,
+                             drive_velocity: None,
+                             length: None,
+                         });
+                     }
+                 });
+
+                 ui.collapsing("Motor / Drive", |ui| {
+                     let mut motor_changed = false;
+                     let mut stiffness = 0.0;
+                     let mut damping = 0.0;
+                     let mut pos = 0.0;
+                     let mut vel = 0.0;
+
+                     ui.label("Stiffness:");
+                     if ui.add(egui::DragValue::new(&mut stiffness).speed(10.0)).changed() { motor_changed = true; }
+                     ui.label("Damping:");
+                     if ui.add(egui::DragValue::new(&mut damping).speed(1.0)).changed() { motor_changed = true; }
+                     ui.label("Target Pos:");
+                     if ui.add(egui::DragValue::new(&mut pos).speed(0.1)).changed() { motor_changed = true; }
+                     ui.label("Target Vel:");
+                     if ui.add(egui::DragValue::new(&mut vel).speed(0.1)).changed() { motor_changed = true; }
+
+                     if motor_changed {
+                         ev_joint.send(ModifyJointEvent {
+                             entity: e,
+                             limits: None,
+                             drive_stiffness: Some(stiffness),
+                             drive_damping: Some(damping),
+                             drive_position: Some(pos),
+                             drive_velocity: Some(vel),
+                             length: None,
+                         });
+                     }
+                 });
+
+                 ui.separator();
+             }
+        }
 
         // Transform
         if has_transform {
