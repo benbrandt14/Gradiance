@@ -126,76 +126,94 @@ impl ConnectorType {
     }
 }
 
-#[derive(Default)]
-struct ConnectorDragState {
-    start_pos: Option<Vec2>,
-    start_entity: Option<Entity>,
+/// State for tracking drag operations in the connector tool.
+#[derive(Default, Debug, Clone)]
+pub struct ConnectorDragState {
+    /// The world position where the drag started.
+    pub start_pos: Option<Vec2>,
+    /// The entity under the cursor when the drag started.
+    pub start_entity: Option<Entity>,
 }
 
-fn update_connector(
-    mut event_writer: EventWriter<SpawnJointEvent>,
-    cursor_pos: Res<CursorWorldPos>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    rapier_context_query: Query<&RapierContext>,
-    mut contexts: EguiContexts,
-    grid_settings: Res<GridSettings>,
-    tool_state: Res<State<ToolState>>,
-    bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
-    parents: Query<&Parent>,
-    transforms: Query<&Transform>,
-    mut drag_state: Local<ConnectorDragState>,
-    mut gizmos: Gizmos,
-) {
-    if is_pointer_over_ui(&mut contexts) {
-        return;
+/// Action to be taken by the system based on logic result.
+#[derive(Debug, PartialEq)]
+pub enum ConnectorToolAction {
+    /// No action.
+    None,
+    /// Update drag preview visual.
+    UpdateDragPreview {
+        /// Start point of the drag.
+        start: Vec2,
+        /// Current end point of the drag.
+        end: Vec2,
+    },
+    /// Spawn a joint.
+    SpawnJoint {
+        /// The type of joint to spawn.
+        connector_type: ConnectorType,
+        /// The first entity involved (if any).
+        entity_a: Option<Entity>,
+        /// The second entity involved (if any).
+        entity_b: Option<Entity>,
+        /// The anchor point for the first entity in world space.
+        anchor_a_world: Vec2,
+        /// The anchor point for the second entity in world space.
+        anchor_b_world: Vec2,
+        /// Whether the interaction was a drag (vs a click).
+        is_drag: bool,
+    },
+}
+
+/// Pure logic for connector tool input handling.
+pub fn handle_connector_input_logic(
+    cursor_pos: Option<Vec2>,
+    mouse_just_pressed: bool,
+    mouse_pressed: bool,
+    mouse_just_released: bool,
+    tool_state: &ToolState,
+    is_pointer_over_ui: bool,
+    grid_show: bool,
+    grid_snap: bool,
+    grid_spacing: f32,
+    bodies_under_cursor: &[Entity],
+    drag_state: &mut ConnectorDragState,
+) -> ConnectorToolAction {
+    if is_pointer_over_ui {
+        return ConnectorToolAction::None;
     }
 
-    let Some(raw_pos) = cursor_pos.0 else {
-        return;
+    let Some(raw_pos) = cursor_pos else {
+        return ConnectorToolAction::None;
     };
 
-    let Some(connector_type) = ConnectorType::from_tool_state(tool_state.get()) else {
-        return;
+    let Some(connector_type) = ConnectorType::from_tool_state(tool_state) else {
+        return ConnectorToolAction::None;
     };
 
-    // Helper to resolve list of intersected entities
-    let resolve_intersections = |pos: Vec2| -> Vec<Entity> {
-        if let Some(rapier_context) = rapier_context_query.iter().next() {
-            let shape = Collider::ball(0.1);
-            let filter = QueryFilter::default().exclude_sensors();
-            let mut intersections = Vec::new();
-            rapier_context.intersections_with_shape(pos, 0.0, &shape, filter, |e| {
-                intersections.push(e);
-                true
-            });
-            resolve_sorted_bodies(&intersections, &bodies, &parents)
-        } else {
-            Vec::new()
-        }
-    };
-
-    let pos = if grid_settings.show && grid_settings.snap {
-        snap_to_grid(raw_pos, grid_settings.spacing)
+    let pos = if grid_show && grid_snap {
+        snap_to_grid(raw_pos, grid_spacing)
     } else {
         raw_pos
     };
 
-    if mouse.just_pressed(MouseButton::Left) {
+    if mouse_just_pressed {
         drag_state.start_pos = Some(pos);
-        let bodies_at_start = resolve_intersections(pos);
-        drag_state.start_entity = bodies_at_start.first().cloned();
+        drag_state.start_entity = bodies_under_cursor.first().cloned();
     }
 
-    if mouse.pressed(MouseButton::Left) {
+    if mouse_pressed {
         if let Some(start_pos) = drag_state.start_pos {
-            gizmos.line_2d(start_pos, pos, Color::srgb(1.0, 1.0, 0.0));
+            return ConnectorToolAction::UpdateDragPreview {
+                start: start_pos,
+                end: pos,
+            };
         }
     }
 
-    if mouse.just_released(MouseButton::Left) {
+    if mouse_just_released {
         if let Some(start_pos) = drag_state.start_pos {
             let end_pos = pos;
-            let bodies_at_end = resolve_intersections(end_pos);
+            let bodies_at_end = bodies_under_cursor;
             let end_entity = bodies_at_end.first().cloned();
 
             let dist = start_pos.distance(end_pos);
@@ -211,10 +229,11 @@ fn update_connector(
                 entity_b = end_entity;
             } else {
                 // Click behavior: Overlapping at start_pos
-                let bodies = resolve_intersections(start_pos);
-                if !bodies.is_empty() {
-                    entity_a = Some(bodies[0]);
-                    entity_b = bodies.get(1).cloned();
+                // NOTE: When clicking, the 'bodies_under_cursor' passed to this function
+                // are essentially the bodies at 'start_pos' (since pos ~ start_pos).
+                if !bodies_at_end.is_empty() {
+                    entity_a = Some(bodies_at_end[0]);
+                    entity_b = bodies_at_end.get(1).cloned();
                 }
                 anchor_a_world = start_pos;
                 anchor_b_world = start_pos;
@@ -234,6 +253,91 @@ fn update_connector(
                 std::mem::swap(&mut anchor_a_world, &mut anchor_b_world);
             }
 
+            // Only spawn if we have at least one entity or it's a valid world-to-world interaction
+            // (though usually we need at least one body for a joint, except maybe rope between two static points?
+            // But Rapier joints usually need a body. Pin to world means one body.
+            // If entity_a is None, we can't create a joint.)
+            if entity_a.is_some() {
+                // Reset drag state
+                drag_state.start_pos = None;
+                drag_state.start_entity = None;
+
+                return ConnectorToolAction::SpawnJoint {
+                    connector_type,
+                    entity_a,
+                    entity_b,
+                    anchor_a_world,
+                    anchor_b_world,
+                    is_drag,
+                };
+            }
+        }
+        drag_state.start_pos = None;
+        drag_state.start_entity = None;
+    }
+
+    ConnectorToolAction::None
+}
+
+fn update_connector(
+    mut event_writer: EventWriter<SpawnJointEvent>,
+    cursor_pos: Res<CursorWorldPos>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    rapier_context_query: Query<&RapierContext>,
+    mut contexts: EguiContexts,
+    grid_settings: Res<GridSettings>,
+    tool_state: Res<State<ToolState>>,
+    bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
+    parents: Query<&Parent>,
+    transforms: Query<&Transform>,
+    mut drag_state: Local<ConnectorDragState>,
+    mut gizmos: Gizmos,
+) {
+    // Helper to resolve list of intersected entities
+    // We do this outside the logic function because it requires ECS queries.
+    let bodies_under_cursor = if let Some(raw_pos) = cursor_pos.0 {
+         let pos = if grid_settings.show && grid_settings.snap {
+            snap_to_grid(raw_pos, grid_settings.spacing)
+        } else {
+            raw_pos
+        };
+
+        if let Some(rapier_context) = rapier_context_query.iter().next() {
+            let shape = Collider::ball(0.1);
+            let filter = QueryFilter::default().exclude_sensors();
+            let mut intersections = Vec::new();
+            rapier_context.intersections_with_shape(pos, 0.0, &shape, filter, |e| {
+                intersections.push(e);
+                true
+            });
+            resolve_sorted_bodies(&intersections, &bodies, &parents)
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+    let action = handle_connector_input_logic(
+        cursor_pos.0,
+        mouse.just_pressed(MouseButton::Left),
+        mouse.pressed(MouseButton::Left),
+        mouse.just_released(MouseButton::Left),
+        tool_state.get(),
+        is_pointer_over_ui(&mut contexts),
+        grid_settings.show,
+        grid_settings.snap,
+        grid_settings.spacing,
+        &bodies_under_cursor,
+        &mut drag_state,
+    );
+
+    match action {
+        ConnectorToolAction::None => {},
+        ConnectorToolAction::UpdateDragPreview { start, end } => {
+             gizmos.line_2d(start, end, Color::srgb(1.0, 1.0, 0.0));
+        },
+        ConnectorToolAction::SpawnJoint { connector_type, entity_a, entity_b, anchor_a_world, anchor_b_world, is_drag } => {
             if let Some(e_a) = entity_a {
                 let get_local = |e: Entity, p: Vec2| -> Vec2 {
                     if let Ok(t) = transforms.get(e) {
@@ -255,16 +359,6 @@ fn update_connector(
                     get_local(e_b, anchor_b_world)
                 } else {
                     anchor_b_world
-                    // Note: If pin to world, anchor_b acts as world pos offset from 0,0?
-                    // No, `resolve_joint_targets` computes pin pos based on A's transform if pin is created.
-                    // But if B is None, `anchor_b` becomes `local_anchor_2` of the joint (which connects to the pin).
-                    // The pin is spawned at `A.transform * anchor_a`.
-                    // So if we drag to a different world spot (anchor_b_world), the pin location computed by `resolve_joint_targets`
-                    // will be at anchor_a_world, NOT anchor_b_world.
-                    // This is a limitation of the current `resolve_joint_targets` implementation for Pinning.
-                    // It assumes Pin is "at" the anchor on body A.
-                    // For Prismatic/Spring/Rope dragging to void, this might be unexpected.
-                    // But we will proceed.
                 };
 
                 let rot_a = get_rot(e_a);
@@ -345,9 +439,7 @@ fn update_connector(
                     }
                 }
             }
-        }
-        drag_state.start_pos = None;
-        drag_state.start_entity = None;
+        },
     }
 }
 
@@ -427,5 +519,106 @@ mod tests {
         assert_eq!(bodies[0].0, e2);
         assert_eq!(bodies[1].0, e3);
         assert_eq!(bodies[2].0, e1);
+    }
+
+    #[rstest]
+    #[case::click_connect_overlapping(
+        Some(Vec2::new(10.0, 10.0)),
+        true, false, true, // just_pressed, pressed, just_released
+        ToolState::RevoluteJoint,
+        vec![Entity::from_raw(1), Entity::from_raw(2)],
+        ConnectorToolAction::SpawnJoint {
+            connector_type: ConnectorType::Hinge,
+            entity_a: Some(Entity::from_raw(1)),
+            entity_b: Some(Entity::from_raw(2)),
+            anchor_a_world: Vec2::new(10.0, 10.0),
+            anchor_b_world: Vec2::new(10.0, 10.0),
+            is_drag: false,
+        }
+    )]
+    #[case::drag_connect_separated(
+        Some(Vec2::new(20.0, 20.0)), // End Pos
+        false, false, true,
+        ToolState::SpringJoint,
+        vec![Entity::from_raw(2)], // Body at end
+        ConnectorToolAction::SpawnJoint {
+            connector_type: ConnectorType::Spring,
+            entity_a: Some(Entity::from_raw(1)), // From setup (drag state)
+            entity_b: Some(Entity::from_raw(2)),
+            anchor_a_world: Vec2::new(10.0, 10.0),
+            anchor_b_world: Vec2::new(20.0, 20.0),
+            is_drag: true,
+        }
+    )]
+    #[case::drag_to_void_pin(
+        Some(Vec2::new(20.0, 20.0)),
+        false, false, true,
+        ToolState::RevoluteJoint,
+        vec![], // No body at end
+        ConnectorToolAction::SpawnJoint {
+            connector_type: ConnectorType::Hinge,
+            entity_a: Some(Entity::from_raw(1)),
+            entity_b: None,
+            anchor_a_world: Vec2::new(10.0, 10.0),
+            anchor_b_world: Vec2::new(20.0, 20.0),
+            is_drag: true,
+        }
+    )]
+    #[case::self_connect_prevention(
+        Some(Vec2::new(20.0, 20.0)),
+        false, false, true,
+        ToolState::RevoluteJoint,
+        vec![Entity::from_raw(1)], // End on same body
+        ConnectorToolAction::SpawnJoint {
+            connector_type: ConnectorType::Hinge,
+            entity_a: Some(Entity::from_raw(1)),
+            entity_b: None, // Cleared
+            anchor_a_world: Vec2::new(10.0, 10.0),
+            anchor_b_world: Vec2::new(20.0, 20.0),
+            is_drag: true,
+        }
+    )]
+    fn test_handle_connector_input_logic(
+        #[case] cursor_pos: Option<Vec2>,
+        #[case] mouse_just_pressed: bool,
+        #[case] mouse_pressed: bool,
+        #[case] mouse_just_released: bool,
+        #[case] tool_state: ToolState,
+        #[case] bodies_under_cursor: Vec<Entity>,
+        #[case] expected_action: ConnectorToolAction,
+    ) {
+        let mut drag_state = ConnectorDragState::default();
+
+        // Setup initial drag state for drag cases
+        if !mouse_just_pressed && (mouse_pressed || mouse_just_released) {
+            drag_state.start_pos = Some(Vec2::new(10.0, 10.0));
+            drag_state.start_entity = Some(Entity::from_raw(1));
+        }
+
+        // For click case (all true for simplicity in parametric definition,
+        // though strictly they happen in sequence frames.
+        // Here we simulate the 'release' frame primarily for Spawn results.
+        // For 'click', existing code treats it as a drag < 0.1 dist.
+        // So for the click test case, we assume we are in the Release frame,
+        // and start_pos was set previously.
+        // BUT wait, existing code sets start_pos on JustPressed.
+        // If we are testing JustReleased, start_pos must be there.
+        // My setup block above handles that.
+
+        let action = handle_connector_input_logic(
+            cursor_pos,
+            mouse_just_pressed,
+            mouse_pressed,
+            mouse_just_released,
+            &tool_state,
+            false, // is_pointer_over_ui
+            false, // grid_show
+            false, // grid_snap
+            1.0,   // grid_spacing
+            &bodies_under_cursor,
+            &mut drag_state,
+        );
+
+        assert_eq!(action, expected_action);
     }
 }
