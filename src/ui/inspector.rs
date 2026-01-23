@@ -4,7 +4,12 @@
 //! such as Transform, RigidBody type, Friction, and Restitution.
 
 use crate::input::editable::{EditableBox, EditableCircle};
+use crate::input::events::{
+    ModifyAttractionEvent, ModifyPhysicsEvent, ModifyRenderEvent, ModifyShapeEvent,
+    ModifyTransformEvent,
+};
 use crate::input::selection::Selection;
+use crate::physics::attraction::Attractor;
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use bevy_prototype_lyon::prelude::*;
@@ -22,23 +27,27 @@ impl Plugin for InspectorPlugin {
 fn inspector_ui(
     mut contexts: EguiContexts,
     selection: Res<Selection>,
-    mut query: Query<(
+    query: Query<(
         Entity,
-        Option<&mut Transform>,
-        Option<&mut RigidBody>,
-        Option<&mut Friction>,
-        Option<&mut Restitution>,
-        Option<&mut EditableBox>,
-        Option<&mut EditableCircle>,
-        Option<&mut Fill>,
-        Option<&mut Stroke>,
-        Option<&mut Sensor>,
-        Option<&mut LockedAxes>,
-        Option<&mut ColliderMassProperties>,
-        Option<&mut GravityScale>,
-        Option<&mut Sleeping>,
+        Option<&Transform>,
+        Option<&RigidBody>,
+        Option<&Friction>,
+        Option<&Restitution>,
+        Option<&EditableBox>,
+        Option<&EditableCircle>,
+        Option<&Fill>,
+        Option<&Stroke>,
+        Option<&Sensor>,
+        Option<&LockedAxes>,
+        Option<&ColliderMassProperties>,
+        Option<&GravityScale>,
+        Option<&Attractor>,
     )>,
-    mut commands: Commands,
+    mut ev_transform: EventWriter<ModifyTransformEvent>,
+    mut ev_physics: EventWriter<ModifyPhysicsEvent>,
+    mut ev_shape: EventWriter<ModifyShapeEvent>,
+    mut ev_render: EventWriter<ModifyRenderEvent>,
+    mut ev_attraction: EventWriter<ModifyAttractionEvent>,
 ) {
     if selection.0.is_empty() {
         return;
@@ -46,9 +55,6 @@ fn inspector_ui(
 
     // Inspect the first selected entity for initial values
     let first_entity = *selection.0.iter().next().unwrap();
-
-    // We need to extract values. We can't hold the borrow while doing UI if we want to write later.
-    // So we verify existence and copy values.
 
     // Check what components the first entity has
     let has_transform;
@@ -70,10 +76,10 @@ fn inspector_ui(
     let mut local_restitution = Restitution::default();
 
     let has_fill;
-    let mut local_fill = Fill::color(Color::BLACK);
+    let mut local_fill = Fill::color(Color::srgb(0.0, 0.0, 0.0));
 
     let has_stroke;
-    let mut local_stroke = Stroke::new(Color::BLACK, 1.0);
+    let mut local_stroke = Stroke::new(Color::srgb(0.0, 0.0, 0.0), 1.0);
 
     let _has_sensor;
     let mut local_sensor = false;
@@ -82,10 +88,13 @@ fn inspector_ui(
     let mut local_locked_axes = LockedAxes::empty();
 
     let has_mass_props;
-    let mut local_density = 1.0; // We usually edit density via ColliderMassProperties::Density
+    let mut local_density = 1.0;
 
     let has_gravity;
     let mut local_gravity = 1.0;
+
+    let has_attractor;
+    let mut local_attractor = Attractor::default();
 
     {
         let Ok((
@@ -102,40 +111,60 @@ fn inspector_ui(
             locked,
             mass,
             grav,
-            _
+            att,
         )) = query.get(first_entity) else {
             return;
         };
 
         has_transform = t.is_some();
-        if let Some(v) = t { local_transform = *v; }
+        if let Some(v) = t {
+            local_transform = *v;
+        }
 
         has_box = ebox.is_some();
-        if let Some(v) = ebox { local_box = *v; }
+        if let Some(v) = ebox {
+            local_box = *v;
+        }
 
         has_circle = ecircle.is_some();
-        if let Some(v) = ecircle { local_circle = *v; }
+        if let Some(v) = ecircle {
+            local_circle = *v;
+        }
 
         has_rb = rb.is_some();
-        if let Some(v) = rb { local_rb = *v; }
+        if let Some(v) = rb {
+            local_rb = *v;
+        }
 
         has_friction = f.is_some();
-        if let Some(v) = f { local_friction = *v; }
+        if let Some(v) = f {
+            local_friction = *v;
+        }
 
         has_restitution = r.is_some();
-        if let Some(v) = r { local_restitution = *v; }
+        if let Some(v) = r {
+            local_restitution = *v;
+        }
 
         has_fill = fill.is_some();
-        if let Some(v) = fill { local_fill = v.clone(); }
+        if let Some(v) = fill {
+            local_fill = v.clone();
+        }
 
         has_stroke = stroke.is_some();
-        if let Some(v) = stroke { local_stroke = v.clone(); }
+        if let Some(v) = stroke {
+            local_stroke = v.clone();
+        }
 
         _has_sensor = sensor.is_some();
-        if sensor.is_some() { local_sensor = true; }
+        if sensor.is_some() {
+            local_sensor = true;
+        }
 
         has_locked_axes = locked.is_some();
-        if let Some(v) = locked { local_locked_axes = *v; }
+        if let Some(v) = locked {
+            local_locked_axes = *v;
+        }
 
         has_mass_props = mass.is_some();
         if let Some(ColliderMassProperties::Density(d)) = mass {
@@ -143,7 +172,14 @@ fn inspector_ui(
         }
 
         has_gravity = grav.is_some();
-        if let Some(v) = grav { local_gravity = v.0; }
+        if let Some(v) = grav {
+            local_gravity = v.0;
+        }
+
+        has_attractor = att.is_some();
+        if let Some(v) = att {
+            local_attractor = *v;
+        }
     }
 
     let ctx = contexts.ctx_mut();
@@ -159,13 +195,22 @@ fn inspector_ui(
             let mut changed = false;
             ui.horizontal(|ui| {
                 ui.label("Pos X:");
-                if ui.add(egui::DragValue::new(&mut local_transform.translation.x).speed(0.1)).changed() { changed = true; }
+                if ui
+                    .add(egui::DragValue::new(&mut local_transform.translation.x).speed(0.1))
+                    .changed()
+                {
+                    changed = true;
+                }
                 ui.label("Pos Y:");
-                if ui.add(egui::DragValue::new(&mut local_transform.translation.y).speed(0.1)).changed() { changed = true; }
+                if ui
+                    .add(egui::DragValue::new(&mut local_transform.translation.y).speed(0.1))
+                    .changed()
+                {
+                    changed = true;
+                }
             });
 
             let mut rotation = local_transform.rotation.to_euler(EulerRot::XYZ).2;
-            let _old_rotation = rotation;
             ui.horizontal(|ui| {
                 ui.label("Rotation:");
                 if ui.drag_angle(&mut rotation).changed() {
@@ -176,16 +221,46 @@ fn inspector_ui(
 
             if changed {
                 for &e in &selection.0 {
-                    if let Ok((_, Some(mut t), ..)) = query.get_mut(e) {
-                         // For transform, we might want relative movement, but here we set absolute.
-                         // Setting absolute is fine for inspector.
-                         t.translation = local_transform.translation;
-                         t.rotation = local_transform.rotation;
-                         // Wake up body if exists
-                         if let Ok((_, _, Some(_), ..)) = query.get(e) {
-                             commands.entity(e).insert(Sleeping::disabled());
-                         }
-                    }
+                    ev_transform.send(ModifyTransformEvent {
+                        entity: e,
+                        translation: Some(local_transform.translation),
+                        rotation: Some(local_transform.rotation),
+                    });
+                }
+            }
+            ui.separator();
+        }
+
+        // Attraction
+        if has_attractor || has_rb {
+            ui.heading("Attraction");
+            let mut changed = false;
+            ui.horizontal(|ui| {
+                ui.label("Strength:");
+                if ui
+                    .add(egui::DragValue::new(&mut local_attractor.strength).speed(10.0))
+                    .changed()
+                {
+                    changed = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("Range:");
+                if ui
+                    .add(egui::DragValue::new(&mut local_attractor.range).speed(10.0))
+                    .changed()
+                {
+                    changed = true;
+                }
+            });
+
+            if changed {
+                for &e in &selection.0 {
+                    ev_attraction.send(ModifyAttractionEvent {
+                        entity: e,
+                        strength: Some(local_attractor.strength),
+                        range: Some(local_attractor.range),
+                    });
                 }
             }
             ui.separator();
@@ -195,18 +270,34 @@ fn inspector_ui(
         if has_box {
             ui.heading("Box Dimensions");
             let mut changed = false;
-            if ui.add(egui::DragValue::new(&mut local_box.width).speed(0.1).prefix("Width: ")).changed() { changed = true; }
-            if ui.add(egui::DragValue::new(&mut local_box.height).speed(0.1).prefix("Height: ")).changed() { changed = true; }
+            if ui
+                .add(
+                    egui::DragValue::new(&mut local_box.width)
+                        .speed(0.1)
+                        .prefix("Width: "),
+                )
+                .changed()
+            {
+                changed = true;
+            }
+            if ui
+                .add(
+                    egui::DragValue::new(&mut local_box.height)
+                        .speed(0.1)
+                        .prefix("Height: "),
+                )
+                .changed()
+            {
+                changed = true;
+            }
 
             if changed {
                 for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, Some(mut b), ..)) = query.get_mut(e) {
-                        *b = local_box;
-                        // Note: Resizing shape logic might be handled by another system observing changes
-                        // or we might need to regenerate collider/shape path here.
-                        // Assuming systems handle change detection or user must trigger update.
-                        // But typically `EditableBox` change should trigger a system.
-                    }
+                    ev_shape.send(ModifyShapeEvent {
+                        entity: e,
+                        box_size: Some(Vec2::new(local_box.width as f32, local_box.height as f32)),
+                        circle_radius: None,
+                    });
                 }
             }
             ui.separator();
@@ -215,11 +306,20 @@ fn inspector_ui(
         // Circle
         if has_circle {
             ui.heading("Circle Dimensions");
-            if ui.add(egui::DragValue::new(&mut local_circle.radius).speed(0.1).prefix("Radius: ")).changed() {
-                 for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, Some(mut c), ..)) = query.get_mut(e) {
-                        *c = local_circle;
-                    }
+            if ui
+                .add(
+                    egui::DragValue::new(&mut local_circle.radius)
+                        .speed(0.1)
+                        .prefix("Radius: "),
+                )
+                .changed()
+            {
+                for &e in &selection.0 {
+                    ev_shape.send(ModifyShapeEvent {
+                        entity: e,
+                        box_size: None,
+                        circle_radius: Some(local_circle.radius as f32),
+                    });
                 }
             }
             ui.separator();
@@ -238,9 +338,21 @@ fn inspector_ui(
                 .selected_text(format!("{:?}", current))
                 .show_ui(ui, |ui| {
                     for option in options {
-                        if ui.selectable_value(&mut current, option, format!("{:?}", option)).clicked() {
+                        if ui
+                            .selectable_value(&mut current, option, format!("{:?}", option))
+                            .clicked()
+                        {
                             for &e in &selection.0 {
-                                commands.entity(e).insert(current).insert(Sleeping::disabled());
+                                ev_physics.send(ModifyPhysicsEvent {
+                                    entity: e,
+                                    body_type: Some(current),
+                                    friction: None,
+                                    restitution: None,
+                                    density: None,
+                                    gravity_scale: None,
+                                    locked_axes: None,
+                                    is_sensor: None,
+                                });
                             }
                         }
                     }
@@ -249,33 +361,45 @@ fn inspector_ui(
         }
 
         // Sensor
-        // We always show Sensor toggle if it has a rigid body or collider
-        if has_rb || query.get(first_entity).map(|c| c.11.is_some()).unwrap_or(false) { // checking collider mass props presence as proxy for collider?
-             // Actually sensor is a component on its own.
-             let mut is_sensor = local_sensor;
-             if ui.checkbox(&mut is_sensor, "Sensor").clicked() {
-                 for &e in &selection.0 {
-                     if is_sensor {
-                         commands.entity(e).insert(Sensor);
-                     } else {
-                         commands.entity(e).remove::<Sensor>();
-                     }
-                 }
-             }
+        if has_rb || query.get(first_entity).map(|c| c.11.is_some()).unwrap_or(false) {
+            let mut is_sensor = local_sensor;
+            if ui.checkbox(&mut is_sensor, "Sensor").clicked() {
+                for &e in &selection.0 {
+                    ev_physics.send(ModifyPhysicsEvent {
+                        entity: e,
+                        body_type: None,
+                        friction: None,
+                        restitution: None,
+                        density: None,
+                        gravity_scale: None,
+                        locked_axes: None,
+                        is_sensor: Some(is_sensor),
+                    });
+                }
+            }
         }
 
         // Friction
         if has_friction || has_rb {
             ui.heading("Friction");
-            if ui.add(egui::Slider::new(&mut local_friction.coefficient, 0.0..=2.0).text("Coefficient")).changed() {
+            if ui
+                .add(
+                    egui::Slider::new(&mut local_friction.coefficient, 0.0..=2.0)
+                        .text("Coefficient"),
+                )
+                .changed()
+            {
                 for &e in &selection.0 {
-                    if let Ok((_, _, _, f, ..)) = query.get_mut(e) {
-                        if let Some(mut f_comp) = f {
-                             f_comp.coefficient = local_friction.coefficient;
-                        } else {
-                             commands.entity(e).insert(Friction::coefficient(local_friction.coefficient));
-                        }
-                    }
+                    ev_physics.send(ModifyPhysicsEvent {
+                        entity: e,
+                        body_type: None,
+                        friction: Some(local_friction.coefficient),
+                        restitution: None,
+                        density: None,
+                        gravity_scale: None,
+                        locked_axes: None,
+                        is_sensor: None,
+                    });
                 }
             }
             ui.separator();
@@ -284,15 +408,24 @@ fn inspector_ui(
         // Restitution
         if has_restitution || has_rb {
             ui.heading("Restitution");
-            if ui.add(egui::Slider::new(&mut local_restitution.coefficient, 0.0..=1.0).text("Coefficient")).changed() {
+            if ui
+                .add(
+                    egui::Slider::new(&mut local_restitution.coefficient, 0.0..=1.0)
+                        .text("Coefficient"),
+                )
+                .changed()
+            {
                 for &e in &selection.0 {
-                    if let Ok((_, _, _, _, r, ..)) = query.get_mut(e) {
-                        if let Some(mut r_comp) = r {
-                            r_comp.coefficient = local_restitution.coefficient;
-                        } else {
-                            commands.entity(e).insert(Restitution::coefficient(local_restitution.coefficient));
-                        }
-                    }
+                    ev_physics.send(ModifyPhysicsEvent {
+                        entity: e,
+                        body_type: None,
+                        friction: None,
+                        restitution: Some(local_restitution.coefficient),
+                        density: None,
+                        gravity_scale: None,
+                        locked_axes: None,
+                        is_sensor: None,
+                    });
                 }
             }
             ui.separator();
@@ -301,10 +434,25 @@ fn inspector_ui(
         // Density
         if has_mass_props || has_rb {
             ui.heading("Density");
-             if ui.add(egui::DragValue::new(&mut local_density).speed(0.1).range(0.001..=1000.0)).changed() {
+            if ui
+                .add(
+                    egui::DragValue::new(&mut local_density)
+                        .speed(0.1)
+                        .range(0.001..=1000.0),
+                )
+                .changed()
+            {
                 for &e in &selection.0 {
-                    commands.entity(e).insert(ColliderMassProperties::Density(local_density));
-                    commands.entity(e).insert(Sleeping::disabled());
+                    ev_physics.send(ModifyPhysicsEvent {
+                        entity: e,
+                        body_type: None,
+                        friction: None,
+                        restitution: None,
+                        density: Some(local_density),
+                        gravity_scale: None,
+                        locked_axes: None,
+                        is_sensor: None,
+                    });
                 }
             }
             ui.separator();
@@ -312,11 +460,22 @@ fn inspector_ui(
 
         // Gravity Scale
         if has_gravity || has_rb {
-             ui.heading("Gravity Scale");
-             if ui.add(egui::DragValue::new(&mut local_gravity).speed(0.1)).changed() {
+            ui.heading("Gravity Scale");
+            if ui
+                .add(egui::DragValue::new(&mut local_gravity).speed(0.1))
+                .changed()
+            {
                 for &e in &selection.0 {
-                    commands.entity(e).insert(GravityScale(local_gravity));
-                    commands.entity(e).insert(Sleeping::disabled());
+                    ev_physics.send(ModifyPhysicsEvent {
+                        entity: e,
+                        body_type: None,
+                        friction: None,
+                        restitution: None,
+                        density: None,
+                        gravity_scale: Some(local_gravity),
+                        locked_axes: None,
+                        is_sensor: None,
+                    });
                 }
             }
             ui.separator();
@@ -324,31 +483,47 @@ fn inspector_ui(
 
         // Locked Axes
         if has_locked_axes || has_rb {
-             ui.heading("Locked Axes");
-             let mut locked = local_locked_axes.contains(LockedAxes::ROTATION_LOCKED);
-             if ui.checkbox(&mut locked, "Lock Rotation").clicked() {
-                 for &e in &selection.0 {
-                     if locked {
-                         commands.entity(e).insert(LockedAxes::ROTATION_LOCKED);
-                     } else {
-                         commands.entity(e).insert(LockedAxes::empty());
-                     }
-                     commands.entity(e).insert(Sleeping::disabled());
-                 }
-             }
-             ui.separator();
+            ui.heading("Locked Axes");
+            let mut locked = local_locked_axes.contains(LockedAxes::ROTATION_LOCKED);
+            if ui.checkbox(&mut locked, "Lock Rotation").clicked() {
+                for &e in &selection.0 {
+                    let new_locked = if locked {
+                        LockedAxes::ROTATION_LOCKED
+                    } else {
+                        LockedAxes::empty()
+                    };
+                    ev_physics.send(ModifyPhysicsEvent {
+                        entity: e,
+                        body_type: None,
+                        friction: None,
+                        restitution: None,
+                        density: None,
+                        gravity_scale: None,
+                        locked_axes: Some(new_locked),
+                        is_sensor: None,
+                    });
+                }
+            }
+            ui.separator();
         }
 
         // Fill Color
         if has_fill {
             ui.heading("Fill Color");
             let mut color_arr = local_fill.color.to_srgba().to_f32_array();
-            if ui.color_edit_button_rgba_unmultiplied(&mut color_arr).changed() {
-                let new_color = Color::srgba(color_arr[0], color_arr[1], color_arr[2], color_arr[3]);
+            if ui
+                .color_edit_button_rgba_unmultiplied(&mut color_arr)
+                .changed()
+            {
+                let new_color =
+                    Color::srgba(color_arr[0], color_arr[1], color_arr[2], color_arr[3]);
                 for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, _, Some(mut f), ..)) = query.get_mut(e) {
-                        f.color = new_color;
-                    }
+                    ev_render.send(ModifyRenderEvent {
+                        entity: e,
+                        fill_color: Some(new_color),
+                        stroke_color: None,
+                        stroke_width: None,
+                    });
                 }
             }
             ui.separator();
@@ -361,21 +536,34 @@ fn inspector_ui(
             let mut changed = false;
 
             ui.horizontal(|ui| {
-                if ui.color_edit_button_rgba_unmultiplied(&mut color_arr).changed() {
-                    local_stroke.color = Color::srgba(color_arr[0], color_arr[1], color_arr[2], color_arr[3]);
+                if ui
+                    .color_edit_button_rgba_unmultiplied(&mut color_arr)
+                    .changed()
+                {
+                    local_stroke.color =
+                        Color::srgba(color_arr[0], color_arr[1], color_arr[2], color_arr[3]);
                     changed = true;
                 }
-                if ui.add(egui::DragValue::new(&mut local_stroke.options.line_width).speed(0.1).prefix("Width: ")).changed() {
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut local_stroke.options.line_width)
+                            .speed(0.1)
+                            .prefix("Width: "),
+                    )
+                    .changed()
+                {
                     changed = true;
                 }
             });
 
             if changed {
                 for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, _, _, Some(mut s), ..)) = query.get_mut(e) {
-                        s.color = local_stroke.color;
-                        s.options.line_width = local_stroke.options.line_width;
-                    }
+                    ev_render.send(ModifyRenderEvent {
+                        entity: e,
+                        fill_color: None,
+                        stroke_color: Some(local_stroke.color),
+                        stroke_width: Some(local_stroke.options.line_width),
+                    });
                 }
             }
             ui.separator();

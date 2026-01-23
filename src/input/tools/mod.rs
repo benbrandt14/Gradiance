@@ -2,6 +2,7 @@
 //!
 //! Includes logic for Select, Box, Circle, Polygon, and Drag tools.
 
+use crate::input::ToolState;
 use crate::prelude::*;
 
 pub mod box_tool;
@@ -34,4 +35,41 @@ impl Plugin for ToolsPlugin {
 pub trait Tool {
     /// Returns the name of the tool.
     fn name(&self) -> &str;
+}
+
+/// Defines the interaction paradigm of a tool.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolBehavior {
+    /// Tool creates or acts via a single click (or press-release cycle).
+    /// Examples: Spawn at cursor (if implemented), Delete (click to delete).
+    SingleClick,
+    /// Tool operates via dragging (Press -> Move -> Release).
+    /// Examples: Box, Circle, Polygon, Drag (Move).
+    Drag,
+    /// Tool specifically connects two points/entities (Press -> Drag -> Release).
+    /// Examples: Connector (Joints).
+    /// Note: Select tool is Hybrid (Click to select, Drag to move/box-select).
+    ClickDragRelease,
+    /// Tool has complex or mixed behavior.
+    /// Examples: Select, Ground (Draws until released).
+    Hybrid,
+}
+
+impl ToolState {
+    /// Returns the interaction behavior for this tool state.
+    pub fn get_behavior(&self) -> ToolBehavior {
+        match self {
+            ToolState::Select => ToolBehavior::Hybrid, // Click select, Drag move, Drag box
+            ToolState::Box | ToolState::Circle | ToolState::Polygon => ToolBehavior::Drag,
+            ToolState::Ground => ToolBehavior::Hybrid, // Drag to draw, but specific logic
+            ToolState::RevoluteJoint
+            | ToolState::PrismaticJoint
+            | ToolState::SpringJoint
+            | ToolState::RopeJoint
+            | ToolState::Weld => ToolBehavior::ClickDragRelease,
+            ToolState::Drag => ToolBehavior::Drag,
+            ToolState::Cut => ToolBehavior::Drag, // Assumed drag to cut
+            ToolState::Sketch => ToolBehavior::Drag, // Assumed drag to sketch
+        }
+    }
 }

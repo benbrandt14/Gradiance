@@ -5,6 +5,7 @@
 
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{cursor::CursorWorldPos, selection::Selection};
+use crate::physics::layers::{DisableSelfCollision, PhysicsLayers};
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
 use bevy_egui::{EguiContexts, egui};
@@ -15,6 +16,8 @@ use bevy_prototype_lyon::prelude::Fill;
 pub struct ContextMenuState {
     /// The screen position where the context menu was opened.
     pub position: Option<egui::Pos2>,
+    /// The world position where the right mouse button was pressed.
+    pub press_start: Option<Vec2>,
 }
 
 /// Plugin that handles the context menu logic and UI.
@@ -41,9 +44,24 @@ fn context_menu_input(
     }
 
     if mouse.just_pressed(MouseButton::Right) {
+        state.press_start = cursor_pos.0;
+    }
+
+    if mouse.just_released(MouseButton::Right) {
+        let Some(start_pos) = state.press_start else {
+            return;
+        };
+        state.press_start = None;
+
         let Some(world_pos) = cursor_pos.0 else {
             return;
         };
+
+        // If dragged significantly, don't open context menu (allow Rotate tool to handle it)
+        if world_pos.distance(start_pos) > 10.0 {
+            return;
+        }
+
         let Some(rapier_context) = rapier_context_query.iter().next() else {
             return;
         };
@@ -69,9 +87,10 @@ fn context_menu_input(
             state.position = None;
         }
     } else if mouse.just_pressed(MouseButton::Left)
-        && !is_pointer_over_ui(&mut contexts) {
-            state.position = None;
-        }
+        && !is_pointer_over_ui(&mut contexts)
+    {
+        state.position = None;
+    }
 }
 
 /// Renders the context menu UI if active.
@@ -89,6 +108,8 @@ fn context_menu_ui(
         Option<&Sleeping>,
     )>,
     mut fill_q: Query<&mut Fill>,
+    mut physics_layers_q: Query<&mut PhysicsLayers>,
+    mut group_id_counter: Local<u32>,
 ) {
     let Some(pos) = state.position else {
         return;
@@ -135,13 +156,13 @@ fn context_menu_ui(
                 if ui.button("Yellow").clicked() { color_to_set = Some(Color::srgb(1.0, 1.0, 0.0)); ui.close_menu(); }
                 if ui.button("Cyan").clicked() { color_to_set = Some(Color::srgb(0.0, 1.0, 1.0)); ui.close_menu(); }
                 if ui.button("Magenta").clicked() { color_to_set = Some(Color::srgb(1.0, 0.0, 1.0)); ui.close_menu(); }
-                if ui.button("White").clicked() { color_to_set = Some(Color::WHITE); ui.close_menu(); }
-                if ui.button("Black").clicked() { color_to_set = Some(Color::BLACK); ui.close_menu(); }
+                if ui.button("White").clicked() { color_to_set = Some(Color::srgb(1.0, 1.0, 1.0)); ui.close_menu(); }
+                if ui.button("Black").clicked() { color_to_set = Some(Color::srgb(0.0, 0.0, 0.0)); ui.close_menu(); }
 
                 ui.separator();
 
                 // Custom Color Picker
-                let mut current_color = Color::BLACK;
+                let mut current_color = Color::srgb(0.0, 0.0, 0.0);
                 if let Some(&first_e) = selection.0.iter().next() {
                     if let Ok(fill) = fill_q.get(first_e) {
                          current_color = fill.color;
@@ -252,6 +273,53 @@ fn context_menu_ui(
                         }
                          commands.entity(e).insert(Sleeping::disabled());
                     }
+                }
+
+                ui.separator();
+                ui.label("Collision Layers");
+
+                let layers = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+                for (i, &layer_char) in layers.iter().enumerate() {
+                    let mask = 1 << i;
+                    let first = selection.0.iter().next().unwrap();
+                    let mut has_layer = if let Ok(l) = physics_layers_q.get(*first) {
+                        (l.0 & mask) != 0
+                    } else {
+                        // Default if missing is Layer A (1)
+                        (1 & mask) != 0
+                    };
+
+                    if ui.checkbox(&mut has_layer, format!("Layer {}", layer_char)).clicked() {
+                        for &e in &selection.0 {
+                            if let Ok(mut l) = physics_layers_q.get_mut(e) {
+                                if has_layer {
+                                    l.0 |= mask;
+                                } else {
+                                    l.0 &= !mask;
+                                }
+                            } else {
+                                let mut base = 1; // Default
+                                if has_layer { base |= mask; } else { base &= !mask; }
+                                commands.entity(e).insert(PhysicsLayers(base));
+                            }
+                            // Wake up body to apply changes?
+                            // Changing collision groups usually works immediately in Rapier
+                            // but Bevy Rapier might need wake up if sleeping?
+                            // Safe to wake up.
+                            commands.entity(e).insert(Sleeping::disabled());
+                        }
+                    }
+                }
+
+                ui.separator();
+                if ui.button("Disable Self Collisions").clicked() {
+                    *group_id_counter += 1;
+                    let new_id = *group_id_counter;
+                    for &e in &selection.0 {
+                        commands.entity(e).insert(DisableSelfCollision(new_id));
+                        commands.entity(e).insert(Sleeping::disabled());
+                    }
+                    ui.close_menu();
                 }
             });
 

@@ -30,11 +30,7 @@ fn sidebar_ui(
         return;
     };
 
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
+    if window.width() <= 0.0 || window.height() <= 0.0 {
         return;
     }
 
@@ -73,6 +69,21 @@ fn sidebar_ui(
             ToolState::Weld,
             contexts.add_image(game_icons.weld.clone_weak()),
             "Fix",
+        ),
+        (
+            ToolState::PrismaticJoint,
+            contexts.add_image(game_icons.prismatic.clone_weak()),
+            "Slider",
+        ),
+        (
+            ToolState::SpringJoint,
+            contexts.add_image(game_icons.spring.clone_weak()),
+            "Spring",
+        ),
+        (
+            ToolState::RopeJoint,
+            contexts.add_image(game_icons.rope.clone_weak()),
+            "Rope",
         ),
         (
             ToolState::Ground,
@@ -114,11 +125,7 @@ fn top_panel_ui(
         return;
     };
 
-    if window.width() <= 0.0
-        || window.height() <= 0.0
-        || window.physical_width() == 0
-        || window.physical_height() == 0
-    {
+    if window.width() <= 0.0 || window.height() <= 0.0 {
         return;
     }
 

@@ -2,7 +2,7 @@
 //!
 //! Click and drag to define the extents of a new box.
 
-use crate::input::commands::{CommandStack, SpawnBoxCommand};
+use crate::input::events::SpawnBoxEvent;
 use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -42,7 +42,7 @@ fn should_spawn_box(size: Vec2) -> bool {
 }
 
 fn box_tool_update(
-    mut commands: Commands,
+    mut event_writer: EventWriter<SpawnBoxEvent>,
     mut data: ResMut<BoxToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -68,17 +68,15 @@ fn box_tool_update(
             gizmos.rect_2d(
                 Isometry2d::from_translation(Vec2::new(center.x, center.y)),
                 Vec2::new(size.x, size.y),
-                Color::WHITE,
+                Color::srgb(1.0, 1.0, 1.0),
             );
         }
         DragStatus::Finished => {
             if should_spawn_box(size) {
-                let cmd = SpawnBoxCommand::new(center, size.x, size.y);
-
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
+                event_writer.send(SpawnBoxEvent {
+                    position: center,
+                    width: size.x,
+                    height: size.y,
                 });
             }
         }
