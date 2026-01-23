@@ -18,7 +18,7 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
 4.  **Architecture**:
     *   **ECS**: Strictly adhere to Bevy's Entity Component System.
     *   **Tools**: Implement tools as separate plugins managed by `ToolState`.
-    *   **Events**: All gameplay actions (creation, deletion, modification) MUST be triggered by **Events** (e.g., `SpawnBoxEvent`, `ModifyPhysicsEvent`). The Undo/Redo system (`CommandStack`) has been removed in favor of a robust event-driven architecture.
+    *   **Commands**: All gameplay actions (creation, deletion, modification) MUST implement `GameCommand` to support Undo/Redo via `CommandStack`.
 5.  **Progress Tracking**
     * See the detailed roadmap below, and the concise ROADMAP.md to keep track of high level goals and current status
     * Ensure all changes consider extensibility to future work, leave TODO's as appropriate to capture design assumptions
@@ -58,7 +58,7 @@ fn my_tool_reset(mut data: ResMut<MyToolData>) { ... }
 
 // Main update loop
 fn my_tool_update(
-    mut event_writer: EventWriter<MyToolEvent>,
+    mut commands: Commands,
     mut data: ResMut<MyToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mut contexts: EguiContexts,
@@ -71,8 +71,8 @@ fn my_tool_update(
 
     // 3. Handle Input (Mouse/Keyboard)
     // 4. Update Visuals (Gizmos)
-    // 5. Apply Changes (Emit Events)
-    // event_writer.send(MyToolEvent { ... });
+    // 5. Apply Changes (Commands - NOT direct mutations)
+    // commands.queue(move |world: &mut World| { ... });
 }
 ```
 

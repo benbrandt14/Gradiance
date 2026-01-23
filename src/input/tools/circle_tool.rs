@@ -2,7 +2,7 @@
 //!
 //! Click and drag to define the radius of a new circle.
 
-use crate::input::events::SpawnCircleEvent;
+use crate::input::commands::{CommandStack, SpawnCircleCommand};
 use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -41,7 +41,7 @@ fn should_spawn_circle(radius: f32) -> bool {
 }
 
 fn circle_tool_update(
-    mut event_writer: EventWriter<SpawnCircleEvent>,
+    mut commands: Commands,
     mut data: ResMut<CircleToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -66,15 +66,22 @@ fn circle_tool_update(
             gizmos.circle_2d(
                 Isometry2d::from_translation(Vec2::new(drag.start.x, drag.start.y)),
                 radius,
-                Color::srgb(1.0, 1.0, 1.0),
+                Color::WHITE,
             );
-            gizmos.line_2d(drag.start, drag.current, Color::srgb(1.0, 1.0, 1.0));
+            gizmos.line_2d(drag.start, drag.current, Color::WHITE);
         }
         DragStatus::Finished => {
             if should_spawn_circle(radius) {
-                event_writer.send(SpawnCircleEvent {
+                let cmd = SpawnCircleCommand {
                     position: drag.start,
                     radius,
+                    entity: None,
+                };
+
+                commands.queue(move |world: &mut World| {
+                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                        stack.push(Box::new(cmd), world);
+                    });
                 });
             }
         }
