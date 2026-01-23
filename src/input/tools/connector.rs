@@ -538,7 +538,7 @@ mod tests {
     )]
     #[case::drag_connect_separated(
         Some(Vec2::new(20.0, 20.0)), // End Pos
-        false, true, true,
+        false, false, true,
         ToolState::SpringJoint,
         vec![Entity::from_raw(2)], // Body at end
         ConnectorToolAction::SpawnJoint {
@@ -552,7 +552,7 @@ mod tests {
     )]
     #[case::drag_to_void_pin(
         Some(Vec2::new(20.0, 20.0)),
-        false, true, true,
+        false, false, true,
         ToolState::RevoluteJoint,
         vec![], // No body at end
         ConnectorToolAction::SpawnJoint {
@@ -566,7 +566,7 @@ mod tests {
     )]
     #[case::self_connect_prevention(
         Some(Vec2::new(20.0, 20.0)),
-        false, true, true,
+        false, false, true,
         ToolState::RevoluteJoint,
         vec![Entity::from_raw(1)], // End on same body
         ConnectorToolAction::SpawnJoint {
