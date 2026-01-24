@@ -412,21 +412,18 @@ impl GameCommand for SpawnGearCommand {
         self.entity = Some(entity);
 
         // Pin logic (Central Hinge)
-        let (target_entity, pin_entity, _, _) = resolve_joint_targets(
-            world,
-            entity,
-            None,
-            Vec2::ZERO,
-            Vec2::ZERO,
-            None,
-        );
-        self.pin_entity = pin_entity;
+        // Manually spawn pin at gear position to avoid GlobalTransform lag
+        let pin_pos = Vec3::new(self.position.x, self.position.y, 0.0);
+        let pin_id = world
+            .spawn((RigidBody::Fixed, Transform::from_translation(pin_pos)))
+            .id();
+        self.pin_entity = Some(pin_id);
 
         let joint_data = RevoluteJointBuilder::new()
             .local_anchor1(Vec2::ZERO)
             .local_anchor2(Vec2::ZERO);
 
-        world.entity_mut(entity).insert(ImpulseJoint::new(target_entity, joint_data));
+        world.entity_mut(entity).insert(ImpulseJoint::new(pin_id, joint_data));
 
         Ok(())
     }
