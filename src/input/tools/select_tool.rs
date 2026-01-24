@@ -9,6 +9,36 @@ use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy_egui::EguiContexts;
 
+/// Information needed to sort hits for selection.
+#[derive(Debug, PartialEq)]
+pub struct HitSortInfo {
+    /// Whether the entity is a ground plane (should be prioritized lower than objects).
+    pub is_ground: bool,
+    /// The Z-index of the entity (higher means closer to camera, thus higher priority).
+    pub z_index: f32,
+}
+
+/// Compare two hits for selection priority.
+///
+/// Priority:
+/// 1. Non-ground entities come first.
+/// 2. Higher Z-index comes first.
+pub fn compare_hits(a: &HitSortInfo, b: &HitSortInfo) -> std::cmp::Ordering {
+    // Non-ground (is_ground = false) < Ground (is_ground = true)
+    // We want Non-ground FIRST.
+    // false < true.
+    let ground_order = a.is_ground.cmp(&b.is_ground);
+    if ground_order != std::cmp::Ordering::Equal {
+        return ground_order;
+    }
+
+    // Z index: Higher is better (comes first).
+    // Sort descending: b.cmp(a)
+    b.z_index
+        .partial_cmp(&a.z_index)
+        .unwrap_or(std::cmp::Ordering::Equal)
+}
+
 /// Plugin for the Select Tool.
 pub struct SelectToolPlugin;
 
@@ -79,24 +109,20 @@ fn select_tool_update(
 
         // Sort hits: Non-ground first, then by Z index (descending)
         hits.sort_by(|&a, &b| {
-            let info_a = query.get(a);
-            let info_b = query.get(b);
-
-            if let (Ok((_, t_a, g_a)), Ok((_, t_b, g_b))) = (info_a, info_b) {
-                // Non-ground (None) > Ground (Some)
-                // We want None < Some (asc) so None comes first?
-                // is_some(): None=false, Some=true. false < true.
-                // So None comes first. Correct.
-                let ground_order = g_a.is_some().cmp(&g_b.is_some());
-                if ground_order != std::cmp::Ordering::Equal {
-                     return ground_order;
+            let get_info = |entity| -> Option<HitSortInfo> {
+                if let Ok((_, t, g)) = query.get(entity) {
+                    Some(HitSortInfo {
+                        is_ground: g.is_some(),
+                        z_index: t.translation.z,
+                    })
+                } else {
+                    None
                 }
+            };
 
-                // Z index: Higher is better (comes first).
-                // Sort descending: b.cmp(a)
-                t_b.translation.z.partial_cmp(&t_a.translation.z).unwrap_or(std::cmp::Ordering::Equal)
-            } else {
-                std::cmp::Ordering::Equal
+            match (get_info(a), get_info(b)) {
+                (Some(ia), Some(ib)) => compare_hits(&ia, &ib),
+                _ => std::cmp::Ordering::Equal,
             }
         });
 
@@ -226,5 +252,49 @@ mod tests {
         let max = start.max(end);
         let contained = is_point_in_box(point, min, max);
         assert_eq!(contained, expected);
+    }
+
+    #[rstest]
+    #[case(
+        HitSortInfo { is_ground: false, z_index: 10.0 },
+        HitSortInfo { is_ground: true, z_index: 20.0 },
+        std::cmp::Ordering::Less // false < true => Less => Non-ground first
+    )]
+    #[case(
+        HitSortInfo { is_ground: true, z_index: 20.0 },
+        HitSortInfo { is_ground: false, z_index: 10.0 },
+        std::cmp::Ordering::Greater
+    )]
+    #[case(
+        HitSortInfo { is_ground: false, z_index: 20.0 },
+        HitSortInfo { is_ground: false, z_index: 10.0 },
+        std::cmp::Ordering::Less // Higher Z first => a > b in value, but we sort descending so compare(b, a) => Greater?
+        // Wait. b.cmp(a).
+        // 20.cmp(10) is Greater.
+        // Wait, descending sort means Higher should be "Less" (come before)?
+        // No, in Rust sort, Less means "comes before".
+        // If we want Descending (High -> Low), then compare(High, Low) should return Less.
+        // compare_hits returns b.z_index.cmp(a.z_index).
+        // Case: a=20, b=10.
+        // b.cmp(a) -> 10.cmp(20) -> Less.
+        // So compare_hits(High, Low) returns Less.
+        // Correct.
+    )]
+    #[case(
+        HitSortInfo { is_ground: false, z_index: 10.0 },
+        HitSortInfo { is_ground: false, z_index: 20.0 },
+        std::cmp::Ordering::Greater // 20.cmp(10) -> Greater
+    )]
+    #[case(
+        HitSortInfo { is_ground: false, z_index: 10.0 },
+        HitSortInfo { is_ground: false, z_index: 10.0 },
+        std::cmp::Ordering::Equal
+    )]
+    fn test_compare_hits(
+        #[case] a: HitSortInfo,
+        #[case] b: HitSortInfo,
+        #[case] expected: std::cmp::Ordering,
+    ) {
+        assert_eq!(compare_hits(&a, &b), expected);
     }
 }
