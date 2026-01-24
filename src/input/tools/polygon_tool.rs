@@ -33,8 +33,76 @@ fn polygon_tool_reset(mut data: ResMut<PolygonToolData>) {
     data.points.clear();
 }
 
-fn should_close_loop(start: Vec2, current: Vec2) -> bool {
-    start.distance(current) < 0.5
+/// Action to be taken by the tool system.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PolygonToolAction {
+    /// Do nothing.
+    None,
+    /// Add a new point to the polygon.
+    AddPoint(Vec2),
+    /// Close the loop and spawn the polygon.
+    CloseLoop,
+}
+
+/// Result of processing input.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PolygonInputResult {
+    /// The cursor position to use for visual previews (snapped if grid is on).
+    pub snapped_cursor: Vec2,
+    /// The action to perform.
+    pub action: PolygonToolAction,
+}
+
+/// Pure logic for polygon tool input.
+pub fn handle_polygon_input_logic(
+    cursor_pos: Option<Vec2>,
+    mouse_just_pressed: bool,
+    enter_pressed: bool,
+    is_over_ui: bool,
+    grid_snap: bool,
+    grid_spacing: f32,
+    points: &[Vec2],
+) -> Option<PolygonInputResult> {
+    if is_over_ui {
+        return None;
+    }
+
+    let raw_pos = cursor_pos?;
+    let mut current_pos = raw_pos;
+
+    if grid_snap {
+        current_pos = snap_to_grid(current_pos, grid_spacing);
+    }
+
+    let mut action = PolygonToolAction::None;
+
+    if enter_pressed {
+         // Only close if we have enough points
+         if points.len() >= 3 {
+             action = PolygonToolAction::CloseLoop;
+         }
+    } else if mouse_just_pressed {
+        // Check if closing loop
+        let should_close = if let Some(start) = points.first() {
+            // Allow closing loop even if snapped, but check distance to (snapped) start
+            start.distance(current_pos) < 0.5
+        } else {
+            false
+        };
+
+        if should_close {
+             if points.len() >= 3 {
+                 action = PolygonToolAction::CloseLoop;
+             }
+        } else {
+            action = PolygonToolAction::AddPoint(current_pos);
+        }
+    }
+
+    Some(PolygonInputResult {
+        snapped_cursor: current_pos,
+        action,
+    })
 }
 
 fn polygon_tool_update(
@@ -47,18 +115,21 @@ fn polygon_tool_update(
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
 ) {
-    if is_pointer_over_ui(&mut contexts) {
-        return;
-    }
+    let logic_result = handle_polygon_input_logic(
+        cursor_pos.0,
+        mouse.just_pressed(MouseButton::Left),
+        keys.just_pressed(KeyCode::Enter),
+        is_pointer_over_ui(&mut contexts),
+        grid_settings.show && grid_settings.snap,
+        grid_settings.spacing,
+        &data.points,
+    );
 
-    let Some(raw_pos) = cursor_pos.0 else {
+    let Some(result) = logic_result else {
         return;
     };
 
-    let mut current_pos = raw_pos;
-    if grid_settings.show && grid_settings.snap {
-        current_pos = snap_to_grid(current_pos, grid_settings.spacing);
-    }
+    let current_pos = result.snapped_cursor;
 
     // Draw preview lines
     if !data.points.is_empty() {
@@ -80,48 +151,32 @@ fn polygon_tool_update(
         );
     }
 
-    let mut should_close = false;
-
-    if mouse.just_pressed(MouseButton::Left) {
-        // Check if closing loop
-        if !data.points.is_empty() {
-            let start = data.points[0];
-            // Allow closing loop even if snapped, but check distance to (snapped) start
-            if should_close_loop(start, current_pos) {
-                should_close = true;
-            } else {
-                data.points.push(current_pos);
-            }
-        } else {
-            data.points.push(current_pos);
+    match result.action {
+        PolygonToolAction::AddPoint(p) => {
+            data.points.push(p);
         }
-    }
+        PolygonToolAction::CloseLoop => {
+             let center =
+                data.points.iter().fold(Vec2::ZERO, |acc, p| acc + *p) / data.points.len() as f32;
 
-    if keys.just_pressed(KeyCode::Enter) {
-        should_close = true;
-    }
+            // Points relative to center
+            let relative_points: Vec<Vec2> = data.points.iter().map(|p| *p - center).collect();
 
-    if should_close && data.points.len() >= 3 {
-        // Close loop and spawn
-        let center =
-            data.points.iter().fold(Vec2::ZERO, |acc, p| acc + *p) / data.points.len() as f32;
+            let cmd = SpawnPolygonCommand {
+                position: center,
+                vertices: relative_points,
+                entity: None,
+            };
 
-        // Points relative to center
-        let relative_points: Vec<Vec2> = data.points.iter().map(|p| *p - center).collect();
-
-        let cmd = SpawnPolygonCommand {
-            position: center,
-            vertices: relative_points,
-            entity: None,
-        };
-
-        commands.queue(move |world: &mut World| {
-            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                stack.push(Box::new(cmd), world);
+            commands.queue(move |world: &mut World| {
+                world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                    stack.push(Box::new(cmd), world);
+                });
             });
-        });
 
-        data.points.clear();
+            data.points.clear();
+        }
+        PolygonToolAction::None => {}
     }
 }
 
@@ -147,10 +202,67 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Vec2::ZERO, Vec2::new(0.4, 0.0), true)]
-    #[case(Vec2::ZERO, Vec2::new(0.5, 0.0), false)]
-    #[case(Vec2::ZERO, Vec2::new(0.6, 0.0), false)]
-    fn test_should_close_loop(#[case] start: Vec2, #[case] current: Vec2, #[case] expected: bool) {
-        assert_eq!(should_close_loop(start, current), expected);
+    #[case::basic_add(
+        Some(Vec2::ZERO), true, false, false, false, 1.0, &[],
+        Some(PolygonInputResult {
+            snapped_cursor: Vec2::ZERO,
+            action: PolygonToolAction::AddPoint(Vec2::ZERO)
+        })
+    )]
+    #[case::over_ui(
+        Some(Vec2::ZERO), true, false, true, false, 1.0, &[],
+        None
+    )]
+    #[case::grid_snap(
+        Some(Vec2::new(0.9, 0.9)), true, false, false, true, 1.0, &[],
+        Some(PolygonInputResult {
+            snapped_cursor: Vec2::new(1.0, 1.0),
+            action: PolygonToolAction::AddPoint(Vec2::new(1.0, 1.0))
+        })
+    )]
+    #[case::close_loop_click(
+        Some(Vec2::ZERO), true, false, false, false, 1.0,
+        &[Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0)], // 3 pts, clicking start
+        Some(PolygonInputResult {
+            snapped_cursor: Vec2::ZERO,
+            action: PolygonToolAction::CloseLoop
+        })
+    )]
+    #[case::not_close_loop_not_enough_pts(
+        Some(Vec2::ZERO), true, false, false, false, 1.0,
+        &[Vec2::ZERO, Vec2::new(1.0, 0.0)], // 2 pts, clicking start
+        Some(PolygonInputResult {
+            snapped_cursor: Vec2::ZERO,
+            action: PolygonToolAction::None
+        })
+    )]
+    #[case::close_loop_enter(
+        Some(Vec2::new(5.0, 5.0)), false, true, false, false, 1.0,
+        &[Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0)], // 3 pts, enter
+        Some(PolygonInputResult {
+            snapped_cursor: Vec2::new(5.0, 5.0), // cursor pos irrelevant for action but returned
+            action: PolygonToolAction::CloseLoop
+        })
+    )]
+    fn test_handle_polygon_input_logic(
+        #[case] cursor_pos: Option<Vec2>,
+        #[case] mouse: bool,
+        #[case] enter: bool,
+        #[case] ui: bool,
+        #[case] snap: bool,
+        #[case] spacing: f32,
+        #[case] points: &[Vec2],
+        #[case] expected: Option<PolygonInputResult>,
+    ) {
+        let result = handle_polygon_input_logic(
+            cursor_pos,
+            mouse,
+            enter,
+            ui,
+            snap,
+            spacing,
+            points
+        );
+        assert_eq!(result, expected);
     }
 }
