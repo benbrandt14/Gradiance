@@ -15,13 +15,6 @@ jobs:
       - name: Check Documentation Coverage
         run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
 
-      # 2. Generate Schedule Graph (Requires bevy_mod_debugdump)
-      # Assumes you created an example/bin named 'gen_graph' (see section 2)
-      - name: Generate ECS Schedule Graph
-        run: |
-          cargo run --example gen_graph > schedule.dot
-          dot -Tpng schedule.dot -o doc/architecture.png
-          
       # 3. Sync Rust Docs to README
       - name: Sync README
         run: cargo rdme --force

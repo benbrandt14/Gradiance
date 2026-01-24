@@ -27,7 +27,6 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
     * doc/schedule.dot contains the authoritative ECS execution order. Use this to detect ordering conflicts.
     * The compiler denies builds with missing_docs. You must write docstrings for every public struct, enum, and function.
     * Edit src/lib.rs module docs for top content in the README
-    * If you change system ordering (.before, .after, .chain), you (or the user) must run cargo run --example gen_graph > doc/schedule.dot to verify the resulting topology.
 
 ## Technical Context & Patterns
 
