@@ -18,9 +18,10 @@ bevy_prototype_lyon = "0.13.0"
 bevy_polyline = "0.11.0"
 bevy_vello = "0.7.1"
 vello = "0.7.0"
-bevy_transform_gizmo = "0.12.1"
+# bevy_transform_gizmo = "0.12.1" # Removed due to incompatibility
 bevy_tween = "0.7.0"
 clipper2 = "0.5.3"
+bevy_rapier3d = "0.28.0"
 
 [package.metadata.rdme]
 # Configuration for cargo-rdme
