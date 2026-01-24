@@ -12,7 +12,7 @@ use gradiance::input::ZIndex;
 use gradiance::input::commands::CommandStack;
 use gradiance::input::cursor::CursorWorldPos;
 use gradiance::input::editable::{EditableBox, EditableCircle};
-use gradiance::input::selection::Selection;
+use gradiance::input::selection::{NextGroupID, Selection, SelectionFilter};
 use gradiance::input::tools::box_tool::BoxToolPlugin;
 use gradiance::input::tools::circle_tool::CircleToolPlugin;
 use gradiance::input::tools::connector::ConnectorToolPlugin;
@@ -75,6 +75,8 @@ fn app() -> App {
     app.init_resource::<GridSettings>();
     app.init_resource::<ZIndex>();
     app.init_resource::<Selection>();
+    app.init_resource::<SelectionFilter>();
+    app.init_resource::<NextGroupID>();
 
     // Initial update
     app.update();

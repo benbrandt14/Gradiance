@@ -7,6 +7,26 @@ use crate::physics::floor::GroundPlane;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
+/// Filter for selection (which types of entities can be selected).
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SelectionFilter {
+    /// Select all types of entities.
+    #[default]
+    All,
+    /// Select only shapes (RigidBody/Collider/Geometry).
+    Shapes,
+    /// Select only joints (Connectors).
+    Joints,
+}
+
+/// Component for logical grouping of entities (Select one -> Select all).
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub struct SelectionGroup(pub u32);
+
+/// Resource for generating unique group IDs.
+#[derive(Resource, Default)]
+pub struct NextGroupID(pub u32);
+
 /// Resource storing the currently selected entities.
 #[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
 pub struct Selection(pub HashSet<Entity>);
@@ -49,7 +69,52 @@ pub struct SelectionPlugin;
 impl Plugin for SelectionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Selection>();
-        app.add_systems(Update, (draw_selection_highlight, handle_delete_key));
+        app.init_resource::<SelectionFilter>();
+        app.init_resource::<NextGroupID>();
+        app.add_systems(
+            Update,
+            (
+                draw_selection_highlight,
+                handle_delete_key,
+                handle_grouping_input,
+            ),
+        );
+    }
+}
+
+fn handle_grouping_input(
+    mut commands: Commands,
+    selection: Res<Selection>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut next_group_id: ResMut<NextGroupID>,
+) {
+    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+
+    if ctrl && keys.just_pressed(KeyCode::KeyG) {
+        if shift {
+            // Ungroup
+            let mut count = 0;
+            for &entity in &selection.0 {
+                commands.entity(entity).remove::<SelectionGroup>();
+                count += 1;
+            }
+            if count > 0 {
+                info!("Ungrouped {} entities", count);
+            }
+        } else {
+            // Group
+            let id = next_group_id.0;
+            next_group_id.0 += 1;
+            let mut count = 0;
+            for &entity in &selection.0 {
+                commands.entity(entity).insert(SelectionGroup(id));
+                count += 1;
+            }
+            if count > 0 {
+                info!("Grouped {} entities into Group {}", count, id);
+            }
+        }
     }
 }
 
