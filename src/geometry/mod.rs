@@ -7,6 +7,7 @@ use crate::prelude::*;
 // use bevy_prototype_lyon::prelude::*;
 
 pub mod csg;
+pub mod gear;
 
 /// Plugin for geometry and vector rendering.
 ///

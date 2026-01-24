@@ -3,9 +3,10 @@
 //! Defines the `GameCommand` trait and the `CommandStack` resource.
 
 use crate::input::ZIndex;
-use crate::input::editable::{EditableBox, EditableCircle};
+use crate::input::editable::{EditableBox, EditableCircle, EditableGear};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
+use crate::geometry::gear::GearProfile;
 use crate::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::rapier::geometry::SharedShape;
@@ -352,6 +353,100 @@ impl GameCommand for SpawnPolygonCommand {
     }
 }
 
+/// Command to spawn a gear.
+pub struct SpawnGearCommand {
+    /// Position of the gear center.
+    pub position: Vec2,
+    /// The gear profile.
+    pub profile: GearProfile,
+    /// The spawned entity ID.
+    pub entity: Option<Entity>,
+    /// The pin entity ID.
+    pub pin_entity: Option<Entity>,
+}
+
+impl GameCommand for SpawnGearCommand {
+    fn name(&self) -> String {
+        "Spawn Gear".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+        // Generate shape and collider
+        let path = self.profile.build_path();
+        let points = self.profile.generate_points(5);
+
+        if points.len() < 3 {
+            return Err("Failed to generate gear points".to_string());
+        }
+
+        let vertices: Vec<Point2<f32>> = points
+            .iter()
+            .map(|v| Point2::new(v.x, v.y))
+            .collect();
+        let indices: Vec<[u32; 2]> = (0..vertices.len())
+            .map(|i| [i as u32, ((i + 1) % vertices.len()) as u32])
+            .collect();
+
+        let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
+        let collider = Collider::from(rapier_shape);
+
+        let z = world.resource_mut::<ZIndex>().next();
+
+        let entity = world
+            .spawn((
+                ShapeBundle {
+                    path,
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
+                    ..default()
+                },
+                Fill::color(Color::srgb(0.6, 0.6, 0.65)),
+                Stroke::new(Color::BLACK, 0.1),
+                RigidBody::Dynamic,
+                collider,
+                EditableGear {
+                    profile: self.profile,
+                },
+            ))
+            .id();
+
+        self.entity = Some(entity);
+
+        // Pin logic (Central Hinge)
+        let (target_entity, pin_entity, _, _) = resolve_joint_targets(
+            world,
+            entity,
+            None,
+            Vec2::ZERO,
+            Vec2::ZERO,
+            None,
+        );
+        self.pin_entity = pin_entity;
+
+        let joint_data = RevoluteJointBuilder::new()
+            .local_anchor1(Vec2::ZERO)
+            .local_anchor2(Vec2::ZERO);
+
+        world.entity_mut(entity).insert(ImpulseJoint::new(target_entity, joint_data));
+
+        Ok(())
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if let Some(e) = self.entity {
+            if let Ok(e_ref) = world.get_entity_mut(e) {
+                e_ref.despawn();
+            }
+            self.entity = None;
+        }
+        if let Some(p) = self.pin_entity {
+            if let Ok(e) = world.get_entity_mut(p) {
+                e.despawn();
+            }
+            self.pin_entity = None;
+        }
+    }
+}
+
 /// Command to spawn a Revolute Joint (Hinge).
 pub struct SpawnJointCommand {
     /// The first body.
@@ -658,6 +753,8 @@ mod tests {
         world
     }
 
+    // Existing tests...
+
     #[rstest]
     fn test_spawn_polygon_command_failure(mut world: World) {
         let vertices = vec![Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0)]; // Only 2 vertices
@@ -733,6 +830,31 @@ mod tests {
 
         assert!(world.get_entity(entity).is_err());
         assert!(cmd.entity.is_none());
+    }
+
+    #[rstest]
+    fn test_spawn_gear_command(mut world: World) {
+        let mut cmd = SpawnGearCommand {
+            position: Vec2::new(0.0, 0.0),
+            profile: GearProfile::default(),
+            entity: None,
+            pin_entity: None,
+        };
+
+        assert!(cmd.apply(&mut world).is_ok());
+        let entity = cmd.entity.unwrap();
+
+        assert!(world.get::<RigidBody>(entity).is_some());
+        assert!(world.get::<Collider>(entity).is_some());
+        assert!(world.get::<EditableGear>(entity).is_some());
+
+        // Check hinge
+        let joint = world.get::<ImpulseJoint>(entity);
+        assert!(joint.is_some());
+
+        // Undo
+        cmd.undo(&mut world);
+        assert!(world.get_entity(entity).is_err());
     }
 
     #[rstest]
