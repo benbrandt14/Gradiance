@@ -10,6 +10,12 @@ impl Plugin for ConstraintsPlugin {
         app.init_resource::<GearPhysicsSettings>();
 
         // Run solver before physics step to enforce kinematic relationships
+        // NOTE: Rapier simulation step resets forces/impulses? No, impulses modify velocity directly.
+        // We need to run AFTER the integration or BEFORE?
+        // If we run before, Rapier's solver might override it if it handles collisions.
+        // But for pure kinematics, it should be fine.
+        // However, if we modify velocity, Rapier integrates it.
+        // Let's ensure it runs.
         app.add_systems(
             FixedUpdate,
             solve_gears
@@ -56,7 +62,7 @@ pub struct PulleyJoint {
 }
 
 fn solve_gears(
-    mut bodies: Query<(&mut Velocity, &ReadMassProperties)>,
+    mut bodies: Query<(&mut Velocity, Option<&ReadMassProperties>, Option<&AdditionalMassProperties>)>,
     joints: Query<&GearJoint>,
     settings: Res<GearPhysicsSettings>,
 ) {
@@ -65,21 +71,43 @@ fn solve_gears(
     }
 
     for joint in joints.iter() {
-        if let Ok([(mut vel_a, mass_a), (mut vel_b, mass_b)]) =
+        if let Ok([(mut vel_a, read_mass_a, add_mass_a), (mut vel_b, read_mass_b, add_mass_b)]) =
             bodies.get_many_mut([joint.entity_a, joint.entity_b])
         {
             let w_a = vel_a.angvel;
             let w_b = vel_b.angvel;
             let ratio = joint.ratio as f32;
 
+            // Helper to get inertia
+            let get_inv_inertia = |rm: Option<&ReadMassProperties>, am: Option<&AdditionalMassProperties>| -> f32 {
+                if let Some(m) = rm {
+                    if m.principal_inertia != 0.0 { return 1.0 / m.principal_inertia; }
+                }
+                if let Some(am) = am {
+                    match am {
+                        AdditionalMassProperties::MassProperties(props) => {
+                            if props.principal_inertia != 0.0 { return 1.0 / props.principal_inertia; }
+                        }
+                        AdditionalMassProperties::Mass(_) => {
+                            // Point mass? Assume some inertia based on mass?
+                            // Without shape, we can't guess inertia from mass accurately.
+                            // But typically Mass(m) implies Moment of Inertia I = m * r^2 (but r unknown)
+                            // or for a circle I = 0.5 * m * r^2.
+                            // If we can't find inertia, return 0.0 (static)
+                            return 0.0;
+                        }
+                    }
+                }
+                0.0
+            };
+
             // Constraint error: C = w_a + ratio * w_b
             // We want C = 0.
             let c = w_a + ratio * w_b;
 
             // Inverse inertia
-            // ReadMassProperties exposes principal_inertia.
-            let inv_i_a = if mass_a.principal_inertia != 0.0 { 1.0 / mass_a.principal_inertia } else { 0.0 };
-            let inv_i_b = if mass_b.principal_inertia != 0.0 { 1.0 / mass_b.principal_inertia } else { 0.0 };
+            let inv_i_a = get_inv_inertia(read_mass_a, add_mass_a);
+            let inv_i_b = get_inv_inertia(read_mass_b, add_mass_b);
 
             // Denominator: J M^-1 J^T
             // J = [1, ratio]

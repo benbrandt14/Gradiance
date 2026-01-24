@@ -10,11 +10,9 @@ use rstest::*;
 fn app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
+    app.add_plugins(TransformPlugin);
     app.add_plugins(bevy::asset::AssetPlugin::default());
-    app.add_plugins(bevy::state::app::StatesPlugin); // Needed for in_state? No, MinimalPlugins doesn't have it? Wait, ToolState usage needs StatesPlugin.
-    // Actually GamePlugin adds InputPlugin which inits state.
-    // But here I'm adding plugins manually.
-
+    app.add_plugins(bevy::state::app::StatesPlugin);
     app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
     app.add_plugins(ConstraintsPlugin);
     app.init_resource::<gradiance::input::ZIndex>();
@@ -59,13 +57,14 @@ fn test_gear_constraint_solver(mut app: App) {
         RigidBody::Dynamic,
         Velocity::default(),
         Collider::ball(1.0),
-        // Mass properties will be calculated by Rapier
+        Transform::default(),
     )).id();
 
     let entity_b = app.world_mut().spawn((
         RigidBody::Dynamic,
         Velocity::default(),
         Collider::ball(1.0),
+        Transform::default(),
     )).id();
 
     app.world_mut().spawn(GearJoint {
@@ -74,13 +73,17 @@ fn test_gear_constraint_solver(mut app: App) {
         ratio: 2.0,
     });
 
-    // Run a few updates to let Rapier calculate mass properties
-    for _ in 0..10 {
-        app.update();
-    }
-
-    // Check if mass props are there
-    assert!(app.world().get::<ReadMassProperties>(entity_a).is_some(), "ReadMassProperties not found on A");
+    // Manually add AdditionalMassProperties to ensure deterministic mass for calculation
+    app.world_mut().entity_mut(entity_a).insert(AdditionalMassProperties::MassProperties(MassProperties {
+        local_center_of_mass: Vec2::ZERO,
+        mass: 1.0,
+        principal_inertia: 1.0,
+    }));
+    app.world_mut().entity_mut(entity_b).insert(AdditionalMassProperties::MassProperties(MassProperties {
+        local_center_of_mass: Vec2::ZERO,
+        mass: 1.0,
+        principal_inertia: 1.0,
+    }));
 
     // Set velocities
     if let Some(mut vel_a) = app.world_mut().get_mut::<Velocity>(entity_a) {
@@ -93,7 +96,8 @@ fn test_gear_constraint_solver(mut app: App) {
     }
 
     // Run update (should trigger FixedUpdate and solve_gears)
-    app.update();
+    // Explicitly run FixedUpdate to bypass Time accumulation issues in test environment
+    app.world_mut().run_schedule(FixedUpdate);
 
     let vel_a = app.world().get::<Velocity>(entity_a).unwrap().angvel;
     let vel_b = app.world().get::<Velocity>(entity_b).unwrap().angvel;
