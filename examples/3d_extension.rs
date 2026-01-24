@@ -73,8 +73,9 @@ fn main() {
         .add_systems(Update, toggle_mode)
         .add_systems(
             Update,
-            (plane_picking, plane_movement, draw_active_plane_gizmo).run_if(in_state(AppMode::Mode3D)),
+            (plane_picking, plane_movement, draw_active_plane_gizmo, camera_controller).run_if(in_state(AppMode::Mode3D)),
         )
+        .add_systems(Update, camera_controller_2d.run_if(in_state(AppMode::Mode2D)))
         .add_systems(OnEnter(AppMode::Mode3D), enter_3d)
         .add_systems(OnEnter(AppMode::Mode2D), enter_2d)
         .run();
@@ -159,7 +160,83 @@ fn draw_active_plane_gizmo(
     planes_data: Res<PlanesData>,
 ) {
     if let Some(plane_data) = planes_data.0.get(active_plane.0) {
+        // Highlight active plane with a yellow wireframe gizmo
         gizmos.cuboid(plane_data.transform, Color::srgb(1.0, 1.0, 0.0));
+    }
+
+    for (i, plane_data) in planes_data.0.iter().enumerate() {
+        if i != active_plane.0 {
+            // Highlight inactive planes with a faint grey wireframe
+            gizmos.cuboid(plane_data.transform, Color::WHITE.with_alpha(0.1));
+        }
+    }
+}
+
+fn camera_controller(
+    input: Res<ButtonInput<KeyCode>>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    mut mouse_motion: EventReader<bevy::input::mouse::MouseMotion>,
+    mut q_camera: Query<&mut Transform, With<Camera3d>>,
+    time: Res<Time>,
+) {
+    let mut rotation_delta = Vec2::ZERO;
+    let mut translation_delta = Vec3::ZERO;
+
+    // Orbit with Right Click Drag
+    if mouse_input.pressed(MouseButton::Right) {
+        for event in mouse_motion.read() {
+            rotation_delta += event.delta;
+        }
+    }
+
+    // Pan with Middle Click Drag or Shift + Right Click
+    let pan_speed = 10.0;
+    if mouse_input.pressed(MouseButton::Middle) || (input.pressed(KeyCode::ShiftLeft) && mouse_input.pressed(MouseButton::Right)) {
+         for event in mouse_motion.read() {
+             // Reset rotation if panning to avoid conflict
+             rotation_delta = Vec2::ZERO;
+             translation_delta.x -= event.delta.x;
+             translation_delta.y += event.delta.y;
+         }
+    }
+
+    let Ok(mut transform) = q_camera.get_single_mut() else { return };
+
+    if rotation_delta != Vec2::ZERO {
+        let sensitivity = 0.005;
+        transform.rotate_around(Vec3::ZERO, Quat::from_rotation_y(-rotation_delta.x * sensitivity));
+        // Simple vertical orbit constraint could be added here
+    }
+
+    if translation_delta != Vec3::ZERO {
+        let right = transform.right();
+        let up = transform.up();
+        transform.translation += (right * translation_delta.x + up * translation_delta.y) * pan_speed * time.delta_secs();
+    }
+}
+
+fn camera_controller_2d(
+    input: Res<ButtonInput<KeyCode>>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    mut mouse_motion: EventReader<bevy::input::mouse::MouseMotion>,
+    mut q_camera: Query<&mut Transform, With<Camera2d>>,
+    time: Res<Time>,
+) {
+     let mut translation_delta = Vec3::ZERO;
+     let pan_speed = 50.0;
+
+     // Pan with Right Click Drag
+     if mouse_input.pressed(MouseButton::Right) {
+        for event in mouse_motion.read() {
+             translation_delta.x -= event.delta.x;
+             translation_delta.y += event.delta.y;
+        }
+    }
+
+    let Ok(mut transform) = q_camera.get_single_mut() else { return };
+
+    if translation_delta != Vec3::ZERO {
+        transform.translation += translation_delta * pan_speed * time.delta_secs();
     }
 }
 
