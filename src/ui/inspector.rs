@@ -4,7 +4,8 @@
 //! such as Transform, RigidBody type, Friction, and Restitution.
 
 use crate::input::editable::{EditableBox, EditableCircle};
-use crate::input::selection::Selection;
+use crate::input::selection::{Selection, SelectionFilter};
+use crate::input::tools::connector::Connector;
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use bevy_prototype_lyon::prelude::*;
@@ -22,6 +23,9 @@ impl Plugin for InspectorPlugin {
 fn inspector_ui(
     mut contexts: EguiContexts,
     selection: Res<Selection>,
+    mut selection_filter: ResMut<SelectionFilter>,
+    connector_query: Query<&Connector>,
+    mut joint_query: Query<&mut ImpulseJoint>,
     mut query: Query<(
         Entity,
         Option<&mut Transform>,
@@ -40,115 +44,122 @@ fn inspector_ui(
     )>,
     mut commands: Commands,
 ) {
-    if selection.0.is_empty() {
-        return;
-    }
-
-    // Inspect the first selected entity for initial values
-    let first_entity = *selection.0.iter().next().unwrap();
-
-    // We need to extract values. We can't hold the borrow while doing UI if we want to write later.
-    // So we verify existence and copy values.
-
-    // Check what components the first entity has
-    let has_transform;
-    let mut local_transform = Transform::default();
-
-    let has_box;
-    let mut local_box = EditableBox::default();
-
-    let has_circle;
-    let mut local_circle = EditableCircle::default();
-
-    let has_rb;
-    let mut local_rb = RigidBody::Dynamic;
-
-    let has_friction;
-    let mut local_friction = Friction::default();
-
-    let has_restitution;
-    let mut local_restitution = Restitution::default();
-
-    let has_fill;
-    let mut local_fill = Fill::color(Color::BLACK);
-
-    let has_stroke;
-    let mut local_stroke = Stroke::new(Color::BLACK, 1.0);
-
-    let _has_sensor;
-    let mut local_sensor = false;
-
-    let has_locked_axes;
-    let mut local_locked_axes = LockedAxes::empty();
-
-    let has_mass_props;
-    let mut local_density = 1.0; // We usually edit density via ColliderMassProperties::Density
-
-    let has_gravity;
-    let mut local_gravity = 1.0;
-
-    {
-        let Ok((
-            _,
-            t,
-            rb,
-            f,
-            r,
-            ebox,
-            ecircle,
-            fill,
-            stroke,
-            sensor,
-            locked,
-            mass,
-            grav,
-            _
-        )) = query.get(first_entity) else {
-            return;
-        };
-
-        has_transform = t.is_some();
-        if let Some(v) = t { local_transform = *v; }
-
-        has_box = ebox.is_some();
-        if let Some(v) = ebox { local_box = *v; }
-
-        has_circle = ecircle.is_some();
-        if let Some(v) = ecircle { local_circle = *v; }
-
-        has_rb = rb.is_some();
-        if let Some(v) = rb { local_rb = *v; }
-
-        has_friction = f.is_some();
-        if let Some(v) = f { local_friction = *v; }
-
-        has_restitution = r.is_some();
-        if let Some(v) = r { local_restitution = *v; }
-
-        has_fill = fill.is_some();
-        if let Some(v) = fill { local_fill = v.clone(); }
-
-        has_stroke = stroke.is_some();
-        if let Some(v) = stroke { local_stroke = v.clone(); }
-
-        _has_sensor = sensor.is_some();
-        if sensor.is_some() { local_sensor = true; }
-
-        has_locked_axes = locked.is_some();
-        if let Some(v) = locked { local_locked_axes = *v; }
-
-        has_mass_props = mass.is_some();
-        if let Some(ColliderMassProperties::Density(d)) = mass {
-            local_density = *d;
-        }
-
-        has_gravity = grav.is_some();
-        if let Some(v) = grav { local_gravity = v.0; }
-    }
-
     let ctx = contexts.ctx_mut();
 
     egui::SidePanel::right("inspector_panel").show(ctx, |ui| {
+        ui.heading("Settings");
+        ui.horizontal(|ui| {
+            ui.label("Filter:");
+            ui.radio_value(&mut *selection_filter, SelectionFilter::All, "All");
+            ui.radio_value(&mut *selection_filter, SelectionFilter::Shapes, "Shapes");
+            ui.radio_value(&mut *selection_filter, SelectionFilter::Joints, "Joints");
+        });
+        ui.separator();
+
+        if selection.0.is_empty() {
+            ui.label("No selection.");
+            return;
+        }
+
+        // Inspect the first selected entity for initial values
+        let first_entity = *selection.0.iter().next().unwrap();
+
+        // Check what components the first entity has
+        let has_transform;
+        let mut local_transform = Transform::default();
+
+        let has_box;
+        let mut local_box = EditableBox::default();
+
+        let has_circle;
+        let mut local_circle = EditableCircle::default();
+
+        let has_rb;
+        let mut local_rb = RigidBody::Dynamic;
+
+        let has_friction;
+        let mut local_friction = Friction::default();
+
+        let has_restitution;
+        let mut local_restitution = Restitution::default();
+
+        let has_fill;
+        let mut local_fill = Fill::color(Color::BLACK);
+
+        let has_stroke;
+        let mut local_stroke = Stroke::new(Color::BLACK, 1.0);
+
+        let _has_sensor;
+        let mut local_sensor = false;
+
+        let has_locked_axes;
+        let mut local_locked_axes = LockedAxes::empty();
+
+        let has_mass_props;
+        let mut local_density = 1.0;
+
+        let has_gravity;
+        let mut local_gravity = 1.0;
+
+        {
+            let Ok((
+                _,
+                t,
+                rb,
+                f,
+                r,
+                ebox,
+                ecircle,
+                fill,
+                stroke,
+                sensor,
+                locked,
+                mass,
+                grav,
+                _
+            )) = query.get(first_entity) else {
+                return;
+            };
+
+            has_transform = t.is_some();
+            if let Some(v) = t { local_transform = *v; }
+
+            has_box = ebox.is_some();
+            if let Some(v) = ebox { local_box = *v; }
+
+            has_circle = ecircle.is_some();
+            if let Some(v) = ecircle { local_circle = *v; }
+
+            has_rb = rb.is_some();
+            if let Some(v) = rb { local_rb = *v; }
+
+            has_friction = f.is_some();
+            if let Some(v) = f { local_friction = *v; }
+
+            has_restitution = r.is_some();
+            if let Some(v) = r { local_restitution = *v; }
+
+            has_fill = fill.is_some();
+            if let Some(v) = fill { local_fill = v.clone(); }
+
+            has_stroke = stroke.is_some();
+            if let Some(v) = stroke { local_stroke = v.clone(); }
+
+            _has_sensor = sensor.is_some();
+            if sensor.is_some() { local_sensor = true; }
+
+            has_locked_axes = locked.is_some();
+            if let Some(v) = locked { local_locked_axes = *v; }
+
+            has_mass_props = mass.is_some();
+            if let Some(ColliderMassProperties::Density(d)) = mass {
+                local_density = *d;
+            }
+
+            has_gravity = grav.is_some();
+            if let Some(v) = grav { local_gravity = v.0; }
+        }
+
         ui.heading("Inspector");
         ui.label(format!("Selected: {} entities", selection.0.len()));
         ui.separator();
@@ -376,6 +387,62 @@ fn inspector_ui(
                         s.color = local_stroke.color;
                         s.options.line_width = local_stroke.options.line_width;
                     }
+                }
+            }
+            ui.separator();
+        }
+
+        // Joint Inspection
+        let mut joint_entity = first_entity;
+        if let Ok(connector) = connector_query.get(first_entity) {
+            joint_entity = connector.entity_a;
+        }
+
+        if let Ok(mut joint) = joint_query.get_mut(joint_entity) {
+            ui.heading("Joint Settings");
+
+            match &mut joint.data {
+                TypedJoint::RevoluteJoint(rev) => {
+                    let current_limits = if let Some(l) = rev.limits() {
+                        [l.min, l.max]
+                    } else {
+                        [-std::f32::consts::PI, std::f32::consts::PI]
+                    };
+                    let mut min = current_limits[0];
+                    let mut max = current_limits[1];
+
+                    ui.label("Revolute Limits");
+                    let mut changed = false;
+                    if ui.add(egui::DragValue::new(&mut min).speed(0.1).prefix("Min: ")).changed() { changed = true; }
+                    if ui.add(egui::DragValue::new(&mut max).speed(0.1).prefix("Max: ")).changed() { changed = true; }
+
+                    if changed {
+                        rev.set_limits([min, max]);
+                    }
+                }
+                TypedJoint::PrismaticJoint(prism) => {
+                    let current_limits = if let Some(l) = prism.limits() {
+                        [l.min, l.max]
+                    } else {
+                        [-10.0, 10.0]
+                    };
+                    let mut min = current_limits[0];
+                    let mut max = current_limits[1];
+
+                    ui.label("Prismatic Limits");
+                    let mut changed = false;
+                    if ui.add(egui::DragValue::new(&mut min).speed(0.1).prefix("Min: ")).changed() { changed = true; }
+                    if ui.add(egui::DragValue::new(&mut max).speed(0.1).prefix("Max: ")).changed() { changed = true; }
+
+                    if changed {
+                        prism.set_limits([min, max]);
+                    }
+                }
+                TypedJoint::FixedJoint(_) => {
+                    ui.label("Fixed Joint (No limits)");
+                }
+                _ => {
+                    ui.label("Generic/Other Joint Type");
                 }
             }
             ui.separator();

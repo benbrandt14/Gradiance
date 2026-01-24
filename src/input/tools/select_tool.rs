@@ -2,8 +2,12 @@
 //!
 //! Simply allows clicking on entities to populate the `Selection` resource.
 
+use crate::input::editable::{EditableBox, EditableCircle};
+use crate::input::selection::{NextGroupID, Selection, SelectionFilter, SelectionGroup};
+use crate::input::tools::connector::Connector;
 use crate::input::tools::utils::is_pointer_over_ui;
-use crate::input::{ToolState, cursor::CursorWorldPos, selection::Selection};
+use bevy_prototype_lyon::prelude::{Fill, Stroke};
+use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
@@ -61,6 +65,12 @@ struct SelectToolData {
     // Map Entity -> Initial Vec2
     initial_positions: Vec<(Entity, Vec2)>,
     drag_start_pos: Vec2,
+
+    // Rotation
+    is_rotating: bool,
+    rotate_start_pos: Vec2,
+    initial_rotations: Vec<(Entity, f32, Vec2)>, // Entity, Rotation, Position
+    rotation_centroid: Vec2,
 }
 
 fn select_tool_reset(mut data: ResMut<SelectToolData>) {
@@ -69,6 +79,7 @@ fn select_tool_reset(mut data: ResMut<SelectToolData>) {
 
 fn select_tool_update(
     mut selection: ResMut<Selection>,
+    selection_filter: Res<SelectionFilter>,
     mut data: ResMut<SelectToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -76,13 +87,39 @@ fn select_tool_update(
     rapier_context_query: Query<&RapierContext>,
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
-    mut query: Query<(Entity, &mut Transform, Option<&GroundPlane>)>,
+    mut queries: ParamSet<(
+        Query<(Entity, &mut Transform, Option<&GroundPlane>)>,
+        Query<(
+            &Transform,
+            &Collider,
+            Option<&RigidBody>,
+            Option<&EditableBox>,
+            Option<&EditableCircle>,
+            Option<&Fill>,
+            Option<&Stroke>,
+            Option<&Friction>,
+            Option<&Restitution>,
+            Option<&ColliderMassProperties>,
+            Option<&GravityScale>,
+            Option<&LockedAxes>,
+            Option<&Sensor>,
+            Option<&SelectionGroup>,
+        )>,
+    )>,
     // Add query for box selection fallback
     selectable_query: Query<(Entity, &GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
+    connector_query: Query<&Connector>,
+    group_query: Query<(Entity, &SelectionGroup)>,
     grid_settings: Res<GridSettings>,
+    mut next_group_id: ResMut<NextGroupID>,
+    mut commands: Commands,
 ) {
     // Prevent selection if over UI
-    if is_pointer_over_ui(&mut contexts) && !data.is_moving && data.drag_start.is_none() {
+    if is_pointer_over_ui(&mut contexts)
+        && !data.is_moving
+        && !data.is_rotating
+        && data.drag_start.is_none()
+    {
         return;
     }
 
@@ -91,6 +128,28 @@ fn select_tool_update(
     };
 
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+
+    // Select All
+    if ctrl && keys.just_pressed(KeyCode::KeyA) {
+        if !shift {
+            selection.clear();
+        }
+        let mut count = 0;
+        for (entity, _) in &selectable_query {
+            let is_connector = connector_query.contains(entity);
+            let pass = match *selection_filter {
+                SelectionFilter::All => true,
+                SelectionFilter::Shapes => !is_connector,
+                SelectionFilter::Joints => is_connector,
+            };
+            if pass {
+                selection.add(entity);
+                count += 1;
+            }
+        }
+        info!("Select All: Selected {} entities", count);
+    }
 
     if mouse.just_pressed(MouseButton::Left) {
         data.drag_start_pos = current_pos;
@@ -103,14 +162,23 @@ fn select_tool_update(
         // Collect all hits
         let mut hits = Vec::new();
         rapier_context.intersections_with_point(current_pos, filter, |entity| {
-            hits.push(entity);
+            let is_connector = connector_query.contains(entity);
+            let pass = match *selection_filter {
+                SelectionFilter::All => true,
+                SelectionFilter::Shapes => !is_connector,
+                SelectionFilter::Joints => is_connector,
+            };
+            if pass {
+                hits.push(entity);
+            }
             true
         });
 
         // Sort hits: Non-ground first, then by Z index (descending)
+        let query0 = queries.p0();
         hits.sort_by(|&a, &b| {
             let get_info = |entity| -> Option<HitSortInfo> {
-                if let Ok((_, t, g)) = query.get(entity) {
+                if let Ok((_, t, g)) = query0.get(entity) {
                     Some(HitSortInfo {
                         is_ground: g.is_some(),
                         z_index: t.translation.z,
@@ -129,23 +197,115 @@ fn select_tool_update(
         if let Some(&entity) = hits.first() {
             // Clicked on something
 
+            // Group Logic
+            let mut entities_to_select = Vec::new();
+            if let Ok((_, group_id)) = group_query.get(entity) {
+                for (e, g) in &group_query {
+                    if g == group_id {
+                        entities_to_select.push(e);
+                    }
+                }
+            } else {
+                entities_to_select.push(entity);
+            }
+
             // If shift not held and entity not in selection, clear selection
-            if !shift && !selection.0.contains(&entity) {
+            let clicked_already_selected = selection.0.contains(&entity);
+            if !shift && !clicked_already_selected {
                 selection.clear();
             }
 
             if shift {
-                selection.toggle(entity);
-            } else if !selection.0.contains(&entity) {
-                selection.add(entity);
+                // Toggle group
+                let any_selected = entities_to_select.iter().any(|e| selection.0.contains(e));
+                if any_selected {
+                    for e in entities_to_select {
+                        selection.remove(e);
+                    }
+                } else {
+                    for e in entities_to_select {
+                        selection.add(e);
+                    }
+                }
+            } else if !clicked_already_selected {
+                for e in entities_to_select {
+                    selection.add(e);
+                }
+            }
+
+            // Copy on Drag
+            if ctrl && selection.0.contains(&entity) {
+                // Duplicate selected entities
+                let mut new_selection = Vec::new();
+                let mut group_map = std::collections::HashMap::new();
+
+                for &old_entity in &selection.0 {
+                    if let Ok((
+                        t,
+                        collider,
+                        rb,
+                        ebox,
+                        ecircle,
+                        fill,
+                        stroke,
+                        friction,
+                        restitution,
+                        mass,
+                        gravity,
+                        locked,
+                        sensor,
+                        group,
+                    )) = queries.p1().get(old_entity) {
+                        let mut builder = commands.spawn((
+                            *t,
+                            collider.clone(),
+                        ));
+
+                        if let Some(c) = rb { builder.insert(*c); }
+                        if let Some(c) = ebox { builder.insert(*c); }
+                        if let Some(c) = ecircle { builder.insert(*c); }
+                        if let Some(c) = fill { builder.insert(c.clone()); }
+                        if let Some(c) = stroke { builder.insert(c.clone()); }
+                        if let Some(c) = friction { builder.insert(*c); }
+                        if let Some(c) = restitution { builder.insert(*c); }
+                        if let Some(c) = mass { builder.insert(c.clone()); }
+                        if let Some(c) = gravity { builder.insert(*c); }
+                        if let Some(c) = locked { builder.insert(*c); }
+                        if let Some(_) = sensor { builder.insert(Sensor); }
+
+                        // Group Logic
+                        if let Some(g) = group {
+                             let new_id = *group_map.entry(g.0).or_insert_with(|| {
+                                 let id = next_group_id.0;
+                                 next_group_id.0 += 1;
+                                 id
+                             });
+                             builder.insert(SelectionGroup(new_id));
+                        }
+
+                        // Disable sleeping so it can move
+                        builder.insert(Sleeping::disabled());
+
+                        new_selection.push(builder.id());
+                    }
+                }
+
+                if !new_selection.is_empty() {
+                    selection.clear();
+                    for e in new_selection {
+                        selection.add(e);
+                    }
+                    info!("Duplicated {} entities", selection.0.len());
+                }
             }
 
             // Initiate Move for all selected
             if selection.0.contains(&entity) {
                 data.is_moving = true;
                 data.initial_positions.clear();
+                let q0 = queries.p0();
                 for &entity in &selection.0 {
-                    if let Ok((_, t, _)) = query.get(entity) {
+                    if let Ok((_, t, _)) = q0.get(entity) {
                         data.initial_positions
                             .push((entity, t.translation.truncate()));
                     }
@@ -165,9 +325,10 @@ fn select_tool_update(
         if data.is_moving {
             // Move the entities
             let delta = current_pos - data.drag_start_pos;
+            let mut q0 = queries.p0();
 
             for (entity, initial_pos) in &data.initial_positions {
-                if let Ok((_, mut t, _)) = query.get_mut(*entity) {
+                if let Ok((_, mut t, _)) = q0.get_mut(*entity) {
                     let mut new_pos = *initial_pos + delta;
                     if grid_settings.show && grid_settings.snap {
                         new_pos = snap_to_grid(new_pos, grid_settings.spacing);
@@ -225,6 +386,65 @@ fn select_tool_update(
         data.is_moving = false;
         data.drag_start = None;
         data.initial_positions.clear();
+    }
+
+    // Right Click Rotation
+    if mouse.just_pressed(MouseButton::Right) && !selection.0.is_empty() {
+        data.is_rotating = true;
+        data.rotate_start_pos = current_pos;
+        data.initial_rotations.clear();
+
+        let mut centroid = Vec2::ZERO;
+        let mut count = 0.0;
+        let q0 = queries.p0();
+
+        for &entity in &selection.0 {
+            if let Ok((_, t, _)) = q0.get(entity) {
+                let rot = t.rotation.to_euler(EulerRot::XYZ).2;
+                let pos = t.translation.truncate();
+                data.initial_rotations.push((entity, rot, pos));
+                centroid += pos;
+                count += 1.0;
+            }
+        }
+
+        if count > 0.0 {
+            data.rotation_centroid = centroid / count;
+        }
+    }
+
+    if mouse.pressed(MouseButton::Right) && data.is_rotating {
+        let delta = current_pos - data.rotate_start_pos;
+        // Sensitivity: 100 pixels = 1 radian approx? Or just delta.y
+        let angle_delta = delta.y * 0.01;
+
+        let mut q0 = queries.p0();
+        for (entity, initial_rot, initial_pos) in &data.initial_rotations {
+            if let Ok((_, mut t, _)) = q0.get_mut(*entity) {
+                // Rotate rotation
+                let new_rot = initial_rot + angle_delta;
+                t.rotation = Quat::from_rotation_z(new_rot);
+
+                // Rotate position around centroid
+                let relative = *initial_pos - data.rotation_centroid;
+                // Rotate vector
+                let cos = angle_delta.cos();
+                let sin = angle_delta.sin();
+                let rotated_rel = Vec2::new(
+                    relative.x * cos - relative.y * sin,
+                    relative.x * sin + relative.y * cos,
+                );
+
+                let new_pos = data.rotation_centroid + rotated_rel;
+                t.translation.x = new_pos.x;
+                t.translation.y = new_pos.y;
+            }
+        }
+    }
+
+    if mouse.just_released(MouseButton::Right) {
+        data.is_rotating = false;
+        data.initial_rotations.clear();
     }
 }
 
