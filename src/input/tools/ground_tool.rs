@@ -2,7 +2,7 @@
 //!
 //! Click and drag to define the surface and rotation of the ground.
 
-use crate::input::events::SpawnGroundEvent;
+use crate::input::commands::{CommandStack, SpawnGroundCommand};
 use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -30,7 +30,7 @@ fn ground_tool_reset(mut data: ResMut<GroundToolData>) {
 }
 
 fn ground_tool_update(
-    mut event_writer: EventWriter<SpawnGroundEvent>,
+    mut commands: Commands,
     mut data: ResMut<GroundToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -51,7 +51,7 @@ fn ground_tool_update(
     match drag.status {
         DragStatus::Dragging => {
             // Draw preview line
-            gizmos.line_2d(drag.start, drag.current, Color::srgb(1.0, 1.0, 1.0));
+            gizmos.line_2d(drag.start, drag.current, Color::WHITE);
             // Draw normal to show "down" direction (where the ground body will be)
             let mid = (drag.start + drag.current) / 2.0;
             let dir = drag.current - drag.start;
@@ -73,9 +73,16 @@ fn ground_tool_update(
             let rotation = diff.to_angle();
             let center = (start + current) / 2.0;
 
-            event_writer.send(SpawnGroundEvent {
+            let cmd = SpawnGroundCommand {
                 position: center,
                 rotation,
+                entity: None,
+            };
+
+            commands.queue(move |world: &mut World| {
+                world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                    stack.push(Box::new(cmd), world);
+                });
             });
         }
         _ => {}
