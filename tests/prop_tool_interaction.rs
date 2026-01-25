@@ -18,6 +18,13 @@ enum Action {
     Update,
 }
 
+#[derive(Debug, Clone)]
+enum Operation {
+    SpawnBox { start: Vec2, end: Vec2 },
+    SpawnCircle { start: Vec2, end: Vec2 },
+    SpawnGround { start: Vec2, end: Vec2 },
+}
+
 fn tool_strategy() -> impl Strategy<Value = ToolState> {
     prop_oneof![
         Just(ToolState::Select),
@@ -56,6 +63,24 @@ fn action_strategy() -> impl Strategy<Value = Action> {
     ]
 }
 
+fn operation_strategy() -> impl Strategy<Value = Operation> {
+    prop_oneof![
+        (
+            (-50.0..50.0f32, -50.0..50.0f32),
+            (-50.0..50.0f32, -50.0..50.0f32)
+        ).prop_map(|((x1, y1), (x2, y2))| Operation::SpawnBox { start: Vec2::new(x1, y1), end: Vec2::new(x2, y2) }),
+        (
+            (-50.0..50.0f32, -50.0..50.0f32),
+            (-50.0..50.0f32, -50.0..50.0f32)
+        ).prop_map(|((x1, y1), (x2, y2))| Operation::SpawnCircle { start: Vec2::new(x1, y1), end: Vec2::new(x2, y2) }),
+        (
+            (-50.0..50.0f32, -50.0..50.0f32),
+            (-50.0..50.0f32, -50.0..50.0f32)
+        ).prop_map(|((x1, y1), (x2, y2))| Operation::SpawnGround { start: Vec2::new(x1, y1), end: Vec2::new(x2, y2) }),
+    ]
+}
+
+
 fn apply_action(app: &mut App, action: &Action) {
     match action {
         Action::SetTool(t) => set_tool(app, *t),
@@ -65,6 +90,41 @@ fn apply_action(app: &mut App, action: &Action) {
         Action::KeyPress(k) => press_key(app, *k),
         Action::KeyRelease(k) => release_key(app, *k),
         Action::Update => app.update(),
+    }
+}
+
+fn apply_operation(app: &mut App, op: &Operation) {
+    match op {
+        Operation::SpawnBox { start, end } => {
+            set_tool(app, ToolState::Box);
+            set_cursor(app, *start);
+            mouse_down(app, MouseButton::Left);
+            app.update();
+            set_cursor(app, *end);
+            app.update();
+            mouse_up(app, MouseButton::Left);
+            app.update();
+        },
+        Operation::SpawnCircle { start, end } => {
+            set_tool(app, ToolState::Circle);
+            set_cursor(app, *start);
+            mouse_down(app, MouseButton::Left);
+            app.update();
+            set_cursor(app, *end);
+            app.update();
+            mouse_up(app, MouseButton::Left);
+            app.update();
+        },
+         Operation::SpawnGround { start, end } => {
+            set_tool(app, ToolState::Ground);
+            set_cursor(app, *start);
+            mouse_down(app, MouseButton::Left);
+            app.update();
+            set_cursor(app, *end);
+            app.update();
+            mouse_up(app, MouseButton::Left);
+            app.update();
+        },
     }
 }
 
@@ -174,5 +234,70 @@ proptest! {
                  }
             }
         }
+    }
+
+    #[test]
+    fn prop_undo_redo_stability(ops in prop::collection::vec(operation_strategy(), 1..20)) {
+        let mut app = create_test_app();
+
+        // Initial state count
+        let initial_count = app.world().entities().len();
+
+        // 1. Execute Operations
+        for op in &ops {
+            apply_operation(&mut app, op);
+        }
+
+        // Verify entities increased
+        let mid_count = app.world().entities().len();
+        if mid_count <= initial_count {
+             // It's possible some operations failed (e.g. zero size box), but generally they should succeed.
+             // We can just log or skip, but for now let's assert strictly to catch bugs.
+             // However, random Vec2s might produce degenerate shapes.
+             // But BoxTool uses drag distance. If start == end, size is 0.
+             // Let's rely on strategies creating non-zero deltas mostly.
+        }
+
+        // 2. Undo All
+        for _ in &ops {
+             press_key(&mut app, KeyCode::ControlLeft);
+             press_key(&mut app, KeyCode::KeyZ);
+             app.update();
+             release_key(&mut app, KeyCode::KeyZ);
+             release_key(&mut app, KeyCode::ControlLeft);
+             app.update();
+        }
+
+        // Verify return to initial
+        // Note: Entities might not be fully despawned immediately if deferred, but app.update() should handle it.
+        // Also, entity IDs are not reused, so we check COUNT.
+        // Wait, despawned entities are removed from count.
+        let final_count = app.world().entities().len();
+
+        // If undo works, we should be back to initial count (or close, if aux entities are involved).
+        // CommandStack commands are undoable.
+        // If final_count != initial_count, we have a leak or undo failure.
+
+        // NOTE: GroundTool might spawn multiple entities? No, mostly 1.
+        // Connectors spawn visuals + pin.
+        // We stick to Box/Circle/Ground which spawn 1 entity usually.
+
+        // Assert
+        // We relax the assertion slightly if we suspect auxiliary entities that persist?
+        // But in a clean test, they should go away.
+        assert_eq!(final_count, initial_count, "Undo did not return entity count to initial state");
+
+        // 3. Redo All
+        for _ in &ops {
+             press_key(&mut app, KeyCode::ControlLeft);
+             press_key(&mut app, KeyCode::KeyY); // Redo
+             app.update();
+             release_key(&mut app, KeyCode::KeyY);
+             release_key(&mut app, KeyCode::ControlLeft);
+             app.update();
+        }
+
+        let redo_count = app.world().entities().len();
+        assert_eq!(redo_count, mid_count, "Redo did not restore entity count");
     }
 }
