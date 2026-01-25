@@ -114,23 +114,10 @@ fn select_tool_update(
     mut next_group_id: ResMut<NextGroupID>,
     mut commands: Commands,
 ) {
-    // Prevent selection if over UI
-    if is_pointer_over_ui(&mut contexts)
-        && !data.is_moving
-        && !data.is_rotating
-        && data.drag_start.is_none()
-    {
-        return;
-    }
-
-    let Some(current_pos) = cursor_pos.0 else {
-        return;
-    };
-
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
 
-    // Select All
+    // Select All (Priority over UI and Cursor checks)
     if ctrl && keys.just_pressed(KeyCode::KeyA) {
         if !shift {
             selection.clear();
@@ -150,6 +137,19 @@ fn select_tool_update(
         }
         info!("Select All: Selected {} entities", count);
     }
+
+    // Prevent selection if over UI
+    if is_pointer_over_ui(&mut contexts)
+        && !data.is_moving
+        && !data.is_rotating
+        && data.drag_start.is_none()
+    {
+        return;
+    }
+
+    let Some(current_pos) = cursor_pos.0 else {
+        return;
+    };
 
     if mouse.just_pressed(MouseButton::Left) {
         data.drag_start_pos = current_pos;
@@ -239,6 +239,9 @@ fn select_tool_update(
                 let mut new_selection = Vec::new();
                 let mut group_map = std::collections::HashMap::new();
 
+                // Clear initial positions to prepare for new entities
+                data.initial_positions.clear();
+
                 for &old_entity in &selection.0 {
                     if let Ok((
                         t,
@@ -286,7 +289,9 @@ fn select_tool_update(
                         // Disable sleeping so it can move
                         builder.insert(Sleeping::disabled());
 
-                        new_selection.push(builder.id());
+                        let new_id = builder.id();
+                        new_selection.push(new_id);
+                        data.initial_positions.push((new_id, t.translation.truncate()));
                     }
                 }
 
@@ -295,6 +300,8 @@ fn select_tool_update(
                     for e in new_selection {
                         selection.add(e);
                     }
+                    data.is_moving = true;
+                    data.drag_start_pos = current_pos;
                     info!("Duplicated {} entities", selection.0.len());
                 }
             }

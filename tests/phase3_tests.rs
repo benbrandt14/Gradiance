@@ -154,6 +154,7 @@ fn test_select_all_ctrl_a(mut app: App) {
         Transform::from_xyz(0.0, 0.0, 0.0),
         GlobalTransform::default(),
         EditableBox::default(),
+        GravityScale(0.0),
     )).id();
     let b2 = app.world_mut().spawn((
         RigidBody::Dynamic,
@@ -161,6 +162,7 @@ fn test_select_all_ctrl_a(mut app: App) {
         Transform::from_xyz(5.0, 0.0, 0.0),
         GlobalTransform::default(),
         EditableBox::default(),
+        GravityScale(0.0),
     )).id();
 
     // Physics update
@@ -186,12 +188,13 @@ fn test_select_all_ctrl_a(mut app: App) {
 fn test_ctrl_drag_copy(mut app: App) {
     // Spawn box
     let b1 = app.world_mut().spawn((
-        RigidBody::Dynamic,
+        RigidBody::KinematicPositionBased,
         Collider::cuboid(1.0, 1.0),
         Transform::from_xyz(0.0, 0.0, 0.0),
         GlobalTransform::default(),
         EditableBox { width: 2.0, height: 2.0 },
         Name::new("Original"),
+        GravityScale(0.0),
     )).id();
 
     app.update();
