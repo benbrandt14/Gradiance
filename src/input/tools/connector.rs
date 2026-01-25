@@ -240,19 +240,12 @@ fn resolve_sorted_bodies(
     let mut resolved = Vec::new();
 
     for &hit_entity in intersections {
-        // Traverse up to find RigidBody
-        let mut current = hit_entity;
-        loop {
-            if let Ok((entity, global_transform)) = bodies.get(current) {
-                resolved.push((entity, global_transform.translation().z));
-                break;
-            }
-            // Move up
-            if let Ok(parent) = parents.get(current) {
-                current = parent.get();
-            } else {
-                break; // No rigid body ancestor
-            }
+        if let Some(info) = find_rigidbody_ancestor(
+            hit_entity,
+            |e| bodies.get(e).map(|(_, t)| t.translation().z).ok(),
+            |e| parents.get(e).map(|p| p.get()).ok(),
+        ) {
+            resolved.push(info);
         }
     }
 
@@ -264,6 +257,32 @@ fn resolve_sorted_bodies(
     sort_bodies_by_z(&mut resolved);
 
     resolved.into_iter().map(|(e, _)| e).collect()
+}
+
+/// Generic logic to find the first ancestor (or self) that satisfies a condition (is a body),
+/// traversing up the hierarchy.
+fn find_rigidbody_ancestor<F, G>(
+    start_entity: Entity,
+    get_body_z: F,
+    get_parent: G,
+) -> Option<(Entity, f32)>
+where
+    F: Fn(Entity) -> Option<f32>,    // Returns Some(z) if it is a body
+    G: Fn(Entity) -> Option<Entity>, // Returns parent
+{
+    let mut current = start_entity;
+    // Limit depth to prevent infinite loops in cyclic graphs (though Bevy prevents cycles)
+    for _ in 0..20 {
+        if let Some(z) = get_body_z(current) {
+            return Some((current, z));
+        }
+        if let Some(parent) = get_parent(current) {
+            current = parent;
+        } else {
+            return None;
+        }
+    }
+    None
 }
 
 fn sort_bodies_by_z(bodies: &mut Vec<(Entity, f32)>) {
@@ -303,5 +322,49 @@ mod tests {
         assert_eq!(bodies[0].0, e2);
         assert_eq!(bodies[1].0, e3);
         assert_eq!(bodies[2].0, e1);
+    }
+
+    #[test]
+    fn test_find_rigidbody_ancestor() {
+        let body = Entity::from_raw(1);
+        let child = Entity::from_raw(2);
+        let grandchild = Entity::from_raw(3);
+        let orphan = Entity::from_raw(4);
+
+        // Mock body check
+        let get_body_z = |e: Entity| -> Option<f32> {
+            if e == body {
+                Some(10.0)
+            } else {
+                None
+            }
+        };
+
+        // Mock hierarchy: grandchild -> child -> body
+        let get_parent = |e: Entity| -> Option<Entity> {
+            if e == grandchild {
+                Some(child)
+            } else if e == child {
+                Some(body)
+            } else {
+                None
+            }
+        };
+
+        // Test finding from self
+        let res = find_rigidbody_ancestor(body, get_body_z, get_parent);
+        assert_eq!(res, Some((body, 10.0)));
+
+        // Test finding from child
+        let res = find_rigidbody_ancestor(child, get_body_z, get_parent);
+        assert_eq!(res, Some((body, 10.0)));
+
+        // Test finding from grandchild
+        let res = find_rigidbody_ancestor(grandchild, get_body_z, get_parent);
+        assert_eq!(res, Some((body, 10.0)));
+
+        // Test orphan (no body found)
+        let res = find_rigidbody_ancestor(orphan, get_body_z, get_parent);
+        assert_eq!(res, None);
     }
 }

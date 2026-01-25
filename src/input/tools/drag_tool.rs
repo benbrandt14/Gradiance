@@ -117,14 +117,8 @@ fn drag_tool_update(
             t.translation.y = current_pos.y;
 
             // Update velocity for correct physics interaction (kinematic body)
-            if time.delta_secs() > 0.0001 {
-                let velocity = (current_pos - old_pos) / time.delta_secs();
-                v.linvel = velocity;
-                v.angvel = 0.0;
-            } else {
-                v.linvel = Vec2::ZERO;
-                v.angvel = 0.0;
-            }
+            v.linvel = calculate_drag_velocity(current_pos, old_pos, time.delta_secs());
+            v.angvel = 0.0;
         }
     }
 
@@ -169,11 +163,33 @@ fn calculate_rotated_anchor(local_anchor: Vec2, rotation: f32) -> Vec2 {
     )
 }
 
+fn calculate_drag_velocity(current_pos: Vec2, old_pos: Vec2, delta_seconds: f32) -> Vec2 {
+    if delta_seconds > 0.0001 {
+        (current_pos - old_pos) / delta_seconds
+    } else {
+        Vec2::ZERO
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
     use std::f32::consts::PI;
+
+    #[rstest]
+    #[case(Vec2::new(10.0, 0.0), Vec2::new(0.0, 0.0), 1.0, Vec2::new(10.0, 0.0))]
+    #[case(Vec2::new(10.0, 0.0), Vec2::new(0.0, 0.0), 0.5, Vec2::new(20.0, 0.0))]
+    #[case(Vec2::new(10.0, 0.0), Vec2::new(0.0, 0.0), 0.00001, Vec2::ZERO)] // Too small dt
+    fn test_calculate_drag_velocity(
+        #[case] current: Vec2,
+        #[case] old: Vec2,
+        #[case] dt: f32,
+        #[case] expected: Vec2,
+    ) {
+        let v = calculate_drag_velocity(current, old, dt);
+        assert!((v - expected).length() < 1e-5);
+    }
 
     #[rstest]
     #[case(Vec2::new(1.0, 0.0), 0.0, Vec2::new(1.0, 0.0))]
