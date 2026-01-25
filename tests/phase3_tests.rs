@@ -219,7 +219,7 @@ fn test_ctrl_drag_copy(mut app: App) {
     set_tool(&mut app, ToolState::Select);
 
     // Disable grid snap to avoid unexpected offsets in test
-    app.world_mut().resource_mut::<GridSettings>().snap = false;
+    app.world_mut().resource_mut::<GridSettings>().snap_to_grid = false;
 
     // Select b1
     set_cursor(&mut app, Vec2::ZERO);
