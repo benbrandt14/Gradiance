@@ -129,7 +129,8 @@ fn drag_tool_update(
             Ok((mut transform, _)) => {
                 let rotation = transform.rotation.to_euler(EulerRot::XYZ).2;
 
-                // If paused, manually move the object to follow cursor
+                // If paused, manually move the object to follow cursor.
+                // If unpaused, we let the ImpulseJoint (Mouse Joint) handle the movement physically.
                 if virtual_time.is_paused() {
                     let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
                     let new_pos = current_pos - rotated_anchor;
