@@ -19,6 +19,7 @@ This project, **Gradiance**, is a modern rewrite of the classic physics sandbox 
     *   **ECS**: Strictly adhere to Bevy's Entity Component System.
     *   **Tools**: Implement tools as separate plugins managed by `ToolState`.
     *   **Commands**: All gameplay actions (creation, deletion, modification) MUST implement `GameCommand` to support Undo/Redo via `CommandStack`.
+    *   **Crates**: You are not permitted to modify the Cargo.toml or Cargo.lock files, you can only recommend the user do so. 
 5.  **Progress Tracking**
     * See the detailed roadmap below, and the concise ROADMAP.md to keep track of high level goals and current status
     * Ensure all changes consider extensibility to future work, leave TODO's as appropriate to capture design assumptions
