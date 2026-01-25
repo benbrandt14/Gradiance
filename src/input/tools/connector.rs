@@ -5,6 +5,11 @@
 //! - Handles single body (pin to world) and two bodies (connect).
 //! - Sorts overlapping bodies by Z-depth.
 //! - Spawns visual indicators parented to the bodies.
+//!
+//! # TODO
+//! - **Visuals**: Currently uses basic debug shapes. Replace with proper sprites/meshes (Bolts, Welds).
+//! - **Limits**: Expose joint limits (angle limits, motor data) in the UI and pass them to the commands.
+//! - **Breakage**: Implement breakable joints (impulse threshold).
 
 use crate::input::commands::{CommandStack, SpawnFixedJointCommand, SpawnJointCommand};
 use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};

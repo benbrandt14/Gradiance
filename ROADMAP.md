@@ -4,9 +4,9 @@
 - [x] right click menu on items
 - [x] select / delete items
 - [x] add hinge behavior
-- [ ] add fix behavior ( ie make static )
+- [x] add fix behavior ( ie make static )
 - [ ] add collision layers
-- [ ] add infinite plane tool
+- [ ] add infinite plane tool (Currently approximated with large box)
 - [ ] add restitution and friction
 - [x] add square selection tool
 - [ ] add a lasso selection tool
@@ -44,7 +44,7 @@
 
 ## Core Tools ( Polish & Feature Complete )
 
-    [ ] Plane Tool: Spawns static infinite half-space. (Implemented as startup system, needs tool)
+    [x] Plane Tool: Spawns static ground (Approximated). Needs infinite shader.
 
     [x] Box Tool: Spawns Collider::cuboid.
 
@@ -56,7 +56,7 @@
 
     [ ] Cut Tool: CSG difference operation on World geometry.
 
-    [x] Drag Tool: MouseJoint implementation.
+    [x] Drag Tool: MouseJoint implementation. (Needs offset fix)
 
     [ ] Scale/Rotate Tool: Gizmos for transforming entities (use bevy_transform_gizmo).
 
@@ -64,9 +64,9 @@
 
 Physics & Constraints
 
-    [x] Hinge: RevoluteJoint ( Half Implemented )
+    [x] Hinge: RevoluteJoint (Implemented via ConnectorTool).
 
-    [ ] Fixed: FixedJoint (Weld).
+    [x] Fixed: FixedJoint (Weld) (Implemented via ConnectorTool).
 
     [ ] Spring: DistanceJoint with soft compliance.
 
@@ -78,7 +78,7 @@ Physics & Constraints
 
     [ ] Gear: Custom constraint (angular velocity ratio).
 
-    [ ] Collision Layers: UI to toggle collision masks (A collides with B).
+    [ ] Collision Layers: UI to toggle collision masks (A collides with B). (Critical for Pinning)
 
     [ ] Material Properties: Friction, Restitution (Bounciness), Density.
 
@@ -118,7 +118,7 @@ UI & UX
 
     [x] Camera Controller: Pan and Zoom.
 
-    [x] Undo/Redo: Command stack (Architecture implemented, Deletion pending).
+    [x] Undo/Redo: Command stack (Architecture implemented).
 
 Scripting
 
@@ -156,29 +156,20 @@ Tasks:
 
     [x] Initialize project with bevy, Rapier2d, bevy_egui.
 
-    [ ] Implement Camera2dBundle with custom Pan/Zoom system (Orthographic scale).
+    [x] Implement Camera2dBundle with custom Pan/Zoom system (Orthographic scale).
 
-        Constraint: Zoom must center on mouse cursor.
+    [x] Implement InfiniteFloor system (Approximated):
+        Spawn Collider::cuboid (Huge) at y=0.
+        *TODO*: Render infinite grid using a custom shader.
 
-    [ ] Implement InfiniteFloor system:
-
-        Spawn Collider::half_space at y=0.
-
-        Render infinite grid using a custom shader (or bevy_infinite_grid fork) that scales lines based on zoom level.
-
-    [ ] Implement Selection resource using bevy_mod_picking:
-
+    [x] Implement Selection resource:
         Click to select single.
-
         Shift+Click to multi-select.
+        Drag background to box-select.
 
-        Drag background to box-select (AABB query).
-
-    [ ] Implement MouseJoint (The "Hand" Tool):
-
-        On drag start: Spawn DistanceJoint (high stiffness) between cursor and object.
-
-        On drag update: Update joint anchor to mouse position.
+    [x] Implement MouseJoint (The "Hand" Tool):
+        On drag start: Spawn DistanceJoint.
+        *Issue*: Offset calculation needs fixing.
 
 Phase 2: Geometry & CSG Pipeline (Months 3–4)
 
@@ -194,37 +185,20 @@ Milestones:
 
 Tasks:
 
-    [ ] Integrate bevy_prototype_lyon:
-
-        Create VectorMesh component (holds path data separate from Bevy Mesh).
+    [x] Integrate bevy_prototype_lyon:
+        Verified working with 0.13.0.
 
     [ ] Implement Sketch Tool:
-
         Capture points -> Ramer-Douglas-Peucker simplification -> Lyon Path.
 
     [ ] Integrate clipper2 crate:
-
         Implement utility fn to_clipper_path(Vec<Vec2>) -> Vec<Point64>.
 
-        Implement scaling factor (105) to handle float-to-int conversion.
-
     [ ] Implement Cut Tool (Laser):
-
-        Input: Line segment A→B.
-
-        Expand line to thin polygon Pcut​.
-
-        Query intersecting bodies.
-
-        Perform Difference(Body, P_{cut}).
-
-        Despawn old body, spawn new bodies.
-
-        Crucial: Calculate new Center of Mass and offset children/collider/mesh to local (0,0).
+        CSG operations on bodies.
 
     [ ] Implement Polygon Decomposition:
-
-        Use parry2d's convex decomposition on resulting shapes to generate valid Rapier colliders.
+        Use parry2d's convex decomposition.
 
 Phase 3: The Mechanical Engineer (Months 5–6)
 
@@ -234,154 +208,26 @@ Milestones:
 
     Standard Joints: Hinge, Fixed, Spring.
 
-    Custom Solvers: Gear and Pulley constraints (Math-heavy phase).
-
-    Visualization: Seeing the joints.
+    Custom Solvers: Gear and Pulley constraints.
 
 Tasks:
 
-    [ ] Implement Hinge Tool:
+    [x] Implement Hinge Tool (ConnectorTool).
 
-        Spawn RevoluteJoint.
+    [x] Implement Fixed Tool (ConnectorTool).
 
-        Visuals: Draw a "Bolt" sprite at anchor.
+    [ ] Fix Pin Collision:
+        Ensure pinned bodies do not collide with their pin anchor (Explosion risk).
 
-    [ ] Implement Spring/Slider Tool:
+    [ ] Implement Spring/Slider Tool.
 
-        Spawn PrismaticJoint (Slider) or DistanceJoint (Spring).
+    [ ] Custom Constraint: Gear Joint.
 
-        UI: Sliders for Stiffness, Damping.
+    [ ] Custom Constraint: Pulley.
 
-    [ ] Custom Constraint: Gear Joint:
+    [ ] Chain Tool.
 
-        Implement GeneralizedConstraint trait in Rapier (if supported).
+(Phases 4-6 remain unchanged)
 
-        Constraint Eq: ΔθA​+rΔθB​=0.
-
-        Add Backlash parameter (dead zone before constraint engages).
-
-    [ ] Custom Constraint: Pulley:
-
-        Implement "Rope" logic: Distance(A, AnchorA) + Distance(B, AnchorB) <= Length.
-
-        Visuals: Draw lines from A→AnchorA→AnchorB→B.
-
-        Stretch: Allow wire to wrap around circular obstacles (requires Raycast/ConvexCast wrapping algorithm).
-
-    [ ] Chain Tool:
-
-        Procedural generation: Spawn N small capsule bodies linked by RevoluteJoints.
-
-        Tune SolverIterations (substeps) to preventing chain explosion.
-
-Phase 4: Simulation & Scripting (Months 7–8)
-
-Goal: Fluids, Lasers, and Scripting terminal.
-
-Milestones:
-
-    Fluids: SPH Implementation.
-
-    Optics: Lasers and refraction.
-
-    Scripting: Lua integration.
-
-Tasks:
-
-    [ ] SPH Fluid System (CPU):
-
-        Implement Spatial Hash Grid resource.
-
-        Particle Entity: Position, Velocity, FluidParticle.
-
-        Solver: Density constraint ρi​=∑W(rij​). Pressure force −∇p.
-
-        Coupling: Raycast from particles to Rapier bodies. Apply impulse to body; reflect particle.
-
-    [ ] Laser/Optics System:
-
-        Recursive Raycast system.
-
-        Materials: RefractiveIndex, Reflectivity.
-
-        Visuals: Bloom mesh using bevy_firefly.
-
-    [ ] Scripting Integration:
-
-        Integrate bevy_mod_scripting with Lua.
-
-        Create "Half-Life" style console using bevy_egui.
-
-        Bind Entity queries to Lua (e.g., scene.get("box1").color = "red").
-
-        Implement ScriptComponent that runs on_update(dt) hook.
-
-Phase 5: The "Algodoo" Polish (Months 9–10)
-
-Goal: UI, Plotting, and Quality of Life.
-
-Milestones:
-
-    Material Manager: Grouping attributes.
-
-    Property Inspector: The main UI.
-
-    Graphing: Real-time plots.
-
-Tasks:
-
-    [ ] Inspector UI (bevy_egui):
-
-        Selection-driven panel.
-
-        Reflection-based auto-UI for components (Friction, Restitution, Mass).
-
-        Color picker (rgba).
-
-    [ ] Material Profiles:
-
-        Resource MaterialLibrary (Gold, Ice, Rubber).
-
-        Applying profile batch-updates components on selected entities.
-
-    [ ] Plotting/Tracers:
-
-        Component Tracer { duration, color }.
-
-        System: Record position history, render using bevy_polyline.
-
-        Mini-graph UI: Plot velocity magnitude vs time for selected object.
-
-Phase 6: Extension & Release (Months 11–12)
-
-Goal: Save/Load, Lighting, Optimization.
-
-Milestones:
-
-    Persistence: Serialization.
-
-    Lighting: 2D Shadows.
-
-    Optimization: Multithreading.
-
-Tasks:
-
-    [ ] Save/Load:
-
-        Integrate moonshine_save.
-
-        Serialize Rapier components and Lyon paths to RON.
-
-        Handle Entity ID remapping for Joints.
-
-    [ ] Lighting:
-
-        Integrate bevy_firefly.
-
-        Add ShadowCaster component to all RigidBodies.
-
-    [ ] Fracturing (Beta):
-
-        System: On CollisionEvent, if Impulse > Threshold:
-
-        Trigger Voronoi shatter (using delaunator or similar) -> Replace body with shards.
+## Technical Debt & Issues
+See `TECH_DEBT.md` for detailed analysis of architectural hurdles and known issues.
