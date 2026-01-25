@@ -1,7 +1,7 @@
 //! Shared utilities for tools.
 
 use crate::input::cursor::CursorWorldPos;
-use crate::ui::grid::{GridSettings, snap_to_grid};
+use crate::ui::grid::GridSettings;
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
@@ -82,9 +82,9 @@ pub fn handle_drag_input_logic(
     mouse_pressed: bool,
     mouse_just_released: bool,
     is_pointer_over_ui: bool,
-    grid_settings_show: bool,
-    grid_settings_snap: bool,
-    grid_settings_spacing: f32,
+    _grid_settings_show: bool,
+    _grid_settings_snap: bool,
+    _grid_settings_spacing: f32,
     drag_start: &mut Option<Vec2>,
 ) -> Option<DragResult> {
     // If not dragging, check UI block
@@ -94,10 +94,7 @@ pub fn handle_drag_input_logic(
 
     let raw_pos = cursor_pos?;
 
-    let mut current_pos = raw_pos;
-    if grid_settings_show && grid_settings_snap {
-        current_pos = snap_to_grid(current_pos, grid_settings_spacing);
-    }
+    let current_pos = raw_pos;
 
     // State Transition Logic
     if let Some(start) = *drag_start {
@@ -165,7 +162,7 @@ pub fn handle_drag_input(
         mouse.just_released(MouseButton::Left),
         is_over_ui,
         grid_settings.show,
-        grid_settings.snap,
+        grid_settings.snap_to_grid,
         grid_settings.spacing,
         drag_start,
     )
@@ -251,14 +248,14 @@ mod tests {
         Some(Vec2::new(10.2, 10.8)),
         true, false, false,
         false,
-        true, true, 1.0, // Snap enabled, spacing 1.0
+        true, true, 1.0, // Snap enabled (but ignored now)
         None,
         Some(DragResult {
-            start: Vec2::new(10.0, 11.0), // Snapped
-            current: Vec2::new(10.0, 11.0),
+            start: Vec2::new(10.2, 10.8), // Not Snapped
+            current: Vec2::new(10.2, 10.8),
             status: DragStatus::Started
         }),
-        Some(Vec2::new(10.0, 11.0))
+        Some(Vec2::new(10.2, 10.8))
     )]
     fn test_handle_drag_input_logic(
         #[case] cursor_pos: Option<Vec2>,

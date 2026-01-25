@@ -30,7 +30,9 @@ impl Plugin for InputPlugin {
 
         // Cursor
         app.init_resource::<cursor::CursorWorldPos>();
+        app.init_resource::<cursor::SnappingStatus>();
         app.add_systems(PreUpdate, cursor::update_cursor_pos);
+        app.add_systems(Update, cursor::draw_snap_indicators);
 
         // Camera Controller
         app.add_plugins(camera_controller::CameraControllerPlugin);

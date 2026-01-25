@@ -7,7 +7,7 @@ use crate::input::commands::{CommandStack, SpawnPolygonCommand};
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
-use crate::ui::grid::{GridSettings, snap_to_grid};
+use crate::ui::grid::GridSettings;
 use bevy_egui::EguiContexts;
 
 /// Action returned by the polygon tool input logic.
@@ -36,17 +36,14 @@ pub fn handle_polygon_input_logic(
     cursor_pos: Option<Vec2>,
     mouse_just_pressed: bool,
     enter_just_pressed: bool,
-    grid_show: bool,
-    grid_snap: bool,
-    grid_spacing: f32,
+    _grid_show: bool,
+    _grid_snap: bool,
+    _grid_spacing: f32,
     points: &[Vec2],
 ) -> Option<PolygonInputResult> {
     let raw_pos = cursor_pos?;
 
-    let mut current_pos = raw_pos;
-    if grid_show && grid_snap {
-        current_pos = snap_to_grid(current_pos, grid_spacing);
-    }
+    let current_pos = raw_pos;
 
     let mut action = PolygonToolAction::None;
 
@@ -118,7 +115,7 @@ fn polygon_tool_update(
         mouse.just_pressed(MouseButton::Left),
         keys.just_pressed(KeyCode::Enter),
         grid_settings.show,
-        grid_settings.snap,
+        grid_settings.snap_to_grid,
         grid_settings.spacing,
         &data.points,
     ) else {
@@ -252,11 +249,11 @@ mod tests {
     #[case(
         Some(Vec2::new(10.2, 10.8)),
         true, false,
-        true, true, 1.0, // Snap enabled
+        true, true, 1.0, // Snap enabled (but ignored in function now)
         vec![],
         Some(PolygonInputResult {
-            snapped_cursor: Vec2::new(10.0, 11.0), // Snapped
-            action: PolygonToolAction::AddPoint(Vec2::new(10.0, 11.0))
+            snapped_cursor: Vec2::new(10.2, 10.8), // Not Snapped by function
+            action: PolygonToolAction::AddPoint(Vec2::new(10.2, 10.8))
         })
     )]
     fn test_handle_polygon_input_logic(

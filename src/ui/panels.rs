@@ -124,7 +124,6 @@ fn top_panel_ui(
 
     let play_icon = contexts.add_image(game_icons.play.clone_weak());
     let pause_icon = contexts.add_image(game_icons.pause.clone_weak());
-    let snap_icon = contexts.add_image(game_icons.snap.clone_weak());
 
     let ctx = contexts.ctx_mut();
 
@@ -153,22 +152,34 @@ fn top_panel_ui(
             ui.separator();
             ui.checkbox(&mut grid_settings.show, "Grid");
             if grid_settings.show {
-                if ui
-                    .add(
-                        egui::ImageButton::new((snap_icon, egui::Vec2::new(24.0, 24.0)))
-                            .selected(grid_settings.snap),
-                    )
-                    .on_hover_text("Snap to Grid")
-                    .clicked()
-                {
-                    grid_settings.snap = !grid_settings.snap;
+                ui.checkbox(&mut grid_settings.auto_spacing, "Auto");
+                if !grid_settings.auto_spacing {
+                    ui.add(
+                        egui::DragValue::new(&mut grid_settings.spacing)
+                            .speed(0.1)
+                            .range(0.1..=100.0)
+                            .prefix("Spc: "),
+                    );
                 }
-                ui.add(
-                    egui::DragValue::new(&mut grid_settings.spacing)
-                        .speed(0.1)
-                        .range(0.1..=100.0)
-                        .prefix("Spacing: "),
-                );
+
+                ui.separator();
+
+                // Toggle Grid Snap
+                ui.checkbox(&mut grid_settings.snap_to_grid, "Snap Grid");
+
+                // Toggle Object Snap
+                ui.checkbox(&mut grid_settings.snap_to_objects, "Snap Obj");
+
+                if grid_settings.snap_to_objects {
+                     ui.menu_button("...", |ui| {
+                        ui.label("Object Snap Options");
+                        ui.checkbox(&mut grid_settings.snap_to_object_centers, "Centers");
+                        ui.checkbox(&mut grid_settings.snap_to_object_edges, "Edges");
+                        ui.checkbox(&mut grid_settings.snap_to_object_midpoints, "Midpoints");
+                        ui.separator();
+                        ui.add(egui::DragValue::new(&mut grid_settings.snap_distance).speed(0.1).range(0.01..=10.0).prefix("Dist: "));
+                    });
+                }
             }
         });
     });
