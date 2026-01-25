@@ -250,6 +250,8 @@ fn select_tool_update(
                 let mut new_selection = Vec::new();
                 let mut group_map = std::collections::HashMap::new();
 
+                data.initial_positions.clear();
+
                 for &old_entity in &selection.0 {
                     if let Ok((
                         t,
@@ -310,7 +312,11 @@ fn select_tool_update(
                         // Disable sleeping so it can move
                         builder.insert(Sleeping::disabled());
 
-                        new_selection.push(builder.id());
+                        let new_id = builder.id();
+                        new_selection.push(new_id);
+
+                        // Populate initial_positions directly with the new ID and the original position
+                        data.initial_positions.push((new_id, t.translation.truncate()));
                     }
                 }
 
@@ -321,11 +327,14 @@ fn select_tool_update(
                     }
                     info!("Duplicated {} entities", selection.0.len());
                     did_copy = true;
+                    // We already populated initial_positions and set is_moving will be set below
                 }
             }
 
             // Initiate Move for all selected
-            if did_copy || selection.0.contains(&entity) {
+            if did_copy {
+                 data.is_moving = true;
+            } else if selection.0.contains(&entity) {
                 data.is_moving = true;
                 data.initial_positions.clear();
                 let q0 = queries.p0();
