@@ -4,3 +4,4 @@
 
 pub use bevy::prelude::*;
 pub use bevy_rapier2d::prelude::*;
+pub use bevy_rapier2d::prelude::Real;
