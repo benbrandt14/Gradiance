@@ -19,6 +19,8 @@ pub enum SnapSource {
     ObjectEdge,
     /// Snapped to the midpoint of an object's edge.
     ObjectMidpoint,
+    /// Snapped to the corner of an object.
+    ObjectCorner,
 }
 
 /// Resource to track the snapping status of the cursor.
@@ -76,8 +78,8 @@ where
                         }
                     }
 
-                    // Edge/Midpoint Snap
-                    if grid_settings.snap_to_object_edges || grid_settings.snap_to_object_midpoints {
+                    // Corner/Edge/Midpoint Snap
+                    if grid_settings.snap_to_object_edges || grid_settings.snap_to_object_midpoints || grid_settings.snap_to_object_corners {
 
                          let transform_iso = Isometry::new(
                              Vector::new(transform.translation().x, transform.translation().y),
@@ -112,6 +114,40 @@ where
                                      best_snap_pos = world_pt;
                                      snapped = true;
                                      snap_source = Some(SnapSource::ObjectMidpoint);
+                                 }
+                             }
+                         }
+
+                         // Corner Snap (Vertices)
+                         // Prioritize Corners over Edges by checking them first (same priority level as Midpoints)
+                         if grid_settings.snap_to_object_corners {
+                             let candidates = match collider.raw.as_typed_shape() {
+                                 TypedShape::Cuboid(c) => {
+                                     let hx = c.half_extents.x;
+                                     let hy = c.half_extents.y;
+                                     vec![
+                                         Point::new(hx, hy), Point::new(hx, -hy),
+                                         Point::new(-hx, hy), Point::new(-hx, -hy)
+                                     ]
+                                 },
+                                 TypedShape::Segment(s) => {
+                                     vec![Point::from(s.a.coords), Point::from(s.b.coords)]
+                                 },
+                                 TypedShape::Triangle(t) => {
+                                     vec![Point::from(t.a.coords), Point::from(t.b.coords), Point::from(t.c.coords)]
+                                 },
+                                 _ => vec![]
+                             };
+
+                             for local_pt in candidates {
+                                 let world_pt_na = transform_iso.transform_point(&local_pt);
+                                 let world_pt = Vec2::new(world_pt_na.x, world_pt_na.y);
+                                 let d2 = world_pt.distance_squared(raw_pos);
+                                 if d2 < best_snap_dist_sq {
+                                     best_snap_dist_sq = d2;
+                                     best_snap_pos = world_pt;
+                                     snapped = true;
+                                     snap_source = Some(SnapSource::ObjectCorner);
                                  }
                              }
                          }
