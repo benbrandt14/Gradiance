@@ -415,27 +415,18 @@ fn select_tool_update(
 
     if mouse.pressed(MouseButton::Right) && data.is_rotating {
         let delta = current_pos - data.rotate_start_pos;
-        // Sensitivity: 100 pixels = 1 radian approx? Or just delta.y
-        let angle_delta = delta.y * 0.01;
 
         let mut q0 = queries.p0();
         for (entity, initial_rot, initial_pos) in &data.initial_rotations {
             if let Ok((_, mut t, _)) = q0.get_mut(*entity) {
-                // Rotate rotation
-                let new_rot = initial_rot + angle_delta;
-                t.rotation = Quat::from_rotation_z(new_rot);
-
-                // Rotate position around centroid
-                let relative = *initial_pos - data.rotation_centroid;
-                // Rotate vector
-                let cos = angle_delta.cos();
-                let sin = angle_delta.sin();
-                let rotated_rel = Vec2::new(
-                    relative.x * cos - relative.y * sin,
-                    relative.x * sin + relative.y * cos,
+                let (new_pos, new_rot) = calculate_rotation_update(
+                    *initial_pos,
+                    *initial_rot,
+                    data.rotation_centroid,
+                    delta,
                 );
 
-                let new_pos = data.rotation_centroid + rotated_rel;
+                t.rotation = Quat::from_rotation_z(new_rot);
                 t.translation.x = new_pos.x;
                 t.translation.y = new_pos.y;
             }
@@ -452,10 +443,33 @@ fn is_point_in_box(point: Vec2, min: Vec2, max: Vec2) -> bool {
     point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y
 }
 
+fn calculate_rotation_update(
+    initial_pos: Vec2,
+    initial_rot: f32,
+    centroid: Vec2,
+    delta: Vec2, // Mouse movement from start
+) -> (Vec2, f32) {
+    // Sensitivity: 100 pixels = 1 radian
+    let angle_delta = delta.y * 0.01;
+    let new_rot = initial_rot + angle_delta;
+
+    let relative = initial_pos - centroid;
+    let cos = angle_delta.cos();
+    let sin = angle_delta.sin();
+    let rotated_rel = Vec2::new(
+        relative.x * cos - relative.y * sin,
+        relative.x * sin + relative.y * cos,
+    );
+    let new_pos = centroid + rotated_rel;
+
+    (new_pos, new_rot)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
+    use std::f32::consts::PI;
 
     #[rstest]
     #[case(Vec2::ZERO, Vec2::new(10.0, 10.0), Vec2::new(5.0, 5.0), true)]
@@ -516,5 +530,38 @@ mod tests {
         #[case] expected: std::cmp::Ordering,
     ) {
         assert_eq!(compare_hits(&a, &b), expected);
+    }
+
+    #[rstest]
+    fn test_calculate_rotation_update_no_movement() {
+        let initial_pos = Vec2::new(10.0, 0.0);
+        let initial_rot = 0.0;
+        let centroid = Vec2::ZERO;
+        let delta = Vec2::ZERO;
+
+        let (pos, rot) = calculate_rotation_update(initial_pos, initial_rot, centroid, delta);
+
+        assert_eq!(pos, initial_pos);
+        assert_eq!(rot, initial_rot);
+    }
+
+    #[rstest]
+    fn test_calculate_rotation_update_90_degrees() {
+        let initial_pos = Vec2::new(10.0, 0.0);
+        let initial_rot = 0.0;
+        let centroid = Vec2::ZERO;
+
+        // We want rotation of PI/2. Sensitivity is 0.01 per pixel y.
+        // delta.y * 0.01 = PI/2 => delta.y = PI/2 / 0.01 = 50PI approx 157.08
+        let delta = Vec2::new(0.0, PI / 2.0 * 100.0);
+
+        let (pos, rot) = calculate_rotation_update(initial_pos, initial_rot, centroid, delta);
+
+        // Expected rotation: PI/2
+        assert!((rot - PI/2.0).abs() < 1e-5);
+
+        // Expected pos: (0, 10)
+        assert!((pos.x - 0.0).abs() < 1e-5);
+        assert!((pos.y - 10.0).abs() < 1e-5);
     }
 }
