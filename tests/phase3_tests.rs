@@ -19,6 +19,7 @@ use gradiance::input::tools::connector::{Connector, ConnectorToolPlugin};
 use gradiance::input::tools::drag_tool::DragToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
+use gradiance::input::shortcuts::ShortcutsPlugin;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
 use rstest::{fixture, rstest};
@@ -56,6 +57,7 @@ fn app() -> App {
     app.add_plugins(SelectionPlugin); // Added
     app.add_plugins(ConnectorToolPlugin);
     app.add_plugins(DragToolPlugin);
+    app.add_plugins(ShortcutsPlugin);
 
     app.init_state::<ToolState>();
     app.init_resource::<CursorWorldPos>();
@@ -192,6 +194,7 @@ fn test_ctrl_drag_copy(mut app: App) {
         GlobalTransform::default(),
         EditableBox { width: 2.0, height: 2.0 },
         Name::new("Original"),
+        GravityScale(0.0),
     )).id();
 
     app.update();

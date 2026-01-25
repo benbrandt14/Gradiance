@@ -12,6 +12,22 @@ use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy_egui::EguiContexts;
+use bevy::ecs::system::SystemParam;
+
+/// Auxiliary queries used by the select tool.
+#[derive(SystemParam)]
+pub struct AuxQueries<'w, 's> {
+    /// Selectable entities.
+    pub selectable: Query<'w, 's, (Entity, &'static GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
+    /// Connectors.
+    pub connector: Query<'w, 's, &'static Connector>,
+    /// Selection groups.
+    pub group: Query<'w, 's, (Entity, &'static SelectionGroup)>,
+    /// Drag preview entities.
+    pub drag_preview: Query<'w, 's, (Entity, &'static DragPreview)>,
+    /// Mesh and Material.
+    pub mesh: Query<'w, 's, (Option<&'static Mesh3d>, Option<&'static MeshMaterial3d<StandardMaterial>>)>,
+}
 
 /// Information needed to sort hits for selection.
 #[derive(Debug, PartialEq)]
@@ -51,26 +67,43 @@ impl Plugin for SelectToolPlugin {
         app.init_resource::<SelectToolData>();
         app.add_systems(
             Update,
-            select_tool_update.run_if(in_state(ToolState::Select)),
+            select_tool_update
+                .run_if(in_state(ToolState::Select))
+                .before(crate::input::camera_controller::camera_pan),
         );
         app.add_systems(OnExit(ToolState::Select), select_tool_reset);
     }
 }
 
-#[derive(Resource, Default)]
-struct SelectToolData {
-    drag_start: Option<Vec2>,
-    is_moving: bool,
-    // Store offsets for multiple entities
-    // Map Entity -> Initial Vec2
-    initial_positions: Vec<(Entity, Vec2)>,
-    drag_start_pos: Vec2,
+/// Component marking an entity as a preview during drag (copy operation).
+#[derive(Component)]
+pub struct DragPreview {
+    /// The original RigidBody component (to restore after drag).
+    pub original_rb: Option<RigidBody>,
+    /// Whether the entity was a sensor before drag.
+    pub was_sensor: bool,
+}
 
-    // Rotation
-    is_rotating: bool,
-    rotate_start_pos: Vec2,
-    initial_rotations: Vec<(Entity, f32, Vec2)>, // Entity, Rotation, Position
-    rotation_centroid: Vec2,
+/// Runtime data for the Select Tool.
+#[derive(Resource, Default)]
+pub struct SelectToolData {
+    /// Start position of the drag box.
+    pub drag_start: Option<Vec2>,
+    /// Whether entities are being moved.
+    pub is_moving: bool,
+    /// Store offsets for multiple entities: Map Entity -> Initial Vec2
+    pub initial_positions: Vec<(Entity, Vec2)>,
+    /// Start position of the drag move.
+    pub drag_start_pos: Vec2,
+
+    /// Whether entities are being rotated.
+    pub is_rotating: bool,
+    /// Start position of the rotation drag.
+    pub rotate_start_pos: Vec2,
+    /// Initial rotations and positions: Entity, Rotation, Position
+    pub initial_rotations: Vec<(Entity, f32, Vec2)>,
+    /// Centroid of the rotation.
+    pub rotation_centroid: Vec2,
 }
 
 fn select_tool_reset(mut data: ResMut<SelectToolData>) {
@@ -106,10 +139,7 @@ fn select_tool_update(
             Option<&SelectionGroup>,
         )>,
     )>,
-    // Add query for box selection fallback
-    selectable_query: Query<(Entity, &GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
-    connector_query: Query<&Connector>,
-    group_query: Query<(Entity, &SelectionGroup)>,
+    aux: AuxQueries,
     grid_settings: Res<GridSettings>,
     mut next_group_id: ResMut<NextGroupID>,
     mut commands: Commands,
@@ -130,27 +160,6 @@ fn select_tool_update(
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
 
-    // Select All
-    if ctrl && keys.just_pressed(KeyCode::KeyA) {
-        if !shift {
-            selection.clear();
-        }
-        let mut count = 0;
-        for (entity, _) in &selectable_query {
-            let is_connector = connector_query.contains(entity);
-            let pass = match *selection_filter {
-                SelectionFilter::All => true,
-                SelectionFilter::Shapes => !is_connector,
-                SelectionFilter::Joints => is_connector,
-            };
-            if pass {
-                selection.add(entity);
-                count += 1;
-            }
-        }
-        info!("Select All: Selected {} entities", count);
-    }
-
     if mouse.just_pressed(MouseButton::Left) {
         data.drag_start_pos = current_pos;
 
@@ -162,7 +171,7 @@ fn select_tool_update(
         // Collect all hits
         let mut hits = Vec::new();
         rapier_context.intersections_with_point(current_pos, filter, |entity| {
-            let is_connector = connector_query.contains(entity);
+            let is_connector = aux.connector.contains(entity);
             let pass = match *selection_filter {
                 SelectionFilter::All => true,
                 SelectionFilter::Shapes => !is_connector,
@@ -199,8 +208,8 @@ fn select_tool_update(
 
             // Group Logic
             let mut entities_to_select = Vec::new();
-            if let Ok((_, group_id)) = group_query.get(entity) {
-                for (e, g) in &group_query {
+            if let Ok((_, group_id)) = aux.group.get(entity) {
+                for (e, g) in &aux.group {
                     if g == group_id {
                         entities_to_select.push(e);
                     }
@@ -233,11 +242,15 @@ fn select_tool_update(
                 }
             }
 
+            let mut did_copy = false;
+
             // Copy on Drag
             if ctrl && selection.0.contains(&entity) {
                 // Duplicate selected entities
                 let mut new_selection = Vec::new();
                 let mut group_map = std::collections::HashMap::new();
+
+                data.initial_positions.clear();
 
                 for &old_entity in &selection.0 {
                     if let Ok((
@@ -273,6 +286,11 @@ fn select_tool_update(
                         if let Some(c) = locked { builder.insert(*c); }
                         if let Some(_) = sensor { builder.insert(Sensor); }
 
+                        if let Ok((mesh, material)) = aux.mesh.get(old_entity) {
+                            if let Some(c) = mesh { builder.insert(c.clone()); }
+                            if let Some(c) = material { builder.insert(c.clone()); }
+                        }
+
                         // Group Logic
                         if let Some(g) = group {
                              let new_id = *group_map.entry(g.0).or_insert_with(|| {
@@ -283,10 +301,22 @@ fn select_tool_update(
                              builder.insert(SelectionGroup(new_id));
                         }
 
+                        // Drag Preview: Set as Kinematic and Sensor to prevent interaction during drag
+                        builder.insert(DragPreview {
+                            original_rb: rb.copied(),
+                            was_sensor: sensor.is_some(),
+                        });
+                        builder.insert(RigidBody::KinematicPositionBased);
+                        builder.insert(Sensor);
+
                         // Disable sleeping so it can move
                         builder.insert(Sleeping::disabled());
 
-                        new_selection.push(builder.id());
+                        let new_id = builder.id();
+                        new_selection.push(new_id);
+
+                        // Populate initial_positions directly with the new ID and the original position
+                        data.initial_positions.push((new_id, t.translation.truncate()));
                     }
                 }
 
@@ -296,11 +326,15 @@ fn select_tool_update(
                         selection.add(e);
                     }
                     info!("Duplicated {} entities", selection.0.len());
+                    did_copy = true;
+                    // We already populated initial_positions and set is_moving will be set below
                 }
             }
 
             // Initiate Move for all selected
-            if selection.0.contains(&entity) {
+            if did_copy {
+                 data.is_moving = true;
+            } else if selection.0.contains(&entity) {
                 data.is_moving = true;
                 data.initial_positions.clear();
                 let q0 = queries.p0();
@@ -364,7 +398,7 @@ fn select_tool_update(
             if size.x > 0.1 && size.y > 0.1 {
                 let mut count = 0;
                 // Manual AABB check against all selectable entities
-                for (entity, global_transform) in &selectable_query {
+                for (entity, global_transform) in &aux.selectable {
                     let t = global_transform.translation().truncate();
                     if is_point_in_box(t, min, max) {
                         // Insert directly to avoid spamming "Added entity" logs
@@ -381,6 +415,22 @@ fn select_tool_update(
 
         if data.is_moving {
             info!("Select Tool: Moved {} entities", selection.0.len());
+
+            // Restore DragPreview entities (copied objects)
+            for (entity, preview) in &aux.drag_preview {
+                if let Some(rb) = preview.original_rb {
+                    commands.entity(entity).insert(rb);
+                } else {
+                    commands.entity(entity).remove::<RigidBody>();
+                }
+
+                if !preview.was_sensor {
+                    commands.entity(entity).remove::<Sensor>();
+                }
+
+                commands.entity(entity).remove::<DragPreview>();
+                commands.entity(entity).insert(Sleeping::disabled());
+            }
         }
 
         data.is_moving = false;
@@ -390,26 +440,42 @@ fn select_tool_update(
 
     // Right Click Rotation
     if mouse.just_pressed(MouseButton::Right) && !selection.0.is_empty() {
-        data.is_rotating = true;
-        data.rotate_start_pos = current_pos;
-        data.initial_rotations.clear();
-
-        let mut centroid = Vec2::ZERO;
-        let mut count = 0.0;
-        let q0 = queries.p0();
-
-        for &entity in &selection.0 {
-            if let Ok((_, t, _)) = q0.get(entity) {
-                let rot = t.rotation.to_euler(EulerRot::XYZ).2;
-                let pos = t.translation.truncate();
-                data.initial_rotations.push((entity, rot, pos));
-                centroid += pos;
-                count += 1.0;
-            }
+        // Only start rotation if cursor is over a selected entity
+        let mut pointer_over_selection = false;
+        if let Some(rapier_context) = rapier_context_query.iter().next() {
+            let filter = QueryFilter::default().exclude_sensors();
+             rapier_context.intersections_with_point(current_pos, filter, |entity| {
+                if selection.0.contains(&entity) {
+                    pointer_over_selection = true;
+                    false // Stop search
+                } else {
+                    true
+                }
+            });
         }
 
-        if count > 0.0 {
-            data.rotation_centroid = centroid / count;
+        if pointer_over_selection {
+            data.is_rotating = true;
+            data.rotate_start_pos = current_pos;
+            data.initial_rotations.clear();
+
+            let mut centroid = Vec2::ZERO;
+            let mut count = 0.0;
+            let q0 = queries.p0();
+
+            for &entity in &selection.0 {
+                if let Ok((_, t, _)) = q0.get(entity) {
+                    let rot = t.rotation.to_euler(EulerRot::XYZ).2;
+                    let pos = t.translation.truncate();
+                    data.initial_rotations.push((entity, rot, pos));
+                    centroid += pos;
+                    count += 1.0;
+                }
+            }
+
+            if count > 0.0 {
+                data.rotation_centroid = centroid / count;
+            }
         }
     }
 

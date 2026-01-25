@@ -13,6 +13,8 @@ pub mod commands;
 pub mod cursor;
 pub mod editable;
 pub mod selection;
+/// Global shortcuts.
+pub mod shortcuts;
 pub mod tools;
 
 /// Plugin for Input and Tools.
@@ -45,17 +47,17 @@ impl Plugin for InputPlugin {
         // Tools
         app.add_plugins(tools::ToolsPlugin);
 
+        // Shortcuts
+        app.add_plugins(shortcuts::ShortcutsPlugin);
+
         // Editable shapes
         app.add_plugins(editable::EditablePlugin);
 
         // Z-Index management
         app.init_resource::<ZIndex>();
 
-        // Global shortcuts
-        app.add_systems(
-            Update,
-            (toggle_pause, handle_undo_redo_input, log_tool_transitions),
-        );
+        // Debug
+        app.add_systems(Update, log_tool_transitions);
     }
 }
 
@@ -64,39 +66,6 @@ fn log_tool_transitions(mut events: EventReader<StateTransitionEvent<ToolState>>
         if let Some(state) = event.entered {
             info!("Tool Changed to: {:?}", state);
         }
-    }
-}
-
-fn handle_undo_redo_input(world: &mut World) {
-    let mut undo = false;
-    let mut redo = false;
-
-    if let Some(keys) = world.get_resource::<ButtonInput<KeyCode>>() {
-        let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
-        let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-
-        if ctrl && keys.just_pressed(KeyCode::KeyZ) {
-            if shift {
-                redo = true;
-            } else {
-                undo = true;
-            }
-        }
-        if ctrl && keys.just_pressed(KeyCode::KeyY) {
-            redo = true;
-        }
-    }
-
-    if undo {
-        world.resource_scope(|world, mut stack: Mut<commands::CommandStack>| {
-            stack.undo(world);
-        });
-    }
-
-    if redo {
-        world.resource_scope(|world, mut stack: Mut<commands::CommandStack>| {
-            stack.redo(world);
-        });
     }
 }
 
@@ -109,16 +78,6 @@ impl ZIndex {
     pub fn next(&mut self) -> f32 {
         self.0 += 0.001;
         self.0
-    }
-}
-
-fn toggle_pause(keys: Res<ButtonInput<KeyCode>>, mut virtual_time: ResMut<Time<Virtual>>) {
-    if keys.just_pressed(KeyCode::Space) {
-        if virtual_time.is_paused() {
-            virtual_time.unpause();
-        } else {
-            virtual_time.pause();
-        }
     }
 }
 

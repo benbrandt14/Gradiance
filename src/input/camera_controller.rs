@@ -4,6 +4,7 @@
 
 use crate::prelude::*;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
+use crate::input::tools::select_tool::SelectToolData;
 
 /// Plugin for camera control.
 pub struct CameraControllerPlugin;
@@ -14,14 +15,25 @@ impl Plugin for CameraControllerPlugin {
     }
 }
 
-fn camera_pan(
+/// Pans the camera when Right or Middle mouse button is dragged.
+pub fn camera_pan(
     mut query: Query<(&mut Transform, &Camera), With<Camera2d>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
+    select_tool_data: Option<Res<SelectToolData>>,
 ) {
     // Check if Right or Middle mouse button is held
     if !mouse_buttons.pressed(MouseButton::Right) && !mouse_buttons.pressed(MouseButton::Middle) {
         return;
+    }
+
+    // If rotating with Select Tool, ignore Right Click panning
+    if mouse_buttons.pressed(MouseButton::Right) {
+        if let Some(data) = &select_tool_data {
+            if data.is_rotating {
+                return;
+            }
+        }
     }
 
     let delta = mouse_motion.delta;
