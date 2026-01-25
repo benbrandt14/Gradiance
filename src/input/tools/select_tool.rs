@@ -463,6 +463,8 @@ fn select_tool_update(
 
                 commands.entity(entity).remove::<DragPreview>();
                 commands.entity(entity).insert(Sleeping::disabled());
+                // Reset velocity to avoid flinging due to kinematic-to-dynamic transition
+                commands.entity(entity).insert(Velocity::zero());
             }
         }
 
