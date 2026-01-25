@@ -431,6 +431,10 @@ impl GameCommand for SpawnJointCommand {
             .local_anchor2(local_anchor_2);
 
         // Attach ImpulseJoint to entity_a
+        // TODO: Implement CollisionGroups/Filtering.
+        // Currently, the pin entity (target_entity) is a rigid body that collides with everything.
+        // If entity_a overlaps with it (which it must to be pinned), Rapier may cause explosions.
+        // We need to disable collisions between entity_a and target_entity.
         world
             .entity_mut(self.entity_a)
             .insert(ImpulseJoint::new(target_entity, joint_data));
