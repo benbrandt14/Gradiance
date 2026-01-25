@@ -29,6 +29,17 @@ fn ground_tool_reset(mut data: ResMut<GroundToolData>) {
     data.drag_start = None;
 }
 
+fn calculate_ground_geometry(start: Vec2, current: Vec2) -> (Vec2, f32) {
+    let center = (start + current) / 2.0;
+    let mut diff = current - start;
+    // If dragging is too short, default to horizontal (length 1.0 to right)
+    if diff.length_squared() < 0.1 {
+        diff = Vec2::new(1.0, 0.0);
+    }
+    let rotation = diff.to_angle();
+    (center, rotation)
+}
+
 fn ground_tool_update(
     mut commands: Commands,
     mut data: ResMut<GroundToolData>,
@@ -60,18 +71,7 @@ fn ground_tool_update(
             gizmos.line_2d(mid, mid + normal, Color::srgb(0.5, 0.5, 0.5));
         }
         DragStatus::Finished => {
-            let start = drag.start;
-            let current = drag.current;
-
-            // Calculate vector
-            let mut diff = current - start;
-            // If dragging is too short, default to horizontal (length 1.0 to right)
-            if diff.length_squared() < 0.1 {
-                diff = Vec2::new(1.0, 0.0);
-            }
-
-            let rotation = diff.to_angle();
-            let center = (start + current) / 2.0;
+            let (center, rotation) = calculate_ground_geometry(drag.start, drag.current);
 
             let cmd = SpawnGroundCommand {
                 position: center,
@@ -86,5 +86,39 @@ fn ground_tool_update(
             });
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+    use std::f32::consts::PI;
+
+    #[rstest]
+    #[case(Vec2::ZERO, Vec2::new(2.0, 0.0), Vec2::new(1.0, 0.0), 0.0)]
+    #[case(Vec2::ZERO, Vec2::new(0.0, 2.0), Vec2::new(0.0, 1.0), PI / 2.0)]
+    #[case(Vec2::new(-1.0, 0.0), Vec2::new(1.0, 0.0), Vec2::ZERO, 0.0)]
+    fn test_calculate_ground_geometry(
+        #[case] start: Vec2,
+        #[case] current: Vec2,
+        #[case] expected_center: Vec2,
+        #[case] expected_rotation: f32,
+    ) {
+        let (center, rotation) = calculate_ground_geometry(start, current);
+        assert_eq!(center, expected_center);
+        assert!((rotation - expected_rotation).abs() < 1e-5);
+    }
+
+    #[rstest]
+    fn test_calculate_ground_geometry_short_drag() {
+        let start = Vec2::ZERO;
+        let current = Vec2::new(0.01, 0.0); // Very short drag
+        let (center, rotation) = calculate_ground_geometry(start, current);
+
+        // Center should still be midpoint
+        assert_eq!(center, Vec2::new(0.005, 0.0));
+        // Rotation should default to 0.0 (horizontal) because drag was too short
+        assert_eq!(rotation, 0.0);
     }
 }
