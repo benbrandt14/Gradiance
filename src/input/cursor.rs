@@ -121,7 +121,7 @@ pub fn draw_snap_indicators(
         1.0
     };
 
-    let radius = 5.0 * scale * 0.01;
+    let radius = 5.0 * scale;
 
     gizmos.circle_2d(pos, radius, color);
 

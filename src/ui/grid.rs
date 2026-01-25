@@ -195,12 +195,12 @@ fn draw_rectangular_grid(
     // Draw minor lines (faint)
     if minor_spacing > 0.001 {
         // Increased alpha from 0.05 to 0.1 for better visibility
-        draw_lines(minor_spacing, 0.1, gizmos);
+        draw_lines(minor_spacing, 0.2, gizmos);
     }
 
     // Draw major lines (stronger)
     // Increased alpha from 0.15 to 0.3
-    draw_lines(major_spacing, 0.3, gizmos);
+    draw_lines(major_spacing, 0.5, gizmos);
 }
 
 #[cfg(test)]
