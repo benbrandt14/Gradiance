@@ -76,9 +76,9 @@ fn my_tool_update(
 }
 ```
 
-### 3. Rendering (Bevy Prototype Lyon - Disabled)
-*   **Status**: `bevy_prototype_lyon` is currently **disabled** due to compatibility issues with Bevy 0.15.3.
-*   **Workaround**: Use `Sprite` components or Bevy `Gizmos` for visualization until this is resolved.
+### 3. Rendering
+*   **Status**: `bevy_prototype_lyon` 0.13.0 is compatible with Bevy 0.15 and enabled.
+*   **Note**: Vector rendering can be performance intensive. Consider `bevy_vello` for future high-performance needs.
 
 ## Future Roadmap (Design Goals)
 
