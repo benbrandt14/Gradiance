@@ -3,7 +3,7 @@
 This project, **Gradiance**, is a modern rewrite of the classic physics sandbox **Algodoo**, built with **Rust** and the **Bevy** game engine.
 
 ## Core Directives
-
+0.  Use the RUST_GUIDELINES.md to structure code using best practices.
 1.  **Modern Algodoo Rewrite**: The ultimate goal is to replicate and improve upon Algodoo's features (lasers, thrusters, CSG, scripting) in a modern engine.
 2.  **Test-Driven Development (TDD)**:
     *   **Tests First**: Whenever possible, write unit tests for logic before implementing the feature.
