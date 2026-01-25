@@ -1,136 +1,17 @@
-use bevy::asset::AssetEvent;
-use bevy::gizmos::GizmoPlugin;
-use bevy::input::InputPlugin as BevyInputPlugin;
 use bevy::prelude::*;
-use bevy::state::app::StatesPlugin;
-use bevy::window::{PrimaryWindow, WindowCreated, WindowResized, WindowScaleFactorChanged};
-
-use bevy_egui::EguiUserTextures;
-use bevy_prototype_lyon::plugin::ShapePlugin;
 use gradiance::input::ToolState;
-use gradiance::input::ZIndex;
 use gradiance::input::commands::CommandStack;
-use gradiance::input::cursor::CursorWorldPos;
 use gradiance::input::editable::{EditableBox, EditableCircle};
-use gradiance::input::selection::{NextGroupID, Selection, SelectionFilter};
-use gradiance::input::tools::box_tool::BoxToolPlugin;
-use gradiance::input::tools::circle_tool::CircleToolPlugin;
-use gradiance::input::tools::connector::ConnectorToolPlugin;
-use gradiance::input::tools::drag_tool::DragToolPlugin;
-use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
-use gradiance::input::tools::select_tool::SelectToolPlugin;
-use gradiance::prelude::*;
-use gradiance::ui::grid::GridSettings;
+use gradiance::input::selection::Selection;
+use bevy_rapier2d::prelude::*;
 use rstest::{fixture, rstest};
+
+mod test_utils;
+use test_utils::*;
 
 #[fixture]
 fn app() -> App {
-    let mut app = App::new();
-
-    // Core plugins
-    app.add_plugins(MinimalPlugins);
-    app.add_plugins(AssetPlugin::default());
-    app.add_plugins(bevy::hierarchy::HierarchyPlugin);
-    app.add_plugins(TransformPlugin);
-    app.add_plugins(StatesPlugin);
-    app.add_plugins(BevyInputPlugin);
-    // WindowPlugin is NOT added to avoid Winit/Window creation issues in headless env.
-
-    // Physics
-    app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
-
-    // Manual resource initialization for headless plugins
-    app.init_resource::<Assets<Shader>>();
-    app.init_resource::<Assets<Mesh>>();
-    app.init_resource::<Assets<Image>>();
-    app.init_resource::<Assets<ColorMaterial>>();
-
-    app.init_resource::<EguiUserTextures>();
-    app.init_resource::<Events<bevy::picking::backend::PointerHits>>();
-
-    // Manually init Window events
-    app.init_resource::<Events<WindowScaleFactorChanged>>();
-    app.init_resource::<Events<WindowResized>>();
-    app.init_resource::<Events<WindowCreated>>();
-    app.init_resource::<Events<AssetEvent<Image>>>();
-
-    // Plugins that rely on Render/Assets/Window but can run headless if resources exist
-    app.add_plugins(GizmoPlugin);
-    app.add_plugins(ShapePlugin);
-
-    // Tools
-    app.add_plugins(BoxToolPlugin);
-    app.add_plugins(CircleToolPlugin);
-    app.add_plugins(PolygonToolPlugin);
-    app.add_plugins(SelectToolPlugin);
-    app.add_plugins(ConnectorToolPlugin);
-    app.add_plugins(DragToolPlugin);
-
-    // Initial State
-    app.init_state::<ToolState>();
-
-    // Resources
-    app.init_resource::<CursorWorldPos>();
-    app.init_resource::<CommandStack>();
-    app.init_resource::<GridSettings>();
-    app.init_resource::<ZIndex>();
-    app.init_resource::<Selection>();
-    app.init_resource::<SelectionFilter>();
-    app.init_resource::<NextGroupID>();
-
-    // Initial update
-    app.update();
-
-    // Spawn Primary Window entity (headless) for systems that query it
-    app.world_mut().spawn((
-        Window {
-            title: "Headless Test Window".into(),
-            ..default()
-        },
-        PrimaryWindow,
-    ));
-    app.update();
-
-    app
-}
-
-fn set_cursor(app: &mut App, pos: Vec2) {
-    let mut cursor = app.world_mut().resource_mut::<CursorWorldPos>();
-    cursor.0 = Some(pos);
-}
-
-use bevy::input::ButtonState;
-use bevy::input::mouse::MouseButtonInput;
-
-fn mouse_down(app: &mut App, button: MouseButton) {
-    let window = app
-        .world_mut()
-        .query_filtered::<Entity, With<PrimaryWindow>>()
-        .single(app.world());
-    app.world_mut().send_event(MouseButtonInput {
-        button,
-        state: ButtonState::Pressed,
-        window,
-    });
-}
-
-fn mouse_up(app: &mut App, button: MouseButton) {
-    let window = app
-        .world_mut()
-        .query_filtered::<Entity, With<PrimaryWindow>>()
-        .single(app.world());
-    app.world_mut().send_event(MouseButtonInput {
-        button,
-        state: ButtonState::Released,
-        window,
-    });
-}
-
-fn set_tool(app: &mut App, state: ToolState) {
-    app.world_mut()
-        .resource_mut::<NextState<ToolState>>()
-        .set(state);
-    app.update(); // Process state change
+    create_test_app()
 }
 
 #[rstest]
@@ -216,8 +97,6 @@ fn test_polygon_tool_spawn(mut app: App) {
         .world_mut()
         .query_filtered::<Entity, (With<RigidBody>, With<Collider>)>();
     // Note: We expect 1 entity.
-    // Depending on pre-existing entities (ground?), count might be higher?
-    // The fixture does NOT spawn ground.
     assert_eq!(query.iter(app.world()).count(), 1);
 }
 
@@ -239,7 +118,6 @@ fn test_selection_tool(mut app: App) {
         .id();
 
     // Run physics update to populate spatial index
-    // Needs multiple updates to ensure transform propagation and broadphase update
     for _ in 0..5 {
         app.update();
     }
@@ -299,19 +177,6 @@ fn test_joint_tool_pin(mut app: App) {
     app.update();
     mouse_up(&mut app, MouseButton::Left);
     app.update();
-
-    // Verify:
-    // A RevoluteJoint component should be added to a new visual entity which is child of box_entity,
-    // OR directly to box_entity?
-    // Looking at connector.rs: SpawnJointCommand spawns a visual_entity, sets parent to entity_a.
-    // Adds RevoluteJoint to visual_entity (if entity_b exists) OR pin_entity.
-    // Wait, if pin_entity (None entity_b), it spawns a Static pin_entity.
-    // Then adds RevoluteJoint to visual_entity connecting entity_a and pin_entity.
-
-    // So we check if box_entity has a child with ImpulseJoint (RevoluteJoint is part of ImpulseJoint in Rapier2D).
-    // Or, did we attach ImpulseJoint directly to box_entity?
-    // SpawnJointCommand:
-    // world.entity_mut(self.entity_a).insert(ImpulseJoint::new(target_entity, joint_data));
 
     let has_joint = app.world().get::<ImpulseJoint>(box_entity).is_some();
 
@@ -417,7 +282,6 @@ fn test_undo_redo(mut app: App) {
     app.update(); // Process any despawns
 
     // Verify box is gone
-    // Note: Undo might just despawn the entity, so we check query count
     let mut query = app
         .world_mut()
         .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
