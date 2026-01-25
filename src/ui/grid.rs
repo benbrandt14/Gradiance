@@ -48,6 +48,8 @@ pub struct GridSettings {
     pub snap_to_objects: bool,
     /// Snap to object centers (transforms).
     pub snap_to_object_centers: bool,
+    /// Snap to object corners (vertices).
+    pub snap_to_object_corners: bool,
     /// Snap to object edges (nearest point on collider).
     pub snap_to_object_edges: bool,
     /// Snap to object midpoints (e.g. middle of an edge).
@@ -67,6 +69,7 @@ impl Default for GridSettings {
 
             snap_to_objects: false,
             snap_to_object_centers: true,
+            snap_to_object_corners: false,
             snap_to_object_edges: false,
             snap_to_object_midpoints: false,
             snap_distance: 0.5,
@@ -174,6 +177,9 @@ fn draw_rectangular_grid(
     top: f32,
     gizmos: &mut Gizmos,
 ) {
+    // Draw at Z = -10.0 to ensure it's behind 2D objects (typically at Z=0.0) but visible
+    let z_depth = -10.0;
+
     let draw_lines = |spacing: f32, alpha: f32, gizmos: &mut Gizmos| {
         let start_x = (left / spacing).floor() * spacing;
         let start_y = (bottom / spacing).floor() * spacing;
@@ -183,24 +189,24 @@ fn draw_rectangular_grid(
 
         for i in 0..=count_x {
             let x = start_x + (i as f32) * spacing;
-            gizmos.line_2d(Vec2::new(x, bottom), Vec2::new(x, top), color);
+            gizmos.line(Vec3::new(x, bottom, z_depth), Vec3::new(x, top, z_depth), color);
         }
 
         for i in 0..=count_y {
             let y = start_y + (i as f32) * spacing;
-            gizmos.line_2d(Vec2::new(left, y), Vec2::new(right, y), color);
+            gizmos.line(Vec3::new(left, y, z_depth), Vec3::new(right, y, z_depth), color);
         }
     };
 
     // Draw minor lines (faint)
     if minor_spacing > 0.001 {
         // Increased alpha from 0.05 to 0.1 for better visibility
-        draw_lines(minor_spacing, 0.1, gizmos);
+        draw_lines(minor_spacing, 0.2, gizmos);
     }
 
     // Draw major lines (stronger)
     // Increased alpha from 0.15 to 0.3
-    draw_lines(major_spacing, 0.3, gizmos);
+    draw_lines(major_spacing, 0.5, gizmos);
 }
 
 #[cfg(test)]
