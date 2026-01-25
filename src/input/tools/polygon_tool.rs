@@ -154,25 +154,25 @@ fn polygon_tool_update(
         PolygonToolAction::CloseLoop => {
             if data.points.len() >= 3 {
                 // Close loop and spawn
-        let center =
-            data.points.iter().fold(Vec2::ZERO, |acc, p| acc + *p) / data.points.len() as f32;
+                let center = data.points.iter().fold(Vec2::ZERO, |acc, p| acc + *p)
+                    / data.points.len() as f32;
 
-        // Points relative to center
-        let relative_points: Vec<Vec2> = data.points.iter().map(|p| *p - center).collect();
+                // Points relative to center
+                let relative_points: Vec<Vec2> = data.points.iter().map(|p| *p - center).collect();
 
-        let cmd = SpawnPolygonCommand {
-            position: center,
-            vertices: relative_points,
-            entity: None,
-        };
+                let cmd = SpawnPolygonCommand {
+                    position: center,
+                    vertices: relative_points,
+                    entity: None,
+                };
 
-        commands.queue(move |world: &mut World| {
-            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                stack.push(Box::new(cmd), world);
-            });
-        });
+                commands.queue(move |world: &mut World| {
+                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                        stack.push(Box::new(cmd), world);
+                    });
+                });
 
-        data.points.clear();
+                data.points.clear();
             }
         }
         PolygonToolAction::None => {}

@@ -73,31 +73,32 @@ fn drag_tool_update(
         });
 
         if let Some(entity) = hit_entity
-            && let Ok((transform, _)) = query.get(entity) {
-                data.dragged_entity = Some(entity);
+            && let Ok((transform, _)) = query.get(entity)
+        {
+            data.dragged_entity = Some(entity);
 
-                // Calculate local anchor on the body
-                data.local_anchor = calculate_local_anchor(transform, current_pos);
+            // Calculate local anchor on the body
+            data.local_anchor = calculate_local_anchor(transform, current_pos);
 
-                // Spawn "Hand" kinematic body
-                let hand = commands
-                    .spawn((
-                        RigidBody::KinematicPositionBased,
-                        Transform::from_xyz(current_pos.x, current_pos.y, 0.0),
-                        Velocity::default(),
-                    ))
-                    .id();
-                data.hand_entity = Some(hand);
+            // Spawn "Hand" kinematic body
+            let hand = commands
+                .spawn((
+                    RigidBody::KinematicPositionBased,
+                    Transform::from_xyz(current_pos.x, current_pos.y, 0.0),
+                    Velocity::default(),
+                ))
+                .id();
+            data.hand_entity = Some(hand);
 
-                // Create RevoluteJoint (Mouse Joint) between Hand and Body
-                let joint = RevoluteJointBuilder::new()
-                    .local_anchor1(Vec2::ZERO)
-                    .local_anchor2(data.local_anchor);
+            // Create RevoluteJoint (Mouse Joint) between Hand and Body
+            let joint = RevoluteJointBuilder::new()
+                .local_anchor1(Vec2::ZERO)
+                .local_anchor2(data.local_anchor);
 
-                commands
-                    .entity(hand)
-                    .insert(ImpulseJoint::new(entity, joint));
-            }
+            commands
+                .entity(hand)
+                .insert(ImpulseJoint::new(entity, joint));
+        }
     }
 
     if mouse.just_released(MouseButton::Left) {

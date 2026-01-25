@@ -6,19 +6,20 @@ use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::selection::{NextGroupID, Selection, SelectionFilter, SelectionGroup};
 use crate::input::tools::connector::Connector;
 use crate::input::tools::utils::is_pointer_over_ui;
-use bevy_prototype_lyon::prelude::{Fill, Stroke};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
-use bevy_egui::EguiContexts;
 use bevy::ecs::system::SystemParam;
+use bevy_egui::EguiContexts;
+use bevy_prototype_lyon::prelude::{Fill, Stroke};
 
 /// Auxiliary queries used by the select tool.
 #[derive(SystemParam)]
 pub struct AuxQueries<'w, 's> {
     /// Selectable entities.
-    pub selectable: Query<'w, 's, (Entity, &'static GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
+    pub selectable:
+        Query<'w, 's, (Entity, &'static GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
     /// Connectors.
     pub connector: Query<'w, 's, &'static Connector>,
     /// Selection groups.
@@ -26,7 +27,14 @@ pub struct AuxQueries<'w, 's> {
     /// Drag preview entities.
     pub drag_preview: Query<'w, 's, (Entity, &'static DragPreview)>,
     /// Mesh and Material.
-    pub mesh: Query<'w, 's, (Option<&'static Mesh3d>, Option<&'static MeshMaterial3d<StandardMaterial>>)>,
+    pub mesh: Query<
+        'w,
+        's,
+        (
+            Option<&'static Mesh3d>,
+            Option<&'static MeshMaterial3d<StandardMaterial>>,
+        ),
+    >,
 }
 
 /// Information needed to sort hits for selection.
@@ -268,37 +276,61 @@ fn select_tool_update(
                         locked,
                         sensor,
                         group,
-                    )) = queries.p1().get(old_entity) {
-                        let mut builder = commands.spawn((
-                            *t,
-                            collider.clone(),
-                        ));
+                    )) = queries.p1().get(old_entity)
+                    {
+                        let mut builder = commands.spawn((*t, collider.clone()));
 
-                        if let Some(c) = rb { builder.insert(*c); }
-                        if let Some(c) = ebox { builder.insert(*c); }
-                        if let Some(c) = ecircle { builder.insert(*c); }
-                        if let Some(c) = fill { builder.insert(c.clone()); }
-                        if let Some(c) = stroke { builder.insert(c.clone()); }
-                        if let Some(c) = friction { builder.insert(*c); }
-                        if let Some(c) = restitution { builder.insert(*c); }
-                        if let Some(c) = mass { builder.insert(c.clone()); }
-                        if let Some(c) = gravity { builder.insert(*c); }
-                        if let Some(c) = locked { builder.insert(*c); }
-                        if let Some(_) = sensor { builder.insert(Sensor); }
+                        if let Some(c) = rb {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = ebox {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = ecircle {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = fill {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = stroke {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = friction {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = restitution {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = mass {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = gravity {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = locked {
+                            builder.insert(*c);
+                        }
+                        if sensor.is_some() {
+                            builder.insert(Sensor);
+                        }
 
                         if let Ok((mesh, material)) = aux.mesh.get(old_entity) {
-                            if let Some(c) = mesh { builder.insert(c.clone()); }
-                            if let Some(c) = material { builder.insert(c.clone()); }
+                            if let Some(c) = mesh {
+                                builder.insert(c.clone());
+                            }
+                            if let Some(c) = material {
+                                builder.insert(c.clone());
+                            }
                         }
 
                         // Group Logic
                         if let Some(g) = group {
-                             let new_id = *group_map.entry(g.0).or_insert_with(|| {
-                                 let id = next_group_id.0;
-                                 next_group_id.0 += 1;
-                                 id
-                             });
-                             builder.insert(SelectionGroup(new_id));
+                            let new_id = *group_map.entry(g.0).or_insert_with(|| {
+                                let id = next_group_id.0;
+                                next_group_id.0 += 1;
+                                id
+                            });
+                            builder.insert(SelectionGroup(new_id));
                         }
 
                         // Drag Preview: Set as Kinematic and Sensor to prevent interaction during drag
@@ -316,7 +348,8 @@ fn select_tool_update(
                         new_selection.push(new_id);
 
                         // Populate initial_positions directly with the new ID and the original position
-                        data.initial_positions.push((new_id, t.translation.truncate()));
+                        data.initial_positions
+                            .push((new_id, t.translation.truncate()));
                     }
                 }
 
@@ -333,7 +366,7 @@ fn select_tool_update(
 
             // Initiate Move for all selected
             if did_copy {
-                 data.is_moving = true;
+                data.is_moving = true;
             } else if selection.0.contains(&entity) {
                 data.is_moving = true;
                 data.initial_positions.clear();
@@ -444,7 +477,7 @@ fn select_tool_update(
         let mut pointer_over_selection = false;
         if let Some(rapier_context) = rapier_context_query.iter().next() {
             let filter = QueryFilter::default().exclude_sensors();
-             rapier_context.intersections_with_point(current_pos, filter, |entity| {
+            rapier_context.intersections_with_point(current_pos, filter, |entity| {
                 if selection.0.contains(&entity) {
                     pointer_over_selection = true;
                     false // Stop search
@@ -624,7 +657,7 @@ mod tests {
         let (pos, rot) = calculate_rotation_update(initial_pos, initial_rot, centroid, delta);
 
         // Expected rotation: PI/2
-        assert!((rot - PI/2.0).abs() < 1e-5);
+        assert!((rot - PI / 2.0).abs() < 1e-5);
 
         // Expected pos: (0, 10)
         assert!((pos.x - 0.0).abs() < 1e-5);

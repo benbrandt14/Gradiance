@@ -2,16 +2,23 @@
 //!
 //! Handles global shortcuts like CTRL+A (Select All), CTRL+Z (Undo), CTRL+Y (Redo), and Space (Pause/Resume).
 
-use crate::prelude::*;
-use crate::input::{commands, ToolState, selection::{Selection, SelectionFilter}, tools::connector::Connector};
+use crate::input::{
+    ToolState, commands,
+    selection::{Selection, SelectionFilter},
+    tools::connector::Connector,
+};
 use crate::physics::floor::GroundPlane;
+use crate::prelude::*;
 
 /// Plugin for handling global shortcuts.
 pub struct ShortcutsPlugin;
 
 impl Plugin for ShortcutsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (handle_undo_redo_input, toggle_pause, handle_ctrl_a));
+        app.add_systems(
+            Update,
+            (handle_undo_redo_input, toggle_pause, handle_ctrl_a),
+        );
     }
 }
 

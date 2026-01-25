@@ -38,9 +38,10 @@ fn toggle_diagnostics(
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     if keys.just_pressed(KeyCode::F1)
-        && let Some(ref mut ctx) = debug_render_context {
-            ctx.enabled = !ctx.enabled;
-        }
+        && let Some(ref mut ctx) = debug_render_context
+    {
+        ctx.enabled = !ctx.enabled;
+    }
     if keys.just_pressed(KeyCode::F2) {
         diagnostics_state.show_fps = !diagnostics_state.show_fps;
     }
@@ -76,13 +77,15 @@ fn diagnostics_ui(
             if diagnostics_state.show_fps {
                 shown = true;
                 if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS)
-                    && let Some(value) = fps.smoothed() {
-                        ui.label(format!("FPS: {:.1}", value));
-                    }
+                    && let Some(value) = fps.smoothed()
+                {
+                    ui.label(format!("FPS: {:.1}", value));
+                }
                 if let Some(frame_time) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
-                    && let Some(value) = frame_time.smoothed() {
-                        ui.label(format!("Frame Time: {:.2} ms", value));
-                    }
+                    && let Some(value) = frame_time.smoothed()
+                {
+                    ui.label(format!("Frame Time: {:.2} ms", value));
+                }
             }
 
             if diagnostics_state.show_stats {
@@ -92,58 +95,60 @@ fn diagnostics_ui(
                 shown = true;
 
                 if let Some(count) = diagnostics.get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT)
-                    && let Some(value) = count.values().last() {
-                        ui.label(format!("Entities: {:.0}", value));
-                    }
+                    && let Some(value) = count.values().last()
+                {
+                    ui.label(format!("Entities: {:.0}", value));
+                }
 
                 if let Some(cpu) = diagnostics.get(&SystemInformationDiagnosticsPlugin::CPU_USAGE)
-                    && let Some(value) = cpu.values().last() {
-                        ui.label(format!("CPU: {:.1}%", value));
-                    }
+                    && let Some(value) = cpu.values().last()
+                {
+                    ui.label(format!("CPU: {:.1}%", value));
+                }
                 if let Some(mem) = diagnostics.get(&SystemInformationDiagnosticsPlugin::MEM_USAGE)
-                    && let Some(value) = mem.values().last() {
-                        ui.label(format!("MEM: {:.1}%", value));
-                    }
+                    && let Some(value) = mem.values().last()
+                {
+                    ui.label(format!("MEM: {:.1}%", value));
+                }
             }
 
-            if debug_enabled
-                && let Some(mut ctx) = debug_render_context {
-                    if shown {
-                        ui.separator();
-                    }
-                    ui.label(egui::RichText::new("Physics Debug").strong());
-
-                    let mode = &mut ctx.pipeline.mode;
-
-                    let mut shapes = mode.contains(DebugRenderMode::COLLIDER_SHAPES);
-                    if ui.checkbox(&mut shapes, "Shapes").changed() {
-                        mode.set(DebugRenderMode::COLLIDER_SHAPES, shapes);
-                    }
-
-                    let mut aabbs = mode.contains(DebugRenderMode::COLLIDER_AABBS);
-                    if ui.checkbox(&mut aabbs, "AABBs").changed() {
-                        mode.set(DebugRenderMode::COLLIDER_AABBS, aabbs);
-                    }
-
-                    let mut axes = mode.contains(DebugRenderMode::RIGID_BODY_AXES);
-                    if ui.checkbox(&mut axes, "Axes").changed() {
-                        mode.set(DebugRenderMode::RIGID_BODY_AXES, axes);
-                    }
-
-                    let mut joints = mode.contains(DebugRenderMode::JOINTS);
-                    if ui.checkbox(&mut joints, "Joints").changed() {
-                        mode.set(DebugRenderMode::JOINTS, joints);
-                    }
-
-                    let mut contacts = mode.contains(DebugRenderMode::CONTACTS);
-                    if ui.checkbox(&mut contacts, "Contacts").changed() {
-                        mode.set(DebugRenderMode::CONTACTS, contacts);
-                    }
-
-                    let mut solver = mode.contains(DebugRenderMode::SOLVER_CONTACTS);
-                    if ui.checkbox(&mut solver, "Solver Contacts").changed() {
-                        mode.set(DebugRenderMode::SOLVER_CONTACTS, solver);
-                    }
+            if debug_enabled && let Some(mut ctx) = debug_render_context {
+                if shown {
+                    ui.separator();
                 }
+                ui.label(egui::RichText::new("Physics Debug").strong());
+
+                let mode = &mut ctx.pipeline.mode;
+
+                let mut shapes = mode.contains(DebugRenderMode::COLLIDER_SHAPES);
+                if ui.checkbox(&mut shapes, "Shapes").changed() {
+                    mode.set(DebugRenderMode::COLLIDER_SHAPES, shapes);
+                }
+
+                let mut aabbs = mode.contains(DebugRenderMode::COLLIDER_AABBS);
+                if ui.checkbox(&mut aabbs, "AABBs").changed() {
+                    mode.set(DebugRenderMode::COLLIDER_AABBS, aabbs);
+                }
+
+                let mut axes = mode.contains(DebugRenderMode::RIGID_BODY_AXES);
+                if ui.checkbox(&mut axes, "Axes").changed() {
+                    mode.set(DebugRenderMode::RIGID_BODY_AXES, axes);
+                }
+
+                let mut joints = mode.contains(DebugRenderMode::JOINTS);
+                if ui.checkbox(&mut joints, "Joints").changed() {
+                    mode.set(DebugRenderMode::JOINTS, joints);
+                }
+
+                let mut contacts = mode.contains(DebugRenderMode::CONTACTS);
+                if ui.checkbox(&mut contacts, "Contacts").changed() {
+                    mode.set(DebugRenderMode::CONTACTS, contacts);
+                }
+
+                let mut solver = mode.contains(DebugRenderMode::SOLVER_CONTACTS);
+                if ui.checkbox(&mut solver, "Solver Contacts").changed() {
+                    mode.set(DebugRenderMode::SOLVER_CONTACTS, solver);
+                }
+            }
         });
 }

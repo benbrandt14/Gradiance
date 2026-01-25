@@ -13,17 +13,17 @@ use gradiance::input::commands::CommandStack;
 use gradiance::input::cursor::CursorWorldPos;
 use gradiance::input::editable::EditableBox;
 use gradiance::input::selection::{Selection, SelectionFilter, SelectionGroup, SelectionPlugin};
+use gradiance::input::shortcuts::ShortcutsPlugin;
 use gradiance::input::tools::box_tool::BoxToolPlugin;
 use gradiance::input::tools::circle_tool::CircleToolPlugin;
 use gradiance::input::tools::connector::{Connector, ConnectorToolPlugin};
 use gradiance::input::tools::drag_tool::DragToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
-use gradiance::input::shortcuts::ShortcutsPlugin;
+use gradiance::physics::floor::GroundPlane;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
 use rstest::{fixture, rstest};
-use gradiance::physics::floor::GroundPlane;
 
 #[fixture]
 fn app() -> App {
@@ -121,7 +121,9 @@ fn key_down(app: &mut App, key_code: KeyCode) {
         key_code,
         state: ButtonState::Pressed,
         window,
-        logical_key: bevy::input::keyboard::Key::Unidentified(bevy::input::keyboard::NativeKey::Unidentified),
+        logical_key: bevy::input::keyboard::Key::Unidentified(
+            bevy::input::keyboard::NativeKey::Unidentified,
+        ),
         repeat: false,
     });
 }
@@ -135,7 +137,9 @@ fn key_up(app: &mut App, key_code: KeyCode) {
         key_code,
         state: ButtonState::Released,
         window,
-        logical_key: bevy::input::keyboard::Key::Unidentified(bevy::input::keyboard::NativeKey::Unidentified),
+        logical_key: bevy::input::keyboard::Key::Unidentified(
+            bevy::input::keyboard::NativeKey::Unidentified,
+        ),
         repeat: false,
     });
 }
@@ -150,20 +154,26 @@ fn set_tool(app: &mut App, state: ToolState) {
 #[rstest]
 fn test_select_all_ctrl_a(mut app: App) {
     // Spawn 2 boxes
-    let b1 = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Collider::cuboid(1.0, 1.0),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        EditableBox::default(),
-    )).id();
-    let b2 = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Collider::cuboid(1.0, 1.0),
-        Transform::from_xyz(5.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        EditableBox::default(),
-    )).id();
+    let b1 = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 1.0),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            EditableBox::default(),
+        ))
+        .id();
+    let b2 = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 1.0),
+            Transform::from_xyz(5.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            EditableBox::default(),
+        ))
+        .id();
 
     // Physics update
     app.update();
@@ -187,15 +197,21 @@ fn test_select_all_ctrl_a(mut app: App) {
 #[rstest]
 fn test_ctrl_drag_copy(mut app: App) {
     // Spawn box
-    let b1 = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Collider::cuboid(1.0, 1.0),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        EditableBox { width: 2.0, height: 2.0 },
-        Name::new("Original"),
-        GravityScale(0.0),
-    )).id();
+    let b1 = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 1.0),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            EditableBox {
+                width: 2.0,
+                height: 2.0,
+            },
+            Name::new("Original"),
+            GravityScale(0.0),
+        ))
+        .id();
 
     app.update();
     app.update();
@@ -234,7 +250,9 @@ fn test_ctrl_drag_copy(mut app: App) {
     assert_eq!(t1.truncate(), Vec2::ZERO);
 
     // 2. New box exists at 5,5
-    let mut query = app.world_mut().query_filtered::<(Entity, &Transform), (With<EditableBox>, Without<GroundPlane>)>();
+    let mut query = app
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), (With<EditableBox>, Without<GroundPlane>)>();
     let entities: Vec<(Entity, &Transform)> = query.iter(app.world()).collect();
     assert_eq!(entities.len(), 2, "Should have 2 boxes now");
 
@@ -245,13 +263,16 @@ fn test_ctrl_drag_copy(mut app: App) {
 #[rstest]
 fn test_right_click_rotate(mut app: App) {
     // Spawn box at (10,0)
-    let b1 = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Collider::cuboid(1.0, 1.0),
-        Transform::from_xyz(10.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        EditableBox::default(),
-    )).id();
+    let b1 = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 1.0),
+            Transform::from_xyz(10.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            EditableBox::default(),
+        ))
+        .id();
 
     app.update();
     set_tool(&mut app, ToolState::Select);
@@ -284,25 +305,31 @@ fn test_right_click_rotate(mut app: App) {
 #[rstest]
 fn test_selection_filter(mut app: App) {
     // Spawn Box and Connector
-    let b1 = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Collider::cuboid(1.0, 1.0),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        EditableBox::default(),
-    )).id();
+    let b1 = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 1.0),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            EditableBox::default(),
+        ))
+        .id();
 
-    let c1 = app.world_mut().spawn((
-        Transform::from_xyz(5.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        Collider::ball(0.5),
-        Connector {
-            entity_a: b1,
-            entity_b: None,
-            local_anchor_a: Vec2::ZERO,
-            local_anchor_b: Vec2::ZERO,
-        },
-    )).id();
+    let c1 = app
+        .world_mut()
+        .spawn((
+            Transform::from_xyz(5.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            Collider::ball(0.5),
+            Connector {
+                entity_a: b1,
+                entity_b: None,
+                local_anchor_a: Vec2::ZERO,
+                local_anchor_b: Vec2::ZERO,
+            },
+        ))
+        .id();
 
     app.update();
     app.update();
@@ -319,7 +346,10 @@ fn test_selection_filter(mut app: App) {
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
-    assert!(app.world().resource::<Selection>().0.is_empty(), "Should not select Connector");
+    assert!(
+        app.world().resource::<Selection>().0.is_empty(),
+        "Should not select Connector"
+    );
 
     // Try select Box (at 0,0)
     set_cursor(&mut app, Vec2::ZERO);
@@ -328,7 +358,10 @@ fn test_selection_filter(mut app: App) {
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
-    assert!(app.world().resource::<Selection>().0.contains(&b1), "Should select Box");
+    assert!(
+        app.world().resource::<Selection>().0.contains(&b1),
+        "Should select Box"
+    );
 
     // Set Filter to Joints
     *app.world_mut().resource_mut::<SelectionFilter>() = SelectionFilter::Joints;
@@ -341,7 +374,10 @@ fn test_selection_filter(mut app: App) {
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
-    assert!(app.world().resource::<Selection>().0.is_empty(), "Should not select Box");
+    assert!(
+        app.world().resource::<Selection>().0.is_empty(),
+        "Should not select Box"
+    );
 
     // Try select Connector
     set_cursor(&mut app, Vec2::new(5.0, 0.0));
@@ -350,22 +386,32 @@ fn test_selection_filter(mut app: App) {
     mouse_up(&mut app, MouseButton::Left);
     app.update();
 
-    assert!(app.world().resource::<Selection>().0.contains(&c1), "Should select Connector");
+    assert!(
+        app.world().resource::<Selection>().0.contains(&c1),
+        "Should select Connector"
+    );
 }
 
 #[rstest]
 fn test_group_objects(mut app: App) {
-    let b1 = app.world_mut().spawn((
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        Collider::ball(1.0),
-    )).id();
-    let b2 = app.world_mut().spawn((
-        Transform::from_xyz(5.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        Collider::ball(1.0),
-    )).id();
-    app.update(); app.update();
+    let b1 = app
+        .world_mut()
+        .spawn((
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            Collider::ball(1.0),
+        ))
+        .id();
+    let b2 = app
+        .world_mut()
+        .spawn((
+            Transform::from_xyz(5.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            Collider::ball(1.0),
+        ))
+        .id();
+    app.update();
+    app.update();
 
     set_tool(&mut app, ToolState::Select);
 
@@ -411,7 +457,9 @@ fn test_joint_inspector_modification(mut app: App) {
     let parent = app.world_mut().spawn(Transform::default()).id();
 
     let joint = RevoluteJointBuilder::new().build();
-    app.world_mut().entity_mut(parent).insert(ImpulseJoint::new(child, joint));
+    app.world_mut()
+        .entity_mut(parent)
+        .insert(ImpulseJoint::new(child, joint));
 
     // Verify existence
     assert!(app.world().get::<ImpulseJoint>(parent).is_some());

@@ -15,7 +15,10 @@ pub struct GroundToolPlugin;
 impl Plugin for GroundToolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GroundToolData>();
-        app.add_systems(Update, ground_tool_update.run_if(in_state(ToolState::Ground)));
+        app.add_systems(
+            Update,
+            ground_tool_update.run_if(in_state(ToolState::Ground)),
+        );
         app.add_systems(OnExit(ToolState::Ground), ground_tool_reset);
     }
 }

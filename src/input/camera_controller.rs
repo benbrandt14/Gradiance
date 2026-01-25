@@ -2,9 +2,9 @@
 //!
 //! Provides WASD movement, Mouse Drag panning, and Scroll zooming.
 
+use crate::input::tools::select_tool::SelectToolData;
 use crate::prelude::*;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
-use crate::input::tools::select_tool::SelectToolData;
 
 /// Plugin for camera control.
 pub struct CameraControllerPlugin;
@@ -28,12 +28,11 @@ pub fn camera_pan(
     }
 
     // If rotating with Select Tool, ignore Right Click panning
-    if mouse_buttons.pressed(MouseButton::Right) {
-        if let Some(data) = &select_tool_data {
-            if data.is_rotating {
-                return;
-            }
-        }
+    if mouse_buttons.pressed(MouseButton::Right)
+        && let Some(data) = &select_tool_data
+        && data.is_rotating
+    {
+        return;
     }
 
     let delta = mouse_motion.delta;

@@ -332,13 +332,7 @@ mod tests {
         let orphan = Entity::from_raw(4);
 
         // Mock body check
-        let get_body_z = |e: Entity| -> Option<f32> {
-            if e == body {
-                Some(10.0)
-            } else {
-                None
-            }
-        };
+        let get_body_z = |e: Entity| -> Option<f32> { if e == body { Some(10.0) } else { None } };
 
         // Mock hierarchy: grandchild -> child -> body
         let get_parent = |e: Entity| -> Option<Entity> {

@@ -4,7 +4,10 @@
 //! grouping, and ungrouping.
 
 use crate::input::tools::utils::is_pointer_over_ui;
-use crate::input::{cursor::CursorWorldPos, selection::{Selection, SelectionGroup, NextGroupID}};
+use crate::input::{
+    cursor::CursorWorldPos,
+    selection::{NextGroupID, Selection, SelectionGroup},
+};
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
 use bevy_egui::{EguiContexts, egui};
@@ -67,10 +70,9 @@ fn context_menu_input(
         } else {
             state.position = None;
         }
-    } else if mouse.just_pressed(MouseButton::Left)
-        && !is_pointer_over_ui(&mut contexts) {
-            state.position = None;
-        }
+    } else if mouse.just_pressed(MouseButton::Left) && !is_pointer_over_ui(&mut contexts) {
+        state.position = None;
+    }
 }
 
 /// Renders the context menu UI if active.
