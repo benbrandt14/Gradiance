@@ -3,43 +3,18 @@
 //! Tracks the mouse cursor's world position, accounting for camera transforms and UI blocking.
 
 use crate::prelude::*;
-use crate::ui::grid::{GridSettings, snap_to_grid};
-use bevy::math::bounding::Aabb2d;
+use crate::ui::grid::GridSettings;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
-use bevy_rapier2d::rapier::math::{Point, Isometry, Vector};
-use bevy_rapier2d::rapier::parry::shape::TypedShape;
+
+// Import from snapping module
+use crate::input::snapping::{SnappingStatus, SnapSource, calculate_snapping};
 
 /// Custom cursor position resource.
 ///
 /// Stores the world-space coordinates of the mouse cursor.
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct CursorWorldPos(pub Option<Vec2>);
-
-/// Source of the snapping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
-pub enum SnapSource {
-    /// Snapped to the grid.
-    Grid,
-    /// Snapped to the center of an object.
-    ObjectCenter,
-    /// Snapped to the edge of an object.
-    ObjectEdge,
-    /// Snapped to the midpoint of an object's edge.
-    ObjectMidpoint,
-}
-
-/// Resource to track the snapping status of the cursor.
-#[derive(Resource, Default, Debug, Clone, Copy, Reflect)]
-#[reflect(Resource)]
-pub struct SnappingStatus {
-    /// Whether the cursor is currently snapped.
-    pub snapped: bool,
-    /// The snapped position in world space.
-    pub snap_pos: Vec2,
-    /// The source of the snap (Grid, Object, etc.).
-    pub snap_source: Option<SnapSource>,
-}
 
 /// Updates the `CursorWorldPos` resource.
 ///
@@ -88,100 +63,28 @@ pub fn update_cursor_pos(
         return;
     };
 
-    let mut best_snap_pos = raw;
-    let mut snapped = false;
-    let mut best_snap_dist_sq = grid_settings.snap_distance.powi(2);
-    let mut snap_source = None;
+    let get_collider_wrapper = |entity| {
+        q_collider.get(entity).ok().map(|(c, t)| (c.clone(), *t))
+    };
 
-    // 1. Object Snapping
-    if grid_settings.snap_to_objects {
-        if let Some(rapier_context) = q_rapier.iter().next() {
-            let search_range = grid_settings.snap_distance * 2.0;
-            // Aabb2d takes center and half-extents
-            let aabb = Aabb2d::new(raw, Vec2::splat(search_range));
-
-            rapier_context.colliders_with_aabb_intersecting_aabb(aabb, |entity| {
-                if let Ok((collider, transform)) = q_collider.get(entity) {
-                    // Center Snap
-                    if grid_settings.snap_to_object_centers {
-                        let center = transform.translation().truncate();
-                        let d2 = center.distance_squared(raw);
-                        if d2 < best_snap_dist_sq {
-                            best_snap_dist_sq = d2;
-                            best_snap_pos = center;
-                            snapped = true;
-                            snap_source = Some(SnapSource::ObjectCenter);
-                        }
-                    }
-
-                    // Edge/Midpoint Snap
-                    if grid_settings.snap_to_object_edges || grid_settings.snap_to_object_midpoints {
-
-                         let transform_iso = Isometry::new(
-                             Vector::new(transform.translation().x, transform.translation().y),
-                             transform.compute_transform().rotation.to_euler(EulerRot::XYZ).2
-                         );
-
-                         // Edge Snap
-                         if grid_settings.snap_to_object_edges {
-                             let pos = transform.translation().truncate();
-                             let rot = transform.compute_transform().rotation.to_euler(EulerRot::XYZ).2;
-                             let projection = collider.project_point(pos, rot, raw, true);
-                             let world_closest_pt = projection.point; // Vec2 (World space)
-
-                             let d2 = world_closest_pt.distance_squared(raw);
-                             if d2 < best_snap_dist_sq {
-                                 best_snap_dist_sq = d2;
-                                 best_snap_pos = world_closest_pt;
-                                 snapped = true;
-                                 snap_source = Some(SnapSource::ObjectEdge);
-                             }
-                         }
-
-                         // Discrete Midpoints (Simplified for Box and Segment)
-                         if grid_settings.snap_to_object_midpoints {
-                             let candidates = match collider.raw.as_typed_shape() {
-                                 TypedShape::Cuboid(c) => {
-                                     let hx = c.half_extents.x;
-                                     let hy = c.half_extents.y;
-                                     vec![
-                                         Point::new(0.0, hy), Point::new(0.0, -hy),
-                                         Point::new(hx, 0.0), Point::new(-hx, 0.0)
-                                     ]
-                                 },
-                                 TypedShape::Segment(s) => {
-                                     let mid = (s.a.coords + s.b.coords) * 0.5;
-                                     vec![Point::from(mid)]
-                                 },
-                                 _ => vec![]
-                             };
-
-                             for local_pt in candidates {
-                                 let world_pt_na = transform_iso.transform_point(&local_pt);
-                                 let world_pt = Vec2::new(world_pt_na.x, world_pt_na.y);
-                                 let d2 = world_pt.distance_squared(raw);
-                                 if d2 < best_snap_dist_sq {
-                                     best_snap_dist_sq = d2;
-                                     best_snap_pos = world_pt;
-                                     snapped = true;
-                                     snap_source = Some(SnapSource::ObjectMidpoint);
-                                 }
-                             }
-                         }
-                    }
-                }
-                true // Continue traversal
-            });
-        }
-    }
-
-    // 2. Grid Snapping (only if not snapped to object)
-    if !snapped && grid_settings.snap_to_grid {
-        let grid_pos = snap_to_grid(raw, grid_settings.spacing);
-        best_snap_pos = grid_pos;
-        snapped = true;
-        snap_source = Some(SnapSource::Grid);
-    }
+    let (best_snap_pos, snapped, snap_source) = if let Some(rapier_context) = q_rapier.iter().next() {
+        calculate_snapping(
+            raw,
+            &grid_settings,
+            Some(|aabb, callback: &mut dyn FnMut(Entity) -> bool| {
+                 rapier_context.colliders_with_aabb_intersecting_aabb(aabb, callback);
+            }),
+            get_collider_wrapper
+        )
+    } else {
+        // No rapier context, pass None for spatial query
+         calculate_snapping(
+            raw,
+            &grid_settings,
+            None::<fn(bevy::math::bounding::Aabb2d, &mut dyn FnMut(Entity) -> bool)>, // Explicit type for None
+            get_collider_wrapper
+        )
+    };
 
     if snapped {
         cursor_pos.0 = Some(best_snap_pos);

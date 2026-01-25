@@ -13,6 +13,7 @@ pub mod commands;
 pub mod cursor;
 pub mod editable;
 pub mod selection;
+pub mod snapping;
 /// Global shortcuts.
 pub mod shortcuts;
 pub mod tools;
@@ -30,7 +31,7 @@ impl Plugin for InputPlugin {
 
         // Cursor
         app.init_resource::<cursor::CursorWorldPos>();
-        app.init_resource::<cursor::SnappingStatus>();
+        app.init_resource::<snapping::SnappingStatus>();
         app.add_systems(PreUpdate, cursor::update_cursor_pos);
         app.add_systems(Update, cursor::draw_snap_indicators);
 
