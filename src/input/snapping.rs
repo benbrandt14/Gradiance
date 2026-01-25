@@ -84,23 +84,8 @@ where
                              transform.compute_transform().rotation.to_euler(EulerRot::XYZ).2
                          );
 
-                         // Edge Snap
-                         if grid_settings.snap_to_object_edges {
-                             let pos = transform.translation().truncate();
-                             let rot = transform.compute_transform().rotation.to_euler(EulerRot::XYZ).2;
-                             let projection = collider.project_point(pos, rot, raw_pos, true);
-                             let world_closest_pt = projection.point; // Vec2 (World space)
-
-                             let d2 = world_closest_pt.distance_squared(raw_pos);
-                             if d2 < best_snap_dist_sq {
-                                 best_snap_dist_sq = d2;
-                                 best_snap_pos = world_closest_pt;
-                                 snapped = true;
-                                 snap_source = Some(SnapSource::ObjectEdge);
-                             }
-                         }
-
                          // Discrete Midpoints (Simplified for Box and Segment)
+                         // Prioritize Midpoints over Edges by checking them first
                          if grid_settings.snap_to_object_midpoints {
                              let candidates = match collider.raw.as_typed_shape() {
                                  TypedShape::Cuboid(c) => {
@@ -128,6 +113,23 @@ where
                                      snapped = true;
                                      snap_source = Some(SnapSource::ObjectMidpoint);
                                  }
+                             }
+                         }
+
+                         // Edge Snap
+                         if grid_settings.snap_to_object_edges {
+                             let pos = transform.translation().truncate();
+                             let rot = transform.compute_transform().rotation.to_euler(EulerRot::XYZ).2;
+                             let projection = collider.project_point(pos, rot, raw_pos, true);
+                             let world_closest_pt = projection.point; // Vec2 (World space)
+
+                             let d2 = world_closest_pt.distance_squared(raw_pos);
+                             // Use < to respect priority of previous snaps (Midpoints) if distances are equal
+                             if d2 < best_snap_dist_sq {
+                                 best_snap_dist_sq = d2;
+                                 best_snap_pos = world_closest_pt;
+                                 snapped = true;
+                                 snap_source = Some(SnapSource::ObjectEdge);
                              }
                          }
                     }
