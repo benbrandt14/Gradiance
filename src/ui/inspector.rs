@@ -8,7 +8,6 @@ use crate::input::selection::{Selection, SelectionFilter};
 use crate::input::tools::connector::Connector;
 use crate::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use bevy_prototype_lyon::prelude::*;
 
 /// Plugin for the Inspector UI.
 pub struct InspectorPlugin;
@@ -34,8 +33,7 @@ fn inspector_ui(
         Option<&mut Restitution>,
         Option<&mut EditableBox>,
         Option<&mut EditableCircle>,
-        Option<&mut Fill>,
-        Option<&mut Stroke>,
+        Option<&MeshMaterial2d<ColorMaterial>>,
         Option<&mut Sensor>,
         Option<&mut LockedAxes>,
         Option<&mut ColliderMassProperties>,
@@ -43,6 +41,7 @@ fn inspector_ui(
         Option<&mut Sleeping>,
     )>,
     mut commands: Commands,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -83,11 +82,8 @@ fn inspector_ui(
         let has_restitution;
         let mut local_restitution = Restitution::default();
 
-        let has_fill;
-        let mut local_fill = Fill::color(Color::BLACK);
-
-        let has_stroke;
-        let mut local_stroke = Stroke::new(Color::BLACK, 1.0);
+        let has_material;
+        let mut local_color = Color::BLACK;
 
         let _has_sensor;
         let mut local_sensor = false;
@@ -110,8 +106,7 @@ fn inspector_ui(
                 r,
                 ebox,
                 ecircle,
-                fill,
-                stroke,
+                mat_handle,
                 sensor,
                 locked,
                 mass,
@@ -139,11 +134,12 @@ fn inspector_ui(
             has_restitution = r.is_some();
             if let Some(v) = r { local_restitution = *v; }
 
-            has_fill = fill.is_some();
-            if let Some(v) = fill { local_fill = v.clone(); }
-
-            has_stroke = stroke.is_some();
-            if let Some(v) = stroke { local_stroke = v.clone(); }
+            has_material = mat_handle.is_some();
+            if let Some(h) = mat_handle {
+                if let Some(mat) = materials.get(h) {
+                    local_color = mat.color;
+                }
+            }
 
             _has_sensor = sensor.is_some();
             if sensor.is_some() { local_sensor = true; }
@@ -188,8 +184,6 @@ fn inspector_ui(
             if changed {
                 for &e in &selection.0 {
                     if let Ok((_, Some(mut t), ..)) = query.get_mut(e) {
-                         // For transform, we might want relative movement, but here we set absolute.
-                         // Setting absolute is fine for inspector.
                          t.translation = local_transform.translation;
                          t.rotation = local_transform.rotation;
                          // Wake up body if exists
@@ -213,10 +207,6 @@ fn inspector_ui(
                 for &e in &selection.0 {
                     if let Ok((_, _, _, _, _, Some(mut b), ..)) = query.get_mut(e) {
                         *b = local_box;
-                        // Note: Resizing shape logic might be handled by another system observing changes
-                        // or we might need to regenerate collider/shape path here.
-                        // Assuming systems handle change detection or user must trigger update.
-                        // But typically `EditableBox` change should trigger a system.
                     }
                 }
             }
@@ -260,9 +250,7 @@ fn inspector_ui(
         }
 
         // Sensor
-        // We always show Sensor toggle if it has a rigid body or collider
-        if has_rb || query.get(first_entity).map(|c| c.11.is_some()).unwrap_or(false) { // checking collider mass props presence as proxy for collider?
-             // Actually sensor is a component on its own.
+        if has_rb || query.get(first_entity).map(|c| c.10.is_some()).unwrap_or(false) {
              let mut is_sensor = local_sensor;
              if ui.checkbox(&mut is_sensor, "Sensor").clicked() {
                  for &e in &selection.0 {
@@ -350,42 +338,17 @@ fn inspector_ui(
              ui.separator();
         }
 
-        // Fill Color
-        if has_fill {
-            ui.heading("Fill Color");
-            let mut color_arr = local_fill.color.to_srgba().to_f32_array();
+        // Material Color
+        if has_material {
+            ui.heading("Color");
+            let mut color_arr = local_color.to_srgba().to_f32_array();
             if ui.color_edit_button_rgba_unmultiplied(&mut color_arr).changed() {
                 let new_color = Color::srgba(color_arr[0], color_arr[1], color_arr[2], color_arr[3]);
                 for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, _, Some(mut f), ..)) = query.get_mut(e) {
-                        f.color = new_color;
-                    }
-                }
-            }
-            ui.separator();
-        }
-
-        // Stroke
-        if has_stroke {
-            ui.heading("Stroke");
-            let mut color_arr = local_stroke.color.to_srgba().to_f32_array();
-            let mut changed = false;
-
-            ui.horizontal(|ui| {
-                if ui.color_edit_button_rgba_unmultiplied(&mut color_arr).changed() {
-                    local_stroke.color = Color::srgba(color_arr[0], color_arr[1], color_arr[2], color_arr[3]);
-                    changed = true;
-                }
-                if ui.add(egui::DragValue::new(&mut local_stroke.options.line_width).speed(0.1).prefix("Width: ")).changed() {
-                    changed = true;
-                }
-            });
-
-            if changed {
-                for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, _, _, Some(mut s), ..)) = query.get_mut(e) {
-                        s.color = local_stroke.color;
-                        s.options.line_width = local_stroke.options.line_width;
+                    if let Ok((_, _, _, _, _, _, _, Some(mat_handle), ..)) = query.get(e) {
+                         if let Some(mat) = materials.get_mut(mat_handle) {
+                             mat.color = new_color;
+                         }
                     }
                 }
             }

@@ -7,9 +7,9 @@ use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
-use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::rapier::geometry::SharedShape;
 use nalgebra::Point2;
+use bevy::render::mesh::{Indices, PrimitiveTopology};
 
 /// A trait for game commands that support Undo/Redo.
 pub trait GameCommand: Send + Sync {
@@ -84,23 +84,21 @@ impl CommandStack {
 fn spawn_shape_entity(
     world: &mut World,
     position: Vec2,
-    shape: &impl bevy_prototype_lyon::geometry::Geometry,
+    mesh: Mesh,
     collider: Collider,
-    fill: Fill,
+    color: Color,
     extra_bundle: impl Bundle,
 ) -> Entity {
     let z = world.resource_mut::<ZIndex>().next();
 
+    let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
+    let material_handle = world.resource_mut::<Assets<ColorMaterial>>().add(ColorMaterial::from(color));
+
     world
         .spawn((
-            ShapeBundle {
-                path: GeometryBuilder::build_as(shape),
-                transform: Transform::from_xyz(position.x, position.y, z),
-                ..default()
-            },
-            fill,
-            Stroke::new(Color::BLACK, 0.1),
-            RigidBody::Dynamic,
+            Mesh2d(mesh_handle),
+            MeshMaterial2d(material_handle),
+            Transform::from_xyz(position.x, position.y, z),
             collider,
             extra_bundle,
         ))
@@ -211,22 +209,21 @@ impl GameCommand for SpawnBoxCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(self.width, self.height),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
+        let mesh = Mesh::from(Rectangle::new(self.width, self.height));
 
         let entity = spawn_shape_entity(
             world,
             self.position,
-            &shape,
+            mesh,
             Collider::cuboid(self.width / 2.0, self.height / 2.0),
-            Fill::color(Color::srgb(0.5, 0.5, 1.0)),
-            EditableBox {
-                width: self.width as f64,
-                height: self.height as f64,
-            },
+            Color::srgb(0.5, 0.5, 1.0),
+            (
+                RigidBody::Dynamic,
+                EditableBox {
+                    width: self.width as f64,
+                    height: self.height as f64,
+                },
+            ),
         );
 
         self.entity = Some(entity);
@@ -259,23 +256,20 @@ impl GameCommand for SpawnCircleCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let shape = shapes::Circle {
-            radius: self.radius,
-            center: Vec2::ZERO,
-        };
+        let mesh = Mesh::from(Circle::new(self.radius));
 
         let entity = spawn_shape_entity(
             world,
             self.position,
-            &shape,
+            mesh,
             Collider::ball(self.radius),
-            Fill {
-                color: Color::srgb(1.0, 0.5, 0.5),
-                options: FillOptions::default().with_tolerance(0.001),
-            },
-            EditableCircle {
-                radius: self.radius as f64,
-            },
+            Color::srgb(1.0, 0.5, 0.5),
+            (
+                RigidBody::Dynamic,
+                EditableCircle {
+                    radius: self.radius as f64,
+                },
+            ),
         );
 
         self.entity = Some(entity);
@@ -312,30 +306,61 @@ impl GameCommand for SpawnPolygonCommand {
             return Err("Polygon must have at least 3 vertices".to_string());
         }
 
-        let shape = shapes::Polygon {
-            points: self.vertices.clone(),
-            closed: true,
-        };
+        // Build a simplified mesh (Triangle Fan centered at 0,0 for now)
+        // This assumes convexity.
+        // TODO: Proper triangulation for concave polygons.
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, bevy::render::render_asset::RenderAssetUsages::default());
+
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+        let mut normals: Vec<[f32; 3]> = Vec::new();
+        let mut indices: Vec<u32> = Vec::new();
+
+        // Add center point for fan
+        let center = [0.0, 0.0, 0.0];
+        positions.push(center);
+        normals.push([0.0, 0.0, 1.0]);
+
+        for v in &self.vertices {
+             positions.push([v.x, v.y, 0.0]);
+             normals.push([0.0, 0.0, 1.0]);
+        }
+
+        for i in 1..self.vertices.len() {
+            indices.push(0);
+            indices.push(i as u32);
+            indices.push((i + 1) as u32);
+        }
+        // Close the loop
+        indices.push(0);
+        indices.push(self.vertices.len() as u32);
+        indices.push(1);
+
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_indices(Indices::U32(indices));
+
 
         let vertices: Vec<Point2<f32>> = self
             .vertices
             .iter()
             .map(|v| Point2::new(v.x, v.y))
             .collect();
-        let indices: Vec<[u32; 2]> = (0..vertices.len())
+        let poly_indices: Vec<[u32; 2]> = (0..vertices.len())
             .map(|i| [i as u32, ((i + 1) % vertices.len()) as u32])
             .collect();
 
-        let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
+        let rapier_shape = SharedShape::convex_decomposition(&vertices, &poly_indices);
         let collider = Collider::from(rapier_shape);
 
         let entity = spawn_shape_entity(
             world,
             self.position,
-            &shape,
+            mesh,
             collider,
-            Fill::color(Color::srgb(0.5, 1.0, 0.5)),
-            (),
+            Color::srgb(0.5, 1.0, 0.5),
+            (
+                RigidBody::Dynamic,
+            ),
         );
 
         self.entity = Some(entity);
@@ -384,30 +409,25 @@ impl GameCommand for SpawnJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                let circle_outer = GeometryBuilder::build_as(&shapes::Circle {
-                    radius: 5.0,
-                    ..default()
-                });
+                let mesh_outer = Mesh::from(Circle::new(5.0));
+                let mesh_inner = Mesh::from(Circle::new(2.0));
+
+                let mesh_handle_outer = world.resource_mut::<Assets<Mesh>>().add(mesh_outer);
+                let mat_handle_outer = world.resource_mut::<Assets<ColorMaterial>>().add(ColorMaterial::from(Color::BLACK));
+
+                let mesh_handle_inner = world.resource_mut::<Assets<Mesh>>().add(mesh_inner);
+                let mat_handle_inner = world.resource_mut::<Assets<ColorMaterial>>().add(ColorMaterial::from(Color::WHITE));
+
                 world.entity_mut(visual_id).insert((
-                    ShapeBundle {
-                        path: circle_outer,
-                        ..default()
-                    },
-                    Fill::color(Color::BLACK),
+                    Mesh2d(mesh_handle_outer),
+                    MeshMaterial2d(mat_handle_outer),
                 ));
 
-                let circle_inner = GeometryBuilder::build_as(&shapes::Circle {
-                    radius: 2.0,
-                    ..default()
-                });
                 let inner = world
                     .spawn((
-                        ShapeBundle {
-                            path: circle_inner,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Fill::color(Color::WHITE),
+                         Mesh2d(mesh_handle_inner),
+                         MeshMaterial2d(mat_handle_inner),
+                        Transform::from_translation(Vec3::Z * 0.1),
                     ))
                     .id();
                 world.entity_mut(visual_id).add_child(inner);
@@ -494,33 +514,32 @@ impl GameCommand for SpawnFixedJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                let line1 = GeometryBuilder::build_as(&shapes::Line(
-                    Vec2::new(-3.0, -3.0),
-                    Vec2::new(3.0, 3.0),
-                ));
+                // Cross shape
+                let thickness = 1.0;
+                let length = 6.0;
+                let mesh_v = Mesh::from(Rectangle::new(thickness, length));
+                let mesh_h = Mesh::from(Rectangle::new(length, thickness));
+
+                let mut meshes = world.resource_mut::<Assets<Mesh>>();
+                let h_v = meshes.add(mesh_v);
+                let h_h = meshes.add(mesh_h);
+
+                let mut materials = world.resource_mut::<Assets<ColorMaterial>>();
+                let mat = materials.add(ColorMaterial::from(Color::srgb(1.0, 0.0, 0.0)));
+
                 let v1 = world
                     .spawn((
-                        ShapeBundle {
-                            path: line1,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                        Mesh2d(h_v),
+                        MeshMaterial2d(mat.clone()),
+                        Transform::from_translation(Vec3::Z * 0.1).with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_4)),
                     ))
                     .id();
 
-                let line2 = GeometryBuilder::build_as(&shapes::Line(
-                    Vec2::new(-3.0, 3.0),
-                    Vec2::new(3.0, -3.0),
-                ));
                 let v2 = world
                     .spawn((
-                        ShapeBundle {
-                            path: line2,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                        Mesh2d(h_h),
+                        MeshMaterial2d(mat),
+                        Transform::from_translation(Vec3::Z * 0.1).with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_4)),
                     ))
                     .id();
                 world.entity_mut(visual_id).add_children(&[v1, v2]);
@@ -588,18 +607,7 @@ impl GameCommand for SpawnGroundCommand {
         let width = 100_000.0;
         let depth = 1000.0;
 
-        // Visual shape: Huge rectangle
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(width, depth),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
-
-        // Offset: the visual rectangle is centered at (0,0).
-        // The collider is centered at (0,0).
-        // But we want the "surface" (top edge) to be at `position` aligned with `rotation`.
-        // The box center is at (0, -depth/2) relative to the surface.
-        // So we rotate (0, -depth/2) by `rotation` and add to `position`.
+        let mesh = Mesh::from(Rectangle::new(width, depth));
 
         let rot = Quat::from_rotation_z(self.rotation);
         let offset = rot * Vec3::new(0.0, -depth / 2.0, 0.0);
@@ -607,26 +615,23 @@ impl GameCommand for SpawnGroundCommand {
 
         let z = -1.0; // Force ground to be behind
 
-        let entity = world
-            .spawn((
-                // Shape Bundle
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&shape),
-                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
-                        .with_rotation(rot),
-                    ..default()
-                },
-                Fill::color(Color::srgb(0.2, 0.2, 0.2)), // Dark grey
-                Stroke::new(Color::BLACK, 2.0),
-                // Physics
-                RigidBody::Fixed,
-                Collider::cuboid(width / 2.0, depth / 2.0),
-                Friction::coefficient(0.5),
-                Restitution::coefficient(0.0),
-                GroundPlane,
-                Name::new("Ground"),
-            ))
-            .id();
+        let entity = spawn_shape_entity(
+             world,
+             Vec2::new(center.x, center.y),
+             mesh,
+             Collider::cuboid(width / 2.0, depth / 2.0),
+             Color::srgb(0.2, 0.2, 0.2),
+             (
+                 GroundPlane,
+                 Name::new("Ground"),
+                 RigidBody::Fixed,
+             )
+        );
+
+        if let Some(mut t) = world.get_mut::<Transform>(entity) {
+             t.rotation = rot;
+             t.translation.z = z; // Ensure Z is set (spawn_shape_entity sets it too, but we override)
+        }
 
         self.entity = Some(entity);
         Ok(())
@@ -655,6 +660,8 @@ mod tests {
     fn world() -> World {
         let mut world = World::new();
         world.init_resource::<GameZIndex>();
+        world.init_resource::<Assets<Mesh>>();
+        world.init_resource::<Assets<ColorMaterial>>();
         world
     }
 
@@ -694,6 +701,7 @@ mod tests {
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
         assert!(world.get::<EditableBox>(entity).is_some());
+        assert!(world.get::<Mesh2d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);
@@ -727,6 +735,7 @@ mod tests {
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
         assert!(world.get::<EditableCircle>(entity).is_some());
+        assert!(world.get::<Mesh2d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);
@@ -806,8 +815,7 @@ mod tests {
 
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
-        // Verify shape bundle exists (checking Transform as proxy)
-        assert!(world.get::<Transform>(entity).is_some());
+        assert!(world.get::<Mesh2d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);

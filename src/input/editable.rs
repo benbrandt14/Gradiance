@@ -3,7 +3,6 @@
 //! Provides `EditableBox` and `EditableCircle` components.
 
 use crate::prelude::*;
-use bevy_prototype_lyon::prelude::*;
 
 /// A component representing a box that can be resized.
 #[derive(Component, Reflect, Default, Debug, Clone, Copy)]
@@ -35,21 +34,27 @@ impl Plugin for EditablePlugin {
 }
 
 /// System to update the collider and visual shape when `EditableBox` changes.
-fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Changed<EditableBox>>) {
-    for (entity, editable) in query.iter() {
+fn resize_box(
+    mut commands: Commands,
+    query: Query<(Entity, &EditableBox, Option<&Mesh2d>), Changed<EditableBox>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    for (entity, editable, existing_mesh) in query.iter() {
         if editable.width <= 0.0 || editable.height <= 0.0 {
             continue;
         }
 
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(editable.width as f32, editable.height as f32),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
+        // Clean up old mesh to prevent leaks (Assumes 1-to-1 ownership for editable objects)
+        if let Some(mesh2d) = existing_mesh {
+            meshes.remove(&mesh2d.0);
+        }
+
+        let mesh = Mesh::from(Rectangle::new(editable.width as f32, editable.height as f32));
+        let handle = meshes.add(mesh);
 
         commands
             .entity(entity)
-            .insert(GeometryBuilder::build_as(&shape))
+            .insert(Mesh2d(handle))
             .insert(Collider::cuboid(
                 (editable.width / 2.0) as f32,
                 (editable.height / 2.0) as f32,
@@ -60,21 +65,25 @@ fn resize_box(mut commands: Commands, query: Query<(Entity, &EditableBox), Chang
 /// System to update the collider and visual shape when `EditableCircle` changes.
 fn resize_circle(
     mut commands: Commands,
-    query: Query<(Entity, &EditableCircle), Changed<EditableCircle>>,
+    query: Query<(Entity, &EditableCircle, Option<&Mesh2d>), Changed<EditableCircle>>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    for (entity, editable) in query.iter() {
+    for (entity, editable, existing_mesh) in query.iter() {
         if editable.radius <= 0.0 {
             continue;
         }
 
-        let shape = shapes::Circle {
-            radius: editable.radius as f32,
-            center: Vec2::ZERO,
-        };
+        // Clean up old mesh
+        if let Some(mesh2d) = existing_mesh {
+            meshes.remove(&mesh2d.0);
+        }
+
+        let mesh = Mesh::from(Circle::new(editable.radius as f32));
+        let handle = meshes.add(mesh);
 
         commands
             .entity(entity)
-            .insert(GeometryBuilder::build_as(&shape))
+            .insert(Mesh2d(handle))
             .insert(Collider::ball(editable.radius as f32));
     }
 }

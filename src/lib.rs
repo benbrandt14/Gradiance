@@ -20,9 +20,6 @@ pub mod scripting;
 pub mod ui;
 
 use crate::prelude::*;
-use bevy_prototype_lyon::prelude::*;
-// use bevy_mod_picking::DefaultPickingPlugins;
-// use bevy_mod_picking::backends::rapier::RapierBackend;
 
 /// The primary plugin for the Gradiance game.
 ///
@@ -32,14 +29,10 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            ShapePlugin,
-            // DefaultPickingPlugins,
-            // RapierBackend,
             physics::PhysicsPlugin,
             geometry::GeometryPlugin,
             input::InputPlugin,
             ui::UiPlugin,
-            // scripting::ScriptingPlugin,
         ))
         .add_systems(Startup, setup_camera);
     }

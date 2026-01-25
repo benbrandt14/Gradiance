@@ -8,7 +8,6 @@ use crate::input::{cursor::CursorWorldPos, selection::Selection};
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
 use bevy_egui::{EguiContexts, egui};
-use bevy_prototype_lyon::prelude::Fill;
 
 /// State for the context menu.
 #[derive(Resource, Default)]
@@ -88,7 +87,8 @@ fn context_menu_ui(
         Option<&LockedAxes>,
         Option<&Sleeping>,
     )>,
-    mut fill_q: Query<&mut Fill>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mesh_mat_q: Query<&MeshMaterial2d<ColorMaterial>>,
 ) {
     let Some(pos) = state.position else {
         return;
@@ -143,8 +143,10 @@ fn context_menu_ui(
                 // Custom Color Picker
                 let mut current_color = Color::BLACK;
                 if let Some(&first_e) = selection.0.iter().next() {
-                    if let Ok(fill) = fill_q.get(first_e) {
-                         current_color = fill.color;
+                     if let Ok(handle) = mesh_mat_q.get(first_e) {
+                         if let Some(mat) = materials.get(&handle.0) {
+                             current_color = mat.color;
+                         }
                     }
                 }
 
@@ -156,8 +158,10 @@ fn context_menu_ui(
 
                 if let Some(c) = color_to_set {
                     for &e in &selection.0 {
-                        if let Ok(mut fill) = fill_q.get_mut(e) {
-                            fill.color = c;
+                        if let Ok(handle) = mesh_mat_q.get(e) {
+                            if let Some(mat) = materials.get_mut(&handle.0) {
+                                mat.color = c;
+                            }
                         }
                     }
                 }
