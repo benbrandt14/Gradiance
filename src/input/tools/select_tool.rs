@@ -242,6 +242,8 @@ fn select_tool_update(
                 }
             }
 
+            let mut did_copy = false;
+
             // Copy on Drag
             if ctrl && selection.0.contains(&entity) {
                 // Duplicate selected entities
@@ -318,11 +320,12 @@ fn select_tool_update(
                         selection.add(e);
                     }
                     info!("Duplicated {} entities", selection.0.len());
+                    did_copy = true;
                 }
             }
 
             // Initiate Move for all selected
-            if selection.0.contains(&entity) {
+            if did_copy || selection.0.contains(&entity) {
                 data.is_moving = true;
                 data.initial_positions.clear();
                 let q0 = queries.p0();
