@@ -174,10 +174,11 @@ fn top_panel_ui(
                      ui.menu_button("...", |ui| {
                         ui.label("Object Snap Options");
                         ui.checkbox(&mut grid_settings.snap_to_object_centers, "Centers");
+                        ui.checkbox(&mut grid_settings.snap_to_object_corners, "Corners");
                         ui.checkbox(&mut grid_settings.snap_to_object_edges, "Edges");
                         ui.checkbox(&mut grid_settings.snap_to_object_midpoints, "Midpoints");
                         ui.separator();
-                        ui.add(egui::DragValue::new(&mut grid_settings.snap_distance).speed(0.1).range(0.01..=10.0).prefix("Dist: "));
+                        ui.add(egui::DragValue::new(&mut grid_settings.snap_distance).speed(0.1).range(0.01..=100.0).prefix("Dist: "));
                     });
                 }
             }
