@@ -9,7 +9,7 @@ use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
-use crate::ui::grid::{GridSettings, snap_to_grid};
+use crate::ui::grid::GridSettings;
 use bevy::ecs::system::SystemParam;
 use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::{Fill, Stroke};
@@ -148,7 +148,7 @@ fn select_tool_update(
         )>,
     )>,
     aux: AuxQueries,
-    grid_settings: Res<GridSettings>,
+    _grid_settings: Res<GridSettings>,
     mut next_group_id: ResMut<NextGroupID>,
     mut commands: Commands,
 ) {
@@ -396,10 +396,7 @@ fn select_tool_update(
 
             for (entity, initial_pos) in &data.initial_positions {
                 if let Ok((_, mut t, _)) = q0.get_mut(*entity) {
-                    let mut new_pos = *initial_pos + delta;
-                    if grid_settings.show && grid_settings.snap {
-                        new_pos = snap_to_grid(new_pos, grid_settings.spacing);
-                    }
+                    let new_pos = *initial_pos + delta;
                     t.translation.x = new_pos.x;
                     t.translation.y = new_pos.y;
                 }

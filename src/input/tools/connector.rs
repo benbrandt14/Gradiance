@@ -15,7 +15,7 @@ use crate::input::commands::{CommandStack, SpawnFixedJointCommand, SpawnJointCom
 use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
-use crate::ui::grid::{GridSettings, snap_to_grid};
+use crate::ui::grid::GridSettings;
 use bevy::math::Vec2;
 use bevy_egui::EguiContexts;
 use std::cmp::Ordering;
@@ -121,7 +121,7 @@ fn update_connector(
     mouse: Res<ButtonInput<MouseButton>>,
     rapier_context_query: Query<&RapierContext>,
     mut contexts: EguiContexts,
-    grid_settings: Res<GridSettings>,
+    _grid_settings: Res<GridSettings>,
     tool_state: Res<State<ToolState>>,
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
     parents: Query<&Parent>,
@@ -140,12 +140,7 @@ fn update_connector(
     };
 
     if mouse.just_pressed(MouseButton::Left) {
-        // Snap to grid
-        let pos = if grid_settings.show && grid_settings.snap {
-            snap_to_grid(raw_pos, grid_settings.spacing)
-        } else {
-            raw_pos
-        };
+        let pos = raw_pos;
 
         // Find entities using shape intersection for better robustness
         let Some(rapier_context) = rapier_context_query.iter().next() else {

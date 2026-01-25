@@ -35,20 +35,41 @@ pub struct GridSettings {
     /// Whether to render the grid lines.
     pub show: bool,
     /// Whether tools should snap positions to the grid.
-    pub snap: bool,
+    pub snap_to_grid: bool,
+    /// Whether to automatically adjust spacing based on zoom.
+    pub auto_spacing: bool,
     /// The distance between grid lines (in world units).
     pub spacing: f32,
     /// The type of grid to display.
     pub grid_type: GridType,
+
+    // --- Object Snapping ---
+    /// Master switch for object snapping.
+    pub snap_to_objects: bool,
+    /// Snap to object centers (transforms).
+    pub snap_to_object_centers: bool,
+    /// Snap to object edges (nearest point on collider).
+    pub snap_to_object_edges: bool,
+    /// Snap to object midpoints (e.g. middle of an edge).
+    pub snap_to_object_midpoints: bool,
+    /// Maximum distance for snapping (in world units).
+    pub snap_distance: f32,
 }
 
 impl Default for GridSettings {
     fn default() -> Self {
         Self {
             show: true,
-            snap: true,
+            snap_to_grid: true,
+            auto_spacing: true,
             spacing: 1.0,
             grid_type: GridType::Rectangular,
+
+            snap_to_objects: false,
+            snap_to_object_centers: true,
+            snap_to_object_edges: false,
+            snap_to_object_midpoints: false,
+            snap_distance: 0.5,
         }
     }
 }
@@ -110,7 +131,6 @@ fn draw_grid(
     }
 
     // Dynamic Spacing Calculation based on Zoom
-    // We want major grid lines approx every 100 screen pixels.
     let scale = if let Projection::Orthographic(ortho) = projection {
         ortho.scale
     } else {
@@ -121,14 +141,18 @@ fn draw_grid(
     let major_spacing = 10.0_f32.powf(exponent);
     let minor_spacing = major_spacing / 10.0;
 
-    // Update grid settings with current spacing for tools to use
-    // Use minor spacing for finer snapping
-    settings.spacing = minor_spacing;
+    // Update grid settings with current spacing for tools to use only if auto_spacing is enabled
+    if settings.auto_spacing {
+        settings.spacing = minor_spacing;
+    }
+
+    let render_spacing = if settings.auto_spacing { minor_spacing } else { settings.spacing };
+    let render_major_spacing = if settings.auto_spacing { major_spacing } else { settings.spacing * 10.0 };
 
     match settings.grid_type {
         GridType::Rectangular => draw_rectangular_grid(
-            major_spacing,
-            minor_spacing,
+            render_major_spacing,
+            render_spacing,
             left,
             right,
             bottom,
@@ -170,11 +194,13 @@ fn draw_rectangular_grid(
 
     // Draw minor lines (faint)
     if minor_spacing > 0.001 {
-        draw_lines(minor_spacing, 0.05, gizmos);
+        // Increased alpha from 0.05 to 0.1 for better visibility
+        draw_lines(minor_spacing, 0.1, gizmos);
     }
 
     // Draw major lines (stronger)
-    draw_lines(major_spacing, 0.15, gizmos);
+    // Increased alpha from 0.15 to 0.3
+    draw_lines(major_spacing, 0.3, gizmos);
 }
 
 #[cfg(test)]
