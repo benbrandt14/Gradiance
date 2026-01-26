@@ -7,6 +7,7 @@ use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use crate::ui::icons::GameIcons;
+use crate::visuals::RenderSettings;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
 
@@ -107,8 +108,10 @@ fn top_panel_ui(
     mut contexts: EguiContexts,
     mut virtual_time: ResMut<Time<Virtual>>,
     mut grid_settings: ResMut<GridSettings>,
+    mut render_settings: ResMut<RenderSettings>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     game_icons: Res<GameIcons>,
+    mut show_render_settings: Local<bool>,
 ) {
     let Some(window) = window_query.iter().next() else {
         return;
@@ -187,6 +190,51 @@ fn top_panel_ui(
                     });
                 }
             }
+
+            ui.separator();
+            if ui.button("Render").clicked() {
+                *show_render_settings = !*show_render_settings;
+            }
         });
     });
+
+    if *show_render_settings {
+        egui::Window::new("Render Settings")
+            .open(&mut *show_render_settings)
+            .show(ctx, |ui| {
+                ui.checkbox(&mut render_settings.cast_shadows, "Cast Shadows");
+                ui.checkbox(&mut render_settings.show_tracers, "Show Tracers");
+                if render_settings.show_tracers {
+                    ui.add(
+                        egui::DragValue::new(&mut render_settings.tracer_length).prefix("Len: "),
+                    );
+                }
+
+                ui.separator();
+                ui.heading("Lighting");
+                ui.add(
+                    egui::Slider::new(&mut render_settings.ambient_light_brightness, 0.0..=2000.0)
+                        .text("Ambient"),
+                );
+
+                ui.separator();
+                ui.heading("Mouse Light");
+                ui.add(
+                    egui::Slider::new(&mut render_settings.point_light_intensity, 0.0..=500_000.0)
+                        .text("Intensity"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut render_settings.point_light_radius, 100.0..=5000.0)
+                        .text("Radius"),
+                );
+
+                // Color picker
+                let mut color = render_settings.point_light_color.to_srgba();
+                let mut color_arr = [color.red, color.green, color.blue];
+                if ui.color_edit_button_rgb(&mut color_arr).changed() {
+                    render_settings.point_light_color =
+                        Color::srgb(color_arr[0], color_arr[1], color_arr[2]);
+                }
+            });
+    }
 }

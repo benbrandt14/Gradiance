@@ -2,17 +2,16 @@
 //!
 //! Defines the [`GameCommand`] trait and the [`CommandStack`] resource.
 
+use crate::geometry::mesh_generator::generate_3d_mesh;
 use crate::input::ZIndex;
 use crate::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use anyhow::{Result, bail};
-use bevy_prototype_lyon::prelude::*;
+// use bevy_prototype_lyon::prelude::*; // Unused
 use std::fmt::Debug;
 
-const DEFAULT_STROKE_WIDTH: f32 = 0.1;
-const DEFAULT_STROKE_COLOR: Color = Color::BLACK;
 const DEFAULT_BOX_COLOR: Color = Color::srgb(0.5, 0.5, 1.0);
 const DEFAULT_CIRCLE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
 const DEFAULT_POLYGON_COLOR: Color = Color::srgb(0.5, 1.0, 0.5);
@@ -20,8 +19,8 @@ const DEFAULT_GROUND_COLOR: Color = Color::srgb(0.2, 0.2, 0.2);
 const GROUND_WIDTH: f32 = 100_000.0;
 const GROUND_DEPTH: f32 = 1000.0;
 const CONNECTOR_COLLIDER_RADIUS: f32 = 0.5;
-const VISUAL_CIRCLE_OUTER_RADIUS: f32 = 5.0;
-const VISUAL_CIRCLE_INNER_RADIUS: f32 = 2.0;
+const VISUAL_CIRCLE_OUTER_RADIUS: f32 = 0.5;
+const VISUAL_CIRCLE_INNER_RADIUS: f32 = 0.2;
 const VISUAL_LINE_OFFSET: f32 = 3.0;
 
 /// A trait for game commands that support Undo/Redo.
@@ -207,20 +206,27 @@ impl GameCommand for SpawnShapeCommand {
             ShapeType::Polygon { .. } => DEFAULT_POLYGON_COLOR,
         };
 
+        let mesh = generate_3d_mesh(&self.shape);
+        let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
+
+        let material = StandardMaterial {
+            base_color: fill_color,
+            unlit: false,
+            ..default()
+        };
+        let material_handle = world.resource_mut::<Assets<StandardMaterial>>().add(material);
+
         let entity = world
             .spawn((
-                ShapeBundle {
-                    path,
-                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
-                    ..default()
-                },
-                Fill::color(fill_color),
-                Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(material_handle),
+                Transform::from_xyz(self.position.x, self.position.y, z),
                 RigidBody::Dynamic,
                 collider,
                 EditableShape {
                     shape: self.shape.clone(),
                 },
+                path,
             ))
             .id();
 
@@ -271,30 +277,34 @@ impl GameCommand for SpawnJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                let circle_outer = GeometryBuilder::build_as(&shapes::Circle {
-                    radius: VISUAL_CIRCLE_OUTER_RADIUS,
+                // Outer Sphere
+                let outer_mesh = Mesh::from(Sphere::new(VISUAL_CIRCLE_OUTER_RADIUS));
+                let outer_mesh_h = world.resource_mut::<Assets<Mesh>>().add(outer_mesh);
+                let outer_mat = StandardMaterial {
+                    base_color: Color::BLACK,
                     ..default()
-                });
+                };
+                let outer_mat_h = world.resource_mut::<Assets<StandardMaterial>>().add(outer_mat);
+
                 world.entity_mut(visual_id).insert((
-                    ShapeBundle {
-                        path: circle_outer,
-                        ..default()
-                    },
-                    Fill::color(Color::BLACK),
+                    Mesh3d(outer_mesh_h),
+                    MeshMaterial3d(outer_mat_h),
                 ));
 
-                let circle_inner = GeometryBuilder::build_as(&shapes::Circle {
-                    radius: VISUAL_CIRCLE_INNER_RADIUS,
+                // Inner Sphere
+                let inner_mesh = Mesh::from(Sphere::new(VISUAL_CIRCLE_INNER_RADIUS));
+                let inner_mesh_h = world.resource_mut::<Assets<Mesh>>().add(inner_mesh);
+                let inner_mat = StandardMaterial {
+                    base_color: Color::WHITE,
                     ..default()
-                });
+                };
+                let inner_mat_h = world.resource_mut::<Assets<StandardMaterial>>().add(inner_mat);
+
                 let inner = world
                     .spawn((
-                        ShapeBundle {
-                            path: circle_inner,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Fill::color(Color::WHITE),
+                        Mesh3d(inner_mesh_h),
+                        MeshMaterial3d(inner_mat_h),
+                        Transform::from_translation(Vec3::Z * 0.2), // Pop out slightly
                     ))
                     .id();
                 world.entity_mut(visual_id).add_child(inner);
@@ -317,11 +327,6 @@ impl GameCommand for SpawnJointCommand {
             .local_anchor1(local_anchor_1)
             .local_anchor2(local_anchor_2);
 
-        // Attach ImpulseJoint to entity_a
-        // TODO: Implement CollisionGroups/Filtering.
-        // Currently, the pin entity (target_entity) is a rigid body that collides with everything.
-        // If entity_a overlaps with it (which it must to be pinned), Rapier may cause explosions.
-        // We need to disable collisions between entity_a and target_entity.
         world
             .entity_mut(self.entity_a)
             .insert(ImpulseJoint::new(target_entity, joint_data));
@@ -336,7 +341,6 @@ impl GameCommand for SpawnJointCommand {
             self.visual_entity = None;
         }
 
-        // Remove Joint from entity_a
         if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
             e.remove::<ImpulseJoint>();
         }
@@ -386,33 +390,38 @@ impl GameCommand for SpawnFixedJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                let line1 = GeometryBuilder::build_as(&shapes::Line(
-                    Vec2::new(-VISUAL_LINE_OFFSET, -VISUAL_LINE_OFFSET),
-                    Vec2::new(VISUAL_LINE_OFFSET, VISUAL_LINE_OFFSET),
-                ));
+                // Cross visuals: Two cuboids
+                // Line 1
+                let line_len = VISUAL_LINE_OFFSET * 2.0; // Approx
+                let thickness = 0.4;
+                // We use Cuboid.
+                // We need to rotate them to form an X.
+                // 45 degrees
+                let mesh = Mesh::from(Cuboid::new(line_len * 1.414, thickness, 0.4)); // length sqrt(2)*offset?
+                // Logic in old code was Line from (-O,-O) to (O,O). Length is sqrt(8)*O.
+
+                let mesh_h = world.resource_mut::<Assets<Mesh>>().add(mesh);
+                let mat = StandardMaterial {
+                    base_color: Color::srgb(1.0, 0.0, 0.0),
+                    ..default()
+                };
+                let mat_h = world.resource_mut::<Assets<StandardMaterial>>().add(mat);
+
                 let v1 = world
                     .spawn((
-                        ShapeBundle {
-                            path: line1,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                        Mesh3d(mesh_h.clone()),
+                        MeshMaterial3d(mat_h.clone()),
+                        Transform::from_translation(Vec3::Z * 0.1)
+                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_4)),
                     ))
                     .id();
 
-                let line2 = GeometryBuilder::build_as(&shapes::Line(
-                    Vec2::new(-VISUAL_LINE_OFFSET, VISUAL_LINE_OFFSET),
-                    Vec2::new(VISUAL_LINE_OFFSET, -VISUAL_LINE_OFFSET),
-                ));
                 let v2 = world
                     .spawn((
-                        ShapeBundle {
-                            path: line2,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                        Mesh3d(mesh_h),
+                        MeshMaterial3d(mat_h),
+                        Transform::from_translation(Vec3::Z * 0.1)
+                            .with_rotation(Quat::from_rotation_z(-std::f32::consts::FRAC_PI_4)),
                     ))
                     .id();
                 world.entity_mut(visual_id).add_children(&[v1, v2]);
@@ -480,13 +489,6 @@ impl GameCommand for SpawnGroundCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<()> {
-        // Visual shape: Huge rectangle
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(GROUND_WIDTH, GROUND_DEPTH),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
-
         // Offset: the visual rectangle is centered at (0,0).
         // The collider is centered at (0,0).
         // But we want the "surface" (top edge) to be at `position` aligned with `rotation`.
@@ -499,17 +501,21 @@ impl GameCommand for SpawnGroundCommand {
 
         let z = -1.0; // Force ground to be behind
 
+        let mesh = Mesh::from(Cuboid::new(GROUND_WIDTH, GROUND_DEPTH, 1.0));
+        let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
+        let material = StandardMaterial {
+            base_color: DEFAULT_GROUND_COLOR,
+            unlit: false,
+            ..default()
+        };
+        let material_handle = world.resource_mut::<Assets<StandardMaterial>>().add(material);
+
         let entity = world
             .spawn((
-                // Shape Bundle
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&shape),
-                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
-                        .with_rotation(rot),
-                    ..default()
-                },
-                Fill::color(DEFAULT_GROUND_COLOR), // Dark grey
-                Stroke::new(DEFAULT_STROKE_COLOR, 2.0),
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(material_handle),
+                Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
+                    .with_rotation(rot),
                 // Physics
                 RigidBody::Fixed,
                 Collider::cuboid(GROUND_WIDTH / 2.0, GROUND_DEPTH / 2.0),
@@ -547,6 +553,10 @@ mod tests {
     fn world() -> World {
         let mut world = World::new();
         world.init_resource::<GameZIndex>();
+        // Add assets for mesh generation
+        world.init_resource::<Assets<Mesh>>();
+        world.init_resource::<Assets<StandardMaterial>>();
+        world.init_resource::<Assets<Image>>(); // Needed? Maybe for StandardMaterial default
         world
     }
 
@@ -593,6 +603,7 @@ mod tests {
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
         assert!(world.get::<EditableShape>(entity).is_some());
+        assert!(world.get::<Mesh3d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);
@@ -626,6 +637,7 @@ mod tests {
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
         assert!(world.get::<EditableShape>(entity).is_some());
+        assert!(world.get::<Mesh3d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);
@@ -666,6 +678,11 @@ mod tests {
         assert!(visual_id.is_some());
         let visual_id = *visual_id.unwrap();
 
+        // Check Mesh3d (Fixed joint has visuals as children)
+        let v_children = world.get::<Children>(visual_id);
+        assert!(v_children.is_some());
+        assert!(v_children.unwrap().iter().any(|&c| world.get::<Mesh3d>(c).is_some()));
+
         // Check pin entity
         assert!(cmd.pin_entity.is_some());
         let pin_id = cmd.pin_entity.unwrap();
@@ -705,8 +722,8 @@ mod tests {
 
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
-        // Verify shape bundle exists (checking Transform as proxy)
-        assert!(world.get::<Transform>(entity).is_some());
+        // Verify Mesh3d
+        assert!(world.get::<Mesh3d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);
@@ -726,8 +743,7 @@ mod tests {
                 width: 1.0,
                 height: 1.0,
             },
-            entity: None,
-        });
+            entity: None,        });
         stack.push(box_cmd, &mut world);
 
         assert_eq!(stack.index, 1);
@@ -797,6 +813,11 @@ mod tests {
             .iter()
             .find(|&&child| world.get::<Connector>(child).is_some())
             .unwrap();
+
+        // Check Mesh3d (Fixed joint has visuals as children)
+        let v_children = world.get::<Children>(visual_id);
+        assert!(v_children.is_some());
+        assert!(v_children.unwrap().iter().any(|&c| world.get::<Mesh3d>(c).is_some()));
 
         // Check pin entity
         assert!(cmd.pin_entity.is_some());
@@ -879,6 +900,7 @@ mod tests {
         assert!(world.get::<Collider>(entity).is_some());
         assert!(world.get::<GroundPlane>(entity).is_some());
         assert!(world.get::<Transform>(entity).is_some());
+        assert!(world.get::<Mesh3d>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);

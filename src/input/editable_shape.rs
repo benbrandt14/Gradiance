@@ -1,5 +1,6 @@
 //! Logic for live-editable shapes using a unified component.
 
+use crate::geometry::mesh_generator::generate_3d_mesh;
 use crate::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::rapier::geometry::SharedShape;
@@ -112,11 +113,20 @@ pub fn generate_shape_components(shape_type: &ShapeType) -> Option<(Path, Collid
 /// System to update the collider and visual shape when `EditableShape` changes.
 fn update_shape_geometry(
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
     query: Query<(Entity, &EditableShape), Changed<EditableShape>>,
 ) {
     for (entity, editable) in query.iter() {
         if let Some((path, collider)) = generate_shape_components(&editable.shape) {
-            commands.entity(entity).insert(path).insert(collider);
+            // Update 3D Mesh
+            let mesh = generate_3d_mesh(&editable.shape);
+            let handle = meshes.add(mesh);
+
+            commands
+                .entity(entity)
+                .insert(path)
+                .insert(collider)
+                .insert(Mesh3d(handle));
         }
     }
 }

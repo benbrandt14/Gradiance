@@ -51,10 +51,20 @@ pub fn update_cursor_pos(
     }
 
     let mut raw_pos = None;
-    if let Some(screen_pos) = window.cursor_position()
-        && let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos)
-    {
-        raw_pos = Some(world_pos);
+    if let Some(screen_pos) = window.cursor_position() {
+        // Try 2D (ortho) first
+        if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos) {
+            raw_pos = Some(world_pos);
+        } else if let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos) {
+            // Raycast to Z=0
+            if ray.direction.z.abs() > f32::EPSILON {
+                let t = -ray.origin.z / ray.direction.z;
+                if t >= 0.0 {
+                    let point = ray.get_point(t);
+                    raw_pos = Some(point.truncate());
+                }
+            }
+        }
     }
 
     cursor_pos.0 = raw_pos;
@@ -97,7 +107,7 @@ pub fn update_cursor_pos(
 pub fn draw_snap_indicators(
     snap_status: Res<SnappingStatus>,
     mut gizmos: Gizmos,
-    q_camera: Query<&Projection, With<Camera2d>>,
+    q_camera: Query<&Projection, With<Camera>>,
 ) {
     if !snap_status.snapped {
         return;
