@@ -7,6 +7,8 @@ use crate::prelude::*;
 // use bevy_prototype_lyon::prelude::*;
 
 pub mod csg;
+/// Logic for generating extruded 3D meshes from 2D paths.
+pub mod extrusion;
 
 /// Plugin for geometry and vector rendering.
 ///
@@ -14,8 +16,10 @@ pub mod csg;
 pub struct GeometryPlugin;
 
 impl Plugin for GeometryPlugin {
-    fn build(&self, _app: &mut App) {
+    fn build(&self, app: &mut App) {
         // Lyon setup for vector rendering
         // app.add_plugins(ShapePlugin);
+
+        app.add_systems(Update, extrusion::sync_extruded_meshes);
     }
 }
