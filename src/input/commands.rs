@@ -560,7 +560,7 @@ mod tests {
             entity: None,
         };
 
-        // Apply should fail
+        // Apply should fail (generate_shape_components returns None)
         let result = cmd.apply(&mut world);
         assert!(result.is_err());
         assert_eq!(
