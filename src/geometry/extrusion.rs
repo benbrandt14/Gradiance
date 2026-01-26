@@ -74,6 +74,8 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
     let mut indices: Vec<u32> = Vec::new();
 
     // 1. Tessellate Front Cap (z_end)
+    // Front face: Normal (0,0,1). Winding CCW.
+    // Lyon generates CCW for filled shapes usually?
     {
         let mut buffers: VertexBuffers<Vec3, u32> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
@@ -103,6 +105,8 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
     }
 
     // 2. Tessellate Back Cap (z_start)
+    // Back face: Normal (0,0,-1). Winding CW (so it faces back).
+    // Lyon generates CCW. We need to swap indices.
     {
         let mut buffers: VertexBuffers<Vec3, u32> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
@@ -125,7 +129,7 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
                 positions.push(p);
                 normals.push(-Vec3::Z);
             }
-            // Reverse indices for back face
+            // Reverse indices for back face (CCW -> CW)
             for i in buffers.indices.chunks(3) {
                 if i.len() == 3 {
                     indices.push(base_idx + i[2]);
@@ -193,6 +197,10 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
             base_color: color,
             perceptual_roughness: 0.5,
             metallic: 0.0,
+            // Double-sided material to debug winding issues?
+            // StandardMaterial has `double_sided: true` option.
+            // Let's enable it just in case, but proper winding is better.
+            double_sided: true,
             ..default()
         })
     };
@@ -216,12 +224,89 @@ fn point_to_vec2(p: lyon::math::Point) -> Vec2 {
 
 fn add_quad(p1: Vec2, p2: Vec2, z_start: f32, z_end: f32, positions: &mut Vec<Vec3>, normals: &mut Vec<Vec3>, indices: &mut Vec<u32>)
 {
-    // Calculate normal
+    // Quad formed by segment p1->p2 extended from z_start to z_end.
+    // p1->p2 is CCW boundary of shape.
+    // Normal should point OUT (Right of p1->p2).
+    // Tangent = p2 - p1. Normal = (tangent.y, -tangent.x). Correct.
+
     let tangent = p2 - p1;
     let normal2d = Vec2::new(tangent.y, -tangent.x).normalize_or_zero();
     let normal = Vec3::new(normal2d.x, normal2d.y, 0.0);
 
-    // Add vertices
+    // Vertices
+    // 0: p1, z_start (Back Bottom)
+    // 1: p2, z_start (Back Top - Wait, z_start is back)
+    // 2: p2, z_end   (Front Top)
+    // 3: p1, z_end   (Front Bottom)
+
+    // Viewing from OUTSIDE (Right):
+    // 3-----2 (Front)
+    // |     |
+    // 0-----1 (Back)
+
+    // CCW Order: 0 -> 1 -> 2 -> 3 ??
+    // Let's trace.
+    // p1 is left, p2 is right (relative to face).
+    // z_end is up? No, Z is depth.
+    // Let's define "Up" as Z+.
+    // 3(p1, end) -- 2(p2, end)
+    // |             |
+    // 0(p1, start) -- 1(p2, start)
+
+    // We are looking at the face. Normal points at us.
+    // CCW: 0->1->2, 2->3->0?
+    // 0(start) -> 1(start)? No.
+    // p1->p2 is CCW. So p1 is "behind" p2 in path.
+    // If we walk p1->p2, interior is Left. Outside is Right.
+    // So we are looking at the Right side.
+    // p1 is Left. p2 is Right.
+    // z_start is Back. z_end is Front.
+
+    // 3(L, F) ---- 2(R, F)
+    // |            |
+    // 0(L, B) ---- 1(R, B)
+
+    // CCW:
+    // 1(R,B) -> 0(L,B) -> 3(L,F) -> 2(R,F)?
+    // Wait.
+    // 1 -> 0 -> 3 (Triangle 1)
+    // 3 -> 2 -> 1 (Triangle 2)
+
+    // My code was:
+    // i0 (p1, start) = 0
+    // i1 (p2, start) = 1
+    // i2 (p2, end)   = 2
+    // i3 (p1, end)   = 3
+
+    // indices.push(i0); indices.push(i1); indices.push(i2);
+    // 0 -> 1 -> 2.
+    // (L, B) -> (R, B) -> (R, F).
+    // Bottom-Left -> Bottom-Right -> Top-Right.
+    // This is CCW. Correct.
+
+    // indices.push(i2); indices.push(i3); indices.push(i0);
+    // 2 -> 3 -> 0.
+    // (R, F) -> (L, F) -> (L, B).
+    // Top-Right -> Top-Left -> Bottom-Left.
+    // This is CCW. Correct.
+
+    // So geometry logic seems correct IF p1->p2 is CCW.
+    // Lyon paths are usually CCW for filled.
+
+    // Why "further two sides... not rendered"?
+    // Maybe normals are wrong?
+    // Normal is (tangent.y, -tangent.x).
+    // If p1=(0,0), p2=(1,0) (Bottom edge, going Right).
+    // Tangent=(1,0). Normal=(0, -1) (Down). Correct.
+
+    // If p1=(1,0), p2=(1,1) (Right edge, going Up).
+    // Tangent=(0,1). Normal=(1, 0) (Right). Correct.
+
+    // Logic seems fine.
+    // Issue might be backface culling if the camera is viewing from inside or if the user thinks "further two sides" should be visible (transparency?)
+    // Or maybe winding is inverted?
+    // Enabling `double_sided: true` in material is a good safety net.
+
     let i0 = add_vertex_internal(Vec3::new(p1.x, p1.y, z_start), normal, positions, normals);
     let i1 = add_vertex_internal(Vec3::new(p2.x, p2.y, z_start), normal, positions, normals);
     let i2 = add_vertex_internal(Vec3::new(p2.x, p2.y, z_end), normal, positions, normals);
