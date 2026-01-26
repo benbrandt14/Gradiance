@@ -161,7 +161,12 @@ fn test_select_all_ctrl_a(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 1.0,
+                    height: 1.0,
+                },
+            },
         ))
         .id();
     let b2 = app
@@ -171,7 +176,12 @@ fn test_select_all_ctrl_a(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(5.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 1.0,
+                    height: 1.0,
+                },
+            },
         ))
         .id();
 
@@ -205,7 +215,10 @@ fn test_ctrl_drag_copy(mut app: App) {
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
             EditableShape {
-                shape: ShapeType::Box { width: 2.0, height: 2.0 },
+                shape: ShapeType::Box {
+                    width: 2.0,
+                    height: 2.0,
+                },
             },
             Name::new("Original"),
             GravityScale(0.0),
@@ -272,7 +285,12 @@ fn test_right_click_rotate(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(10.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 1.0,
+                    height: 1.0,
+                },
+            },
         ))
         .id();
 
@@ -314,7 +332,12 @@ fn test_selection_filter(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 1.0,
+                    height: 1.0,
+                },
+            },
         ))
         .id();
 

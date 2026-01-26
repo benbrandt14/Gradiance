@@ -154,7 +154,10 @@ proptest! {
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
             EditableShape {
-                shape: ShapeType::Box { width: 10.0, height: 10.0 },
+                shape: ShapeType::Box {
+                    width: 10.0,
+                    height: 10.0,
+                },
             },
         )).id();
         app.update();
@@ -213,7 +216,10 @@ proptest! {
             Transform::from_xyz(initial_pos.x, initial_pos.y, 0.0),
             GlobalTransform::default(),
             EditableShape {
-                shape: ShapeType::Box { width: 2.0, height: 2.0 },
+                shape: ShapeType::Box {
+                    width: 2.0,
+                    height: 2.0,
+                },
             },
             Velocity::zero(),
             Damping { linear_damping: 0.0, angular_damping: 0.0 },

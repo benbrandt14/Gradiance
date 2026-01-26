@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::input::commands::*;
-use gradiance::input::editable_shape::*;
+use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::tools::connector::Connector;
 use gradiance::physics::floor::GroundPlane;
 use gradiance::prelude::*;
