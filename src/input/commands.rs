@@ -209,12 +209,11 @@ impl GameCommand for SpawnShapeCommand {
 
         let entity = world
             .spawn((
-                // Replace ShapeBundle with manual components for 3D/2.5D
-                Transform::from_xyz(self.position.x, self.position.y, 0.0), // Z determined by layers
-                GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
+                // Using PbrBundle to ensure all required components (Mesh, Material, Transform, Visibility, etc.) are present
+                PbrBundle {
+                    transform: Transform::from_xyz(self.position.x, self.position.y, 0.0),
+                    ..default()
+                },
                 Fill::color(fill_color),
                 Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
                 RigidBody::Dynamic,
@@ -508,13 +507,13 @@ impl GameCommand for SpawnGroundCommand {
 
         let entity = world
             .spawn((
-                Mesh3d(mesh_handle),
-                MeshMaterial3d(material_handle),
-                Transform::from_translation(center + Vec3::new(0.0, 0.0, z)).with_rotation(rot),
-                GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
+                PbrBundle {
+                    mesh: Mesh3d(mesh_handle),
+                    material: MeshMaterial3d(material_handle),
+                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
+                        .with_rotation(rot),
+                    ..default()
+                },
                 RigidBody::Fixed,
                 Collider::cuboid(GROUND_WIDTH / 2.0, GROUND_DEPTH / 2.0),
                 Friction::coefficient(0.5),
