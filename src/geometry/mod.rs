@@ -7,6 +7,7 @@ use crate::prelude::*;
 // use bevy_prototype_lyon::prelude::*;
 
 pub mod csg;
+pub mod extrusion;
 
 /// Plugin for geometry and vector rendering.
 ///
@@ -14,8 +15,11 @@ pub mod csg;
 pub struct GeometryPlugin;
 
 impl Plugin for GeometryPlugin {
-    fn build(&self, _app: &mut App) {
+    fn build(&self, app: &mut App) {
         // Lyon setup for vector rendering
         // app.add_plugins(ShapePlugin);
+
+        app.init_resource::<extrusion::ExtrusionCache>();
+        app.add_systems(PostUpdate, extrusion::batch_extrusion_system);
     }
 }
