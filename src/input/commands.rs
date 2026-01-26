@@ -2,6 +2,7 @@
 //!
 //! Defines the [`GameCommand`] trait and the [`CommandStack`] resource.
 
+use crate::geometry::mesh_generator::generate_mesh_from_collider;
 use crate::input::ZIndex;
 use crate::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
 use crate::input::tools::connector::Connector;
@@ -207,13 +208,28 @@ impl GameCommand for SpawnShapeCommand {
             ShapeType::Polygon { .. } => DEFAULT_POLYGON_COLOR,
         };
 
+        let groups = CollisionGroups::new(Group::GROUP_1, Group::ALL);
+
+        // Generate mesh and material
+        let mesh = generate_mesh_from_collider(&collider, Some(&groups));
+        let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
+        let material_handle = world
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color: fill_color,
+                unlit: true,
+                ..default()
+            });
+
         let entity = world
             .spawn((
-                // Using PbrBundle to ensure all required components (Mesh, Material, Transform, Visibility, etc.) are present
-                PbrBundle {
-                    transform: Transform::from_xyz(self.position.x, self.position.y, 0.0),
-                    ..default()
-                },
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(material_handle),
+                Transform::from_xyz(self.position.x, self.position.y, 0.0),
+                GlobalTransform::default(),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
                 Fill::color(fill_color),
                 Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
                 RigidBody::Dynamic,
@@ -221,8 +237,7 @@ impl GameCommand for SpawnShapeCommand {
                 EditableShape {
                     shape: self.shape.clone(),
                 },
-                // Default to Layer 0 (Group 1)
-                CollisionGroups::new(Group::GROUP_1, Group::ALL),
+                groups,
             ))
             .id();
 
@@ -507,13 +522,13 @@ impl GameCommand for SpawnGroundCommand {
 
         let entity = world
             .spawn((
-                PbrBundle {
-                    mesh: Mesh3d(mesh_handle),
-                    material: MeshMaterial3d(material_handle),
-                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
-                        .with_rotation(rot),
-                    ..default()
-                },
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(material_handle),
+                Transform::from_translation(center + Vec3::new(0.0, 0.0, z)).with_rotation(rot),
+                GlobalTransform::default(),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
                 RigidBody::Fixed,
                 Collider::cuboid(GROUND_WIDTH / 2.0, GROUND_DEPTH / 2.0),
                 Friction::coefficient(0.5),

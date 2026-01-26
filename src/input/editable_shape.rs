@@ -140,11 +140,13 @@ fn update_shape_geometry(
             commands
                 .entity(entity)
                 .insert(collider)
-                // Use PbrBundle components if they don't exist, or just insert the new handles.
-                // Since this system runs on changes, the entity might already have PbrBundle components.
-                // Inserting Mesh3d/MeshMaterial3d is sufficient if PbrBundle was added initially (which it is in SpawnShapeCommand).
                 .insert(Mesh3d(mesh_handle))
                 .insert(MeshMaterial3d(material_handle))
+                // Ensure required visibility components exist in case they were missing (e.g. legacy entities)
+                // Though SpawnShapeCommand adds them, manual updates or edits might need them.
+                // In Bevy 0.15, inserting Mesh3d triggers Required Components, so manual insertion is strictly
+                // redundant but harmless if we want to be explicit about "starting state" in the command.
+                // Here we just update the handles.
                 .remove::<Path>();
         }
     }
