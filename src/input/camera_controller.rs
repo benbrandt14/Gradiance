@@ -17,21 +17,13 @@ impl Plugin for CameraControllerPlugin {
 
 /// Pans the camera when Right or Middle mouse button is dragged.
 pub fn camera_pan(
-    mut query: Query<(&mut Transform, &Camera), With<Camera2d>>,
+    mut query: Query<&mut Transform, With<Camera3d>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
-    select_tool_data: Option<Res<SelectToolData>>,
+    // select_tool_data: Option<Res<SelectToolData>>,
 ) {
     // Check if Right or Middle mouse button is held
     if !mouse_buttons.pressed(MouseButton::Right) && !mouse_buttons.pressed(MouseButton::Middle) {
-        return;
-    }
-
-    // If rotating with Select Tool, ignore Right Click panning
-    if mouse_buttons.pressed(MouseButton::Right)
-        && let Some(data) = &select_tool_data
-        && data.is_rotating
-    {
         return;
     }
 
@@ -40,20 +32,25 @@ pub fn camera_pan(
         return;
     }
 
-    for (mut transform, _camera) in query.iter_mut() {
-        // We need to scale the delta by the current zoom level (scale.x)
-        // to keep panning speed consistent relative to the world.
-        // Also invert x and y because dragging mouse right means moving camera left to keep world "under" cursor.
-        let zoom = transform.scale.x;
+    for mut transform in query.iter_mut() {
+        // Simple scaling based on Z distance (perspective zoom)
+        // At Z=60, scale factor should allow reasonable panning speed.
+        // Screen width ~ Z * tan(FOV/2).
+        // Let's assume Z around 60.
+        // Sensitivity 0.1 works for orthographic scale 1.0.
+        // For perspective, world movement = delta * (Z / height_pixels * 2 * tan(fov/2))
 
-        // However, we want to move the camera opposite to mouse drag to "grab" the world.
-        transform.translation.x -= delta.x * zoom;
-        transform.translation.y += delta.y * zoom;
+        // Approximate factor:
+        let sensitivity = transform.translation.z.abs() * 0.002;
+
+        // Invert X and Y for drag-to-move-world feel
+        transform.translation.x -= delta.x * sensitivity;
+        transform.translation.y += delta.y * sensitivity;
     }
 }
 
 fn camera_zoom(
-    mut query: Query<&mut Transform, With<Camera2d>>,
+    mut query: Query<&mut Transform, With<Camera3d>>,
     scroll_events: Res<AccumulatedMouseScroll>,
 ) {
     let scroll = scroll_events.delta.y;
@@ -62,19 +59,20 @@ fn camera_zoom(
     }
 
     for mut transform in query.iter_mut() {
-        let mut scale = transform.scale.x;
+        let mut z = transform.translation.z;
 
         // Zoom speed
         let sensitivity = 0.1;
+
         if scroll > 0.0 {
-            scale /= 1.0 + sensitivity;
+            z /= 1.0 + sensitivity;
         } else {
-            scale *= 1.0 + sensitivity;
+            z *= 1.0 + sensitivity;
         }
 
         // Clamp zoom
-        scale = scale.clamp(0.01, 1000.0);
+        z = z.clamp(5.0, 1000.0);
 
-        transform.scale = Vec3::splat(scale);
+        transform.translation.z = z;
     }
 }

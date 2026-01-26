@@ -197,11 +197,17 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
         })
     };
 
-    // Component Insertion
-    world.commands().entity(entity).insert((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(material_handle),
-    ));
+    // Safe Component Insertion to prevent panic if entity is despawned
+    world.commands().queue(move |world: &mut World| {
+        if world.get_entity(entity).is_ok() {
+            if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+                entity_mut.insert((
+                    Mesh3d(mesh_handle),
+                    MeshMaterial3d(material_handle),
+                ));
+            }
+        }
+    });
 }
 
 fn point_to_vec2(p: lyon::math::Point) -> Vec2 {
