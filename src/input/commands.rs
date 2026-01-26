@@ -133,7 +133,11 @@ fn resolve_joint_targets(
         let world_pos = t_a.transform_point(Vec3::new(anchor_a.x, anchor_a.y, 0.0));
 
         let pin_id = world
-            .spawn((RigidBody::Fixed, Transform::from_translation(world_pos)))
+            .spawn((
+                RigidBody::Fixed,
+                Transform::from_translation(world_pos),
+                CollisionGroups::new(Group::NONE, Group::NONE),
+            ))
             .id();
 
         pin_entity = Some(pin_id);
@@ -545,7 +549,9 @@ impl GameCommand for SpawnFixedJointCommand {
 
         let joint_data = FixedJointBuilder::new()
             .local_anchor1(local_anchor_1)
-            .local_anchor2(local_anchor_2);
+            .local_anchor2(local_anchor_2)
+            .local_basis1(-self.rot_a)
+            .local_basis2(-self.rot_b);
 
         world
             .entity_mut(self.entity_a)
