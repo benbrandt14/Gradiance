@@ -96,7 +96,6 @@ impl CommandStack {
     }
 }
 
-
 /// Helper to resolve joint targets and handle pinning.
 fn resolve_joint_targets(
     world: &mut World,
@@ -563,10 +562,7 @@ mod tests {
         // Apply should fail (generate_shape_components returns None)
         let result = cmd.apply(&mut world);
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Invalid shape parameters"
-        );
+        assert_eq!(result.unwrap_err().to_string(), "Invalid shape parameters");
         assert!(cmd.entity.is_none());
     }
 

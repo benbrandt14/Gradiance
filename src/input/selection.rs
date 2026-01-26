@@ -139,11 +139,7 @@ fn handle_delete_key(
 /// Supports `EditableShape` and `GroundPlane`.
 fn draw_selection_highlight(
     selection: Res<Selection>,
-    query: Query<(
-        &Transform,
-        Option<&EditableShape>,
-        Option<&GroundPlane>,
-    )>,
+    query: Query<(&Transform, Option<&EditableShape>, Option<&GroundPlane>)>,
     mut gizmos: Gizmos,
 ) {
     for &entity in &selection.0 {

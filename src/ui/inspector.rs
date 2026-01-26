@@ -94,7 +94,10 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             let state = extract_inspector_state(entity, &inspector.entity_query);
 
             ui.heading("Inspector");
-            ui.label(format!("Selected: {} entities", inspector.selection.0.len()));
+            ui.label(format!(
+                "Selected: {} entities",
+                inspector.selection.0.len()
+            ));
             ui.separator();
 
             inspect_transform(ui, &mut inspector, &state);
@@ -118,41 +121,26 @@ fn render_settings_header(ui: &mut egui::Ui, selection_filter: &mut SelectionFil
 
 fn extract_inspector_state(
     entity: Entity,
-    query: &Query<
-        (
-            Entity,
-            Option<&mut Transform>,
-            Option<&mut RigidBody>,
-            Option<&mut Friction>,
-            Option<&mut Restitution>,
-            Option<&mut EditableShape>,
-            Option<&mut Fill>,
-            Option<&mut Stroke>,
-            Option<&mut Sensor>,
-            Option<&mut LockedAxes>,
-            Option<&mut ColliderMassProperties>,
-            Option<&mut GravityScale>,
-            Option<&mut Sleeping>,
-        ),
-    >,
+    query: &Query<(
+        Entity,
+        Option<&mut Transform>,
+        Option<&mut RigidBody>,
+        Option<&mut Friction>,
+        Option<&mut Restitution>,
+        Option<&mut EditableShape>,
+        Option<&mut Fill>,
+        Option<&mut Stroke>,
+        Option<&mut Sensor>,
+        Option<&mut LockedAxes>,
+        Option<&mut ColliderMassProperties>,
+        Option<&mut GravityScale>,
+        Option<&mut Sleeping>,
+    )>,
 ) -> InspectorState {
     let mut state = InspectorState::default();
 
-    if let Ok((
-        _,
-        t,
-        rb,
-        f,
-        r,
-        eshape,
-        fill,
-        stroke,
-        sensor,
-        locked,
-        mass,
-        grav,
-        _,
-    )) = query.get(entity)
+    if let Ok((_, t, rb, f, r, eshape, fill, stroke, sensor, locked, mass, grav, _)) =
+        query.get(entity)
     {
         if let Some(v) = t {
             state.transform = Some(*v);
@@ -368,13 +356,13 @@ fn inspect_physics(ui: &mut egui::Ui, inspector: &mut InspectorQuery, state: &In
         }
         ui.separator();
     } else if has_rb {
-         ui.heading("Friction");
-         if ui.button("Add Friction").clicked() {
-             for &e in &inspector.selection.0 {
-                 inspector.commands.entity(e).insert(Friction::default());
-             }
-         }
-         ui.separator();
+        ui.heading("Friction");
+        if ui.button("Add Friction").clicked() {
+            for &e in &inspector.selection.0 {
+                inspector.commands.entity(e).insert(Friction::default());
+            }
+        }
+        ui.separator();
     }
 
     // Restitution
@@ -402,15 +390,14 @@ fn inspect_physics(ui: &mut egui::Ui, inspector: &mut InspectorQuery, state: &In
         }
         ui.separator();
     } else if has_rb {
-         ui.heading("Restitution");
-         if ui.button("Add Restitution").clicked() {
-             for &e in &inspector.selection.0 {
-                 inspector.commands.entity(e).insert(Restitution::default());
-             }
-         }
-         ui.separator();
+        ui.heading("Restitution");
+        if ui.button("Add Restitution").clicked() {
+            for &e in &inspector.selection.0 {
+                inspector.commands.entity(e).insert(Restitution::default());
+            }
+        }
+        ui.separator();
     }
-
 
     // Density
     if let Some(mut density) = state.density {
@@ -434,12 +421,15 @@ fn inspect_physics(ui: &mut egui::Ui, inspector: &mut InspectorQuery, state: &In
         ui.separator();
     } else if has_rb {
         ui.heading("Density");
-         if ui.button("Set Density").clicked() {
-             for &e in &inspector.selection.0 {
-                 inspector.commands.entity(e).insert(ColliderMassProperties::Density(1.0));
-             }
-         }
-         ui.separator();
+        if ui.button("Set Density").clicked() {
+            for &e in &inspector.selection.0 {
+                inspector
+                    .commands
+                    .entity(e)
+                    .insert(ColliderMassProperties::Density(1.0));
+            }
+        }
+        ui.separator();
     }
 
     // Gravity Scale
@@ -456,13 +446,13 @@ fn inspect_physics(ui: &mut egui::Ui, inspector: &mut InspectorQuery, state: &In
         }
         ui.separator();
     } else if has_rb {
-         ui.heading("Gravity Scale");
-         if ui.button("Add Gravity Scale").clicked() {
-             for &e in &inspector.selection.0 {
-                 inspector.commands.entity(e).insert(GravityScale(1.0));
-             }
-         }
-         ui.separator();
+        ui.heading("Gravity Scale");
+        if ui.button("Add Gravity Scale").clicked() {
+            for &e in &inspector.selection.0 {
+                inspector.commands.entity(e).insert(GravityScale(1.0));
+            }
+        }
+        ui.separator();
     }
 
     // Locked Axes
@@ -485,12 +475,12 @@ fn inspect_physics(ui: &mut egui::Ui, inspector: &mut InspectorQuery, state: &In
         ui.separator();
     } else if has_rb {
         ui.heading("Locked Axes");
-         if ui.button("Add Axis Locking").clicked() {
-             for &e in &inspector.selection.0 {
-                 inspector.commands.entity(e).insert(LockedAxes::empty());
-             }
-         }
-         ui.separator();
+        if ui.button("Add Axis Locking").clicked() {
+            for &e in &inspector.selection.0 {
+                inspector.commands.entity(e).insert(LockedAxes::empty());
+            }
+        }
+        ui.separator();
     }
 }
 
