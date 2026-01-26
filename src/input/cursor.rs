@@ -51,10 +51,23 @@ pub fn update_cursor_pos(
     }
 
     let mut raw_pos = None;
-    if let Some(screen_pos) = window.cursor_position()
-        && let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos)
-    {
-        raw_pos = Some(world_pos);
+    if let Some(screen_pos) = window.cursor_position() {
+        // Try 2D first (for backward compat if Camera2d is used)
+        if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos) {
+            raw_pos = Some(world_pos);
+        } else if let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos) {
+            // Raycast to Z=0 plane
+            let normal = Vec3::Z;
+            let origin = Vec3::ZERO;
+            let denom = ray.direction.dot(normal);
+            if denom.abs() > f32::EPSILON {
+                let t = (origin - ray.origin).dot(normal) / denom;
+                if t >= 0.0 {
+                    let point = ray.get_point(t);
+                    raw_pos = Some(point.truncate());
+                }
+            }
+        }
     }
 
     cursor_pos.0 = raw_pos;
@@ -97,7 +110,7 @@ pub fn update_cursor_pos(
 pub fn draw_snap_indicators(
     snap_status: Res<SnappingStatus>,
     mut gizmos: Gizmos,
-    q_camera: Query<&Projection, With<Camera2d>>,
+    _q_camera: Query<&Projection, With<Camera>>,
 ) {
     if !snap_status.snapped {
         return;
@@ -110,26 +123,26 @@ pub fn draw_snap_indicators(
         None => Color::WHITE,
     };
 
-    let scale = if let Some(Projection::Orthographic(ortho)) = q_camera.iter().next() {
-        ortho.scale
-    } else {
-        1.0
-    };
+    // Fixed size for now, or could query camera distance
+    let radius = 0.5;
 
-    let radius = 5.0 * scale;
+    // Draw in 3D at Z=0.1 to avoid z-fighting if coincidental
+    let center_3d = Vec3::new(pos.x, pos.y, 0.1);
 
-    gizmos.circle_2d(pos, radius, color);
+    // gizmos.circle takes (position, radius, color) in this version.
+    // It likely draws a billboard or camera-facing circle.
+    gizmos.circle(center_3d, radius, color);
 
     // Crosshair
     let arm_len = radius * 2.0;
-    gizmos.line_2d(
-        pos - Vec2::new(arm_len, 0.0),
-        pos + Vec2::new(arm_len, 0.0),
+    gizmos.line(
+        center_3d - Vec3::new(arm_len, 0.0, 0.0),
+        center_3d + Vec3::new(arm_len, 0.0, 0.0),
         color,
     );
-    gizmos.line_2d(
-        pos - Vec2::new(0.0, arm_len),
-        pos + Vec2::new(0.0, arm_len),
+    gizmos.line(
+        center_3d - Vec3::new(0.0, arm_len, 0.0),
+        center_3d + Vec3::new(0.0, arm_len, 0.0),
         color,
     );
 }

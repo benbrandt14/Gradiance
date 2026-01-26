@@ -99,7 +99,7 @@ pub fn snap_to_grid(pos: Vec2, spacing: f32) -> Vec2 {
 
 fn draw_grid(
     mut settings: ResMut<GridSettings>,
-    camera_query: Query<(&Camera, &GlobalTransform, &Projection), With<Camera2d>>,
+    camera_query: Query<(&Camera, &GlobalTransform, &Projection), With<Camera>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     mut gizmos: Gizmos,
 ) {
@@ -111,23 +111,38 @@ fn draw_grid(
         return;
     };
 
-    // Calculate visible area using viewport_to_world_2d
-    // We get the world position of the top-left and bottom-right corners of the screen.
+    // Calculate visible area on Z=0 plane
+    let get_world_pos = |screen_pos: Vec2| -> Option<Vec2> {
+        if let Ok(pos) = camera.viewport_to_world_2d(transform, screen_pos) {
+            return Some(pos);
+        }
+        if let Ok(ray) = camera.viewport_to_world(transform, screen_pos) {
+            let normal = Vec3::Z;
+            let denom = ray.direction.dot(normal);
+            if denom.abs() > f32::EPSILON {
+                 let t = (Vec3::ZERO - ray.origin).dot(normal) / denom;
+                 if t >= 0.0 {
+                     return Some(ray.get_point(t).truncate());
+                 }
+            }
+        }
+        None
+    };
+
     let top_left_screen = Vec2::ZERO;
     let bottom_right_screen = Vec2::new(window.width(), window.height());
 
-    let Ok(top_left) = camera.viewport_to_world_2d(transform, top_left_screen) else {
-        return;
-    };
-    let Ok(bottom_right) = camera.viewport_to_world_2d(transform, bottom_right_screen) else {
-        return;
-    };
+    let Some(p1) = get_world_pos(top_left_screen) else { return; };
+    let Some(p2) = get_world_pos(bottom_right_screen) else { return; };
+    // Also check other corners for perspective distortion
+    let Some(p3) = get_world_pos(Vec2::new(window.width(), 0.0)) else { return; };
+    let Some(p4) = get_world_pos(Vec2::new(0.0, window.height())) else { return; };
 
-    // Construct the bounds
-    let left = top_left.x.min(bottom_right.x);
-    let right = top_left.x.max(bottom_right.x);
-    let bottom = top_left.y.min(bottom_right.y);
-    let top = top_left.y.max(bottom_right.y);
+    // Construct the bounds covering all corners
+    let left = p1.x.min(p2.x).min(p3.x).min(p4.x);
+    let right = p1.x.max(p2.x).max(p3.x).max(p4.x);
+    let bottom = p1.y.min(p2.y).min(p3.y).min(p4.y);
+    let top = p1.y.max(p2.y).max(p3.y).max(p4.y);
 
     if !settings.show {
         return;
@@ -137,9 +152,10 @@ fn draw_grid(
     let scale = if let Projection::Orthographic(ortho) = projection {
         ortho.scale
     } else {
-        1.0
+        // Perspective approximation: scale based on height
+        transform.translation().z.abs() / 20.0
     };
-    let target_spacing = 100.0 * scale;
+    let target_spacing: f32 = 100.0 * scale;
     let exponent = target_spacing.log10().floor();
     let major_spacing = 10.0_f32.powf(exponent);
     let minor_spacing = major_spacing / 10.0;

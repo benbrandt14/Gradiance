@@ -17,7 +17,7 @@ impl Plugin for CameraControllerPlugin {
 
 /// Pans the camera when Right or Middle mouse button is dragged.
 pub fn camera_pan(
-    mut query: Query<(&mut Transform, &Camera), With<Camera2d>>,
+    mut query: Query<(&mut Transform, &Projection), With<Camera>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
     select_tool_data: Option<Res<SelectToolData>>,
@@ -40,20 +40,29 @@ pub fn camera_pan(
         return;
     }
 
-    for (mut transform, _camera) in query.iter_mut() {
-        // We need to scale the delta by the current zoom level (scale.x)
-        // to keep panning speed consistent relative to the world.
-        // Also invert x and y because dragging mouse right means moving camera left to keep world "under" cursor.
-        let zoom = transform.scale.x;
+    for (mut transform, projection) in query.iter_mut() {
+        match projection {
+            Projection::Orthographic(_) => {
+                // 2D Logic
+                let zoom = transform.scale.x;
+                transform.translation.x -= delta.x * zoom;
+                transform.translation.y += delta.y * zoom;
+            }
+            Projection::Perspective(_) => {
+                // 3D Logic
+                // Scale pan speed by distance to ground (approx z height)
+                let dist = transform.translation.z.max(1.0);
+                let speed = dist * 0.002; // Tune this factor
 
-        // However, we want to move the camera opposite to mouse drag to "grab" the world.
-        transform.translation.x -= delta.x * zoom;
-        transform.translation.y += delta.y * zoom;
+                transform.translation.x -= delta.x * speed;
+                transform.translation.y += delta.y * speed;
+            }
+        }
     }
 }
 
 fn camera_zoom(
-    mut query: Query<&mut Transform, With<Camera2d>>,
+    mut query: Query<(&mut Transform, &Projection), With<Camera>>,
     scroll_events: Res<AccumulatedMouseScroll>,
 ) {
     let scroll = scroll_events.delta.y;
@@ -61,20 +70,34 @@ fn camera_zoom(
         return;
     }
 
-    for mut transform in query.iter_mut() {
-        let mut scale = transform.scale.x;
-
+    for (mut transform, projection) in query.iter_mut() {
         // Zoom speed
         let sensitivity = 0.1;
-        if scroll > 0.0 {
-            scale /= 1.0 + sensitivity;
-        } else {
-            scale *= 1.0 + sensitivity;
+
+        match projection {
+            Projection::Orthographic(_) => {
+                // 2D Logic
+                let mut scale = transform.scale.x;
+                if scroll > 0.0 {
+                    scale /= 1.0 + sensitivity;
+                } else {
+                    scale *= 1.0 + sensitivity;
+                }
+                scale = scale.clamp(0.01, 1000.0);
+                transform.scale = Vec3::splat(scale);
+            }
+            Projection::Perspective(_) => {
+                // 3D Logic: Move along forward vector
+                let forward = transform.forward();
+                let mut zoom_amount = scroll * sensitivity * transform.translation.z.abs(); // Scale step by distance
+
+                // Limit zoom in (don't clip through ground)
+                if transform.translation.z < 2.0 && zoom_amount > 0.0 {
+                    zoom_amount = 0.0;
+                }
+
+                transform.translation += forward * zoom_amount;
+            }
         }
-
-        // Clamp zoom
-        scale = scale.clamp(0.01, 1000.0);
-
-        transform.scale = Vec3::splat(scale);
     }
 }

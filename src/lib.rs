@@ -45,7 +45,26 @@ impl Plugin for GamePlugin {
     }
 }
 
-/// Spawns the main 2D camera.
+/// Spawns the main 3D camera and lighting.
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    // Camera
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, -30.0, 60.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Lighting
+    commands.insert_resource(AmbientLight {
+        color: Color::WHITE,
+        brightness: 500.0,
+    });
+
+    commands.spawn((
+        DirectionalLight {
+            shadows_enabled: true,
+            illuminance: 10_000.0,
+            ..default()
+        },
+        Transform::from_xyz(50.0, 50.0, 50.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 }
