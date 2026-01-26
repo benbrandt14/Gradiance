@@ -45,6 +45,7 @@ pub fn create_test_app() -> App {
     app.init_resource::<Assets<Mesh>>();
     app.init_resource::<Assets<Image>>();
     app.init_resource::<Assets<ColorMaterial>>();
+    app.init_resource::<Assets<StandardMaterial>>();
 
     app.init_resource::<EguiUserTextures>();
     app.init_resource::<Events<bevy::picking::backend::PointerHits>>();

@@ -495,7 +495,7 @@ impl GameCommand for SpawnGroundCommand {
             .resource_mut::<Assets<StandardMaterial>>()
             .add(StandardMaterial {
                 base_color: DEFAULT_GROUND_COLOR,
-                unlit: false,
+                unlit: true,
                 ..default()
             });
 

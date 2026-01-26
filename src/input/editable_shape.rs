@@ -133,7 +133,7 @@ fn update_shape_geometry(
             let color = fill.map(|f| f.color).unwrap_or(Color::WHITE);
             let material_handle = materials.add(StandardMaterial {
                 base_color: color,
-                unlit: false,
+                unlit: true, // Ensure visibility regardless of lighting
                 ..default()
             });
 
