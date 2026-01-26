@@ -13,9 +13,9 @@ pub mod commands;
 pub mod cursor;
 pub mod editable;
 pub mod selection;
-pub mod snapping;
 /// Global shortcuts.
 pub mod shortcuts;
+pub mod snapping;
 pub mod tools;
 
 /// Plugin for Input and Tools.

@@ -702,7 +702,10 @@ mod tests {
         // Apply should fail
         let result = cmd.apply(&mut world);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Polygon must have at least 3 vertices");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Polygon must have at least 3 vertices"
+        );
         assert!(cmd.entity.is_none());
     }
 

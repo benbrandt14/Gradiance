@@ -1,11 +1,11 @@
 use bevy::prelude::*;
-use proptest::prelude::*;
 use bevy_rapier2d::prelude::*;
-use gradiance::prelude::*;
 use gradiance::input::commands::*;
 use gradiance::input::editable::*;
-use gradiance::physics::floor::GroundPlane;
 use gradiance::input::tools::connector::Connector;
+use gradiance::physics::floor::GroundPlane;
+use gradiance::prelude::*;
+use proptest::prelude::*;
 
 mod test_utils;
 use test_utils::*;
@@ -14,11 +14,7 @@ use test_utils::*;
 
 // Strategy for random Transform
 fn transform_strategy() -> impl Strategy<Value = Transform> {
-    (
-        -50.0..50.0f32,
-        -50.0..50.0f32,
-        -3.14..3.14f32
-    ).prop_map(|(x, y, rot)| {
+    (-50.0..50.0f32, -50.0..50.0f32, -3.14..3.14f32).prop_map(|(x, y, rot)| {
         Transform::from_xyz(x, y, 0.0).with_rotation(Quat::from_rotation_z(rot))
     })
 }

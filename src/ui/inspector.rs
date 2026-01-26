@@ -35,7 +35,10 @@ struct InspectorQuery<'w, 's> {
     selection_filter: ResMut<'w, SelectionFilter>,
     connector_query: Query<'w, 's, &'static Connector>,
     joint_query: Query<'w, 's, &'static mut ImpulseJoint>,
-    #[expect(clippy::type_complexity, reason = "Large query tuple required for inspector")]
+    #[expect(
+        clippy::type_complexity,
+        reason = "Large query tuple required for inspector"
+    )]
     entity_query: Query<
         'w,
         's,
@@ -198,7 +201,10 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
         }
 
         ui.heading("Inspector");
-        ui.label(format!("Selected: {} entities", inspector.selection.0.len()));
+        ui.label(format!(
+            "Selected: {} entities",
+            inspector.selection.0.len()
+        ));
         ui.separator();
 
         // Transform
@@ -208,18 +214,14 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             ui.horizontal(|ui| {
                 ui.label("Pos X:");
                 if ui
-                    .add(
-                        egui::DragValue::new(&mut local_transform.translation.x).speed(DRAG_SPEED),
-                    )
+                    .add(egui::DragValue::new(&mut local_transform.translation.x).speed(DRAG_SPEED))
                     .changed()
                 {
                     changed = true;
                 }
                 ui.label("Pos Y:");
                 if ui
-                    .add(
-                        egui::DragValue::new(&mut local_transform.translation.y).speed(DRAG_SPEED),
-                    )
+                    .add(egui::DragValue::new(&mut local_transform.translation.y).speed(DRAG_SPEED))
                     .changed()
                 {
                     changed = true;
@@ -245,10 +247,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                         t.rotation = local_transform.rotation;
                         // Wake up body if exists
                         if let Ok((_, _, Some(_), ..)) = inspector.entity_query.get(e) {
-                            inspector
-                                .commands
-                                .entity(e)
-                                .insert(Sleeping::disabled());
+                            inspector.commands.entity(e).insert(Sleeping::disabled());
                         }
                     }
                 }
@@ -283,8 +282,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
             if changed {
                 for &e in &inspector.selection.0 {
-                    if let Ok((_, _, _, _, _, Some(mut b), ..)) =
-                        inspector.entity_query.get_mut(e)
+                    if let Ok((_, _, _, _, _, Some(mut b), ..)) = inspector.entity_query.get_mut(e)
                     {
                         *b = local_box;
                         // Note: Resizing shape logic might be handled by another system observing changes
@@ -387,9 +385,10 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                         if let Some(mut f_comp) = f {
                             f_comp.coefficient = local_friction.coefficient;
                         } else {
-                            inspector.commands.entity(e).insert(Friction::coefficient(
-                                local_friction.coefficient,
-                            ));
+                            inspector
+                                .commands
+                                .entity(e)
+                                .insert(Friction::coefficient(local_friction.coefficient));
                         }
                     }
                 }
@@ -402,11 +401,8 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             ui.heading("Restitution");
             if ui
                 .add(
-                    egui::Slider::new(
-                        &mut local_restitution.coefficient,
-                        0.0..=RESTITUTION_MAX,
-                    )
-                    .text("Coefficient"),
+                    egui::Slider::new(&mut local_restitution.coefficient, 0.0..=RESTITUTION_MAX)
+                        .text("Coefficient"),
                 )
                 .changed()
             {
@@ -418,9 +414,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                             inspector
                                 .commands
                                 .entity(e)
-                                .insert(Restitution::coefficient(
-                                    local_restitution.coefficient,
-                                ));
+                                .insert(Restitution::coefficient(local_restitution.coefficient));
                         }
                     }
                 }

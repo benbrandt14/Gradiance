@@ -3,5 +3,5 @@
 //! Re-exports commonly used types from Bevy, Rapier, and internal modules.
 
 pub use bevy::prelude::*;
-pub use bevy_rapier2d::prelude::*;
 pub use bevy_rapier2d::prelude::Real;
+pub use bevy_rapier2d::prelude::*;

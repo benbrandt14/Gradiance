@@ -5,7 +5,7 @@
 use crate::prelude::*;
 use crate::ui::grid::{GridSettings, snap_to_grid};
 use bevy::math::bounding::Aabb2d;
-use bevy_rapier2d::rapier::math::{Point, Isometry, Vector};
+use bevy_rapier2d::rapier::math::{Isometry, Point, Vector};
 use bevy_rapier2d::rapier::parry::shape::TypedShape;
 
 /// Source of the snapping.
@@ -58,121 +58,139 @@ where
     let mut snap_source = None;
 
     // 1. Object Snapping
-    if grid_settings.snap_to_objects {
-        if let Some(query_fn) = spatial_query.as_mut() {
-            let search_range = grid_settings.snap_distance * 2.0;
-            // Aabb2d takes center and half-extents
-            let aabb = Aabb2d::new(raw_pos, Vec2::splat(search_range));
+    if grid_settings.snap_to_objects
+        && let Some(query_fn) = spatial_query.as_mut()
+    {
+        let search_range = grid_settings.snap_distance * 2.0;
+        // Aabb2d takes center and half-extents
+        let aabb = Aabb2d::new(raw_pos, Vec2::splat(search_range));
 
-            query_fn(aabb, &mut |entity| {
-                if let Some((collider, transform)) = get_collider_data(entity) {
-                    // Center Snap
-                    if grid_settings.snap_to_object_centers {
-                        let center = transform.translation().truncate();
-                        let d2 = center.distance_squared(raw_pos);
-                        if d2 < best_snap_dist_sq {
-                            best_snap_dist_sq = d2;
-                            best_snap_pos = center;
-                            snapped = true;
-                            snap_source = Some(SnapSource::ObjectCenter);
+        query_fn(aabb, &mut |entity| {
+            if let Some((collider, transform)) = get_collider_data(entity) {
+                // Center Snap
+                if grid_settings.snap_to_object_centers {
+                    let center = transform.translation().truncate();
+                    let d2 = center.distance_squared(raw_pos);
+                    if d2 < best_snap_dist_sq {
+                        best_snap_dist_sq = d2;
+                        best_snap_pos = center;
+                        snapped = true;
+                        snap_source = Some(SnapSource::ObjectCenter);
+                    }
+                }
+
+                // Corner/Edge/Midpoint Snap
+                if grid_settings.snap_to_object_edges
+                    || grid_settings.snap_to_object_midpoints
+                    || grid_settings.snap_to_object_corners
+                {
+                    let transform_iso = Isometry::new(
+                        Vector::new(transform.translation().x, transform.translation().y),
+                        transform
+                            .compute_transform()
+                            .rotation
+                            .to_euler(EulerRot::XYZ)
+                            .2,
+                    );
+
+                    // Discrete Midpoints (Simplified for Box and Segment)
+                    // Prioritize Midpoints over Edges by checking them first
+                    if grid_settings.snap_to_object_midpoints {
+                        let candidates = match collider.raw.as_typed_shape() {
+                            TypedShape::Cuboid(c) => {
+                                let hx = c.half_extents.x;
+                                let hy = c.half_extents.y;
+                                vec![
+                                    Point::new(0.0, hy),
+                                    Point::new(0.0, -hy),
+                                    Point::new(hx, 0.0),
+                                    Point::new(-hx, 0.0),
+                                ]
+                            }
+                            TypedShape::Segment(s) => {
+                                let mid = (s.a.coords + s.b.coords) * 0.5;
+                                vec![Point::from(mid)]
+                            }
+                            _ => vec![],
+                        };
+
+                        for local_pt in candidates {
+                            let world_pt_na = transform_iso.transform_point(&local_pt);
+                            let world_pt = Vec2::new(world_pt_na.x, world_pt_na.y);
+                            let d2 = world_pt.distance_squared(raw_pos);
+                            if d2 < best_snap_dist_sq {
+                                best_snap_dist_sq = d2;
+                                best_snap_pos = world_pt;
+                                snapped = true;
+                                snap_source = Some(SnapSource::ObjectMidpoint);
+                            }
                         }
                     }
 
-                    // Corner/Edge/Midpoint Snap
-                    if grid_settings.snap_to_object_edges || grid_settings.snap_to_object_midpoints || grid_settings.snap_to_object_corners {
+                    // Corner Snap (Vertices)
+                    // Prioritize Corners over Edges by checking them first (same priority level as Midpoints)
+                    if grid_settings.snap_to_object_corners {
+                        let candidates = match collider.raw.as_typed_shape() {
+                            TypedShape::Cuboid(c) => {
+                                let hx = c.half_extents.x;
+                                let hy = c.half_extents.y;
+                                vec![
+                                    Point::new(hx, hy),
+                                    Point::new(hx, -hy),
+                                    Point::new(-hx, hy),
+                                    Point::new(-hx, -hy),
+                                ]
+                            }
+                            TypedShape::Segment(s) => {
+                                vec![Point::from(s.a.coords), Point::from(s.b.coords)]
+                            }
+                            TypedShape::Triangle(t) => {
+                                vec![
+                                    Point::from(t.a.coords),
+                                    Point::from(t.b.coords),
+                                    Point::from(t.c.coords),
+                                ]
+                            }
+                            _ => vec![],
+                        };
 
-                         let transform_iso = Isometry::new(
-                             Vector::new(transform.translation().x, transform.translation().y),
-                             transform.compute_transform().rotation.to_euler(EulerRot::XYZ).2
-                         );
+                        for local_pt in candidates {
+                            let world_pt_na = transform_iso.transform_point(&local_pt);
+                            let world_pt = Vec2::new(world_pt_na.x, world_pt_na.y);
+                            let d2 = world_pt.distance_squared(raw_pos);
+                            if d2 < best_snap_dist_sq {
+                                best_snap_dist_sq = d2;
+                                best_snap_pos = world_pt;
+                                snapped = true;
+                                snap_source = Some(SnapSource::ObjectCorner);
+                            }
+                        }
+                    }
 
-                         // Discrete Midpoints (Simplified for Box and Segment)
-                         // Prioritize Midpoints over Edges by checking them first
-                         if grid_settings.snap_to_object_midpoints {
-                             let candidates = match collider.raw.as_typed_shape() {
-                                 TypedShape::Cuboid(c) => {
-                                     let hx = c.half_extents.x;
-                                     let hy = c.half_extents.y;
-                                     vec![
-                                         Point::new(0.0, hy), Point::new(0.0, -hy),
-                                         Point::new(hx, 0.0), Point::new(-hx, 0.0)
-                                     ]
-                                 },
-                                 TypedShape::Segment(s) => {
-                                     let mid = (s.a.coords + s.b.coords) * 0.5;
-                                     vec![Point::from(mid)]
-                                 },
-                                 _ => vec![]
-                             };
+                    // Edge Snap
+                    if grid_settings.snap_to_object_edges {
+                        let pos = transform.translation().truncate();
+                        let rot = transform
+                            .compute_transform()
+                            .rotation
+                            .to_euler(EulerRot::XYZ)
+                            .2;
+                        let projection = collider.project_point(pos, rot, raw_pos, true);
+                        let world_closest_pt = projection.point; // Vec2 (World space)
 
-                             for local_pt in candidates {
-                                 let world_pt_na = transform_iso.transform_point(&local_pt);
-                                 let world_pt = Vec2::new(world_pt_na.x, world_pt_na.y);
-                                 let d2 = world_pt.distance_squared(raw_pos);
-                                 if d2 < best_snap_dist_sq {
-                                     best_snap_dist_sq = d2;
-                                     best_snap_pos = world_pt;
-                                     snapped = true;
-                                     snap_source = Some(SnapSource::ObjectMidpoint);
-                                 }
-                             }
-                         }
-
-                         // Corner Snap (Vertices)
-                         // Prioritize Corners over Edges by checking them first (same priority level as Midpoints)
-                         if grid_settings.snap_to_object_corners {
-                             let candidates = match collider.raw.as_typed_shape() {
-                                 TypedShape::Cuboid(c) => {
-                                     let hx = c.half_extents.x;
-                                     let hy = c.half_extents.y;
-                                     vec![
-                                         Point::new(hx, hy), Point::new(hx, -hy),
-                                         Point::new(-hx, hy), Point::new(-hx, -hy)
-                                     ]
-                                 },
-                                 TypedShape::Segment(s) => {
-                                     vec![Point::from(s.a.coords), Point::from(s.b.coords)]
-                                 },
-                                 TypedShape::Triangle(t) => {
-                                     vec![Point::from(t.a.coords), Point::from(t.b.coords), Point::from(t.c.coords)]
-                                 },
-                                 _ => vec![]
-                             };
-
-                             for local_pt in candidates {
-                                 let world_pt_na = transform_iso.transform_point(&local_pt);
-                                 let world_pt = Vec2::new(world_pt_na.x, world_pt_na.y);
-                                 let d2 = world_pt.distance_squared(raw_pos);
-                                 if d2 < best_snap_dist_sq {
-                                     best_snap_dist_sq = d2;
-                                     best_snap_pos = world_pt;
-                                     snapped = true;
-                                     snap_source = Some(SnapSource::ObjectCorner);
-                                 }
-                             }
-                         }
-
-                         // Edge Snap
-                         if grid_settings.snap_to_object_edges {
-                             let pos = transform.translation().truncate();
-                             let rot = transform.compute_transform().rotation.to_euler(EulerRot::XYZ).2;
-                             let projection = collider.project_point(pos, rot, raw_pos, true);
-                             let world_closest_pt = projection.point; // Vec2 (World space)
-
-                             let d2 = world_closest_pt.distance_squared(raw_pos);
-                             // Use < to respect priority of previous snaps (Midpoints) if distances are equal
-                             if d2 < best_snap_dist_sq {
-                                 best_snap_dist_sq = d2;
-                                 best_snap_pos = world_closest_pt;
-                                 snapped = true;
-                                 snap_source = Some(SnapSource::ObjectEdge);
-                             }
-                         }
+                        let d2 = world_closest_pt.distance_squared(raw_pos);
+                        // Use < to respect priority of previous snaps (Midpoints) if distances are equal
+                        if d2 < best_snap_dist_sq {
+                            best_snap_dist_sq = d2;
+                            best_snap_pos = world_closest_pt;
+                            snapped = true;
+                            snap_source = Some(SnapSource::ObjectEdge);
+                        }
                     }
                 }
-                true // Continue traversal
-            });
-        }
+            }
+            true // Continue traversal
+        });
     }
 
     // 2. Grid Snapping (only if not snapped to object)
@@ -195,7 +213,9 @@ mod tests {
     fn no_spatial_query(_aabb: Aabb2d, _callback: &mut dyn FnMut(Entity) -> bool) {}
 
     // Helper for no-op collider data
-    fn no_collider_data(_entity: Entity) -> Option<(Collider, GlobalTransform)> { None }
+    fn no_collider_data(_entity: Entity) -> Option<(Collider, GlobalTransform)> {
+        None
+    }
 
     #[rstest]
     #[case(Vec2::new(1.1, 1.1), 1.0, Vec2::new(1.0, 1.0))]
@@ -206,12 +226,8 @@ mod tests {
         settings.spacing = spacing;
         settings.snap_to_objects = false;
 
-        let (pos, snapped, source) = calculate_snapping(
-            raw,
-            &settings,
-            Some(no_spatial_query),
-            no_collider_data
-        );
+        let (pos, snapped, source) =
+            calculate_snapping(raw, &settings, Some(no_spatial_query), no_collider_data);
 
         assert!(snapped);
         assert_eq!(source, Some(SnapSource::Grid));
@@ -225,12 +241,8 @@ mod tests {
         settings.snap_to_objects = false;
 
         let raw = Vec2::new(1.1, 1.1);
-        let (pos, snapped, source) = calculate_snapping(
-            raw,
-            &settings,
-            Some(no_spatial_query),
-            no_collider_data
-        );
+        let (pos, snapped, source) =
+            calculate_snapping(raw, &settings, Some(no_spatial_query), no_collider_data);
 
         assert!(!snapped);
         assert_eq!(source, None);
@@ -258,19 +270,15 @@ mod tests {
             if entity.index() == 1 {
                 Some((
                     Collider::cuboid(0.5, 0.5),
-                    GlobalTransform::from_translation(object_center.extend(0.0))
+                    GlobalTransform::from_translation(object_center.extend(0.0)),
                 ))
             } else {
                 None
             }
         };
 
-        let (pos, snapped, source) = calculate_snapping(
-            raw,
-            &settings,
-            Some(spatial_query),
-            get_collider_data
-        );
+        let (pos, snapped, source) =
+            calculate_snapping(raw, &settings, Some(spatial_query), get_collider_data);
 
         assert!(snapped);
         assert_eq!(source, Some(SnapSource::ObjectCenter));

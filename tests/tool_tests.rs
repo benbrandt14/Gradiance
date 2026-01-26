@@ -1,9 +1,9 @@
 use bevy::prelude::*;
+use bevy_rapier2d::prelude::*;
 use gradiance::input::ToolState;
 use gradiance::input::commands::CommandStack;
 use gradiance::input::editable::{EditableBox, EditableCircle};
 use gradiance::input::selection::Selection;
-use bevy_rapier2d::prelude::*;
 use rstest::{fixture, rstest};
 
 mod test_utils;

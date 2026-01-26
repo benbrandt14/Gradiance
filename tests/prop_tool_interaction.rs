@@ -1,8 +1,8 @@
 use bevy::prelude::*;
-use proptest::prelude::*;
+use bevy_rapier2d::prelude::*;
 use gradiance::input::ToolState;
 use gradiance::input::editable::EditableBox;
-use bevy_rapier2d::prelude::*;
+use proptest::prelude::*;
 
 mod test_utils;
 use test_utils::*;
@@ -68,18 +68,29 @@ fn operation_strategy() -> impl Strategy<Value = Operation> {
         (
             (-50.0..50.0f32, -50.0..50.0f32),
             (-50.0..50.0f32, -50.0..50.0f32)
-        ).prop_map(|((x1, y1), (x2, y2))| Operation::SpawnBox { start: Vec2::new(x1, y1), end: Vec2::new(x2, y2) }),
+        )
+            .prop_map(|((x1, y1), (x2, y2))| Operation::SpawnBox {
+                start: Vec2::new(x1, y1),
+                end: Vec2::new(x2, y2)
+            }),
         (
             (-50.0..50.0f32, -50.0..50.0f32),
             (-50.0..50.0f32, -50.0..50.0f32)
-        ).prop_map(|((x1, y1), (x2, y2))| Operation::SpawnCircle { start: Vec2::new(x1, y1), end: Vec2::new(x2, y2) }),
+        )
+            .prop_map(|((x1, y1), (x2, y2))| Operation::SpawnCircle {
+                start: Vec2::new(x1, y1),
+                end: Vec2::new(x2, y2)
+            }),
         (
             (-50.0..50.0f32, -50.0..50.0f32),
             (-50.0..50.0f32, -50.0..50.0f32)
-        ).prop_map(|((x1, y1), (x2, y2))| Operation::SpawnGround { start: Vec2::new(x1, y1), end: Vec2::new(x2, y2) }),
+        )
+            .prop_map(|((x1, y1), (x2, y2))| Operation::SpawnGround {
+                start: Vec2::new(x1, y1),
+                end: Vec2::new(x2, y2)
+            }),
     ]
 }
-
 
 fn apply_action(app: &mut App, action: &Action) {
     match action {
@@ -104,7 +115,7 @@ fn apply_operation(app: &mut App, op: &Operation) {
             app.update();
             mouse_up(app, MouseButton::Left);
             app.update();
-        },
+        }
         Operation::SpawnCircle { start, end } => {
             set_tool(app, ToolState::Circle);
             set_cursor(app, *start);
@@ -114,8 +125,8 @@ fn apply_operation(app: &mut App, op: &Operation) {
             app.update();
             mouse_up(app, MouseButton::Left);
             app.update();
-        },
-         Operation::SpawnGround { start, end } => {
+        }
+        Operation::SpawnGround { start, end } => {
             set_tool(app, ToolState::Ground);
             set_cursor(app, *start);
             mouse_down(app, MouseButton::Left);
@@ -124,7 +135,7 @@ fn apply_operation(app: &mut App, op: &Operation) {
             app.update();
             mouse_up(app, MouseButton::Left);
             app.update();
-        },
+        }
     }
 }
 
@@ -159,17 +170,21 @@ proptest! {
 fn safe_action_strategy() -> impl Strategy<Value = Action> {
     prop_oneof![
         // Filter out Drag
-        tool_strategy().prop_filter("No Drag", |t| *t != ToolState::Drag).prop_map(Action::SetTool),
-
+        tool_strategy()
+            .prop_filter("No Drag", |t| *t != ToolState::Drag)
+            .prop_map(Action::SetTool),
         (-100.0..100.0f32, -100.0..100.0f32).prop_map(|(x, y)| Action::MoveMouse(Vec2::new(x, y))),
-
         prop_oneof![Just(MouseButton::Left), Just(MouseButton::Right)].prop_map(Action::MouseDown),
         prop_oneof![Just(MouseButton::Left), Just(MouseButton::Right)].prop_map(Action::MouseUp),
-
         // Filter out Delete keys
-        key_strategy().prop_filter("No Delete", |k| *k != KeyCode::Delete && *k != KeyCode::Backspace).prop_map(Action::KeyPress),
-        key_strategy().prop_filter("No Delete", |k| *k != KeyCode::Delete && *k != KeyCode::Backspace).prop_map(Action::KeyRelease),
-
+        key_strategy()
+            .prop_filter("No Delete", |k| *k != KeyCode::Delete
+                && *k != KeyCode::Backspace)
+            .prop_map(Action::KeyPress),
+        key_strategy()
+            .prop_filter("No Delete", |k| *k != KeyCode::Delete
+                && *k != KeyCode::Backspace)
+            .prop_map(Action::KeyRelease),
         Just(Action::Update),
     ]
 }

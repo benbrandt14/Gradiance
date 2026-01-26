@@ -149,8 +149,16 @@ fn draw_grid(
         settings.spacing = minor_spacing;
     }
 
-    let render_spacing = if settings.auto_spacing { minor_spacing } else { settings.spacing };
-    let render_major_spacing = if settings.auto_spacing { major_spacing } else { settings.spacing * 10.0 };
+    let render_spacing = if settings.auto_spacing {
+        minor_spacing
+    } else {
+        settings.spacing
+    };
+    let render_major_spacing = if settings.auto_spacing {
+        major_spacing
+    } else {
+        settings.spacing * 10.0
+    };
 
     match settings.grid_type {
         GridType::Rectangular => draw_rectangular_grid(
@@ -189,12 +197,20 @@ fn draw_rectangular_grid(
 
         for i in 0..=count_x {
             let x = start_x + (i as f32) * spacing;
-            gizmos.line(Vec3::new(x, bottom, z_depth), Vec3::new(x, top, z_depth), color);
+            gizmos.line(
+                Vec3::new(x, bottom, z_depth),
+                Vec3::new(x, top, z_depth),
+                color,
+            );
         }
 
         for i in 0..=count_y {
             let y = start_y + (i as f32) * spacing;
-            gizmos.line(Vec3::new(left, y, z_depth), Vec3::new(right, y, z_depth), color);
+            gizmos.line(
+                Vec3::new(left, y, z_depth),
+                Vec3::new(right, y, z_depth),
+                color,
+            );
         }
     };
 

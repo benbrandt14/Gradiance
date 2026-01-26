@@ -8,7 +8,7 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
 // Import from snapping module
-use crate::input::snapping::{SnappingStatus, SnapSource, calculate_snapping};
+use crate::input::snapping::{SnapSource, SnappingStatus, calculate_snapping};
 
 /// Custom cursor position resource.
 ///
@@ -51,10 +51,10 @@ pub fn update_cursor_pos(
     }
 
     let mut raw_pos = None;
-    if let Some(screen_pos) = window.cursor_position() {
-        if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos) {
-            raw_pos = Some(world_pos);
-        }
+    if let Some(screen_pos) = window.cursor_position()
+        && let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos)
+    {
+        raw_pos = Some(world_pos);
     }
 
     cursor_pos.0 = raw_pos;
@@ -63,26 +63,25 @@ pub fn update_cursor_pos(
         return;
     };
 
-    let get_collider_wrapper = |entity| {
-        q_collider.get(entity).ok().map(|(c, t)| (c.clone(), *t))
-    };
+    let get_collider_wrapper = |entity| q_collider.get(entity).ok().map(|(c, t)| (c.clone(), *t));
 
-    let (best_snap_pos, snapped, snap_source) = if let Some(rapier_context) = q_rapier.iter().next() {
+    let (best_snap_pos, snapped, snap_source) = if let Some(rapier_context) = q_rapier.iter().next()
+    {
         calculate_snapping(
             raw,
             &grid_settings,
             Some(|aabb, callback: &mut dyn FnMut(Entity) -> bool| {
-                 rapier_context.colliders_with_aabb_intersecting_aabb(aabb, callback);
+                rapier_context.colliders_with_aabb_intersecting_aabb(aabb, callback);
             }),
-            get_collider_wrapper
+            get_collider_wrapper,
         )
     } else {
         // No rapier context, pass None for spatial query
-         calculate_snapping(
+        calculate_snapping(
             raw,
             &grid_settings,
             None::<fn(bevy::math::bounding::Aabb2d, &mut dyn FnMut(Entity) -> bool)>, // Explicit type for None
-            get_collider_wrapper
+            get_collider_wrapper,
         )
     };
 
@@ -107,7 +106,7 @@ pub fn draw_snap_indicators(
     let pos = snap_status.snap_pos;
     let color = match snap_status.snap_source {
         Some(SnapSource::Grid) => Color::srgb(0.0, 1.0, 0.0), // Green
-        Some(_) => Color::srgb(0.0, 1.0, 1.0), // Cyan
+        Some(_) => Color::srgb(0.0, 1.0, 1.0),                // Cyan
         None => Color::WHITE,
     };
 
@@ -123,6 +122,14 @@ pub fn draw_snap_indicators(
 
     // Crosshair
     let arm_len = radius * 2.0;
-    gizmos.line_2d(pos - Vec2::new(arm_len, 0.0), pos + Vec2::new(arm_len, 0.0), color);
-    gizmos.line_2d(pos - Vec2::new(0.0, arm_len), pos + Vec2::new(0.0, arm_len), color);
+    gizmos.line_2d(
+        pos - Vec2::new(arm_len, 0.0),
+        pos + Vec2::new(arm_len, 0.0),
+        color,
+    );
+    gizmos.line_2d(
+        pos - Vec2::new(0.0, arm_len),
+        pos + Vec2::new(0.0, arm_len),
+        color,
+    );
 }

@@ -1,12 +1,12 @@
 use bevy::asset::AssetEvent;
 use bevy::gizmos::GizmoPlugin;
+use bevy::input::ButtonState;
 use bevy::input::InputPlugin as BevyInputPlugin;
+use bevy::input::keyboard::KeyboardInput;
+use bevy::input::mouse::MouseButtonInput;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy::window::{PrimaryWindow, WindowCreated, WindowResized, WindowScaleFactorChanged};
-use bevy::input::ButtonState;
-use bevy::input::mouse::MouseButtonInput;
-use bevy::input::keyboard::KeyboardInput;
 
 use bevy_egui::EguiUserTextures;
 use bevy_prototype_lyon::plugin::ShapePlugin;
@@ -141,7 +141,9 @@ pub fn press_key(app: &mut App, key_code: KeyCode) {
         .single(app.world());
     app.world_mut().send_event(KeyboardInput {
         key_code,
-        logical_key: bevy::input::keyboard::Key::Unidentified(bevy::input::keyboard::NativeKey::Unidentified),
+        logical_key: bevy::input::keyboard::Key::Unidentified(
+            bevy::input::keyboard::NativeKey::Unidentified,
+        ),
         state: ButtonState::Pressed,
         window,
         repeat: false,
@@ -156,7 +158,9 @@ pub fn release_key(app: &mut App, key_code: KeyCode) {
         .single(app.world());
     app.world_mut().send_event(KeyboardInput {
         key_code,
-        logical_key: bevy::input::keyboard::Key::Unidentified(bevy::input::keyboard::NativeKey::Unidentified),
+        logical_key: bevy::input::keyboard::Key::Unidentified(
+            bevy::input::keyboard::NativeKey::Unidentified,
+        ),
         state: ButtonState::Released,
         window,
         repeat: false,
