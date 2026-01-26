@@ -26,6 +26,12 @@ fn test_extrusion_generation() {
     });
 
     // Spawn entity
+    // Layers 0 (1) and 2 (4) -> bits 0101 -> 5
+    // min_i = 0. max_i = 2.
+    // Z direction is now NEGATIVE.
+    // z_front = -(0 * 10) = 0.0.
+    // depth = (2 - 0 + 1) * 10 = 30.0.
+    // z_back = 0.0 - 30.0 = -30.0.
     let groups = CollisionGroups::new(Group::from_bits_truncate(5), Group::ALL);
 
     let entity = app.world_mut().spawn((
@@ -43,19 +49,17 @@ fn test_extrusion_generation() {
     let meshes = app.world().resource::<Assets<Mesh>>();
 
     // Find the generated mesh in assets.
-    // Due to some test environment quirks, handle ID might mismatch stored ID,
-    // so we verify by content.
     let mut found_mesh = false;
     for (_, mesh) in meshes.iter() {
         if let Some(positions) = mesh.attribute(Mesh::ATTRIBUTE_POSITION).and_then(|a| a.as_float3()) {
-             // Check for vertices at expected Z levels (0 and 30)
+             // Check for vertices at expected Z levels (0 and -30)
              let mut found_start = false;
              let mut found_end = false;
 
              for p in positions {
                  let z = p[2];
                  if (z - 0.0).abs() < 0.001 { found_start = true; }
-                 if (z - 30.0).abs() < 0.001 { found_end = true; }
+                 if (z - -30.0).abs() < 0.001 { found_end = true; }
              }
 
              if found_start && found_end {
@@ -65,5 +69,5 @@ fn test_extrusion_generation() {
         }
     }
 
-    assert!(found_mesh, "Should find a mesh with vertices at z=0.0 and z=30.0");
+    assert!(found_mesh, "Should find a mesh with vertices at z=0.0 and z=-30.0");
 }

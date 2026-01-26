@@ -44,23 +44,21 @@ pub fn camera_pan_orbit(
         }
 
         // Orbit: Middle Click
+        // Constraint: Pitch (local X) and Yaw (GLOBAL Y). No Roll (local Z).
         if mouse_buttons.pressed(MouseButton::Middle) {
             let sensitivity = 0.005;
 
-            // Orbit around a pivot point. Ideally the look-at point.
-            // Assume look-at point is on Z=0 plane at center of screen?
-            // Or just rotate around current position? No, rotate around target.
-            // Camera setup: (0, -30, 60) looking at (0,0,0).
-
-            // Simple orbit logic:
-            // Rotate around Z axis (yaw) and local X axis (pitch).
-
-            // Current Look Direction
-            // We want to rotate around the focus point.
-            // Finding focus point: intersection of forward vector with Z=0 plane?
-
+            // Find pivot point (intersection with Z=0 plane)
             let forward = transform.forward();
             let origin = transform.translation;
+            // Plane normal is Z (0,0,1).
+            // But wait, if we want "Up" to be Y (physics world Up),
+            // then we are viewing a "Wall".
+            // Camera setup: (0, -30, 500) looking at (0,0,0).
+            // Up is Y. Z is Depth.
+            // So we orbit around Y axis (Yaw) and Local X (Pitch).
+
+            // Intersection with Z=0 plane still makes sense as focus point.
             let normal = Vec3::Z;
             let denominator = forward.dot(normal);
 
@@ -71,36 +69,77 @@ pub fn camera_pan_orbit(
                 Vec3::ZERO // Fallback
             };
 
-            // Orbit calculation
-            // Rotate transform around pivot
-
             let yaw = -delta.x * sensitivity;
             let pitch = -delta.y * sensitivity;
 
-            // Rotate around pivot
             // 1. Translate to pivot relative
-            let mut offset = transform.translation - pivot;
+            let offset = transform.translation - pivot;
 
             // 2. Rotate
-            // Yaw (around World Z)
-            offset = Quat::from_rotation_z(yaw) * offset;
-            transform.rotation = Quat::from_rotation_z(yaw) * transform.rotation;
+            // Yaw around GLOBAL Y (0,1,0)?
+            // Wait, if 2D plane is XY, then Y is Up.
+            // So Yaw around Y.
+            // Pitch around Local Right (X).
 
-            // Pitch (around Local X)
+            let mut rotation = transform.rotation;
+
+            // Apply Pitch (Local X)
             let pitch_rot = Quat::from_rotation_x(pitch);
-            offset = transform.rotation * pitch_rot * transform.rotation.inverse() * offset;
-            transform.rotation = transform.rotation * pitch_rot;
+            rotation = rotation * pitch_rot;
 
-            // 3. Translate back
-            transform.translation = pivot + offset;
+            // Apply Yaw (Global Y)? Or Global Z?
+            // If we are looking at XY plane, and Y is Up.
+            // Then rotating around Y (0,1,0) moves the camera left/right around the vertical axis.
+            // This assumes Y is vertical.
+            // Let's try Yaw around Y.
+            // But previous setup was Yaw around Z (Roll?).
+            // If camera is at (0, -30, 500), looking at origin.
+            // It's mostly looking along -Z.
+            // Y is Up on screen. X is Right.
+            // Rotating around Z spins the view (Roll).
+            // Rotating around Y orbits horizontally (Yaw).
+            // Rotating around X orbits vertically (Pitch).
+
+            // User said "should not roll". So no Z rotation.
+            // Only Pitch (X) and Yaw (Y).
+
+            // Yaw (Global Y)
+            let yaw_rot = Quat::from_rotation_y(yaw);
+            // Apply Yaw to position: rotate offset around Y.
+            let mut new_offset = yaw_rot * offset;
+            // Apply Pitch to position: rotate offset around camera's local X?
+            // This is tricky. Standard orbit: rotate position around pivot.
+            // We need to accumulate rotations on the transform.
+
+            // Let's use `look_at`.
+            // Calculate new position on sphere.
+            // Current position relative to pivot: `offset`.
+            // Convert to spherical coords? Or just rotate vector.
+
+            // Rotate offset by Yaw (Global Y)
+            new_offset = Quat::from_rotation_y(yaw) * new_offset;
+
+            // Rotate offset by Pitch (Local Right).
+            // Local Right depends on current rotation.
+            // But we want to prevent roll.
+            // We can calculate right vector from Cross(Forward, WorldUp).
+            // WorldUp = Y (0,1,0).
+            let fwd = -new_offset.normalize(); // Looking at pivot
+            let right = fwd.cross(Vec3::Y).normalize_or_zero();
+            // If right is zero (looking straight up/down), handle singularity?
+            if right.length_squared() < 0.001 {
+               // Singularity. Skip pitch.
+            } else {
+               let pitch_rot_axis = Quat::from_axis_angle(right, pitch);
+               new_offset = pitch_rot_axis * new_offset;
+            }
+
+            transform.translation = pivot + new_offset;
+            transform.look_at(pivot, Vec3::Y); // Enforce Up=Y to prevent roll
         }
     }
 }
 
-// Kept for backward compatibility if other modules reference it (like select_tool.rs)
-// Or we update select_tool.rs.
-// Let's update select_tool.rs instead to point to camera_pan_orbit.
-// But for now, alias it?
 pub use camera_pan_orbit as camera_pan;
 
 fn camera_zoom(
@@ -113,31 +152,11 @@ fn camera_zoom(
     }
 
     for mut transform in query.iter_mut() {
-        // Move along forward vector to zoom towards cursor/center?
-        // Simple Z-translation zoom (dolly) is easiest for top-down-ish view.
-        // But if rotated, Z-translation might behave weirdly.
-        // Better: Move along forward vector.
-
         let forward = transform.forward();
-        // let _dist = transform.translation.length();
 
-        // Approximate zoom scale
-        // let sensitivity = 0.1;
-        // let mut _factor = 1.0;
-
-        // if scroll > 0.0 {
-        //     _factor = 1.0 - sensitivity;
-        // } else {
-        //     _factor = 1.0 + sensitivity;
-        // }
-
-        // If we move along forward vector:
         let displacement = forward * (scroll * transform.translation.z.abs() * 0.1);
         let new_pos = transform.translation + displacement;
 
-        // Check bounds (don't go through ground or too far)
-        // Only constrain if we are looking somewhat down?
-        // Z check is simple.
         if new_pos.z > 1.0 && new_pos.z < 5000.0 {
             transform.translation = new_pos;
         }
