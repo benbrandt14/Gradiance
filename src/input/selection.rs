@@ -2,7 +2,7 @@
 //!
 //! Handles the currently selected entity and renders a highlight gizmo around it.
 
-use crate::input::editable::{EditableBox, EditableCircle};
+use crate::input::editable_shape::{EditableShape, ShapeType};
 use crate::physics::floor::GroundPlane;
 use bevy::prelude::*;
 use std::collections::HashSet;
@@ -136,33 +136,48 @@ fn handle_delete_key(
 
 /// System that draws a yellow outline around the selected entities.
 ///
-/// Supports `EditableBox`, `EditableCircle`, and `GroundPlane`.
+/// Supports `EditableShape` and `GroundPlane`.
 fn draw_selection_highlight(
     selection: Res<Selection>,
     query: Query<(
         &Transform,
-        Option<&EditableBox>,
-        Option<&EditableCircle>,
+        Option<&EditableShape>,
         Option<&GroundPlane>,
     )>,
     mut gizmos: Gizmos,
 ) {
     for &entity in &selection.0 {
-        if let Ok((transform, box_shape, circle_shape, ground)) = query.get(entity) {
+        if let Ok((transform, editable_shape, ground)) = query.get(entity) {
             let color = Color::srgb(1.0, 1.0, 0.0); // Yellow
             let t = transform.translation.truncate();
             let r = transform.rotation.to_euler(EulerRot::XYZ).2;
 
             let iso = Isometry2d::from_translation(t) * Isometry2d::from_rotation(Rot2::radians(r));
 
-            if let Some(b) = box_shape {
-                gizmos.rect_2d(
-                    iso,
-                    Vec2::new(b.width as f32 + 0.2, b.height as f32 + 0.2), // slightly larger
-                    color,
-                );
-            } else if let Some(c) = circle_shape {
-                gizmos.circle_2d(iso, c.radius as f32 + 0.1, color);
+            if let Some(shape) = editable_shape {
+                match &shape.shape {
+                    ShapeType::Box { width, height } => {
+                        gizmos.rect_2d(
+                            iso,
+                            Vec2::new(width + 0.2, height + 0.2), // slightly larger
+                            color,
+                        );
+                    }
+                    ShapeType::Circle { radius } => {
+                        gizmos.circle_2d(iso, radius + 0.1, color);
+                    }
+                    ShapeType::Polygon { points } => {
+                        if points.len() >= 3 {
+                            for i in 0..points.len() {
+                                let p1 = points[i];
+                                let p2 = points[(i + 1) % points.len()];
+                                let start = iso * p1;
+                                let end = iso * p2;
+                                gizmos.line_2d(start, end, color);
+                            }
+                        }
+                    }
+                }
             } else if ground.is_some() {
                 // Visualize infinite plane selection (line + normal indicator)
                 // Draw a very long line

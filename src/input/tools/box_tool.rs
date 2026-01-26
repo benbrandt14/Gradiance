@@ -2,7 +2,8 @@
 //!
 //! Click and drag to define the extents of a new box.
 
-use crate::input::commands::{CommandStack, SpawnBoxCommand};
+use crate::input::commands::{CommandStack, SpawnShapeCommand};
+use crate::input::editable_shape::ShapeType;
 use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -73,7 +74,14 @@ fn box_tool_update(
         }
         DragStatus::Finished => {
             if should_spawn_box(size) {
-                let cmd = SpawnBoxCommand::new(center, size.x, size.y);
+                let cmd = SpawnShapeCommand {
+                    position: center,
+                    shape: ShapeType::Box {
+                        width: size.x,
+                        height: size.y,
+                    },
+                    entity: None,
+                };
 
                 commands.queue(move |world: &mut World| {
                     world.resource_scope(|world, mut stack: Mut<CommandStack>| {
