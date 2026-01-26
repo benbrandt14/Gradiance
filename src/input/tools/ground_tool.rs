@@ -65,13 +65,16 @@ fn ground_tool_update(
     match drag.status {
         DragStatus::Dragging => {
             // Draw preview line
-            gizmos.line_2d(drag.start, drag.current, Color::WHITE);
-            // Draw normal to show "down" direction (where the ground body will be)
-            let mid = (drag.start + drag.current) / 2.0;
-            let dir = drag.current - drag.start;
-            // Normal rotated -90 degrees (x, y) -> (y, -x)
-            let normal = Vec2::new(dir.y, -dir.x).normalize_or_zero() * 20.0;
-            gizmos.line_2d(mid, mid + normal, Color::srgb(0.5, 0.5, 0.5));
+            let start = Vec3::new(drag.start.x, drag.start.y, 0.1);
+            let end = Vec3::new(drag.current.x, drag.current.y, 0.1);
+            gizmos.line(start, end, Color::WHITE);
+
+            // Draw normal to show "down" direction
+            let mid = (start + end) / 2.0;
+            let dir = (end - start).normalize_or_zero();
+            // Normal rotated -90 degrees around Z: (x, y, 0) -> (y, -x, 0)
+            let normal = Vec3::new(dir.y, -dir.x, 0.0) * 20.0;
+            gizmos.line(mid, mid + normal, Color::srgb(0.5, 0.5, 0.5));
         }
         DragStatus::Finished => {
             let (center, rotation) = calculate_ground_geometry(drag.start, drag.current);

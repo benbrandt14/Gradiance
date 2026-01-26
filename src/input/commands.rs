@@ -18,7 +18,8 @@ const DEFAULT_CIRCLE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
 const DEFAULT_POLYGON_COLOR: Color = Color::srgb(0.5, 1.0, 0.5);
 const DEFAULT_GROUND_COLOR: Color = Color::srgb(0.2, 0.2, 0.2);
 const GROUND_WIDTH: f32 = 100_000.0;
-const GROUND_DEPTH: f32 = 1000.0;
+// Make visual depth huge so it looks like an infinite plane in 3D perspective
+const GROUND_DEPTH: f32 = 100_000.0;
 const CONNECTOR_COLLIDER_RADIUS: f32 = 0.5;
 const VISUAL_CIRCLE_OUTER_RADIUS: f32 = 5.0;
 const VISUAL_CIRCLE_INNER_RADIUS: f32 = 2.0;

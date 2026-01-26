@@ -100,7 +100,36 @@ pub fn generate_shape_components(shape_type: &ShapeType) -> Option<(Path, Collid
                 .map(|i| [i as u32, ((i + 1) % vertices.len()) as u32])
                 .collect();
 
+            // Handle potential panic if decomposition fails (returns empty compound)
+            // or if points are collinear/invalid.
+            // Bevy Rapier's convex_decomposition uses parry2d, which might panic if result is invalid.
+            // We'll wrap it in a catch_unwind? No, catch_unwind is not idiomatic here if we can detect it.
+            // But SharedShape doesn't expose a "try_convex_decomposition".
+            // However, we can check if the polygon has area.
+
+            // Check area using shoelace formula
+            let mut area = 0.0;
+            for i in 0..points.len() {
+                let j = (i + 1) % points.len();
+                area += points[i].x * points[j].y;
+                area -= points[j].x * points[i].y;
+            }
+            area = area.abs() / 2.0;
+
+            if area < 1e-4 {
+                // Degenerate polygon
+                return None;
+            }
+
             let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
+
+            // Verify the shape is valid (not empty compound)
+            if let Some(compound) = rapier_shape.as_compound() {
+                if compound.shapes().is_empty() {
+                    return None;
+                }
+            }
+
             Some((
                 GeometryBuilder::build_as(&shape),
                 Collider::from(rapier_shape),

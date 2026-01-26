@@ -77,7 +77,7 @@ impl Plugin for SelectToolPlugin {
             Update,
             select_tool_update
                 .run_if(in_state(ToolState::Select))
-                .before(crate::input::camera_controller::camera_pan),
+                .before(crate::input::camera_controller::camera_pan_orbit),
         );
         app.add_systems(OnExit(ToolState::Select), select_tool_reset);
     }

@@ -201,8 +201,9 @@ fn draw_rectangular_grid(
     top: f32,
     gizmos: &mut Gizmos,
 ) {
-    // Draw at Z = -10.0 to ensure it's behind 2D objects (typically at Z=0.0) but visible
-    let z_depth = -10.0;
+    // Draw at Z = -1.0 to ensure it's slightly behind 2D objects (at Z=0.0)
+    // -10.0 might be too far if the camera is close or at a shallow angle
+    let z_depth = -1.0;
 
     let draw_lines = |spacing: f32, alpha: f32, gizmos: &mut Gizmos| {
         let start_x = (left / spacing).floor() * spacing;
@@ -232,13 +233,11 @@ fn draw_rectangular_grid(
 
     // Draw minor lines (faint)
     if minor_spacing > 0.001 {
-        // Increased alpha from 0.05 to 0.1 for better visibility
-        draw_lines(minor_spacing, 0.2, gizmos);
+        draw_lines(minor_spacing, 0.1, gizmos);
     }
 
     // Draw major lines (stronger)
-    // Increased alpha from 0.15 to 0.3
-    draw_lines(major_spacing, 0.5, gizmos);
+    draw_lines(major_spacing, 0.4, gizmos);
 }
 
 #[cfg(test)]
