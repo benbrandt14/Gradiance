@@ -67,7 +67,7 @@ impl Plugin for InputPlugin {
 fn log_tool_transitions(mut events: EventReader<StateTransitionEvent<ToolState>>) {
     for event in events.read() {
         if let Some(state) = event.entered {
-            info!("Tool Changed to: {:?}", state);
+            info!(state = ?state, "Tool Changed");
         }
     }
 }
@@ -78,7 +78,7 @@ pub struct ZIndex(pub f32);
 
 impl ZIndex {
     /// Get the next Z-index value and increment.
-    pub fn next(&mut self) -> f32 {
+    pub fn next_z(&mut self) -> f32 {
         self.0 += 0.001;
         self.0
     }

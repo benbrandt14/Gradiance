@@ -280,7 +280,7 @@ where
     None
 }
 
-fn sort_bodies_by_z(bodies: &mut Vec<(Entity, f32)>) {
+fn sort_bodies_by_z(bodies: &mut [(Entity, f32)]) {
     bodies.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 }
 

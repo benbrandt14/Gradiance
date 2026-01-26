@@ -111,12 +111,8 @@ pub fn draw_snap_indicators(
         None => Color::WHITE,
     };
 
-    let scale = if let Some(projection) = q_camera.iter().next() {
-        if let Projection::Orthographic(ortho) = projection {
-             ortho.scale
-        } else {
-             1.0
-        }
+    let scale = if let Some(Projection::Orthographic(ortho)) = q_camera.iter().next() {
+        ortho.scale
     } else {
         1.0
     };
