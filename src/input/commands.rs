@@ -432,8 +432,8 @@ impl GameCommand for SpawnJointCommand {
         self.pin_entity = pin_entity;
 
         let joint_data = RevoluteJointBuilder::new()
-            .local_anchor1(-local_anchor_1)
-            .local_anchor2(-local_anchor_2);
+            .local_anchor1(local_anchor_1)
+            .local_anchor2(local_anchor_2);
 
         // Attach ImpulseJoint to entity_a
         // TODO: Implement CollisionGroups/Filtering.
@@ -548,8 +548,8 @@ impl GameCommand for SpawnFixedJointCommand {
         self.pin_entity = pin_entity;
 
         let joint_data = FixedJointBuilder::new()
-            .local_anchor1(-local_anchor_1)
-            .local_anchor2(-local_anchor_2)
+            .local_anchor1(local_anchor_1)
+            .local_anchor2(local_anchor_2)
             .local_basis1(-self.rot_a)
             .local_basis2(-self.rot_b);
 
