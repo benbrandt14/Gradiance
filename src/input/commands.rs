@@ -565,7 +565,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Polygon must have at least 3 vertices"
+            "Invalid shape parameters"
         );
         assert!(cmd.entity.is_none());
     }
