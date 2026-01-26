@@ -64,31 +64,6 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
         max_i = 0;
     }
 
-    // Spec: "physics plane should be in the 'front' so debug objects are visualized over the extrusion".
-    // Physics world is at Z=0.
-    // So Extrusion must be BEHIND Z=0 (Negative Z).
-    // Original: `z_start = min_i * layer_h`. Extruded to `z_start + depth`. (Positive Z).
-    // New:
-    // We want Layer 0 to be just behind Z=0.
-    // Layer 0: Z range [-10, 0].
-    // Layer 1: Z range [-20, -10].
-    // min_i maps to the "Front" of the object.
-    // So `z_front = - (min_i * layer_h)`.
-    // `z_back = z_front - depth`.
-
-    // Let's re-verify.
-    // If multiple layers active (e.g. 0 and 1).
-    // min_i = 0. max_i = 1.
-    // depth = (1 - 0 + 1) * 10 = 20.
-    // z_front (at Z=0) = 0.
-    // z_back = -20.
-    // Object spans [-20, 0].
-    // Debug lines at Z=0 are visible on top. Correct.
-
-    // What if min_i = 1?
-    // z_front = -1 * 10 = -10.
-    // Object starts at -10. Correct.
-
     let z_front = -(min_i as f32 * layer_h);
     let depth = (max_i as i32 - min_i as i32 + 1) as f32 * layer_h;
     let z_back = z_front - depth;
@@ -185,14 +160,6 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
                 let p1 = current_point;
                 let p2 = point_to_vec2(to);
 
-                // Add quad between z_back and z_front.
-                // Note order: z_back is "far", z_front is "near".
-                // add_quad expects (z_start, z_end) where normal calculation assumes direction?
-                // `add_quad` logic assumed `z_start` is back and `z_end` is front.
-                // Here `z_back` is smaller than `z_front`.
-                // So pass `z_back` as start, `z_front` as end?
-                // Let's check `add_quad`.
-
                 add_quad(p1, p2, z_back, z_front, &mut positions, &mut normals, &mut indices);
                 current_point = p2;
             }
@@ -228,6 +195,8 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
             base_color: color,
             perceptual_roughness: 0.5,
             metallic: 0.0,
+            // Disabled culling to ensure visibility
+            cull_mode: None,
             double_sided: true,
             ..default()
         })

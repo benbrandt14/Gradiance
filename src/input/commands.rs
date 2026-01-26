@@ -2,7 +2,6 @@
 //!
 //! Defines the [`GameCommand`] trait and the [`CommandStack`] resource.
 
-use crate::input::ZIndex;
 use crate::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
@@ -12,18 +11,14 @@ use anyhow::{Result, bail};
 use bevy_prototype_lyon::prelude::*;
 use std::fmt::Debug;
 
-const DEFAULT_STROKE_WIDTH: f32 = 0.1;
-const DEFAULT_STROKE_COLOR: Color = Color::BLACK;
-const DEFAULT_BOX_COLOR: Color = Color::srgb(0.5, 0.5, 1.0);
-const DEFAULT_CIRCLE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
-const DEFAULT_POLYGON_COLOR: Color = Color::srgb(0.5, 1.0, 0.5);
-const DEFAULT_GROUND_COLOR: Color = Color::srgb(0.2, 0.2, 0.2);
 const GROUND_WIDTH: f32 = 100_000.0;
 const GROUND_DEPTH: f32 = 1000.0;
 const CONNECTOR_COLLIDER_RADIUS: f32 = 0.5;
 const VISUAL_CIRCLE_OUTER_RADIUS: f32 = 5.0;
 const VISUAL_CIRCLE_INNER_RADIUS: f32 = 2.0;
 const VISUAL_LINE_OFFSET: f32 = 3.0;
+
+// Removed unused colors and stroke width constants to silence warnings
 
 /// A trait for game commands that support Undo/Redo.
 pub trait GameCommand: Send + Sync + Debug {
@@ -356,8 +351,19 @@ impl GameCommand for SpawnFixedJointCommand {
             self.entity_b,
             self.anchor_a,
             self.anchor_b,
-            |_world, _visual_id| {
-                // TODO: Fix connector visuals
+            |world, visual_id| {
+                // Visual lines removed or need Path?
+                // The original code had GeometryBuilder::build_as(&shapes::Line...
+                // But we are removing ShapeBundle dependencies.
+                // Let's create Paths for lines if we want visual.
+                // For now, empty visual logic as per PR cleanup?
+                // Or restore using Path component.
+
+                let line1 = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::new(-VISUAL_LINE_OFFSET, -VISUAL_LINE_OFFSET),
+                    Vec2::new(VISUAL_LINE_OFFSET, VISUAL_LINE_OFFSET),
+                ));
+                world.entity_mut(visual_id).insert(path_from_shape(line1));
             },
         );
         self.visual_entity = Some(visual_id);
