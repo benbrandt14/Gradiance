@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::input::commands::*;
-use gradiance::input::editable::*;
+use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::tools::connector::Connector;
 use gradiance::physics::floor::GroundPlane;
 use gradiance::prelude::*;
@@ -142,16 +142,28 @@ proptest! {
         app.update();
 
         // Count components before
-        let count_box = app.world_mut().query::<&EditableBox>().iter(app.world()).len();
-        let count_circle = app.world_mut().query::<&EditableCircle>().iter(app.world()).len();
+        let count_box = app.world_mut().query::<&EditableShape>().iter(app.world())
+            .filter(|s| matches!(s.shape, ShapeType::Box { .. }))
+            .count();
+        let count_circle = app.world_mut().query::<&EditableShape>().iter(app.world())
+            .filter(|s| matches!(s.shape, ShapeType::Circle { .. }))
+            .count();
         let count_ground = app.world_mut().query::<&GroundPlane>().iter(app.world()).len();
         let count_joint = app.world_mut().query::<&ImpulseJoint>().iter(app.world()).len();
         // Visuals have Connector
         let count_connector = app.world_mut().query::<&Connector>().iter(app.world()).len();
 
         let mut cmd: Box<dyn GameCommand> = match op_idx {
-            0 => Box::new(SpawnBoxCommand::new(pos, param, param)),
-            1 => Box::new(SpawnCircleCommand { position: pos, radius: param, entity: None }),
+            0 => Box::new(SpawnShapeCommand {
+                position: pos,
+                shape: ShapeType::Box { width: param, height: param },
+                entity: None,
+            }),
+            1 => Box::new(SpawnShapeCommand {
+                position: pos,
+                shape: ShapeType::Circle { radius: param },
+                entity: None,
+            }),
             2 => Box::new(SpawnGroundCommand { position: pos, rotation: 0.0, entity: None }),
             3 => Box::new(SpawnJointCommand {
                 entity_a: id1,
@@ -182,11 +194,15 @@ proptest! {
         // Assert counts
         match op_idx {
             0 => {
-                let new_count = app.world_mut().query::<&EditableBox>().iter(app.world()).len();
+                let new_count = app.world_mut().query::<&EditableShape>().iter(app.world())
+                    .filter(|s| matches!(s.shape, ShapeType::Box { .. }))
+                    .count();
                 prop_assert_eq!(new_count, count_box + 1, "EditableBox count mismatch");
             },
             1 => {
-                let new_count = app.world_mut().query::<&EditableCircle>().iter(app.world()).len();
+                let new_count = app.world_mut().query::<&EditableShape>().iter(app.world())
+                    .filter(|s| matches!(s.shape, ShapeType::Circle { .. }))
+                    .count();
                 prop_assert_eq!(new_count, count_circle + 1, "EditableCircle count mismatch");
             },
             2 => {

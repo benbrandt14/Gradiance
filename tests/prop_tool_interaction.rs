@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::input::ToolState;
-use gradiance::input::editable::EditableBox;
+use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use proptest::prelude::*;
 
 mod test_utils;
@@ -153,7 +153,12 @@ proptest! {
             Collider::cuboid(5.0, 5.0),
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableBox { width: 10.0, height: 10.0 },
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 10.0,
+                    height: 10.0,
+                },
+            },
         )).id();
         app.update();
 
@@ -210,7 +215,12 @@ proptest! {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(initial_pos.x, initial_pos.y, 0.0),
             GlobalTransform::default(),
-            EditableBox { width: 2.0, height: 2.0 },
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 2.0,
+                    height: 2.0,
+                },
+            },
             Velocity::zero(),
             Damping { linear_damping: 0.0, angular_damping: 0.0 },
         )).id();

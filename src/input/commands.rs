@@ -554,9 +554,9 @@ mod tests {
     #[rstest]
     fn test_spawn_polygon_command_failure(mut world: World) {
         let vertices = vec![Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0)]; // Only 2 vertices
-        let mut cmd = SpawnPolygonCommand {
+        let mut cmd = SpawnShapeCommand {
             position: Vec2::new(0.0, 0.0),
-            vertices: vertices.clone(),
+            shape: ShapeType::Polygon { points: vertices },
             entity: None,
         };
 
@@ -572,7 +572,14 @@ mod tests {
 
     #[rstest]
     fn test_spawn_box_command(mut world: World) {
-        let mut cmd = SpawnBoxCommand::new(Vec2::new(10.0, 20.0), 5.0, 5.0);
+        let mut cmd = SpawnShapeCommand {
+            position: Vec2::new(10.0, 20.0),
+            shape: ShapeType::Box {
+                width: 5.0,
+                height: 5.0,
+            },
+            entity: None,
+        };
 
         // Apply
         assert!(cmd.apply(&mut world).is_ok());
@@ -589,7 +596,7 @@ mod tests {
 
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
-        assert!(world.get::<EditableBox>(entity).is_some());
+        assert!(world.get::<EditableShape>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);
@@ -601,9 +608,9 @@ mod tests {
 
     #[rstest]
     fn test_spawn_circle_command(mut world: World) {
-        let mut cmd = SpawnCircleCommand {
+        let mut cmd = SpawnShapeCommand {
             position: Vec2::new(-5.0, 5.0),
-            radius: 3.0,
+            shape: ShapeType::Circle { radius: 3.0 },
             entity: None,
         };
 
@@ -622,7 +629,7 @@ mod tests {
 
         assert!(world.get::<RigidBody>(entity).is_some());
         assert!(world.get::<Collider>(entity).is_some());
-        assert!(world.get::<EditableCircle>(entity).is_some());
+        assert!(world.get::<EditableShape>(entity).is_some());
 
         // Undo
         cmd.undo(&mut world);
@@ -688,9 +695,9 @@ mod tests {
             Vec2::new(10.0, 0.0),
             Vec2::new(0.0, 10.0),
         ];
-        let mut cmd = SpawnPolygonCommand {
+        let mut cmd = SpawnShapeCommand {
             position: Vec2::new(0.0, 0.0),
-            vertices: vertices.clone(),
+            shape: ShapeType::Polygon { points: vertices },
             entity: None,
         };
 
@@ -717,7 +724,14 @@ mod tests {
         let mut stack = CommandStack::default();
 
         // 1. Push Box
-        let box_cmd = Box::new(SpawnBoxCommand::new(Vec2::ZERO, 1.0, 1.0));
+        let box_cmd = Box::new(SpawnShapeCommand {
+            position: Vec2::ZERO,
+            shape: ShapeType::Box {
+                width: 1.0,
+                height: 1.0,
+            },
+            entity: None,
+        });
         stack.push(box_cmd, &mut world);
 
         assert_eq!(stack.index, 1);
@@ -741,9 +755,9 @@ mod tests {
         assert_eq!(world.entities().len(), 0);
 
         // 5. Push new command (Circle), should truncate history
-        let circle_cmd = Box::new(SpawnCircleCommand {
+        let circle_cmd = Box::new(SpawnShapeCommand {
             position: Vec2::new(10.0, 0.0),
-            radius: 1.0,
+            shape: ShapeType::Circle { radius: 1.0 },
             entity: None,
         });
         stack.push(circle_cmd, &mut world);
@@ -754,7 +768,7 @@ mod tests {
 
         // Verify it is indeed the circle (by checking component)
         let entity = world.iter_entities().next().unwrap().id();
-        assert!(world.get::<EditableCircle>(entity).is_some());
+        assert!(world.get::<EditableShape>(entity).is_some());
     }
 
     #[rstest]
