@@ -7,6 +7,8 @@ use crate::prelude::*;
 // use bevy_prototype_lyon::prelude::*;
 
 pub mod csg;
+/// 3D mesh generation from 2D physics shapes.
+pub mod mesh_generator;
 
 /// Plugin for geometry and vector rendering.
 ///

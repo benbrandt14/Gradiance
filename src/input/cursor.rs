@@ -51,10 +51,24 @@ pub fn update_cursor_pos(
     }
 
     let mut raw_pos = None;
-    if let Some(screen_pos) = window.cursor_position()
-        && let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos)
-    {
-        raw_pos = Some(world_pos);
+    if let Some(screen_pos) = window.cursor_position() {
+        // Handle both 2D (Orthographic) and 3D (Perspective) cameras
+        if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos) {
+            // Orthographic / 2D case
+            raw_pos = Some(world_pos);
+        } else if let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos) {
+            // Perspective / 3D case: Intersect with Z=0 plane
+            // Plane normal is (0, 0, 1) since we want the XY plane.
+            // Ray equation: O + t * D
+            // Intersection with Z=0: O.z + t * D.z = 0 => t = -O.z / D.z
+            if ray.direction.z.abs() > f32::EPSILON {
+                let t = -ray.origin.z / ray.direction.z;
+                if t >= 0.0 {
+                    let point = ray.origin + ray.direction * t;
+                    raw_pos = Some(point.truncate());
+                }
+            }
+        }
     }
 
     cursor_pos.0 = raw_pos;
@@ -97,7 +111,6 @@ pub fn update_cursor_pos(
 pub fn draw_snap_indicators(
     snap_status: Res<SnappingStatus>,
     mut gizmos: Gizmos,
-    q_camera: Query<&Projection, With<Camera2d>>,
 ) {
     if !snap_status.snapped {
         return;
@@ -110,13 +123,9 @@ pub fn draw_snap_indicators(
         None => Color::WHITE,
     };
 
-    let scale = if let Some(Projection::Orthographic(ortho)) = q_camera.iter().next() {
-        ortho.scale
-    } else {
-        1.0
-    };
-
-    let radius = 5.0 * scale;
+    // Fixed radius for 3D view, or could be dynamic based on distance.
+    // In 2D we used ortho scale. In 3D perspective, a fixed world size works well.
+    let radius = 0.5;
 
     gizmos.circle_2d(pos, radius, color);
 

@@ -55,6 +55,7 @@ struct InspectorQuery<'w, 's> {
             Option<&'static mut ColliderMassProperties>,
             Option<&'static mut GravityScale>,
             Option<&'static mut Sleeping>,
+            Option<&'static mut CollisionGroups>,
         ),
     >,
     commands: Commands<'w, 's>,
@@ -73,6 +74,7 @@ struct InspectorState {
     locked_axes: Option<LockedAxes>,
     density: Option<f32>,
     gravity_scale: Option<f32>,
+    collision_groups: Option<CollisionGroups>,
 }
 
 fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
@@ -102,6 +104,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
             inspect_transform(ui, &mut inspector, &state);
             inspect_shape(ui, &mut inspector, &state);
+            inspect_collision_groups(ui, &mut inspector, &state);
             inspect_physics(ui, &mut inspector, &state);
             inspect_visuals(ui, &mut inspector, &state);
             inspect_joint(ui, &mut inspector, entity);
@@ -135,11 +138,12 @@ fn extract_inspector_state(
         Option<&mut ColliderMassProperties>,
         Option<&mut GravityScale>,
         Option<&mut Sleeping>,
+        Option<&mut CollisionGroups>,
     )>,
 ) -> InspectorState {
     let mut state = InspectorState::default();
 
-    if let Ok((_, t, rb, f, r, eshape, fill, stroke, sensor, locked, mass, grav, _)) =
+    if let Ok((_, t, rb, f, r, eshape, fill, stroke, sensor, locked, mass, grav, _, groups)) =
         query.get(entity)
     {
         if let Some(v) = t {
@@ -178,8 +182,66 @@ fn extract_inspector_state(
         if let Some(v) = grav {
             state.gravity_scale = Some(v.0);
         }
+        if let Some(v) = groups {
+            state.collision_groups = Some(*v);
+        }
     }
     state
+}
+
+fn inspect_collision_groups(
+    ui: &mut egui::Ui,
+    inspector: &mut InspectorQuery,
+    state: &InspectorState,
+) {
+    if let Some(groups) = state.collision_groups {
+        ui.heading("Collision Layers");
+        let mut memberships = groups.memberships.bits();
+        let mut changed = false;
+
+        ui.horizontal(|ui| {
+            for i in 0..5 {
+                let bit = 1 << i;
+                let mut active = (memberships & bit) != 0;
+                // Layer labels: 0=Default, 1-4=Extra
+                if ui.checkbox(&mut active, format!("{}", i)).clicked() {
+                    if active {
+                        memberships |= bit;
+                    } else {
+                        memberships &= !bit;
+                    }
+                    changed = true;
+                }
+            }
+        });
+
+        if changed {
+            for &e in &inspector.selection.0 {
+                // Ensure we update both memberships and filter (assuming allow all interaction for now or keep existing filter)
+                // For simplicity, we just update memberships on the component.
+                if let Ok((.., Some(mut g))) = inspector.entity_query.get_mut(e) {
+                    g.memberships = Group::from_bits_truncate(memberships);
+                } else {
+                    inspector.commands.entity(e).insert(CollisionGroups::new(
+                        Group::from_bits_truncate(memberships),
+                        Group::ALL,
+                    ));
+                }
+            }
+        }
+        ui.separator();
+    } else if state.rigid_body.is_some() {
+        ui.heading("Collision Layers");
+        if ui.button("Add Collision Groups").clicked() {
+            for &e in &inspector.selection.0 {
+                inspector
+                    .commands
+                    .entity(e)
+                    .insert(CollisionGroups::default());
+            }
+        }
+        ui.separator();
+    }
 }
 
 fn inspect_transform(ui: &mut egui::Ui, inspector: &mut InspectorQuery, state: &InspectorState) {

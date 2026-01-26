@@ -45,7 +45,20 @@ impl Plugin for GamePlugin {
     }
 }
 
-/// Spawns the main 2D camera.
+/// Spawns the main 2.5D camera and light.
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    // 3D Camera positioned to look at the 2D plane with an angle to see depth
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, -30.0, 60.0).looking_at(Vec3::ZERO, Vec3::Z),
+    ));
+
+    // Directional light to show depth
+    commands.spawn((
+        DirectionalLight {
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_xyz(50.0, 50.0, 50.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 }

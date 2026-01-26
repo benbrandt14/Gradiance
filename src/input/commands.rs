@@ -196,11 +196,11 @@ impl GameCommand for SpawnShapeCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<()> {
-        let Some((path, collider)) = generate_shape_components(&self.shape) else {
+        let Some((_, collider)) = generate_shape_components(&self.shape) else {
             bail!("Invalid shape parameters");
         };
 
-        let z = world.resource_mut::<ZIndex>().next_z();
+        let _z = world.resource_mut::<ZIndex>().next_z(); // Ignored in 2.5D
         let fill_color = match self.shape {
             ShapeType::Box { .. } => DEFAULT_BOX_COLOR,
             ShapeType::Circle { .. } => DEFAULT_CIRCLE_COLOR,
@@ -209,11 +209,12 @@ impl GameCommand for SpawnShapeCommand {
 
         let entity = world
             .spawn((
-                ShapeBundle {
-                    path,
-                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
-                    ..default()
-                },
+                // Replace ShapeBundle with manual components for 3D/2.5D
+                Transform::from_xyz(self.position.x, self.position.y, 0.0), // Z determined by layers
+                GlobalTransform::default(),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
                 Fill::color(fill_color),
                 Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
                 RigidBody::Dynamic,
@@ -221,6 +222,8 @@ impl GameCommand for SpawnShapeCommand {
                 EditableShape {
                     shape: self.shape.clone(),
                 },
+                // Default to Layer 0 (Group 1)
+                CollisionGroups::new(Group::GROUP_1, Group::ALL),
             ))
             .id();
 
@@ -480,43 +483,45 @@ impl GameCommand for SpawnGroundCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<()> {
-        // Visual shape: Huge rectangle
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(GROUND_WIDTH, GROUND_DEPTH),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
-
-        // Offset: the visual rectangle is centered at (0,0).
-        // The collider is centered at (0,0).
-        // But we want the "surface" (top edge) to be at `position` aligned with `rotation`.
-        // The box center is at (0, -depth/2) relative to the surface.
-        // So we rotate (0, -depth/2) by `rotation` and add to `position`.
+        let z_thickness = 10.0;
+        let mesh_handle = world
+            .resource_mut::<Assets<Mesh>>()
+            .add(Mesh::from(Cuboid::new(
+                GROUND_WIDTH,
+                GROUND_DEPTH,
+                z_thickness,
+            )));
+        let material_handle = world
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color: DEFAULT_GROUND_COLOR,
+                unlit: false,
+                ..default()
+            });
 
         let rot = Quat::from_rotation_z(self.rotation);
         let offset = rot * Vec3::new(0.0, -GROUND_DEPTH / 2.0, 0.0);
         let center = Vec3::new(self.position.x, self.position.y, 0.0) + offset;
 
-        let z = -1.0; // Force ground to be behind
+        // Ground center Z is 0 (spanning -5 to 5 if thickness is 10)
+        let z = 0.0;
 
         let entity = world
             .spawn((
-                // Shape Bundle
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&shape),
-                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
-                        .with_rotation(rot),
-                    ..default()
-                },
-                Fill::color(DEFAULT_GROUND_COLOR), // Dark grey
-                Stroke::new(DEFAULT_STROKE_COLOR, 2.0),
-                // Physics
+                Mesh3d(mesh_handle),
+                MeshMaterial3d(material_handle),
+                Transform::from_translation(center + Vec3::new(0.0, 0.0, z)).with_rotation(rot),
+                GlobalTransform::default(),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
                 RigidBody::Fixed,
                 Collider::cuboid(GROUND_WIDTH / 2.0, GROUND_DEPTH / 2.0),
                 Friction::coefficient(0.5),
                 Restitution::coefficient(0.0),
                 GroundPlane,
                 Name::new("Ground"),
+                CollisionGroups::new(Group::ALL, Group::ALL),
             ))
             .id();
 
@@ -547,6 +552,9 @@ mod tests {
     fn world() -> World {
         let mut world = World::new();
         world.init_resource::<GameZIndex>();
+        world.init_resource::<Assets<Mesh>>();
+        world.init_resource::<Assets<StandardMaterial>>();
+        world.init_resource::<Assets<Image>>(); // Required for StandardMaterial
         world
     }
 

@@ -1,5 +1,6 @@
 //! Logic for live-editable shapes using a unified component.
 
+use crate::geometry::mesh_generator::generate_mesh_from_collider;
 use crate::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::rapier::geometry::SharedShape;
@@ -112,11 +113,36 @@ pub fn generate_shape_components(shape_type: &ShapeType) -> Option<(Path, Collid
 /// System to update the collider and visual shape when `EditableShape` changes.
 fn update_shape_geometry(
     mut commands: Commands,
-    query: Query<(Entity, &EditableShape), Changed<EditableShape>>,
+    query: Query<
+        (
+            Entity,
+            &EditableShape,
+            Option<&CollisionGroups>,
+            Option<&Fill>,
+        ),
+        Or<(Changed<EditableShape>, Changed<CollisionGroups>)>,
+    >,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (entity, editable) in query.iter() {
-        if let Some((path, collider)) = generate_shape_components(&editable.shape) {
-            commands.entity(entity).insert(path).insert(collider);
+    for (entity, editable, groups, fill) in query.iter() {
+        if let Some((_, collider)) = generate_shape_components(&editable.shape) {
+            let mesh = generate_mesh_from_collider(&collider, groups);
+            let mesh_handle = meshes.add(mesh);
+
+            let color = fill.map(|f| f.color).unwrap_or(Color::WHITE);
+            let material_handle = materials.add(StandardMaterial {
+                base_color: color,
+                unlit: false,
+                ..default()
+            });
+
+            commands
+                .entity(entity)
+                .insert(collider)
+                .insert(Mesh3d(mesh_handle))
+                .insert(MeshMaterial3d(material_handle))
+                .remove::<Path>();
         }
     }
 }
