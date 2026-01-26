@@ -97,7 +97,7 @@ pub fn update_cursor_pos(
 pub fn draw_snap_indicators(
     snap_status: Res<SnappingStatus>,
     mut gizmos: Gizmos,
-    q_camera: Query<&Projection, With<Camera2d>>,
+    q_camera: Query<&Projection, With<Camera3d>>,
 ) {
     if !snap_status.snapped {
         return;
@@ -110,13 +110,26 @@ pub fn draw_snap_indicators(
         None => Color::WHITE,
     };
 
+    // Calculate generic scale for gizmos
     let scale = if let Some(Projection::Orthographic(ortho)) = q_camera.iter().next() {
         ortho.scale
     } else {
+        // For perspective, we might want a fixed size or distance based.
+        // Using 1.0 for now as a reasonable default for 3D view at typical distance.
         1.0
     };
 
-    let radius = 5.0 * scale;
+    // In 2D, scale 1.0 meant pixels? No, Bevy gizmos use world units.
+    // 5.0 radius in world units is huge if units are meters.
+    // If we assume units are meters (Box size 1.0), then radius 5.0 is massive.
+    // Previously Camera2d likely had huge scale (pixels per meter?).
+    // Memory says "PIXELS_PER_METER" exists.
+    // If previous code used radius 5.0 * scale, and scale was maybe 1.0 (zoom), 5.0 units.
+    // If the box is 1.0x1.0, 5.0 is very big.
+    // I'll stick to a smaller radius for 3D/Physics scale.
+    // Let's use 0.2.
+
+    let radius = 0.2 * scale;
 
     gizmos.circle_2d(pos, radius, color);
 
