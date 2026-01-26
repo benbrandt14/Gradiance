@@ -174,9 +174,9 @@ proptest! {
 // Strategy for Stability Test: Exclude Drag and Delete
 fn safe_action_strategy() -> impl Strategy<Value = Action> {
     prop_oneof![
-        // Filter out Drag
+        // Filter out Drag and Ground (Ground creates objects that disturb)
         tool_strategy()
-            .prop_filter("No Drag", |t| *t != ToolState::Drag)
+            .prop_filter("No Drag/Ground", |t| *t != ToolState::Drag && *t != ToolState::Ground)
             .prop_map(Action::SetTool),
         (-100.0..100.0f32, -100.0..100.0f32).prop_map(|(x, y)| Action::MoveMouse(Vec2::new(x, y))),
         prop_oneof![Just(MouseButton::Left), Just(MouseButton::Right)].prop_map(Action::MouseDown),
