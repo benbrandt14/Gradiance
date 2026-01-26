@@ -3,14 +3,12 @@
 //! Defines the [`GameCommand`] trait and the [`CommandStack`] resource.
 
 use crate::input::ZIndex;
-use crate::input::editable::{EditableBox, EditableCircle};
+use crate::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use anyhow::{Result, bail};
 use bevy_prototype_lyon::prelude::*;
-use bevy_rapier2d::rapier::geometry::SharedShape;
-use nalgebra::Point2;
 use std::fmt::Debug;
 
 const DEFAULT_STROKE_WIDTH: f32 = 0.1;
@@ -98,32 +96,6 @@ impl CommandStack {
     }
 }
 
-/// Helper to spawn a shape entity with common components.
-fn spawn_shape_entity(
-    world: &mut World,
-    position: Vec2,
-    shape: &impl bevy_prototype_lyon::geometry::Geometry,
-    collider: Collider,
-    fill: Fill,
-    extra_bundle: impl Bundle,
-) -> Entity {
-    let z = world.resource_mut::<ZIndex>().next_z();
-
-    world
-        .spawn((
-            ShapeBundle {
-                path: GeometryBuilder::build_as(shape),
-                transform: Transform::from_xyz(position.x, position.y, z),
-                ..default()
-            },
-            fill,
-            Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
-            RigidBody::Dynamic,
-            collider,
-            extra_bundle,
-        ))
-        .id()
-}
 
 /// Helper to resolve joint targets and handle pinning.
 fn resolve_joint_targets(
@@ -204,54 +176,54 @@ fn spawn_connector_visual(
     visual_id
 }
 
-/// Command to spawn a box.
+/// Command to spawn a generic shape.
 #[derive(Debug)]
-pub struct SpawnBoxCommand {
-    /// Position of the box.
+pub struct SpawnShapeCommand {
+    /// Position of the shape.
     pub position: Vec2,
-    /// Width of the box.
-    pub width: f32,
-    /// Height of the box.
-    pub height: f32,
-    /// The spawned entity ID (if active).
+    /// The shape definition.
+    pub shape: ShapeType,
+    /// The spawned entity ID.
     pub entity: Option<Entity>,
 }
 
-impl SpawnBoxCommand {
-    /// Create a new SpawnBoxCommand.
-    pub fn new(position: Vec2, width: f32, height: f32) -> Self {
-        Self {
-            position,
-            width,
-            height,
-            entity: None,
-        }
-    }
-}
-
-impl GameCommand for SpawnBoxCommand {
+impl GameCommand for SpawnShapeCommand {
     fn name(&self) -> String {
-        "Spawn Box".to_string()
+        match &self.shape {
+            ShapeType::Box { .. } => "Spawn Box".to_string(),
+            ShapeType::Circle { .. } => "Spawn Circle".to_string(),
+            ShapeType::Polygon { .. } => "Spawn Polygon".to_string(),
+        }
     }
 
     fn apply(&mut self, world: &mut World) -> Result<()> {
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(self.width, self.height),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
+        let Some((path, collider)) = generate_shape_components(&self.shape) else {
+            bail!("Invalid shape parameters");
         };
 
-        let entity = spawn_shape_entity(
-            world,
-            self.position,
-            &shape,
-            Collider::cuboid(self.width / 2.0, self.height / 2.0),
-            Fill::color(DEFAULT_BOX_COLOR),
-            EditableBox {
-                width: self.width as f64,
-                height: self.height as f64,
-            },
-        );
+        let z = world.resource_mut::<ZIndex>().next_z();
+        let fill_color = match self.shape {
+            ShapeType::Box { .. } => DEFAULT_BOX_COLOR,
+            ShapeType::Circle { .. } => DEFAULT_CIRCLE_COLOR,
+            ShapeType::Polygon { .. } => DEFAULT_POLYGON_COLOR,
+        };
+
+        let entity = world
+            .spawn((
+                ShapeBundle {
+                    path,
+                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
+                    ..default()
+                },
+                Fill::color(fill_color),
+                Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
+                RigidBody::Dynamic,
+                collider,
+                EditableShape {
+                    shape: self.shape.clone(),
+                },
+            ))
+            .id();
 
         self.entity = Some(entity);
         Ok(())
@@ -261,117 +233,6 @@ impl GameCommand for SpawnBoxCommand {
         if let Some(entity) = self.entity {
             if let Ok(entity_ref) = world.get_entity_mut(entity) {
                 entity_ref.despawn();
-            }
-            self.entity = None;
-        }
-    }
-}
-
-/// Command to spawn a circle.
-#[derive(Debug)]
-pub struct SpawnCircleCommand {
-    /// The center position.
-    pub position: Vec2,
-    /// The radius.
-    pub radius: f32,
-    /// The spawned entity ID.
-    pub entity: Option<Entity>,
-}
-
-impl GameCommand for SpawnCircleCommand {
-    fn name(&self) -> String {
-        "Spawn Circle".to_string()
-    }
-
-    fn apply(&mut self, world: &mut World) -> Result<()> {
-        let shape = shapes::Circle {
-            radius: self.radius,
-            center: Vec2::ZERO,
-        };
-
-        let entity = spawn_shape_entity(
-            world,
-            self.position,
-            &shape,
-            Collider::ball(self.radius),
-            Fill {
-                color: DEFAULT_CIRCLE_COLOR,
-                options: FillOptions::default().with_tolerance(0.001),
-            },
-            EditableCircle {
-                radius: self.radius as f64,
-            },
-        );
-
-        self.entity = Some(entity);
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) {
-        if let Some(e) = self.entity {
-            if let Ok(e_ref) = world.get_entity_mut(e) {
-                e_ref.despawn();
-            }
-            self.entity = None;
-        }
-    }
-}
-
-/// Command to spawn a polygon.
-#[derive(Debug)]
-pub struct SpawnPolygonCommand {
-    /// The center position.
-    pub position: Vec2,
-    /// The vertices relative to the center.
-    pub vertices: Vec<Vec2>,
-    /// The spawned entity ID.
-    pub entity: Option<Entity>,
-}
-
-impl GameCommand for SpawnPolygonCommand {
-    fn name(&self) -> String {
-        "Spawn Polygon".to_string()
-    }
-
-    fn apply(&mut self, world: &mut World) -> Result<()> {
-        if self.vertices.len() < 3 {
-            bail!("Polygon must have at least 3 vertices");
-        }
-
-        let shape = shapes::Polygon {
-            points: self.vertices.clone(),
-            closed: true,
-        };
-
-        let vertices: Vec<Point2<f32>> = self
-            .vertices
-            .iter()
-            .map(|v| Point2::new(v.x, v.y))
-            .collect();
-        let indices: Vec<[u32; 2]> = (0..vertices.len())
-            .map(|i| [i as u32, ((i + 1) % vertices.len()) as u32])
-            .collect();
-
-        let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
-        let collider = Collider::from(rapier_shape);
-
-        let entity = spawn_shape_entity(
-            world,
-            self.position,
-            &shape,
-            collider,
-            Fill::color(DEFAULT_POLYGON_COLOR),
-            (),
-        );
-
-        self.entity = Some(entity);
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) {
-        if let Some(e) = self.entity {
-            if let Ok(e_ref) = world.get_entity_mut(e) {
-                e_ref.despawn();
             }
             self.entity = None;
         }

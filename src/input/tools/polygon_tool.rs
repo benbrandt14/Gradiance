@@ -3,7 +3,8 @@
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
 //! Uses Convex Hull decomposition for colliders.
 
-use crate::input::commands::{CommandStack, SpawnPolygonCommand};
+use crate::input::commands::{CommandStack, SpawnShapeCommand};
+use crate::input::editable_shape::ShapeType;
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -157,9 +158,11 @@ fn polygon_tool_update(
                 // Points relative to center
                 let relative_points: Vec<Vec2> = data.points.iter().map(|p| *p - center).collect();
 
-                let cmd = SpawnPolygonCommand {
+                let cmd = SpawnShapeCommand {
                     position: center,
-                    vertices: relative_points,
+                    shape: ShapeType::Polygon {
+                        points: relative_points,
+                    },
                     entity: None,
                 };
 

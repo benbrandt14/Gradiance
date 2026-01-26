@@ -2,7 +2,7 @@
 //!
 //! Simply allows clicking on entities to populate the `Selection` resource.
 
-use crate::input::editable::{EditableBox, EditableCircle};
+use crate::input::editable_shape::EditableShape;
 use crate::input::selection::{NextGroupID, Selection, SelectionFilter, SelectionGroup};
 use crate::input::tools::connector::Connector;
 use crate::input::tools::utils::is_pointer_over_ui;
@@ -134,8 +134,7 @@ fn select_tool_update(
             &Transform,
             &Collider,
             Option<&RigidBody>,
-            Option<&EditableBox>,
-            Option<&EditableCircle>,
+            Option<&EditableShape>,
             Option<&Fill>,
             Option<&Stroke>,
             Option<&Friction>,
@@ -265,8 +264,7 @@ fn select_tool_update(
                         t,
                         collider,
                         rb,
-                        ebox,
-                        ecircle,
+                        eshape,
                         fill,
                         stroke,
                         friction,
@@ -283,11 +281,8 @@ fn select_tool_update(
                         if let Some(c) = rb {
                             builder.insert(*c);
                         }
-                        if let Some(c) = ebox {
-                            builder.insert(*c);
-                        }
-                        if let Some(c) = ecircle {
-                            builder.insert(*c);
+                        if let Some(c) = eshape {
+                            builder.insert(c.clone());
                         }
                         if let Some(c) = fill {
                             builder.insert(*c);

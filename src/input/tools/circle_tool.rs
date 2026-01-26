@@ -2,7 +2,8 @@
 //!
 //! Click and drag to define the radius of a new circle.
 
-use crate::input::commands::{CommandStack, SpawnCircleCommand};
+use crate::input::commands::{CommandStack, SpawnShapeCommand};
+use crate::input::editable_shape::ShapeType;
 use crate::input::tools::utils::{DragStatus, handle_drag_input};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -72,9 +73,9 @@ fn circle_tool_update(
         }
         DragStatus::Finished => {
             if should_spawn_circle(radius) {
-                let cmd = SpawnCircleCommand {
+                let cmd = SpawnShapeCommand {
                     position: drag.start,
-                    radius,
+                    shape: ShapeType::Circle { radius },
                     entity: None,
                 };
 

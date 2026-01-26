@@ -11,7 +11,7 @@ use crate::prelude::*;
 pub mod camera_controller;
 pub mod commands;
 pub mod cursor;
-pub mod editable;
+pub mod editable_shape;
 pub mod selection;
 /// Global shortcuts.
 pub mod shortcuts;
@@ -54,7 +54,7 @@ impl Plugin for InputPlugin {
         app.add_plugins(shortcuts::ShortcutsPlugin);
 
         // Editable shapes
-        app.add_plugins(editable::EditablePlugin);
+        app.add_plugins(editable_shape::EditableShapePlugin);
 
         // Z-Index management
         app.init_resource::<ZIndex>();
