@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::input::ToolState;
 use gradiance::input::commands::CommandStack;
-use gradiance::input::editable::{EditableBox, EditableCircle};
+use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::selection::Selection;
 use rstest::{fixture, rstest};
 
@@ -32,8 +32,11 @@ fn test_box_tool_spawn(mut app: App) {
     // Verify
     let mut query = app
         .world_mut()
-        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
-    assert_eq!(query.iter(app.world()).count(), 1);
+        .query_filtered::<&EditableShape, With<RigidBody>>();
+
+    let shapes: Vec<&EditableShape> = query.iter(app.world()).collect();
+    assert_eq!(shapes.len(), 1);
+    assert!(matches!(shapes[0].shape, ShapeType::Box { .. }));
 }
 
 #[rstest]
@@ -54,8 +57,11 @@ fn test_circle_tool_spawn(mut app: App) {
     // Verify
     let mut query = app
         .world_mut()
-        .query_filtered::<Entity, (With<EditableCircle>, With<RigidBody>)>();
-    assert_eq!(query.iter(app.world()).count(), 1);
+        .query_filtered::<&EditableShape, With<RigidBody>>();
+
+    let shapes: Vec<&EditableShape> = query.iter(app.world()).collect();
+    assert_eq!(shapes.len(), 1);
+    assert!(matches!(shapes[0].shape, ShapeType::Circle { .. }));
 }
 
 #[rstest]
@@ -110,9 +116,11 @@ fn test_selection_tool(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(10.0, 10.0, 0.0),
             GlobalTransform::default(), // Important for spatial query
-            EditableBox {
-                width: 2.0,
-                height: 2.0,
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 2.0,
+                    height: 2.0,
+                },
             },
         ))
         .id();
@@ -157,9 +165,11 @@ fn test_joint_tool_pin(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(5.0, 5.0, 0.0),
             GlobalTransform::default(),
-            EditableBox {
-                width: 2.0,
-                height: 2.0,
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 2.0,
+                    height: 2.0,
+                },
             },
         ))
         .id();
@@ -197,9 +207,11 @@ fn test_drag_tool(mut app: App) {
             Transform::from_xyz(5.0, 5.0, 0.0),
             GlobalTransform::default(),
             Velocity::default(),
-            EditableBox {
-                width: 2.0,
-                height: 2.0,
+            EditableShape {
+                shape: ShapeType::Box {
+                    width: 2.0,
+                    height: 2.0,
+                },
             },
         ))
         .id();
@@ -268,7 +280,7 @@ fn test_undo_redo(mut app: App) {
     // Verify box exists
     let mut query = app
         .world_mut()
-        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
+        .query_filtered::<Entity, (With<EditableShape>, With<RigidBody>)>();
     let entities: Vec<Entity> = query.iter(app.world()).collect();
     assert_eq!(entities.len(), 1, "Box should be spawned");
     let _box_id = entities[0];
@@ -284,7 +296,7 @@ fn test_undo_redo(mut app: App) {
     // Verify box is gone
     let mut query = app
         .world_mut()
-        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
+        .query_filtered::<Entity, (With<EditableShape>, With<RigidBody>)>();
     assert_eq!(
         query.iter(app.world()).count(),
         0,
@@ -301,7 +313,7 @@ fn test_undo_redo(mut app: App) {
     // Verify box is back
     let mut query = app
         .world_mut()
-        .query_filtered::<Entity, (With<EditableBox>, With<RigidBody>)>();
+        .query_filtered::<Entity, (With<EditableShape>, With<RigidBody>)>();
     assert_eq!(
         query.iter(app.world()).count(),
         1,

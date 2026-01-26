@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::input::commands::*;
-use gradiance::input::editable::*;
+use gradiance::input::editable_shape::*;
 use gradiance::input::tools::connector::Connector;
 use gradiance::physics::floor::GroundPlane;
 use gradiance::prelude::*;
@@ -141,17 +141,37 @@ proptest! {
         let id2 = app.world_mut().spawn(Transform::default()).id();
         app.update();
 
+        // Helper to count shapes by type
+        let count_shapes = |app: &mut App, check: fn(&ShapeType) -> bool| -> usize {
+            app.world_mut()
+                .query::<&EditableShape>()
+                .iter(app.world())
+                .filter(|s| check(&s.shape))
+                .count()
+        };
+
+        let is_box = |s: &ShapeType| matches!(s, ShapeType::Box { .. });
+        let is_circle = |s: &ShapeType| matches!(s, ShapeType::Circle { .. });
+
         // Count components before
-        let count_box = app.world_mut().query::<&EditableBox>().iter(app.world()).len();
-        let count_circle = app.world_mut().query::<&EditableCircle>().iter(app.world()).len();
+        let count_box = count_shapes(&mut app, is_box);
+        let count_circle = count_shapes(&mut app, is_circle);
         let count_ground = app.world_mut().query::<&GroundPlane>().iter(app.world()).len();
         let count_joint = app.world_mut().query::<&ImpulseJoint>().iter(app.world()).len();
         // Visuals have Connector
         let count_connector = app.world_mut().query::<&Connector>().iter(app.world()).len();
 
         let mut cmd: Box<dyn GameCommand> = match op_idx {
-            0 => Box::new(SpawnBoxCommand::new(pos, param, param)),
-            1 => Box::new(SpawnCircleCommand { position: pos, radius: param, entity: None }),
+            0 => Box::new(SpawnShapeCommand {
+                position: pos,
+                shape: ShapeType::Box { width: param, height: param },
+                entity: None,
+            }),
+            1 => Box::new(SpawnShapeCommand {
+                position: pos,
+                shape: ShapeType::Circle { radius: param },
+                entity: None,
+            }),
             2 => Box::new(SpawnGroundCommand { position: pos, rotation: 0.0, entity: None }),
             3 => Box::new(SpawnJointCommand {
                 entity_a: id1,
@@ -182,12 +202,12 @@ proptest! {
         // Assert counts
         match op_idx {
             0 => {
-                let new_count = app.world_mut().query::<&EditableBox>().iter(app.world()).len();
-                prop_assert_eq!(new_count, count_box + 1, "EditableBox count mismatch");
+                let new_count = count_shapes(&mut app, is_box);
+                prop_assert_eq!(new_count, count_box + 1, "EditableShape (Box) count mismatch");
             },
             1 => {
-                let new_count = app.world_mut().query::<&EditableCircle>().iter(app.world()).len();
-                prop_assert_eq!(new_count, count_circle + 1, "EditableCircle count mismatch");
+                let new_count = count_shapes(&mut app, is_circle);
+                prop_assert_eq!(new_count, count_circle + 1, "EditableShape (Circle) count mismatch");
             },
             2 => {
                 let new_count = app.world_mut().query::<&GroundPlane>().iter(app.world()).len();

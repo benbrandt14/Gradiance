@@ -11,7 +11,7 @@ use gradiance::input::ToolState;
 use gradiance::input::ZIndex;
 use gradiance::input::commands::CommandStack;
 use gradiance::input::cursor::CursorWorldPos;
-use gradiance::input::editable::EditableBox;
+use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::selection::{Selection, SelectionFilter, SelectionGroup, SelectionPlugin};
 use gradiance::input::shortcuts::ShortcutsPlugin;
 use gradiance::input::tools::box_tool::BoxToolPlugin;
@@ -161,7 +161,7 @@ fn test_select_all_ctrl_a(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableBox::default(),
+            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
         ))
         .id();
     let b2 = app
@@ -171,7 +171,7 @@ fn test_select_all_ctrl_a(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(5.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableBox::default(),
+            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
         ))
         .id();
 
@@ -204,9 +204,8 @@ fn test_ctrl_drag_copy(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableBox {
-                width: 2.0,
-                height: 2.0,
+            EditableShape {
+                shape: ShapeType::Box { width: 2.0, height: 2.0 },
             },
             Name::new("Original"),
             GravityScale(0.0),
@@ -255,7 +254,7 @@ fn test_ctrl_drag_copy(mut app: App) {
     // 2. New box exists at 5,5
     let mut query = app
         .world_mut()
-        .query_filtered::<(Entity, &Transform), (With<EditableBox>, Without<GroundPlane>)>();
+        .query_filtered::<(Entity, &Transform), (With<EditableShape>, Without<GroundPlane>)>();
     let entities: Vec<(Entity, &Transform)> = query.iter(app.world()).collect();
     assert_eq!(entities.len(), 2, "Should have 2 boxes now");
 
@@ -273,7 +272,7 @@ fn test_right_click_rotate(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(10.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableBox::default(),
+            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
         ))
         .id();
 
@@ -315,7 +314,7 @@ fn test_selection_filter(mut app: App) {
             Collider::cuboid(1.0, 1.0),
             Transform::from_xyz(0.0, 0.0, 0.0),
             GlobalTransform::default(),
-            EditableBox::default(),
+            EditableShape { shape: ShapeType::Box { width: 1.0, height: 1.0 } },
         ))
         .id();
 
