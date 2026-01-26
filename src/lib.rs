@@ -20,7 +20,6 @@ pub mod scripting;
 pub mod ui;
 
 use crate::prelude::*;
-use bevy_prototype_lyon::prelude::*;
 // use bevy_mod_picking::DefaultPickingPlugins;
 // use bevy_mod_picking::backends::rapier::RapierBackend;
 
@@ -32,7 +31,7 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            ShapePlugin,
+            // ShapePlugin, // Removed in favor of ExtrusionPlugin (via GeometryPlugin)
             // DefaultPickingPlugins,
             // RapierBackend,
             physics::PhysicsPlugin,
@@ -45,7 +44,20 @@ impl Plugin for GamePlugin {
     }
 }
 
-/// Spawns the main 2D camera.
+/// Spawns the main 3D camera for 2.5D visualization.
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, -30.0, 60.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Also add a light so we can see the 3D meshes
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 10000.0,
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.0, -0.5, 0.0)),
+    ));
 }
