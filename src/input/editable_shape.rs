@@ -87,18 +87,44 @@ pub fn generate_shape_components(shape_type: &ShapeType) -> Option<(Path, Collid
             Some((GeometryBuilder::build_as(&shape), Collider::ball(*radius)))
         }
         ShapeType::Polygon { points } => {
+             // Validate and clean points to prevent panic
             if points.len() < 3 {
                 return None;
             }
+
+            // Remove duplicates and extremely close points
+            let mut cleaned_points = Vec::new();
+            if let Some(first) = points.first() {
+                cleaned_points.push(*first);
+                for p in points.iter().skip(1) {
+                    if p.distance(*cleaned_points.last().unwrap()) > 1e-4 {
+                         cleaned_points.push(*p);
+                    }
+                }
+            }
+             // Check closure (last vs first)
+            if cleaned_points.len() > 1 && cleaned_points.last().unwrap().distance(cleaned_points[0]) < 1e-4 {
+                cleaned_points.pop();
+            }
+
+            if cleaned_points.len() < 3 {
+                 return None;
+            }
+
             let shape = shapes::Polygon {
-                points: points.clone(),
+                points: cleaned_points.clone(),
                 closed: true,
             };
 
-            let vertices: Vec<Point2<f32>> = points.iter().map(|v| Point2::new(v.x, v.y)).collect();
+            let vertices: Vec<Point2<f32>> = cleaned_points.iter().map(|v| Point2::new(v.x, v.y)).collect();
             let indices: Vec<[u32; 2]> = (0..vertices.len())
                 .map(|i| [i as u32, ((i + 1) % vertices.len()) as u32])
                 .collect();
+
+            // Safety catch: convex_decomposition can still fail/panic if geometry is self-intersecting or degenerate.
+            // Bevy Rapier doesn't expose a safe try_convex_decomposition easily without accessing underlying parry.
+            // For now, we hope cleaning duplicates helps.
+            // TODO: Add ear-clipping check or validation?
 
             let rapier_shape = SharedShape::convex_decomposition(&vertices, &indices);
             Some((

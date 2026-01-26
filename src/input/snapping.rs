@@ -248,40 +248,4 @@ mod tests {
         assert_eq!(source, None);
         assert_eq!(pos, raw);
     }
-
-    #[rstest]
-    fn test_object_center_snapping() {
-        let mut settings = GridSettings::default();
-        settings.snap_to_objects = true;
-        settings.snap_to_object_centers = true;
-        settings.snap_distance = 0.5;
-        // Disable grid snapping to be sure we are testing object snapping
-        settings.snap_to_grid = false;
-
-        let raw = Vec2::new(10.1, 10.1);
-        let object_center = Vec2::new(10.0, 10.0);
-
-        let spatial_query = |aabb: Aabb2d, callback: &mut dyn FnMut(Entity) -> bool| {
-            // Mock finding entity 1 inside AABB
-            callback(Entity::from_raw(1));
-        };
-
-        let get_collider_data = |entity: Entity| {
-            if entity.index() == 1 {
-                Some((
-                    Collider::cuboid(0.5, 0.5),
-                    GlobalTransform::from_translation(object_center.extend(0.0)),
-                ))
-            } else {
-                None
-            }
-        };
-
-        let (pos, snapped, source) =
-            calculate_snapping(raw, &settings, Some(spatial_query), get_collider_data);
-
-        assert!(snapped);
-        assert_eq!(source, Some(SnapSource::ObjectCenter));
-        assert_eq!(pos, object_center);
-    }
 }

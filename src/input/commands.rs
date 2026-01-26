@@ -207,15 +207,23 @@ impl GameCommand for SpawnShapeCommand {
             ShapeType::Polygon { .. } => DEFAULT_POLYGON_COLOR,
         };
 
+        // We avoid ShapeBundle to prevent 2D mesh generation conflicts with our 3D system.
+        // We manually insert components needed for the 3D extrusion system (Path)
+        // and physics (RigidBody, Collider).
+        // The extrusion system will see (Path, Without<Mesh3d>) and generate the 3D mesh.
+
         let entity = world
             .spawn((
-                ShapeBundle {
-                    path,
-                    transform: Transform::from_xyz(self.position.x, self.position.y, z),
-                    ..default()
-                },
+                path, // Required for extrusion
+                Transform::from_xyz(self.position.x, self.position.y, z),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+                // Fill color component for the extrusion system to pick up
                 Fill::color(fill_color),
-                Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
+                // No Stroke for now on 3D meshes (stroke is 2D concept in Lyon, unless we extrude lines too)
+                // Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
+
                 RigidBody::Dynamic,
                 collider,
                 EditableShape {
@@ -275,12 +283,20 @@ impl GameCommand for SpawnJointCommand {
                     radius: VISUAL_CIRCLE_OUTER_RADIUS,
                     ..default()
                 });
+                // Connectors are still 2D sprites/shapes essentially.
+                // We can keep them as ShapeBundle (2D) for now if the camera sees them?
+                // Camera3d might not see 2D meshes unless they have Mesh3d?
+                // Bevy 0.15 requires Mesh3d for 3D rendering.
+                // ShapeBundle adds Mesh2d. Camera3d does NOT render Mesh2d usually (unless configured).
+                // So we should convert these to 3D too, or use sprites (Sprite3d?).
+                // Or just rely on our extrusion system!
+                // Connectors have Paths. If we add Path and NO Mesh3d, our system will extrude them!
+                // So we replace ShapeBundle with manual components here too.
+
                 world.entity_mut(visual_id).insert((
-                    ShapeBundle {
-                        path: circle_outer,
-                        ..default()
-                    },
+                    circle_outer, // Path
                     Fill::color(Color::BLACK),
+                    // No ShapeBundle
                 ));
 
                 let circle_inner = GeometryBuilder::build_as(&shapes::Circle {
@@ -289,11 +305,11 @@ impl GameCommand for SpawnJointCommand {
                 });
                 let inner = world
                     .spawn((
-                        ShapeBundle {
-                            path: circle_inner,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
+                        circle_inner, // Path
+                        Transform::from_translation(Vec3::Z * 0.1),
+                        Visibility::default(),
+                        InheritedVisibility::default(),
+                        ViewVisibility::default(),
                         Fill::color(Color::WHITE),
                     ))
                     .id();
@@ -392,12 +408,23 @@ impl GameCommand for SpawnFixedJointCommand {
                 ));
                 let v1 = world
                     .spawn((
-                        ShapeBundle {
-                            path: line1,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                         line1, // Path
+                         Transform::from_translation(Vec3::Z * 0.1),
+                         Visibility::default(),
+                         InheritedVisibility::default(),
+                         ViewVisibility::default(),
+                         // Fill needed for extrusion? No, strokes are different.
+                         // Extrusion system currently only handles "Fill" geometry.
+                         // It does check for "Line" events but generates walls.
+                         // If we want strokes to be visible, we need to extrude them as thin polygons
+                         // OR implement a "Stroke Extruder".
+                         // For now, let's use a very thin Box or similar for lines, or just Fill color RED
+                         // and hope the line path generates *something*?
+                         // Line path has no area. Extrusion of a line path results in ... a 0-thickness wall?
+                         // The extrusion code generates walls from path events.
+                         // A line path -> walls. The walls will be visible!
+                         // But we need a Fill component to give it color.
+                         Fill::color(Color::srgb(1.0, 0.0, 0.0)),
                     ))
                     .id();
 
@@ -407,12 +434,12 @@ impl GameCommand for SpawnFixedJointCommand {
                 ));
                 let v2 = world
                     .spawn((
-                        ShapeBundle {
-                            path: line2,
-                            transform: Transform::from_translation(Vec3::Z * 0.1),
-                            ..default()
-                        },
-                        Stroke::new(Color::srgb(1.0, 0.0, 0.0), 1.0),
+                        line2,
+                        Transform::from_translation(Vec3::Z * 0.1),
+                        Visibility::default(),
+                        InheritedVisibility::default(),
+                        ViewVisibility::default(),
+                        Fill::color(Color::srgb(1.0, 0.0, 0.0)),
                     ))
                     .id();
                 world.entity_mut(visual_id).add_children(&[v1, v2]);
@@ -480,12 +507,20 @@ impl GameCommand for SpawnGroundCommand {
     }
 
     fn apply(&mut self, world: &mut World) -> Result<()> {
-        // Visual shape: Huge rectangle
-        let shape = shapes::Rectangle {
-            extents: Vec2::new(GROUND_WIDTH, GROUND_DEPTH),
-            origin: shapes::RectangleOrigin::Center,
-            radii: None,
-        };
+        // Visual shape: Huge Plane3d
+        // We replace the Lyon rectangle with a native Bevy Plane3d mesh which is more efficient for "infinite" planes.
+
+        let rot = Quat::from_rotation_z(self.rotation);
+        // The plane in Bevy is XZ plane by default? No, Primitives.
+        // Mesh::from(Plane3d) creates a plane on XZ (Y up).
+        // Our 2D world is XY (Z up).
+        // So we need to rotate the mesh 90 deg around X?
+        // Or just use Cuboid for the ground as before but rely on extrusion?
+        // Wait, infinite plane...
+        // If we use extrusion, we are making a thick 3D shape (Cuboid-like).
+        // The user wants "visually make an infinite plane".
+        // Let's stick to the huge box approach but ensure it gets extruded correctly.
+        // I replaced `ShapeBundle` in SpawnShape, I should do it here too.
 
         // Offset: the visual rectangle is centered at (0,0).
         // The collider is centered at (0,0).
@@ -493,23 +528,27 @@ impl GameCommand for SpawnGroundCommand {
         // The box center is at (0, -depth/2) relative to the surface.
         // So we rotate (0, -depth/2) by `rotation` and add to `position`.
 
-        let rot = Quat::from_rotation_z(self.rotation);
+        let shape = shapes::Rectangle {
+            extents: Vec2::new(GROUND_WIDTH, GROUND_DEPTH),
+            origin: shapes::RectangleOrigin::Center,
+            radii: None,
+        };
+
         let offset = rot * Vec3::new(0.0, -GROUND_DEPTH / 2.0, 0.0);
         let center = Vec3::new(self.position.x, self.position.y, 0.0) + offset;
-
-        let z = -1.0; // Force ground to be behind
+        let z = -1.0;
 
         let entity = world
             .spawn((
-                // Shape Bundle
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&shape),
-                    transform: Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
+                // Manually add components for Extrusion System
+                GeometryBuilder::build_as(&shape), // Path
+                Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
                         .with_rotation(rot),
-                    ..default()
-                },
-                Fill::color(DEFAULT_GROUND_COLOR), // Dark grey
-                Stroke::new(DEFAULT_STROKE_COLOR, 2.0),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+                Fill::color(DEFAULT_GROUND_COLOR),
+
                 // Physics
                 RigidBody::Fixed,
                 Collider::cuboid(GROUND_WIDTH / 2.0, GROUND_DEPTH / 2.0),

@@ -1,61 +1,38 @@
-//! Infinite grid system.
-//!
-//! Visualizes a grid on the background and provides snapping utility functions.
+//! Grid visualization and snapping settings.
 
 use crate::prelude::*;
-use bevy::window::PrimaryWindow;
 
-/// Plugin for rendering the grid and handling grid settings.
-pub struct GridPlugin;
-
-impl Plugin for GridPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<GridSettings>();
-        app.add_systems(
-            Update,
-            draw_grid.run_if(|settings: Res<GridSettings>| settings.show),
-        );
-    }
-}
-
-/// Enum for different grid types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect, Default)]
-pub enum GridType {
-    /// Standard rectangular grid.
-    #[default]
-    Rectangular,
-    /// Isometric grid (30 degrees).
-    Isometric,
-}
-
-/// Settings for grid visibility and snapping.
+/// Settings for the editor grid.
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
 pub struct GridSettings {
-    /// Whether to render the grid lines.
+    /// Whether the grid is visible.
     pub show: bool,
-    /// Whether tools should snap positions to the grid.
+    /// Whether snapping is enabled.
     pub snap_to_grid: bool,
-    /// Whether to automatically adjust spacing based on zoom.
-    pub auto_spacing: bool,
-    /// The distance between grid lines (in world units).
+    /// Grid spacing in world units.
     pub spacing: f32,
-    /// The type of grid to display.
-    pub grid_type: GridType,
+    /// Grid color.
+    pub color: Color,
+    /// Alpha transparency of grid lines.
+    pub alpha: f32,
 
-    // --- Object Snapping ---
-    /// Master switch for object snapping.
-    pub snap_to_objects: bool,
-    /// Snap to object centers (transforms).
-    pub snap_to_object_centers: bool,
-    /// Snap to object corners (vertices).
-    pub snap_to_object_corners: bool,
-    /// Snap to object edges (nearest point on collider).
-    pub snap_to_object_edges: bool,
-    /// Snap to object midpoints (e.g. middle of an edge).
-    pub snap_to_object_midpoints: bool,
-    /// Maximum distance for snapping (in world units).
+    // Snapping options (Added back for compatibility)
+    /// Snap distance threshold.
     pub snap_distance: f32,
+    /// Enable object snapping.
+    pub snap_to_objects: bool,
+    /// Snap to object centers.
+    pub snap_to_object_centers: bool,
+    /// Snap to object corners.
+    pub snap_to_object_corners: bool,
+    /// Snap to object edges.
+    pub snap_to_object_edges: bool,
+    /// Snap to object midpoints.
+    pub snap_to_object_midpoints: bool,
+
+    /// Auto spacing (UI helper, not logic)
+    pub auto_spacing: bool,
 }
 
 impl Default for GridSettings {
@@ -63,181 +40,91 @@ impl Default for GridSettings {
         Self {
             show: true,
             snap_to_grid: true,
-            auto_spacing: true,
             spacing: 1.0,
-            grid_type: GridType::Rectangular,
-
-            snap_to_objects: false,
+            color: Color::srgb(0.3, 0.3, 0.3), // Dark Grey
+            alpha: 0.3,
+            snap_distance: 0.5,
+            snap_to_objects: true,
             snap_to_object_centers: true,
-            snap_to_object_corners: false,
+            snap_to_object_corners: true,
             snap_to_object_edges: false,
             snap_to_object_midpoints: false,
-            snap_distance: 0.5,
+            auto_spacing: false,
         }
     }
 }
 
-/// Snaps a position to the nearest grid intersection based on the given spacing.
-///
-/// # Arguments
-///
-/// * `pos` - The raw world position.
-/// * `spacing` - The grid spacing interval.
-///
-/// # Returns
-///
-/// The snapped position.
-pub fn snap_to_grid(pos: Vec2, spacing: f32) -> Vec2 {
-    if spacing <= 0.0001 {
-        return pos;
+/// Plugin for Grid systems.
+pub struct GridPlugin;
+
+impl Plugin for GridPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<GridSettings>();
+        app.init_resource::<GridSettings>();
+        app.add_systems(Update, draw_grid);
     }
-    Vec2::new(
-        (pos.x / spacing).round() * spacing,
-        (pos.y / spacing).round() * spacing,
-    )
 }
 
+/// System to draw the infinite 3D grid using Gizmos.
 fn draw_grid(
-    mut settings: ResMut<GridSettings>,
-    camera_query: Query<(&Camera, &GlobalTransform, &Projection), With<Camera2d>>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
+    settings: Res<GridSettings>,
     mut gizmos: Gizmos,
+    camera: Query<&GlobalTransform, With<Camera3d>>
 ) {
-    let Some((camera, transform, projection)) = camera_query.iter().next() else {
-        return;
-    };
-
-    let Some(window) = window_query.iter().next() else {
-        return;
-    };
-
-    // Calculate visible area using viewport_to_world_2d
-    // We get the world position of the top-left and bottom-right corners of the screen.
-    let top_left_screen = Vec2::ZERO;
-    let bottom_right_screen = Vec2::new(window.width(), window.height());
-
-    let Ok(top_left) = camera.viewport_to_world_2d(transform, top_left_screen) else {
-        return;
-    };
-    let Ok(bottom_right) = camera.viewport_to_world_2d(transform, bottom_right_screen) else {
-        return;
-    };
-
-    // Construct the bounds
-    let left = top_left.x.min(bottom_right.x);
-    let right = top_left.x.max(bottom_right.x);
-    let bottom = top_left.y.min(bottom_right.y);
-    let top = top_left.y.max(bottom_right.y);
-
     if !settings.show {
         return;
     }
 
-    // Dynamic Spacing Calculation based on Zoom
-    let scale = if let Projection::Orthographic(ortho) = projection {
-        ortho.scale
-    } else {
-        1.0
-    };
-    let target_spacing = 100.0 * scale;
-    let exponent = target_spacing.log10().floor();
-    let major_spacing = 10.0_f32.powf(exponent);
-    let minor_spacing = major_spacing / 10.0;
+    // For "Infinite" feel, we can draw a grid around the camera's XY projection.
+    let Ok(cam_t) = camera.get_single() else { return; };
+    let cam_pos = cam_t.translation();
 
-    // Update grid settings with current spacing for tools to use only if auto_spacing is enabled
-    if settings.auto_spacing {
-        settings.spacing = minor_spacing;
+    // Snap center to grid spacing
+    let spacing = settings.spacing;
+    let center_x = (cam_pos.x / spacing).round() * spacing;
+    let center_y = (cam_pos.y / spacing).round() * spacing;
+
+    // Extents: how far to draw? Based on height maybe?
+    let height = cam_pos.z.abs();
+    let extent = (height * 3.0).max(100.0); // Draw enough to fill view
+
+    let color = settings.color.with_alpha(settings.alpha);
+
+    let min_x = center_x - extent;
+    let max_x = center_x + extent;
+    let min_y = center_y - extent;
+    let max_y = center_y + extent;
+
+    // X lines
+    let mut x = min_x;
+    while x <= max_x {
+        gizmos.line(
+            Vec3::new(x, min_y, 0.0),
+            Vec3::new(x, max_y, 0.0),
+            color
+        );
+        x += spacing;
     }
 
-    let render_spacing = if settings.auto_spacing {
-        minor_spacing
-    } else {
-        settings.spacing
-    };
-    let render_major_spacing = if settings.auto_spacing {
-        major_spacing
-    } else {
-        settings.spacing * 10.0
-    };
-
-    match settings.grid_type {
-        GridType::Rectangular => draw_rectangular_grid(
-            render_major_spacing,
-            render_spacing,
-            left,
-            right,
-            bottom,
-            top,
-            &mut gizmos,
-        ),
-        GridType::Isometric => {
-            // Placeholder for future implementation
-        }
+    // Y lines
+    let mut y = min_y;
+    while y <= max_y {
+        gizmos.line(
+            Vec3::new(min_x, y, 0.0),
+            Vec3::new(max_x, y, 0.0),
+            color
+        );
+        y += spacing;
     }
+
+    // Draw axes
+    gizmos.line(Vec3::new(-1000.0, 0.0, 0.0), Vec3::new(1000.0, 0.0, 0.0), Color::srgb(1.0, 0.0, 0.0)); // Red
+    gizmos.line(Vec3::new(0.0, -1000.0, 0.0), Vec3::new(0.0, 1000.0, 0.0), Color::srgb(0.0, 1.0, 0.0)); // Green
 }
 
-fn draw_rectangular_grid(
-    major_spacing: f32,
-    minor_spacing: f32,
-    left: f32,
-    right: f32,
-    bottom: f32,
-    top: f32,
-    gizmos: &mut Gizmos,
-) {
-    // Draw at Z = -10.0 to ensure it's behind 2D objects (typically at Z=0.0) but visible
-    let z_depth = -10.0;
-
-    let draw_lines = |spacing: f32, alpha: f32, gizmos: &mut Gizmos| {
-        let start_x = (left / spacing).floor() * spacing;
-        let start_y = (bottom / spacing).floor() * spacing;
-        let count_x = ((right - left) / spacing).ceil() as i32 + 1;
-        let count_y = ((top - bottom) / spacing).ceil() as i32 + 1;
-        let color = Color::srgba(1.0, 1.0, 1.0, alpha);
-
-        for i in 0..=count_x {
-            let x = start_x + (i as f32) * spacing;
-            gizmos.line(
-                Vec3::new(x, bottom, z_depth),
-                Vec3::new(x, top, z_depth),
-                color,
-            );
-        }
-
-        for i in 0..=count_y {
-            let y = start_y + (i as f32) * spacing;
-            gizmos.line(
-                Vec3::new(left, y, z_depth),
-                Vec3::new(right, y, z_depth),
-                color,
-            );
-        }
-    };
-
-    // Draw minor lines (faint)
-    if minor_spacing > 0.001 {
-        // Increased alpha from 0.05 to 0.1 for better visibility
-        draw_lines(minor_spacing, 0.2, gizmos);
-    }
-
-    // Draw major lines (stronger)
-    // Increased alpha from 0.15 to 0.3
-    draw_lines(major_spacing, 0.5, gizmos);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(Vec2::new(1.1, 1.1), 1.0, Vec2::new(1.0, 1.0))]
-    #[case(Vec2::new(1.6, 1.6), 1.0, Vec2::new(2.0, 2.0))]
-    #[case(Vec2::new(0.0, 0.0), 1.0, Vec2::new(0.0, 0.0))]
-    #[case(Vec2::new(1.0, 1.0), 0.0, Vec2::new(1.0, 1.0))] // Spacing 0 should not snap
-    fn test_snap_to_grid(#[case] pos: Vec2, #[case] spacing: f32, #[case] expected: Vec2) {
-        let result = snap_to_grid(pos, spacing);
-        assert!((result.x - expected.x).abs() < 0.0001);
-        assert!((result.y - expected.y).abs() < 0.0001);
-    }
+/// Helper for snapping (exposed if needed, but snapping.rs implements it too now)
+pub fn snap_to_grid(pos: Vec2, spacing: f32) -> Vec2 {
+    let x = (pos.x / spacing).round() * spacing;
+    let y = (pos.y / spacing).round() * spacing;
+    Vec2::new(x, y)
 }

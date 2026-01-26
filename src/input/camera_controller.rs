@@ -11,50 +11,88 @@ pub struct CameraControllerPlugin;
 
 impl Plugin for CameraControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (camera_pan, camera_zoom));
+        app.add_systems(Update, (camera_pan_orbit, camera_zoom));
     }
 }
 
-/// Pans the camera when Right or Middle mouse button is dragged.
-pub fn camera_pan(
+/// Pans the camera when Right mouse button is dragged.
+/// Orbits when Middle mouse button is dragged.
+pub fn camera_pan_orbit(
     mut query: Query<(&mut Transform, &Camera), With<Camera3d>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
     select_tool_data: Option<Res<SelectToolData>>,
 ) {
-    // Check if Right or Middle mouse button is held
-    if !mouse_buttons.pressed(MouseButton::Right) && !mouse_buttons.pressed(MouseButton::Middle) {
-        return;
-    }
-
-    // If rotating with Select Tool, ignore Right Click panning
-    if mouse_buttons.pressed(MouseButton::Right)
-        && let Some(data) = &select_tool_data
-        && data.is_rotating
-    {
-        return;
-    }
-
     let delta = mouse_motion.delta;
     if delta == Vec2::ZERO {
         return;
     }
 
-    for (mut transform, _camera) in query.iter_mut() {
-        // For perspective camera, we move along the local Right and Up vectors (projected to move broadly parallel to ground).
-        // Since the camera is tilted, "Up" on screen is not world Z or world Y.
-        // Screen Y movement should move the camera such that the ground point moves roughly with the mouse.
-        // A simple approximation is to move along the camera's local Right (-X) and local Up (Y).
+    // Panning (Right Click)
+    if mouse_buttons.pressed(MouseButton::Right) {
+        // If rotating with Select Tool, ignore Right Click panning
+        if let Some(data) = &select_tool_data {
+            if data.is_rotating {
+                return;
+            }
+        }
 
-        // Speed factor: proportional to distance (Z height approx)
-        let distance = transform.translation.z.abs().max(1.0);
-        let speed = distance * 0.001; // Tunable
+        for (mut transform, _camera) in query.iter_mut() {
+            // Speed factor: proportional to distance (Z height approx)
+            let distance = transform.translation.length().max(1.0);
+            let speed = distance * 0.0005; // Tunable
 
-        let right = transform.right();
-        let up = transform.up();
+            let right = transform.right();
+            let up = transform.up();
 
-        let movement = (right * -delta.x + up * delta.y) * speed;
-        transform.translation += movement;
+            let movement = (right * -delta.x + up * delta.y) * speed;
+            transform.translation += movement;
+        }
+    }
+    // Orbiting (Middle Click or Alt+Left)
+    else if mouse_buttons.pressed(MouseButton::Middle) {
+         for (mut transform, _camera) in query.iter_mut() {
+            let sensitivity = 0.005;
+            let rotation_x = Quat::from_rotation_y(-delta.x * sensitivity);
+            let rotation_y = Quat::from_rotation_x(-delta.y * sensitivity);
+
+            // Orbit around a pivot point.
+            // Ideally pivot is cursor position or (0,0,0) or center of screen.
+            // Simple orbit: Rotate around (0,0,0) on ground?
+            // Or rotate around "LookAt" point.
+            // Let's assume looking at 0,0,0 or just rotate camera around its focus distance.
+
+            // For now, simpler "Editor Camera":
+            // Rotate around the camera's current focus point (approx distance forward).
+            let focus_dist = transform.translation.length();
+            let focus_point = transform.translation + transform.forward() * focus_dist; // Roughly 0,0,0 if looking at it
+
+            // Actually, usually we look at 0,0,0.
+            // Let's just rotate position around 0,0,0?
+            // No, that restricts movement.
+
+            // Better: Rotate transforms around focus point.
+            // But we don't track focus point.
+            // Let's assume focus is some distance away along forward vector.
+            let focus = transform.translation + transform.forward() * transform.translation.length(); // if we look at 0,0,0 from start
+
+            // Translate to origin (relative to focus)
+            let offset = transform.translation - focus;
+
+            // Apply rotations
+            // Rotate around global Y for yaw (delta x)
+            let offset = rotation_x * offset;
+
+            // Rotate around local X for pitch (delta y)
+            // Need to be careful with Gimbal lock or up vector.
+            // Local Right axis
+            let right = transform.right();
+            let pitch_rot = Quat::from_axis_angle(*right, -delta.y * sensitivity);
+            let offset = pitch_rot * offset;
+
+            transform.translation = focus + offset;
+            transform.look_at(focus, Vec3::Y); // Keep Y up
+         }
     }
 }
 
@@ -84,7 +122,7 @@ fn camera_zoom(
 
         // Check bounds (don't go through origin)
         let new_pos = transform.translation + movement;
-        if new_pos.length() > 2.0 && new_pos.length() < 500.0 {
+        if new_pos.length() > 2.0 && new_pos.length() < 1000.0 {
              transform.translation = new_pos;
         }
     }
