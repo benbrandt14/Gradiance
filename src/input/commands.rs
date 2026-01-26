@@ -1,20 +1,38 @@
 //! Command pattern implementation for Undo/Redo.
 //!
-//! Defines the `GameCommand` trait and the `CommandStack` resource.
+//! Defines the [`GameCommand`] trait and the [`CommandStack`] resource.
 
 use crate::input::ZIndex;
 use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
+use anyhow::{Result, bail};
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::rapier::geometry::SharedShape;
 use nalgebra::Point2;
+use std::fmt::Debug;
+
+const DEFAULT_STROKE_WIDTH: f32 = 0.1;
+const DEFAULT_STROKE_COLOR: Color = Color::BLACK;
+const DEFAULT_BOX_COLOR: Color = Color::srgb(0.5, 0.5, 1.0);
+const DEFAULT_CIRCLE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
+const DEFAULT_POLYGON_COLOR: Color = Color::srgb(0.5, 1.0, 0.5);
+const DEFAULT_GROUND_COLOR: Color = Color::srgb(0.2, 0.2, 0.2);
+const GROUND_WIDTH: f32 = 100_000.0;
+const GROUND_DEPTH: f32 = 1000.0;
+const CONNECTOR_COLLIDER_RADIUS: f32 = 0.5;
+const VISUAL_CIRCLE_OUTER_RADIUS: f32 = 5.0;
+const VISUAL_CIRCLE_INNER_RADIUS: f32 = 2.0;
+const VISUAL_LINE_OFFSET: f32 = 3.0;
 
 /// A trait for game commands that support Undo/Redo.
-pub trait GameCommand: Send + Sync {
+pub trait GameCommand: Send + Sync + Debug {
     /// Apply the command to the world.
-    fn apply(&mut self, world: &mut World) -> Result<(), String>;
+    ///
+    /// # Errors
+    /// Returns an error if the command cannot be applied (e.g., invalid geometry).
+    fn apply(&mut self, world: &mut World) -> Result<()>;
 
     /// Revert the command's effects.
     fn undo(&mut self, world: &mut World);
@@ -24,7 +42,7 @@ pub trait GameCommand: Send + Sync {
 }
 
 /// Resource handling the stack of executed commands.
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Debug)]
 pub struct CommandStack {
     /// The stack of commands.
     history: Vec<Box<dyn GameCommand>>,
@@ -43,13 +61,13 @@ impl CommandStack {
         }
 
         match command.apply(world) {
-            Ok(_) => {
-                info!("Command Applied: {}", command.name());
+            Ok(()) => {
+                info!(name = %command.name(), "Command Applied");
                 self.history.push(command);
                 self.index += 1;
             }
             Err(e) => {
-                warn!("Command Failed: {}: {}", command.name(), e);
+                warn!(name = %command.name(), error = %e, "Command Failed");
             }
         }
     }
@@ -59,7 +77,7 @@ impl CommandStack {
         if self.index > 0 {
             self.index -= 1;
             if let Some(command) = self.history.get_mut(self.index) {
-                info!("Undo: {}", command.name());
+                info!(name = %command.name(), "Undo");
                 command.undo(world);
             }
         }
@@ -70,9 +88,9 @@ impl CommandStack {
         if self.index < self.history.len() {
             if let Some(command) = self.history.get_mut(self.index) {
                 if let Err(e) = command.apply(world) {
-                    warn!("Redo Failed: {}: {}", command.name(), e);
+                    warn!(name = %command.name(), error = %e, "Redo Failed");
                 } else {
-                    info!("Redo: {}", command.name());
+                    info!(name = %command.name(), "Redo");
                 }
             }
             self.index += 1;
@@ -89,7 +107,7 @@ fn spawn_shape_entity(
     fill: Fill,
     extra_bundle: impl Bundle,
 ) -> Entity {
-    let z = world.resource_mut::<ZIndex>().next();
+    let z = world.resource_mut::<ZIndex>().next_z();
 
     world
         .spawn((
@@ -99,7 +117,7 @@ fn spawn_shape_entity(
                 ..default()
             },
             fill,
-            Stroke::new(Color::BLACK, 0.1),
+            Stroke::new(DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH),
             RigidBody::Dynamic,
             collider,
             extra_bundle,
@@ -169,7 +187,7 @@ fn spawn_connector_visual(
             Visibility::default(),
             InheritedVisibility::default(),
             ViewVisibility::default(),
-            Collider::ball(0.5),
+            Collider::ball(CONNECTOR_COLLIDER_RADIUS),
             Sensor,
             Connector {
                 entity_a,
@@ -187,6 +205,7 @@ fn spawn_connector_visual(
 }
 
 /// Command to spawn a box.
+#[derive(Debug)]
 pub struct SpawnBoxCommand {
     /// Position of the box.
     pub position: Vec2,
@@ -215,7 +234,7 @@ impl GameCommand for SpawnBoxCommand {
         "Spawn Box".to_string()
     }
 
-    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+    fn apply(&mut self, world: &mut World) -> Result<()> {
         let shape = shapes::Rectangle {
             extents: Vec2::new(self.width, self.height),
             origin: shapes::RectangleOrigin::Center,
@@ -227,7 +246,7 @@ impl GameCommand for SpawnBoxCommand {
             self.position,
             &shape,
             Collider::cuboid(self.width / 2.0, self.height / 2.0),
-            Fill::color(Color::srgb(0.5, 0.5, 1.0)),
+            Fill::color(DEFAULT_BOX_COLOR),
             EditableBox {
                 width: self.width as f64,
                 height: self.height as f64,
@@ -249,6 +268,7 @@ impl GameCommand for SpawnBoxCommand {
 }
 
 /// Command to spawn a circle.
+#[derive(Debug)]
 pub struct SpawnCircleCommand {
     /// The center position.
     pub position: Vec2,
@@ -263,7 +283,7 @@ impl GameCommand for SpawnCircleCommand {
         "Spawn Circle".to_string()
     }
 
-    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+    fn apply(&mut self, world: &mut World) -> Result<()> {
         let shape = shapes::Circle {
             radius: self.radius,
             center: Vec2::ZERO,
@@ -275,7 +295,7 @@ impl GameCommand for SpawnCircleCommand {
             &shape,
             Collider::ball(self.radius),
             Fill {
-                color: Color::srgb(1.0, 0.5, 0.5),
+                color: DEFAULT_CIRCLE_COLOR,
                 options: FillOptions::default().with_tolerance(0.001),
             },
             EditableCircle {
@@ -298,6 +318,7 @@ impl GameCommand for SpawnCircleCommand {
 }
 
 /// Command to spawn a polygon.
+#[derive(Debug)]
 pub struct SpawnPolygonCommand {
     /// The center position.
     pub position: Vec2,
@@ -312,9 +333,9 @@ impl GameCommand for SpawnPolygonCommand {
         "Spawn Polygon".to_string()
     }
 
-    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+    fn apply(&mut self, world: &mut World) -> Result<()> {
         if self.vertices.len() < 3 {
-            return Err("Polygon must have at least 3 vertices".to_string());
+            bail!("Polygon must have at least 3 vertices");
         }
 
         let shape = shapes::Polygon {
@@ -339,7 +360,7 @@ impl GameCommand for SpawnPolygonCommand {
             self.position,
             &shape,
             collider,
-            Fill::color(Color::srgb(0.5, 1.0, 0.5)),
+            Fill::color(DEFAULT_POLYGON_COLOR),
             (),
         );
 
@@ -358,6 +379,7 @@ impl GameCommand for SpawnPolygonCommand {
 }
 
 /// Command to spawn a Revolute Joint (Hinge).
+#[derive(Debug)]
 pub struct SpawnJointCommand {
     /// The first body.
     pub entity_a: Entity,
@@ -380,7 +402,7 @@ impl GameCommand for SpawnJointCommand {
         "Spawn Joint".to_string()
     }
 
-    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+    fn apply(&mut self, world: &mut World) -> Result<()> {
         // Visual
         let visual_id = spawn_connector_visual(
             world,
@@ -390,7 +412,7 @@ impl GameCommand for SpawnJointCommand {
             self.anchor_b,
             |world, visual_id| {
                 let circle_outer = GeometryBuilder::build_as(&shapes::Circle {
-                    radius: 5.0,
+                    radius: VISUAL_CIRCLE_OUTER_RADIUS,
                     ..default()
                 });
                 world.entity_mut(visual_id).insert((
@@ -402,7 +424,7 @@ impl GameCommand for SpawnJointCommand {
                 ));
 
                 let circle_inner = GeometryBuilder::build_as(&shapes::Circle {
-                    radius: 2.0,
+                    radius: VISUAL_CIRCLE_INNER_RADIUS,
                     ..default()
                 });
                 let inner = world
@@ -469,6 +491,7 @@ impl GameCommand for SpawnJointCommand {
 }
 
 /// Command to spawn a Fixed Joint (Weld).
+#[derive(Debug)]
 pub struct SpawnFixedJointCommand {
     /// The first body.
     pub entity_a: Entity,
@@ -495,7 +518,7 @@ impl GameCommand for SpawnFixedJointCommand {
         "Spawn Fixed Joint".to_string()
     }
 
-    fn apply(&mut self, world: &mut World) -> Result<(), String> {
+    fn apply(&mut self, world: &mut World) -> Result<()> {
         let visual_id = spawn_connector_visual(
             world,
             self.entity_a,
@@ -504,8 +527,8 @@ impl GameCommand for SpawnFixedJointCommand {
             self.anchor_b,
             |world, visual_id| {
                 let line1 = GeometryBuilder::build_as(&shapes::Line(
-                    Vec2::new(-3.0, -3.0),
-                    Vec2::new(3.0, 3.0),
+                    Vec2::new(-VISUAL_LINE_OFFSET, -VISUAL_LINE_OFFSET),
+                    Vec2::new(VISUAL_LINE_OFFSET, VISUAL_LINE_OFFSET),
                 ));
                 let v1 = world
                     .spawn((
@@ -519,8 +542,8 @@ impl GameCommand for SpawnFixedJointCommand {
                     .id();
 
                 let line2 = GeometryBuilder::build_as(&shapes::Line(
-                    Vec2::new(-3.0, 3.0),
-                    Vec2::new(3.0, -3.0),
+                    Vec2::new(-VISUAL_LINE_OFFSET, VISUAL_LINE_OFFSET),
+                    Vec2::new(VISUAL_LINE_OFFSET, -VISUAL_LINE_OFFSET),
                 ));
                 let v2 = world
                     .spawn((
@@ -581,6 +604,7 @@ impl GameCommand for SpawnFixedJointCommand {
 }
 
 /// Command to spawn an infinite ground plane.
+#[derive(Debug)]
 pub struct SpawnGroundCommand {
     /// Position of the ground (center of surface).
     pub position: Vec2,
@@ -595,13 +619,10 @@ impl GameCommand for SpawnGroundCommand {
         "Spawn Ground".to_string()
     }
 
-    fn apply(&mut self, world: &mut World) -> Result<(), String> {
-        let width = 100_000.0;
-        let depth = 1000.0;
-
+    fn apply(&mut self, world: &mut World) -> Result<()> {
         // Visual shape: Huge rectangle
         let shape = shapes::Rectangle {
-            extents: Vec2::new(width, depth),
+            extents: Vec2::new(GROUND_WIDTH, GROUND_DEPTH),
             origin: shapes::RectangleOrigin::Center,
             radii: None,
         };
@@ -613,7 +634,7 @@ impl GameCommand for SpawnGroundCommand {
         // So we rotate (0, -depth/2) by `rotation` and add to `position`.
 
         let rot = Quat::from_rotation_z(self.rotation);
-        let offset = rot * Vec3::new(0.0, -depth / 2.0, 0.0);
+        let offset = rot * Vec3::new(0.0, -GROUND_DEPTH / 2.0, 0.0);
         let center = Vec3::new(self.position.x, self.position.y, 0.0) + offset;
 
         let z = -1.0; // Force ground to be behind
@@ -627,11 +648,11 @@ impl GameCommand for SpawnGroundCommand {
                         .with_rotation(rot),
                     ..default()
                 },
-                Fill::color(Color::srgb(0.2, 0.2, 0.2)), // Dark grey
-                Stroke::new(Color::BLACK, 2.0),
+                Fill::color(DEFAULT_GROUND_COLOR), // Dark grey
+                Stroke::new(DEFAULT_STROKE_COLOR, 2.0),
                 // Physics
                 RigidBody::Fixed,
-                Collider::cuboid(width / 2.0, depth / 2.0),
+                Collider::cuboid(GROUND_WIDTH / 2.0, GROUND_DEPTH / 2.0),
                 Friction::coefficient(0.5),
                 Restitution::coefficient(0.0),
                 GroundPlane,
@@ -681,7 +702,7 @@ mod tests {
         // Apply should fail
         let result = cmd.apply(&mut world);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Polygon must have at least 3 vertices");
+        assert_eq!(result.unwrap_err().to_string(), "Polygon must have at least 3 vertices");
         assert!(cmd.entity.is_none());
     }
 

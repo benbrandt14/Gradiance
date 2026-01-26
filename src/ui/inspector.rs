@@ -7,8 +7,18 @@ use crate::input::editable::{EditableBox, EditableCircle};
 use crate::input::selection::{Selection, SelectionFilter};
 use crate::input::tools::connector::Connector;
 use crate::prelude::*;
+use bevy::ecs::system::SystemParam;
 use bevy_egui::{EguiContexts, egui};
 use bevy_prototype_lyon::prelude::*;
+
+const DRAG_SPEED: f32 = 0.1;
+const FRICTION_MAX: f32 = 2.0;
+const RESTITUTION_MAX: f32 = 1.0;
+const DENSITY_MIN: f32 = 0.001;
+const DENSITY_MAX: f32 = 1000.0;
+const PRISMATIC_MIN_DEFAULT: f32 = -10.0;
+const PRISMATIC_MAX_DEFAULT: f32 = 10.0;
+const DEFAULT_STROKE_WIDTH: f32 = 1.0;
 
 /// Plugin for the Inspector UI.
 pub struct InspectorPlugin;
@@ -19,50 +29,68 @@ impl Plugin for InspectorPlugin {
     }
 }
 
-#[allow(clippy::type_complexity)]
-fn inspector_ui(
-    mut contexts: EguiContexts,
-    selection: Res<Selection>,
-    mut selection_filter: ResMut<SelectionFilter>,
-    connector_query: Query<&Connector>,
-    mut joint_query: Query<&mut ImpulseJoint>,
-    mut query: Query<(
-        Entity,
-        Option<&mut Transform>,
-        Option<&mut RigidBody>,
-        Option<&mut Friction>,
-        Option<&mut Restitution>,
-        Option<&mut EditableBox>,
-        Option<&mut EditableCircle>,
-        Option<&mut Fill>,
-        Option<&mut Stroke>,
-        Option<&mut Sensor>,
-        Option<&mut LockedAxes>,
-        Option<&mut ColliderMassProperties>,
-        Option<&mut GravityScale>,
-        Option<&mut Sleeping>,
-    )>,
-    mut commands: Commands,
-) {
+#[derive(SystemParam)]
+struct InspectorQuery<'w, 's> {
+    selection: Res<'w, Selection>,
+    selection_filter: ResMut<'w, SelectionFilter>,
+    connector_query: Query<'w, 's, &'static Connector>,
+    joint_query: Query<'w, 's, &'static mut ImpulseJoint>,
+    #[expect(clippy::type_complexity, reason = "Large query tuple required for inspector")]
+    entity_query: Query<
+        'w,
+        's,
+        (
+            Entity,
+            Option<&'static mut Transform>,
+            Option<&'static mut RigidBody>,
+            Option<&'static mut Friction>,
+            Option<&'static mut Restitution>,
+            Option<&'static mut EditableBox>,
+            Option<&'static mut EditableCircle>,
+            Option<&'static mut Fill>,
+            Option<&'static mut Stroke>,
+            Option<&'static mut Sensor>,
+            Option<&'static mut LockedAxes>,
+            Option<&'static mut ColliderMassProperties>,
+            Option<&'static mut GravityScale>,
+            Option<&'static mut Sleeping>,
+        ),
+    >,
+    commands: Commands<'w, 's>,
+}
+
+fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
     let ctx = contexts.ctx_mut();
 
     egui::SidePanel::right("inspector_panel").show(ctx, |ui| {
         ui.heading("Settings");
         ui.horizontal(|ui| {
             ui.label("Filter:");
-            ui.radio_value(&mut *selection_filter, SelectionFilter::All, "All");
-            ui.radio_value(&mut *selection_filter, SelectionFilter::Shapes, "Shapes");
-            ui.radio_value(&mut *selection_filter, SelectionFilter::Joints, "Joints");
+            ui.radio_value(
+                &mut *inspector.selection_filter,
+                SelectionFilter::All,
+                "All",
+            );
+            ui.radio_value(
+                &mut *inspector.selection_filter,
+                SelectionFilter::Shapes,
+                "Shapes",
+            );
+            ui.radio_value(
+                &mut *inspector.selection_filter,
+                SelectionFilter::Joints,
+                "Joints",
+            );
         });
         ui.separator();
 
-        if selection.0.is_empty() {
+        if inspector.selection.0.is_empty() {
             ui.label("No selection.");
             return;
         }
 
         // Inspect the first selected entity for initial values
-        let first_entity = *selection.0.iter().next().unwrap();
+        let first_entity = *inspector.selection.0.iter().next().unwrap();
 
         // Check what components the first entity has
         let has_transform;
@@ -87,7 +115,7 @@ fn inspector_ui(
         let mut local_fill = Fill::color(Color::BLACK);
 
         let has_stroke;
-        let mut local_stroke = Stroke::new(Color::BLACK, 1.0);
+        let mut local_stroke = Stroke::new(Color::BLACK, DEFAULT_STROKE_WIDTH);
 
         let _has_sensor;
         let mut local_sensor = false;
@@ -103,7 +131,7 @@ fn inspector_ui(
 
         {
             let Ok((_, t, rb, f, r, ebox, ecircle, fill, stroke, sensor, locked, mass, grav, _)) =
-                query.get(first_entity)
+                inspector.entity_query.get(first_entity)
             else {
                 return;
             };
@@ -170,7 +198,7 @@ fn inspector_ui(
         }
 
         ui.heading("Inspector");
-        ui.label(format!("Selected: {} entities", selection.0.len()));
+        ui.label(format!("Selected: {} entities", inspector.selection.0.len()));
         ui.separator();
 
         // Transform
@@ -180,14 +208,18 @@ fn inspector_ui(
             ui.horizontal(|ui| {
                 ui.label("Pos X:");
                 if ui
-                    .add(egui::DragValue::new(&mut local_transform.translation.x).speed(0.1))
+                    .add(
+                        egui::DragValue::new(&mut local_transform.translation.x).speed(DRAG_SPEED),
+                    )
                     .changed()
                 {
                     changed = true;
                 }
                 ui.label("Pos Y:");
                 if ui
-                    .add(egui::DragValue::new(&mut local_transform.translation.y).speed(0.1))
+                    .add(
+                        egui::DragValue::new(&mut local_transform.translation.y).speed(DRAG_SPEED),
+                    )
                     .changed()
                 {
                     changed = true;
@@ -205,15 +237,18 @@ fn inspector_ui(
             });
 
             if changed {
-                for &e in &selection.0 {
-                    if let Ok((_, Some(mut t), ..)) = query.get_mut(e) {
+                for &e in &inspector.selection.0 {
+                    if let Ok((_, Some(mut t), ..)) = inspector.entity_query.get_mut(e) {
                         // For transform, we might want relative movement, but here we set absolute.
                         // Setting absolute is fine for inspector.
                         t.translation = local_transform.translation;
                         t.rotation = local_transform.rotation;
                         // Wake up body if exists
-                        if let Ok((_, _, Some(_), ..)) = query.get(e) {
-                            commands.entity(e).insert(Sleeping::disabled());
+                        if let Ok((_, _, Some(_), ..)) = inspector.entity_query.get(e) {
+                            inspector
+                                .commands
+                                .entity(e)
+                                .insert(Sleeping::disabled());
                         }
                     }
                 }
@@ -228,7 +263,7 @@ fn inspector_ui(
             if ui
                 .add(
                     egui::DragValue::new(&mut local_box.width)
-                        .speed(0.1)
+                        .speed(DRAG_SPEED)
                         .prefix("Width: "),
                 )
                 .changed()
@@ -238,7 +273,7 @@ fn inspector_ui(
             if ui
                 .add(
                     egui::DragValue::new(&mut local_box.height)
-                        .speed(0.1)
+                        .speed(DRAG_SPEED)
                         .prefix("Height: "),
                 )
                 .changed()
@@ -247,8 +282,10 @@ fn inspector_ui(
             }
 
             if changed {
-                for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, Some(mut b), ..)) = query.get_mut(e) {
+                for &e in &inspector.selection.0 {
+                    if let Ok((_, _, _, _, _, Some(mut b), ..)) =
+                        inspector.entity_query.get_mut(e)
+                    {
                         *b = local_box;
                         // Note: Resizing shape logic might be handled by another system observing changes
                         // or we might need to regenerate collider/shape path here.
@@ -266,13 +303,15 @@ fn inspector_ui(
             if ui
                 .add(
                     egui::DragValue::new(&mut local_circle.radius)
-                        .speed(0.1)
+                        .speed(DRAG_SPEED)
                         .prefix("Radius: "),
                 )
                 .changed()
             {
-                for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, Some(mut c), ..)) = query.get_mut(e) {
+                for &e in &inspector.selection.0 {
+                    if let Ok((_, _, _, _, _, _, Some(mut c), ..)) =
+                        inspector.entity_query.get_mut(e)
+                    {
                         *c = local_circle;
                     }
                 }
@@ -297,8 +336,9 @@ fn inspector_ui(
                             .selectable_value(&mut current, option, format!("{:?}", option))
                             .clicked()
                         {
-                            for &e in &selection.0 {
-                                commands
+                            for &e in &inspector.selection.0 {
+                                inspector
+                                    .commands
                                     .entity(e)
                                     .insert(current)
                                     .insert(Sleeping::disabled());
@@ -312,7 +352,8 @@ fn inspector_ui(
         // Sensor
         // We always show Sensor toggle if it has a rigid body or collider
         if has_rb
-            || query
+            || inspector
+                .entity_query
                 .get(first_entity)
                 .map(|c| c.11.is_some())
                 .unwrap_or(false)
@@ -321,11 +362,11 @@ fn inspector_ui(
             // Actually sensor is a component on its own.
             let mut is_sensor = local_sensor;
             if ui.checkbox(&mut is_sensor, "Sensor").clicked() {
-                for &e in &selection.0 {
+                for &e in &inspector.selection.0 {
                     if is_sensor {
-                        commands.entity(e).insert(Sensor);
+                        inspector.commands.entity(e).insert(Sensor);
                     } else {
-                        commands.entity(e).remove::<Sensor>();
+                        inspector.commands.entity(e).remove::<Sensor>();
                     }
                 }
             }
@@ -336,19 +377,19 @@ fn inspector_ui(
             ui.heading("Friction");
             if ui
                 .add(
-                    egui::Slider::new(&mut local_friction.coefficient, 0.0..=2.0)
+                    egui::Slider::new(&mut local_friction.coefficient, 0.0..=FRICTION_MAX)
                         .text("Coefficient"),
                 )
                 .changed()
             {
-                for &e in &selection.0 {
-                    if let Ok((_, _, _, f, ..)) = query.get_mut(e) {
+                for &e in &inspector.selection.0 {
+                    if let Ok((_, _, _, f, ..)) = inspector.entity_query.get_mut(e) {
                         if let Some(mut f_comp) = f {
                             f_comp.coefficient = local_friction.coefficient;
                         } else {
-                            commands
-                                .entity(e)
-                                .insert(Friction::coefficient(local_friction.coefficient));
+                            inspector.commands.entity(e).insert(Friction::coefficient(
+                                local_friction.coefficient,
+                            ));
                         }
                     }
                 }
@@ -361,19 +402,25 @@ fn inspector_ui(
             ui.heading("Restitution");
             if ui
                 .add(
-                    egui::Slider::new(&mut local_restitution.coefficient, 0.0..=1.0)
-                        .text("Coefficient"),
+                    egui::Slider::new(
+                        &mut local_restitution.coefficient,
+                        0.0..=RESTITUTION_MAX,
+                    )
+                    .text("Coefficient"),
                 )
                 .changed()
             {
-                for &e in &selection.0 {
-                    if let Ok((_, _, _, _, r, ..)) = query.get_mut(e) {
+                for &e in &inspector.selection.0 {
+                    if let Ok((_, _, _, _, r, ..)) = inspector.entity_query.get_mut(e) {
                         if let Some(mut r_comp) = r {
                             r_comp.coefficient = local_restitution.coefficient;
                         } else {
-                            commands
+                            inspector
+                                .commands
                                 .entity(e)
-                                .insert(Restitution::coefficient(local_restitution.coefficient));
+                                .insert(Restitution::coefficient(
+                                    local_restitution.coefficient,
+                                ));
                         }
                     }
                 }
@@ -387,16 +434,17 @@ fn inspector_ui(
             if ui
                 .add(
                     egui::DragValue::new(&mut local_density)
-                        .speed(0.1)
-                        .range(0.001..=1000.0),
+                        .speed(DRAG_SPEED)
+                        .range(DENSITY_MIN..=DENSITY_MAX),
                 )
                 .changed()
             {
-                for &e in &selection.0 {
-                    commands
+                for &e in &inspector.selection.0 {
+                    inspector
+                        .commands
                         .entity(e)
                         .insert(ColliderMassProperties::Density(local_density));
-                    commands.entity(e).insert(Sleeping::disabled());
+                    inspector.commands.entity(e).insert(Sleeping::disabled());
                 }
             }
             ui.separator();
@@ -406,12 +454,15 @@ fn inspector_ui(
         if has_gravity || has_rb {
             ui.heading("Gravity Scale");
             if ui
-                .add(egui::DragValue::new(&mut local_gravity).speed(0.1))
+                .add(egui::DragValue::new(&mut local_gravity).speed(DRAG_SPEED))
                 .changed()
             {
-                for &e in &selection.0 {
-                    commands.entity(e).insert(GravityScale(local_gravity));
-                    commands.entity(e).insert(Sleeping::disabled());
+                for &e in &inspector.selection.0 {
+                    inspector
+                        .commands
+                        .entity(e)
+                        .insert(GravityScale(local_gravity));
+                    inspector.commands.entity(e).insert(Sleeping::disabled());
                 }
             }
             ui.separator();
@@ -422,13 +473,16 @@ fn inspector_ui(
             ui.heading("Locked Axes");
             let mut locked = local_locked_axes.contains(LockedAxes::ROTATION_LOCKED);
             if ui.checkbox(&mut locked, "Lock Rotation").clicked() {
-                for &e in &selection.0 {
+                for &e in &inspector.selection.0 {
                     if locked {
-                        commands.entity(e).insert(LockedAxes::ROTATION_LOCKED);
+                        inspector
+                            .commands
+                            .entity(e)
+                            .insert(LockedAxes::ROTATION_LOCKED);
                     } else {
-                        commands.entity(e).insert(LockedAxes::empty());
+                        inspector.commands.entity(e).insert(LockedAxes::empty());
                     }
-                    commands.entity(e).insert(Sleeping::disabled());
+                    inspector.commands.entity(e).insert(Sleeping::disabled());
                 }
             }
             ui.separator();
@@ -444,8 +498,10 @@ fn inspector_ui(
             {
                 let new_color =
                     Color::srgba(color_arr[0], color_arr[1], color_arr[2], color_arr[3]);
-                for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, _, Some(mut f), ..)) = query.get_mut(e) {
+                for &e in &inspector.selection.0 {
+                    if let Ok((_, _, _, _, _, _, _, Some(mut f), ..)) =
+                        inspector.entity_query.get_mut(e)
+                    {
                         f.color = new_color;
                     }
                 }
@@ -471,7 +527,7 @@ fn inspector_ui(
                 if ui
                     .add(
                         egui::DragValue::new(&mut local_stroke.options.line_width)
-                            .speed(0.1)
+                            .speed(DRAG_SPEED)
                             .prefix("Width: "),
                     )
                     .changed()
@@ -481,8 +537,10 @@ fn inspector_ui(
             });
 
             if changed {
-                for &e in &selection.0 {
-                    if let Ok((_, _, _, _, _, _, _, _, Some(mut s), ..)) = query.get_mut(e) {
+                for &e in &inspector.selection.0 {
+                    if let Ok((_, _, _, _, _, _, _, _, Some(mut s), ..)) =
+                        inspector.entity_query.get_mut(e)
+                    {
                         s.color = local_stroke.color;
                         s.options.line_width = local_stroke.options.line_width;
                     }
@@ -493,11 +551,11 @@ fn inspector_ui(
 
         // Joint Inspection
         let mut joint_entity = first_entity;
-        if let Ok(connector) = connector_query.get(first_entity) {
+        if let Ok(connector) = inspector.connector_query.get(first_entity) {
             joint_entity = connector.entity_a;
         }
 
-        if let Ok(mut joint) = joint_query.get_mut(joint_entity) {
+        if let Ok(mut joint) = inspector.joint_query.get_mut(joint_entity) {
             ui.heading("Joint Settings");
 
             match &mut joint.data {
@@ -513,13 +571,21 @@ fn inspector_ui(
                     ui.label("Revolute Limits");
                     let mut changed = false;
                     if ui
-                        .add(egui::DragValue::new(&mut min).speed(0.1).prefix("Min: "))
+                        .add(
+                            egui::DragValue::new(&mut min)
+                                .speed(DRAG_SPEED)
+                                .prefix("Min: "),
+                        )
                         .changed()
                     {
                         changed = true;
                     }
                     if ui
-                        .add(egui::DragValue::new(&mut max).speed(0.1).prefix("Max: "))
+                        .add(
+                            egui::DragValue::new(&mut max)
+                                .speed(DRAG_SPEED)
+                                .prefix("Max: "),
+                        )
                         .changed()
                     {
                         changed = true;
@@ -533,7 +599,7 @@ fn inspector_ui(
                     let current_limits = if let Some(l) = prism.limits() {
                         [l.min, l.max]
                     } else {
-                        [-10.0, 10.0]
+                        [PRISMATIC_MIN_DEFAULT, PRISMATIC_MAX_DEFAULT]
                     };
                     let mut min = current_limits[0];
                     let mut max = current_limits[1];
@@ -541,13 +607,21 @@ fn inspector_ui(
                     ui.label("Prismatic Limits");
                     let mut changed = false;
                     if ui
-                        .add(egui::DragValue::new(&mut min).speed(0.1).prefix("Min: "))
+                        .add(
+                            egui::DragValue::new(&mut min)
+                                .speed(DRAG_SPEED)
+                                .prefix("Min: "),
+                        )
                         .changed()
                     {
                         changed = true;
                     }
                     if ui
-                        .add(egui::DragValue::new(&mut max).speed(0.1).prefix("Max: "))
+                        .add(
+                            egui::DragValue::new(&mut max)
+                                .speed(DRAG_SPEED)
+                                .prefix("Max: "),
+                        )
                         .changed()
                     {
                         changed = true;
