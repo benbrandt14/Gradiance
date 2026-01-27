@@ -24,6 +24,7 @@ use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
+use gradiance::geometry::extrusion::ExtrusionPlugin; // Add ExtrusionPlugin
 
 #[allow(dead_code)]
 pub fn create_test_app() -> App {
@@ -45,6 +46,7 @@ pub fn create_test_app() -> App {
     app.init_resource::<Assets<Mesh>>();
     app.init_resource::<Assets<Image>>();
     app.init_resource::<Assets<ColorMaterial>>();
+    app.init_resource::<Assets<StandardMaterial>>(); // Initialize StandardMaterial for Extrusion
 
     app.init_resource::<EguiUserTextures>();
     app.init_resource::<Events<bevy::picking::backend::PointerHits>>();
@@ -58,6 +60,7 @@ pub fn create_test_app() -> App {
     // Plugins that rely on Render/Assets/Window but can run headless if resources exist
     app.add_plugins(GizmoPlugin);
     app.add_plugins(ShapePlugin);
+    app.add_plugins(ExtrusionPlugin); // Add ExtrusionPlugin
 
     // Tools
     app.add_plugins(BoxToolPlugin);

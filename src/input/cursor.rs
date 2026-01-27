@@ -25,7 +25,7 @@ pub fn update_cursor_pos(
     mut snap_status: ResMut<SnappingStatus>,
     grid_settings: Res<GridSettings>,
     q_window: Query<&Window, With<PrimaryWindow>>,
-    q_camera: Query<(&Camera, &GlobalTransform)>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut contexts: EguiContexts,
     // Physics queries for object snapping
     q_rapier: Query<&RapierContext>,
@@ -34,6 +34,7 @@ pub fn update_cursor_pos(
     // Reset snap status
     snap_status.snapped = false;
     snap_status.snap_source = None;
+    cursor_pos.0 = None; // Reset cursor pos
 
     // Use iter().next() instead of get_single() as per AGENTS.md/memory
     let Some(window) = q_window.iter().next() else {
@@ -46,41 +47,61 @@ pub fn update_cursor_pos(
     // Check if mouse is over UI
     let ctx = contexts.ctx_mut();
     if ctx.is_pointer_over_area() {
-        cursor_pos.0 = None;
         return;
     }
 
     let mut raw_pos = None;
-    if let Some(screen_pos) = window.cursor_position()
-        && let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos)
-    {
-        raw_pos = Some(world_pos);
+
+    // 3D Raycasting to Z=0 plane
+    if let Some(screen_pos) = window.cursor_position() {
+        if let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos) {
+            // Ray: origin + t * direction
+            // Plane: Z=0. Normal: (0,0,1). Point: (0,0,0).
+            // Distance t = (point - origin) . normal / (direction . normal)
+            // t = (0 - origin.z) / direction.z
+
+            let normal = Vec3::Z;
+            let denominator = ray.direction.dot(normal);
+
+            if denominator.abs() > 0.0001 {
+                let t = (0.0 - ray.origin.z) / ray.direction.z;
+                if t >= 0.0 {
+                    let point = ray.origin + ray.direction * t;
+                    raw_pos = Some(Vec2::new(point.x, point.y));
+                }
+            }
+        }
     }
 
-    cursor_pos.0 = raw_pos;
-
-    let Some(raw) = raw_pos else {
+    if let Some(pos) = raw_pos {
+        cursor_pos.0 = Some(pos);
+    } else {
         return;
+    }
+
+    let rapier_context = q_rapier.iter().next();
+
+    // Need explicit callback for snapping closure to avoid lifetime issues
+    let get_collider_wrapper = |entity: Entity| -> Option<(Collider, GlobalTransform)> {
+        q_collider.get(entity).ok().map(|(c, t)| (c.clone(), *t))
     };
 
-    let get_collider_wrapper = |entity| q_collider.get(entity).ok().map(|(c, t)| (c.clone(), *t));
-
-    let (best_snap_pos, snapped, snap_source) = if let Some(rapier_context) = q_rapier.iter().next()
-    {
+    let (best_snap_pos, snapped, source) = if let Some(rapier_context) = rapier_context {
         calculate_snapping(
-            raw,
+            raw_pos.unwrap(),
             &grid_settings,
             Some(|aabb, callback: &mut dyn FnMut(Entity) -> bool| {
-                rapier_context.colliders_with_aabb_intersecting_aabb(aabb, callback);
+                 rapier_context.colliders_with_aabb_intersecting_aabb(aabb, callback);
             }),
             get_collider_wrapper,
         )
     } else {
-        // No rapier context, pass None for spatial query
+        // Explicitly annotate type of None for spatial query
+        // Using explicit function type to satisfy type inference
         calculate_snapping(
-            raw,
+            raw_pos.unwrap(),
             &grid_settings,
-            None::<fn(bevy::math::bounding::Aabb2d, &mut dyn FnMut(Entity) -> bool)>, // Explicit type for None
+            None::<fn(bevy::math::bounding::Aabb2d, &mut dyn FnMut(Entity) -> bool)>,
             get_collider_wrapper,
         )
     };
@@ -89,7 +110,7 @@ pub fn update_cursor_pos(
         cursor_pos.0 = Some(best_snap_pos);
         snap_status.snapped = true;
         snap_status.snap_pos = best_snap_pos;
-        snap_status.snap_source = snap_source;
+        snap_status.snap_source = source;
     }
 }
 
@@ -97,7 +118,7 @@ pub fn update_cursor_pos(
 pub fn draw_snap_indicators(
     snap_status: Res<SnappingStatus>,
     mut gizmos: Gizmos,
-    q_camera: Query<&Projection, With<Camera2d>>,
+    _q_camera: Query<&Projection, With<Camera3d>>,
 ) {
     if !snap_status.snapped {
         return;
@@ -110,26 +131,25 @@ pub fn draw_snap_indicators(
         None => Color::WHITE,
     };
 
-    let scale = if let Some(Projection::Orthographic(ortho)) = q_camera.iter().next() {
-        ortho.scale
-    } else {
-        1.0
-    };
+    let radius = 1.0;
 
-    let radius = 5.0 * scale;
-
-    gizmos.circle_2d(pos, radius, color);
+    // Draw circle on Z=0 plane
+    gizmos.circle(
+        Isometry3d::new(Vec3::new(pos.x, pos.y, 0.0), Quat::IDENTITY),
+        radius,
+        color,
+    );
 
     // Crosshair
     let arm_len = radius * 2.0;
-    gizmos.line_2d(
-        pos - Vec2::new(arm_len, 0.0),
-        pos + Vec2::new(arm_len, 0.0),
+    gizmos.line(
+        Vec3::new(pos.x - arm_len, pos.y, 0.0),
+        Vec3::new(pos.x + arm_len, pos.y, 0.0),
         color,
     );
-    gizmos.line_2d(
-        pos - Vec2::new(0.0, arm_len),
-        pos + Vec2::new(0.0, arm_len),
+    gizmos.line(
+        Vec3::new(pos.x, pos.y - arm_len, 0.0),
+        Vec3::new(pos.x, pos.y + arm_len, 0.0),
         color,
     );
 }
