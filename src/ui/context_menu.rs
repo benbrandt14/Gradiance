@@ -83,6 +83,7 @@ fn context_menu_ui(
     mut selection: ResMut<Selection>,
     mut next_group_id: ResMut<NextGroupID>,
     game_icons: Res<GameIcons>,
+    mut collision_groups: Query<&mut CollisionGroups>,
 ) {
     let Some(pos) = state.position else {
         return;
@@ -130,6 +131,52 @@ fn context_menu_ui(
                 }
                 state.position = None;
             }
+
+            ui.separator();
+
+            // Collision Layers / Depth
+            ui.collapsing("Collision Layers / Depth", |ui| {
+                let mut current_memberships = if let Some(first) = selection.0.iter().next() {
+                    if let Ok(groups) = collision_groups.get(*first) {
+                        groups.memberships.bits()
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+
+                let mut changed = false;
+
+                egui::Grid::new("collision_layers_grid").show(ui, |ui| {
+                    for i in 0..32 {
+                        let mut active = (current_memberships >> i) & 1 == 1;
+                        if ui.checkbox(&mut active, format!("{}", i)).changed() {
+                            if active {
+                                current_memberships |= 1 << i;
+                            } else {
+                                current_memberships &= !(1 << i);
+                            }
+                            changed = true;
+                        }
+
+                        if (i + 1) % 4 == 0 {
+                            ui.end_row();
+                        }
+                    }
+                });
+
+                if changed {
+                    let new_memberships = Group::from_bits_truncate(current_memberships);
+                    for &entity in &selection.0 {
+                        if let Ok(mut groups) = collision_groups.get_mut(entity) {
+                            groups.memberships = new_memberships;
+                        } else {
+                             commands.entity(entity).insert(CollisionGroups::new(new_memberships, Group::ALL));
+                        }
+                    }
+                }
+            });
 
             ui.separator();
 

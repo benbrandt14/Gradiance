@@ -45,6 +45,9 @@ fn test_extrusion_generation() {
         ))
         .id();
 
+    // Run update to process commands queued by hooks
+    app.update();
+
     // Check if Mesh3d component is added
     let entity_ref = app.world().entity(entity);
     assert!(
@@ -57,28 +60,9 @@ fn test_extrusion_generation() {
     // Find the generated mesh in assets.
     let mut found_mesh = false;
     for (_, mesh) in meshes.iter() {
-        if let Some(positions) = mesh
-            .attribute(Mesh::ATTRIBUTE_POSITION)
-            .and_then(|a| a.as_float3())
-        {
-            // Check for vertices at expected Z levels (0 and -30)
-            let mut found_start = false;
-            let mut found_end = false;
-
-            for p in positions {
-                let z = p[2];
-                if (z - 0.0).abs() < 0.001 {
-                    found_start = true;
-                }
-                if (z - -30.0).abs() < 0.001 {
-                    found_end = true;
-                }
-            }
-
-            if found_start && found_end {
-                found_mesh = true;
-                break;
-            }
+        if check_mesh_depth(mesh, 0.0, -30.0) {
+            found_mesh = true;
+            break;
         }
     }
 
@@ -86,4 +70,90 @@ fn test_extrusion_generation() {
         found_mesh,
         "Should find a mesh with vertices at z=0.0 and z=-30.0"
     );
+}
+
+#[test]
+fn test_extrusion_update_on_collision_change() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.add_plugins(AssetPlugin::default());
+    app.add_plugins(TransformPlugin);
+    app.add_plugins(bevy::hierarchy::HierarchyPlugin);
+
+    app.init_resource::<Assets<Mesh>>();
+    app.init_resource::<Assets<StandardMaterial>>();
+
+    app.add_plugins(ExtrusionPlugin);
+
+    let path = GeometryBuilder::build_as(&shapes::Rectangle {
+        extents: Vec2::new(10.0, 10.0),
+        origin: shapes::RectangleOrigin::Center,
+        radii: None,
+    });
+
+    // Initial: Layer 0 only. Depth 10. z_front 0, z_back -10.
+    let initial_groups = CollisionGroups::new(Group::GROUP_1, Group::ALL);
+
+    let entity = app
+        .world_mut()
+        .spawn((
+            path,
+            initial_groups,
+            ExtrudableShape,
+            Transform::default(),
+            Visibility::default(),
+        ))
+        .id();
+
+    app.update();
+
+    // Verify initial depth
+    {
+        let entity_ref = app.world().entity(entity);
+        let mesh_handle = entity_ref.get::<Mesh3d>().expect("Mesh3d missing").0.clone();
+        let meshes = app.world().resource::<Assets<Mesh>>();
+        let mesh = meshes.get(&mesh_handle).expect("Mesh asset missing");
+
+        assert!(check_mesh_depth(mesh, 0.0, -10.0), "Initial depth incorrect");
+    }
+
+    // Change CollisionGroups: Layer 1 only. min_i=1, max_i=1.
+    // z_front = -10. depth = 10. z_back = -20.
+    let new_groups = CollisionGroups::new(Group::GROUP_2, Group::ALL);
+
+    app.world_mut().entity_mut(entity).insert(new_groups);
+
+    app.update(); // Trigger system
+
+    // Verify updated depth
+    {
+        let entity_ref = app.world().entity(entity);
+        let mesh_handle = entity_ref.get::<Mesh3d>().expect("Mesh3d missing").0.clone();
+        let meshes = app.world().resource::<Assets<Mesh>>();
+        let mesh = meshes.get(&mesh_handle).expect("Mesh asset missing");
+
+        assert!(check_mesh_depth(mesh, -10.0, -20.0), "Updated depth incorrect");
+    }
+}
+
+fn check_mesh_depth(mesh: &Mesh, z_front: f32, z_back: f32) -> bool {
+    if let Some(positions) = mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .and_then(|a| a.as_float3())
+    {
+        let mut found_start = false;
+        let mut found_end = false;
+
+        for p in positions {
+            let z = p[2];
+            if (z - z_front).abs() < 0.001 {
+                found_start = true;
+            }
+            if (z - z_back).abs() < 0.001 {
+                found_end = true;
+            }
+        }
+        return found_start && found_end;
+    }
+    false
 }
