@@ -83,7 +83,7 @@ fn update_extrusion_mesh(
         ),
         (
             With<ExtrudableShape>,
-            Or<(Changed<CollisionGroups>, Changed<Path>)>,
+            Or<(Changed<CollisionGroups>, Changed<Path>, Added<CollisionGroups>)>,
         ),
     >,
 ) {
