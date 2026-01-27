@@ -7,6 +7,7 @@ use crate::input::ToolState;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use crate::ui::icons::GameIcons;
+use crate::ui::menu::GameMenuState;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
 
@@ -107,6 +108,7 @@ fn top_panel_ui(
     mut contexts: EguiContexts,
     mut virtual_time: ResMut<Time<Virtual>>,
     mut grid_settings: ResMut<GridSettings>,
+    mut menu_state: ResMut<GameMenuState>,
     window_query: Query<&Window, With<PrimaryWindow>>,
     game_icons: Res<GameIcons>,
 ) {
@@ -148,6 +150,12 @@ fn top_panel_ui(
             }
 
             ui.label(format!("Speed: {:.2}x", virtual_time.relative_speed()));
+
+            ui.separator();
+
+            if ui.button("Settings").clicked() {
+                menu_state.is_open = !menu_state.is_open;
+            }
 
             ui.separator();
             ui.checkbox(&mut grid_settings.show, "Grid");
