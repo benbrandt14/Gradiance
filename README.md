@@ -23,9 +23,14 @@ Gradiance leverages Bevy's Entity-Component-System (ECS) architecture to create 
     *   Uses `f32` precision (Rapier2d default).
     *   High substep count (12-16) for stiff constraints.
     *   Will house custom constraints like Gears and Pulleys.
-*   **`src/geometry`**: Handles vector rendering and Constructive Solid Geometry (CSG).
-    *   Uses `bevy_prototype_lyon` (currently disabled due to compatibility issues) for vector graphics.
-    *   Uses `clipper2` for boolean operations (Cut/Weld) on geometry.
+*   **`src/geometry`**: Handles 2.5D rendering and Constructive Solid Geometry (CSG).
+    *   Implements **2.5D Extrusion**: Shapes are automatically extruded into 3D meshes based on their collision layers.
+    *   **Collision Layers as Depth**: The active collision membership bits determine the Z-depth of the extrusion.
+        *   Bit 0: Front layer.
+        *   Bit 31: Back layer.
+        *   Depth is calculated from the range of active bits (`max_bit - min_bit + 1`).
+    *   Uses `bevy_prototype_lyon` for path data.
+    *   Uses `clipper2` for boolean operations.
 *   **`src/input`**: Manages user interaction and tool states.
     *   Implements a `ToolState` machine (Select, Drag, Cut, Sketch, etc.).
     *   Uses Bevy's built-in picking for object selection.

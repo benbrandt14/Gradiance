@@ -7,8 +7,8 @@ use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_prototype_lyon::prelude::*; // For Path component wrapper
 use bevy_rapier2d::prelude::*;
-use lyon::path::PathEvent;
 use lyon::path::iterator::PathIterator;
+use lyon::path::PathEvent;
 use lyon::tessellation::{self, BuffersBuilder, FillOptions, FillTessellator, VertexBuffers}; // Import trait for flattened
 
 /// Plugin that registers the extrusion component and logic.
@@ -17,6 +17,7 @@ pub struct ExtrusionPlugin;
 impl Plugin for ExtrusionPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ExtrudableShape>();
+        app.add_systems(Update, update_extrusion_mesh);
     }
 }
 
@@ -45,6 +46,67 @@ fn generate_mesh_hook(
 
     let groups = groups.unwrap_or(CollisionGroups::default());
 
+    let (mesh, material) = create_extruded_mesh(&path, groups);
+
+    // Asset Registration
+    let mesh_handle = {
+        let mut meshes = world.resource_mut::<Assets<Mesh>>();
+        meshes.add(mesh)
+    };
+
+    let material_handle = {
+        let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
+        materials.add(material)
+    };
+
+    // Safe Component Insertion to prevent panic if entity is despawned
+    world.commands().queue(move |world: &mut World| {
+        if world.get_entity(entity).is_ok() {
+            if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+                entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
+            }
+        }
+    });
+}
+
+fn update_extrusion_mesh(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    query: Query<
+        (
+            Entity,
+            &Path,
+            &CollisionGroups,
+            &Mesh3d,
+            &MeshMaterial3d<StandardMaterial>,
+        ),
+        (
+            With<ExtrudableShape>,
+            Or<(Changed<CollisionGroups>, Changed<Path>)>,
+        ),
+    >,
+) {
+    for (entity, path, groups, mesh_handle, mat_handle) in query.iter() {
+        let (mesh, material) = create_extruded_mesh(&path.0, *groups);
+
+        // Remove old assets to prevent leaks
+        meshes.remove(&mesh_handle.0);
+        materials.remove(&mat_handle.0);
+
+        let new_mesh_handle = meshes.add(mesh);
+        let new_mat_handle = materials.add(material);
+
+        commands
+            .entity(entity)
+            .insert((Mesh3d(new_mesh_handle), MeshMaterial3d(new_mat_handle)));
+    }
+}
+
+fn create_extruded_mesh(
+    path: &lyon::path::Path,
+    groups: CollisionGroups,
+) -> (Mesh, StandardMaterial) {
     // Parse memberships
     let layer_h = 10.0;
     let memberships = groups.memberships.bits();
@@ -66,8 +128,13 @@ fn generate_mesh_hook(
     }
 
     if !active {
-        min_i = 0;
-        max_i = 0;
+        return (
+            Mesh::new(
+                PrimitiveTopology::TriangleList,
+                bevy::render::render_asset::RenderAssetUsages::default(),
+            ),
+            StandardMaterial::default(),
+        );
     }
 
     let z_front = -(min_i as f32 * layer_h);
@@ -80,7 +147,6 @@ fn generate_mesh_hook(
     let mut indices: Vec<u32> = Vec::new();
 
     // 1. Tessellate Front Cap (z_front)
-    // Front face: Normal (0,0,1). Winding CCW.
     {
         let mut buffers: VertexBuffers<Vec3, u32> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
@@ -97,7 +163,7 @@ fn generate_mesh_hook(
 
         if tessellator
             .tessellate_path(
-                &path,
+                path,
                 &FillOptions::default(),
                 &mut BuffersBuilder::new(&mut buffers, VertexConstructor { z: z_front }),
             )
@@ -115,7 +181,6 @@ fn generate_mesh_hook(
     }
 
     // 2. Tessellate Back Cap (z_back)
-    // Back face: Normal (0,0,-1). Winding CW.
     {
         let mut buffers: VertexBuffers<Vec3, u32> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
@@ -132,7 +197,7 @@ fn generate_mesh_hook(
 
         if tessellator
             .tessellate_path(
-                &path,
+                path,
                 &FillOptions::default(),
                 &mut BuffersBuilder::new(&mut buffers, VertexConstructor { z: z_back }),
             )
@@ -219,35 +284,21 @@ fn generate_mesh_hook(
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_indices(Indices::U32(indices));
 
-    // Asset Registration
-    let mesh_handle = {
-        let mut meshes = world.resource_mut::<Assets<Mesh>>();
-        meshes.add(mesh)
+    // Material
+    // Color based on layer index (min_i) to distinguish zones
+    let hue = min_i as f32 * 30.0;
+    let color = Color::hsl(hue, 0.8, 0.5);
+    let material = StandardMaterial {
+        base_color: color,
+        perceptual_roughness: 0.5,
+        metallic: 0.0,
+        // Disabled culling to ensure visibility
+        cull_mode: None,
+        double_sided: true,
+        ..default()
     };
 
-    let material_handle = {
-        let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
-        // Color based on layer index (min_i) to distinguish zones
-        let hue = min_i as f32 * 30.0;
-        let color = Color::hsl(hue, 0.8, 0.5);
-        materials.add(StandardMaterial {
-            base_color: color,
-            perceptual_roughness: 0.5,
-            metallic: 0.0,
-            // Disabled culling to ensure visibility
-            cull_mode: None,
-            double_sided: true,
-            ..default()
-        })
-    };
-
-    // Safe Component Insertion to prevent panic if entity is despawned
-    world.commands().queue(move |world: &mut World| {
-        if world.get_entity(entity).is_ok()
-            && let Ok(mut entity_mut) = world.get_entity_mut(entity) {
-                entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
-            }
-    });
+    (mesh, material)
 }
 
 fn point_to_vec2(p: lyon::math::Point) -> Vec2 {
