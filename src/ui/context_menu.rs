@@ -217,6 +217,45 @@ fn context_menu_ui(
                          }
                      }
                 }
+
+                if ui.button("Distribute Layers").clicked() {
+                    let mut entities: Vec<_> = selection.0.iter().copied().collect();
+                    // Sort by Entity ID for deterministic distribution
+                    entities.sort();
+
+                    let count = entities.len();
+                    if count > 1 {
+                        let span = (end as f32 - start as f32).max(0.0);
+                        let step = span / (count - 1) as f32;
+
+                        for (i, entity) in entities.into_iter().enumerate() {
+                            let layer = (start as f32 + i as f32 * step).round() as u32;
+                            // Clamp to be safe, though math should hold
+                            let layer = layer.clamp(0, 31);
+
+                            let mask = 1 << layer;
+                            let new_groups = Group::from_bits_truncate(mask);
+
+                            if let Ok(mut groups) = collision_groups.get_mut(entity) {
+                                groups.memberships = new_groups;
+                                groups.filters = new_groups;
+                            } else {
+                                commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                            }
+                        }
+                    } else if count == 1 {
+                        // Single entity, just assign start
+                         let layer = start;
+                         let mask = 1 << layer;
+                         let new_groups = Group::from_bits_truncate(mask);
+                         if let Ok(mut groups) = collision_groups.get_mut(entities[0]) {
+                             groups.memberships = new_groups;
+                             groups.filters = new_groups;
+                         } else {
+                             commands.entity(entities[0]).insert(CollisionGroups::new(new_groups, new_groups));
+                         }
+                    }
+                }
             });
 
             ui.separator();
