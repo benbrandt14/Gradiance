@@ -128,10 +128,10 @@ pub fn camera_pan_orbit(
             let right = fwd.cross(Vec3::Y).normalize_or_zero();
             // If right is zero (looking straight up/down), handle singularity?
             if right.length_squared() < 0.001 {
-               // Singularity. Skip pitch.
+                // Singularity. Skip pitch.
             } else {
-               let pitch_rot_axis = Quat::from_axis_angle(right, pitch);
-               new_offset = pitch_rot_axis * new_offset;
+                let pitch_rot_axis = Quat::from_axis_angle(right, pitch);
+                new_offset = pitch_rot_axis * new_offset;
             }
 
             transform.translation = pivot + new_offset;

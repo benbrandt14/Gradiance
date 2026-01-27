@@ -2,16 +2,14 @@
 //!
 //! Handles generating 3D meshes from 2D paths based on collision layers.
 
-use bevy::prelude::*;
 use bevy::ecs::world::DeferredWorld;
+use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_prototype_lyon::prelude::*; // For Path component wrapper
 use bevy_rapier2d::prelude::*;
 use lyon::path::PathEvent;
-use lyon::tessellation::{
-    self, BuffersBuilder, FillOptions, FillTessellator, VertexBuffers,
-};
-use lyon::path::iterator::PathIterator; // Import trait for flattened
+use lyon::path::iterator::PathIterator;
+use lyon::tessellation::{self, BuffersBuilder, FillOptions, FillTessellator, VertexBuffers}; // Import trait for flattened
 
 /// Plugin that registers the extrusion component and logic.
 pub struct ExtrusionPlugin;
@@ -32,7 +30,11 @@ impl Plugin for ExtrusionPlugin {
 #[component(on_add = generate_mesh_hook)]
 pub struct ExtrudableShape;
 
-fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: bevy::ecs::component::ComponentId) {
+fn generate_mesh_hook(
+    mut world: DeferredWorld,
+    entity: Entity,
+    _component_id: bevy::ecs::component::ComponentId,
+) {
     let path = world.get::<Path>(entity).map(|p| p.0.clone());
     let groups = world.get::<CollisionGroups>(entity).copied();
 
@@ -53,8 +55,12 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
 
     for i in 0..32 {
         if (memberships >> i) & 1 == 1 {
-            if i < min_i { min_i = i; }
-            if i > max_i { max_i = i; }
+            if i < min_i {
+                min_i = i;
+            }
+            if i > max_i {
+                max_i = i;
+            }
             active = true;
         }
     }
@@ -79,7 +85,9 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
         let mut buffers: VertexBuffers<Vec3, u32> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
 
-        struct VertexConstructor { z: f32 }
+        struct VertexConstructor {
+            z: f32,
+        }
         impl tessellation::FillVertexConstructor<Vec3> for VertexConstructor {
             fn new_vertex(&mut self, vertex: tessellation::FillVertex) -> Vec3 {
                 let p = vertex.position();
@@ -87,11 +95,14 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
             }
         }
 
-        if tessellator.tessellate_path(
-            &path,
-            &FillOptions::default(),
-            &mut BuffersBuilder::new(&mut buffers, VertexConstructor { z: z_front })
-        ).is_ok() {
+        if tessellator
+            .tessellate_path(
+                &path,
+                &FillOptions::default(),
+                &mut BuffersBuilder::new(&mut buffers, VertexConstructor { z: z_front }),
+            )
+            .is_ok()
+        {
             let base_idx = positions.len() as u32;
             for p in buffers.vertices {
                 positions.push(p);
@@ -109,7 +120,9 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
         let mut buffers: VertexBuffers<Vec3, u32> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
 
-        struct VertexConstructor { z: f32 }
+        struct VertexConstructor {
+            z: f32,
+        }
         impl tessellation::FillVertexConstructor<Vec3> for VertexConstructor {
             fn new_vertex(&mut self, vertex: tessellation::FillVertex) -> Vec3 {
                 let p = vertex.position();
@@ -117,11 +130,14 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
             }
         }
 
-        if tessellator.tessellate_path(
-            &path,
-            &FillOptions::default(),
-            &mut BuffersBuilder::new(&mut buffers, VertexConstructor { z: z_back })
-        ).is_ok() {
+        if tessellator
+            .tessellate_path(
+                &path,
+                &FillOptions::default(),
+                &mut BuffersBuilder::new(&mut buffers, VertexConstructor { z: z_back }),
+            )
+            .is_ok()
+        {
             let base_idx = positions.len() as u32;
             for p in buffers.vertices {
                 positions.push(p);
@@ -160,14 +176,34 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
                 let p1 = current_point;
                 let p2 = point_to_vec2(to);
 
-                add_quad(p1, p2, z_back, z_front, &mut positions, &mut normals, &mut indices);
+                add_quad(
+                    p1,
+                    p2,
+                    z_back,
+                    z_front,
+                    &mut positions,
+                    &mut normals,
+                    &mut indices,
+                );
                 current_point = p2;
             }
-            PathEvent::End { last: _, first: _, close } => {
+            PathEvent::End {
+                last: _,
+                first: _,
+                close,
+            } => {
                 if close {
                     let p1 = current_point;
                     let p2 = start_point;
-                    add_quad(p1, p2, z_back, z_front, &mut positions, &mut normals, &mut indices);
+                    add_quad(
+                        p1,
+                        p2,
+                        z_back,
+                        z_front,
+                        &mut positions,
+                        &mut normals,
+                        &mut indices,
+                    );
                 }
             }
             _ => {}
@@ -175,7 +211,10 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
     }
 
     // Build Mesh
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, bevy::render::render_asset::RenderAssetUsages::default());
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        bevy::render::render_asset::RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_indices(Indices::U32(indices));
@@ -206,10 +245,7 @@ fn generate_mesh_hook(mut world: DeferredWorld, entity: Entity, _component_id: b
     world.commands().queue(move |world: &mut World| {
         if world.get_entity(entity).is_ok() {
             if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
-                entity_mut.insert((
-                    Mesh3d(mesh_handle),
-                    MeshMaterial3d(material_handle),
-                ));
+                entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
             }
         }
     });
@@ -219,8 +255,15 @@ fn point_to_vec2(p: lyon::math::Point) -> Vec2 {
     Vec2::new(p.x, p.y)
 }
 
-fn add_quad(p1: Vec2, p2: Vec2, z_back: f32, z_front: f32, positions: &mut Vec<Vec3>, normals: &mut Vec<Vec3>, indices: &mut Vec<u32>)
-{
+fn add_quad(
+    p1: Vec2,
+    p2: Vec2,
+    z_back: f32,
+    z_front: f32,
+    positions: &mut Vec<Vec3>,
+    normals: &mut Vec<Vec3>,
+    indices: &mut Vec<u32>,
+) {
     // Tangent = p2 - p1. Normal = (tangent.y, -tangent.x).
     let tangent = p2 - p1;
     let normal2d = Vec2::new(tangent.y, -tangent.x).normalize_or_zero();
@@ -251,7 +294,12 @@ fn add_quad(p1: Vec2, p2: Vec2, z_back: f32, z_front: f32, positions: &mut Vec<V
     indices.push(i0);
 }
 
-fn add_vertex_internal(pos: Vec3, normal: Vec3, positions: &mut Vec<Vec3>, normals: &mut Vec<Vec3>) -> u32 {
+fn add_vertex_internal(
+    pos: Vec3,
+    normal: Vec3,
+    positions: &mut Vec<Vec3>,
+    normals: &mut Vec<Vec3>,
+) -> u32 {
     positions.push(pos);
     normals.push(normal);
     (positions.len() - 1) as u32

@@ -91,7 +91,7 @@ pub fn update_cursor_pos(
             raw_pos.unwrap(),
             &grid_settings,
             Some(|aabb, callback: &mut dyn FnMut(Entity) -> bool| {
-                 rapier_context.colliders_with_aabb_intersecting_aabb(aabb, callback);
+                rapier_context.colliders_with_aabb_intersecting_aabb(aabb, callback);
             }),
             get_collider_wrapper,
         )

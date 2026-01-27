@@ -10,6 +10,7 @@ use bevy::window::{PrimaryWindow, WindowCreated, WindowResized, WindowScaleFacto
 
 use bevy_egui::EguiUserTextures;
 use bevy_prototype_lyon::plugin::ShapePlugin;
+use gradiance::geometry::extrusion::ExtrusionPlugin;
 use gradiance::input::ToolState;
 use gradiance::input::ZIndex;
 use gradiance::input::commands::CommandStack;
@@ -23,8 +24,7 @@ use gradiance::input::tools::ground_tool::GroundToolPlugin;
 use gradiance::input::tools::polygon_tool::PolygonToolPlugin;
 use gradiance::input::tools::select_tool::SelectToolPlugin;
 use gradiance::prelude::*;
-use gradiance::ui::grid::GridSettings;
-use gradiance::geometry::extrusion::ExtrusionPlugin; // Add ExtrusionPlugin
+use gradiance::ui::grid::GridSettings; // Add ExtrusionPlugin
 
 #[allow(dead_code)]
 pub fn create_test_app() -> App {

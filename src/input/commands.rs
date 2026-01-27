@@ -2,11 +2,11 @@
 //!
 //! Defines the [`GameCommand`] trait and the [`CommandStack`] resource.
 
+use crate::geometry::extrusion::ExtrudableShape;
 use crate::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
-use crate::geometry::extrusion::ExtrudableShape;
 use anyhow::{Result, bail};
 use bevy_prototype_lyon::prelude::*;
 use std::fmt::Debug;
@@ -266,9 +266,9 @@ impl GameCommand for SpawnJointCommand {
                     radius: VISUAL_CIRCLE_OUTER_RADIUS,
                     ..default()
                 });
-                world.entity_mut(visual_id).insert(
-                   path_from_shape(circle_outer),
-                );
+                world
+                    .entity_mut(visual_id)
+                    .insert(path_from_shape(circle_outer));
             },
         );
         self.visual_entity = Some(visual_id);
@@ -445,8 +445,7 @@ impl GameCommand for SpawnGroundCommand {
         let entity = world
             .spawn((
                 GeometryBuilder::build_as(&shape), // Path
-                Transform::from_translation(center + Vec3::new(0.0, 0.0, z))
-                    .with_rotation(rot),
+                Transform::from_translation(center + Vec3::new(0.0, 0.0, z)).with_rotation(rot),
                 Visibility::default(),
                 // Physics
                 RigidBody::Fixed,
