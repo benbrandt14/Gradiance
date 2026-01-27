@@ -134,45 +134,65 @@ fn context_menu_ui(
 
             ui.separator();
 
-            // Collision Layers / Depth
-            ui.collapsing("Collision Layers / Depth", |ui| {
-                let mut current_memberships = if let Some(first) = selection.0.iter().next() {
+            // Collision Depth (Layers)
+            ui.collapsing("Depth (Collision Layers)", |ui| {
+                // Determine current range from selection (approximate from first entity)
+                let (current_start, current_end) = if let Some(first) = selection.0.iter().next() {
                     if let Ok(groups) = collision_groups.get(*first) {
-                        groups.memberships.bits()
+                        let bits = groups.memberships.bits();
+                        let start = bits.trailing_zeros();
+                        let end = 31 - bits.leading_zeros();
+                        if start <= end && bits != 0 {
+                            (start, end)
+                        } else {
+                            (0, 0)
+                        }
                     } else {
-                        0
+                        (0, 0)
                     }
                 } else {
-                    0
+                    (0, 0)
                 };
 
+                let mut start = current_start;
+                let mut end = current_end;
                 let mut changed = false;
 
-                egui::Grid::new("collision_layers_grid").show(ui, |ui| {
-                    for i in 0..32 {
-                        let mut active = (current_memberships >> i) & 1 == 1;
-                        if ui.checkbox(&mut active, format!("{}", i)).changed() {
-                            if active {
-                                current_memberships |= 1 << i;
-                            } else {
-                                current_memberships &= !(1 << i);
-                            }
-                            changed = true;
-                        }
-
-                        if (i + 1) % 4 == 0 {
-                            ui.end_row();
-                        }
+                ui.horizontal(|ui| {
+                    ui.label("Start Layer:");
+                    if ui.add(egui::DragValue::new(&mut start).range(0..=31)).changed() {
+                        changed = true;
                     }
                 });
 
+                ui.horizontal(|ui| {
+                    ui.label("End Layer:  ");
+                    if ui.add(egui::DragValue::new(&mut end).range(0..=31)).changed() {
+                        changed = true;
+                    }
+                });
+
+                // Ensure valid range
+                if start > end {
+                    end = start;
+                }
+
                 if changed {
-                    let new_memberships = Group::from_bits_truncate(current_memberships);
+                    let mut mask = 0u32;
+                    for i in start..=end {
+                        mask |= 1 << i;
+                    }
+
+                    let new_groups = Group::from_bits_truncate(mask);
+
                     for &entity in &selection.0 {
+                        // Apply same mask to memberships AND filters to ensure self-collision
+                        // and collision with others in this range.
                         if let Ok(mut groups) = collision_groups.get_mut(entity) {
-                            groups.memberships = new_memberships;
+                            groups.memberships = new_groups;
+                            groups.filters = new_groups;
                         } else {
-                             commands.entity(entity).insert(CollisionGroups::new(new_memberships, Group::ALL));
+                             commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
                         }
                     }
                 }

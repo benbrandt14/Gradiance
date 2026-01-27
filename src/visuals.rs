@@ -54,6 +54,10 @@ impl Material for ToonMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/toon.wgsl".into()
     }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Opaque
+    }
 }
 
 /// Plugin for visual effects and rendering configuration.

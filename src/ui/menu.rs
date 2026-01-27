@@ -42,6 +42,7 @@ fn menu_ui(
     mut rapier_config: Query<&mut RapierConfiguration>,
     mut debug_render: ResMut<DebugRenderContext>,
     mut time: ResMut<Time<Virtual>>,
+    mut fixed_time: ResMut<Time<Fixed>>,
     // Rendering Resources
     mut render_settings: ResMut<RenderSettings>,
 ) {
@@ -63,7 +64,7 @@ fn menu_ui(
 
             match menu_state.current_tab {
                 MenuTab::Physics => {
-                    physics_tab(ui, &mut rapier_config, &mut debug_render, &mut time);
+                    physics_tab(ui, &mut rapier_config, &mut debug_render, &mut time, &mut fixed_time);
                 }
                 MenuTab::Rendering => {
                     rendering_tab(ui, &mut render_settings);
@@ -78,6 +79,7 @@ fn physics_tab(
     rapier_config: &mut Query<&mut RapierConfiguration>,
     debug_render: &mut ResMut<DebugRenderContext>,
     time: &mut ResMut<Time<Virtual>>,
+    fixed_time: &mut ResMut<Time<Fixed>>,
 ) {
     ui.heading("Physics Configuration");
 
@@ -97,6 +99,18 @@ fn physics_tab(
                     .prefix("Y: "),
             );
         });
+
+    }
+
+    ui.separator();
+
+    // Fixed Timestep
+    ui.label("Physics Timestep:");
+    let mut hz = 1.0 / fixed_time.timestep().as_secs_f64();
+    if ui.add(egui::DragValue::new(&mut hz).speed(1.0).prefix("Hz: ").range(1.0..=240.0)).changed() {
+        if hz > 0.0 {
+            fixed_time.set_timestep_hz(hz);
+        }
     }
 
     ui.separator();
