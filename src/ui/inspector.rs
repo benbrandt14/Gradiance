@@ -79,33 +79,35 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
     let ctx = contexts.ctx_mut();
 
     egui::SidePanel::right("inspector_panel").show(ctx, |ui| {
-        render_settings_header(ui, &mut inspector.selection_filter);
-        ui.separator();
-
-        if inspector.selection.0.is_empty() {
-            ui.label("No selection.");
-            return;
-        }
-
-        // Inspect the first selected entity for initial values
-        let first_entity = inspector.selection.0.iter().next().copied();
-
-        if let Some(entity) = first_entity {
-            let state = extract_inspector_state(entity, &inspector.entity_query);
-
-            ui.heading("Inspector");
-            ui.label(format!(
-                "Selected: {} entities",
-                inspector.selection.0.len()
-            ));
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            render_settings_header(ui, &mut inspector.selection_filter);
             ui.separator();
 
-            inspect_transform(ui, &mut inspector, &state);
-            inspect_shape(ui, &mut inspector, &state);
-            inspect_physics(ui, &mut inspector, &state);
-            inspect_visuals(ui, &mut inspector, &state);
-            inspect_joint(ui, &mut inspector, entity);
-        }
+            if inspector.selection.0.is_empty() {
+                ui.label("No selection.");
+                return;
+            }
+
+            // Inspect the first selected entity for initial values
+            let first_entity = inspector.selection.0.iter().next().copied();
+
+            if let Some(entity) = first_entity {
+                let state = extract_inspector_state(entity, &inspector.entity_query);
+
+                ui.heading("Inspector");
+                ui.label(format!(
+                    "Selected: {} entities",
+                    inspector.selection.0.len()
+                ));
+                ui.separator();
+
+                inspect_transform(ui, &mut inspector, &state);
+                inspect_shape(ui, &mut inspector, &state);
+                inspect_physics(ui, &mut inspector, &state);
+                inspect_visuals(ui, &mut inspector, &state);
+                inspect_joint(ui, &mut inspector, entity);
+            }
+        });
     });
 }
 

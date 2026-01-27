@@ -18,6 +18,7 @@ pub mod physics;
 pub mod prelude;
 pub mod scripting;
 pub mod ui;
+pub mod visuals;
 
 use crate::prelude::*;
 // use bevy_mod_picking::DefaultPickingPlugins;
@@ -38,6 +39,7 @@ impl Plugin for GamePlugin {
             geometry::GeometryPlugin,
             input::InputPlugin,
             ui::UiPlugin,
+            visuals::VisualsPlugin,
             // scripting::ScriptingPlugin,
         ))
         .add_systems(Startup, setup_camera);

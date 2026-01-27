@@ -12,6 +12,7 @@ pub mod diagnostics;
 pub mod grid;
 pub mod icons;
 pub mod inspector;
+pub mod menu;
 pub mod panels;
 
 /// Plugin for the Editor User Interface.
@@ -31,6 +32,7 @@ impl Plugin for UiPlugin {
             context_menu::ContextMenuPlugin,
             grid::GridPlugin,
             diagnostics::DiagnosticsPlugin,
+            menu::MenuPlugin,
         ));
     }
 }

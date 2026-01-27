@@ -144,6 +144,7 @@ fn select_tool_update(
             Option<&LockedAxes>,
             Option<&Sensor>,
             Option<&SelectionGroup>,
+            Option<&CollisionGroups>,
         )>,
     )>,
     aux: AuxQueries,
@@ -274,11 +275,15 @@ fn select_tool_update(
                         locked,
                         sensor,
                         group,
+                        collision_groups,
                     )) = queries.p1().get(old_entity)
                     {
                         let mut builder = commands.spawn((*t, collider.clone()));
 
                         if let Some(c) = rb {
+                            builder.insert(*c);
+                        }
+                        if let Some(c) = collision_groups {
                             builder.insert(*c);
                         }
                         if let Some(c) = eshape {

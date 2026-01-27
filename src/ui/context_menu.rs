@@ -11,6 +11,7 @@ use crate::input::{
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
 use bevy_egui::{EguiContexts, egui};
+use rand::Rng;
 
 /// State for the context menu.
 #[derive(Resource, Default)]
@@ -134,46 +135,125 @@ fn context_menu_ui(
 
             ui.separator();
 
-            // Collision Layers / Depth
-            ui.collapsing("Collision Layers / Depth", |ui| {
-                let mut current_memberships = if let Some(first) = selection.0.iter().next() {
+            // Collision Depth (Layers)
+            ui.collapsing("Depth (Collision Layers)", |ui| {
+                // Determine current range from selection (approximate from first entity)
+                let (current_start, current_end) = if let Some(first) = selection.0.iter().next() {
                     if let Ok(groups) = collision_groups.get(*first) {
-                        groups.memberships.bits()
+                        let bits = groups.memberships.bits();
+                        let start = bits.trailing_zeros();
+                        let end = 31 - bits.leading_zeros();
+                        if start <= end && bits != 0 {
+                            (start, end)
+                        } else {
+                            (0, 0)
+                        }
                     } else {
-                        0
+                        (0, 0)
                     }
                 } else {
-                    0
+                    (0, 0)
                 };
 
+                let mut start = current_start;
+                let mut end = current_end;
                 let mut changed = false;
 
-                egui::Grid::new("collision_layers_grid").show(ui, |ui| {
-                    for i in 0..32 {
-                        let mut active = (current_memberships >> i) & 1 == 1;
-                        if ui.checkbox(&mut active, format!("{}", i)).changed() {
-                            if active {
-                                current_memberships |= 1 << i;
-                            } else {
-                                current_memberships &= !(1 << i);
-                            }
-                            changed = true;
-                        }
-
-                        if (i + 1) % 4 == 0 {
-                            ui.end_row();
-                        }
+                ui.horizontal(|ui| {
+                    ui.label("Start Layer:");
+                    if ui.add(egui::DragValue::new(&mut start).range(0..=31)).changed() {
+                        changed = true;
                     }
                 });
 
+                ui.horizontal(|ui| {
+                    ui.label("End Layer:  ");
+                    if ui.add(egui::DragValue::new(&mut end).range(0..=31)).changed() {
+                        changed = true;
+                    }
+                });
+
+                // Ensure valid range
+                if start > end {
+                    end = start;
+                }
+
                 if changed {
-                    let new_memberships = Group::from_bits_truncate(current_memberships);
+                    let mut mask = 0u32;
+                    for i in start..=end {
+                        mask |= 1 << i;
+                    }
+
+                    let new_groups = Group::from_bits_truncate(mask);
+
                     for &entity in &selection.0 {
+                        // Apply same mask to memberships AND filters to ensure self-collision
+                        // and collision with others in this range.
                         if let Ok(mut groups) = collision_groups.get_mut(entity) {
-                            groups.memberships = new_memberships;
+                            groups.memberships = new_groups;
+                            groups.filters = new_groups;
                         } else {
-                             commands.entity(entity).insert(CollisionGroups::new(new_memberships, Group::ALL));
+                             commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
                         }
+                    }
+                }
+
+                if ui.button("Randomize Layers").clicked() {
+                     let mut rng = rand::rng();
+                     let range_size = end.saturating_sub(start) + 1;
+
+                     for &entity in &selection.0 {
+                         // Pick a random layer within the start..=end range
+                         let random_offset = rng.random_range(0..range_size);
+                         let layer = start + random_offset;
+                         let mask = 1 << layer;
+                         let new_groups = Group::from_bits_truncate(mask);
+
+                         if let Ok(mut groups) = collision_groups.get_mut(entity) {
+                             groups.memberships = new_groups;
+                             groups.filters = new_groups;
+                         } else {
+                             commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                         }
+                     }
+                }
+
+                if ui.button("Distribute Layers").clicked() {
+                    let mut entities: Vec<_> = selection.0.iter().copied().collect();
+                    // Sort by Entity ID for deterministic distribution
+                    entities.sort();
+
+                    let count = entities.len();
+                    if count > 1 {
+                        let span = (end as f32 - start as f32).max(0.0);
+                        let step = span / (count - 1) as f32;
+
+                        for (i, entity) in entities.into_iter().enumerate() {
+                            let layer = (start as f32 + i as f32 * step).round() as u32;
+                            // Clamp to be safe, though math should hold
+                            let layer = layer.clamp(0, 31);
+
+                            let mask = 1 << layer;
+                            let new_groups = Group::from_bits_truncate(mask);
+
+                            if let Ok(mut groups) = collision_groups.get_mut(entity) {
+                                groups.memberships = new_groups;
+                                groups.filters = new_groups;
+                            } else {
+                                commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                            }
+                        }
+                    } else if count == 1 {
+                        // Single entity, just assign start
+                         let layer = start;
+                         let mask = 1 << layer;
+                         let new_groups = Group::from_bits_truncate(mask);
+                         if let Ok(mut groups) = collision_groups.get_mut(entities[0]) {
+                             groups.memberships = new_groups;
+                             groups.filters = new_groups;
+                         } else {
+                             commands.entity(entities[0]).insert(CollisionGroups::new(new_groups, new_groups));
+                         }
                     }
                 }
             });
