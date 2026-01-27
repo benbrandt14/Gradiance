@@ -53,8 +53,8 @@ pub fn update_cursor_pos(
     let mut raw_pos = None;
 
     // 3D Raycasting to Z=0 plane
-    if let Some(screen_pos) = window.cursor_position() {
-        if let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos) {
+    if let Some(screen_pos) = window.cursor_position()
+        && let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos) {
             // Ray: origin + t * direction
             // Plane: Z=0. Normal: (0,0,1). Point: (0,0,0).
             // Distance t = (point - origin) . normal / (direction . normal)
@@ -71,7 +71,6 @@ pub fn update_cursor_pos(
                 }
             }
         }
-    }
 
     if let Some(pos) = raw_pos {
         cursor_pos.0 = Some(pos);

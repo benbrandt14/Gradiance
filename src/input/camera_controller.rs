@@ -2,7 +2,6 @@
 //!
 //! Provides WASD movement, Mouse Drag panning/orbiting, and Scroll zooming.
 
-use crate::input::tools::select_tool::SelectToolData;
 use crate::prelude::*;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 
@@ -85,7 +84,7 @@ pub fn camera_pan_orbit(
 
             // Apply Pitch (Local X)
             let pitch_rot = Quat::from_rotation_x(pitch);
-            rotation = rotation * pitch_rot;
+            rotation *= pitch_rot;
 
             // Apply Yaw (Global Y)? Or Global Z?
             // If we are looking at XY plane, and Y is Up.

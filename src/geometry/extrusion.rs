@@ -71,7 +71,7 @@ fn generate_mesh_hook(
     }
 
     let z_front = -(min_i as f32 * layer_h);
-    let depth = (max_i as i32 - min_i as i32 + 1) as f32 * layer_h;
+    let depth = (max_i - min_i + 1) as f32 * layer_h;
     let z_back = z_front - depth;
 
     // Mesh Data Arrays
@@ -243,11 +243,10 @@ fn generate_mesh_hook(
 
     // Safe Component Insertion to prevent panic if entity is despawned
     world.commands().queue(move |world: &mut World| {
-        if world.get_entity(entity).is_ok() {
-            if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+        if world.get_entity(entity).is_ok()
+            && let Ok(mut entity_mut) = world.get_entity_mut(entity) {
                 entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
             }
-        }
     });
 }
 
