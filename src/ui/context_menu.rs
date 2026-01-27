@@ -11,6 +11,7 @@ use crate::input::{
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
 use bevy_egui::{EguiContexts, egui};
+use rand::Rng;
 
 /// State for the context menu.
 #[derive(Resource, Default)]
@@ -195,6 +196,26 @@ fn context_menu_ui(
                              commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
                         }
                     }
+                }
+
+                if ui.button("Randomize Layers").clicked() {
+                     let mut rng = rand::rng();
+                     let range_size = end.saturating_sub(start) + 1;
+
+                     for &entity in &selection.0 {
+                         // Pick a random layer within the start..=end range
+                         let random_offset = rng.random_range(0..range_size);
+                         let layer = start + random_offset;
+                         let mask = 1 << layer;
+                         let new_groups = Group::from_bits_truncate(mask);
+
+                         if let Ok(mut groups) = collision_groups.get_mut(entity) {
+                             groups.memberships = new_groups;
+                             groups.filters = new_groups;
+                         } else {
+                             commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                         }
+                     }
                 }
             });
 

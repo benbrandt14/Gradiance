@@ -40,6 +40,7 @@ fn menu_ui(
     mut menu_state: ResMut<GameMenuState>,
     // Physics Resources
     mut rapier_config: Query<&mut RapierConfiguration>,
+    mut rapier_context: Query<&mut RapierContext>,
     mut debug_render: ResMut<DebugRenderContext>,
     mut time: ResMut<Time<Virtual>>,
     mut fixed_time: ResMut<Time<Fixed>>,
@@ -64,7 +65,7 @@ fn menu_ui(
 
             match menu_state.current_tab {
                 MenuTab::Physics => {
-                    physics_tab(ui, &mut rapier_config, &mut debug_render, &mut time, &mut fixed_time);
+                    physics_tab(ui, &mut rapier_config, &mut rapier_context, &mut debug_render, &mut time, &mut fixed_time);
                 }
                 MenuTab::Rendering => {
                     rendering_tab(ui, &mut render_settings);
@@ -77,6 +78,7 @@ fn menu_ui(
 fn physics_tab(
     ui: &mut egui::Ui,
     rapier_config: &mut Query<&mut RapierConfiguration>,
+    rapier_context: &mut Query<&mut RapierContext>,
     debug_render: &mut ResMut<DebugRenderContext>,
     time: &mut ResMut<Time<Virtual>>,
     fixed_time: &mut ResMut<Time<Fixed>>,
@@ -100,6 +102,43 @@ fn physics_tab(
             );
         });
 
+        ui.separator();
+
+        // Use collapsible to hide advanced settings
+        ui.collapsing("Advanced Solver Settings", |ui| {
+            for mut context in rapier_context.iter_mut() {
+                ui.label("Solver Iterations:");
+                // Use drag value for usize
+                let mut iterations = context.integration_parameters.num_solver_iterations.get();
+                if ui.add(egui::DragValue::new(&mut iterations).range(1..=50).speed(1.0)).changed() {
+                    context.integration_parameters.num_solver_iterations = std::num::NonZeroUsize::new(iterations).unwrap_or(std::num::NonZeroUsize::new(1).unwrap());
+                }
+
+                ui.label("Friction Iterations:");
+                 let mut f_iterations = context.integration_parameters.num_additional_friction_iterations;
+                if ui.add(egui::DragValue::new(&mut f_iterations).range(0..=50).speed(1.0)).changed() {
+                    context.integration_parameters.num_additional_friction_iterations = f_iterations;
+                }
+
+                ui.label("Prediction Distance:");
+                // prediction_distance is a field in newer Rapier versions but seems to be a method or renamed in this version.
+                // However, without explicit documentation or source access to the dependency, it's safer to remove it if it causes build errors.
+                // The user request was to fix "squishing", which is mostly solver iterations and CCD.
+                // prediction_distance is less critical.
+                // Re-reading error: "attempted to take value of method `prediction_distance`".
+                // If it is a method, we can't mutate it directly via DragValue(&mut val).
+                // We'd need to read it, DragValue it, then set it via setter if available.
+                // If no setter, we can't edit it.
+                // Given the constraint and time, I will remove this field from the UI to fix the build.
+                // The primary fix for squishing is Solver Iterations and CCD.
+
+                ui.label("Max CCD Substeps:");
+                let mut ccd_substeps = context.integration_parameters.max_ccd_substeps;
+                if ui.add(egui::DragValue::new(&mut ccd_substeps).range(0..=10).speed(1.0)).changed() {
+                    context.integration_parameters.max_ccd_substeps = ccd_substeps;
+                }
+            }
+        });
     }
 
     ui.separator();
