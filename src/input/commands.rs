@@ -16,6 +16,7 @@ const GROUND_DEPTH: f32 = 1000.0;
 const CONNECTOR_COLLIDER_RADIUS: f32 = 0.5;
 const VISUAL_CIRCLE_OUTER_RADIUS: f32 = 5.0;
 const VISUAL_LINE_OFFSET: f32 = 3.0;
+const PIN_GROUP: Group = Group::GROUP_32;
 
 // Removed unused colors and stroke width constants to silence warnings
 
@@ -99,6 +100,7 @@ fn resolve_joint_targets(
     anchor_a: Vec2,
     anchor_b: Vec2,
     visual_entity: Option<Entity>,
+    pin_solver_groups: SolverGroups,
 ) -> (Entity, Option<Entity>, Vec2, Vec2) {
     let mut pin_entity = None;
     let target_entity;
@@ -120,7 +122,8 @@ fn resolve_joint_targets(
             .spawn((
                 RigidBody::Fixed,
                 Transform::from_translation(world_pos),
-                CollisionGroups::new(Group::NONE, Group::NONE),
+                Collider::ball(CONNECTOR_COLLIDER_RADIUS),
+                pin_solver_groups,
             ))
             .id();
 
@@ -245,6 +248,8 @@ pub struct SpawnJointCommand {
     pub visual_entity: Option<Entity>,
     /// The pin entity ID (if pinning to world).
     pub pin_entity: Option<Entity>,
+    /// Previous solver groups of the pinned body (for undo).
+    pub original_solver_groups: Option<SolverGroups>,
 }
 
 impl GameCommand for SpawnJointCommand {
@@ -272,6 +277,23 @@ impl GameCommand for SpawnJointCommand {
         );
         self.visual_entity = Some(visual_id);
 
+        // Capture original solver groups (Only if pinning to world)
+        if self.entity_b.is_none() {
+            let old_groups = world.get::<SolverGroups>(self.entity_a).copied();
+            self.original_solver_groups = old_groups;
+
+            let mut new_groups = old_groups.unwrap_or(SolverGroups {
+                memberships: Group::ALL,
+                filters: Group::ALL,
+            });
+            new_groups.filters &= !PIN_GROUP;
+
+            world.entity_mut(self.entity_a).insert(new_groups);
+        }
+
+        // Pin groups
+        let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
+
         // Physics Joint
         let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
             world,
@@ -280,6 +302,7 @@ impl GameCommand for SpawnJointCommand {
             self.anchor_a,
             self.anchor_b,
             Some(visual_id),
+            pin_groups,
         );
         self.pin_entity = pin_entity;
 
@@ -312,6 +335,19 @@ impl GameCommand for SpawnJointCommand {
             }
             self.pin_entity = None;
         }
+
+        // Restore solver groups
+        if self.entity_b.is_none() {
+            if let Some(groups) = self.original_solver_groups {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                    e.insert(groups);
+                }
+            } else {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                    e.remove::<SolverGroups>();
+                }
+            }
+        }
     }
 }
 
@@ -332,6 +368,8 @@ pub struct SpawnFixedJointCommand {
     pub visual_entity: Option<Entity>,
     /// The pin entity ID.
     pub pin_entity: Option<Entity>,
+    /// Previous solver groups of the pinned body (for undo).
+    pub original_solver_groups: Option<SolverGroups>,
     /// Rotation of body A (radians).
     pub rot_a: f32,
     /// Rotation of body B (radians).
@@ -367,6 +405,23 @@ impl GameCommand for SpawnFixedJointCommand {
         );
         self.visual_entity = Some(visual_id);
 
+        // Capture original solver groups (Only if pinning to world)
+        if self.entity_b.is_none() {
+            let old_groups = world.get::<SolverGroups>(self.entity_a).copied();
+            self.original_solver_groups = old_groups;
+
+            let mut new_groups = old_groups.unwrap_or(SolverGroups {
+                memberships: Group::ALL,
+                filters: Group::ALL,
+            });
+            new_groups.filters &= !PIN_GROUP;
+
+            world.entity_mut(self.entity_a).insert(new_groups);
+        }
+
+        // Pin groups
+        let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
+
         let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
             world,
             self.entity_a,
@@ -374,6 +429,7 @@ impl GameCommand for SpawnFixedJointCommand {
             self.anchor_a,
             self.anchor_b,
             Some(visual_id),
+            pin_groups,
         );
         self.pin_entity = pin_entity;
 
@@ -406,6 +462,19 @@ impl GameCommand for SpawnFixedJointCommand {
                 e.despawn();
             }
             self.pin_entity = None;
+        }
+
+        // Restore solver groups
+        if self.entity_b.is_none() {
+            if let Some(groups) = self.original_solver_groups {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                    e.insert(groups);
+                }
+            } else {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                    e.remove::<SolverGroups>();
+                }
+            }
         }
     }
 }
@@ -594,6 +663,7 @@ mod tests {
             compliance: 0.0,
             visual_entity: None,
             pin_entity: None,
+            original_solver_groups: None,
         };
 
         // Apply
@@ -723,6 +793,7 @@ mod tests {
             compliance: 0.0,
             visual_entity: None,
             pin_entity: None,
+            original_solver_groups: None,
             rot_a: 0.0,
             rot_b: 0.0,
         };
@@ -765,6 +836,7 @@ mod tests {
             compliance: 0.0,
             visual_entity: None,
             pin_entity: None,
+            original_solver_groups: None,
         };
 
         // Apply

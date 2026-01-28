@@ -196,6 +196,7 @@ fn update_connector(
                     compliance: 0.0,
                     visual_entity: None,
                     pin_entity: None,
+                    original_solver_groups: None,
                 };
                 commands.queue(move |world: &mut World| {
                     world.resource_scope(|world, mut stack: Mut<CommandStack>| {
@@ -212,6 +213,7 @@ fn update_connector(
                     compliance: 0.0,
                     visual_entity: None,
                     pin_entity: None,
+                    original_solver_groups: None,
                     rot_a,
                     rot_b,
                 };
