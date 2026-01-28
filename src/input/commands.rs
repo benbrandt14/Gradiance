@@ -15,7 +15,6 @@ const GROUND_WIDTH: f32 = 100_000.0;
 const GROUND_DEPTH: f32 = 1000.0;
 const CONNECTOR_COLLIDER_RADIUS: f32 = 0.5;
 const VISUAL_CIRCLE_OUTER_RADIUS: f32 = 5.0;
-const VISUAL_CIRCLE_INNER_RADIUS: f32 = 2.0;
 const VISUAL_LINE_OFFSET: f32 = 3.0;
 
 // Removed unused colors and stroke width constants to silence warnings
