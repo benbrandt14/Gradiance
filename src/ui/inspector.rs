@@ -334,38 +334,127 @@ fn extract_inspector_state(
 
 // UI Helpers
 
+/// Helper wrapper to render a widget with a context menu for alignment/distribution
+/// and middle-click to reset.
+fn inspect_with_context<T: Clone>(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<T>,
+    default: T,
+    render_ui: impl FnOnce(&mut egui::Ui, &mut T) -> egui::Response,
+) -> bool {
+    // Determine the value to edit. If Mixed, we use default as placeholder but don't commit unless changed.
+    let mut current_val = match val {
+        InspectorValue::Same(v) => v.clone(),
+        InspectorValue::Mixed => default.clone(),
+    };
+
+    let response = render_ui(ui, &mut current_val);
+
+    let mut changed = response.changed();
+
+    // Context Menu for Alignment/Distribution
+    response.context_menu(|ui| {
+        ui.label("Alignment (TODO)");
+        if ui.button("Align Min").clicked() {
+             info!("TODO: Implement Align Min");
+             ui.close_menu();
+        }
+        if ui.button("Align Center").clicked() {
+             info!("TODO: Implement Align Center");
+             ui.close_menu();
+        }
+        if ui.button("Align Max").clicked() {
+             info!("TODO: Implement Align Max");
+             ui.close_menu();
+        }
+        if ui.button("Distribute").clicked() {
+             info!("TODO: Implement Distribute");
+             ui.close_menu();
+        }
+    });
+
+    // Middle click to reset
+    if response.clicked_by(egui::PointerButton::Middle) {
+        current_val = default;
+        changed = true;
+    }
+
+    if changed {
+        *val = InspectorValue::Same(current_val);
+    }
+
+    changed
+}
+
 fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> bool {
     let mut changed = false;
-    let mut t = match val {
+    let t = match val {
         InspectorValue::Same(v) => *v,
         InspectorValue::Mixed => Transform::default(),
     };
 
     let mixed = matches!(val, InspectorValue::Mixed);
 
+    // Decompose to inspect components
+    // Position X
     ui.horizontal(|ui| {
         ui.label("Pos X:");
-        let mut x = if mixed { 0.0 } else { t.translation.x };
-        if ui.add(egui::DragValue::new(&mut x).speed(DRAG_SPEED)).changed() {
-            t.translation.x = x;
-            changed = true;
+        let mut x_val = InspectorValue::Same(t.translation.x);
+        if mixed { x_val = InspectorValue::Mixed; }
+
+        let changed_x = inspect_with_context(ui, &mut x_val, 0.0, |ui, val| {
+            ui.add(egui::DragValue::new(val).speed(DRAG_SPEED))
+        });
+
+        if changed_x {
+            if let InspectorValue::Same(new_x) = x_val {
+                let mut new_t = t;
+                new_t.translation.x = new_x;
+                *val = InspectorValue::Same(new_t);
+                changed = true;
+            }
         }
 
         ui.label("Pos Y:");
-        let mut y = if mixed { 0.0 } else { t.translation.y };
-         if ui.add(egui::DragValue::new(&mut y).speed(DRAG_SPEED)).changed() {
-            t.translation.y = y;
-            changed = true;
+        let mut y_val = InspectorValue::Same(t.translation.y);
+        if mixed { y_val = InspectorValue::Mixed; }
+
+        let changed_y = inspect_with_context(ui, &mut y_val, 0.0, |ui, val| {
+            ui.add(egui::DragValue::new(val).speed(DRAG_SPEED))
+        });
+
+        if changed_y {
+            if let InspectorValue::Same(new_y) = y_val {
+                // If x changed in same frame, update that too? Unlikely with immediate mode separate widgets.
+                // We re-read `t` which might be stale if `x` changed above?
+                // Actually `val` was updated above if x changed. So we should re-read `val`.
+                let current_t = match val { InspectorValue::Same(v) => *v, _ => t };
+                let mut new_t = current_t;
+                new_t.translation.y = new_y;
+                *val = InspectorValue::Same(new_t);
+                changed = true;
+            }
         }
     });
 
     // Rotation
     ui.horizontal(|ui| {
         ui.label("Rotation:");
-        let mut rot = if mixed { 0.0 } else { t.rotation.to_euler(EulerRot::XYZ).2 };
-        if ui.drag_angle(&mut rot).changed() {
-            t.rotation = Quat::from_rotation_z(rot);
-            changed = true;
+        let current_t = match val { InspectorValue::Same(v) => *v, _ => t };
+        let mut rot_val = InspectorValue::Same(current_t.rotation.to_euler(EulerRot::XYZ).2);
+        if mixed && !changed { rot_val = InspectorValue::Mixed; } // careful with mixed logic
+
+        let changed_rot = inspect_with_context(ui, &mut rot_val, 0.0, |ui, val| {
+             ui.drag_angle(val)
+        });
+
+        if changed_rot {
+             if let InspectorValue::Same(new_rot) = rot_val {
+                let mut new_t = current_t;
+                new_t.rotation = Quat::from_rotation_z(new_rot);
+                *val = InspectorValue::Same(new_t);
+                changed = true;
+             }
         }
     });
 
@@ -373,9 +462,6 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
         ui.label("(Mixed Values - Edit to set all)");
     }
 
-    if changed {
-        *val = InspectorValue::Same(t);
-    }
     changed
 }
 
@@ -385,16 +471,42 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
         InspectorValue::Mixed => return false, // Too complex to edit mixed shapes
     };
 
+    // Shape editing is complex because of nested fields.
+    // We can't easily wrap the entire shape struct in `inspect_with_context`.
+    // We would need to wrap individual fields (width, height, radius).
+
     let mut changed = false;
     match &mut eshape.shape {
         ShapeType::Box { width, height } => {
             ui.label("Box Dimensions");
-            if ui.add(egui::DragValue::new(width).speed(DRAG_SPEED).prefix("Width: ")).changed() { changed = true; }
-            if ui.add(egui::DragValue::new(height).speed(DRAG_SPEED).prefix("Height: ")).changed() { changed = true; }
+
+            // Width
+            let mut w_val = InspectorValue::Same(*width);
+            let w_changed = inspect_with_context(ui, &mut w_val, 1.0, |ui, val| {
+                ui.add(egui::DragValue::new(val).speed(DRAG_SPEED).prefix("Width: "))
+            });
+            if w_changed {
+                if let InspectorValue::Same(w) = w_val { *width = w; changed = true; }
+            }
+
+            // Height
+             let mut h_val = InspectorValue::Same(*height);
+            let h_changed = inspect_with_context(ui, &mut h_val, 1.0, |ui, val| {
+                ui.add(egui::DragValue::new(val).speed(DRAG_SPEED).prefix("Height: "))
+            });
+            if h_changed {
+                if let InspectorValue::Same(h) = h_val { *height = h; changed = true; }
+            }
         }
         ShapeType::Circle { radius } => {
             ui.label("Circle Dimensions");
-             if ui.add(egui::DragValue::new(radius).speed(DRAG_SPEED).prefix("Radius: ")).changed() { changed = true; }
+             let mut r_val = InspectorValue::Same(*radius);
+            let r_changed = inspect_with_context(ui, &mut r_val, 1.0, |ui, val| {
+                ui.add(egui::DragValue::new(val).speed(DRAG_SPEED).prefix("Radius: "))
+            });
+            if r_changed {
+                if let InspectorValue::Same(r) = r_val { *radius = r; changed = true; }
+            }
         }
         ShapeType::Polygon { points } => {
             ui.label("Polygon");
@@ -409,6 +521,8 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
 }
 
 fn inspect_rigid_body(ui: &mut egui::Ui, val: &mut InspectorValue<RigidBody>) -> bool {
+    // RigidBody enum doesn't map well to "Middle Click Reset" (what is default?)
+    // or alignment. So we skip the wrapper for this one, or just use it for context menu only.
     let mut rb = match val {
         InspectorValue::Same(v) => *v,
         InspectorValue::Mixed => RigidBody::Dynamic, // default
@@ -436,76 +550,57 @@ fn inspect_rigid_body(ui: &mut egui::Ui, val: &mut InspectorValue<RigidBody>) ->
             });
     });
 
-    // We handle changed implicitly by setting *val inside callback
-    // But we need to return bool.
-    // The SelectableValue modifies `rb`. We check if it matches `val`.
     if let InspectorValue::Same(_new_rb) = *val {
-         // This logic is bit circular because we modify val inside closure.
-         // Better:
-         // If mixed, we show "Mixed". User picks -> val becomes Same(Picked).
-         // If same, we show current. User picks -> val becomes Same(Picked).
-         // We can return true if val changed.
-         // Actually, simpler:
          return !matches!(val, InspectorValue::Mixed) || !mixed;
     }
     false
 }
 
-// Simplified generic handlers
-fn inspect_float_prop(ui: &mut egui::Ui, val: &mut InspectorValue<f32>, label: &str, range: std::ops::RangeInclusive<f32>) -> bool {
-    let mut v = match val { InspectorValue::Same(v) => *v, InspectorValue::Mixed => 0.0 };
-    let mixed = matches!(val, InspectorValue::Mixed);
-
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        if ui.add(egui::Slider::new(&mut v, range).text(label)).changed() {
-            changed = true;
-        }
+fn inspect_friction(ui: &mut egui::Ui, val: &mut InspectorValue<Friction>) -> bool {
+    let mut f_val = match val { InspectorValue::Same(v) => InspectorValue::Same(v.coefficient), InspectorValue::Mixed => InspectorValue::Mixed };
+    let changed = inspect_with_context(ui, &mut f_val, 0.5, |ui, val| {
+        ui.add(egui::Slider::new(val, 0.0..=FRICTION_MAX).text("Friction"))
     });
 
-    if mixed { ui.label("(Mixed)"); }
+    if match val { InspectorValue::Mixed => true, _ => false } { ui.label("(Mixed)"); }
 
-    if changed { *val = InspectorValue::Same(v); }
-    changed
-}
-
-fn inspect_friction(ui: &mut egui::Ui, val: &mut InspectorValue<Friction>) -> bool {
-    let mut f = match val { InspectorValue::Same(v) => v.coefficient, InspectorValue::Mixed => 0.0 };
-    let mixed = matches!(val, InspectorValue::Mixed);
-    let mut changed = false;
-    if ui.add(egui::Slider::new(&mut f, 0.0..=FRICTION_MAX).text("Friction")).changed() { changed = true; }
-    if mixed { ui.label("(Mixed)"); }
-    if changed { *val = InspectorValue::Same(Friction::coefficient(f)); }
+    if changed {
+        if let InspectorValue::Same(coef) = f_val {
+            *val = InspectorValue::Same(Friction::coefficient(coef));
+        }
+    }
     changed
 }
 
 fn inspect_restitution(ui: &mut egui::Ui, val: &mut InspectorValue<Restitution>) -> bool {
-    let mut c = match val { InspectorValue::Same(v) => v.coefficient, InspectorValue::Mixed => 0.0 };
-    let mixed = matches!(val, InspectorValue::Mixed);
-    let mut changed = false;
-    if ui.add(egui::Slider::new(&mut c, 0.0..=RESTITUTION_MAX).text("Restitution")).changed() { changed = true; }
-    if mixed { ui.label("(Mixed)"); }
-    if changed { *val = InspectorValue::Same(Restitution::coefficient(c)); }
+    let mut r_val = match val { InspectorValue::Same(v) => InspectorValue::Same(v.coefficient), InspectorValue::Mixed => InspectorValue::Mixed };
+    let changed = inspect_with_context(ui, &mut r_val, 0.0, |ui, val| {
+        ui.add(egui::Slider::new(val, 0.0..=RESTITUTION_MAX).text("Restitution"))
+    });
+
+    if match val { InspectorValue::Mixed => true, _ => false } { ui.label("(Mixed)"); }
+
+    if changed {
+         if let InspectorValue::Same(coef) = r_val {
+            *val = InspectorValue::Same(Restitution::coefficient(coef));
+        }
+    }
     changed
 }
 
 fn inspect_density(ui: &mut egui::Ui, val: &mut InspectorValue<f32>) -> bool {
-    let mut d = match val { InspectorValue::Same(v) => *v, InspectorValue::Mixed => 1.0 };
-    let mixed = matches!(val, InspectorValue::Mixed);
-    let mut changed = false;
-    if ui.add(egui::DragValue::new(&mut d).speed(DRAG_SPEED).range(DENSITY_MIN..=DENSITY_MAX).prefix("Density: ")).changed() { changed = true; }
-    if mixed { ui.label("(Mixed)"); }
-    if changed { *val = InspectorValue::Same(d); }
+    let changed = inspect_with_context(ui, val, 1.0, |ui, val| {
+        ui.add(egui::DragValue::new(val).speed(DRAG_SPEED).range(DENSITY_MIN..=DENSITY_MAX).prefix("Density: "))
+    });
+    if match val { InspectorValue::Mixed => true, _ => false } { ui.label("(Mixed)"); }
     changed
 }
 
 fn inspect_gravity(ui: &mut egui::Ui, val: &mut InspectorValue<f32>) -> bool {
-    let mut g = match val { InspectorValue::Same(v) => *v, InspectorValue::Mixed => 1.0 };
-    let mixed = matches!(val, InspectorValue::Mixed);
-    let mut changed = false;
-    if ui.add(egui::DragValue::new(&mut g).speed(DRAG_SPEED).prefix("Gravity Scale: ")).changed() { changed = true; }
-    if mixed { ui.label("(Mixed)"); }
-    if changed { *val = InspectorValue::Same(g); }
+    let changed = inspect_with_context(ui, val, 1.0, |ui, val| {
+         ui.add(egui::DragValue::new(val).speed(DRAG_SPEED).prefix("Gravity Scale: "))
+    });
+    if match val { InspectorValue::Mixed => true, _ => false } { ui.label("(Mixed)"); }
     changed
 }
 
@@ -516,6 +611,9 @@ fn inspect_sensor(ui: &mut egui::Ui, val: &mut InspectorValue<bool>) -> bool {
 
     let label = if mixed { "Sensor (Mixed)" } else { "Sensor" };
     if ui.checkbox(&mut is_sensor, label).clicked() { changed = true; }
+
+    // Checkbox middle click reset is less standard, but we can do context menu if we wrap it.
+    // ui.checkbox returns Response.
 
     if changed { *val = InspectorValue::Same(is_sensor); }
     changed
@@ -560,7 +658,6 @@ fn inspect_fill(ui: &mut egui::Ui, val: &mut InspectorValue<Fill>) -> bool {
 
 fn inspect_stroke(ui: &mut egui::Ui, val: &mut InspectorValue<Stroke>) -> bool {
     let mut color = match val { InspectorValue::Same(v) => v.color, InspectorValue::Mixed => Color::BLACK };
-    let mut width = match val { InspectorValue::Same(v) => v.options.line_width, InspectorValue::Mixed => 1.0 };
     let mixed = matches!(val, InspectorValue::Mixed);
     let mut changed = false;
 
@@ -570,13 +667,24 @@ fn inspect_stroke(ui: &mut egui::Ui, val: &mut InspectorValue<Stroke>) -> bool {
             color = Color::srgba(c_arr[0], c_arr[1], c_arr[2], c_arr[3]);
             changed = true;
         }
-        if ui.add(egui::DragValue::new(&mut width).speed(0.1).prefix("Width: ")).changed() {
+
+        // Width
+        let mut width_val = InspectorValue::Same(match val { InspectorValue::Same(v) => v.options.line_width, InspectorValue::Mixed => 1.0 });
+        if mixed { width_val = InspectorValue::Mixed; }
+
+        let width_changed = inspect_with_context(ui, &mut width_val, 1.0, |ui, val| {
+            ui.add(egui::DragValue::new(val).speed(0.1).prefix("Width: "))
+        });
+
+        if width_changed {
             changed = true;
         }
     });
+
     if mixed { ui.label("(Mixed Visuals)"); }
 
     if changed {
+         let width = match val { InspectorValue::Same(v) => v.options.line_width, InspectorValue::Mixed => 1.0 }; // Fallback to current/default
          let s = Stroke { color, options: StrokeOptions::default().with_line_width(width) };
          *val = InspectorValue::Same(s);
     }
