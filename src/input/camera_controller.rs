@@ -28,9 +28,9 @@ pub fn camera_pan_orbit(
     rapier_context_query: Query<&RapierContext>,
 ) {
     // Check if cursor is hovering a selected entity (to prioritize rotation)
-    if mouse_buttons.pressed(MouseButton::Right) {
-        if let Some(pos) = cursor_pos.0 {
-            if let Some(rapier_context) = rapier_context_query.iter().next() {
+    if mouse_buttons.pressed(MouseButton::Right)
+        && let Some(pos) = cursor_pos.0
+            && let Some(rapier_context) = rapier_context_query.iter().next() {
                 let filter = QueryFilter::default().exclude_sensors();
                 let mut hit_selected_entity = false;
 
@@ -46,8 +46,6 @@ pub fn camera_pan_orbit(
                     return; // Abort camera pan to allow object rotation
                 }
             }
-        }
-    }
 
     let delta = mouse_motion.delta;
     if delta == Vec2::ZERO {

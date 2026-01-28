@@ -176,11 +176,9 @@ fn physics_tab(
                 .range(1.0..=240.0),
         )
         .changed()
-    {
-        if hz > 0.0 {
+        && hz > 0.0 {
             fixed_time.set_timestep_hz(hz);
         }
-    }
 
     ui.separator();
 

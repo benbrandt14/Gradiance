@@ -342,10 +342,8 @@ impl GameCommand for SpawnJointCommand {
                 if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
                     e.insert(groups);
                 }
-            } else {
-                if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-                    e.remove::<SolverGroups>();
-                }
+            } else if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                e.remove::<SolverGroups>();
             }
         }
     }
@@ -470,10 +468,8 @@ impl GameCommand for SpawnFixedJointCommand {
                 if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
                     e.insert(groups);
                 }
-            } else {
-                if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
-                    e.remove::<SolverGroups>();
-                }
+            } else if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                e.remove::<SolverGroups>();
             }
         }
     }

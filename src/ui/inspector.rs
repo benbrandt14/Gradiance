@@ -270,15 +270,15 @@ fn extract_inspector_state(
     }
 
     let mut state = InspectorState {
-        transform: init(t.as_deref()),
-        editable_shape: init(eshape.as_deref()),
-        rigid_body: init(rb.as_deref()),
-        friction: init(f.as_deref()),
-        restitution: init(r.as_deref()),
-        fill: init(fill.as_deref()),
-        stroke: init(stroke.as_deref()),
+        transform: init(t),
+        editable_shape: init(eshape),
+        rigid_body: init(rb),
+        friction: init(f),
+        restitution: init(r),
+        fill: init(fill),
+        stroke: init(stroke),
         sensor: init_bool(sensor), // Sensor is unit struct, present = true
-        locked_axes: init(locked.as_deref()),
+        locked_axes: init(locked),
         density: init_mass(mass),
         gravity_scale: init_grav(grav),
     };
@@ -301,33 +301,31 @@ fn extract_inspector_state(
             } // Already marked missing
             match entity_val {
                 Some(v) => {
-                    if let Some(InspectorValue::Same(existing)) = state_val {
-                        if existing != v {
+                    if let Some(InspectorValue::Same(existing)) = state_val
+                        && existing != v {
                             *state_val = Some(InspectorValue::Mixed);
                         }
-                    }
                 }
                 None => *state_val = None, // Missing on this entity -> don't show
             }
         }
 
         // Merge Transform
-        merge(&mut state.transform, t.as_deref());
-        merge(&mut state.editable_shape, eshape.as_deref());
-        merge(&mut state.rigid_body, rb.as_deref());
-        merge(&mut state.friction, f.as_deref());
-        merge(&mut state.restitution, r.as_deref());
-        merge(&mut state.fill, fill.as_deref());
-        merge(&mut state.stroke, stroke.as_deref());
-        merge(&mut state.locked_axes, locked.as_deref());
+        merge(&mut state.transform, t);
+        merge(&mut state.editable_shape, eshape);
+        merge(&mut state.rigid_body, rb);
+        merge(&mut state.friction, f);
+        merge(&mut state.restitution, r);
+        merge(&mut state.fill, fill);
+        merge(&mut state.stroke, stroke);
+        merge(&mut state.locked_axes, locked);
 
         // Sensor (bool)
         let is_sensor = sensor.is_some();
-        if let Some(InspectorValue::Same(existing)) = state.sensor {
-            if existing != is_sensor {
+        if let Some(InspectorValue::Same(existing)) = state.sensor
+            && existing != is_sensor {
                 state.sensor = Some(InspectorValue::Mixed);
             }
-        }
 
         // Density
         let d = if let Some(ColliderMassProperties::Density(v)) = mass {
@@ -423,14 +421,13 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
             ui.add(egui::DragValue::new(val).speed(DRAG_SPEED))
         });
 
-        if changed_x {
-            if let InspectorValue::Same(new_x) = x_val {
+        if changed_x
+            && let InspectorValue::Same(new_x) = x_val {
                 let mut new_t = t;
                 new_t.translation.x = new_x;
                 *val = InspectorValue::Same(new_t);
                 changed = true;
             }
-        }
 
         ui.label("Pos Y:");
         let mut y_val = InspectorValue::Same(t.translation.y);
@@ -442,8 +439,8 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
             ui.add(egui::DragValue::new(val).speed(DRAG_SPEED))
         });
 
-        if changed_y {
-            if let InspectorValue::Same(new_y) = y_val {
+        if changed_y
+            && let InspectorValue::Same(new_y) = y_val {
                 // If x changed in same frame, update that too? Unlikely with immediate mode separate widgets.
                 // We re-read `t` which might be stale if `x` changed above?
                 // Actually `val` was updated above if x changed. So we should re-read `val`.
@@ -456,7 +453,6 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
                 *val = InspectorValue::Same(new_t);
                 changed = true;
             }
-        }
     });
 
     // Rotation
@@ -473,14 +469,13 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
 
         let changed_rot = inspect_with_context(ui, &mut rot_val, 0.0, |ui, val| ui.drag_angle(val));
 
-        if changed_rot {
-            if let InspectorValue::Same(new_rot) = rot_val {
+        if changed_rot
+            && let InspectorValue::Same(new_rot) = rot_val {
                 let mut new_t = current_t;
                 new_t.rotation = Quat::from_rotation_z(new_rot);
                 *val = InspectorValue::Same(new_t);
                 changed = true;
             }
-        }
     });
 
     if mixed && !changed {
@@ -514,12 +509,11 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
                         .prefix("Width: "),
                 )
             });
-            if w_changed {
-                if let InspectorValue::Same(w) = w_val {
+            if w_changed
+                && let InspectorValue::Same(w) = w_val {
                     *width = w;
                     changed = true;
                 }
-            }
 
             // Height
             let mut h_val = InspectorValue::Same(*height);
@@ -530,12 +524,11 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
                         .prefix("Height: "),
                 )
             });
-            if h_changed {
-                if let InspectorValue::Same(h) = h_val {
+            if h_changed
+                && let InspectorValue::Same(h) = h_val {
                     *height = h;
                     changed = true;
                 }
-            }
         }
         ShapeType::Circle { radius } => {
             ui.label("Circle Dimensions");
@@ -547,12 +540,11 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
                         .prefix("Radius: "),
                 )
             });
-            if r_changed {
-                if let InspectorValue::Same(r) = r_val {
+            if r_changed
+                && let InspectorValue::Same(r) = r_val {
                     *radius = r;
                     changed = true;
                 }
-            }
         }
         ShapeType::Polygon { points } => {
             ui.label("Polygon");
@@ -625,11 +617,10 @@ fn inspect_friction(ui: &mut egui::Ui, val: &mut InspectorValue<Friction>) -> bo
         ui.label("(Mixed)");
     }
 
-    if changed {
-        if let InspectorValue::Same(coef) = f_val {
+    if changed
+        && let InspectorValue::Same(coef) = f_val {
             *val = InspectorValue::Same(Friction::coefficient(coef));
         }
-    }
     changed
 }
 
@@ -649,11 +640,10 @@ fn inspect_restitution(ui: &mut egui::Ui, val: &mut InspectorValue<Restitution>)
         ui.label("(Mixed)");
     }
 
-    if changed {
-        if let InspectorValue::Same(coef) = r_val {
+    if changed
+        && let InspectorValue::Same(coef) = r_val {
             *val = InspectorValue::Same(Restitution::coefficient(coef));
         }
-    }
     changed
 }
 
