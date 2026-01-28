@@ -1,10 +1,13 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
-use gradiance::input::commands::{GameCommand, CommandStack, SpawnShapeCommand, SpawnJointCommand, SpawnFixedJointCommand, SpawnGroundCommand};
+use gradiance::geometry::extrusion::{ExtrudableShape, ExtrusionPlugin};
+use gradiance::input::ZIndex as GameZIndex;
+use gradiance::input::commands::{
+    CommandStack, GameCommand, SpawnFixedJointCommand, SpawnGroundCommand, SpawnJointCommand,
+    SpawnShapeCommand,
+};
 use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::tools::connector::Connector;
-use gradiance::input::ZIndex as GameZIndex;
-use gradiance::geometry::extrusion::{ExtrudableShape, ExtrusionPlugin};
 use gradiance::physics::floor::GroundPlane;
 use rstest::{fixture, rstest};
 

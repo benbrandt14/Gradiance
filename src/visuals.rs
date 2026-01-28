@@ -6,7 +6,9 @@ use crate::geometry::extrusion::ExtrudableShape;
 use crate::prelude::*;
 use bevy::core_pipeline::bloom::Bloom;
 use bevy::core_pipeline::experimental::taa::TemporalAntiAliasing;
-use bevy::pbr::{MaterialPipeline, MaterialPipelineKey, ScreenSpaceAmbientOcclusion, ScreenSpaceReflections};
+use bevy::pbr::{
+    MaterialPipeline, MaterialPipelineKey, ScreenSpaceAmbientOcclusion, ScreenSpaceReflections,
+};
 use bevy::reflect::TypePath;
 use bevy::render::mesh::MeshVertexBufferLayoutRef;
 use bevy::render::render_resource::{
@@ -235,7 +237,7 @@ fn apply_render_settings(
 
         // Bloom
         if settings.bloom_enabled {
-             if let Ok(mut bloom) = bloom_query.get_mut(entity) {
+            if let Ok(mut bloom) = bloom_query.get_mut(entity) {
                 if bloom.intensity != settings.bloom_intensity {
                     bloom.intensity = settings.bloom_intensity;
                 }
@@ -251,29 +253,29 @@ fn apply_render_settings(
 
         // SSAO
         if settings.ssao_enabled {
-             entity_cmds.insert(ScreenSpaceAmbientOcclusion::default());
+            entity_cmds.insert(ScreenSpaceAmbientOcclusion::default());
         } else if ssao_removals.contains(entity) {
-             entity_cmds.remove::<ScreenSpaceAmbientOcclusion>();
+            entity_cmds.remove::<ScreenSpaceAmbientOcclusion>();
         }
 
         // TAA
         if settings.taa_enabled {
-             if let Some(mut msaa) = msaa_opt {
-                 if *msaa != Msaa::Off {
-                     *msaa = Msaa::Off;
-                 }
-             }
-             entity_cmds.insert(TemporalAntiAliasing::default());
+            if let Some(mut msaa) = msaa_opt {
+                if *msaa != Msaa::Off {
+                    *msaa = Msaa::Off;
+                }
+            }
+            entity_cmds.insert(TemporalAntiAliasing::default());
         } else if taa_removals.contains(entity) {
-             entity_cmds.remove::<TemporalAntiAliasing>();
-             // Optional: Restore MSAA here if desired, but default to Off is safe
+            entity_cmds.remove::<TemporalAntiAliasing>();
+            // Optional: Restore MSAA here if desired, but default to Off is safe
         }
 
         // SSR
         if settings.ssr_enabled {
-             entity_cmds.insert(ScreenSpaceReflections::default());
+            entity_cmds.insert(ScreenSpaceReflections::default());
         } else if ssr_removals.contains(entity) {
-             entity_cmds.remove::<ScreenSpaceReflections>();
+            entity_cmds.remove::<ScreenSpaceReflections>();
         }
     }
 

@@ -225,7 +225,8 @@ fn context_menu_ui(
                                 cmd.insert(s.clone());
 
                                 // Manually generate components to ensure Extrusion hook works
-                                if let Some((path, collider)) = generate_shape_components(&s.shape) {
+                                if let Some((path, collider)) = generate_shape_components(&s.shape)
+                                {
                                     cmd.insert(path);
                                     cmd.insert(collider);
                                 }
