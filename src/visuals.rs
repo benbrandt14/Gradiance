@@ -3,7 +3,7 @@
 //! Handles global rendering settings (Bloom, Shadows, Toon Shading) and custom materials.
 
 use crate::prelude::*;
-use bevy::render::render_resource::{AsBindGroup, ShaderRef};
+use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
 use bevy::reflect::TypePath;
 use bevy::core_pipeline::bloom::Bloom;
 use crate::geometry::extrusion::ExtrudableShape;
@@ -22,6 +22,12 @@ pub struct RenderSettings {
     pub toon_mode: bool,
     /// The clear color (background color) of the camera.
     pub clear_color: Color,
+    /// The color of the main directional light (Sun).
+    pub sun_color: Color,
+    /// The ambient light color.
+    pub ambient_color: Color,
+    /// Number of shading steps (bands) for the Toon Shader.
+    pub toon_steps: u32,
 }
 
 impl Default for RenderSettings {
@@ -32,22 +38,71 @@ impl Default for RenderSettings {
             shadows_enabled: true,
             toon_mode: false,
             clear_color: Color::BLACK,
+            sun_color: Color::WHITE,
+            ambient_color: Color::srgb(0.1, 0.1, 0.1),
+            toon_steps: 4,
         }
     }
 }
 
+/// Marker component for the main camera used by the Toon Shader.
+#[derive(Component)]
+pub struct ToonShaderMainCamera;
+
+/// Marker component for the sun (directional light) used by the Toon Shader.
+#[derive(Component)]
+pub struct ToonShaderSun;
+
 /// A custom material for Toon / Cel Shading.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+#[uniform(0, ToonMaterialUniform)]
 pub struct ToonMaterial {
     /// Base color of the material.
-    #[uniform(0)]
     pub color: LinearRgba,
+    /// Direction of the sun (light source).
+    pub sun_dir: Vec3,
+    /// Color of the sun.
+    pub sun_color: LinearRgba,
+    /// Position of the camera.
+    pub camera_pos: Vec3,
+    /// Ambient light color.
+    pub ambient_color: LinearRgba,
     /// Number of shading steps (bands).
-    #[uniform(0)]
     pub steps: u32,
-    /// Width of the border/outline (if implemented).
-    #[uniform(0)]
-    pub border_width: f32,
+    /// Base color texture (optional).
+    #[texture(1)]
+    #[sampler(2)]
+    pub base_color_texture: Option<Handle<Image>>,
+}
+
+/// Uniform struct for ToonMaterial.
+#[derive(ShaderType, Clone, Debug)]
+pub struct ToonMaterialUniform {
+    /// Base color.
+    pub color: LinearRgba,
+    /// Sun direction.
+    pub sun_dir: Vec3,
+    /// Sun color.
+    pub sun_color: LinearRgba,
+    /// Camera position.
+    pub camera_pos: Vec3,
+    /// Ambient color.
+    pub ambient_color: LinearRgba,
+    /// Shading steps.
+    pub steps: u32,
+}
+
+impl From<&ToonMaterial> for ToonMaterialUniform {
+    fn from(m: &ToonMaterial) -> Self {
+        Self {
+            color: m.color,
+            sun_dir: m.sun_dir,
+            sun_color: m.sun_color,
+            camera_pos: m.camera_pos,
+            ambient_color: m.ambient_color,
+            steps: m.steps,
+        }
+    }
 }
 
 impl Material for ToonMaterial {
@@ -67,12 +122,51 @@ impl Plugin for VisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<ToonMaterial>::default())
            .init_resource::<RenderSettings>()
+           .init_resource::<AmbientLight>()
            .register_type::<RenderSettings>()
            .add_systems(Update, (
+               tag_main_camera_and_sun,
                apply_render_settings,
+               update_toon_shader,
                sync_to_toon_material,
                sync_to_standard_material
             ));
+    }
+}
+
+/// Ensures the main camera and sun have the required marker components.
+fn tag_main_camera_and_sun(
+    mut commands: Commands,
+    camera_query: Query<Entity, (With<Camera3d>, Without<ToonShaderMainCamera>)>,
+    sun_query: Query<Entity, (With<DirectionalLight>, Without<ToonShaderSun>)>,
+) {
+    for entity in &camera_query {
+        commands.entity(entity).insert(ToonShaderMainCamera);
+    }
+    for entity in &sun_query {
+        commands.entity(entity).insert(ToonShaderSun);
+    }
+}
+
+/// Updates `ToonMaterial` uniforms based on the scene's camera and sun.
+fn update_toon_shader(
+    main_cam: Query<&GlobalTransform, With<ToonShaderMainCamera>>,
+    sun: Query<(&GlobalTransform, &DirectionalLight), With<ToonShaderSun>>,
+    ambient_light: Option<Res<AmbientLight>>,
+    mut toon_materials: ResMut<Assets<ToonMaterial>>,
+) {
+    let camera_pos = main_cam.get_single().map(|t| t.translation()).unwrap_or(Vec3::ZERO);
+    let (sun_dir, sun_color) = sun.get_single()
+        .map(|(t, l)| (t.back(), l.color))
+        .unwrap_or((Dir3::Y, Color::WHITE));
+
+    let ambient = ambient_light.map(|l| l.color).unwrap_or(Color::BLACK);
+
+    for (_, toon_mat) in toon_materials.iter_mut() {
+        toon_mat.camera_pos = camera_pos;
+        toon_mat.sun_dir = *sun_dir;
+        toon_mat.sun_color = LinearRgba::from(sun_color);
+        toon_mat.ambient_color = LinearRgba::from(ambient);
     }
 }
 
@@ -81,10 +175,12 @@ fn apply_render_settings(
     settings: Res<RenderSettings>,
     mut bloom_query: Query<&mut Bloom>,
     mut light_query: Query<&mut DirectionalLight>,
+    mut ambient_light: ResMut<AmbientLight>,
     mut clear_color: ResMut<ClearColor>,
     mut commands: Commands,
     camera_query: Query<Entity, (With<Camera3d>, Without<Bloom>)>,
     bloom_removals: Query<Entity, (With<Camera3d>, With<Bloom>)>,
+    mut toon_materials: ResMut<Assets<ToonMaterial>>,
 ) {
     // Sync Clear Color
     if clear_color.0 != settings.clear_color {
@@ -113,10 +209,25 @@ fn apply_render_settings(
         }
     }
 
-    // Sync Shadows
+    // Sync Shadows and Sun Color
     for mut light in &mut light_query {
         if light.shadows_enabled != settings.shadows_enabled {
             light.shadows_enabled = settings.shadows_enabled;
+        }
+        if light.color != settings.sun_color {
+            light.color = settings.sun_color;
+        }
+    }
+
+    // Sync Ambient Light
+    if ambient_light.color != settings.ambient_color {
+        ambient_light.color = settings.ambient_color;
+    }
+
+    // Sync Toon Steps
+    for (_, mat) in toon_materials.iter_mut() {
+        if mat.steps != settings.toon_steps {
+            mat.steps = settings.toon_steps;
         }
     }
 }
@@ -141,8 +252,12 @@ fn sync_to_toon_material(
         // Create equivalent ToonMaterial
         let toon_material = ToonMaterial {
             color: LinearRgba::from(color),
-            steps: 4,
-            border_width: 0.05,
+            steps: settings.toon_steps,
+            sun_dir: Vec3::Y, // Will be updated by update_toon_shader
+            sun_color: LinearRgba::WHITE, // Will be updated by update_toon_shader
+            camera_pos: Vec3::ZERO, // Will be updated by update_toon_shader
+            ambient_color: LinearRgba::BLACK, // Will be updated by update_toon_shader
+            base_color_texture: None, // StandardMaterial texture handling omitted for simplicity
         };
 
         let new_handle = toon_materials.add(toon_material);
