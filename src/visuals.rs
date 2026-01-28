@@ -216,9 +216,8 @@ fn apply_render_settings(
     point_light_query: Query<(Entity, &mut PointLight), With<ScenePointLight>>,
     mut ambient_light: ResMut<AmbientLight>,
     mut clear_color: ResMut<ClearColor>,
-    mut msaa: ResMut<Msaa>,
     mut commands: Commands,
-    camera_query: Query<Entity, With<Camera3d>>,
+    mut camera_query: Query<(Entity, Option<&mut Msaa>), With<Camera3d>>,
     bloom_removals: Query<Entity, (With<Camera3d>, With<Bloom>)>,
     ssao_removals: Query<Entity, (With<Camera3d>, With<ScreenSpaceAmbientOcclusion>)>,
     taa_removals: Query<Entity, (With<Camera3d>, With<TemporalAntiAliasing>)>,
@@ -231,7 +230,7 @@ fn apply_render_settings(
     }
 
     // Camera Post-Processing
-    for entity in &camera_query {
+    for (entity, msaa_opt) in &mut camera_query {
         let mut entity_cmds = commands.entity(entity);
 
         // Bloom
@@ -259,8 +258,10 @@ fn apply_render_settings(
 
         // TAA
         if settings.taa_enabled {
-             if *msaa != Msaa::Off {
-                 *msaa = Msaa::Off;
+             if let Some(mut msaa) = msaa_opt {
+                 if *msaa != Msaa::Off {
+                     *msaa = Msaa::Off;
+                 }
              }
              entity_cmds.insert(TemporalAntiAliasing::default());
         } else if taa_removals.contains(entity) {
