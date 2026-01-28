@@ -198,7 +198,10 @@ fn update_toon_shader(
     let (sun_dir, sun_color) = sun
         .get_single()
         .map(|(t, l)| (t.back(), l.color))
-        .unwrap_or((Dir3::Y, Color::WHITE));
+        .unwrap_or((
+            Dir3::new(Vec3::new(0.5, 0.5, 1.0)).unwrap(),
+            Color::WHITE,
+        ));
 
     let ambient = ambient_light.map(|l| l.color).unwrap_or(Color::BLACK);
 

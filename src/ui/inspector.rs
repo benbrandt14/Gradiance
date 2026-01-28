@@ -81,6 +81,81 @@ struct InspectorState {
     gravity_scale: Option<InspectorValue<f32>>,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum AlignmentAction {
+    Min,
+    Center,
+    Max,
+    Distribute,
+}
+
+fn apply_alignment<F, S>(
+    action: AlignmentAction,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+    mut get_val: F,
+    mut set_val: S,
+) where
+    F: FnMut(&mut InspectorQuery, Entity) -> Option<f32>,
+    S: FnMut(&mut InspectorQuery, Entity, f32),
+{
+    let mut values = Vec::new();
+    for &e in entities {
+        if let Some(v) = get_val(inspector, e) {
+            values.push((e, v));
+        }
+    }
+
+    if values.is_empty() {
+        return;
+    }
+
+    match action {
+        AlignmentAction::Min => {
+            let min = values
+                .iter()
+                .map(|(_, v)| *v)
+                .fold(f32::INFINITY, f32::min);
+            for (e, _) in values {
+                set_val(inspector, e, min);
+            }
+        }
+        AlignmentAction::Max => {
+            let max = values
+                .iter()
+                .map(|(_, v)| *v)
+                .fold(f32::NEG_INFINITY, f32::max);
+            for (e, _) in values {
+                set_val(inspector, e, max);
+            }
+        }
+        AlignmentAction::Center => {
+            let sum: f32 = values.iter().map(|(_, v)| *v).sum();
+            let avg = sum / values.len() as f32;
+            for (e, _) in values {
+                set_val(inspector, e, avg);
+            }
+        }
+        AlignmentAction::Distribute => {
+            if values.len() < 2 {
+                return;
+            }
+            // Sort by current value to determine order
+            values.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            let min = values.first().unwrap().1;
+            let max = values.last().unwrap().1;
+            let span = max - min;
+            let step = span / (values.len() - 1) as f32;
+
+            for (i, (e, _)) in values.iter().enumerate() {
+                let new_val = min + i as f32 * step;
+                set_val(inspector, *e, new_val);
+            }
+        }
+    }
+}
+
 fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
     let ctx = contexts.ctx_mut();
 
@@ -106,7 +181,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             // Transform
             if let Some(mut val) = state.transform {
                 ui.collapsing("Transform", |ui| {
-                    if inspect_transform(ui, &mut val) {
+                    if inspect_transform(ui, &mut val, &entities, &mut inspector) {
                         apply_transform_change(&mut inspector, &entities, val);
                     }
                 });
@@ -116,7 +191,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             // Shape
             if let Some(mut val) = state.editable_shape {
                 ui.collapsing("Shape", |ui| {
-                    if inspect_shape(ui, &mut val) {
+                    if inspect_shape(ui, &mut val, &entities, &mut inspector) {
                         apply_shape_change(&mut inspector, &entities, val);
                     }
                 });
@@ -143,7 +218,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Friction
                 if let Some(mut val) = state.friction {
-                    if inspect_friction(ui, &mut val) {
+                    if inspect_friction(ui, &mut val, &entities, &mut inspector) {
                         apply_friction_change(&mut inspector, &entities, val);
                     }
                     ui.separator();
@@ -151,7 +226,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Restitution
                 if let Some(mut val) = state.restitution {
-                    if inspect_restitution(ui, &mut val) {
+                    if inspect_restitution(ui, &mut val, &entities, &mut inspector) {
                         apply_restitution_change(&mut inspector, &entities, val);
                     }
                     ui.separator();
@@ -159,7 +234,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Density
                 if let Some(mut val) = state.density {
-                    if inspect_density(ui, &mut val) {
+                    if inspect_density(ui, &mut val, &entities, &mut inspector) {
                         apply_density_change(&mut inspector, &entities, val);
                     }
                     ui.separator();
@@ -167,7 +242,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Gravity
                 if let Some(mut val) = state.gravity_scale {
-                    if inspect_gravity(ui, &mut val) {
+                    if inspect_gravity(ui, &mut val, &entities, &mut inspector) {
                         apply_gravity_change(&mut inspector, &entities, val);
                     }
                     ui.separator();
@@ -192,7 +267,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                     ui.separator();
                 }
                 if let Some(mut val) = state.stroke {
-                    if inspect_stroke(ui, &mut val) {
+                    if inspect_stroke(ui, &mut val, &entities, &mut inspector) {
                         apply_stroke_change(&mut inspector, &entities, val);
                     }
                     ui.separator();
@@ -356,6 +431,7 @@ fn inspect_with_context<T: Clone>(
     val: &mut InspectorValue<T>,
     default: T,
     render_ui: impl FnOnce(&mut egui::Ui, &mut T) -> egui::Response,
+    mut on_align: impl FnMut(AlignmentAction),
 ) -> bool {
     // Determine the value to edit. If Mixed, we use default as placeholder but don't commit unless changed.
     let mut current_val = match val {
@@ -369,21 +445,21 @@ fn inspect_with_context<T: Clone>(
 
     // Context Menu for Alignment/Distribution
     response.context_menu(|ui| {
-        ui.label("Alignment (TODO)");
+        ui.label("Alignment");
         if ui.button("Align Min").clicked() {
-            info!("TODO: Implement Align Min");
+            on_align(AlignmentAction::Min);
             ui.close_menu();
         }
         if ui.button("Align Center").clicked() {
-            info!("TODO: Implement Align Center");
+            on_align(AlignmentAction::Center);
             ui.close_menu();
         }
         if ui.button("Align Max").clicked() {
-            info!("TODO: Implement Align Max");
+            on_align(AlignmentAction::Max);
             ui.close_menu();
         }
         if ui.button("Distribute").clicked() {
-            info!("TODO: Implement Distribute");
+            on_align(AlignmentAction::Distribute);
             ui.close_menu();
         }
     });
@@ -401,7 +477,12 @@ fn inspect_with_context<T: Clone>(
     changed
 }
 
-fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> bool {
+fn inspect_transform(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<Transform>,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+) -> bool {
     let mut changed = false;
     let t = match val {
         InspectorValue::Same(v) => *v,
@@ -419,9 +500,31 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
             x_val = InspectorValue::Mixed;
         }
 
-        let changed_x = inspect_with_context(ui, &mut x_val, 0.0, |ui, val| {
-            ui.add(egui::DragValue::new(val).speed(DRAG_SPEED))
-        });
+        let changed_x = inspect_with_context(
+            ui,
+            &mut x_val,
+            0.0,
+            |ui, val| ui.add(egui::DragValue::new(val).speed(DRAG_SPEED)),
+            |action| {
+                apply_alignment(
+                    action,
+                    entities,
+                    inspector,
+                    |ins, e| {
+                        ins.entity_query
+                            .get(e)
+                            .ok()
+                            .and_then(|(_, t, ..)| t.as_ref().map(|t| t.translation.x))
+                    },
+                    |ins, e, v| {
+                        if let Ok((_, Some(mut t), ..)) = ins.entity_query.get_mut(e) {
+                            t.translation.x = v;
+                            wake_up(e, ins);
+                        }
+                    },
+                )
+            },
+        );
 
         if changed_x && let InspectorValue::Same(new_x) = x_val {
             let mut new_t = t;
@@ -436,9 +539,31 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
             y_val = InspectorValue::Mixed;
         }
 
-        let changed_y = inspect_with_context(ui, &mut y_val, 0.0, |ui, val| {
-            ui.add(egui::DragValue::new(val).speed(DRAG_SPEED))
-        });
+        let changed_y = inspect_with_context(
+            ui,
+            &mut y_val,
+            0.0,
+            |ui, val| ui.add(egui::DragValue::new(val).speed(DRAG_SPEED)),
+            |action| {
+                apply_alignment(
+                    action,
+                    entities,
+                    inspector,
+                    |ins, e| {
+                        ins.entity_query
+                            .get(e)
+                            .ok()
+                            .and_then(|(_, t, ..)| t.as_ref().map(|t| t.translation.y))
+                    },
+                    |ins, e, v| {
+                        if let Ok((_, Some(mut t), ..)) = ins.entity_query.get_mut(e) {
+                            t.translation.y = v;
+                            wake_up(e, ins);
+                        }
+                    },
+                )
+            },
+        );
 
         if changed_y && let InspectorValue::Same(new_y) = y_val {
             // If x changed in same frame, update that too? Unlikely with immediate mode separate widgets.
@@ -467,7 +592,31 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
             rot_val = InspectorValue::Mixed;
         } // careful with mixed logic
 
-        let changed_rot = inspect_with_context(ui, &mut rot_val, 0.0, |ui, val| ui.drag_angle(val));
+        let changed_rot = inspect_with_context(
+            ui,
+            &mut rot_val,
+            0.0,
+            |ui, val| ui.drag_angle(val),
+            |action| {
+                apply_alignment(
+                    action,
+                    entities,
+                    inspector,
+                    |ins, e| {
+                        ins.entity_query.get(e).ok().and_then(|(_, t, ..)| {
+                            t.as_ref()
+                                .map(|t| t.rotation.to_euler(EulerRot::XYZ).2)
+                        })
+                    },
+                    |ins, e, v| {
+                        if let Ok((_, Some(mut t), ..)) = ins.entity_query.get_mut(e) {
+                            t.rotation = Quat::from_rotation_z(v);
+                            wake_up(e, ins);
+                        }
+                    },
+                )
+            },
+        );
 
         if changed_rot && let InspectorValue::Same(new_rot) = rot_val {
             let mut new_t = current_t;
@@ -484,15 +633,16 @@ fn inspect_transform(ui: &mut egui::Ui, val: &mut InspectorValue<Transform>) -> 
     changed
 }
 
-fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> bool {
+fn inspect_shape(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<EditableShape>,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+) -> bool {
     let mut eshape = match val {
         InspectorValue::Same(v) => v.clone(),
         InspectorValue::Mixed => return false, // Too complex to edit mixed shapes
     };
-
-    // Shape editing is complex because of nested fields.
-    // We can't easily wrap the entire shape struct in `inspect_with_context`.
-    // We would need to wrap individual fields (width, height, radius).
 
     let mut changed = false;
     match &mut eshape.shape {
@@ -501,13 +651,41 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
 
             // Width
             let mut w_val = InspectorValue::Same(*width);
-            let w_changed = inspect_with_context(ui, &mut w_val, 1.0, |ui, val| {
-                ui.add(
-                    egui::DragValue::new(val)
-                        .speed(DRAG_SPEED)
-                        .prefix("Width: "),
-                )
-            });
+            let w_changed = inspect_with_context(
+                ui,
+                &mut w_val,
+                1.0,
+                |ui, val| {
+                    ui.add(
+                        egui::DragValue::new(val)
+                            .speed(DRAG_SPEED)
+                            .prefix("Width: "),
+                    )
+                },
+                |action| {
+                    apply_alignment(
+                        action,
+                        entities,
+                        inspector,
+                        |ins, e| {
+                            ins.entity_query.get(e).ok().and_then(|(_, _, _, _, _, s, ..)| {
+                                s.as_ref().and_then(|s| match &s.shape {
+                                    ShapeType::Box { width, .. } => Some(*width),
+                                    _ => None,
+                                })
+                            })
+                        },
+                        |ins, e, v| {
+                            if let Ok((_, _, _, _, _, Some(mut s), ..)) = ins.entity_query.get_mut(e) {
+                                if let ShapeType::Box { width, .. } = &mut s.shape {
+                                    *width = v;
+                                    // Physics update automatic
+                                }
+                            }
+                        },
+                    )
+                },
+            );
             if w_changed && let InspectorValue::Same(w) = w_val {
                 *width = w;
                 changed = true;
@@ -515,13 +693,40 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
 
             // Height
             let mut h_val = InspectorValue::Same(*height);
-            let h_changed = inspect_with_context(ui, &mut h_val, 1.0, |ui, val| {
-                ui.add(
-                    egui::DragValue::new(val)
-                        .speed(DRAG_SPEED)
-                        .prefix("Height: "),
-                )
-            });
+            let h_changed = inspect_with_context(
+                ui,
+                &mut h_val,
+                1.0,
+                |ui, val| {
+                    ui.add(
+                        egui::DragValue::new(val)
+                            .speed(DRAG_SPEED)
+                            .prefix("Height: "),
+                    )
+                },
+                |action| {
+                    apply_alignment(
+                        action,
+                        entities,
+                        inspector,
+                        |ins, e| {
+                            ins.entity_query.get(e).ok().and_then(|(_, _, _, _, _, s, ..)| {
+                                s.as_ref().and_then(|s| match &s.shape {
+                                    ShapeType::Box { height, .. } => Some(*height),
+                                    _ => None,
+                                })
+                            })
+                        },
+                        |ins, e, v| {
+                            if let Ok((_, _, _, _, _, Some(mut s), ..)) = ins.entity_query.get_mut(e) {
+                                if let ShapeType::Box { height, .. } = &mut s.shape {
+                                    *height = v;
+                                }
+                            }
+                        },
+                    )
+                },
+            );
             if h_changed && let InspectorValue::Same(h) = h_val {
                 *height = h;
                 changed = true;
@@ -530,13 +735,40 @@ fn inspect_shape(ui: &mut egui::Ui, val: &mut InspectorValue<EditableShape>) -> 
         ShapeType::Circle { radius } => {
             ui.label("Circle Dimensions");
             let mut r_val = InspectorValue::Same(*radius);
-            let r_changed = inspect_with_context(ui, &mut r_val, 1.0, |ui, val| {
-                ui.add(
-                    egui::DragValue::new(val)
-                        .speed(DRAG_SPEED)
-                        .prefix("Radius: "),
-                )
-            });
+            let r_changed = inspect_with_context(
+                ui,
+                &mut r_val,
+                1.0,
+                |ui, val| {
+                    ui.add(
+                        egui::DragValue::new(val)
+                            .speed(DRAG_SPEED)
+                            .prefix("Radius: "),
+                    )
+                },
+                |action| {
+                    apply_alignment(
+                        action,
+                        entities,
+                        inspector,
+                        |ins, e| {
+                            ins.entity_query.get(e).ok().and_then(|(_, _, _, _, _, s, ..)| {
+                                s.as_ref().and_then(|s| match &s.shape {
+                                    ShapeType::Circle { radius } => Some(*radius),
+                                    _ => None,
+                                })
+                            })
+                        },
+                        |ins, e, v| {
+                            if let Ok((_, _, _, _, _, Some(mut s), ..)) = ins.entity_query.get_mut(e) {
+                                if let ShapeType::Circle { radius } = &mut s.shape {
+                                    *radius = v;
+                                }
+                            }
+                        },
+                    )
+                },
+            );
             if r_changed && let InspectorValue::Same(r) = r_val {
                 *radius = r;
                 changed = true;
@@ -597,14 +829,40 @@ fn inspect_rigid_body(ui: &mut egui::Ui, val: &mut InspectorValue<RigidBody>) ->
     false
 }
 
-fn inspect_friction(ui: &mut egui::Ui, val: &mut InspectorValue<Friction>) -> bool {
+fn inspect_friction(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<Friction>,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+) -> bool {
     let mut f_val = match val {
         InspectorValue::Same(v) => InspectorValue::Same(v.coefficient),
         InspectorValue::Mixed => InspectorValue::Mixed,
     };
-    let changed = inspect_with_context(ui, &mut f_val, 0.5, |ui, val| {
-        ui.add(egui::Slider::new(val, 0.0..=FRICTION_MAX).text("Friction"))
-    });
+    let changed = inspect_with_context(
+        ui,
+        &mut f_val,
+        0.5,
+        |ui, val| ui.add(egui::Slider::new(val, 0.0..=FRICTION_MAX).text("Friction")),
+        |action| {
+            apply_alignment(
+                action,
+                entities,
+                inspector,
+                |ins, e| {
+                    ins.entity_query
+                        .get(e)
+                        .ok()
+                        .and_then(|(_, _, _, f, ..)| f.as_ref().map(|f| f.coefficient))
+                },
+                |ins, e, v| {
+                    if let Ok((_, _, _, Some(mut f), ..)) = ins.entity_query.get_mut(e) {
+                        f.coefficient = v;
+                    }
+                },
+            )
+        },
+    );
 
     if match val {
         InspectorValue::Mixed => true,
@@ -619,14 +877,40 @@ fn inspect_friction(ui: &mut egui::Ui, val: &mut InspectorValue<Friction>) -> bo
     changed
 }
 
-fn inspect_restitution(ui: &mut egui::Ui, val: &mut InspectorValue<Restitution>) -> bool {
+fn inspect_restitution(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<Restitution>,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+) -> bool {
     let mut r_val = match val {
         InspectorValue::Same(v) => InspectorValue::Same(v.coefficient),
         InspectorValue::Mixed => InspectorValue::Mixed,
     };
-    let changed = inspect_with_context(ui, &mut r_val, 0.0, |ui, val| {
-        ui.add(egui::Slider::new(val, 0.0..=RESTITUTION_MAX).text("Restitution"))
-    });
+    let changed = inspect_with_context(
+        ui,
+        &mut r_val,
+        0.0,
+        |ui, val| ui.add(egui::Slider::new(val, 0.0..=RESTITUTION_MAX).text("Restitution")),
+        |action| {
+            apply_alignment(
+                action,
+                entities,
+                inspector,
+                |ins, e| {
+                    ins.entity_query
+                        .get(e)
+                        .ok()
+                        .and_then(|(_, _, _, _, r, ..)| r.as_ref().map(|r| r.coefficient))
+                },
+                |ins, e, v| {
+                    if let Ok((_, _, _, _, Some(mut r), ..)) = ins.entity_query.get_mut(e) {
+                        r.coefficient = v;
+                    }
+                },
+            )
+        },
+    );
 
     if match val {
         InspectorValue::Mixed => true,
@@ -641,15 +925,53 @@ fn inspect_restitution(ui: &mut egui::Ui, val: &mut InspectorValue<Restitution>)
     changed
 }
 
-fn inspect_density(ui: &mut egui::Ui, val: &mut InspectorValue<f32>) -> bool {
-    let changed = inspect_with_context(ui, val, 1.0, |ui, val| {
-        ui.add(
-            egui::DragValue::new(val)
-                .speed(DRAG_SPEED)
-                .range(DENSITY_MIN..=DENSITY_MAX)
-                .prefix("Density: "),
-        )
-    });
+fn inspect_density(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<f32>,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+) -> bool {
+    let changed = inspect_with_context(
+        ui,
+        val,
+        1.0,
+        |ui, val| {
+            ui.add(
+                egui::DragValue::new(val)
+                    .speed(DRAG_SPEED)
+                    .range(DENSITY_MIN..=DENSITY_MAX)
+                    .prefix("Density: "),
+            )
+        },
+        |action| {
+            apply_alignment(
+                action,
+                entities,
+                inspector,
+                |ins, e| {
+                    ins.entity_query
+                        .get(e)
+                        .ok()
+                        .and_then(|(_, _, _, _, _, _, _, _, _, _, m, ..)| {
+                            m.as_ref().and_then(|m| match m {
+                                ColliderMassProperties::Density(d) => Some(*d),
+                                _ => None,
+                            })
+                        })
+                },
+                |ins, e, v| {
+                    // Updating density requires replacing the component or modifying it
+                    // ColliderMassProperties is an enum
+                    if let Ok((_, _, _, _, _, _, _, _, _, _, Some(mut m), ..)) =
+                        ins.entity_query.get_mut(e)
+                    {
+                        *m = ColliderMassProperties::Density(v);
+                        wake_up(e, ins);
+                    }
+                },
+            )
+        },
+    );
     if match val {
         InspectorValue::Mixed => true,
         _ => false,
@@ -659,14 +981,47 @@ fn inspect_density(ui: &mut egui::Ui, val: &mut InspectorValue<f32>) -> bool {
     changed
 }
 
-fn inspect_gravity(ui: &mut egui::Ui, val: &mut InspectorValue<f32>) -> bool {
-    let changed = inspect_with_context(ui, val, 1.0, |ui, val| {
-        ui.add(
-            egui::DragValue::new(val)
-                .speed(DRAG_SPEED)
-                .prefix("Gravity Scale: "),
-        )
-    });
+fn inspect_gravity(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<f32>,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+) -> bool {
+    let changed = inspect_with_context(
+        ui,
+        val,
+        1.0,
+        |ui, val| {
+            ui.add(
+                egui::DragValue::new(val)
+                    .speed(DRAG_SPEED)
+                    .prefix("Gravity Scale: "),
+            )
+        },
+        |action| {
+            apply_alignment(
+                action,
+                entities,
+                inspector,
+                |ins, e| {
+                    ins.entity_query
+                        .get(e)
+                        .ok()
+                        .and_then(|(_, _, _, _, _, _, _, _, _, _, _, g, ..)| {
+                            g.as_ref().map(|g| g.0)
+                        })
+                },
+                |ins, e, v| {
+                    if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut g), ..)) =
+                        ins.entity_query.get_mut(e)
+                    {
+                        g.0 = v;
+                        wake_up(e, ins);
+                    }
+                },
+            )
+        },
+    );
     if match val {
         InspectorValue::Mixed => true,
         _ => false,
@@ -756,7 +1111,12 @@ fn inspect_fill(ui: &mut egui::Ui, val: &mut InspectorValue<Fill>) -> bool {
     changed
 }
 
-fn inspect_stroke(ui: &mut egui::Ui, val: &mut InspectorValue<Stroke>) -> bool {
+fn inspect_stroke(
+    ui: &mut egui::Ui,
+    val: &mut InspectorValue<Stroke>,
+    entities: &[Entity],
+    inspector: &mut InspectorQuery,
+) -> bool {
     let mut color = match val {
         InspectorValue::Same(v) => v.color,
         InspectorValue::Mixed => Color::BLACK,
@@ -780,9 +1140,34 @@ fn inspect_stroke(ui: &mut egui::Ui, val: &mut InspectorValue<Stroke>) -> bool {
             width_val = InspectorValue::Mixed;
         }
 
-        let width_changed = inspect_with_context(ui, &mut width_val, 1.0, |ui, val| {
-            ui.add(egui::DragValue::new(val).speed(0.1).prefix("Width: "))
-        });
+        let width_changed = inspect_with_context(
+            ui,
+            &mut width_val,
+            1.0,
+            |ui, val| ui.add(egui::DragValue::new(val).speed(0.1).prefix("Width: ")),
+            |action| {
+                apply_alignment(
+                    action,
+                    entities,
+                    inspector,
+                    |ins, e| {
+                        ins.entity_query
+                            .get(e)
+                            .ok()
+                            .and_then(|(_, _, _, _, _, _, _, s, ..)| {
+                                s.as_ref().map(|s| s.options.line_width)
+                            })
+                    },
+                    |ins, e, v| {
+                        if let Ok((_, _, _, _, _, _, _, Some(mut s), ..)) =
+                            ins.entity_query.get_mut(e)
+                        {
+                            s.options.line_width = v;
+                        }
+                    },
+                )
+            },
+        );
 
         if width_changed {
             changed = true;
