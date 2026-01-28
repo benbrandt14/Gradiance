@@ -2,9 +2,9 @@
 //!
 //! Provides WASD movement, Mouse Drag panning/orbiting, and Scroll zooming.
 
-use crate::prelude::*;
 use crate::input::cursor::CursorWorldPos;
 use crate::input::selection::Selection;
+use crate::prelude::*;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 
 /// Plugin for camera control.
@@ -35,11 +35,11 @@ pub fn camera_pan_orbit(
                 let mut hit_selected_entity = false;
 
                 rapier_context.intersections_with_point(pos, filter, |entity| {
-                     if selection.0.contains(&entity) {
-                         hit_selected_entity = true;
-                         return false; // Stop iteration
-                     }
-                     true
+                    if selection.0.contains(&entity) {
+                        hit_selected_entity = true;
+                        return false; // Stop iteration
+                    }
+                    true
                 });
 
                 if hit_selected_entity {

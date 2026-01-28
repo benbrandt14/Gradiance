@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
-use gradiance::input::commands::{SpawnJointCommand, GameCommand};
+use gradiance::input::commands::{GameCommand, SpawnJointCommand};
 use rstest::{fixture, rstest};
 
 mod test_utils;
@@ -48,15 +48,24 @@ fn test_pin_collision_solver_groups(mut app: App) {
     let pin_entity = cmd.pin_entity.expect("Pin entity should be spawned");
 
     // Check Collider
-    assert!(app.world().get::<Collider>(pin_entity).is_some(), "Pin should have a collider");
+    assert!(
+        app.world().get::<Collider>(pin_entity).is_some(),
+        "Pin should have a collider"
+    );
 
     // Check Pin SolverGroups
-    let pin_groups = app.world().get::<SolverGroups>(pin_entity).expect("Pin should have SolverGroups");
+    let pin_groups = app
+        .world()
+        .get::<SolverGroups>(pin_entity)
+        .expect("Pin should have SolverGroups");
     assert_eq!(pin_groups.memberships, PIN_GROUP);
     assert_eq!(pin_groups.filters, Group::ALL);
 
     // 4. Verify Box Entity
-    let box_groups = app.world().get::<SolverGroups>(box_entity).expect("Box should have SolverGroups now");
+    let box_groups = app
+        .world()
+        .get::<SolverGroups>(box_entity)
+        .expect("Box should have SolverGroups now");
     assert_eq!(box_groups.memberships, Group::ALL);
     assert_eq!(box_groups.filters, Group::ALL & !PIN_GROUP);
 
@@ -65,7 +74,10 @@ fn test_pin_collision_solver_groups(mut app: App) {
     app.update();
 
     // 6. Verify Box SolverGroups restored
-    assert!(app.world().get::<SolverGroups>(box_entity).is_none(), "Box SolverGroups should be removed");
+    assert!(
+        app.world().get::<SolverGroups>(box_entity).is_none(),
+        "Box SolverGroups should be removed"
+    );
 
     // Verify Pin is gone
     assert!(app.world().get_entity(pin_entity).is_err());
@@ -91,7 +103,10 @@ fn test_joint_two_bodies_no_solver_group_change(mut app: App) {
     app.update();
 
     // Check SolverGroups on entity_a
-    assert!(app.world().get::<SolverGroups>(entity_a).is_none(), "Should NOT modify SolverGroups for 2-body joint");
+    assert!(
+        app.world().get::<SolverGroups>(entity_a).is_none(),
+        "Should NOT modify SolverGroups for 2-body joint"
+    );
 
     // Check Undo
     cmd.undo(app.world_mut());

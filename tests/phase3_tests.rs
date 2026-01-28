@@ -419,7 +419,6 @@ fn test_selection_filter(mut app: App) {
     );
 }
 
-
 #[rstest]
 fn test_joint_inspector_modification(mut app: App) {
     // Create entity with ImpulseJoint

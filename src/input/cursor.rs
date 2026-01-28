@@ -54,23 +54,24 @@ pub fn update_cursor_pos(
 
     // 3D Raycasting to Z=0 plane
     if let Some(screen_pos) = window.cursor_position()
-        && let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos) {
-            // Ray: origin + t * direction
-            // Plane: Z=0. Normal: (0,0,1). Point: (0,0,0).
-            // Distance t = (point - origin) . normal / (direction . normal)
-            // t = (0 - origin.z) / direction.z
+        && let Ok(ray) = camera.viewport_to_world(camera_transform, screen_pos)
+    {
+        // Ray: origin + t * direction
+        // Plane: Z=0. Normal: (0,0,1). Point: (0,0,0).
+        // Distance t = (point - origin) . normal / (direction . normal)
+        // t = (0 - origin.z) / direction.z
 
-            let normal = Vec3::Z;
-            let denominator = ray.direction.dot(normal);
+        let normal = Vec3::Z;
+        let denominator = ray.direction.dot(normal);
 
-            if denominator.abs() > 0.0001 {
-                let t = (0.0 - ray.origin.z) / ray.direction.z;
-                if t >= 0.0 {
-                    let point = ray.origin + ray.direction * t;
-                    raw_pos = Some(Vec2::new(point.x, point.y));
-                }
+        if denominator.abs() > 0.0001 {
+            let t = (0.0 - ray.origin.z) / ray.direction.z;
+            if t >= 0.0 {
+                let point = ray.origin + ray.direction * t;
+                raw_pos = Some(Vec2::new(point.x, point.y));
             }
         }
+    }
 
     if let Some(pos) = raw_pos {
         cursor_pos.0 = Some(pos);
