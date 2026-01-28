@@ -3,11 +3,12 @@
 //! Provides a right-click context menu for entities, allowing actions like deletion,
 //! grouping, and ungrouping.
 
+use crate::geometry::extrusion::ExtrudableShape;
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{
     ToolState,
     cursor::CursorWorldPos,
-    editable_shape::EditableShape,
+    editable_shape::{EditableShape, generate_shape_components},
     selection::{NextGroupID, Selection, SelectionFilter, SelectionGroup},
     tools::connector::Connector,
 };
@@ -97,6 +98,9 @@ struct ContextMenuData<'w, 's> {
     mass: Query<'w, 's, &'static ColliderMassProperties>,
     fill: Query<'w, 's, &'static Fill>,
     stroke: Query<'w, 's, &'static Stroke>,
+    extrudable: Query<'w, 's, &'static ExtrudableShape>,
+    materials: Query<'w, 's, &'static MeshMaterial3d<StandardMaterial>>,
+    assets: ResMut<'w, Assets<StandardMaterial>>,
 }
 
 /// Renders the context menu UI if active.
@@ -215,9 +219,18 @@ fn context_menu_ui(
                             let mut cmd = commands.spawn(
                                 Transform::from_translation(new_pos).with_rotation(t.rotation),
                             );
+
+                            // Shape & Components
                             if let Ok(s) = data.shape.get(entity) {
                                 cmd.insert(s.clone());
+
+                                // Manually generate components to ensure Extrusion hook works
+                                if let Some((path, collider)) = generate_shape_components(&s.shape) {
+                                    cmd.insert(path);
+                                    cmd.insert(collider);
+                                }
                             }
+
                             if let Ok(rb) = data.rb.get(entity) {
                                 cmd.insert(*rb);
                             }
@@ -248,6 +261,11 @@ fn context_menu_ui(
                             if let Ok(stroke) = data.stroke.get(entity) {
                                 cmd.insert(*stroke);
                             }
+                            // ExtrudableShape must be present for mesh generation
+                            if data.extrudable.get(entity).is_ok() {
+                                cmd.insert(ExtrudableShape);
+                            }
+
                             cmd.insert(Sleeping::disabled());
                             new_selection.push(cmd.id());
                         }
@@ -412,6 +430,80 @@ fn context_menu_ui(
                                 }
                             }
                         }
+                    }
+                });
+
+                ui.separator();
+
+                ui.collapsing("Material Properties", |ui| {
+                    let mut current_color = Color::WHITE;
+                    let mut metallic = 0.0;
+                    let mut roughness = 0.5;
+                    let mut reflectance = 0.5;
+                    let mut has_material = false;
+
+                    // Get initial values from first selected entity
+                    if let Some(first) = selection.0.iter().next() {
+                        if let Ok(handle) = data.materials.get(*first) {
+                            if let Some(mat) = data.assets.get(&handle.0) {
+                                current_color = mat.base_color;
+                                metallic = mat.metallic;
+                                roughness = mat.perceptual_roughness;
+                                reflectance = mat.reflectance;
+                                has_material = true;
+                            }
+                        }
+                    }
+
+                    if has_material {
+                        let mut changed = false;
+                        let mut rgba = LinearRgba::from(current_color);
+                        let mut color_arr = [rgba.red, rgba.green, rgba.blue];
+
+                        ui.horizontal(|ui| {
+                            ui.label("Color:");
+                            if ui.color_edit_button_rgb(&mut color_arr).changed() {
+                                rgba.red = color_arr[0];
+                                rgba.green = color_arr[1];
+                                rgba.blue = color_arr[2];
+                                current_color = Color::LinearRgba(rgba);
+                                changed = true;
+                            }
+                        });
+
+                        if ui
+                            .add(egui::Slider::new(&mut metallic, 0.0..=1.0).text("Metallic"))
+                            .changed()
+                        {
+                            changed = true;
+                        }
+                        if ui
+                            .add(egui::Slider::new(&mut roughness, 0.0..=1.0).text("Roughness"))
+                            .changed()
+                        {
+                            changed = true;
+                        }
+                        if ui
+                            .add(egui::Slider::new(&mut reflectance, 0.0..=1.0).text("Reflectance"))
+                            .changed()
+                        {
+                            changed = true;
+                        }
+
+                        if changed {
+                            for entity in &selection.0 {
+                                if let Ok(handle) = data.materials.get(*entity) {
+                                    if let Some(mat) = data.assets.get_mut(&handle.0) {
+                                        mat.base_color = current_color;
+                                        mat.metallic = metallic;
+                                        mat.perceptual_roughness = roughness;
+                                        mat.reflectance = reflectance;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        ui.label("No Standard Material on primary selection.");
                     }
                 });
 
