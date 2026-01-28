@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
-use gradiance::geometry::extrusion::{ExtrudableShape, ExtrusionPlugin};
+use gradiance::geometry::extrusion::ExtrudableShape;
 use gradiance::input::ZIndex as GameZIndex;
 use gradiance::input::commands::{
     CommandStack, GameCommand, SpawnFixedJointCommand, SpawnGroundCommand, SpawnJointCommand,

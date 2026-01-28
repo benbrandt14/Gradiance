@@ -2,6 +2,8 @@
 //!
 //! Handles global rendering settings (Bloom, Shadows, Toon Shading) and custom materials.
 
+#![allow(unused)]
+
 use crate::geometry::extrusion::ExtrudableShape;
 use crate::prelude::*;
 use bevy::core_pipeline::bloom::Bloom;
@@ -81,20 +83,27 @@ pub struct ScenePointLight;
 #[uniform(0, ToonMaterialUniform)]
 pub struct ToonMaterial {
     /// Base color of the material.
+    #[allow(dead_code)]
     pub color: LinearRgba,
     /// Direction of the sun (light source).
+    #[allow(dead_code)]
     pub sun_dir: Vec3,
     /// Color of the sun.
+    #[allow(dead_code)]
     pub sun_color: LinearRgba,
     /// Position of the camera.
+    #[allow(dead_code)]
     pub camera_pos: Vec3,
     /// Ambient light color.
+    #[allow(dead_code)]
     pub ambient_color: LinearRgba,
     /// Number of shading steps (bands).
+    #[allow(dead_code)]
     pub steps: u32,
     /// Base color texture (optional).
     #[texture(1)]
     #[sampler(2)]
+    #[allow(dead_code)]
     pub base_color_texture: Option<Handle<Image>>,
 }
 
@@ -198,7 +207,7 @@ fn update_toon_shader(
     let (sun_dir, sun_color) = sun
         .get_single()
         .map(|(t, l)| (t.back(), l.color))
-        .unwrap_or((Dir3::Y, Color::WHITE));
+        .unwrap_or((Dir3::new(Vec3::new(0.5, 0.5, 1.0)).unwrap(), Color::WHITE));
 
     let ambient = ambient_light.map(|l| l.color).unwrap_or(Color::BLACK);
 

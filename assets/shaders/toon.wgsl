@@ -27,9 +27,11 @@ fn fragment (in: VertexOutput) -> @location(0) vec4<f32> {
 
     let base_color = material.color * textureSample(base_color_texture, base_color_sampler, uv);
     let normal = normalize(in.world_normal);
+    let sun_dir = normalize(material.sun_dir);
+
     // Use absolute value to light backfaces (since culling is off)
     // Plus a small bias to prevent perfectly flat shading
-    let n_dot_l = abs(dot(material.sun_dir, normal));
+    let n_dot_l = abs(dot(sun_dir, normal));
     var light_intensity = 0.0;
 
     let bands = f32(material.steps);
@@ -46,9 +48,13 @@ fn fragment (in: VertexOutput) -> @location(0) vec4<f32> {
 
     let light = light_intensity * material.sun_color;
 
-    let view_dir: vec3<f32> = normalize(material.camera_pos - in.world_position.xyz);
+    let view_vec = material.camera_pos - in.world_position.xyz;
+    var view_dir = vec3<f32>(0.0, 0.0, 1.0);
+    if (length(view_vec) > 0.001) {
+        view_dir = normalize(view_vec);
+    }
 
-    let half_vector = normalize(material.sun_dir + view_dir);
+    let half_vector = normalize(sun_dir + view_dir);
     let n_dot_h = dot(normal, half_vector);
     let glossiness = 32.0;
     let specular_intensity = pow(n_dot_h, glossiness * glossiness);

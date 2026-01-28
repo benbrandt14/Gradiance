@@ -87,6 +87,7 @@ fn update_extrusion_mesh(
                 Changed<CollisionGroups>,
                 Changed<Path>,
                 Added<CollisionGroups>,
+                Added<Mesh3d>,
             )>,
         ),
     >,
