@@ -2,11 +2,11 @@
 //!
 //! Handles global rendering settings (Bloom, Shadows, Toon Shading) and custom materials.
 
-use crate::prelude::*;
-use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
-use bevy::reflect::TypePath;
-use bevy::core_pipeline::bloom::Bloom;
 use crate::geometry::extrusion::ExtrudableShape;
+use crate::prelude::*;
+use bevy::core_pipeline::bloom::Bloom;
+use bevy::reflect::TypePath;
+use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
 
 /// Global rendering settings accessible via UI.
 #[derive(Resource, Reflect, Debug)]
@@ -121,16 +121,19 @@ pub struct VisualsPlugin;
 impl Plugin for VisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<ToonMaterial>::default())
-           .init_resource::<RenderSettings>()
-           .init_resource::<AmbientLight>()
-           .register_type::<RenderSettings>()
-           .add_systems(Update, (
-               tag_main_camera_and_sun,
-               apply_render_settings,
-               update_toon_shader,
-               sync_to_toon_material,
-               sync_to_standard_material
-            ));
+            .init_resource::<RenderSettings>()
+            .init_resource::<AmbientLight>()
+            .register_type::<RenderSettings>()
+            .add_systems(
+                Update,
+                (
+                    tag_main_camera_and_sun,
+                    apply_render_settings,
+                    update_toon_shader,
+                    sync_to_toon_material,
+                    sync_to_standard_material,
+                ),
+            );
     }
 }
 
@@ -155,8 +158,12 @@ fn update_toon_shader(
     ambient_light: Option<Res<AmbientLight>>,
     mut toon_materials: ResMut<Assets<ToonMaterial>>,
 ) {
-    let camera_pos = main_cam.get_single().map(|t| t.translation()).unwrap_or(Vec3::ZERO);
-    let (sun_dir, sun_color) = sun.get_single()
+    let camera_pos = main_cam
+        .get_single()
+        .map(|t| t.translation())
+        .unwrap_or(Vec3::ZERO);
+    let (sun_dir, sun_color) = sun
+        .get_single()
         .map(|(t, l)| (t.back(), l.color))
         .unwrap_or((Dir3::Y, Color::WHITE));
 
@@ -247,15 +254,18 @@ fn sync_to_toon_material(
 
     for (entity, handle) in &query {
         // Extract color from current material
-        let color = materials.get(&handle.0).map(|m| m.base_color).unwrap_or(Color::WHITE);
+        let color = materials
+            .get(&handle.0)
+            .map(|m| m.base_color)
+            .unwrap_or(Color::WHITE);
 
         // Create equivalent ToonMaterial
         let toon_material = ToonMaterial {
             color: LinearRgba::from(color),
             steps: settings.toon_steps,
-            sun_dir: Vec3::Y, // Will be updated by update_toon_shader
+            sun_dir: Vec3::Y,             // Will be updated by update_toon_shader
             sun_color: LinearRgba::WHITE, // Will be updated by update_toon_shader
-            camera_pos: Vec3::ZERO, // Will be updated by update_toon_shader
+            camera_pos: Vec3::ZERO,       // Will be updated by update_toon_shader
             ambient_color: LinearRgba::BLACK, // Will be updated by update_toon_shader
             base_color_texture: None, // StandardMaterial texture handling omitted for simplicity
         };
@@ -263,7 +273,8 @@ fn sync_to_toon_material(
         let new_handle = toon_materials.add(toon_material);
 
         // Swap components
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .remove::<MeshMaterial3d<StandardMaterial>>()
             .insert(MeshMaterial3d(new_handle));
     }
@@ -284,7 +295,10 @@ fn sync_to_standard_material(
 
     for (entity, handle) in &query {
         // Extract color from current material
-        let color = toon_materials.get(&handle.0).map(|m| Color::from(m.color)).unwrap_or(Color::WHITE);
+        let color = toon_materials
+            .get(&handle.0)
+            .map(|m| Color::from(m.color))
+            .unwrap_or(Color::WHITE);
 
         // Create equivalent StandardMaterial
         let standard_material = StandardMaterial {
@@ -298,7 +312,8 @@ fn sync_to_standard_material(
         let new_handle = materials.add(standard_material);
 
         // Swap components
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .remove::<MeshMaterial3d<ToonMaterial>>()
             .insert(MeshMaterial3d(new_handle));
     }

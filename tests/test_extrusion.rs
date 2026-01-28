@@ -110,11 +110,18 @@ fn test_extrusion_update_on_collision_change() {
     // Verify initial depth
     {
         let entity_ref = app.world().entity(entity);
-        let mesh_handle = entity_ref.get::<Mesh3d>().expect("Mesh3d missing").0.clone();
+        let mesh_handle = entity_ref
+            .get::<Mesh3d>()
+            .expect("Mesh3d missing")
+            .0
+            .clone();
         let meshes = app.world().resource::<Assets<Mesh>>();
         let mesh = meshes.get(&mesh_handle).expect("Mesh asset missing");
 
-        assert!(check_mesh_depth(mesh, 0.0, -10.0), "Initial depth incorrect");
+        assert!(
+            check_mesh_depth(mesh, 0.0, -10.0),
+            "Initial depth incorrect"
+        );
     }
 
     // Change CollisionGroups: Layer 1 only. min_i=1, max_i=1.
@@ -128,11 +135,18 @@ fn test_extrusion_update_on_collision_change() {
     // Verify updated depth
     {
         let entity_ref = app.world().entity(entity);
-        let mesh_handle = entity_ref.get::<Mesh3d>().expect("Mesh3d missing").0.clone();
+        let mesh_handle = entity_ref
+            .get::<Mesh3d>()
+            .expect("Mesh3d missing")
+            .0
+            .clone();
         let meshes = app.world().resource::<Assets<Mesh>>();
         let mesh = meshes.get(&mesh_handle).expect("Mesh asset missing");
 
-        assert!(check_mesh_depth(mesh, -10.0, -20.0), "Updated depth incorrect");
+        assert!(
+            check_mesh_depth(mesh, -10.0, -20.0),
+            "Updated depth incorrect"
+        );
     }
 }
 

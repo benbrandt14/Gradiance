@@ -7,8 +7,8 @@ use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_prototype_lyon::prelude::*; // For Path component wrapper
 use bevy_rapier2d::prelude::*;
-use lyon::path::iterator::PathIterator;
 use lyon::path::PathEvent;
+use lyon::path::iterator::PathIterator;
 use lyon::tessellation::{self, BuffersBuilder, FillOptions, FillTessellator, VertexBuffers}; // Import trait for flattened
 
 /// Plugin that registers the extrusion component and logic.
@@ -61,11 +61,10 @@ fn generate_mesh_hook(
 
     // Safe Component Insertion to prevent panic if entity is despawned
     world.commands().queue(move |world: &mut World| {
-        if world.get_entity(entity).is_ok() {
-            if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+        if world.get_entity(entity).is_ok()
+            && let Ok(mut entity_mut) = world.get_entity_mut(entity) {
                 entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
             }
-        }
     });
 }
 
@@ -83,7 +82,11 @@ fn update_extrusion_mesh(
         ),
         (
             With<ExtrudableShape>,
-            Or<(Changed<CollisionGroups>, Changed<Path>, Added<CollisionGroups>)>,
+            Or<(
+                Changed<CollisionGroups>,
+                Changed<Path>,
+                Added<CollisionGroups>,
+            )>,
         ),
     >,
 ) {

@@ -5,11 +5,11 @@
 
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{
+    ToolState,
     cursor::CursorWorldPos,
     editable_shape::EditableShape,
     selection::{NextGroupID, Selection, SelectionFilter, SelectionGroup},
     tools::connector::Connector,
-    ToolState,
 };
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
@@ -212,18 +212,42 @@ fn context_menu_ui(
                     for &entity in &selection.0 {
                         if let Ok(t) = data.transform.get(entity) {
                             let new_pos = t.translation + Vec3::new(20.0, -20.0, 0.0);
-                            let mut cmd = commands.spawn(Transform::from_translation(new_pos).with_rotation(t.rotation));
-                            if let Ok(s) = data.shape.get(entity) { cmd.insert(s.clone()); }
-                            if let Ok(rb) = data.rb.get(entity) { cmd.insert(*rb); }
-                            if let Ok(f) = data.friction.get(entity) { cmd.insert(*f); }
-                            if let Ok(r) = data.restitution.get(entity) { cmd.insert(*r); }
-                            if let Ok(cg) = data.collision_groups.get(entity) { cmd.insert(*cg); }
-                            if data.sensor.get(entity).is_ok() { cmd.insert(Sensor); }
-                            if let Ok(la) = data.locked.get(entity) { cmd.insert(*la); }
-                            if let Ok(g) = data.gravity.get(entity) { cmd.insert(*g); }
-                            if let Ok(m) = data.mass.get(entity) { cmd.insert(*m); }
-                            if let Ok(fill) = data.fill.get(entity) { cmd.insert(*fill); }
-                            if let Ok(stroke) = data.stroke.get(entity) { cmd.insert(*stroke); }
+                            let mut cmd = commands.spawn(
+                                Transform::from_translation(new_pos).with_rotation(t.rotation),
+                            );
+                            if let Ok(s) = data.shape.get(entity) {
+                                cmd.insert(s.clone());
+                            }
+                            if let Ok(rb) = data.rb.get(entity) {
+                                cmd.insert(*rb);
+                            }
+                            if let Ok(f) = data.friction.get(entity) {
+                                cmd.insert(*f);
+                            }
+                            if let Ok(r) = data.restitution.get(entity) {
+                                cmd.insert(*r);
+                            }
+                            if let Ok(cg) = data.collision_groups.get(entity) {
+                                cmd.insert(*cg);
+                            }
+                            if data.sensor.get(entity).is_ok() {
+                                cmd.insert(Sensor);
+                            }
+                            if let Ok(la) = data.locked.get(entity) {
+                                cmd.insert(*la);
+                            }
+                            if let Ok(g) = data.gravity.get(entity) {
+                                cmd.insert(*g);
+                            }
+                            if let Ok(m) = data.mass.get(entity) {
+                                cmd.insert(*m);
+                            }
+                            if let Ok(fill) = data.fill.get(entity) {
+                                cmd.insert(*fill);
+                            }
+                            if let Ok(stroke) = data.stroke.get(entity) {
+                                cmd.insert(*stroke);
+                            }
                             cmd.insert(Sleeping::disabled());
                             new_selection.push(cmd.id());
                         }
@@ -254,145 +278,158 @@ fn context_menu_ui(
 
                 // Collision Depth (Layers)
                 ui.collapsing("Depth (Collision Layers)", |ui| {
-                // Determine current range from selection (approximate from first entity)
-                let (current_start, current_end) = if let Some(first) = selection.0.iter().next() {
-                    if let Ok(groups) = data.collision_groups.get(*first) {
-                        let bits = groups.memberships.bits();
-                        let start = bits.trailing_zeros();
-                        let end = 31 - bits.leading_zeros();
-                        if start <= end && bits != 0 {
-                            (start, end)
+                    // Determine current range from selection (approximate from first entity)
+                    let (current_start, current_end) =
+                        if let Some(first) = selection.0.iter().next() {
+                            if let Ok(groups) = data.collision_groups.get(*first) {
+                                let bits = groups.memberships.bits();
+                                let start = bits.trailing_zeros();
+                                let end = 31 - bits.leading_zeros();
+                                if start <= end && bits != 0 {
+                                    (start, end)
+                                } else {
+                                    (0, 0)
+                                }
+                            } else {
+                                (0, 0)
+                            }
                         } else {
                             (0, 0)
+                        };
+
+                    let mut start = current_start;
+                    let mut end = current_end;
+                    let mut changed = false;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Start Layer:");
+                        if ui
+                            .add(egui::DragValue::new(&mut start).range(0..=31))
+                            .changed()
+                        {
+                            changed = true;
                         }
-                    } else {
-                        (0, 0)
-                    }
-                } else {
-                    (0, 0)
-                };
+                    });
 
-                let mut start = current_start;
-                let mut end = current_end;
-                let mut changed = false;
+                    ui.horizontal(|ui| {
+                        ui.label("End Layer:  ");
+                        if ui
+                            .add(egui::DragValue::new(&mut end).range(0..=31))
+                            .changed()
+                        {
+                            changed = true;
+                        }
+                    });
 
-                ui.horizontal(|ui| {
-                    ui.label("Start Layer:");
-                    if ui.add(egui::DragValue::new(&mut start).range(0..=31)).changed() {
-                        changed = true;
-                    }
-                });
-
-                ui.horizontal(|ui| {
-                    ui.label("End Layer:  ");
-                    if ui.add(egui::DragValue::new(&mut end).range(0..=31)).changed() {
-                        changed = true;
-                    }
-                });
-
-                // Ensure valid range
-                if start > end {
-                    end = start;
-                }
-
-                if changed {
-                    let mut mask = 0u32;
-                    for i in start..=end {
-                        mask |= 1 << i;
+                    // Ensure valid range
+                    if start > end {
+                        end = start;
                     }
 
-                    let new_groups = Group::from_bits_truncate(mask);
+                    if changed {
+                        let mut mask = 0u32;
+                        for i in start..=end {
+                            mask |= 1 << i;
+                        }
 
-                    for &entity in &selection.0 {
-                        // Apply same mask to memberships AND filters to ensure self-collision
-                        // and collision with others in this range.
-                        if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
-                            groups.memberships = new_groups;
-                            groups.filters = new_groups;
-                        } else {
-                             commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                        let new_groups = Group::from_bits_truncate(mask);
+
+                        for &entity in &selection.0 {
+                            // Apply same mask to memberships AND filters to ensure self-collision
+                            // and collision with others in this range.
+                            if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
+                                groups.memberships = new_groups;
+                                groups.filters = new_groups;
+                            } else {
+                                commands
+                                    .entity(entity)
+                                    .insert(CollisionGroups::new(new_groups, new_groups));
+                            }
                         }
                     }
-                }
 
-                if ui.button("Randomize Layers").clicked() {
-                     let mut rng = rand::rng();
-                     let range_size = end.saturating_sub(start) + 1;
+                    if ui.button("Randomize Layers").clicked() {
+                        let mut rng = rand::rng();
+                        let range_size = end.saturating_sub(start) + 1;
 
-                     for &entity in &selection.0 {
-                         // Pick a random layer within the start..=end range
-                         let random_offset = rng.random_range(0..range_size);
-                         let layer = start + random_offset;
-                         let mask = 1 << layer;
-                         let new_groups = Group::from_bits_truncate(mask);
+                        for &entity in &selection.0 {
+                            // Pick a random layer within the start..=end range
+                            let random_offset = rng.random_range(0..range_size);
+                            let layer = start + random_offset;
+                            let mask = 1 << layer;
+                            let new_groups = Group::from_bits_truncate(mask);
 
-                         if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
-                             groups.memberships = new_groups;
-                             groups.filters = new_groups;
-                         } else {
-                             commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
-                         }
-                     }
-                }
+                            if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
+                                groups.memberships = new_groups;
+                                groups.filters = new_groups;
+                            } else {
+                                commands
+                                    .entity(entity)
+                                    .insert(CollisionGroups::new(new_groups, new_groups));
+                            }
+                        }
+                    }
 
-                if ui.button("Distribute Layers").clicked() {
-                    let mut entities: Vec<_> = selection.0.iter().copied().collect();
-                    // Sort by Entity ID for deterministic distribution
-                    entities.sort();
+                    if ui.button("Distribute Layers").clicked() {
+                        let mut entities: Vec<_> = selection.0.iter().copied().collect();
+                        // Sort by Entity ID for deterministic distribution
+                        entities.sort();
 
-                    let count = entities.len();
-                    if count > 0 {
-                        let total_layers = end.saturating_sub(start) + 1;
-                        if total_layers > 0 {
-                            let layers_per_object = total_layers / count as u32;
-                            let mut remainder = total_layers % count as u32;
+                        let count = entities.len();
+                        if count > 0 {
+                            let total_layers = end.saturating_sub(start) + 1;
+                            if total_layers > 0 {
+                                let layers_per_object = total_layers / count as u32;
+                                let mut remainder = total_layers % count as u32;
 
-                            let mut current_layer = start;
+                                let mut current_layer = start;
 
-                            for entity in entities {
-                                let mut my_count = layers_per_object;
-                                if remainder > 0 {
-                                    my_count += 1;
-                                    remainder -= 1;
-                                }
-
-                                let mut mask = 0u32;
-                                for _ in 0..my_count {
-                                    if current_layer <= 31 {
-                                        mask |= 1 << current_layer;
-                                        current_layer += 1;
+                                for entity in entities {
+                                    let mut my_count = layers_per_object;
+                                    if remainder > 0 {
+                                        my_count += 1;
+                                        remainder -= 1;
                                     }
-                                }
 
-                                let new_groups = Group::from_bits_truncate(mask);
+                                    let mut mask = 0u32;
+                                    for _ in 0..my_count {
+                                        if current_layer <= 31 {
+                                            mask |= 1 << current_layer;
+                                            current_layer += 1;
+                                        }
+                                    }
 
-                                if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
-                                    groups.memberships = new_groups;
-                                    groups.filters = new_groups;
-                                } else {
-                                    commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                                    let new_groups = Group::from_bits_truncate(mask);
+
+                                    if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
+                                        groups.memberships = new_groups;
+                                        groups.filters = new_groups;
+                                    } else {
+                                        commands
+                                            .entity(entity)
+                                            .insert(CollisionGroups::new(new_groups, new_groups));
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
 
-            ui.separator();
+                ui.separator();
 
-            // Delete
-            if ui
-                .add(egui::Button::image_and_text(
-                    (delete_icon, egui::Vec2::new(16.0, 16.0)),
-                    "Delete",
-                ))
-                .clicked()
-            {
-                for entity in selection.0.drain() {
-                    commands.entity(entity).despawn_recursive();
+                // Delete
+                if ui
+                    .add(egui::Button::image_and_text(
+                        (delete_icon, egui::Vec2::new(16.0, 16.0)),
+                        "Delete",
+                    ))
+                    .clicked()
+                {
+                    for entity in selection.0.drain() {
+                        commands.entity(entity).despawn_recursive();
+                    }
+                    state.position = None;
                 }
-                state.position = None;
-            }
             } // End else
         });
 }

@@ -4,7 +4,6 @@ use gradiance::input::commands::*;
 use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::tools::connector::Connector;
 use gradiance::physics::floor::GroundPlane;
-use gradiance::prelude::*;
 use proptest::prelude::*;
 
 mod test_utils;
@@ -81,6 +80,7 @@ proptest! {
                 compliance: 0.0,
                 visual_entity: None,
                 pin_entity: None,
+                original_solver_groups: None,
                 rot_a: rot1,
                 rot_b: rot2,
             })
@@ -93,6 +93,7 @@ proptest! {
                 compliance: 0.0,
                 visual_entity: None,
                 pin_entity: None,
+                original_solver_groups: None,
             })
         };
 
@@ -181,6 +182,7 @@ proptest! {
                 compliance: 0.0,
                 visual_entity: None,
                 pin_entity: None,
+                original_solver_groups: None,
             }),
             4 => Box::new(SpawnFixedJointCommand {
                 entity_a: id1,
@@ -190,6 +192,7 @@ proptest! {
                 compliance: 0.0,
                 visual_entity: None,
                 pin_entity: None,
+                original_solver_groups: None,
                 rot_a: 0.0,
                 rot_b: 0.0,
             }),
