@@ -341,36 +341,39 @@ fn context_menu_ui(
                     entities.sort();
 
                     let count = entities.len();
-                    if count > 1 {
-                        let span = (end as f32 - start as f32).max(0.0);
-                        let step = span / (count - 1) as f32;
+                    if count > 0 {
+                        let total_layers = end.saturating_sub(start) + 1;
+                        if total_layers > 0 {
+                            let layers_per_object = total_layers / count as u32;
+                            let mut remainder = total_layers % count as u32;
 
-                        for (i, entity) in entities.into_iter().enumerate() {
-                            let layer = (start as f32 + i as f32 * step).round() as u32;
-                            // Clamp to be safe, though math should hold
-                            let layer = layer.clamp(0, 31);
+                            let mut current_layer = start;
 
-                            let mask = 1 << layer;
-                            let new_groups = Group::from_bits_truncate(mask);
+                            for entity in entities {
+                                let mut my_count = layers_per_object;
+                                if remainder > 0 {
+                                    my_count += 1;
+                                    remainder -= 1;
+                                }
 
-                            if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
-                                groups.memberships = new_groups;
-                                groups.filters = new_groups;
-                            } else {
-                                commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                                let mut mask = 0u32;
+                                for _ in 0..my_count {
+                                    if current_layer <= 31 {
+                                        mask |= 1 << current_layer;
+                                        current_layer += 1;
+                                    }
+                                }
+
+                                let new_groups = Group::from_bits_truncate(mask);
+
+                                if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
+                                    groups.memberships = new_groups;
+                                    groups.filters = new_groups;
+                                } else {
+                                    commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                                }
                             }
                         }
-                    } else if count == 1 {
-                        // Single entity, just assign start
-                         let layer = start;
-                         let mask = 1 << layer;
-                         let new_groups = Group::from_bits_truncate(mask);
-                         if let Ok(mut groups) = data.collision_groups.get_mut(entities[0]) {
-                             groups.memberships = new_groups;
-                             groups.filters = new_groups;
-                         } else {
-                             commands.entity(entities[0]).insert(CollisionGroups::new(new_groups, new_groups));
-                         }
                     }
                 }
             });
