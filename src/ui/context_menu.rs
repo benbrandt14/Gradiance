@@ -358,7 +358,7 @@ fn context_menu_ui(
                             if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
                                 groups.memberships = new_groups;
                                 groups.filters = new_groups;
-                            } else {
+                            } else if data.transform.contains(entity) {
                                 commands
                                     .entity(entity)
                                     .insert(CollisionGroups::new(new_groups, new_groups));
@@ -380,7 +380,7 @@ fn context_menu_ui(
                             if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
                                 groups.memberships = new_groups;
                                 groups.filters = new_groups;
-                            } else {
+                            } else if data.transform.contains(entity) {
                                 commands
                                     .entity(entity)
                                     .insert(CollisionGroups::new(new_groups, new_groups));
@@ -422,7 +422,8 @@ fn context_menu_ui(
                                     if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
                                         groups.memberships = new_groups;
                                         groups.filters = new_groups;
-                                    } else {
+                                    } else if data.transform.contains(entity) {
+                                        // Ensure entity exists before inserting
                                         commands
                                             .entity(entity)
                                             .insert(CollisionGroups::new(new_groups, new_groups));
