@@ -9,6 +9,7 @@ use crate::input::{
 };
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
+use bevy_egui::EguiContexts;
 
 /// Plugin for handling global shortcuts.
 pub struct ShortcutsPlugin;
@@ -17,8 +18,42 @@ impl Plugin for ShortcutsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (handle_undo_redo_input, toggle_pause, handle_ctrl_a),
+            (
+                handle_undo_redo_input,
+                toggle_pause,
+                handle_ctrl_a,
+                handle_tool_shortcuts,
+            ),
         );
+    }
+}
+
+fn handle_tool_shortcuts(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut next_tool_state: ResMut<NextState<ToolState>>,
+    mut contexts: EguiContexts,
+) {
+    // Prevent switching tools while typing in a text field
+    if contexts.ctx_mut().wants_keyboard_input() {
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::KeyS) {
+        next_tool_state.set(ToolState::Select);
+    } else if keys.just_pressed(KeyCode::KeyD) {
+        next_tool_state.set(ToolState::Drag);
+    } else if keys.just_pressed(KeyCode::KeyB) {
+        next_tool_state.set(ToolState::Box);
+    } else if keys.just_pressed(KeyCode::KeyC) {
+        next_tool_state.set(ToolState::Circle);
+    } else if keys.just_pressed(KeyCode::KeyP) {
+        next_tool_state.set(ToolState::Polygon);
+    } else if keys.just_pressed(KeyCode::KeyA) {
+        next_tool_state.set(ToolState::RevoluteJoint);
+    } else if keys.just_pressed(KeyCode::KeyW) {
+        next_tool_state.set(ToolState::Weld);
+    } else if keys.just_pressed(KeyCode::KeyG) {
+        next_tool_state.set(ToolState::Ground);
     }
 }
 

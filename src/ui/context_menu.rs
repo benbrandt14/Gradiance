@@ -6,11 +6,17 @@
 use crate::input::tools::utils::is_pointer_over_ui;
 use crate::input::{
     cursor::CursorWorldPos,
-    selection::{NextGroupID, Selection, SelectionGroup},
+    editable_shape::EditableShape,
+    selection::{NextGroupID, Selection, SelectionFilter, SelectionGroup},
+    tools::connector::Connector,
+    ToolState,
 };
+use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use crate::ui::icons::GameIcons;
+use bevy::ecs::system::SystemParam;
 use bevy_egui::{EguiContexts, egui};
+use bevy_prototype_lyon::prelude::{Fill, Stroke};
 use rand::Rng;
 
 /// State for the context menu.
@@ -64,16 +70,33 @@ fn context_menu_input(
                 selection.clear();
                 selection.add(entity);
             }
-            let ctx = contexts.ctx_mut();
-            if let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                state.position = Some(pointer_pos);
-            }
         } else {
-            state.position = None;
+            selection.clear();
+        }
+
+        let ctx = contexts.ctx_mut();
+        if let Some(pointer_pos) = ctx.input(|i| i.pointer.hover_pos()) {
+            state.position = Some(pointer_pos);
         }
     } else if mouse.just_pressed(MouseButton::Left) && !is_pointer_over_ui(&mut contexts) {
         state.position = None;
     }
+}
+
+#[derive(SystemParam)]
+struct ContextMenuData<'w, 's> {
+    collision_groups: Query<'w, 's, &'static mut CollisionGroups>,
+    transform: Query<'w, 's, &'static Transform>,
+    shape: Query<'w, 's, &'static EditableShape>,
+    rb: Query<'w, 's, &'static RigidBody>,
+    friction: Query<'w, 's, &'static Friction>,
+    restitution: Query<'w, 's, &'static Restitution>,
+    sensor: Query<'w, 's, &'static Sensor>,
+    locked: Query<'w, 's, &'static LockedAxes>,
+    gravity: Query<'w, 's, &'static GravityScale>,
+    mass: Query<'w, 's, &'static ColliderMassProperties>,
+    fill: Query<'w, 's, &'static Fill>,
+    stroke: Query<'w, 's, &'static Stroke>,
 }
 
 /// Renders the context menu UI if active.
@@ -84,15 +107,15 @@ fn context_menu_ui(
     mut selection: ResMut<Selection>,
     mut next_group_id: ResMut<NextGroupID>,
     game_icons: Res<GameIcons>,
-    mut collision_groups: Query<&mut CollisionGroups>,
+    mut data: ContextMenuData,
+    selection_filter: Option<Res<SelectionFilter>>,
+    selectable_query: Query<Entity, (With<Collider>, Without<GroundPlane>)>,
+    connector_query: Query<&Connector>,
+    mut next_tool_state: ResMut<NextState<ToolState>>,
 ) {
     let Some(pos) = state.position else {
         return;
     };
-
-    if selection.0.is_empty() {
-        return;
-    }
 
     let delete_icon = contexts.add_image(game_icons.delete.clone_weak());
 
@@ -105,41 +128,135 @@ fn context_menu_ui(
         .title_bar(false)
         .frame(egui::Frame::popup(ctx.style().as_ref()))
         .show(ctx, |ui| {
-            // Group
-            if ui.button("Group").clicked() {
-                let id = next_group_id.0;
-                next_group_id.0 += 1;
-                let mut count = 0;
-                for &entity in &selection.0 {
-                    commands.entity(entity).insert(SelectionGroup(id));
-                    count += 1;
-                }
-                if count > 0 {
-                    info!("Grouped {} entities into Group {}", count, id);
-                }
-                state.position = None;
-            }
+            if selection.0.is_empty() {
+                ui.label("Global Actions");
+                ui.separator();
 
-            // Ungroup
-            if ui.button("Ungroup").clicked() {
-                let mut count = 0;
-                for &entity in &selection.0 {
-                    commands.entity(entity).remove::<SelectionGroup>();
-                    count += 1;
-                }
-                if count > 0 {
-                    info!("Ungrouped {} entities", count);
-                }
-                state.position = None;
-            }
+                ui.menu_button("Add Shape", |ui| {
+                    if ui.button("Box").clicked() {
+                        next_tool_state.set(ToolState::Box);
+                        state.position = None;
+                        ui.close_menu();
+                    }
+                    if ui.button("Circle").clicked() {
+                        next_tool_state.set(ToolState::Circle);
+                        state.position = None;
+                        ui.close_menu();
+                    }
+                    if ui.button("Polygon").clicked() {
+                        next_tool_state.set(ToolState::Polygon);
+                        state.position = None;
+                        ui.close_menu();
+                    }
+                });
 
-            ui.separator();
+                if ui.button("Select All").clicked() {
+                    if let Some(filter) = selection_filter {
+                        let mut count = 0;
+                        for entity in &selectable_query {
+                            let is_connector = connector_query.contains(entity);
+                            let pass = match *filter {
+                                SelectionFilter::All => true,
+                                SelectionFilter::Shapes => !is_connector,
+                                SelectionFilter::Joints => is_connector,
+                            };
+                            if pass {
+                                selection.add(entity);
+                                count += 1;
+                            }
+                        }
+                        info!("Selected {} entities", count);
+                    } else {
+                        for entity in &selectable_query {
+                            selection.add(entity);
+                        }
+                    }
+                    state.position = None;
+                }
+            } else {
+                ui.label("Entity Actions");
+                ui.separator();
 
-            // Collision Depth (Layers)
-            ui.collapsing("Depth (Collision Layers)", |ui| {
+                // Group
+                if ui.button("Group").clicked() {
+                    let id = next_group_id.0;
+                    next_group_id.0 += 1;
+                    let mut count = 0;
+                    for &entity in &selection.0 {
+                        commands.entity(entity).insert(SelectionGroup(id));
+                        count += 1;
+                    }
+                    if count > 0 {
+                        info!("Grouped {} entities into Group {}", count, id);
+                    }
+                    state.position = None;
+                }
+
+                // Ungroup
+                if ui.button("Ungroup").clicked() {
+                    let mut count = 0;
+                    for &entity in &selection.0 {
+                        commands.entity(entity).remove::<SelectionGroup>();
+                        count += 1;
+                    }
+                    if count > 0 {
+                        info!("Ungrouped {} entities", count);
+                    }
+                    state.position = None;
+                }
+
+                ui.separator();
+
+                if ui.button("Duplicate").clicked() {
+                    let mut new_selection = Vec::new();
+                    for &entity in &selection.0 {
+                        if let Ok(t) = data.transform.get(entity) {
+                            let new_pos = t.translation + Vec3::new(20.0, -20.0, 0.0);
+                            let mut cmd = commands.spawn(Transform::from_translation(new_pos).with_rotation(t.rotation));
+                            if let Ok(s) = data.shape.get(entity) { cmd.insert(s.clone()); }
+                            if let Ok(rb) = data.rb.get(entity) { cmd.insert(*rb); }
+                            if let Ok(f) = data.friction.get(entity) { cmd.insert(*f); }
+                            if let Ok(r) = data.restitution.get(entity) { cmd.insert(*r); }
+                            if let Ok(cg) = data.collision_groups.get(entity) { cmd.insert(*cg); }
+                            if data.sensor.get(entity).is_ok() { cmd.insert(Sensor); }
+                            if let Ok(la) = data.locked.get(entity) { cmd.insert(*la); }
+                            if let Ok(g) = data.gravity.get(entity) { cmd.insert(*g); }
+                            if let Ok(m) = data.mass.get(entity) { cmd.insert(*m); }
+                            if let Ok(fill) = data.fill.get(entity) { cmd.insert(*fill); }
+                            if let Ok(stroke) = data.stroke.get(entity) { cmd.insert(*stroke); }
+                            cmd.insert(Sleeping::disabled());
+                            new_selection.push(cmd.id());
+                        }
+                    }
+                    selection.clear();
+                    for e in new_selection {
+                        selection.add(e);
+                    }
+                    state.position = None;
+                }
+
+                if ui.button("Lock/Unlock Rotation").clicked() {
+                    for &entity in &selection.0 {
+                        if let Ok(locked) = data.locked.get(entity) {
+                            if locked.contains(LockedAxes::ROTATION_LOCKED) {
+                                commands.entity(entity).insert(LockedAxes::empty());
+                            } else {
+                                commands.entity(entity).insert(LockedAxes::ROTATION_LOCKED);
+                            }
+                        } else {
+                            commands.entity(entity).insert(LockedAxes::ROTATION_LOCKED);
+                        }
+                    }
+                    state.position = None;
+                }
+
+                ui.separator();
+
+                // Collision Depth (Layers)
+                ui.collapsing("Depth (Collision Layers)", |ui| {
                 // Determine current range from selection (approximate from first entity)
                 let (current_start, current_end) = if let Some(first) = selection.0.iter().next() {
-                    if let Ok(groups) = collision_groups.get(*first) {
+                    if let Ok(groups) = data.collision_groups.get(*first) {
                         let bits = groups.memberships.bits();
                         let start = bits.trailing_zeros();
                         let end = 31 - bits.leading_zeros();
@@ -189,7 +306,7 @@ fn context_menu_ui(
                     for &entity in &selection.0 {
                         // Apply same mask to memberships AND filters to ensure self-collision
                         // and collision with others in this range.
-                        if let Ok(mut groups) = collision_groups.get_mut(entity) {
+                        if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
                             groups.memberships = new_groups;
                             groups.filters = new_groups;
                         } else {
@@ -209,7 +326,7 @@ fn context_menu_ui(
                          let mask = 1 << layer;
                          let new_groups = Group::from_bits_truncate(mask);
 
-                         if let Ok(mut groups) = collision_groups.get_mut(entity) {
+                         if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
                              groups.memberships = new_groups;
                              groups.filters = new_groups;
                          } else {
@@ -224,36 +341,39 @@ fn context_menu_ui(
                     entities.sort();
 
                     let count = entities.len();
-                    if count > 1 {
-                        let span = (end as f32 - start as f32).max(0.0);
-                        let step = span / (count - 1) as f32;
+                    if count > 0 {
+                        let total_layers = end.saturating_sub(start) + 1;
+                        if total_layers > 0 {
+                            let layers_per_object = total_layers / count as u32;
+                            let mut remainder = total_layers % count as u32;
 
-                        for (i, entity) in entities.into_iter().enumerate() {
-                            let layer = (start as f32 + i as f32 * step).round() as u32;
-                            // Clamp to be safe, though math should hold
-                            let layer = layer.clamp(0, 31);
+                            let mut current_layer = start;
 
-                            let mask = 1 << layer;
-                            let new_groups = Group::from_bits_truncate(mask);
+                            for entity in entities {
+                                let mut my_count = layers_per_object;
+                                if remainder > 0 {
+                                    my_count += 1;
+                                    remainder -= 1;
+                                }
 
-                            if let Ok(mut groups) = collision_groups.get_mut(entity) {
-                                groups.memberships = new_groups;
-                                groups.filters = new_groups;
-                            } else {
-                                commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                                let mut mask = 0u32;
+                                for _ in 0..my_count {
+                                    if current_layer <= 31 {
+                                        mask |= 1 << current_layer;
+                                        current_layer += 1;
+                                    }
+                                }
+
+                                let new_groups = Group::from_bits_truncate(mask);
+
+                                if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
+                                    groups.memberships = new_groups;
+                                    groups.filters = new_groups;
+                                } else {
+                                    commands.entity(entity).insert(CollisionGroups::new(new_groups, new_groups));
+                                }
                             }
                         }
-                    } else if count == 1 {
-                        // Single entity, just assign start
-                         let layer = start;
-                         let mask = 1 << layer;
-                         let new_groups = Group::from_bits_truncate(mask);
-                         if let Ok(mut groups) = collision_groups.get_mut(entities[0]) {
-                             groups.memberships = new_groups;
-                             groups.filters = new_groups;
-                         } else {
-                             commands.entity(entities[0]).insert(CollisionGroups::new(new_groups, new_groups));
-                         }
                     }
                 }
             });
@@ -273,5 +393,6 @@ fn context_menu_ui(
                 }
                 state.position = None;
             }
+            } // End else
         });
 }

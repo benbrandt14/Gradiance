@@ -6,7 +6,7 @@ use bevy_rapier2d::rapier::geometry::SharedShape;
 use nalgebra::Point2;
 
 /// Defines the type and dimensions of a shape.
-#[derive(Debug, Clone, Reflect)]
+#[derive(Debug, Clone, Reflect, PartialEq)]
 pub enum ShapeType {
     /// A rectangle with width and height.
     Box {
@@ -40,7 +40,7 @@ impl Default for ShapeType {
 ///
 /// Changing this component will automatically update the entity's
 /// visual mesh and physics collider.
-#[derive(Component, Reflect, Default, Debug, Clone)]
+#[derive(Component, Reflect, Default, Debug, Clone, PartialEq)]
 #[reflect(Component)]
 pub struct EditableShape {
     /// The geometric definition of the shape.
