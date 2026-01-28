@@ -225,7 +225,8 @@ fn context_menu_ui(
                                 cmd.insert(s.clone());
 
                                 // Manually generate components to ensure Extrusion hook works
-                                if let Some((path, collider)) = generate_shape_components(&s.shape) {
+                                if let Some((path, collider)) = generate_shape_components(&s.shape)
+                                {
                                     cmd.insert(path);
                                     cmd.insert(collider);
                                 }
@@ -395,39 +396,22 @@ fn context_menu_ui(
 
                         let count = entities.len();
                         if count > 0 {
-                            let total_layers = end.saturating_sub(start) + 1;
-                            if total_layers > 0 {
-                                let layers_per_object = total_layers / count as u32;
-                                let mut remainder = total_layers % count as u32;
+                            let masks = calculate_layer_distribution(count, start, end);
 
-                                let mut current_layer = start;
+                            for (entity, mask) in entities.into_iter().zip(masks.into_iter()) {
+                                if mask == 0 {
+                                    continue;
+                                }
+                                let new_groups = Group::from_bits_truncate(mask);
 
-                                for entity in entities {
-                                    let mut my_count = layers_per_object;
-                                    if remainder > 0 {
-                                        my_count += 1;
-                                        remainder -= 1;
-                                    }
-
-                                    let mut mask = 0u32;
-                                    for _ in 0..my_count {
-                                        if current_layer <= 31 {
-                                            mask |= 1 << current_layer;
-                                            current_layer += 1;
-                                        }
-                                    }
-
-                                    let new_groups = Group::from_bits_truncate(mask);
-
-                                    if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
-                                        groups.memberships = new_groups;
-                                        groups.filters = new_groups;
-                                    } else if data.transform.contains(entity) {
-                                        // Ensure entity exists before inserting
-                                        commands
-                                            .entity(entity)
-                                            .insert(CollisionGroups::new(new_groups, new_groups));
-                                    }
+                                if let Ok(mut groups) = data.collision_groups.get_mut(entity) {
+                                    groups.memberships = new_groups;
+                                    groups.filters = new_groups;
+                                } else if data.transform.contains(entity) {
+                                    // Ensure entity exists before inserting
+                                    commands
+                                        .entity(entity)
+                                        .insert(CollisionGroups::new(new_groups, new_groups));
                                 }
                             }
                         }
@@ -525,4 +509,39 @@ fn context_menu_ui(
                 }
             } // End else
         });
+}
+
+/// Calculates the layer masks for distributing 'count' entities across 'start' to 'end' layers.
+pub fn calculate_layer_distribution(count: usize, start: u32, end: u32) -> Vec<u32> {
+    if count == 0 {
+        return Vec::new();
+    }
+    let total_layers = end.saturating_sub(start) + 1;
+    if total_layers == 0 {
+        return vec![0; count];
+    }
+
+    let layers_per_object = total_layers / count as u32;
+    let mut remainder = total_layers % count as u32;
+    let mut current_layer = start;
+
+    let mut result = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        let mut my_count = layers_per_object;
+        if remainder > 0 {
+            my_count += 1;
+            remainder -= 1;
+        }
+
+        let mut mask = 0u32;
+        for _ in 0..my_count {
+            if current_layer <= 31 {
+                mask |= 1 << current_layer;
+                current_layer += 1;
+            }
+        }
+        result.push(mask);
+    }
+    result
 }

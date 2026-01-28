@@ -62,9 +62,10 @@ fn generate_mesh_hook(
     // Safe Component Insertion to prevent panic if entity is despawned
     world.commands().queue(move |world: &mut World| {
         if world.get_entity(entity).is_ok()
-            && let Ok(mut entity_mut) = world.get_entity_mut(entity) {
-                entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
-            }
+            && let Ok(mut entity_mut) = world.get_entity_mut(entity)
+        {
+            entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
+        }
     });
 }
 
