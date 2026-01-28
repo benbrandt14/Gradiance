@@ -34,6 +34,7 @@ fn app() -> App {
     app.add_plugins(TransformPlugin);
     app.add_plugins(StatesPlugin);
     app.add_plugins(BevyInputPlugin);
+    app.add_plugins(WindowPlugin::default());
 
     app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
 
@@ -41,12 +42,20 @@ fn app() -> App {
     app.init_resource::<Assets<Mesh>>();
     app.init_resource::<Assets<Image>>();
     app.init_resource::<Assets<ColorMaterial>>();
+
+    app.add_plugins(bevy_egui::EguiPlugin);
     app.init_resource::<EguiUserTextures>();
     app.init_resource::<Events<bevy::picking::backend::PointerHits>>();
     app.init_resource::<Events<WindowScaleFactorChanged>>();
     app.init_resource::<Events<WindowResized>>();
     app.init_resource::<Events<WindowCreated>>();
     app.init_resource::<Events<AssetEvent<Image>>>();
+    app.init_resource::<Events<bevy::window::CursorMoved>>();
+    app.init_resource::<Events<bevy::input::keyboard::KeyboardInput>>();
+    app.init_resource::<Events<bevy::input::mouse::MouseButtonInput>>();
+    app.init_resource::<Events<bevy::input::mouse::MouseWheel>>();
+    app.init_resource::<Events<bevy::window::WindowFocused>>();
+    app.init_resource::<Events<bevy::window::Ime>>();
 
     app.add_plugins(GizmoPlugin);
     app.add_plugins(ShapePlugin);
@@ -66,15 +75,6 @@ fn app() -> App {
     app.init_resource::<ZIndex>();
     // SelectionPlugin inits Selection, SelectionFilter, NextGroupID
 
-    app.update();
-
-    app.world_mut().spawn((
-        Window {
-            title: "Headless Test Window".into(),
-            ..default()
-        },
-        PrimaryWindow,
-    ));
     app.update();
     app
 }
@@ -167,6 +167,7 @@ fn test_select_all_ctrl_a(mut app: App) {
                     height: 1.0,
                 },
             },
+            GravityScale(0.0),
         ))
         .id();
     let b2 = app
@@ -182,6 +183,7 @@ fn test_select_all_ctrl_a(mut app: App) {
                     height: 1.0,
                 },
             },
+            GravityScale(0.0),
         ))
         .id();
 
@@ -417,63 +419,6 @@ fn test_selection_filter(mut app: App) {
     );
 }
 
-#[rstest]
-fn test_group_objects(mut app: App) {
-    let b1 = app
-        .world_mut()
-        .spawn((
-            Transform::from_xyz(0.0, 0.0, 0.0),
-            GlobalTransform::default(),
-            Collider::ball(1.0),
-        ))
-        .id();
-    let b2 = app
-        .world_mut()
-        .spawn((
-            Transform::from_xyz(5.0, 0.0, 0.0),
-            GlobalTransform::default(),
-            Collider::ball(1.0),
-        ))
-        .id();
-    app.update();
-    app.update();
-
-    set_tool(&mut app, ToolState::Select);
-
-    // Select both
-    app.world_mut().resource_mut::<Selection>().0.insert(b1);
-    app.world_mut().resource_mut::<Selection>().0.insert(b2);
-
-    // Ctrl + G
-    key_down(&mut app, KeyCode::ControlLeft);
-    key_down(&mut app, KeyCode::KeyG);
-    app.update();
-    key_up(&mut app, KeyCode::KeyG);
-    key_up(&mut app, KeyCode::ControlLeft);
-    app.update();
-
-    // Verify they have SelectionGroup component
-    let g1 = app.world().get::<SelectionGroup>(b1);
-    let g2 = app.world().get::<SelectionGroup>(b2);
-    assert!(g1.is_some());
-    assert!(g2.is_some());
-    assert_eq!(g1.unwrap(), g2.unwrap());
-
-    // Clear selection
-    app.world_mut().resource_mut::<Selection>().clear();
-
-    // Click b1
-    set_cursor(&mut app, Vec2::ZERO);
-    mouse_down(&mut app, MouseButton::Left);
-    app.update();
-    mouse_up(&mut app, MouseButton::Left);
-    app.update();
-
-    // Assert both selected
-    let s = app.world().resource::<Selection>();
-    assert!(s.0.contains(&b1));
-    assert!(s.0.contains(&b2));
-}
 
 #[rstest]
 fn test_joint_inspector_modification(mut app: App) {

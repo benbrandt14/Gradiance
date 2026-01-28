@@ -261,7 +261,7 @@ mod tests {
         let raw = Vec2::new(10.1, 10.1);
         let object_center = Vec2::new(10.0, 10.0);
 
-        let spatial_query = |aabb: Aabb2d, callback: &mut dyn FnMut(Entity) -> bool| {
+        let spatial_query = |_aabb: Aabb2d, callback: &mut dyn FnMut(Entity) -> bool| {
             // Mock finding entity 1 inside AABB
             callback(Entity::from_raw(1));
         };

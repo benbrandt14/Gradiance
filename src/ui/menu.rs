@@ -120,18 +120,6 @@ fn physics_tab(
                     context.integration_parameters.num_additional_friction_iterations = f_iterations;
                 }
 
-                ui.label("Prediction Distance:");
-                // prediction_distance is a field in newer Rapier versions but seems to be a method or renamed in this version.
-                // However, without explicit documentation or source access to the dependency, it's safer to remove it if it causes build errors.
-                // The user request was to fix "squishing", which is mostly solver iterations and CCD.
-                // prediction_distance is less critical.
-                // Re-reading error: "attempted to take value of method `prediction_distance`".
-                // If it is a method, we can't mutate it directly via DragValue(&mut val).
-                // We'd need to read it, DragValue it, then set it via setter if available.
-                // If no setter, we can't edit it.
-                // Given the constraint and time, I will remove this field from the UI to fix the build.
-                // The primary fix for squishing is Solver Iterations and CCD.
-
                 ui.label("Max CCD Substeps:");
                 let mut ccd_substeps = context.integration_parameters.max_ccd_substeps;
                 if ui.add(egui::DragValue::new(&mut ccd_substeps).range(0..=10).speed(1.0)).changed() {
@@ -189,6 +177,30 @@ fn rendering_tab(ui: &mut egui::Ui, settings: &mut ResMut<RenderSettings>) {
         ui.radio_value(&mut settings.toon_mode, false, "Standard (PBR)");
         ui.radio_value(&mut settings.toon_mode, true, "Toon Shading");
     });
+
+    if settings.toon_mode {
+        ui.separator();
+        ui.label("Toon Settings");
+        ui.indent("toon_settings", |ui| {
+             ui.add(egui::Slider::new(&mut settings.toon_steps, 1..=10).text("Bands/Steps"));
+
+             ui.horizontal(|ui| {
+                ui.label("Sun Color:");
+                let mut sun_color = settings.sun_color.to_srgba().to_f32_array();
+                if ui.color_edit_button_rgba_unmultiplied(&mut sun_color).changed() {
+                    settings.sun_color = Color::srgba(sun_color[0], sun_color[1], sun_color[2], sun_color[3]);
+                }
+             });
+
+             ui.horizontal(|ui| {
+                ui.label("Ambient Color:");
+                let mut amb_color = settings.ambient_color.to_srgba().to_f32_array();
+                if ui.color_edit_button_rgba_unmultiplied(&mut amb_color).changed() {
+                    settings.ambient_color = Color::srgba(amb_color[0], amb_color[1], amb_color[2], amb_color[3]);
+                }
+             });
+        });
+    }
 
     ui.separator();
 

@@ -1,31 +1,57 @@
-#import bevy_pbr::mesh_view_bindings
-#import bevy_pbr::forward_io::VertexOutput
-
-struct ToonMaterial {
+struct ToonShaderMaterial {
     color: vec4<f32>,
+    sun_dir: vec3<f32>,
+    sun_color: vec4<f32>,
+    camera_pos: vec3<f32>,
+    ambient_color: vec4<f32>,
     steps: u32,
-    border_width: f32,
 };
 
-@group(2) @binding(0) var<uniform> material: ToonMaterial;
+@group(2) @binding(0)
+var<uniform> material: ToonShaderMaterial;
+@group(2) @binding(1)
+var base_color_texture: texture_2d<f32>;
+@group(2) @binding(2)
+var base_color_sampler: sampler;
+
+#import bevy_pbr::forward_io::VertexOutput
 
 @fragment
-fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Simple directional light (fixed direction for now, simulating a sun)
-    let light_dir = normalize(vec3<f32>(0.5, 1.0, 0.5));
-    let N = normalize(in.world_normal);
+fn fragment (in: VertexOutput) -> @location(0) vec4<f32> {
+    // if model doesn't have uvs, this lets it still render.
+    #ifdef VERTEX_UVS_A
+        let uv = in.uv;
+    #else
+        let uv = vec2(1.0, 1.0);
+    #endif
 
-    // NdotL calculation
-    let NdotL = max(dot(N, light_dir), 0.0);
+    let base_color = material.color * textureSample(base_color_texture, base_color_sampler, uv);
+    let normal = normalize(in.world_normal);
+    let n_dot_l = dot(material.sun_dir, normal);
+    var light_intensity = 0.0;
 
-    // Toon shading: Quantize intensity into steps
-    let steps = f32(material.steps);
-    // Add a small bias to avoid stepping at exactly 0.0 or 1.0 artifacts
-    let quantized = floor(NdotL * steps + 0.01) / steps;
+    if n_dot_l > 0.0 {
+        let bands = f32(material.steps);
+        var x = n_dot_l * bands;
 
-    // Ambient light component
-    let ambient = 0.3;
-    let intensity = ambient + quantized * (1.0 - ambient);
+        x = round(x);
 
-    return vec4<f32>(material.color.rgb * intensity, material.color.a);
+        light_intensity = x / bands;
+    } else {
+        light_intensity = 0.0;
+    }
+
+    let light = light_intensity * material.sun_color;
+
+    let view_dir: vec3<f32> = normalize(material.camera_pos - in.world_position.xyz);
+
+    let half_vector = normalize(material.sun_dir + view_dir);
+    let n_dot_h = dot(normal, half_vector);
+    let glossiness = 32.0;
+    let specular_intensity = pow(n_dot_h, glossiness * glossiness);
+
+    let specular_intensity_smooth = smoothstep(0.005, 0.01, specular_intensity);
+    let specular = specular_intensity_smooth * vec4<f32>(0.9, 0.9 ,0.9 ,1.0);
+
+    return base_color * (light + material.ambient_color + specular);
 }
