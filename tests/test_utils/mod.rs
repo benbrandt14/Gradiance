@@ -37,6 +37,7 @@ pub fn create_test_app() -> App {
     app.add_plugins(TransformPlugin);
     app.add_plugins(StatesPlugin);
     app.add_plugins(BevyInputPlugin);
+    app.add_plugins(WindowPlugin::default()); // Added WindowPlugin
 
     // Physics
     app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
@@ -48,6 +49,7 @@ pub fn create_test_app() -> App {
     app.init_resource::<Assets<ColorMaterial>>();
     app.init_resource::<Assets<StandardMaterial>>(); // Initialize StandardMaterial for Extrusion
 
+    app.add_plugins(bevy_egui::EguiPlugin); // Added EguiPlugin
     app.init_resource::<EguiUserTextures>();
     app.init_resource::<Events<bevy::picking::backend::PointerHits>>();
 
@@ -56,6 +58,12 @@ pub fn create_test_app() -> App {
     app.init_resource::<Events<WindowResized>>();
     app.init_resource::<Events<WindowCreated>>();
     app.init_resource::<Events<AssetEvent<Image>>>();
+    app.init_resource::<Events<bevy::window::CursorMoved>>(); // Added missing events
+    app.init_resource::<Events<bevy::input::keyboard::KeyboardInput>>();
+    app.init_resource::<Events<bevy::input::mouse::MouseButtonInput>>();
+    app.init_resource::<Events<bevy::input::mouse::MouseWheel>>();
+    app.init_resource::<Events<bevy::window::WindowFocused>>();
+    app.init_resource::<Events<bevy::window::Ime>>();
 
     // Plugins that rely on Render/Assets/Window but can run headless if resources exist
     app.add_plugins(GizmoPlugin);
@@ -91,14 +99,6 @@ pub fn create_test_app() -> App {
     // Initial update
     app.update();
 
-    // Spawn Primary Window entity (headless) for systems that query it
-    app.world_mut().spawn((
-        Window {
-            title: "Headless Test Window".into(),
-            ..default()
-        },
-        PrimaryWindow,
-    ));
     app.update();
 
     app
