@@ -90,16 +90,6 @@ impl CommandStack {
             self.index += 1;
         }
     }
-
-    /// Returns the number of commands in history.
-    pub fn history_len(&self) -> usize {
-        self.history.len()
-    }
-
-    /// Returns the current index in history.
-    pub fn current_index(&self) -> usize {
-        self.index
-    }
 }
 
 /// Helper to resolve joint targets and handle pinning.
@@ -551,3 +541,5 @@ impl GameCommand for SpawnGroundCommand {
 fn path_from_shape(path: Path) -> Path {
     path
 }
+
+#[cfg(test)]
