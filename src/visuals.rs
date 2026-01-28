@@ -5,8 +5,13 @@
 use crate::geometry::extrusion::ExtrudableShape;
 use crate::prelude::*;
 use bevy::core_pipeline::bloom::Bloom;
+use bevy::core_pipeline::experimental::taa::TemporalAntiAliasing;
+use bevy::pbr::{MaterialPipeline, MaterialPipelineKey, ScreenSpaceAmbientOcclusion, ScreenSpaceReflections};
 use bevy::reflect::TypePath;
-use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
+use bevy::render::mesh::MeshVertexBufferLayoutRef;
+use bevy::render::render_resource::{
+    AsBindGroup, RenderPipelineDescriptor, ShaderRef, ShaderType, SpecializedMeshPipelineError,
+};
 
 /// Global rendering settings accessible via UI.
 #[derive(Resource, Reflect, Debug)]
@@ -16,6 +21,14 @@ pub struct RenderSettings {
     pub bloom_enabled: bool,
     /// Intensity of the Bloom effect.
     pub bloom_intensity: f32,
+    /// Enable SSAO.
+    pub ssao_enabled: bool,
+    /// Enable TAA.
+    pub taa_enabled: bool,
+    /// Enable SSR.
+    pub ssr_enabled: bool,
+    /// Enable Point Lights.
+    pub point_lights_enabled: bool,
     /// Enable shadows for the main directional light.
     pub shadows_enabled: bool,
     /// Enable Toon Shading mode (swaps StandardMaterial for ToonMaterial).
@@ -35,11 +48,15 @@ impl Default for RenderSettings {
         Self {
             bloom_enabled: true,
             bloom_intensity: 0.15,
+            ssao_enabled: false,
+            taa_enabled: false,
+            ssr_enabled: false,
+            point_lights_enabled: false,
             shadows_enabled: true,
             toon_mode: false,
             clear_color: Color::BLACK,
             sun_color: Color::WHITE,
-            ambient_color: Color::srgb(0.1, 0.1, 0.1),
+            ambient_color: Color::srgb(0.5, 0.5, 0.5),
             toon_steps: 4,
         }
     }
@@ -52,6 +69,10 @@ pub struct ToonShaderMainCamera;
 /// Marker component for the sun (directional light) used by the Toon Shader.
 #[derive(Component)]
 pub struct ToonShaderSun;
+
+/// Marker for the scene point light.
+#[derive(Component)]
+pub struct ScenePointLight;
 
 /// A custom material for Toon / Cel Shading.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -112,6 +133,16 @@ impl Material for ToonMaterial {
 
     fn alpha_mode(&self) -> AlphaMode {
         AlphaMode::Opaque
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline<Self>,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        descriptor.primitive.cull_mode = None;
+        Ok(())
     }
 }
 
@@ -182,11 +213,15 @@ fn apply_render_settings(
     settings: Res<RenderSettings>,
     mut bloom_query: Query<&mut Bloom>,
     mut light_query: Query<&mut DirectionalLight>,
+    point_light_query: Query<(Entity, &mut PointLight), With<ScenePointLight>>,
     mut ambient_light: ResMut<AmbientLight>,
     mut clear_color: ResMut<ClearColor>,
     mut commands: Commands,
-    camera_query: Query<Entity, (With<Camera3d>, Without<Bloom>)>,
+    mut camera_query: Query<(Entity, Option<&mut Msaa>), With<Camera3d>>,
     bloom_removals: Query<Entity, (With<Camera3d>, With<Bloom>)>,
+    ssao_removals: Query<Entity, (With<Camera3d>, With<ScreenSpaceAmbientOcclusion>)>,
+    taa_removals: Query<Entity, (With<Camera3d>, With<TemporalAntiAliasing>)>,
+    ssr_removals: Query<Entity, (With<Camera3d>, With<ScreenSpaceReflections>)>,
     mut toon_materials: ResMut<Assets<ToonMaterial>>,
 ) {
     // Sync Clear Color
@@ -194,25 +229,51 @@ fn apply_render_settings(
         clear_color.0 = settings.clear_color;
     }
 
-    // Sync Bloom
-    if settings.bloom_enabled {
-        // Update existing Bloom
-        for mut bloom in &mut bloom_query {
-            if bloom.intensity != settings.bloom_intensity {
-                bloom.intensity = settings.bloom_intensity;
+    // Camera Post-Processing
+    for (entity, msaa_opt) in &mut camera_query {
+        let mut entity_cmds = commands.entity(entity);
+
+        // Bloom
+        if settings.bloom_enabled {
+             if let Ok(mut bloom) = bloom_query.get_mut(entity) {
+                if bloom.intensity != settings.bloom_intensity {
+                    bloom.intensity = settings.bloom_intensity;
+                }
+            } else {
+                entity_cmds.insert(Bloom {
+                    intensity: settings.bloom_intensity,
+                    ..default()
+                });
             }
+        } else if bloom_removals.contains(entity) {
+            entity_cmds.remove::<Bloom>();
         }
-        // Add Bloom if missing
-        for entity in &camera_query {
-            commands.entity(entity).insert(Bloom {
-                intensity: settings.bloom_intensity,
-                ..default()
-            });
+
+        // SSAO
+        if settings.ssao_enabled {
+             entity_cmds.insert(ScreenSpaceAmbientOcclusion::default());
+        } else if ssao_removals.contains(entity) {
+             entity_cmds.remove::<ScreenSpaceAmbientOcclusion>();
         }
-    } else {
-        // Remove Bloom if present
-        for entity in &bloom_removals {
-            commands.entity(entity).remove::<Bloom>();
+
+        // TAA
+        if settings.taa_enabled {
+             if let Some(mut msaa) = msaa_opt {
+                 if *msaa != Msaa::Off {
+                     *msaa = Msaa::Off;
+                 }
+             }
+             entity_cmds.insert(TemporalAntiAliasing::default());
+        } else if taa_removals.contains(entity) {
+             entity_cmds.remove::<TemporalAntiAliasing>();
+             // Optional: Restore MSAA here if desired, but default to Off is safe
+        }
+
+        // SSR
+        if settings.ssr_enabled {
+             entity_cmds.insert(ScreenSpaceReflections::default());
+        } else if ssr_removals.contains(entity) {
+             entity_cmds.remove::<ScreenSpaceReflections>();
         }
     }
 
@@ -223,6 +284,29 @@ fn apply_render_settings(
         }
         if light.color != settings.sun_color {
             light.color = settings.sun_color;
+        }
+    }
+
+    // Point Light Management
+    if settings.point_lights_enabled {
+        if point_light_query.iter().next().is_none() {
+            // Spawn if missing
+            commands.spawn((
+                PointLight {
+                    intensity: 200_000.0,
+                    range: 100.0,
+                    shadows_enabled: true,
+                    color: Color::srgb(1.0, 0.8, 0.6), // Warm light
+                    ..default()
+                },
+                Transform::from_xyz(20.0, 20.0, 30.0),
+                ScenePointLight,
+            ));
+        }
+    } else {
+        // Despawn if present
+        for (e, _) in &point_light_query {
+            commands.entity(e).despawn();
         }
     }
 

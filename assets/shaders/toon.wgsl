@@ -27,19 +27,22 @@ fn fragment (in: VertexOutput) -> @location(0) vec4<f32> {
 
     let base_color = material.color * textureSample(base_color_texture, base_color_sampler, uv);
     let normal = normalize(in.world_normal);
-    let n_dot_l = dot(material.sun_dir, normal);
+    // Use absolute value to light backfaces (since culling is off)
+    // Plus a small bias to prevent perfectly flat shading
+    let n_dot_l = abs(dot(material.sun_dir, normal));
     var light_intensity = 0.0;
 
-    if n_dot_l > 0.0 {
-        let bands = f32(material.steps);
-        var x = n_dot_l * bands;
+    let bands = f32(material.steps);
+    var x = n_dot_l * bands;
+    x = ceil(x); // Use ceil for sharper bands
+    light_intensity = x / bands;
 
-        x = round(x);
+    // Add a rim light effect for better definition
+    let view_dir_rim = normalize(material.camera_pos - in.world_position.xyz);
+    let n_dot_v = 1.0 - abs(dot(normal, view_dir_rim));
+    let rim = smoothstep(0.6, 1.0, n_dot_v) * 0.5;
 
-        light_intensity = x / bands;
-    } else {
-        light_intensity = 0.0;
-    }
+    light_intensity += rim;
 
     let light = light_intensity * material.sun_color;
 
