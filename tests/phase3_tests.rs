@@ -12,7 +12,7 @@ use gradiance::input::ZIndex;
 use gradiance::input::commands::CommandStack;
 use gradiance::input::cursor::CursorWorldPos;
 use gradiance::input::editable_shape::{EditableShape, ShapeType};
-use gradiance::input::selection::{Selection, SelectionFilter, SelectionGroup, SelectionPlugin};
+use gradiance::input::selection::{Selection, SelectionFilter, SelectionPlugin};
 use gradiance::input::shortcuts::ShortcutsPlugin;
 use gradiance::input::tools::box_tool::BoxToolPlugin;
 use gradiance::input::tools::circle_tool::CircleToolPlugin;
