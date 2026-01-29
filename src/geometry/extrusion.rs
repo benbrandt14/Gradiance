@@ -2,7 +2,6 @@
 //!
 //! Handles generating 3D meshes from 2D paths based on collision layers.
 
-use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_prototype_lyon::prelude::*; // For Path component wrapper
@@ -28,46 +27,7 @@ impl Plugin for ExtrusionPlugin {
 #[derive(Component, Reflect, Default, Debug)]
 #[reflect(Component)]
 #[require(Mesh3d, MeshMaterial3d<StandardMaterial>)]
-#[component(on_add = generate_mesh_hook)]
 pub struct ExtrudableShape;
-
-fn generate_mesh_hook(
-    mut world: DeferredWorld,
-    entity: Entity,
-    _component_id: bevy::ecs::component::ComponentId,
-) {
-    let path = world.get::<Path>(entity).map(|p| p.0.clone());
-    let groups = world.get::<CollisionGroups>(entity).copied();
-
-    let Some(path) = path else {
-        warn!("ExtrudableShape added to entity {:?} without Path", entity);
-        return;
-    };
-
-    let groups = groups.unwrap_or(CollisionGroups::default());
-
-    let (mesh, material) = create_extruded_mesh(&path, groups);
-
-    // Asset Registration
-    let mesh_handle = {
-        let mut meshes = world.resource_mut::<Assets<Mesh>>();
-        meshes.add(mesh)
-    };
-
-    let material_handle = {
-        let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
-        materials.add(material)
-    };
-
-    // Safe Component Insertion to prevent panic if entity is despawned
-    world.commands().queue(move |world: &mut World| {
-        if world.get_entity(entity).is_ok()
-            && let Ok(mut entity_mut) = world.get_entity_mut(entity)
-        {
-            entity_mut.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
-        }
-    });
-}
 
 fn update_extrusion_mesh(
     mut commands: Commands,
@@ -87,7 +47,7 @@ fn update_extrusion_mesh(
                 Changed<CollisionGroups>,
                 Changed<Path>,
                 Added<CollisionGroups>,
-                Added<Mesh3d>,
+                Added<ExtrudableShape>,
             )>,
         ),
     >,
