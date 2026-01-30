@@ -11,15 +11,12 @@
 //! - **Limits**: Expose joint limits (angle limits, motor data) in the UI and pass them to the commands.
 //! - **Breakage**: Implement breakable joints (impulse threshold).
 
-use crate::input::commands::{
-    CommandStack, SpawnFixedJointCommand, SpawnJointCommand, SpawnPrismaticJointCommand,
-};
-use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::events::{SpawnFixedJointEvent, SpawnJointEvent, SpawnPrismaticJointEvent};
+use crate::input::tools::utils::calculate_local_anchor;
+use crate::input::{PointerOverUi, ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::math::Vec2;
-use bevy_egui::EguiContexts;
 use std::cmp::Ordering;
 
 /// Plugin for the Connector Tool.
@@ -124,19 +121,20 @@ impl ConnectorType {
 }
 
 fn update_connector(
-    mut commands: Commands,
+    mut ev_joint: EventWriter<SpawnJointEvent>,
+    mut ev_fixed: EventWriter<SpawnFixedJointEvent>,
+    mut ev_prism: EventWriter<SpawnPrismaticJointEvent>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     rapier_context_query: Query<&RapierContext>,
-    // TODO: Decouple from EguiContexts.
-    mut contexts: EguiContexts,
+    pointer_over_ui: Res<PointerOverUi>,
     _grid_settings: Res<GridSettings>,
     tool_state: Res<State<ToolState>>,
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
     parents: Query<&Parent>,
     transforms: Query<&Transform>,
 ) {
-    if is_pointer_over_ui(&mut contexts) {
+    if pointer_over_ui.0 {
         return;
     }
 
@@ -198,57 +196,33 @@ fn update_connector(
         // TODO: Use EventWriter for all these commands.
         match connector_type {
             ConnectorType::Hinge => {
-                let cmd = SpawnJointCommand {
+                ev_joint.send(SpawnJointEvent {
                     entity_a,
                     entity_b,
                     anchor_a,
                     anchor_b,
                     compliance: 0.0,
-                    visual_entity: None,
-                    pin_entity: None,
-                    original_solver_groups: None,
-                };
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
                 });
             }
             ConnectorType::Fix => {
-                let cmd = SpawnFixedJointCommand {
+                ev_fixed.send(SpawnFixedJointEvent {
                     entity_a,
                     entity_b,
                     anchor_a,
                     anchor_b,
                     compliance: 0.0,
-                    visual_entity: None,
-                    pin_entity: None,
-                    original_solver_groups: None,
                     rot_a,
                     rot_b,
-                };
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
                 });
             }
             ConnectorType::Slider => {
-                let cmd = SpawnPrismaticJointCommand {
+                ev_prism.send(SpawnPrismaticJointEvent {
                     entity_a,
                     entity_b,
                     anchor_a,
                     anchor_b,
                     axis: Vec2::X,
                     compliance: 0.0,
-                    visual_entity: None,
-                    pin_entity: None,
-                    original_solver_groups: None,
-                };
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
                 });
             }
         }

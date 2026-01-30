@@ -151,9 +151,9 @@ impl Material for ToonMaterial {
 }
 
 /// Plugin for visual effects and rendering configuration.
-pub struct VisualsPlugin;
+pub struct GradianceVisualsPlugin;
 
-impl Plugin for VisualsPlugin {
+impl Plugin for GradianceVisualsPlugin {
     fn build(&self, app: &mut App) {
         // TODO: Bound systems with run conditions (e.g. `run_if(in_state(...))`).
         // Also consider using `Changed<RenderSettings>` for `apply_render_settings` to avoid per-frame overhead.

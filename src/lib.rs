@@ -12,6 +12,7 @@
 //! //! ## Bevy Schedule Graph
 //! ![Schedule Graph](doc/architecture.png)
 
+pub mod events;
 pub mod geometry;
 pub mod input;
 pub mod physics;
@@ -31,21 +32,36 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        app.init_state::<GameState>();
+
         // TODO: Ensure systems are registered with run conditions (e.g., `run_if(in_state(...))`)
         // and that setup/cleanup systems for states are co-located for clarity.
         app.add_plugins((
             // ShapePlugin, // Removed in favor of ExtrusionPlugin (via GeometryPlugin)
             // DefaultPickingPlugins,
             // RapierBackend,
-            physics::PhysicsPlugin,
+            events::GameEventsPlugin,
+            physics::GradiancePhysicsPlugin,
             geometry::GeometryPlugin,
-            input::InputPlugin,
-            ui::UiPlugin,
-            visuals::VisualsPlugin,
+            input::GradianceInputPlugin,
+            ui::GradianceUiPlugin,
+            visuals::GradianceVisualsPlugin,
             // scripting::ScriptingPlugin,
         ))
         .add_systems(Startup, setup_camera);
     }
+}
+
+/// Global game states.
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum GameState {
+    /// The main gameplay/editor state.
+    #[default]
+    Playing,
+    /// The game is paused.
+    Paused,
+    /// The main menu.
+    Menu,
 }
 
 /// Spawns the main 3D camera for 2.5D visualization.

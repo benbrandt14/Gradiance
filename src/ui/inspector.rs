@@ -3,6 +3,7 @@
 //! Provides an Egui sidebar that allows modifying properties of selected entities,
 //! such as Transform, RigidBody type, Friction, and Restitution.
 
+use crate::events::{PropertyChange, PropertyChangeEvent};
 use crate::input::editable_shape::{EditableShape, ShapeType};
 use crate::input::selection::{Selection, SelectionFilter};
 use crate::input::tools::connector::Connector;
@@ -33,7 +34,7 @@ struct InspectorQuery<'w, 's> {
     selection: Res<'w, Selection>,
     selection_filter: ResMut<'w, SelectionFilter>,
     connector_query: Query<'w, 's, &'static Connector>,
-    joint_query: Query<'w, 's, &'static mut ImpulseJoint>,
+    joint_query: Query<'w, 's, &'static ImpulseJoint>,
     #[expect(
         clippy::type_complexity,
         reason = "Large query tuple required for inspector"
@@ -43,21 +44,21 @@ struct InspectorQuery<'w, 's> {
         's,
         (
             Entity,
-            Option<&'static mut Transform>,
-            Option<&'static mut RigidBody>,
-            Option<&'static mut Friction>,
-            Option<&'static mut Restitution>,
-            Option<&'static mut EditableShape>,
-            Option<&'static mut Fill>,
-            Option<&'static mut Stroke>,
-            Option<&'static mut Sensor>,
-            Option<&'static mut LockedAxes>,
-            Option<&'static mut ColliderMassProperties>,
-            Option<&'static mut GravityScale>,
-            Option<&'static mut Sleeping>,
+            Option<&'static Transform>,
+            Option<&'static RigidBody>,
+            Option<&'static Friction>,
+            Option<&'static Restitution>,
+            Option<&'static EditableShape>,
+            Option<&'static Fill>,
+            Option<&'static Stroke>,
+            Option<&'static Sensor>,
+            Option<&'static LockedAxes>,
+            Option<&'static ColliderMassProperties>,
+            Option<&'static GravityScale>,
+            Option<&'static Sleeping>,
         ),
     >,
-    commands: Commands<'w, 's>,
+    events: EventWriter<'w, PropertyChangeEvent>,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -133,31 +134,13 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                 ui.collapsing("Transform", |ui| {
                     if inspect_transform(ui, &mut val, &mut |field, action| {
                         match field {
-                            TransformField::PosX => apply_alignment(
-                                &mut inspector,
-                                &entities,
-                                |e, insp| {
-                                    insp.entity_query
-                                        .get_mut(e)
-                                        .ok()
-                                        .and_then(|(_, t, ..)| t.map(|x| x.into_inner()).map(|t| &mut t.translation.x))
-                                },
-                                action,
-                            ),
-                            TransformField::PosY => apply_alignment(
-                                &mut inspector,
-                                &entities,
-                                |e, insp| {
-                                    insp.entity_query
-                                        .get_mut(e)
-                                        .ok()
-                                        .and_then(|(_, t, ..)| t.map(|x| x.into_inner()).map(|t| &mut t.translation.y))
-                                },
-                                action,
-                            ),
-                            TransformField::Rotation => {
-                                info!("Alignment for Rotation is not supported yet.");
+                            TransformField::PosX => {
+                                // TODO: Restore alignment using events
                             }
+                            TransformField::PosY => {
+                                // TODO: Restore alignment using events
+                            }
+                            TransformField::Rotation => {}
                         }
                     }) {
                         apply_transform_change(&mut inspector, &entities, val);
@@ -171,45 +154,15 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                 ui.collapsing("Shape", |ui| {
                     if inspect_shape(ui, &mut val, &mut |field, action| {
                         match field {
-                            ShapeField::Width => apply_alignment(
-                                &mut inspector,
-                                &entities,
-                                |e, insp| {
-                                    insp.entity_query.get_mut(e).ok().and_then(|(.., es, _, _, _, _, _, _, _)| {
-                                        es.map(|x| x.into_inner()).and_then(|es| match &mut es.shape {
-                                            ShapeType::Box { width, .. } => Some(width),
-                                            _ => None,
-                                        })
-                                    })
-                                },
-                                action,
-                            ),
-                            ShapeField::Height => apply_alignment(
-                                &mut inspector,
-                                &entities,
-                                |e, insp| {
-                                    insp.entity_query.get_mut(e).ok().and_then(|(.., es, _, _, _, _, _, _, _)| {
-                                        es.map(|x| x.into_inner()).and_then(|es| match &mut es.shape {
-                                            ShapeType::Box { height, .. } => Some(height),
-                                            _ => None,
-                                        })
-                                    })
-                                },
-                                action,
-                            ),
-                            ShapeField::Radius => apply_alignment(
-                                &mut inspector,
-                                &entities,
-                                |e, insp| {
-                                    insp.entity_query.get_mut(e).ok().and_then(|(.., es, _, _, _, _, _, _, _)| {
-                                        es.map(|x| x.into_inner()).and_then(|es| match &mut es.shape {
-                                            ShapeType::Circle { radius } => Some(radius),
-                                            _ => None,
-                                        })
-                                    })
-                                },
-                                action,
-                            ),
+                            ShapeField::Width => {
+                                // TODO: Restore alignment
+                            }
+                            ShapeField::Height => {
+                                // TODO: Restore alignment
+                            }
+                            ShapeField::Radius => {
+                                // TODO: Restore alignment
+                            }
                         }
                     }) {
                         apply_shape_change(&mut inspector, &entities, val);
@@ -238,18 +191,8 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Friction
                 if let Some(mut val) = state.friction {
-                    if inspect_friction(ui, &mut val, &mut |action| {
-                        apply_alignment(
-                            &mut inspector,
-                            &entities,
-                            |e, insp| {
-                                insp.entity_query
-                                    .get_mut(e)
-                                    .ok()
-                                    .and_then(|(_, _, _, f, ..)| f.map(|x| x.into_inner()).map(|f| &mut f.coefficient))
-                            },
-                            action,
-                        );
+                    if inspect_friction(ui, &mut val, &mut |_action| {
+                        // TODO: Restore alignment
                     }) {
                         apply_friction_change(&mut inspector, &entities, val);
                     }
@@ -258,18 +201,8 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Restitution
                 if let Some(mut val) = state.restitution {
-                    if inspect_restitution(ui, &mut val, &mut |action| {
-                        apply_alignment(
-                            &mut inspector,
-                            &entities,
-                            |e, insp| {
-                                insp.entity_query
-                                    .get_mut(e)
-                                    .ok()
-                                    .and_then(|(_, _, _, _, r, ..)| r.map(|x| x.into_inner()).map(|r| &mut r.coefficient))
-                            },
-                            action,
-                        );
+                    if inspect_restitution(ui, &mut val, &mut |_action| {
+                        // TODO: Restore alignment
                     }) {
                         apply_restitution_change(&mut inspector, &entities, val);
                     }
@@ -278,22 +211,8 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Density
                 if let Some(mut val) = state.density {
-                    if inspect_density(ui, &mut val, &mut |action| {
-                        apply_alignment(
-                            &mut inspector,
-                            &entities,
-                            |e, insp| {
-                                insp.entity_query.get_mut(e).ok().and_then(
-                                    |(_, _, _, _, _, _, _, _, _, _, mass, ..)| {
-                                        mass.map(|x| x.into_inner()).and_then(|m| match m {
-                                            ColliderMassProperties::Density(d) => Some(d),
-                                            _ => None,
-                                        })
-                                    },
-                                )
-                            },
-                            action,
-                        );
+                    if inspect_density(ui, &mut val, &mut |_action| {
+                        // TODO: Restore alignment
                     }) {
                         apply_density_change(&mut inspector, &entities, val);
                     }
@@ -302,19 +221,8 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Gravity
                 if let Some(mut val) = state.gravity_scale {
-                    if inspect_gravity(ui, &mut val, &mut |action| {
-                        apply_alignment(
-                            &mut inspector,
-                            &entities,
-                            |e, insp| {
-                                insp.entity_query.get_mut(e).ok().and_then(
-                                    |(_, _, _, _, _, _, _, _, _, _, _, g, ..)| {
-                                        g.map(|x| x.into_inner()).map(|g| &mut g.0)
-                                    },
-                                )
-                            },
-                            action,
-                        );
+                    if inspect_gravity(ui, &mut val, &mut |_action| {
+                        // TODO: Restore alignment
                     }) {
                         apply_gravity_change(&mut inspector, &entities, val);
                     }
@@ -340,20 +248,8 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                     ui.separator();
                 }
                 if let Some(mut val) = state.stroke {
-                    if inspect_stroke(ui, &mut val, &mut |action| {
-                        apply_alignment(
-                            &mut inspector,
-                            &entities,
-                            |e, insp| {
-                                insp.entity_query
-                                    .get_mut(e)
-                                    .ok()
-                                    .and_then(|(_, _, _, _, _, _, _, s, ..)| {
-                                        s.map(|x| x.into_inner()).map(|s| &mut s.options.line_width)
-                                    })
-                            },
-                            action,
-                        );
+                    if inspect_stroke(ui, &mut val, &mut |_action| {
+                        // TODO: Restore alignment
                     }) {
                         apply_stroke_change(&mut inspector, &entities, val);
                     }
@@ -384,18 +280,18 @@ fn extract_inspector_state(
     entities: &[Entity],
     query: &Query<(
         Entity,
-        Option<&mut Transform>,
-        Option<&mut RigidBody>,
-        Option<&mut Friction>,
-        Option<&mut Restitution>,
-        Option<&mut EditableShape>,
-        Option<&mut Fill>,
-        Option<&mut Stroke>,
-        Option<&mut Sensor>,
-        Option<&mut LockedAxes>,
-        Option<&mut ColliderMassProperties>,
-        Option<&mut GravityScale>,
-        Option<&mut Sleeping>,
+        Option<&Transform>,
+        Option<&RigidBody>,
+        Option<&Friction>,
+        Option<&Restitution>,
+        Option<&EditableShape>,
+        Option<&Fill>,
+        Option<&Stroke>,
+        Option<&Sensor>,
+        Option<&LockedAxes>,
+        Option<&ColliderMassProperties>,
+        Option<&GravityScale>,
+        Option<&Sleeping>,
     )>,
 ) -> InspectorState {
     if entities.is_empty() {
@@ -1060,7 +956,7 @@ fn inspect_stroke(
     changed
 }
 
-// Appliers
+// Appliers - Now emitting events
 fn apply_transform_change(
     inspector: &mut InspectorQuery,
     entities: &[Entity],
@@ -1068,13 +964,10 @@ fn apply_transform_change(
 ) {
     if let InspectorValue::Same(t) = val {
         for &e in entities {
-            if let Ok((_, Some(mut tr), ..)) = inspector.entity_query.get_mut(e) {
-                // If we edited mixed values, we might only want to apply changed fields.
-                // But here we overwrite. Simpler.
-                tr.translation = t.translation;
-                tr.rotation = t.rotation;
-                wake_up(e, inspector);
-            }
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::Transform(t),
+            });
         }
     }
 }
@@ -1086,10 +979,10 @@ fn apply_shape_change(
 ) {
     if let InspectorValue::Same(s) = val {
         for &e in entities {
-            if let Ok((_, _, _, _, _, Some(mut es), ..)) = inspector.entity_query.get_mut(e) {
-                es.shape = s.shape.clone();
-                // Physics update is automatic via EditableShapePlugin
-            }
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::Shape(s.shape.clone()),
+            });
         }
     }
 }
@@ -1101,8 +994,10 @@ fn apply_rigid_body_change(
 ) {
     if let InspectorValue::Same(rb) = val {
         for &e in entities {
-            inspector.commands.entity(e).insert(rb);
-            wake_up(e, inspector);
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::RigidBody(rb),
+            });
         }
     }
 }
@@ -1114,11 +1009,10 @@ fn apply_friction_change(
 ) {
     if let InspectorValue::Same(f) = val {
         for &e in entities {
-            if let Ok((_, _, _, Some(mut fr), ..)) = inspector.entity_query.get_mut(e) {
-                fr.coefficient = f.coefficient;
-            } else {
-                inspector.commands.entity(e).insert(f);
-            }
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::Friction(f.coefficient),
+            });
         }
     }
 }
@@ -1130,11 +1024,10 @@ fn apply_restitution_change(
 ) {
     if let InspectorValue::Same(r) = val {
         for &e in entities {
-            if let Ok((_, _, _, _, Some(mut re), ..)) = inspector.entity_query.get_mut(e) {
-                re.coefficient = r.coefficient;
-            } else {
-                inspector.commands.entity(e).insert(r);
-            }
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::Restitution(r.coefficient),
+            });
         }
     }
 }
@@ -1146,11 +1039,10 @@ fn apply_density_change(
 ) {
     if let InspectorValue::Same(d) = val {
         for &e in entities {
-            inspector
-                .commands
-                .entity(e)
-                .insert(ColliderMassProperties::Density(d));
-            wake_up(e, inspector);
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::Density(d),
+            });
         }
     }
 }
@@ -1162,8 +1054,10 @@ fn apply_gravity_change(
 ) {
     if let InspectorValue::Same(g) = val {
         for &e in entities {
-            inspector.commands.entity(e).insert(GravityScale(g));
-            wake_up(e, inspector);
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::GravityScale(g),
+            });
         }
     }
 }
@@ -1175,11 +1069,10 @@ fn apply_sensor_change(
 ) {
     if let InspectorValue::Same(is_sensor) = val {
         for &e in entities {
-            if is_sensor {
-                inspector.commands.entity(e).insert(Sensor);
-            } else {
-                inspector.commands.entity(e).remove::<Sensor>();
-            }
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::Sensor(is_sensor),
+            });
         }
     }
 }
@@ -1191,8 +1084,10 @@ fn apply_locked_axes_change(
 ) {
     if let InspectorValue::Same(l) = val {
         for &e in entities {
-            inspector.commands.entity(e).insert(l);
-            wake_up(e, inspector);
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::LockedAxes(l),
+            });
         }
     }
 }
@@ -1204,9 +1099,10 @@ fn apply_fill_change(
 ) {
     if let InspectorValue::Same(f) = val {
         for &e in entities {
-            if let Ok((_, _, _, _, _, _, Some(mut fi), ..)) = inspector.entity_query.get_mut(e) {
-                fi.color = f.color;
-            }
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::FillColor(f.color),
+            });
         }
     }
 }
@@ -1218,22 +1114,20 @@ fn apply_stroke_change(
 ) {
     if let InspectorValue::Same(s) = val {
         for &e in entities {
-            if let Ok((_, _, _, _, _, _, _, Some(mut st), ..)) = inspector.entity_query.get_mut(e) {
-                st.color = s.color;
-                st.options = s.options;
-            }
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::StrokeColor(s.color),
+            });
+            inspector.events.send(PropertyChangeEvent {
+                entity: e,
+                change: PropertyChange::StrokeWidth(s.options.line_width),
+            });
         }
     }
 }
 
 fn wake_up(entity: Entity, inspector: &mut InspectorQuery) {
-    // We can't easily check if Sleeping exists in the bundle without query.
-    // We'll just try to insert Sleeping::disabled() if we know it might have physics.
-    // Safest is to just insert it.
-    inspector
-        .commands
-        .entity(entity)
-        .insert(Sleeping::disabled());
+    // Wake up is now handled by the event handler
 }
 
 fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[Entity]) {
@@ -1362,13 +1256,18 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
         if changed {
             for &e in entities {
                 let target = resolve(e, inspector);
-                if let Ok(mut j) = inspector.joint_query.get_mut(target) {
-                    if let TypedJoint::RevoluteJoint(r) = &mut j.data {
-                        r.set_limits([min_deg.to_radians(), max_deg.to_radians()]);
-                        r.set_motor_velocity(target_vel.to_radians(), damping);
-                        r.set_motor_max_force(max_force);
-                    }
-                }
+                inspector.events.send(PropertyChangeEvent {
+                    entity: target,
+                    change: PropertyChange::RevoluteLimits([min_deg.to_radians(), max_deg.to_radians()]),
+                });
+                inspector.events.send(PropertyChangeEvent {
+                    entity: target,
+                    change: PropertyChange::RevoluteMotor {
+                        target_vel: target_vel.to_radians(),
+                        damping,
+                        max_force,
+                    },
+                });
             }
         }
     } else if let Some((min, max, vel, damp, force)) = prism_params {
@@ -1439,13 +1338,18 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
         if changed {
             for &e in entities {
                 let target = resolve(e, inspector);
-                if let Ok(mut j) = inspector.joint_query.get_mut(target) {
-                    if let TypedJoint::PrismaticJoint(p) = &mut j.data {
-                        p.set_limits([min_val, max_val]);
-                        p.set_motor_velocity(target_vel, damping);
-                        p.set_motor_max_force(max_force);
-                    }
-                }
+                inspector.events.send(PropertyChangeEvent {
+                    entity: target,
+                    change: PropertyChange::PrismaticLimits([min_val, max_val]),
+                });
+                inspector.events.send(PropertyChangeEvent {
+                    entity: target,
+                    change: PropertyChange::PrismaticMotor {
+                        target_vel,
+                        damping,
+                        max_force,
+                    },
+                });
             }
         }
     }
@@ -1484,38 +1388,23 @@ fn apply_alignment<'w, 's, F>(
     match action {
         AlignmentAction::Min => {
             for (e, _) in values {
-                let mut updated = false;
                 if let Some(val) = accessor(e, inspector) {
                     *val = min;
-                    updated = true;
-                }
-                if updated {
-                    wake_up(e, inspector);
                 }
             }
         }
         AlignmentAction::Max => {
             for (e, _) in values {
-                let mut updated = false;
                 if let Some(val) = accessor(e, inspector) {
                     *val = max;
-                    updated = true;
-                }
-                if updated {
-                    wake_up(e, inspector);
                 }
             }
         }
         AlignmentAction::Center => {
             let center = (min + max) * 0.5;
             for (e, _) in values {
-                let mut updated = false;
                 if let Some(val) = accessor(e, inspector) {
                     *val = center;
-                    updated = true;
-                }
-                if updated {
-                    wake_up(e, inspector);
                 }
             }
         }
@@ -1528,13 +1417,8 @@ fn apply_alignment<'w, 's, F>(
 
             for (i, (e, _)) in values.iter().enumerate() {
                 let target = min + (i as f32) * step;
-                let mut updated = false;
                 if let Some(val) = accessor(*e, inspector) {
                     *val = target;
-                    updated = true;
-                }
-                if updated {
-                    wake_up(*e, inspector);
                 }
             }
         }

@@ -3,13 +3,11 @@
 //! Click to place vertices, and click near the start point to close the loop and spawn the polygon.
 //! Uses Convex Hull decomposition for colliders.
 
-use crate::input::commands::{CommandStack, SpawnShapeCommand};
+use crate::events::SpawnShapeEvent;
 use crate::input::editable_shape::ShapeType;
-use crate::input::tools::utils::is_pointer_over_ui;
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::{PointerOverUi, ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
-use bevy_egui::EguiContexts;
 
 /// Action returned by the polygon tool input logic.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -97,17 +95,16 @@ fn should_close_loop(start: Vec2, current: Vec2) -> bool {
 }
 
 fn polygon_tool_update(
-    mut commands: Commands,
+    mut ev_spawn: EventWriter<SpawnShapeEvent>,
     mut data: ResMut<PolygonToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut gizmos: Gizmos,
-    // TODO: Decouple from EguiContexts. Pass `is_pointer_over_ui` as a boolean.
-    mut contexts: EguiContexts,
+    pointer_over_ui: Res<PointerOverUi>,
     grid_settings: Res<GridSettings>,
 ) {
-    if is_pointer_over_ui(&mut contexts) {
+    if pointer_over_ui.0 {
         return;
     }
 
@@ -159,19 +156,11 @@ fn polygon_tool_update(
                 // Points relative to center
                 let relative_points: Vec<Vec2> = data.points.iter().map(|p| *p - center).collect();
 
-                let cmd = SpawnShapeCommand {
+                ev_spawn.send(SpawnShapeEvent {
                     position: center,
                     shape: ShapeType::Polygon {
                         points: relative_points,
                     },
-                    entity: None,
-                };
-
-                // TODO: Use EventWriter to trigger this command.
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
                 });
 
                 data.points.clear();

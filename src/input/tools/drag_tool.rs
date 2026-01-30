@@ -3,11 +3,10 @@
 //! Allows the user to grab and move dynamic bodies using a mouse joint-like mechanic.
 //! Currently implemented by calculating a target anchor and drawing lines.
 
-use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::tools::utils::calculate_local_anchor;
+use crate::input::{PointerOverUi, ToolState, cursor::CursorWorldPos};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
-use bevy_egui::EguiContexts;
 
 /// Plugin for the Drag Tool.
 pub struct DragToolPlugin;
@@ -47,12 +46,11 @@ fn drag_tool_update(
     >,
     mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
-    // TODO: Decouple from EguiContexts.
-    mut contexts: EguiContexts,
+    pointer_over_ui: Res<PointerOverUi>,
     virtual_time: Res<Time<Virtual>>,
     time: Res<Time>,
 ) {
-    if is_pointer_over_ui(&mut contexts) && data.dragged_entity.is_none() {
+    if pointer_over_ui.0 && data.dragged_entity.is_none() {
         return;
     }
 

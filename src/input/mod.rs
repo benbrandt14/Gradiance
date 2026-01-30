@@ -12,6 +12,8 @@ pub mod camera_controller;
 pub mod commands;
 pub mod cursor;
 pub mod editable_shape;
+/// Event handlers for processing game events.
+pub mod event_handlers;
 pub mod selection;
 /// Global shortcuts.
 pub mod shortcuts;
@@ -21,9 +23,9 @@ pub mod tools;
 /// Plugin for Input and Tools.
 ///
 /// Initializes the cursor, selection, tool state, and specific tool plugins.
-pub struct InputPlugin;
+pub struct GradianceInputPlugin;
 
-impl Plugin for InputPlugin {
+impl Plugin for GradianceInputPlugin {
     fn build(&self, app: &mut App) {
         // Picking setup
         // app.add_plugins(DefaultPickingPlugins);
@@ -43,6 +45,15 @@ impl Plugin for InputPlugin {
 
         // Commands
         app.init_resource::<commands::CommandStack>();
+        app.add_systems(Update, (
+            event_handlers::handle_spawn_shape_event,
+            event_handlers::handle_spawn_ground_event,
+            event_handlers::handle_spawn_joint_event,
+            event_handlers::handle_spawn_prismatic_joint_event,
+            event_handlers::handle_spawn_fixed_joint_event,
+            event_handlers::handle_undo_event,
+            event_handlers::handle_redo_event,
+        ));
 
         // Tool state
         app.init_state::<ToolState>();
@@ -58,6 +69,7 @@ impl Plugin for InputPlugin {
 
         // Z-Index management
         app.init_resource::<ZIndex>();
+        app.init_resource::<PointerOverUi>();
 
         // Debug
         app.add_systems(Update, log_tool_transitions);
@@ -83,6 +95,11 @@ impl ZIndex {
         self.0
     }
 }
+
+/// Resource indicating if the mouse pointer is currently over a UI element.
+/// This allows input systems to block actions (like spawning shapes) when interacting with UI.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PointerOverUi(pub bool);
 
 /// The active tool state.
 ///
