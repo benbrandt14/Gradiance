@@ -11,7 +11,9 @@
 //! - **Limits**: Expose joint limits (angle limits, motor data) in the UI and pass them to the commands.
 //! - **Breakage**: Implement breakable joints (impulse threshold).
 
-use crate::input::commands::{CommandStack, SpawnFixedJointCommand, SpawnJointCommand};
+use crate::input::commands::{
+    CommandStack, SpawnFixedJointCommand, SpawnJointCommand, SpawnPrismaticJointCommand,
+};
 use crate::input::tools::utils::{calculate_local_anchor, is_pointer_over_ui};
 use crate::input::{ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
@@ -29,7 +31,10 @@ impl Plugin for ConnectorToolPlugin {
             Update,
             (
                 update_connector.run_if(|state: Res<State<ToolState>>| {
-                    matches!(state.get(), ToolState::RevoluteJoint | ToolState::Weld)
+                    matches!(
+                        state.get(),
+                        ToolState::RevoluteJoint | ToolState::Weld | ToolState::PrismaticJoint
+                    )
                 }),
                 update_connector_visuals,
             ),
@@ -103,6 +108,8 @@ pub enum ConnectorType {
     Hinge,
     /// A fixed joint (weld).
     Fix,
+    /// A prismatic joint (slider).
+    Slider,
 }
 
 impl ConnectorType {
@@ -110,6 +117,7 @@ impl ConnectorType {
         match state {
             ToolState::RevoluteJoint => Some(Self::Hinge),
             ToolState::Weld => Some(Self::Fix),
+            ToolState::PrismaticJoint => Some(Self::Slider),
             _ => None,
         }
     }
@@ -223,6 +231,24 @@ fn update_connector(
                     });
                 });
             }
+            ConnectorType::Slider => {
+                let cmd = SpawnPrismaticJointCommand {
+                    entity_a,
+                    entity_b,
+                    anchor_a,
+                    anchor_b,
+                    axis: Vec2::X,
+                    compliance: 0.0,
+                    visual_entity: None,
+                    pin_entity: None,
+                    original_solver_groups: None,
+                };
+                commands.queue(move |world: &mut World| {
+                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                        stack.push(Box::new(cmd), world);
+                    });
+                });
+            }
         }
     }
 }
@@ -294,6 +320,7 @@ mod tests {
     #[rstest]
     #[case(ToolState::RevoluteJoint, Some(ConnectorType::Hinge))]
     #[case(ToolState::Weld, Some(ConnectorType::Fix))]
+    #[case(ToolState::PrismaticJoint, Some(ConnectorType::Slider))]
     #[case(ToolState::Select, None)]
     fn test_connector_type_from_state(
         #[case] state: ToolState,
