@@ -132,13 +132,37 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             // Transform
             if let Some(mut val) = state.transform {
                 ui.collapsing("Transform", |ui| {
-                    if inspect_transform(ui, &mut val, &mut |field, _action| {
+                    if inspect_transform(ui, &mut val, &mut |field, action| {
                         match field {
                             TransformField::PosX => {
-                                // TODO: Restore alignment using events
+                                apply_alignment(
+                                    &mut inspector,
+                                    &entities,
+                                    |e, q| q.entity_query.get(e).ok().and_then(|(_, t, ..)| t.map(|t| t.translation.x)),
+                                    |e, new_x, q| {
+                                        if let Ok((_, Some(t), ..)) = q.entity_query.get(e) {
+                                            let mut new_t = *t;
+                                            new_t.translation.x = new_x;
+                                            q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Transform(new_t) });
+                                        }
+                                    },
+                                    action
+                                );
                             }
                             TransformField::PosY => {
-                                // TODO: Restore alignment using events
+                                apply_alignment(
+                                    &mut inspector,
+                                    &entities,
+                                    |e, q| q.entity_query.get(e).ok().and_then(|(_, t, ..)| t.map(|t| t.translation.y)),
+                                    |e, new_y, q| {
+                                        if let Ok((_, Some(t), ..)) = q.entity_query.get(e) {
+                                            let mut new_t = *t;
+                                            new_t.translation.y = new_y;
+                                            q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Transform(new_t) });
+                                        }
+                                    },
+                                    action
+                                );
                             }
                             TransformField::Rotation => {}
                         }
@@ -152,16 +176,61 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             // Shape
             if let Some(mut val) = state.editable_shape {
                 ui.collapsing("Shape", |ui| {
-                    if inspect_shape(ui, &mut val, &mut |field, _action| {
+                    if inspect_shape(ui, &mut val, &mut |field, action| {
                         match field {
                             ShapeField::Width => {
-                                // TODO: Restore alignment
+                                apply_alignment(
+                                    &mut inspector,
+                                    &entities,
+                                    |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, _, _, es, ..)| es.and_then(|es|
+                                        match es.shape { ShapeType::Box { width, .. } => Some(width), _ => None }
+                                    )),
+                                    |e, new_w, q| {
+                                        if let Ok((_, _, _, _, _, Some(es), ..)) = q.entity_query.get(e) {
+                                            if let ShapeType::Box { height, .. } = es.shape {
+                                                let new_shape = ShapeType::Box { width: new_w, height };
+                                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Shape(new_shape) });
+                                            }
+                                        }
+                                    },
+                                    action
+                                );
                             }
                             ShapeField::Height => {
-                                // TODO: Restore alignment
+                                apply_alignment(
+                                    &mut inspector,
+                                    &entities,
+                                    |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, _, _, es, ..)| es.and_then(|es|
+                                        match es.shape { ShapeType::Box { height, .. } => Some(height), _ => None }
+                                    )),
+                                    |e, new_h, q| {
+                                        if let Ok((_, _, _, _, _, Some(es), ..)) = q.entity_query.get(e) {
+                                            if let ShapeType::Box { width, .. } = es.shape {
+                                                let new_shape = ShapeType::Box { width, height: new_h };
+                                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Shape(new_shape) });
+                                            }
+                                        }
+                                    },
+                                    action
+                                );
                             }
                             ShapeField::Radius => {
-                                // TODO: Restore alignment
+                                apply_alignment(
+                                    &mut inspector,
+                                    &entities,
+                                    |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, _, _, es, ..)| es.and_then(|es|
+                                        match es.shape { ShapeType::Circle { radius } => Some(radius), _ => None }
+                                    )),
+                                    |e, new_r, q| {
+                                        if let Ok((_, _, _, _, _, Some(es), ..)) = q.entity_query.get(e) {
+                                            if let ShapeType::Circle { .. } = es.shape {
+                                                let new_shape = ShapeType::Circle { radius: new_r };
+                                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Shape(new_shape) });
+                                            }
+                                        }
+                                    },
+                                    action
+                                );
                             }
                         }
                     }) {
@@ -191,8 +260,16 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Friction
                 if let Some(mut val) = state.friction {
-                    if inspect_friction(ui, &mut val, &mut |_action| {
-                        // TODO: Restore alignment
+                    if inspect_friction(ui, &mut val, &mut |action| {
+                        apply_alignment(
+                            &mut inspector,
+                            &entities,
+                            |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, f, ..)| f.map(|f| f.coefficient)),
+                            |e, val, q| {
+                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Friction(val) });
+                            },
+                            action
+                        );
                     }) {
                         apply_friction_change(&mut inspector, &entities, val);
                     }
@@ -201,8 +278,16 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Restitution
                 if let Some(mut val) = state.restitution {
-                    if inspect_restitution(ui, &mut val, &mut |_action| {
-                        // TODO: Restore alignment
+                    if inspect_restitution(ui, &mut val, &mut |action| {
+                        apply_alignment(
+                            &mut inspector,
+                            &entities,
+                            |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, _, r, ..)| r.map(|r| r.coefficient)),
+                            |e, val, q| {
+                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Restitution(val) });
+                            },
+                            action
+                        );
                     }) {
                         apply_restitution_change(&mut inspector, &entities, val);
                     }
@@ -211,8 +296,18 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Density
                 if let Some(mut val) = state.density {
-                    if inspect_density(ui, &mut val, &mut |_action| {
-                        // TODO: Restore alignment
+                    if inspect_density(ui, &mut val, &mut |action| {
+                        apply_alignment(
+                            &mut inspector,
+                            &entities,
+                            |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, _, _, _, _, _, _, _, m, ..)| m.map(|m|
+                                if let ColliderMassProperties::Density(d) = m { *d } else { 1.0 }
+                            )),
+                            |e, val, q| {
+                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::Density(val) });
+                            },
+                            action
+                        );
                     }) {
                         apply_density_change(&mut inspector, &entities, val);
                     }
@@ -221,8 +316,16 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
                 // Gravity
                 if let Some(mut val) = state.gravity_scale {
-                    if inspect_gravity(ui, &mut val, &mut |_action| {
-                        // TODO: Restore alignment
+                    if inspect_gravity(ui, &mut val, &mut |action| {
+                        apply_alignment(
+                            &mut inspector,
+                            &entities,
+                            |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, _, _, _, _, _, _, _, _, g, ..)| g.map(|g| g.0)),
+                            |e, val, q| {
+                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::GravityScale(val) });
+                            },
+                            action
+                        );
                     }) {
                         apply_gravity_change(&mut inspector, &entities, val);
                     }
@@ -248,8 +351,16 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
                     ui.separator();
                 }
                 if let Some(mut val) = state.stroke {
-                    if inspect_stroke(ui, &mut val, &mut |_action| {
-                        // TODO: Restore alignment
+                    if inspect_stroke(ui, &mut val, &mut |action| {
+                        apply_alignment(
+                            &mut inspector,
+                            &entities,
+                            |e, q| q.entity_query.get(e).ok().and_then(|(_, _, _, _, _, _, _, s, ..)| s.map(|s| s.options.line_width)),
+                            |e, val, q| {
+                                q.events.send(PropertyChangeEvent { entity: e, change: PropertyChange::StrokeWidth(val) });
+                            },
+                            action
+                        );
                     }) {
                         apply_stroke_change(&mut inspector, &entities, val);
                     }
@@ -1123,13 +1234,8 @@ fn apply_stroke_change(
     }
 }
 
-fn wake_up(_entity: Entity, _inspector: &mut InspectorQuery) {
-    // Wake up is now handled by the event handler
-}
-
 fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[Entity]) {
     let resolve = |e: Entity, insp: &InspectorQuery| -> Entity {
-// [dunnage] WARN: function `wake_up` is never used
         if let Ok(connector) = insp.connector_query.get(e) {
             connector.entity_a
         } else {
@@ -1356,14 +1462,15 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
     }
 }
 
-fn apply_alignment<'w, 's, F>(
+fn apply_alignment<'w, 's, Get, Set>(
     inspector: &mut InspectorQuery<'w, 's>,
     entities: &[Entity],
-    mut accessor: F,
+    mut get_value: Get,
+    mut set_value: Set,
     action: AlignmentAction,
 ) where
-    F: for<'a> FnMut(Entity, &'a mut InspectorQuery<'w, 's>) -> Option<&'a mut f32>,
-// [dunnage] WARN: function `apply_alignment` is never used
+    Get: FnMut(Entity, &InspectorQuery<'w, 's>) -> Option<f32>,
+    Set: FnMut(Entity, f32, &mut InspectorQuery<'w, 's>),
 {
     if entities.len() < 2 {
         return;
@@ -1372,8 +1479,8 @@ fn apply_alignment<'w, 's, F>(
     // 1. Read values
     let mut values: Vec<(Entity, f32)> = Vec::with_capacity(entities.len());
     for &e in entities {
-        if let Some(val) = accessor(e, inspector) {
-            values.push((e, *val));
+        if let Some(val) = get_value(e, inspector) {
+            values.push((e, val));
         }
     }
 
@@ -1390,24 +1497,18 @@ fn apply_alignment<'w, 's, F>(
     match action {
         AlignmentAction::Min => {
             for (e, _) in values {
-                if let Some(val) = accessor(e, inspector) {
-                    *val = min;
-                }
+                set_value(e, min, inspector);
             }
         }
         AlignmentAction::Max => {
             for (e, _) in values {
-                if let Some(val) = accessor(e, inspector) {
-                    *val = max;
-                }
+                set_value(e, max, inspector);
             }
         }
         AlignmentAction::Center => {
             let center = (min + max) * 0.5;
             for (e, _) in values {
-                if let Some(val) = accessor(e, inspector) {
-                    *val = center;
-                }
+                set_value(e, center, inspector);
             }
         }
         AlignmentAction::Distribute => {
@@ -1419,9 +1520,7 @@ fn apply_alignment<'w, 's, F>(
 
             for (i, (e, _)) in values.iter().enumerate() {
                 let target = min + (i as f32) * step;
-                if let Some(val) = accessor(*e, inspector) {
-                    *val = target;
-                }
+                set_value(*e, target, inspector);
             }
         }
     }
