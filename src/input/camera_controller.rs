@@ -12,11 +12,13 @@ pub struct CameraControllerPlugin;
 
 impl Plugin for CameraControllerPlugin {
     fn build(&self, app: &mut App) {
+        // TODO: Bound these systems with `run_if(in_state(GameState::Playing))` or similar.
         app.add_systems(Update, (camera_pan_orbit, camera_zoom));
     }
 }
 
 /// Pans (Right Click) or Orbits (Middle Click) the camera.
+// TODO: Decouple input logic (mouse buttons) from camera logic. Use input events or actions (e.g., `bevy_input` or `leafwing_input_manager`).
 pub fn camera_pan_orbit(
     mut query: Query<(&mut Transform, &GlobalTransform), With<Camera3d>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,

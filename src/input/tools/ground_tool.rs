@@ -49,6 +49,7 @@ fn ground_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
+    // TODO: Decouple from EguiContexts.
     contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
 ) {
@@ -82,6 +83,7 @@ fn ground_tool_update(
                 entity: None,
             };
 
+            // TODO: Use EventWriter.
             commands.queue(move |world: &mut World| {
                 world.resource_scope(|world, mut stack: Mut<CommandStack>| {
                     stack.push(Box::new(cmd), world);

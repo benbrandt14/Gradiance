@@ -26,6 +26,7 @@ pub fn update_cursor_pos(
     grid_settings: Res<GridSettings>,
     q_window: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    // TODO: Decouple from EguiContexts.
     mut contexts: EguiContexts,
     // Physics queries for object snapping
     q_rapier: Query<&RapierContext>,

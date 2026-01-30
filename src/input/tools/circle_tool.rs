@@ -47,6 +47,7 @@ fn circle_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
+    // TODO: Decouple from EguiContexts. Pass `is_pointer_over_ui` as a boolean or handle UI blocking in a separate system.
     contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
 ) {
@@ -79,6 +80,7 @@ fn circle_tool_update(
                     entity: None,
                 };
 
+                // TODO: Use EventWriter to trigger this command instead of queuing directly.
                 commands.queue(move |world: &mut World| {
                     world.resource_scope(|world, mut stack: Mut<CommandStack>| {
                         stack.push(Box::new(cmd), world);

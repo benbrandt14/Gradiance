@@ -103,6 +103,9 @@ struct InspectorState {
     gravity_scale: Option<InspectorValue<f32>>,
 }
 
+// TODO: Refactor to separate View (UI) from Model (Logic).
+// Instead of mutating components directly in the UI system, emit events (e.g. `PropertyChangeEvent`)
+// and handle them in a separate system. This improves testability and undo/redo support.
 fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
     let ctx = contexts.ctx_mut();
 

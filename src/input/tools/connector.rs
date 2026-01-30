@@ -128,6 +128,7 @@ fn update_connector(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     rapier_context_query: Query<&RapierContext>,
+    // TODO: Decouple from EguiContexts.
     mut contexts: EguiContexts,
     _grid_settings: Res<GridSettings>,
     tool_state: Res<State<ToolState>>,
@@ -194,6 +195,7 @@ fn update_connector(
             (Vec2::ZERO, 0.0)
         };
 
+        // TODO: Use EventWriter for all these commands.
         match connector_type {
             ConnectorType::Hinge => {
                 let cmd = SpawnJointCommand {

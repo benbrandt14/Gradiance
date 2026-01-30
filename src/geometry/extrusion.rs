@@ -105,6 +105,9 @@ fn update_extrusion_mesh(
     }
 }
 
+// TODO: Separate Mesh generation from Material generation.
+// Currently, this function creates a new StandardMaterial every time, which overwrites any
+// custom material properties (color, roughness) set by the user when the mesh is updated.
 fn create_extruded_mesh(
     path: &lyon::path::Path,
     groups: CollisionGroups,

@@ -111,6 +111,7 @@ fn sidebar_ui(
 
 fn top_panel_ui(
     mut contexts: EguiContexts,
+    // TODO: Consider using Events to change Time/State instead of direct mutation here.
     mut virtual_time: ResMut<Time<Virtual>>,
     mut grid_settings: ResMut<GridSettings>,
     mut menu_state: ResMut<GameMenuState>,

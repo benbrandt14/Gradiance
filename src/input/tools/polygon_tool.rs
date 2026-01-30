@@ -103,6 +103,7 @@ fn polygon_tool_update(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut gizmos: Gizmos,
+    // TODO: Decouple from EguiContexts. Pass `is_pointer_over_ui` as a boolean.
     mut contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
 ) {
@@ -166,6 +167,7 @@ fn polygon_tool_update(
                     entity: None,
                 };
 
+                // TODO: Use EventWriter to trigger this command.
                 commands.queue(move |world: &mut World| {
                     world.resource_scope(|world, mut stack: Mut<CommandStack>| {
                         stack.push(Box::new(cmd), world);
