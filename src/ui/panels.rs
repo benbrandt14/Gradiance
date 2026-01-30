@@ -76,6 +76,11 @@ fn sidebar_ui(
             "Fix (W)",
         ),
         (
+            ToolState::PrismaticJoint,
+            contexts.add_image(game_icons.prismatic_joint.clone_weak()),
+            "Slider (L)",
+        ),
+        (
             ToolState::Ground,
             contexts.add_image(game_icons.ground.clone_weak()),
             "Ground (G)",

@@ -6,6 +6,8 @@ use crate::geometry::extrusion::ExtrudableShape;
 use crate::prelude::*;
 use bevy::core_pipeline::bloom::Bloom;
 use bevy::core_pipeline::experimental::taa::TemporalAntiAliasing;
+
+mod gizmos;
 use bevy::pbr::{
     MaterialPipeline, MaterialPipelineKey, ScreenSpaceAmbientOcclusion, ScreenSpaceReflections,
 };
@@ -165,6 +167,7 @@ impl Plugin for VisualsPlugin {
                     update_toon_shader,
                     sync_to_toon_material,
                     sync_to_standard_material,
+                    gizmos::draw_joint_gizmos,
                 ),
             );
     }

@@ -359,6 +359,123 @@ impl GameCommand for SpawnJointCommand {
     }
 }
 
+/// Command to spawn a Prismatic Joint (Slider).
+#[derive(Debug)]
+pub struct SpawnPrismaticJointCommand {
+    /// The first body.
+    pub entity_a: Entity,
+    /// The second body (optional).
+    pub entity_b: Option<Entity>,
+    /// Anchor on body A (local).
+    pub anchor_a: Vec2,
+    /// Anchor on body B (local).
+    pub anchor_b: Vec2,
+    /// Axis of translation (local to body A).
+    pub axis: Vec2,
+    /// Joint compliance.
+    pub compliance: f32,
+    /// The visual entity ID.
+    pub visual_entity: Option<Entity>,
+    /// The pin entity ID.
+    pub pin_entity: Option<Entity>,
+    /// Previous solver groups of the pinned body (for undo).
+    pub original_solver_groups: Option<SolverGroups>,
+}
+
+impl GameCommand for SpawnPrismaticJointCommand {
+    fn name(&self) -> String {
+        "Spawn Prismatic Joint".to_string()
+    }
+
+    fn apply(&mut self, world: &mut World) -> Result<()> {
+        let visual_id = spawn_connector_visual(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            |world, visual_id| {
+                // Visual: A line representing the slider axis?
+                // For now, similar to FixedJoint but maybe longer or different color if we had colors.
+                let line = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::new(-VISUAL_LINE_OFFSET * 2.0, 0.0),
+                    Vec2::new(VISUAL_LINE_OFFSET * 2.0, 0.0),
+                ));
+                world.entity_mut(visual_id).insert(path_from_shape(line));
+            },
+        );
+        self.visual_entity = Some(visual_id);
+
+        // Capture original solver groups (Only if pinning to world)
+        if self.entity_b.is_none() {
+            let old_groups = world.get::<SolverGroups>(self.entity_a).copied();
+            self.original_solver_groups = old_groups;
+
+            let mut new_groups = old_groups.unwrap_or(SolverGroups {
+                memberships: Group::ALL,
+                filters: Group::ALL,
+            });
+            new_groups.filters &= !PIN_GROUP;
+
+            world.entity_mut(self.entity_a).insert(new_groups);
+        }
+
+        // Pin groups
+        let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
+
+        let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
+            world,
+            self.entity_a,
+            self.entity_b,
+            self.anchor_a,
+            self.anchor_b,
+            Some(visual_id),
+            pin_groups,
+        );
+        self.pin_entity = pin_entity;
+
+        let joint_data = PrismaticJointBuilder::new(self.axis)
+            .local_anchor1(local_anchor_1)
+            .local_anchor2(local_anchor_2);
+
+        world
+            .entity_mut(self.entity_a)
+            .insert(ImpulseJoint::new(target_entity, joint_data));
+        Ok(())
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        if let Some(v) = self.visual_entity {
+            if let Ok(e) = world.get_entity_mut(v) {
+                e.despawn();
+            }
+            self.visual_entity = None;
+        }
+
+        if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+            e.remove::<ImpulseJoint>();
+        }
+
+        if let Some(p) = self.pin_entity {
+            if let Ok(e) = world.get_entity_mut(p) {
+                e.despawn();
+            }
+            self.pin_entity = None;
+        }
+
+        // Restore solver groups
+        if self.entity_b.is_none() {
+            if let Some(groups) = self.original_solver_groups {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                    e.insert(groups);
+                }
+            } else if let Ok(mut e) = world.get_entity_mut(self.entity_a) {
+                e.remove::<SolverGroups>();
+            }
+        }
+    }
+}
+
 /// Command to spawn a Fixed Joint (Weld).
 #[derive(Debug)]
 pub struct SpawnFixedJointCommand {

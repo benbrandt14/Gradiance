@@ -359,9 +359,9 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             });
             ui.separator();
 
-            // Joints (Only supports single selection or unified joint type for now, sticking to first for simplicity on joints)
-            if let Some(first) = entities.first() {
-                inspect_joint(ui, &mut inspector, *first);
+            // Joints
+            if !entities.is_empty() {
+                inspect_joint(ui, &mut inspector, &entities);
             }
         });
     });
@@ -1233,88 +1233,54 @@ fn wake_up(entity: Entity, inspector: &mut InspectorQuery) {
         .insert(Sleeping::disabled());
 }
 
-fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, first_entity: Entity) {
-    // Keep existing logic for joints, as they are complex to multi-edit
-    let mut joint_entity = first_entity;
-    if let Ok(connector) = inspector.connector_query.get(first_entity) {
-        joint_entity = connector.entity_a;
-    }
+fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[Entity]) {
+    let resolve = |e: Entity, insp: &InspectorQuery| -> Entity {
+        if let Ok(connector) = insp.connector_query.get(e) {
+            connector.entity_a
+        } else {
+            e
+        }
+    };
 
-    if let Ok(mut joint) = inspector.joint_query.get_mut(joint_entity) {
-        ui.heading("Joint Settings");
+    let first = resolve(entities[0], inspector);
 
-        match &mut joint.data {
+    // Read initial values from first entity
+    let mut rev_params = None;
+    let mut prism_params = None;
+
+    if let Ok(joint) = inspector.joint_query.get(first) {
+        match &joint.data {
             TypedJoint::RevoluteJoint(rev) => {
-                let current_limits = if let Some(l) = rev.limits() {
+                let limits = if let Some(l) = rev.limits() {
                     [l.min, l.max]
                 } else {
                     [-std::f32::consts::PI, std::f32::consts::PI]
                 };
-                let mut min = current_limits[0];
-                let mut max = current_limits[1];
-
-                ui.label("Revolute Limits");
-                let mut changed = false;
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut min)
-                            .speed(DRAG_SPEED)
-                            .prefix("Min: "),
-                    )
-                    .changed()
-                {
-                    changed = true;
-                }
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut max)
-                            .speed(DRAG_SPEED)
-                            .prefix("Max: "),
-                    )
-                    .changed()
-                {
-                    changed = true;
-                }
-
-                if changed {
-                    rev.set_limits([min, max]);
-                }
+                let raw = rev.data.raw.as_revolute().unwrap();
+                let motor = &raw.data.motors[2]; // Z axis
+                rev_params = Some((
+                    limits[0],
+                    limits[1],
+                    motor.target_vel,
+                    motor.damping,
+                    motor.max_force,
+                ));
             }
             TypedJoint::PrismaticJoint(prism) => {
-                let current_limits = if let Some(l) = prism.limits() {
+                let limits = if let Some(l) = prism.limits() {
                     [l.min, l.max]
                 } else {
                     [PRISMATIC_MIN_DEFAULT, PRISMATIC_MAX_DEFAULT]
                 };
-                let mut min = current_limits[0];
-                let mut max = current_limits[1];
-
-                ui.label("Prismatic Limits");
-                let mut changed = false;
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut min)
-                            .speed(DRAG_SPEED)
-                            .prefix("Min: "),
-                    )
-                    .changed()
-                {
-                    changed = true;
-                }
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut max)
-                            .speed(DRAG_SPEED)
-                            .prefix("Max: "),
-                    )
-                    .changed()
-                {
-                    changed = true;
-                }
-
-                if changed {
-                    prism.set_limits([min, max]);
-                }
+                let raw = prism.data.raw.as_prismatic().unwrap();
+                let motor = &raw.data.motors[0]; // X axis
+                prism_params = Some((
+                    limits[0],
+                    limits[1],
+                    motor.target_vel,
+                    motor.damping,
+                    motor.max_force,
+                ));
             }
             TypedJoint::FixedJoint(_) => {
                 ui.label("Fixed Joint (No limits)");
@@ -1323,7 +1289,162 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, first_entity
                 ui.label("Generic/Other Joint Type");
             }
         }
+    }
+
+    if let Some((min, max, vel, damp, force)) = rev_params {
+        let mut min_deg = min.to_degrees();
+        let mut max_deg = max.to_degrees();
+        let mut target_vel = vel.to_degrees();
+        let mut damping = damp;
+        let mut max_force = force;
+
+        ui.heading("Revolute Settings");
+        let mut changed = false;
+
+        ui.label("Limits (Deg)");
+        if ui
+            .add(
+                egui::DragValue::new(&mut min_deg)
+                    .speed(1.0)
+                    .prefix("Min: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .add(
+                egui::DragValue::new(&mut max_deg)
+                    .speed(1.0)
+                    .prefix("Max: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+
         ui.separator();
+        ui.label("Motor Settings");
+        if ui
+            .add(
+                egui::DragValue::new(&mut target_vel)
+                    .speed(1.0)
+                    .prefix("Speed (deg/s): "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .add(
+                egui::DragValue::new(&mut damping)
+                    .speed(0.1)
+                    .prefix("Damping: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .add(
+                egui::DragValue::new(&mut max_force)
+                    .speed(10.0)
+                    .prefix("Max Force: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+
+        if changed {
+            for &e in entities {
+                let target = resolve(e, inspector);
+                if let Ok(mut j) = inspector.joint_query.get_mut(target) {
+                    if let TypedJoint::RevoluteJoint(r) = &mut j.data {
+                        r.set_limits([min_deg.to_radians(), max_deg.to_radians()]);
+                        r.set_motor_velocity(target_vel.to_radians(), damping);
+                        r.set_motor_max_force(max_force);
+                    }
+                }
+            }
+        }
+    } else if let Some((min, max, vel, damp, force)) = prism_params {
+        let mut min_val = min;
+        let mut max_val = max;
+        let mut target_vel = vel;
+        let mut damping = damp;
+        let mut max_force = force;
+
+        ui.heading("Prismatic Settings");
+        let mut changed = false;
+
+        ui.label("Limits");
+        if ui
+            .add(
+                egui::DragValue::new(&mut min_val)
+                    .speed(DRAG_SPEED)
+                    .prefix("Min: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .add(
+                egui::DragValue::new(&mut max_val)
+                    .speed(DRAG_SPEED)
+                    .prefix("Max: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+
+        ui.separator();
+        ui.label("Motor Settings");
+        if ui
+            .add(
+                egui::DragValue::new(&mut target_vel)
+                    .speed(0.1)
+                    .prefix("Speed: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .add(
+                egui::DragValue::new(&mut damping)
+                    .speed(0.1)
+                    .prefix("Damping: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .add(
+                egui::DragValue::new(&mut max_force)
+                    .speed(10.0)
+                    .prefix("Max Force: "),
+            )
+            .changed()
+        {
+            changed = true;
+        }
+
+        if changed {
+            for &e in entities {
+                let target = resolve(e, inspector);
+                if let Ok(mut j) = inspector.joint_query.get_mut(target) {
+                    if let TypedJoint::PrismaticJoint(p) = &mut j.data {
+                        p.set_limits([min_val, max_val]);
+                        p.set_motor_velocity(target_vel, damping);
+                        p.set_motor_max_force(max_force);
+                    }
+                }
+            }
+        }
     }
 }
 

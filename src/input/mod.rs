@@ -108,6 +108,8 @@ pub enum ToolState {
     RevoluteJoint,
     /// Create fixed joints (Welds).
     Weld,
+    /// Create prismatic joints (Sliders).
+    PrismaticJoint,
     /// Create infinite ground plane.
     Ground,
     // Add more as needed
