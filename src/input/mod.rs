@@ -45,15 +45,18 @@ impl Plugin for GradianceInputPlugin {
 
         // Commands
         app.init_resource::<commands::CommandStack>();
-        app.add_systems(Update, (
-            event_handlers::handle_spawn_shape_event,
-            event_handlers::handle_spawn_ground_event,
-            event_handlers::handle_spawn_joint_event,
-            event_handlers::handle_spawn_prismatic_joint_event,
-            event_handlers::handle_spawn_fixed_joint_event,
-            event_handlers::handle_undo_event,
-            event_handlers::handle_redo_event,
-        ));
+        app.add_systems(
+            Update,
+            (
+                event_handlers::handle_spawn_shape_event,
+                event_handlers::handle_spawn_ground_event,
+                event_handlers::handle_spawn_joint_event,
+                event_handlers::handle_spawn_prismatic_joint_event,
+                event_handlers::handle_spawn_fixed_joint_event,
+                event_handlers::handle_undo_event,
+                event_handlers::handle_redo_event,
+            ),
+        );
 
         // Tool state
         app.init_state::<ToolState>();

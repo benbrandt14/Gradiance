@@ -4,8 +4,8 @@
 //! It includes the sidebar for tools, the inspector for properties,
 //! the context menu, and the grid system.
 
-use crate::prelude::*;
 use crate::input::PointerOverUi;
+use crate::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin};
 
 pub mod context_menu;

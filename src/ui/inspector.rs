@@ -543,9 +543,10 @@ fn inspect_transform(
         } // careful with mixed logic
 
         let mut rot_action = None;
-        let changed_rot = inspect_with_context(ui, &mut rot_val, 0.0, &mut rot_action, |ui, val| {
-            ui.drag_angle(val)
-        });
+        let changed_rot =
+            inspect_with_context(ui, &mut rot_val, 0.0, &mut rot_action, |ui, val| {
+                ui.drag_angle(val)
+            });
         if let Some(act) = rot_action {
             on_align(TransformField::Rotation, act);
         }
@@ -926,9 +927,10 @@ fn inspect_stroke(
         }
 
         let mut action = None;
-        let width_changed = inspect_with_context(ui, &mut width_val, 1.0, &mut action, |ui, val| {
-            ui.add(egui::DragValue::new(val).speed(0.1).prefix("Width: "))
-        });
+        let width_changed =
+            inspect_with_context(ui, &mut width_val, 1.0, &mut action, |ui, val| {
+                ui.add(egui::DragValue::new(val).speed(0.1).prefix("Width: "))
+            });
         if let Some(act) = action {
             on_align(act);
         }
@@ -1258,7 +1260,10 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
                 let target = resolve(e, inspector);
                 inspector.events.send(PropertyChangeEvent {
                     entity: target,
-                    change: PropertyChange::RevoluteLimits([min_deg.to_radians(), max_deg.to_radians()]),
+                    change: PropertyChange::RevoluteLimits([
+                        min_deg.to_radians(),
+                        max_deg.to_radians(),
+                    ]),
                 });
                 inspector.events.send(PropertyChangeEvent {
                     entity: target,

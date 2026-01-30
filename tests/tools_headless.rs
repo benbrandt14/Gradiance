@@ -15,7 +15,10 @@ fn test_event_handler_spawn_shape() {
 
     // We only need the event handler system and CommandStack
     app.init_resource::<CommandStack>();
-    app.add_systems(Update, gradiance::input::event_handlers::handle_spawn_shape_event);
+    app.add_systems(
+        Update,
+        gradiance::input::event_handlers::handle_spawn_shape_event,
+    );
 
     // Mock ExtrusionPlugin hook?
     // The panic was "Requested resource Assets<Mesh> does not exist".
@@ -24,7 +27,10 @@ fn test_event_handler_spawn_shape() {
     // Send event
     app.world_mut().send_event(SpawnShapeEvent {
         position: Vec2::new(10.0, 10.0),
-        shape: ShapeType::Box { width: 5.0, height: 5.0 },
+        shape: ShapeType::Box {
+            width: 5.0,
+            height: 5.0,
+        },
     });
 
     // Run schedule

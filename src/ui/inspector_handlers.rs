@@ -1,10 +1,10 @@
 //! Event handlers for applying property changes from the Inspector.
 
-use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
-use bevy_prototype_lyon::prelude::*;
-use crate::events::{PropertyChangeEvent, PropertyChange};
+use crate::events::{PropertyChange, PropertyChangeEvent};
 use crate::input::editable_shape::EditableShape;
+use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
+use bevy_rapier2d::prelude::*;
 
 /// Handles `PropertyChangeEvent` by applying changes to entities.
 pub fn handle_property_change_event(
@@ -31,10 +31,21 @@ pub fn handle_property_change_event(
 
         // Check if entity exists and get components
         if let Ok((
-            mut t, _rb, mut f, mut r, mut es, mut fill, mut stroke,
-            _sensor, _locked, _mass, _grav, _sleep, mut joint
-        )) = query.get_mut(entity) {
-
+            mut t,
+            _rb,
+            mut f,
+            mut r,
+            mut es,
+            mut fill,
+            mut stroke,
+            _sensor,
+            _locked,
+            _mass,
+            _grav,
+            _sleep,
+            mut joint,
+        )) = query.get_mut(entity)
+        {
             match &event.change {
                 PropertyChange::Transform(new_t) => {
                     if let Some(t) = &mut t {
@@ -61,11 +72,15 @@ pub fn handle_property_change_event(
                     if let Some(r) = &mut r {
                         r.coefficient = *val;
                     } else {
-                        commands.entity(entity).insert(Restitution::coefficient(*val));
+                        commands
+                            .entity(entity)
+                            .insert(Restitution::coefficient(*val));
                     }
                 }
                 PropertyChange::Density(val) => {
-                    commands.entity(entity).insert(ColliderMassProperties::Density(*val));
+                    commands
+                        .entity(entity)
+                        .insert(ColliderMassProperties::Density(*val));
                 }
                 PropertyChange::GravityScale(val) => {
                     commands.entity(entity).insert(GravityScale(*val));
@@ -102,7 +117,11 @@ pub fn handle_property_change_event(
                         }
                     }
                 }
-                PropertyChange::RevoluteMotor { target_vel, damping, max_force } => {
+                PropertyChange::RevoluteMotor {
+                    target_vel,
+                    damping,
+                    max_force,
+                } => {
                     if let Some(joint) = &mut joint {
                         if let TypedJoint::RevoluteJoint(r) = &mut joint.data {
                             r.set_motor_velocity(*target_vel, *damping);
@@ -117,7 +136,11 @@ pub fn handle_property_change_event(
                         }
                     }
                 }
-                PropertyChange::PrismaticMotor { target_vel, damping, max_force } => {
+                PropertyChange::PrismaticMotor {
+                    target_vel,
+                    damping,
+                    max_force,
+                } => {
                     if let Some(joint) = &mut joint {
                         if let TypedJoint::PrismaticJoint(p) = &mut joint.data {
                             p.set_motor_velocity(*target_vel, *damping);

@@ -3,9 +3,9 @@
 //! This module defines the events used to communicate user intent and game state changes
 //! across different systems, following an event-driven architecture.
 
+use crate::input::editable_shape::ShapeType;
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::{LockedAxes, RigidBody, SolverGroups};
-use crate::input::editable_shape::ShapeType;
 
 /// Plugin for registering game events.
 pub struct GameEventsPlugin;

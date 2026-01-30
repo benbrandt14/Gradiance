@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
-use gradiance::input::commands::{GameCommand, SpawnPrismaticJointCommand, SpawnJointCommand};
+use gradiance::input::commands::{GameCommand, SpawnJointCommand, SpawnPrismaticJointCommand};
 // use gradiance::prelude::*;
 
 #[test]
@@ -10,17 +10,23 @@ fn test_spawn_prismatic_joint() {
     app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
 
     // Setup entities
-    let entity_a = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Transform::default(),
-        GlobalTransform::default(),
-    )).id();
+    let entity_a = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Transform::default(),
+            GlobalTransform::default(),
+        ))
+        .id();
 
-    let entity_b = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Transform::from_xyz(10.0, 0.0, 0.0),
-        GlobalTransform::from_translation(Vec3::new(10.0, 0.0, 0.0)),
-    )).id();
+    let entity_b = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Transform::from_xyz(10.0, 0.0, 0.0),
+            GlobalTransform::from_translation(Vec3::new(10.0, 0.0, 0.0)),
+        ))
+        .id();
 
     let mut command = SpawnPrismaticJointCommand {
         entity_a,
@@ -34,10 +40,15 @@ fn test_spawn_prismatic_joint() {
         original_solver_groups: None,
     };
 
-    command.apply(app.world_mut()).expect("Failed to apply command");
+    command
+        .apply(app.world_mut())
+        .expect("Failed to apply command");
 
     // Verify component
-    let joint = app.world().get::<ImpulseJoint>(entity_a).expect("Joint not found");
+    let joint = app
+        .world()
+        .get::<ImpulseJoint>(entity_a)
+        .expect("Joint not found");
     assert_eq!(joint.parent, entity_b);
 
     if let TypedJoint::PrismaticJoint(prism) = joint.data {
@@ -55,17 +66,23 @@ fn test_joint_motor_properties() {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0));
 
-    let entity_a = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Transform::default(),
-        GlobalTransform::default(),
-    )).id();
+    let entity_a = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Transform::default(),
+            GlobalTransform::default(),
+        ))
+        .id();
 
-    let entity_b = app.world_mut().spawn((
-        RigidBody::Dynamic,
-        Transform::from_xyz(10.0, 0.0, 0.0),
-        GlobalTransform::from_translation(Vec3::new(10.0, 0.0, 0.0)),
-    )).id();
+    let entity_b = app
+        .world_mut()
+        .spawn((
+            RigidBody::Dynamic,
+            Transform::from_xyz(10.0, 0.0, 0.0),
+            GlobalTransform::from_translation(Vec3::new(10.0, 0.0, 0.0)),
+        ))
+        .id();
 
     // Spawn Revolute
     let mut cmd_rev = SpawnJointCommand {

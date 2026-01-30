@@ -151,11 +151,7 @@ fn select_tool_update(
     mut commands: Commands,
 ) {
     // Prevent selection if over UI
-    if pointer_over_ui.0
-        && !data.is_moving
-        && !data.is_rotating
-        && data.drag_start.is_none()
-    {
+    if pointer_over_ui.0 && !data.is_moving && !data.is_rotating && data.drag_start.is_none() {
         return;
     }
 
