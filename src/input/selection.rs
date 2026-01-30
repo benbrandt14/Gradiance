@@ -3,6 +3,7 @@
 //! Handles the currently selected entity and renders a highlight gizmo around it.
 
 use crate::input::editable_shape::{EditableShape, ShapeType};
+use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
 use bevy::prelude::*;
 use std::collections::HashSet;
@@ -136,21 +137,25 @@ fn handle_delete_key(
 
 /// System that draws a yellow outline around the selected entities.
 ///
-/// Supports `EditableShape` and `GroundPlane`.
+/// Supports `EditableShape`, `GroundPlane`, and `Connector`.
 fn draw_selection_highlight(
     selection: Res<Selection>,
-    query: Query<(&Transform, Option<&EditableShape>, Option<&GroundPlane>)>,
+    query: Query<(&Transform, Option<&EditableShape>, Option<&GroundPlane>, Option<&Connector>)>,
     mut gizmos: Gizmos,
 ) {
     for &entity in &selection.0 {
-        if let Ok((transform, editable_shape, ground)) = query.get(entity) {
+        if let Ok((transform, editable_shape, ground, connector)) = query.get(entity) {
             let color = Color::srgb(1.0, 1.0, 0.0); // Yellow
             let t = transform.translation.truncate();
             let r = transform.rotation.to_euler(EulerRot::XYZ).2;
 
             let iso = Isometry2d::from_translation(t) * Isometry2d::from_rotation(Rot2::radians(r));
 
-            if let Some(shape) = editable_shape {
+            if let Some(_connector) = connector {
+                // Highlight connector (Cyan)
+                let connector_color = Color::srgb(0.0, 1.0, 1.0);
+                gizmos.circle_2d(iso, 0.6, connector_color);
+            } else if let Some(shape) = editable_shape {
                 match &shape.shape {
                     ShapeType::Box { width, height } => {
                         gizmos.rect_2d(

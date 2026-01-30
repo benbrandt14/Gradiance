@@ -8,6 +8,7 @@ use bevy_rapier2d::render::DebugRenderContext;
 
 pub mod config;
 pub mod constraints;
+pub mod controllers;
 pub mod floor;
 
 const PIXELS_PER_METER: f32 = 100.0;
@@ -29,6 +30,7 @@ impl Plugin for PhysicsPlugin {
 
         // Spec: Custom constraints will be added here
         app.add_plugins(constraints::ConstraintsPlugin);
+        app.add_plugins(controllers::MotorControllerPlugin);
 
         // Setup Floor
         app.add_plugins(floor::FloorPlugin);

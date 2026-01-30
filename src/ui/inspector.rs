@@ -1317,21 +1317,13 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
 
         ui.label("Limits (Deg)");
         if ui
-            .add(
-                egui::DragValue::new(&mut min_deg)
-                    .speed(1.0)
-                    .prefix("Min: "),
-            )
+            .add(egui::Slider::new(&mut min_deg, -180.0..=180.0).text("Min"))
             .changed()
         {
             changed = true;
         }
         if ui
-            .add(
-                egui::DragValue::new(&mut max_deg)
-                    .speed(1.0)
-                    .prefix("Max: "),
-            )
+            .add(egui::Slider::new(&mut max_deg, -180.0..=180.0).text("Max"))
             .changed()
         {
             changed = true;
