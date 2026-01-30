@@ -391,6 +391,8 @@ fn context_menu_ui(
 
                     if ui.button("Distribute Layers").clicked() {
                         let mut entities: Vec<_> = selection.0.iter().copied().collect();
+                        // Filter out joints/connectors
+                        entities.retain(|&e| !connector_query.contains(e));
                         // Sort by Entity ID for deterministic distribution
                         entities.sort();
 

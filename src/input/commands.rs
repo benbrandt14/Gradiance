@@ -4,7 +4,7 @@
 
 use crate::geometry::extrusion::ExtrudableShape;
 use crate::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
-use crate::input::tools::connector::Connector;
+use crate::input::tools::connector::{Connector, SliderKnob};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use anyhow::{Result, bail};
@@ -276,13 +276,23 @@ impl GameCommand for SpawnJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                let circle_outer = GeometryBuilder::build_as(&shapes::Circle {
+                // Dial shape (Circle + Line) to indicate rotation
+                let circle = GeometryBuilder::build_as(&shapes::Circle {
                     radius: VISUAL_CIRCLE_OUTER_RADIUS,
                     ..default()
                 });
                 world
                     .entity_mut(visual_id)
-                    .insert(path_from_shape(circle_outer));
+                    .insert(circle)
+                    .insert(Stroke::new(Color::WHITE, 1.0));
+
+                // Line indicator as child
+                let line = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::ZERO,
+                    Vec2::new(VISUAL_CIRCLE_OUTER_RADIUS, 0.0)
+                ));
+
+                world.spawn((line, Stroke::new(Color::WHITE, 1.0), Transform::default(), Visibility::default())).set_parent(visual_id);
             },
         );
         self.visual_entity = Some(visual_id);
@@ -316,9 +326,11 @@ impl GameCommand for SpawnJointCommand {
         );
         self.pin_entity = pin_entity;
 
-        let joint_data = RevoluteJointBuilder::new()
+        let mut joint_data = RevoluteJointBuilder::new()
             .local_anchor1(local_anchor_1)
-            .local_anchor2(local_anchor_2);
+            .local_anchor2(local_anchor_2)
+            .build();
+        joint_data.set_contacts_enabled(false);
 
         world
             .entity_mut(self.entity_a)
@@ -395,13 +407,42 @@ impl GameCommand for SpawnPrismaticJointCommand {
             self.anchor_a,
             self.anchor_b,
             |world, visual_id| {
-                // Visual: A line representing the slider axis?
-                // For now, similar to FixedJoint but maybe longer or different color if we had colors.
-                let line = GeometryBuilder::build_as(&shapes::Line(
-                    Vec2::new(-VISUAL_LINE_OFFSET * 2.0, 0.0),
-                    Vec2::new(VISUAL_LINE_OFFSET * 2.0, 0.0),
+                // Slider shape (Line with ticks)
+                let len = VISUAL_LINE_OFFSET * 2.0;
+                let main_line = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::new(-len, 0.0),
+                    Vec2::new(len, 0.0)
                 ));
-                world.entity_mut(visual_id).insert(path_from_shape(line));
+                world
+                    .entity_mut(visual_id)
+                    .insert(main_line)
+                    .insert(Stroke::new(Color::WHITE, 1.0));
+
+                // Ticks
+                let tick1 = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::new(-len, -2.0),
+                    Vec2::new(-len, 2.0)
+                ));
+                world.spawn((tick1, Stroke::new(Color::WHITE, 1.0), Transform::default(), Visibility::default())).set_parent(visual_id);
+
+                let tick2 = GeometryBuilder::build_as(&shapes::Line(
+                    Vec2::new(len, -2.0),
+                    Vec2::new(len, 2.0)
+                ));
+                world.spawn((tick2, Stroke::new(Color::WHITE, 1.0), Transform::default(), Visibility::default())).set_parent(visual_id);
+
+                // Knob (Moving indicator)
+                let knob = GeometryBuilder::build_as(&shapes::Rectangle {
+                    extents: Vec2::new(1.0, 4.0),
+                    ..default()
+                });
+                world.spawn((
+                    knob,
+                    Stroke::new(Color::WHITE, 1.0),
+                    Transform::default(),
+                    Visibility::default(),
+                    SliderKnob
+                )).set_parent(visual_id);
             },
         );
         self.visual_entity = Some(visual_id);
@@ -434,9 +475,11 @@ impl GameCommand for SpawnPrismaticJointCommand {
         );
         self.pin_entity = pin_entity;
 
-        let joint_data = PrismaticJointBuilder::new(self.axis)
+        let mut joint_data = PrismaticJointBuilder::new(self.axis)
             .local_anchor1(local_anchor_1)
-            .local_anchor2(local_anchor_2);
+            .local_anchor2(local_anchor_2)
+            .build();
+        joint_data.set_contacts_enabled(false);
 
         world
             .entity_mut(self.entity_a)
@@ -558,11 +601,13 @@ impl GameCommand for SpawnFixedJointCommand {
         );
         self.pin_entity = pin_entity;
 
-        let joint_data = FixedJointBuilder::new()
+        let mut joint_data = FixedJointBuilder::new()
             .local_anchor1(local_anchor_1)
             .local_anchor2(local_anchor_2)
             .local_basis1(-self.rot_a)
-            .local_basis2(-self.rot_b);
+            .local_basis2(-self.rot_b)
+            .build();
+        joint_data.set_contacts_enabled(false);
 
         world
             .entity_mut(self.entity_a)

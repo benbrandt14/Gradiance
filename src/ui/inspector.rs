@@ -118,7 +118,21 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
 
             // Extract state from all selected entities
             // We collect entities into a Vec to pass to state extractor
-            let entities: Vec<Entity> = inspector.selection.0.iter().copied().collect();
+            let filter = *inspector.selection_filter;
+            let entities: Vec<Entity> = inspector
+                .selection
+                .0
+                .iter()
+                .copied()
+                .filter(|&e| {
+                    let is_connector = inspector.connector_query.contains(e);
+                    match filter {
+                        SelectionFilter::All => true,
+                        SelectionFilter::Shapes => !is_connector,
+                        SelectionFilter::Joints => is_connector,
+                    }
+                })
+                .collect();
             let state = extract_inspector_state(&entities, &inspector.entity_query);
 
             ui.heading("Inspector");
@@ -1349,7 +1363,21 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
             .add(
                 egui::DragValue::new(&mut max_force)
                     .speed(10.0)
-                    .prefix("Max Force: "),
+                    .prefix("Max Force: ")
+                    .custom_formatter(|n, _| {
+                        if n > 1e20 {
+                            "inf".to_string()
+                        } else {
+                            format!("{:.1}", n)
+                        }
+                    })
+                    .custom_parser(|s| {
+                        if s == "inf" {
+                            Some(f32::MAX.into())
+                        } else {
+                            s.parse().ok()
+                        }
+                    }),
             )
             .changed()
         {
@@ -1426,7 +1454,21 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
             .add(
                 egui::DragValue::new(&mut max_force)
                     .speed(10.0)
-                    .prefix("Max Force: "),
+                    .prefix("Max Force: ")
+                    .custom_formatter(|n, _| {
+                        if n > 1e20 {
+                            "inf".to_string()
+                        } else {
+                            format!("{:.1}", n)
+                        }
+                    })
+                    .custom_parser(|s| {
+                        if s == "inf" {
+                            Some(f32::MAX.into())
+                        } else {
+                            s.parse().ok()
+                        }
+                    }),
             )
             .changed()
         {

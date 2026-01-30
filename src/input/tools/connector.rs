@@ -57,13 +57,23 @@ pub struct Connector {
     pub local_anchor_b: Vec2,
 }
 
+/// Tag component for the moving part of a slider visual.
+#[derive(Component)]
+pub struct SliderKnob;
+
 fn update_connector_visuals(
-    mut visuals: Query<(&mut Transform, &Connector, &Parent)>,
+    mut visuals: Query<(Entity, &mut Transform, &Connector, &Parent)>,
+    mut knobs: Query<(&mut Transform, &Parent), (With<SliderKnob>, Without<Connector>)>,
     global_transforms: Query<&GlobalTransform>,
+    rapier_handles: Query<&RapierImpulseJointHandle>,
+    rapier_context_query: Query<&RapierContext>,
+    joints: Query<&ImpulseJoint>,
 ) {
-    for (mut transform, connector, parent) in &mut visuals {
+    let rapier_context = rapier_context_query.iter().next();
+
+    for (entity, mut transform, connector, parent) in &mut visuals {
         if let Ok(parent_global) = global_transforms.get(parent.get()) {
-            // Calculate world anchors
+            // 1. Position: Midpoint of anchors
             let anchor_a_world = if let Ok(t_a) = global_transforms.get(connector.entity_a) {
                 let t = t_a.compute_transform();
                 t.transform_point(Vec3::new(
@@ -97,6 +107,81 @@ fn update_connector_visuals(
 
             transform.translation.x = local_midpoint.x;
             transform.translation.y = local_midpoint.y;
+
+            // 2. Rotation and State Visualization
+            let mut joint_angle = 0.0;
+            let mut joint_offset = 0.0;
+
+            // Try to get dynamic state from Rapier
+            if let Ok(handle) = rapier_handles.get(connector.entity_a) {
+                if let Some(ctx) = rapier_context {
+                    if let Some(joint) = ctx.impulse_joints.get(handle.0) {
+                        if let Some(rev) = joint.data.as_revolute() {
+                            if let (Some(b1), Some(b2)) = (ctx.bodies.get(joint.body1), ctx.bodies.get(joint.body2)) {
+                                joint_angle = rev.angle(b1.rotation(), b2.rotation());
+                            }
+                        } else if let Some(pris) = joint.data.as_prismatic() {
+                            // Calculate position manually
+                            // Use connector entities (A and B/Pin)
+                            if let Some(e_b) = connector.entity_b {
+                                if let (Ok(b1), Ok(b2)) = (global_transforms.get(connector.entity_a), global_transforms.get(e_b)) {
+                                    let anchor1 = pris.local_anchor1();
+                                    let anchor2 = pris.local_anchor2();
+                                    let axis1 = pris.local_axis1();
+
+                                    let t1 = b1.compute_transform();
+                                    let t2 = b2.compute_transform();
+
+                                    let p1 = t1.transform_point(Vec3::new(anchor1.x, anchor1.y, 0.0));
+                                    let p2 = t2.transform_point(Vec3::new(anchor2.x, anchor2.y, 0.0));
+                                    let axis_world = t1.rotation * Vec3::new(axis1.x, axis1.y, 0.0);
+
+                                    let d = p2 - p1;
+                                    joint_offset = d.dot(axis_world);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Determine Base Rotation
+            let base_rotation = if connector.entity_b.is_none() {
+                // Pinned: Fixed to background -> Inverse of parent rotation
+                parent_global.compute_transform().rotation.inverse()
+            } else {
+                // Connected: Relative to parent -> Identity
+                Quat::IDENTITY
+            };
+
+            // Determine Axis/Type from ImpulseJoint component to apply state correctly
+            if let Ok(joint) = joints.get(connector.entity_a) {
+                match &joint.data {
+                    TypedJoint::RevoluteJoint(_) => {
+                         // Rotate by joint angle
+                         transform.rotation = base_rotation * Quat::from_rotation_z(joint_angle);
+                    }
+                    TypedJoint::PrismaticJoint(data) => {
+                         let axis = data.data.local_axis1();
+                         let axis_vec = Vec2::new(axis.x, axis.y);
+                         let angle = axis_vec.y.atan2(axis_vec.x);
+
+                         transform.rotation = base_rotation * Quat::from_rotation_z(angle);
+
+                         // Update Knob Position
+                         for (mut knob_transform, knob_parent) in &mut knobs {
+                             if knob_parent.get() == entity {
+                                 knob_transform.translation.x = joint_offset;
+                             }
+                         }
+                    }
+                    _ => {
+                         transform.rotation = base_rotation;
+                    }
+                }
+            } else {
+                 transform.rotation = base_rotation;
+            }
         }
     }
 }
@@ -133,7 +218,6 @@ fn update_connector(
     tool_state: Res<State<ToolState>>,
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
     parents: Query<&Parent>,
-    transforms: Query<&Transform>,
 ) {
     if is_pointer_over_ui(&mut contexts) {
         return;
@@ -179,9 +263,10 @@ fn update_connector(
         };
 
         let get_local_and_rot = |e: Entity| -> (Vec2, f32) {
-            if let Ok(t) = transforms.get(e) {
+            if let Ok((_, global_transform)) = bodies.get(e) {
+                let t = global_transform.compute_transform();
                 let rot = t.rotation.to_euler(EulerRot::XYZ).2;
-                (calculate_local_anchor(t, pos), rot)
+                (calculate_local_anchor(&t, pos), rot)
             } else {
                 (Vec2::ZERO, 0.0)
             }
