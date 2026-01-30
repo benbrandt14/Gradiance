@@ -155,6 +155,8 @@ pub struct VisualsPlugin;
 
 impl Plugin for VisualsPlugin {
     fn build(&self, app: &mut App) {
+        // TODO: Bound systems with run conditions (e.g. `run_if(in_state(...))`).
+        // Also consider using `Changed<RenderSettings>` for `apply_render_settings` to avoid per-frame overhead.
         app.add_plugins(MaterialPlugin::<ToonMaterial>::default())
             .init_resource::<RenderSettings>()
             .init_resource::<AmbientLight>()

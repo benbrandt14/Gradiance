@@ -71,6 +71,7 @@ impl Plugin for SelectionPlugin {
         app.init_resource::<Selection>();
         app.init_resource::<SelectionFilter>();
         app.init_resource::<NextGroupID>();
+        // TODO: Bound these systems with `run_if(in_state(...))`
         app.add_systems(
             Update,
             (
@@ -127,6 +128,7 @@ fn handle_delete_key(
         let count = selection.0.len();
         if count > 0 {
             info!("Deleted {} entities", count);
+            // TODO: Use a `DeleteCommand` via `CommandStack` to support Undo/Redo.
             for entity in selection.0.drain() {
                 commands.entity(entity).despawn_recursive();
             }

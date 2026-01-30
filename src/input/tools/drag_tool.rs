@@ -47,6 +47,7 @@ fn drag_tool_update(
     >,
     mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
+    // TODO: Decouple from EguiContexts.
     mut contexts: EguiContexts,
     virtual_time: Res<Time<Virtual>>,
     time: Res<Time>,

@@ -126,6 +126,7 @@ fn select_tool_update(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     rapier_context_query: Query<&RapierContext>,
+    // TODO: Decouple from EguiContexts. Use a resource or flag.
     mut contexts: EguiContexts,
     mut gizmos: Gizmos,
     mut queries: ParamSet<(

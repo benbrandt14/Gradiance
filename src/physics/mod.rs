@@ -18,6 +18,9 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
+        // TODO: Bound physics systems with run conditions (e.g., `run_if(in_state(GameState::Playing))`)
+        // to prevent physics from running when paused or in menus.
+
         // Rapier setup
         app.add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(
             PIXELS_PER_METER,

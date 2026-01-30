@@ -31,6 +31,8 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        // TODO: Ensure systems are registered with run conditions (e.g., `run_if(in_state(...))`)
+        // and that setup/cleanup systems for states are co-located for clarity.
         app.add_plugins((
             // ShapePlugin, // Removed in favor of ExtrusionPlugin (via GeometryPlugin)
             // DefaultPickingPlugins,

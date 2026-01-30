@@ -37,6 +37,7 @@ pub trait GameCommand: Send + Sync + Debug {
 
 /// Resource handling the stack of executed commands.
 #[derive(Resource, Default, Debug)]
+// TODO: Use Strong IDs (wrapper types) instead of raw `Entity` for better persistence and safety.
 pub struct CommandStack {
     /// The stack of commands.
     history: Vec<Box<dyn GameCommand>>,
@@ -48,6 +49,8 @@ pub struct CommandStack {
 impl CommandStack {
     /// Pushes a new command and executes it.
     /// Clears any redo history.
+    // TODO: Consider using Events (e.g., `EventWriter<CommandEvent>`) to trigger these actions
+    // instead of direct resource mutation, to better decouple logic and allow other systems to hook in.
     pub fn push(&mut self, mut command: Box<dyn GameCommand>, world: &mut World) {
         // If we are in the middle of the stack (undo performed), clear the future.
         if self.index < self.history.len() {
@@ -212,6 +215,7 @@ impl GameCommand for SpawnShapeCommand {
         // But we still set 0.0 here.
         let z = 0.0;
 
+        // TODO: Add `Name` component for debugging and `StateScoped` (or cleanup) component for lifecycle management.
         let entity = world
             .spawn((
                 path, // Insert Path directly

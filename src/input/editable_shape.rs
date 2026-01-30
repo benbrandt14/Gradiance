@@ -53,6 +53,7 @@ pub struct EditableShapePlugin;
 impl Plugin for EditableShapePlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<EditableShape>();
+        // TODO: Bound this system (e.g., `run_if(in_state(GameState::Playing))`) if appropriate.
         app.add_systems(Update, update_shape_geometry);
     }
 }

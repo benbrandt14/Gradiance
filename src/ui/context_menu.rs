@@ -104,6 +104,8 @@ struct ContextMenuData<'w, 's> {
 }
 
 /// Renders the context menu UI if active.
+// TODO: Refactor logic (grouping, duplicating, layer distribution) out of the UI system.
+// Use `EventWriter` to trigger these actions.
 fn context_menu_ui(
     mut state: ResMut<ContextMenuState>,
     mut contexts: EguiContexts,
