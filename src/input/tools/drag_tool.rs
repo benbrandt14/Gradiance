@@ -1,8 +1,9 @@
 //! Tool for dragging dynamic objects (the "Hand" tool).
 //!
 //! Allows the user to grab and move dynamic bodies using a mouse joint-like mechanic.
-//! Currently implemented by calculating a target anchor and drawing lines.
+//! Separates input logic from physics implementation.
 
+use crate::events::{CommitDragEvent, DragEntitiesEvent};
 use crate::input::tools::utils::calculate_local_anchor;
 use crate::input::{PointerOverUi, ToolState, cursor::CursorWorldPos};
 use crate::physics::floor::GroundPlane;
@@ -14,16 +15,32 @@ pub struct DragToolPlugin;
 impl Plugin for DragToolPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DragToolData>();
-        app.add_systems(Update, drag_tool_update.run_if(in_state(ToolState::Drag)));
+        app.add_systems(
+            Update,
+            (
+                drag_tool_input,
+                drag_tool_physics,
+            )
+                .run_if(in_state(ToolState::Drag)),
+        );
         app.add_systems(OnExit(ToolState::Drag), drag_tool_reset);
     }
 }
 
 #[derive(Resource, Default)]
 struct DragToolData {
+    /// The entity currently being dragged.
     dragged_entity: Option<Entity>,
+    /// The visual/physics "hand" entity.
     hand_entity: Option<Entity>,
+    /// Local anchor point on the dragged entity.
     local_anchor: Vec2,
+    /// Current target position for the hand (cursor pos).
+    target_pos: Vec2,
+
+    // For Undo
+    start_pos: Vec2,
+    start_rot: f32,
 }
 
 fn drag_tool_reset(mut commands: Commands, mut data: ResMut<DragToolData>) {
@@ -34,32 +51,32 @@ fn drag_tool_reset(mut commands: Commands, mut data: ResMut<DragToolData>) {
     data.hand_entity = None;
 }
 
-fn drag_tool_update(
-// [dunnage] WARN: this function has too many arguments (11/7)
-    mut commands: Commands,
+/// Handles input, updates `DragToolData`, and emits events for Paused dragging / Undo.
+#[allow(clippy::too_many_arguments)]
+fn drag_tool_input(
     mut data: ResMut<DragToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     rapier_context_query: Query<&RapierContext>,
-    mut query: Query<
-        (&mut Transform, &Velocity),
-// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
+    query: Query<
+        (Entity, &Transform),
         (With<RigidBody>, With<Collider>, Without<GroundPlane>),
     >,
-    mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
-    mut gizmos: Gizmos,
     pointer_over_ui: Res<PointerOverUi>,
-// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
     virtual_time: Res<Time<Virtual>>,
-    time: Res<Time>,
+    mut ev_drag: EventWriter<DragEntitiesEvent>,
+    mut ev_commit: EventWriter<CommitDragEvent>,
 ) {
-    if pointer_over_ui.0 && data.dragged_entity.is_none() {
-        return;
-    }
-
     let Some(current_pos) = cursor_pos.0 else {
         return;
     };
+
+    // Update target pos continuously for physics system
+    data.target_pos = current_pos;
+
+    if pointer_over_ui.0 && data.dragged_entity.is_none() {
+        return;
+    }
 
     if mouse.just_pressed(MouseButton::Left) {
         let Some(rapier_context) = rapier_context_query.iter().next() else {
@@ -75,84 +92,109 @@ fn drag_tool_update(
         });
 
         if let Some(entity) = hit_entity
-            && let Ok((transform, _)) = query.get(entity)
+            && let Ok((_, transform)) = query.get(entity)
         {
             data.dragged_entity = Some(entity);
-
-            // Calculate local anchor on the body
             data.local_anchor = calculate_local_anchor(transform, current_pos);
+            data.start_pos = transform.translation.truncate();
+            data.start_rot = transform.rotation.to_euler(EulerRot::XYZ).2;
+        }
+    }
 
-            // Spawn "Hand" kinematic body
-            let hand = commands
-                .spawn((
-                    RigidBody::KinematicPositionBased,
-                    Transform::from_xyz(current_pos.x, current_pos.y, 0.0),
-                    Velocity::default(),
-                ))
-                .id();
-            data.hand_entity = Some(hand);
+    // Drag Update (Paused Mode)
+    if data.dragged_entity.is_some() && virtual_time.is_paused() {
+        if let Some(entity) = data.dragged_entity {
+            if let Ok((_, transform)) = query.get(entity) {
+                 let rotation = transform.rotation.to_euler(EulerRot::XYZ).2;
+                 let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
+                 let new_pos = current_pos - rotated_anchor;
 
-            // Create RevoluteJoint (Mouse Joint) between Hand and Body
-            let joint = RevoluteJointBuilder::new()
-                .local_anchor1(Vec2::ZERO)
-                .local_anchor2(data.local_anchor);
-
-            commands
-                .entity(hand)
-                .insert(ImpulseJoint::new(entity, joint));
+                 ev_drag.send(DragEntitiesEvent {
+                     positions: vec![(entity, new_pos)],
+                     rotations: Vec::new(),
+                 });
+            }
         }
     }
 
     if mouse.just_released(MouseButton::Left) {
-        if let Some(hand) = data.hand_entity {
-            commands.entity(hand).despawn();
+        if let Some(entity) = data.dragged_entity {
+            // Commit Undo
+            // Calculate final state
+            if let Ok((_, transform)) = query.get(entity) {
+                let end_pos = transform.translation.truncate();
+                let end_rot = transform.rotation;
+
+                // Only commit if changed
+                if (end_pos - data.start_pos).length_squared() > 0.001
+                   || (end_rot.to_euler(EulerRot::XYZ).2 - data.start_rot).abs() > 0.001
+                {
+                     ev_commit.send(CommitDragEvent {
+                         position_changes: vec![(entity, data.start_pos, end_pos)],
+                         rotation_changes: vec![(entity, Quat::from_rotation_z(data.start_rot), end_rot)],
+                     });
+                }
+            }
         }
-        data.hand_entity = None;
         data.dragged_entity = None;
     }
+}
 
-    if let Some(hand) = data.hand_entity {
-        // Move hand to cursor
-        if let Ok((mut t, mut v)) = hand_query.get_mut(hand) {
-            // Update transform for visual/logic consistency
-            let old_pos = t.translation.truncate();
-            t.translation.x = current_pos.x;
-            t.translation.y = current_pos.y;
+/// Handles physics of dragging (Spawning hand, moving hand).
+fn drag_tool_physics(
+    mut commands: Commands,
+    mut data: ResMut<DragToolData>,
+    mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
+    mut gizmos: Gizmos,
+    query: Query<&Transform, With<Collider>>, // To get current pos of dragged entity for line drawing
+    time: Res<Time>,
+) {
+    // Check state transitions
+    if data.dragged_entity.is_some() && data.hand_entity.is_none() {
+        // Start Drag: Spawn Hand
+        let hand = commands
+            .spawn((
+                RigidBody::KinematicPositionBased,
+                Transform::from_xyz(data.target_pos.x, data.target_pos.y, 0.0),
+                Velocity::default(),
+            ))
+            .id();
+        data.hand_entity = Some(hand);
 
-            // Update velocity for correct physics interaction (kinematic body)
-            v.linvel = calculate_drag_velocity(current_pos, old_pos, time.delta_secs());
-            v.angvel = 0.0;
-        }
+        // Create Joint
+        let joint = RevoluteJointBuilder::new()
+            .local_anchor1(Vec2::ZERO)
+            .local_anchor2(data.local_anchor);
+
+        commands
+            .entity(hand)
+            .insert(ImpulseJoint::new(data.dragged_entity.unwrap(), joint));
+    } else if data.dragged_entity.is_none() && data.hand_entity.is_some() {
+        // Stop Drag: Despawn Hand
+        commands.entity(data.hand_entity.unwrap()).despawn();
+        data.hand_entity = None;
     }
 
-    // Handle dragging
-    if let Some(entity) = data.dragged_entity {
-        match query.get_mut(entity) {
-            Ok((mut transform, _)) => {
-                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2;
+    // Update Hand
+    if let Some(hand) = data.hand_entity {
+        let target = data.target_pos;
 
-                // If paused, manually move the object to follow cursor.
-                // If unpaused, we let the ImpulseJoint (Mouse Joint) handle the movement physically.
-                if virtual_time.is_paused() {
-                    let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
-                    let new_pos = current_pos - rotated_anchor;
-                    transform.translation.x = new_pos.x;
-                    transform.translation.y = new_pos.y;
-                }
+        if let Ok((mut t, mut v)) = hand_query.get_mut(hand) {
+            let old_pos = t.translation.truncate();
+            t.translation.x = target.x;
+            t.translation.y = target.y;
 
-                // Draw line
-                let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
-                let current_anchor_pos = transform.translation.truncate() + rotated_anchor;
+            v.linvel = calculate_drag_velocity(target, old_pos, time.delta_secs());
+            v.angvel = 0.0;
+        }
 
-                gizmos.line_2d(current_anchor_pos, current_pos, Color::WHITE);
-            }
-            Err(_) => {
-                // Entity lost. Cleanup.
-                if let Some(hand) = data.hand_entity {
-                    commands.entity(hand).despawn();
-                }
-                data.hand_entity = None;
-                data.dragged_entity = None;
+        // Draw gizmo line
+        if let Some(dragged) = data.dragged_entity {
+            if let Ok(t) = query.get(dragged) {
+                 let rotation = t.rotation.to_euler(EulerRot::XYZ).2;
+                 let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
+                 let anchor_world = t.translation.truncate() + rotated_anchor;
+                 gizmos.line_2d(anchor_world, target, Color::WHITE);
             }
         }
     }
