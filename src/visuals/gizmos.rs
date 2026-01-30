@@ -25,12 +25,12 @@ pub fn draw_joint_gizmos(
                 (prism.local_anchor1(), prism.local_axis1(), prism.limits(), &raw.data.motors[0], true)
             }
             TypedJoint::GenericJoint(generic) => {
-                if generic.locked_axes == JointAxesMask::LOCKED_REVOLUTE_AXES {
-                    // Revolute
-                    (generic.local_anchor1(), Vec2::X, generic.limits(JointAxis::Ang), &generic.data.motors[2], false)
-                } else if generic.locked_axes == JointAxesMask::LOCKED_PRISMATIC_AXES {
-                    // Prismatic (assuming X axis)
-                    (generic.local_anchor1(), generic.local_axis1(), generic.limits(JointAxis::X), &generic.data.motors[0], true)
+                if generic.locked_axes() == JointAxesMask::LOCKED_REVOLUTE_AXES {
+                    // Revolute - Index 2
+                    (generic.local_anchor1(), Vec2::X, Some(&generic.raw.limits[2]), &generic.raw.motors[2], false)
+                } else if generic.locked_axes() == JointAxesMask::LOCKED_PRISMATIC_AXES {
+                    // Prismatic (assuming X axis) - Index 0
+                    (generic.local_anchor1(), generic.local_axis1(), Some(&generic.raw.limits[0]), &generic.raw.motors[0], true)
                 } else {
                     continue;
                 }

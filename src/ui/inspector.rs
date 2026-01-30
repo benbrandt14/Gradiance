@@ -1256,44 +1256,40 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
                 } else {
                     [-std::f32::consts::PI, std::f32::consts::PI]
                 };
-                // Assuming internal structure if possible, but safer to rely on Generic for now?
-                // No, existing RevoluteJoint logic works if joint is RevoluteJoint.
-                // But we spawn GenericJoint now.
-                // So this branch won't be hit for new joints.
+                // Cannot read motor properties from wrapper easily, defaulting to 0
+                rev_params = Some((
+                    limits[0],
+                    limits[1],
+                    0.0,
+                    0.0,
+                    0.0,
+                ));
             }
             TypedJoint::GenericJoint(generic) => {
-                if generic.locked_axes == JointAxesMask::LOCKED_REVOLUTE_AXES {
-                    // It's a Revolute Joint (Generic)
-                    let limits = if let Some(l) = generic.limits(JointAxis::Ang) {
-                        [l.min, l.max]
-                    } else {
-                        [-std::f32::consts::PI, std::f32::consts::PI]
-                    };
-                    let motor = &generic.data.motors[2]; // Ang
+                if generic.locked_axes() == JointAxesMask::LOCKED_REVOLUTE_AXES {
+                    // It's a Revolute Joint (Generic) - Index 2
+                    let limits = generic.raw.limits[2];
+                    let motor = &generic.raw.motors[2]; // Ang
                     rev_params = Some((
-                        limits[0],
-                        limits[1],
+                        limits.min,
+                        limits.max,
                         motor.target_vel,
                         motor.damping,
                         motor.max_force,
                     ));
-                } else if generic.locked_axes == JointAxesMask::LOCKED_PRISMATIC_AXES {
-                    // It's a Prismatic Joint (Generic) - Local X
-                    let limits = if let Some(l) = generic.limits(JointAxis::X) {
-                        [l.min, l.max]
-                    } else {
-                        [PRISMATIC_MIN_DEFAULT, PRISMATIC_MAX_DEFAULT]
-                    };
-                    let motor = &generic.data.motors[0]; // X
+                } else if generic.locked_axes() == JointAxesMask::LOCKED_PRISMATIC_AXES {
+                    // It's a Prismatic Joint (Generic) - Local X - Index 0
+                    let limits = generic.raw.limits[0];
+                    let motor = &generic.raw.motors[0]; // X
                     prism_params = Some((
-                        limits[0],
-                        limits[1],
+                        limits.min,
+                        limits.max,
                         motor.target_vel,
                         motor.damping,
                         motor.max_force,
                     ));
                 } else {
-                    ui.label(format!("Generic Joint (Axes: {:?})", generic.locked_axes));
+                    ui.label(format!("Generic Joint (Axes: {:?})", generic.locked_axes()));
                 }
             }
             TypedJoint::FixedJoint(_) => {
@@ -1306,9 +1302,9 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
     }
 
     if let Some((min, max, vel, damp, force)) = rev_params {
-        let mut min_deg = min.to_degrees();
-        let mut max_deg = max.to_degrees();
-        let mut target_vel = vel.to_degrees();
+        let mut min_deg: f32 = min.to_degrees();
+        let mut max_deg: f32 = max.to_degrees();
+        let mut target_vel: f32 = vel.to_degrees();
         let mut damping = damp;
         let mut max_force = force;
 
@@ -1386,10 +1382,12 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
                 let target = resolve(e, inspector);
                 if let Ok(mut j) = inspector.joint_query.get_mut(target) {
                     match &mut j.data {
-                        TypedJoint::GenericJoint(g) if g.locked_axes == JointAxesMask::LOCKED_REVOLUTE_AXES => {
-                            g.set_limits(JointAxis::Ang, [min_deg.to_radians(), max_deg.to_radians()]);
-                            g.set_motor_velocity(JointAxis::Ang, target_vel.to_radians(), damping);
-                            g.set_motor_max_force(JointAxis::Ang, max_force);
+                        TypedJoint::GenericJoint(g) if g.locked_axes() == JointAxesMask::LOCKED_REVOLUTE_AXES => {
+                            g.raw.limits[2].min = min_deg.to_radians();
+                            g.raw.limits[2].max = max_deg.to_radians();
+                            g.raw.motors[2].target_vel = target_vel.to_radians();
+                            g.raw.motors[2].damping = damping;
+                            g.raw.motors[2].max_force = max_force;
                         }
                         TypedJoint::RevoluteJoint(r) => {
                             // Legacy support if needed
@@ -1483,10 +1481,12 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
                 let target = resolve(e, inspector);
                 if let Ok(mut j) = inspector.joint_query.get_mut(target) {
                     match &mut j.data {
-                        TypedJoint::GenericJoint(g) if g.locked_axes == JointAxesMask::LOCKED_PRISMATIC_AXES => {
-                            g.set_limits(JointAxis::X, [min_val, max_val]);
-                            g.set_motor_velocity(JointAxis::X, target_vel, damping);
-                            g.set_motor_max_force(JointAxis::X, max_force);
+                        TypedJoint::GenericJoint(g) if g.locked_axes() == JointAxesMask::LOCKED_PRISMATIC_AXES => {
+                            g.raw.limits[0].min = min_val;
+                            g.raw.limits[0].max = max_val;
+                            g.raw.motors[0].target_vel = target_vel;
+                            g.raw.motors[0].damping = damping;
+                            g.raw.motors[0].max_force = max_force;
                         }
                         TypedJoint::PrismaticJoint(p) => {
                             p.set_limits([min_val, max_val]);
