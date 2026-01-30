@@ -97,6 +97,20 @@ fn update_connector_visuals(
 
             transform.translation.x = local_midpoint.x;
             transform.translation.y = local_midpoint.y;
+
+            // If pinned (no body B), rotation should be inverse of parent to appear "global"
+            if connector.entity_b.is_none() {
+                // We want the visual to look aligned with world up/right or just neutral.
+                // Parent Global * Local = World
+                // World Rotation = Identity (or 0)
+                // Parent Global Rot * Local Rot = Identity
+                // Local Rot = (Parent Global Rot)^-1
+                let parent_rot = parent_global.to_scale_rotation_translation().1;
+                transform.rotation = parent_rot.inverse();
+            } else {
+                // If connected, it rotates with A (parent). Reset to identity.
+                transform.rotation = Quat::IDENTITY;
+            }
         }
     }
 }
@@ -133,7 +147,7 @@ fn update_connector(
     tool_state: Res<State<ToolState>>,
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
     parents: Query<&Parent>,
-    transforms: Query<&Transform>,
+    transforms: Query<&GlobalTransform>,
 ) {
     if is_pointer_over_ui(&mut contexts) {
         return;
@@ -180,8 +194,9 @@ fn update_connector(
 
         let get_local_and_rot = |e: Entity| -> (Vec2, f32) {
             if let Ok(t) = transforms.get(e) {
-                let rot = t.rotation.to_euler(EulerRot::XYZ).2;
-                (calculate_local_anchor(t, pos), rot)
+                let t_computed = t.compute_transform();
+                let rot = t_computed.rotation.to_euler(EulerRot::XYZ).2;
+                (calculate_local_anchor(&t_computed, pos), rot)
             } else {
                 (Vec2::ZERO, 0.0)
             }

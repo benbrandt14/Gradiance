@@ -390,7 +390,12 @@ fn context_menu_ui(
                     }
 
                     if ui.button("Distribute Layers").clicked() {
-                        let mut entities: Vec<_> = selection.0.iter().copied().collect();
+                        // Only distribute for entities that should have collision layers (Shapes)
+                        // Exclude Connectors/Joints
+                        let mut entities: Vec<_> = selection.0.iter()
+                            .copied()
+                            .filter(|e| !connector_query.contains(*e))
+                            .collect();
                         // Sort by Entity ID for deterministic distribution
                         entities.sort();
 

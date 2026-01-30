@@ -320,9 +320,13 @@ impl GameCommand for SpawnJointCommand {
             .local_anchor1(local_anchor_1)
             .local_anchor2(local_anchor_2);
 
+        let joint: RevoluteJoint = joint_data.build();
+        let mut generic: GenericJoint = joint.into();
+        generic.set_contacts_enabled(false);
+
         world
             .entity_mut(self.entity_a)
-            .insert(ImpulseJoint::new(target_entity, joint_data));
+            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(generic)));
         Ok(())
     }
 
@@ -438,9 +442,13 @@ impl GameCommand for SpawnPrismaticJointCommand {
             .local_anchor1(local_anchor_1)
             .local_anchor2(local_anchor_2);
 
+        let joint: PrismaticJoint = joint_data.build();
+        let mut generic: GenericJoint = joint.into();
+        generic.set_contacts_enabled(false);
+
         world
             .entity_mut(self.entity_a)
-            .insert(ImpulseJoint::new(target_entity, joint_data));
+            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(generic)));
         Ok(())
     }
 

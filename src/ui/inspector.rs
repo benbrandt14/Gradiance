@@ -1256,31 +1256,45 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
                 } else {
                     [-std::f32::consts::PI, std::f32::consts::PI]
                 };
-                let raw = rev.data.raw.as_revolute().unwrap();
-                let motor = &raw.data.motors[2]; // Z axis
-                rev_params = Some((
-                    limits[0],
-                    limits[1],
-                    motor.target_vel,
-                    motor.damping,
-                    motor.max_force,
-                ));
+                // Assuming internal structure if possible, but safer to rely on Generic for now?
+                // No, existing RevoluteJoint logic works if joint is RevoluteJoint.
+                // But we spawn GenericJoint now.
+                // So this branch won't be hit for new joints.
             }
-            TypedJoint::PrismaticJoint(prism) => {
-                let limits = if let Some(l) = prism.limits() {
-                    [l.min, l.max]
+            TypedJoint::GenericJoint(generic) => {
+                if generic.locked_axes == JointAxesMask::LOCKED_REVOLUTE_AXES {
+                    // It's a Revolute Joint (Generic)
+                    let limits = if let Some(l) = generic.limits(JointAxis::Ang) {
+                        [l.min, l.max]
+                    } else {
+                        [-std::f32::consts::PI, std::f32::consts::PI]
+                    };
+                    let motor = &generic.data.motors[2]; // Ang
+                    rev_params = Some((
+                        limits[0],
+                        limits[1],
+                        motor.target_vel,
+                        motor.damping,
+                        motor.max_force,
+                    ));
+                } else if generic.locked_axes == JointAxesMask::LOCKED_PRISMATIC_AXES {
+                    // It's a Prismatic Joint (Generic) - Local X
+                    let limits = if let Some(l) = generic.limits(JointAxis::X) {
+                        [l.min, l.max]
+                    } else {
+                        [PRISMATIC_MIN_DEFAULT, PRISMATIC_MAX_DEFAULT]
+                    };
+                    let motor = &generic.data.motors[0]; // X
+                    prism_params = Some((
+                        limits[0],
+                        limits[1],
+                        motor.target_vel,
+                        motor.damping,
+                        motor.max_force,
+                    ));
                 } else {
-                    [PRISMATIC_MIN_DEFAULT, PRISMATIC_MAX_DEFAULT]
-                };
-                let raw = prism.data.raw.as_prismatic().unwrap();
-                let motor = &raw.data.motors[0]; // X axis
-                prism_params = Some((
-                    limits[0],
-                    limits[1],
-                    motor.target_vel,
-                    motor.damping,
-                    motor.max_force,
-                ));
+                    ui.label(format!("Generic Joint (Axes: {:?})", generic.locked_axes));
+                }
             }
             TypedJoint::FixedJoint(_) => {
                 ui.label("Fixed Joint (No limits)");
@@ -1345,14 +1359,25 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
         {
             changed = true;
         }
+        let mut max_force_display = if max_force > 1e10 {
+            f32::INFINITY
+        } else {
+            max_force
+        };
+
         if ui
             .add(
-                egui::DragValue::new(&mut max_force)
+                egui::DragValue::new(&mut max_force_display)
                     .speed(10.0)
                     .prefix("Max Force: "),
             )
             .changed()
         {
+            max_force = if max_force_display.is_infinite() {
+                f32::MAX
+            } else {
+                max_force_display
+            };
             changed = true;
         }
 
@@ -1360,10 +1385,19 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
             for &e in entities {
                 let target = resolve(e, inspector);
                 if let Ok(mut j) = inspector.joint_query.get_mut(target) {
-                    if let TypedJoint::RevoluteJoint(r) = &mut j.data {
-                        r.set_limits([min_deg.to_radians(), max_deg.to_radians()]);
-                        r.set_motor_velocity(target_vel.to_radians(), damping);
-                        r.set_motor_max_force(max_force);
+                    match &mut j.data {
+                        TypedJoint::GenericJoint(g) if g.locked_axes == JointAxesMask::LOCKED_REVOLUTE_AXES => {
+                            g.set_limits(JointAxis::Ang, [min_deg.to_radians(), max_deg.to_radians()]);
+                            g.set_motor_velocity(JointAxis::Ang, target_vel.to_radians(), damping);
+                            g.set_motor_max_force(JointAxis::Ang, max_force);
+                        }
+                        TypedJoint::RevoluteJoint(r) => {
+                            // Legacy support if needed
+                            r.set_limits([min_deg.to_radians(), max_deg.to_radians()]);
+                            r.set_motor_velocity(target_vel.to_radians(), damping);
+                            r.set_motor_max_force(max_force);
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -1422,14 +1456,25 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
         {
             changed = true;
         }
+        let mut max_force_display = if max_force > 1e10 {
+            f32::INFINITY
+        } else {
+            max_force
+        };
+
         if ui
             .add(
-                egui::DragValue::new(&mut max_force)
+                egui::DragValue::new(&mut max_force_display)
                     .speed(10.0)
                     .prefix("Max Force: "),
             )
             .changed()
         {
+            max_force = if max_force_display.is_infinite() {
+                f32::MAX
+            } else {
+                max_force_display
+            };
             changed = true;
         }
 
@@ -1437,10 +1482,18 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
             for &e in entities {
                 let target = resolve(e, inspector);
                 if let Ok(mut j) = inspector.joint_query.get_mut(target) {
-                    if let TypedJoint::PrismaticJoint(p) = &mut j.data {
-                        p.set_limits([min_val, max_val]);
-                        p.set_motor_velocity(target_vel, damping);
-                        p.set_motor_max_force(max_force);
+                    match &mut j.data {
+                        TypedJoint::GenericJoint(g) if g.locked_axes == JointAxesMask::LOCKED_PRISMATIC_AXES => {
+                            g.set_limits(JointAxis::X, [min_val, max_val]);
+                            g.set_motor_velocity(JointAxis::X, target_vel, damping);
+                            g.set_motor_max_force(JointAxis::X, max_force);
+                        }
+                        TypedJoint::PrismaticJoint(p) => {
+                            p.set_limits([min_val, max_val]);
+                            p.set_motor_velocity(target_vel, damping);
+                            p.set_motor_max_force(max_force);
+                        }
+                        _ => {}
                     }
                 }
             }
