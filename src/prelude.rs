@@ -7,3 +7,8 @@
 pub use bevy::prelude::*;
 pub use bevy_rapier2d::prelude::Real;
 pub use bevy_rapier2d::prelude::*;
+pub use crate::GameState;
+
+/// Strong ID wrapper for persistent references.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EntityId(pub Entity);

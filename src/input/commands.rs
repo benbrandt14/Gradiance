@@ -137,6 +137,7 @@ fn resolve_joint_targets(
                 Transform::from_translation(world_pos),
                 Collider::ball(CONNECTOR_COLLIDER_RADIUS),
                 pin_solver_groups,
+                StateScoped(GameState::Playing),
             ))
             .id();
 
@@ -177,6 +178,7 @@ fn spawn_connector_visual(
                 local_anchor_a: anchor_a,
                 local_anchor_b: anchor_b,
             },
+            StateScoped(GameState::Playing),
         ))
         .set_parent_in_place(entity_a)
         .id();
@@ -216,6 +218,12 @@ impl GameCommand for SpawnShapeCommand {
         let z = 0.0;
 
         // TODO: Add `Name` component for debugging and `StateScoped` (or cleanup) component for lifecycle management.
+        let name = match &self.shape {
+            ShapeType::Box { .. } => "Box",
+            ShapeType::Circle { .. } => "Circle",
+            ShapeType::Polygon { .. } => "Polygon",
+        };
+
         let entity = world
             .spawn((
                 path, // Insert Path directly
@@ -228,6 +236,8 @@ impl GameCommand for SpawnShapeCommand {
                     shape: self.shape.clone(),
                 },
                 ExtrudableShape, // Trigger extrusion
+                Name::new(name.to_string()),
+                StateScoped(GameState::Playing),
             ))
             .id();
 
@@ -651,6 +661,7 @@ impl GameCommand for SpawnGroundCommand {
                 GroundPlane,
                 Name::new("Ground"),
                 ExtrudableShape,
+                StateScoped(GameState::Playing),
             ))
             .id();
 

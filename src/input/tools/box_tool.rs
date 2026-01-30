@@ -2,13 +2,12 @@
 //!
 //! Click and drag to define the extents of a new box.
 
-use crate::input::commands::{CommandStack, SpawnShapeCommand};
+use crate::events::SpawnShapeEvent;
 use crate::input::editable_shape::ShapeType;
-use crate::input::tools::utils::{DragStatus, handle_drag_input};
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::tools::utils::{DragStatus, handle_drag_input_safe};
+use crate::input::{PointerOverUi, ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
-use bevy_egui::EguiContexts;
 
 /// Plugin for the Box Tool.
 pub struct BoxToolPlugin;
@@ -43,20 +42,19 @@ fn should_spawn_box(size: Vec2) -> bool {
 }
 
 fn box_tool_update(
-    mut commands: Commands,
+    mut ev_spawn: EventWriter<SpawnShapeEvent>,
     mut data: ResMut<BoxToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
-    // TODO: Decouple from EguiContexts. UI interaction should be handled separately or passed as a flag.
-    contexts: EguiContexts,
+    pointer_over_ui: Res<PointerOverUi>,
     grid_settings: Res<GridSettings>,
 ) {
-    let Some(drag) = handle_drag_input(
+    let Some(drag) = handle_drag_input_safe(
         cursor_pos,
         mouse,
         grid_settings,
-        contexts,
+        pointer_over_ui,
         &mut data.drag_start,
     ) else {
         return;
@@ -75,20 +73,12 @@ fn box_tool_update(
         }
         DragStatus::Finished => {
             if should_spawn_box(size) {
-                let cmd = SpawnShapeCommand {
+                ev_spawn.send(SpawnShapeEvent {
                     position: center,
                     shape: ShapeType::Box {
                         width: size.x,
                         height: size.y,
                     },
-                    entity: None,
-                };
-
-                // TODO: Use EventWriter to trigger this command instead of queuing directly.
-                commands.queue(move |world: &mut World| {
-                    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                        stack.push(Box::new(cmd), world);
-                    });
                 });
             }
         }

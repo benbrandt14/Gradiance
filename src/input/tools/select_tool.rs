@@ -5,13 +5,11 @@
 use crate::input::editable_shape::EditableShape;
 use crate::input::selection::{NextGroupID, Selection, SelectionFilter, SelectionGroup};
 use crate::input::tools::connector::Connector;
-use crate::input::tools::utils::is_pointer_over_ui;
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::input::{PointerOverUi, ToolState, cursor::CursorWorldPos};
 use crate::physics::floor::GroundPlane;
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
 use bevy::ecs::system::SystemParam;
-use bevy_egui::EguiContexts;
 use bevy_prototype_lyon::prelude::{Fill, Stroke};
 
 /// Auxiliary queries used by the select tool.
@@ -126,8 +124,7 @@ fn select_tool_update(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     rapier_context_query: Query<&RapierContext>,
-    // TODO: Decouple from EguiContexts. Use a resource or flag.
-    mut contexts: EguiContexts,
+    pointer_over_ui: Res<PointerOverUi>,
     mut gizmos: Gizmos,
     mut queries: ParamSet<(
         Query<(Entity, &mut Transform, Option<&GroundPlane>)>,
@@ -154,7 +151,7 @@ fn select_tool_update(
     mut commands: Commands,
 ) {
     // Prevent selection if over UI
-    if is_pointer_over_ui(&mut contexts)
+    if pointer_over_ui.0
         && !data.is_moving
         && !data.is_rotating
         && data.drag_start.is_none()

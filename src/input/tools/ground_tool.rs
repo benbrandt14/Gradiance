@@ -2,12 +2,11 @@
 //!
 //! Click and drag to define the surface and rotation of the ground.
 
-use crate::input::commands::{CommandStack, SpawnGroundCommand};
-use crate::input::tools::utils::{DragStatus, handle_drag_input};
-use crate::input::{ToolState, cursor::CursorWorldPos};
+use crate::events::SpawnGroundEvent;
+use crate::input::tools::utils::{DragStatus, handle_drag_input_safe};
+use crate::input::{PointerOverUi, ToolState, cursor::CursorWorldPos};
 use crate::prelude::*;
 use crate::ui::grid::GridSettings;
-use bevy_egui::EguiContexts;
 
 /// Plugin for the Ground Tool.
 pub struct GroundToolPlugin;
@@ -44,20 +43,19 @@ fn calculate_ground_geometry(start: Vec2, current: Vec2) -> (Vec2, f32) {
 }
 
 fn ground_tool_update(
-    mut commands: Commands,
+    mut ev_spawn: EventWriter<SpawnGroundEvent>,
     mut data: ResMut<GroundToolData>,
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
-    // TODO: Decouple from EguiContexts.
-    contexts: EguiContexts,
+    pointer_over_ui: Res<PointerOverUi>,
     grid_settings: Res<GridSettings>,
 ) {
-    let Some(drag) = handle_drag_input(
+    let Some(drag) = handle_drag_input_safe(
         cursor_pos,
         mouse,
         grid_settings,
-        contexts,
+        pointer_over_ui,
         &mut data.drag_start,
     ) else {
         return;
@@ -77,17 +75,9 @@ fn ground_tool_update(
         DragStatus::Finished => {
             let (center, rotation) = calculate_ground_geometry(drag.start, drag.current);
 
-            let cmd = SpawnGroundCommand {
+            ev_spawn.send(SpawnGroundEvent {
                 position: center,
                 rotation,
-                entity: None,
-            };
-
-            // TODO: Use EventWriter.
-            commands.queue(move |world: &mut World| {
-                world.resource_scope(|world, mut stack: Mut<CommandStack>| {
-                    stack.push(Box::new(cmd), world);
-                });
             });
         }
         _ => {}

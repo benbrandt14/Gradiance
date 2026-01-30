@@ -169,6 +169,35 @@ pub fn handle_drag_input(
     )
 }
 
+/// Handles common input logic for drag-based creation tools (e.g. Box, Circle) using PointerOverUi resource.
+pub fn handle_drag_input_safe(
+    // Inputs
+    cursor_pos: Res<CursorWorldPos>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    grid_settings: Res<GridSettings>,
+    pointer_over_ui: Res<crate::input::PointerOverUi>,
+    // State
+    drag_start: &mut Option<Vec2>,
+) -> Option<DragResult> {
+    let is_over_ui = if drag_start.is_none() {
+        pointer_over_ui.0
+    } else {
+        false
+    };
+
+    handle_drag_input_logic(
+        cursor_pos.0,
+        mouse.just_pressed(MouseButton::Left),
+        mouse.pressed(MouseButton::Left),
+        mouse.just_released(MouseButton::Left),
+        is_over_ui,
+        grid_settings.show,
+        grid_settings.snap_to_grid,
+        grid_settings.spacing,
+        drag_start,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

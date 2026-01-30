@@ -14,9 +14,9 @@ const PIXELS_PER_METER: f32 = 100.0;
 const GRAVITY: Vec2 = Vec2::new(0.0, -1000.0);
 
 /// Plugin that configures the physics simulation.
-pub struct PhysicsPlugin;
+pub struct GradiancePhysicsPlugin;
 
-impl Plugin for PhysicsPlugin {
+impl Plugin for GradiancePhysicsPlugin {
     fn build(&self, app: &mut App) {
         // TODO: Bound physics systems with run conditions (e.g., `run_if(in_state(GameState::Playing))`)
         // to prevent physics from running when paused or in menus.
