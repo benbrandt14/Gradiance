@@ -105,21 +105,27 @@ pub struct ToonMaterial {
 pub struct ToonMaterialUniform {
     /// Base color.
     pub color: LinearRgba,
+// [dunnage] WARN: function `check` is never used
     /// Sun direction.
     pub sun_dir: Vec3,
     /// Sun color.
+// [dunnage] WARN: function `check` is never used
     pub sun_color: LinearRgba,
     /// Camera position.
     pub camera_pos: Vec3,
+// [dunnage] WARN: function `check` is never used
     /// Ambient color.
     pub ambient_color: LinearRgba,
     /// Shading steps.
+// [dunnage] WARN: function `check` is never used
     pub steps: u32,
 }
 
+// [dunnage] WARN: function `check` is never used
 impl From<&ToonMaterial> for ToonMaterialUniform {
     fn from(m: &ToonMaterial) -> Self {
         Self {
+// [dunnage] WARN: function `check` is never used
             color: m.color,
             sun_dir: m.sun_dir,
             sun_color: m.sun_color,
@@ -223,6 +229,7 @@ fn apply_render_settings(
     point_light_query: Query<(Entity, &mut PointLight), With<ScenePointLight>>,
     mut ambient_light: ResMut<AmbientLight>,
     mut clear_color: ResMut<ClearColor>,
+// [dunnage] WARN: this function has too many arguments (13/7)
     mut commands: Commands,
     mut camera_query: Query<(Entity, Option<&mut Msaa>), With<Camera3d>>,
     bloom_removals: Query<Entity, (With<Camera3d>, With<Bloom>)>,

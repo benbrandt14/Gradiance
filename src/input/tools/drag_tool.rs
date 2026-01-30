@@ -35,6 +35,7 @@ fn drag_tool_reset(mut commands: Commands, mut data: ResMut<DragToolData>) {
 }
 
 fn drag_tool_update(
+// [dunnage] WARN: this function has too many arguments (11/7)
     mut commands: Commands,
     mut data: ResMut<DragToolData>,
     cursor_pos: Res<CursorWorldPos>,
@@ -42,11 +43,13 @@ fn drag_tool_update(
     rapier_context_query: Query<&RapierContext>,
     mut query: Query<
         (&mut Transform, &Velocity),
+// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
         (With<RigidBody>, With<Collider>, Without<GroundPlane>),
     >,
     mut hand_query: Query<(&mut Transform, &mut Velocity), (With<RigidBody>, Without<Collider>)>,
     mut gizmos: Gizmos,
     pointer_over_ui: Res<PointerOverUi>,
+// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
     virtual_time: Res<Time<Virtual>>,
     time: Res<Time>,
 ) {

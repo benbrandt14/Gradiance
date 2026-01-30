@@ -72,6 +72,7 @@ fn update_extrusion_mesh(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<
+// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
         (
             Entity,
             &Path,

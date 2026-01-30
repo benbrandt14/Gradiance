@@ -36,6 +36,7 @@ impl Plugin for MenuPlugin {
 }
 
 fn menu_ui(
+// [dunnage] WARN: this function has too many arguments (8/7)
     mut contexts: EguiContexts,
     mut menu_state: ResMut<GameMenuState>,
     // Physics Resources

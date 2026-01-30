@@ -18,6 +18,7 @@ pub struct AuxQueries<'w, 's> {
     /// Selectable entities.
     pub selectable:
         Query<'w, 's, (Entity, &'static GlobalTransform), (With<Collider>, Without<GroundPlane>)>,
+// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
     /// Connectors.
     pub connector: Query<'w, 's, &'static Connector>,
     /// Selection groups.
@@ -118,6 +119,7 @@ fn select_tool_reset(mut data: ResMut<SelectToolData>) {
 
 fn select_tool_update(
     mut selection: ResMut<Selection>,
+// [dunnage] WARN: this function has too many arguments (14/7)
     selection_filter: Res<SelectionFilter>,
     mut data: ResMut<SelectToolData>,
     cursor_pos: Res<CursorWorldPos>,
@@ -129,6 +131,7 @@ fn select_tool_update(
     mut queries: ParamSet<(
         Query<(Entity, &mut Transform, Option<&GroundPlane>)>,
         Query<(
+// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
             &Transform,
             &Collider,
             Option<&RigidBody>,

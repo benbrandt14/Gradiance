@@ -279,6 +279,7 @@ fn render_settings_header(ui: &mut egui::Ui, selection_filter: &mut SelectionFil
 fn extract_inspector_state(
     entities: &[Entity],
     query: &Query<(
+// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
         Entity,
         Option<&Transform>,
         Option<&RigidBody>,
@@ -714,6 +715,7 @@ fn inspect_friction(
 
     if match val {
         InspectorValue::Mixed => true,
+// [dunnage] WARN: match expression looks like `matches!` macro
         _ => false,
     } {
         ui.label("(Mixed)");
@@ -746,6 +748,7 @@ fn inspect_restitution(
     if match val {
         InspectorValue::Mixed => true,
         _ => false,
+// [dunnage] WARN: match expression looks like `matches!` macro
     } {
         ui.label("(Mixed)");
     }
@@ -778,6 +781,7 @@ fn inspect_density(
         InspectorValue::Mixed => true,
         _ => false,
     } {
+// [dunnage] WARN: match expression looks like `matches!` macro
         ui.label("(Mixed)");
     }
     changed
@@ -804,6 +808,7 @@ fn inspect_gravity(
         _ => false,
     } {
         ui.label("(Mixed)");
+// [dunnage] WARN: match expression looks like `matches!` macro
     }
     changed
 }
@@ -1124,6 +1129,7 @@ fn wake_up(_entity: Entity, _inspector: &mut InspectorQuery) {
 
 fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[Entity]) {
     let resolve = |e: Entity, insp: &InspectorQuery| -> Entity {
+// [dunnage] WARN: function `wake_up` is never used
         if let Ok(connector) = insp.connector_query.get(e) {
             connector.entity_a
         } else {
@@ -1357,6 +1363,7 @@ fn apply_alignment<'w, 's, F>(
     action: AlignmentAction,
 ) where
     F: for<'a> FnMut(Entity, &'a mut InspectorQuery<'w, 's>) -> Option<&'a mut f32>,
+// [dunnage] WARN: function `apply_alignment` is never used
 {
     if entities.len() < 2 {
         return;

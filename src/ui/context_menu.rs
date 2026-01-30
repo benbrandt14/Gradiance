@@ -107,6 +107,7 @@ struct ContextMenuData<'w, 's> {
 // TODO: Refactor logic (grouping, duplicating, layer distribution) out of the UI system.
 // Use `EventWriter` to trigger these actions.
 fn context_menu_ui(
+// [dunnage] WARN: this function has too many arguments (11/7)
     mut state: ResMut<ContextMenuState>,
     mut contexts: EguiContexts,
     mut commands: Commands,

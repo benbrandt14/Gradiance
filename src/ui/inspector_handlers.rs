@@ -11,6 +11,7 @@ pub fn handle_property_change_event(
     mut events: EventReader<PropertyChangeEvent>,
     mut commands: Commands,
     mut query: Query<(
+// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
         Option<&mut Transform>,
         Option<&mut RigidBody>,
         Option<&mut Friction>,

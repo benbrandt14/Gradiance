@@ -95,6 +95,7 @@ fn should_close_loop(start: Vec2, current: Vec2) -> bool {
 }
 
 fn polygon_tool_update(
+// [dunnage] WARN: this function has too many arguments (8/7)
     mut ev_spawn: EventWriter<SpawnShapeEvent>,
     mut data: ResMut<PolygonToolData>,
     cursor_pos: Res<CursorWorldPos>,
