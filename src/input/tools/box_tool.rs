@@ -48,6 +48,7 @@ fn box_tool_update(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut gizmos: Gizmos,
+    // TODO: Decouple from EguiContexts. UI interaction should be handled separately or passed as a flag.
     contexts: EguiContexts,
     grid_settings: Res<GridSettings>,
 ) {
@@ -83,6 +84,7 @@ fn box_tool_update(
                     entity: None,
                 };
 
+                // TODO: Use EventWriter to trigger this command instead of queuing directly.
                 commands.queue(move |world: &mut World| {
                     world.resource_scope(|world, mut stack: Mut<CommandStack>| {
                         stack.push(Box::new(cmd), world);

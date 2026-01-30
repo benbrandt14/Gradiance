@@ -140,6 +140,7 @@ pub fn handle_drag_input_logic(
 /// 2. Gets the cursor position.
 /// 3. Applies grid snapping.
 /// 4. Manages the `drag_start` state based on mouse input.
+// TODO: Decouple from EguiContexts. Pass `is_pointer_over_ui` as a boolean argument.
 pub fn handle_drag_input(
     // Inputs
     cursor_pos: Res<CursorWorldPos>,
