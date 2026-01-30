@@ -430,17 +430,15 @@ fn context_menu_ui(
                     let mut has_material = false;
 
                     // Get initial values from first selected entity
-                    if let Some(first) = selection.0.iter().next() {
-                        if let Ok(handle) = data.materials.get(*first) {
-                            if let Some(mat) = data.assets.get(&handle.0) {
+                    if let Some(first) = selection.0.iter().next()
+                        && let Ok(handle) = data.materials.get(*first)
+                            && let Some(mat) = data.assets.get(&handle.0) {
                                 current_color = mat.base_color;
                                 metallic = mat.metallic;
                                 roughness = mat.perceptual_roughness;
                                 reflectance = mat.reflectance;
                                 has_material = true;
                             }
-                        }
-                    }
 
                     if has_material {
                         let mut changed = false;
@@ -479,14 +477,13 @@ fn context_menu_ui(
 
                         if changed {
                             for entity in &selection.0 {
-                                if let Ok(handle) = data.materials.get(*entity) {
-                                    if let Some(mat) = data.assets.get_mut(&handle.0) {
+                                if let Ok(handle) = data.materials.get(*entity)
+                                    && let Some(mat) = data.assets.get_mut(&handle.0) {
                                         mat.base_color = current_color;
                                         mat.metallic = metallic;
                                         mat.perceptual_roughness = roughness;
                                         mat.reflectance = reflectance;
                                     }
-                                }
                             }
                         }
                     } else {

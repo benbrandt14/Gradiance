@@ -111,42 +111,38 @@ pub fn handle_property_change_event(
                     }
                 }
                 PropertyChange::RevoluteLimits(limits) => {
-                    if let Some(joint) = &mut joint {
-                        if let TypedJoint::RevoluteJoint(r) = &mut joint.data {
+                    if let Some(joint) = &mut joint
+                        && let TypedJoint::RevoluteJoint(r) = &mut joint.data {
                             r.set_limits(*limits);
                         }
-                    }
                 }
                 PropertyChange::RevoluteMotor {
                     target_vel,
                     damping,
                     max_force,
                 } => {
-                    if let Some(joint) = &mut joint {
-                        if let TypedJoint::RevoluteJoint(r) = &mut joint.data {
+                    if let Some(joint) = &mut joint
+                        && let TypedJoint::RevoluteJoint(r) = &mut joint.data {
                             r.set_motor_velocity(*target_vel, *damping);
                             r.set_motor_max_force(*max_force);
                         }
-                    }
                 }
                 PropertyChange::PrismaticLimits(limits) => {
-                    if let Some(joint) = &mut joint {
-                        if let TypedJoint::PrismaticJoint(p) = &mut joint.data {
+                    if let Some(joint) = &mut joint
+                        && let TypedJoint::PrismaticJoint(p) = &mut joint.data {
                             p.set_limits(*limits);
                         }
-                    }
                 }
                 PropertyChange::PrismaticMotor {
                     target_vel,
                     damping,
                     max_force,
                 } => {
-                    if let Some(joint) = &mut joint {
-                        if let TypedJoint::PrismaticJoint(p) = &mut joint.data {
+                    if let Some(joint) = &mut joint
+                        && let TypedJoint::PrismaticJoint(p) = &mut joint.data {
                             p.set_motor_velocity(*target_vel, *damping);
                             p.set_motor_max_force(*max_force);
                         }
-                    }
                 }
             }
 

@@ -5,7 +5,7 @@
 
 use crate::input::editable_shape::ShapeType;
 use bevy::prelude::*;
-use bevy_rapier2d::prelude::{LockedAxes, RigidBody, SolverGroups};
+use bevy_rapier2d::prelude::{LockedAxes, RigidBody};
 
 /// Plugin for registering game events.
 pub struct GameEventsPlugin;

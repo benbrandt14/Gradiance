@@ -132,7 +132,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             // Transform
             if let Some(mut val) = state.transform {
                 ui.collapsing("Transform", |ui| {
-                    if inspect_transform(ui, &mut val, &mut |field, action| {
+                    if inspect_transform(ui, &mut val, &mut |field, _action| {
                         match field {
                             TransformField::PosX => {
                                 // TODO: Restore alignment using events
@@ -152,7 +152,7 @@ fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
             // Shape
             if let Some(mut val) = state.editable_shape {
                 ui.collapsing("Shape", |ui| {
-                    if inspect_shape(ui, &mut val, &mut |field, action| {
+                    if inspect_shape(ui, &mut val, &mut |field, _action| {
                         match field {
                             ShapeField::Width => {
                                 // TODO: Restore alignment
@@ -359,11 +359,10 @@ fn extract_inspector_state(
             } // Already marked missing
             match entity_val {
                 Some(v) => {
-                    if let Some(InspectorValue::Same(existing)) = state_val {
-                        if existing != v {
+                    if let Some(InspectorValue::Same(existing)) = state_val
+                        && existing != v {
                             *state_val = Some(InspectorValue::Mixed);
                         }
-                    }
                 }
                 None => *state_val = None, // Missing on this entity -> don't show
             }
@@ -381,11 +380,10 @@ fn extract_inspector_state(
 
         // Sensor (bool)
         let is_sensor = sensor.is_some();
-        if let Some(InspectorValue::Same(existing)) = state.sensor {
-            if existing != is_sensor {
+        if let Some(InspectorValue::Same(existing)) = state.sensor
+            && existing != is_sensor {
                 state.sensor = Some(InspectorValue::Mixed);
             }
-        }
 
         // Density
         let d = if let Some(ColliderMassProperties::Density(v)) = mass {
@@ -490,14 +488,13 @@ fn inspect_transform(
             on_align(TransformField::PosX, act);
         }
 
-        if changed_x {
-            if let InspectorValue::Same(new_x) = x_val {
+        if changed_x
+            && let InspectorValue::Same(new_x) = x_val {
                 let mut new_t = t;
                 new_t.translation.x = new_x;
                 *val = InspectorValue::Same(new_t);
                 changed = true;
             }
-        }
 
         ui.label("Pos Y:");
         let mut y_val = InspectorValue::Same(t.translation.y);
@@ -513,8 +510,8 @@ fn inspect_transform(
             on_align(TransformField::PosY, act);
         }
 
-        if changed_y {
-            if let InspectorValue::Same(new_y) = y_val {
+        if changed_y
+            && let InspectorValue::Same(new_y) = y_val {
                 // If x changed in same frame, update that too? Unlikely with immediate mode separate widgets.
                 // We re-read `t` which might be stale if `x` changed above?
                 // Actually `val` was updated above if x changed. So we should re-read `val`.
@@ -527,7 +524,6 @@ fn inspect_transform(
                 *val = InspectorValue::Same(new_t);
                 changed = true;
             }
-        }
     });
 
     // Rotation
@@ -551,14 +547,13 @@ fn inspect_transform(
             on_align(TransformField::Rotation, act);
         }
 
-        if changed_rot {
-            if let InspectorValue::Same(new_rot) = rot_val {
+        if changed_rot
+            && let InspectorValue::Same(new_rot) = rot_val {
                 let mut new_t = current_t;
                 new_t.rotation = Quat::from_rotation_z(new_rot);
                 *val = InspectorValue::Same(new_t);
                 changed = true;
             }
-        }
     });
 
     if mixed && !changed {
@@ -600,12 +595,11 @@ fn inspect_shape(
             if let Some(act) = w_action {
                 on_align(ShapeField::Width, act);
             }
-            if w_changed {
-                if let InspectorValue::Same(w) = w_val {
+            if w_changed
+                && let InspectorValue::Same(w) = w_val {
                     *width = w;
                     changed = true;
                 }
-            }
 
             // Height
             let mut h_val = InspectorValue::Same(*height);
@@ -620,12 +614,11 @@ fn inspect_shape(
             if let Some(act) = h_action {
                 on_align(ShapeField::Height, act);
             }
-            if h_changed {
-                if let InspectorValue::Same(h) = h_val {
+            if h_changed
+                && let InspectorValue::Same(h) = h_val {
                     *height = h;
                     changed = true;
                 }
-            }
         }
         ShapeType::Circle { radius } => {
             ui.label("Circle Dimensions");
@@ -641,12 +634,11 @@ fn inspect_shape(
             if let Some(act) = r_action {
                 on_align(ShapeField::Radius, act);
             }
-            if r_changed {
-                if let InspectorValue::Same(r) = r_val {
+            if r_changed
+                && let InspectorValue::Same(r) = r_val {
                     *radius = r;
                     changed = true;
                 }
-            }
         }
         ShapeType::Polygon { points } => {
             ui.label("Polygon");
@@ -727,11 +719,10 @@ fn inspect_friction(
         ui.label("(Mixed)");
     }
 
-    if changed {
-        if let InspectorValue::Same(coef) = f_val {
+    if changed
+        && let InspectorValue::Same(coef) = f_val {
             *val = InspectorValue::Same(Friction::coefficient(coef));
         }
-    }
     changed
 }
 
@@ -759,11 +750,10 @@ fn inspect_restitution(
         ui.label("(Mixed)");
     }
 
-    if changed {
-        if let InspectorValue::Same(coef) = r_val {
+    if changed
+        && let InspectorValue::Same(coef) = r_val {
             *val = InspectorValue::Same(Restitution::coefficient(coef));
         }
-    }
     changed
 }
 
@@ -1128,7 +1118,7 @@ fn apply_stroke_change(
     }
 }
 
-fn wake_up(entity: Entity, inspector: &mut InspectorQuery) {
+fn wake_up(_entity: Entity, _inspector: &mut InspectorQuery) {
     // Wake up is now handled by the event handler
 }
 

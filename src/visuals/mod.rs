@@ -265,11 +265,10 @@ fn apply_render_settings(
 
         // TAA
         if settings.taa_enabled {
-            if let Some(mut msaa) = msaa_opt {
-                if *msaa != Msaa::Off {
+            if let Some(mut msaa) = msaa_opt
+                && *msaa != Msaa::Off {
                     *msaa = Msaa::Off;
                 }
-            }
             entity_cmds.insert(TemporalAntiAliasing::default());
         } else if taa_removals.contains(entity) {
             entity_cmds.remove::<TemporalAntiAliasing>();
