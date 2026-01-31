@@ -10,6 +10,7 @@ use bevy::window::{PrimaryWindow, WindowCreated, WindowResized, WindowScaleFacto
 
 use bevy_egui::EguiUserTextures;
 use bevy_prototype_lyon::plugin::ShapePlugin;
+use gradiance::events::GameEventsPlugin;
 use gradiance::geometry::extrusion::ExtrusionPlugin;
 use gradiance::input::ToolState;
 use gradiance::input::ZIndex;
@@ -70,6 +71,9 @@ pub fn create_test_app() -> App {
     app.add_plugins(ShapePlugin);
     app.add_plugins(ExtrusionPlugin); // Add ExtrusionPlugin
 
+    // Events
+    app.add_plugins(GameEventsPlugin);
+
     // Tools
     app.add_plugins(BoxToolPlugin);
     app.add_plugins(CircleToolPlugin);
@@ -90,6 +94,7 @@ pub fn create_test_app() -> App {
     app.init_resource::<Selection>();
     app.init_resource::<SelectionFilter>();
     app.init_resource::<NextGroupID>();
+    app.init_resource::<gradiance::input::PointerOverUi>();
 
     // Shortcuts
     app.add_plugins(gradiance::input::shortcuts::ShortcutsPlugin);
