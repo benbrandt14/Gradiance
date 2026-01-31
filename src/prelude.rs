@@ -10,5 +10,7 @@ pub use bevy_rapier2d::prelude::Real;
 pub use bevy_rapier2d::prelude::*;
 
 /// Strong ID wrapper for persistent references.
+// TODO: Note that Entity is ephemeral and not suitable for long-term persistence (save/load) or networking.
+// Consider implementing a stable ID system (e.g. Uuid) if persistence is required.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EntityId(pub Entity);

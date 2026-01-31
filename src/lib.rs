@@ -67,12 +67,14 @@ pub enum GameState {
 /// Spawns the main 3D camera for 2.5D visualization.
 fn setup_camera(mut commands: Commands) {
     // Camera positioned further back to see all layers (Z=0 to Z=320)
+    // TODO: Add Name::new("MainCamera") and StateScoped/Cleanup component.
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.0, -30.0, 500.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // Also add a light so we can see the 3D meshes
+    // TODO: Add Name::new("Sun") and StateScoped/Cleanup component.
     commands.spawn((
         DirectionalLight {
             illuminance: 10000.0,

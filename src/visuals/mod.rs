@@ -304,6 +304,7 @@ fn apply_render_settings(
     if settings.point_lights_enabled {
         if point_light_query.iter().next().is_none() {
             // Spawn if missing
+            // TODO: Add Name::new("ScenePointLight")
             commands.spawn((
                 PointLight {
                     intensity: 200_000.0,

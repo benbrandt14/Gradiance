@@ -37,6 +37,8 @@ impl Plugin for GradianceUiPlugin {
             menu::MenuPlugin,
         ))
         .add_systems(PreUpdate, update_pointer_over_ui)
+        // TODO: Constrain with `.run_if(in_state(GameState::Playing))`
+        // TODO: Use `.run_if(on_event::<PropertyChangeEvent>())` and ensure ordering `.after(inspector::inspector_ui)`
         .add_systems(Update, inspector_handlers::handle_property_change_event);
     }
 }

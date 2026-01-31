@@ -45,6 +45,7 @@ impl Plugin for GradianceInputPlugin {
 
         // Commands
         app.init_resource::<commands::CommandStack>();
+        // TODO: Constrain these systems with `.run_if(in_state(GameState::Playing))`
         app.add_systems(
             Update,
             (
