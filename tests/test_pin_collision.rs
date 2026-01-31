@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::input::commands::{GameCommand, SpawnJointCommand};
+use gradiance::prelude::EntityId;
 use rstest::{fixture, rstest};
 
 mod test_utils;
@@ -31,7 +32,7 @@ fn test_pin_collision_solver_groups(mut app: App) {
 
     // 2. Apply SpawnJointCommand
     let mut cmd = SpawnJointCommand {
-        entity_a: box_entity,
+        entity_a: EntityId(box_entity),
         entity_b: None, // Pin to world
         anchor_a: Vec2::ZERO,
         anchor_b: Vec2::ZERO,
@@ -45,7 +46,8 @@ fn test_pin_collision_solver_groups(mut app: App) {
     app.update();
 
     // 3. Verify Pin Entity
-    let pin_entity = cmd.pin_entity.expect("Pin entity should be spawned");
+    let pin_entity_id = cmd.pin_entity.expect("Pin entity should be spawned");
+    let pin_entity = pin_entity_id.0;
 
     // Check Collider
     assert!(
@@ -89,8 +91,8 @@ fn test_joint_two_bodies_no_solver_group_change(mut app: App) {
     let entity_b = app.world_mut().spawn(Transform::default()).id();
 
     let mut cmd = SpawnJointCommand {
-        entity_a,
-        entity_b: Some(entity_b),
+        entity_a: EntityId(entity_a),
+        entity_b: Some(EntityId(entity_b)),
         anchor_a: Vec2::ZERO,
         anchor_b: Vec2::ZERO,
         compliance: 0.0,

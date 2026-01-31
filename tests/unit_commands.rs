@@ -9,6 +9,7 @@ use gradiance::input::commands::{
 use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::tools::connector::Connector;
 use gradiance::physics::floor::GroundPlane;
+use gradiance::prelude::EntityId;
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -52,7 +53,8 @@ fn test_spawn_box_command(mut world: World) {
     assert!(cmd.apply(&mut world).is_ok());
 
     assert!(cmd.entity.is_some());
-    let entity = cmd.entity.unwrap();
+    let entity_id = cmd.entity.unwrap();
+    let entity = entity_id.0;
 
     let transform = world.get::<Transform>(entity);
     assert!(transform.is_some());
@@ -86,7 +88,8 @@ fn test_spawn_circle_command(mut world: World) {
     assert!(cmd.apply(&mut world).is_ok());
 
     assert!(cmd.entity.is_some());
-    let entity = cmd.entity.unwrap();
+    let entity_id = cmd.entity.unwrap();
+    let entity = entity_id.0;
 
     let transform = world.get::<Transform>(entity);
     assert!(transform.is_some());
@@ -112,7 +115,7 @@ fn test_spawn_joint_command(mut world: World) {
     let entity_a = world.spawn(Transform::default()).id();
 
     let mut cmd = SpawnJointCommand {
-        entity_a,
+        entity_a: EntityId(entity_a),
         entity_b: None, // Pin to world
         anchor_a: Vec2::ZERO,
         anchor_b: Vec2::ZERO,
@@ -140,7 +143,7 @@ fn test_spawn_joint_command(mut world: World) {
 
     // Check pin entity
     assert!(cmd.pin_entity.is_some());
-    let pin_id = cmd.pin_entity.unwrap();
+    let pin_id = cmd.pin_entity.unwrap().0;
     assert!(world.get::<RigidBody>(pin_id).is_some());
 
     // Undo
@@ -173,7 +176,8 @@ fn test_spawn_polygon_command(mut world: World) {
     assert!(cmd.apply(&mut world).is_ok());
 
     assert!(cmd.entity.is_some());
-    let entity = cmd.entity.unwrap();
+    let entity_id = cmd.entity.unwrap();
+    let entity = entity_id.0;
 
     assert!(world.get::<RigidBody>(entity).is_some());
     assert!(world.get::<Collider>(entity).is_some());
@@ -242,7 +246,7 @@ fn test_spawn_fixed_joint_command(mut world: World) {
     let entity_a = world.spawn(Transform::default()).id();
 
     let mut cmd = SpawnFixedJointCommand {
-        entity_a,
+        entity_a: EntityId(entity_a),
         entity_b: None,
         anchor_a: Vec2::ZERO,
         anchor_b: Vec2::ZERO,
@@ -268,7 +272,7 @@ fn test_spawn_fixed_joint_command(mut world: World) {
         .unwrap();
 
     assert!(cmd.pin_entity.is_some());
-    let pin_id = cmd.pin_entity.unwrap();
+    let pin_id = cmd.pin_entity.unwrap().0;
     assert!(world.get::<RigidBody>(pin_id).is_some());
 
     // Undo
@@ -285,8 +289,8 @@ fn test_spawn_joint_command_two_bodies(mut world: World) {
     let entity_b = world.spawn(Transform::default()).id();
 
     let mut cmd = SpawnJointCommand {
-        entity_a,
-        entity_b: Some(entity_b),
+        entity_a: EntityId(entity_a),
+        entity_b: Some(EntityId(entity_b)),
         anchor_a: Vec2::ZERO,
         anchor_b: Vec2::ZERO,
         compliance: 0.0,
@@ -332,7 +336,8 @@ fn test_spawn_ground_command(mut world: World) {
     assert!(cmd.apply(&mut world).is_ok());
 
     assert!(cmd.entity.is_some());
-    let entity = cmd.entity.unwrap();
+    let entity_id = cmd.entity.unwrap();
+    let entity = entity_id.0;
 
     assert!(world.get::<RigidBody>(entity).is_some());
     assert!(world.get::<Collider>(entity).is_some());

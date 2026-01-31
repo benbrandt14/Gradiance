@@ -4,6 +4,7 @@ use gradiance::input::commands::*;
 use gradiance::input::editable_shape::{EditableShape, ShapeType};
 use gradiance::input::tools::connector::Connector;
 use gradiance::physics::floor::GroundPlane;
+use gradiance::prelude::EntityId;
 use proptest::prelude::*;
 
 mod test_utils;
@@ -73,8 +74,8 @@ proptest! {
         // 3. Create Command
         let mut cmd: Box<dyn GameCommand> = if is_fixed {
              Box::new(SpawnFixedJointCommand {
-                entity_a: id1,
-                entity_b: Some(id2),
+                entity_a: EntityId(id1),
+                entity_b: Some(EntityId(id2)),
                 anchor_a: local_anchor_1,
                 anchor_b: local_anchor_2,
                 compliance: 0.0,
@@ -86,8 +87,8 @@ proptest! {
             })
         } else {
              Box::new(SpawnJointCommand {
-                entity_a: id1,
-                entity_b: Some(id2),
+                entity_a: EntityId(id1),
+                entity_b: Some(EntityId(id2)),
                 anchor_a: local_anchor_1,
                 anchor_b: local_anchor_2,
                 compliance: 0.0,
@@ -175,8 +176,8 @@ proptest! {
             }),
             2 => Box::new(SpawnGroundCommand { position: pos, rotation: 0.0, entity: None }),
             3 => Box::new(SpawnJointCommand {
-                entity_a: id1,
-                entity_b: Some(id2),
+                entity_a: EntityId(id1),
+                entity_b: Some(EntityId(id2)),
                 anchor_a: Vec2::ZERO,
                 anchor_b: Vec2::ZERO,
                 compliance: 0.0,
@@ -185,8 +186,8 @@ proptest! {
                 original_solver_groups: None,
             }),
             4 => Box::new(SpawnFixedJointCommand {
-                entity_a: id1,
-                entity_b: Some(id2),
+                entity_a: EntityId(id1),
+                entity_b: Some(EntityId(id2)),
                 anchor_a: Vec2::ZERO,
                 anchor_b: Vec2::ZERO,
                 compliance: 0.0,

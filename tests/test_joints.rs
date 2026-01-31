@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::input::commands::{GameCommand, SpawnJointCommand, SpawnPrismaticJointCommand};
-// use gradiance::prelude::*;
+use gradiance::prelude::EntityId;
 
 #[test]
 fn test_spawn_prismatic_joint() {
@@ -29,8 +29,8 @@ fn test_spawn_prismatic_joint() {
         .id();
 
     let mut command = SpawnPrismaticJointCommand {
-        entity_a,
-        entity_b: Some(entity_b),
+        entity_a: EntityId(entity_a),
+        entity_b: Some(EntityId(entity_b)),
         anchor_a: Vec2::ZERO,
         anchor_b: Vec2::ZERO,
         axis: Vec2::X,
@@ -86,8 +86,8 @@ fn test_joint_motor_properties() {
 
     // Spawn Revolute
     let mut cmd_rev = SpawnJointCommand {
-        entity_a,
-        entity_b: Some(entity_b),
+        entity_a: EntityId(entity_a),
+        entity_b: Some(EntityId(entity_b)),
         anchor_a: Vec2::ZERO,
         anchor_b: Vec2::ZERO,
         compliance: 0.0,
