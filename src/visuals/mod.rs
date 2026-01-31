@@ -161,7 +161,6 @@ pub struct GradianceVisualsPlugin;
 
 impl Plugin for GradianceVisualsPlugin {
     fn build(&self, app: &mut App) {
-        // TODO: Bound systems with run conditions (e.g. `run_if(in_state(...))`).
         // Also consider using `Changed<RenderSettings>` for `apply_render_settings` to avoid per-frame overhead.
         app.add_plugins(MaterialPlugin::<ToonMaterial>::default())
             .init_resource::<RenderSettings>()
@@ -176,7 +175,8 @@ impl Plugin for GradianceVisualsPlugin {
                     sync_to_toon_material,
                     sync_to_standard_material,
                     gizmos::draw_joint_gizmos,
-                ),
+                )
+                    .run_if(in_state(GameState::Playing)),
             );
     }
 }
@@ -304,8 +304,8 @@ fn apply_render_settings(
     if settings.point_lights_enabled {
         if point_light_query.iter().next().is_none() {
             // Spawn if missing
-            // TODO: Add Name::new("ScenePointLight")
             commands.spawn((
+                Name::new("ScenePointLight"),
                 PointLight {
                     intensity: 200_000.0,
                     range: 100.0,

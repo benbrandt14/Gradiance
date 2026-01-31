@@ -20,7 +20,6 @@ pub struct GroundPlane;
 /// Spawns a static ground plane.
 // TODO: Consider making the ground plane `StateScoped` or managed via a Level resource/plugin
 // so it can be unloaded when changing levels or states.
-// TODO: Add StateScoped(GameState::Playing)
 fn setup_ground(mut commands: Commands) {
     // Visual representation (very wide rectangle to simulate infinity)
     let w = 100_000.0;

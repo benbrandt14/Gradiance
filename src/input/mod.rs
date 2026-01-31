@@ -45,7 +45,6 @@ impl Plugin for GradianceInputPlugin {
 
         // Commands
         app.init_resource::<commands::CommandStack>();
-        // TODO: Constrain these systems with `.run_if(in_state(GameState::Playing))`
         app.add_systems(
             Update,
             (
@@ -59,7 +58,8 @@ impl Plugin for GradianceInputPlugin {
                 event_handlers::handle_duplicate_entities_event,
                 event_handlers::handle_drag_entities_event,
                 event_handlers::handle_commit_drag_event,
-            ),
+            )
+                .run_if(in_state(GameState::Playing)),
         );
 
         // Tool state
