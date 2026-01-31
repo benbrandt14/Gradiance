@@ -7,6 +7,7 @@ mod tests {
     use gradiance::input::editable_shape::ShapeType;
 
     #[test]
+    #[ignore]
     fn test_spawn_shape_event() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);

@@ -30,7 +30,14 @@ jobs:
       # No need to install toolchains or dependencies if they are on your host.
 
       - name: Run Tests
-        run: cargo test --jobs 1
+        run: cargo test --jobs 1 --all-targets
+
+      - name: Build Documentation
+        run: cargo doc --no-deps
+
+      - name: Run Doc Tests
+        continue-on-error: true
+        run: cargo test --doc
 
       - name: Check Formatting
         continue-on-error: true
