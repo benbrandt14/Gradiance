@@ -55,6 +55,9 @@ impl Plugin for GradianceInputPlugin {
                 event_handlers::handle_spawn_fixed_joint_event,
                 event_handlers::handle_undo_event,
                 event_handlers::handle_redo_event,
+                event_handlers::handle_duplicate_entities_event,
+                event_handlers::handle_drag_entities_event,
+                event_handlers::handle_commit_drag_event,
             ),
         );
 

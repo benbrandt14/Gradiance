@@ -19,7 +19,10 @@ impl Plugin for GameEventsPlugin {
             .add_event::<SpawnFixedJointEvent>()
             .add_event::<UndoEvent>()
             .add_event::<RedoEvent>()
-            .add_event::<PropertyChangeEvent>();
+            .add_event::<PropertyChangeEvent>()
+            .add_event::<DuplicateEntitiesEvent>()
+            .add_event::<DragEntitiesEvent>()
+            .add_event::<CommitDragEvent>();
     }
 }
 
@@ -99,6 +102,34 @@ pub struct UndoEvent;
 /// Event triggered to redo the last command.
 #[derive(Event, Debug, Clone, Copy)]
 pub struct RedoEvent;
+
+/// Event triggered to duplicate a set of entities.
+#[derive(Event, Debug, Clone)]
+pub struct DuplicateEntitiesEvent {
+    /// The entities to duplicate.
+    pub entities: Vec<Entity>,
+    /// Whether to spawn them as kinematic (for immediate dragging).
+    pub make_kinematic: bool,
+}
+
+/// Event triggered to update the position/rotation of entities during a drag.
+/// (Transient - not undoable).
+#[derive(Event, Debug, Clone)]
+pub struct DragEntitiesEvent {
+    /// List of entities and their new positions.
+    pub positions: Vec<(Entity, Vec2)>,
+    /// List of entities and their new rotations (optional).
+    pub rotations: Vec<(Entity, Quat)>,
+}
+
+/// Event triggered to commit a drag operation (Undoable).
+#[derive(Event, Debug, Clone)]
+pub struct CommitDragEvent {
+    /// Map of Entity -> (Old Position, New Position).
+    pub position_changes: Vec<(Entity, Vec2, Vec2)>,
+    /// Map of Entity -> (Old Rotation, New Rotation).
+    pub rotation_changes: Vec<(Entity, Quat, Quat)>,
+}
 
 /// Enum representing the type of property change.
 #[derive(Debug, Clone)]
