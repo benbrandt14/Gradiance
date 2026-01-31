@@ -34,8 +34,8 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>();
 
-        // TODO: Ensure systems are registered with run conditions (e.g., `run_if(in_state(...))`)
-        // and that setup/cleanup systems for states are co-located for clarity.
+        app.enable_state_scoped_entities::<GameState>();
+
         app.add_plugins((
             // ShapePlugin, // Removed in favor of ExtrusionPlugin (via GeometryPlugin)
             // DefaultPickingPlugins,
@@ -68,12 +68,14 @@ pub enum GameState {
 fn setup_camera(mut commands: Commands) {
     // Camera positioned further back to see all layers (Z=0 to Z=320)
     commands.spawn((
+        Name::new("MainCamera"),
         Camera3d::default(),
         Transform::from_xyz(0.0, -30.0, 500.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // Also add a light so we can see the 3D meshes
     commands.spawn((
+        Name::new("Sun"),
         DirectionalLight {
             illuminance: 10000.0,
             shadows_enabled: true,

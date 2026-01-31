@@ -58,7 +58,8 @@ impl Plugin for GradianceInputPlugin {
                 event_handlers::handle_duplicate_entities_event,
                 event_handlers::handle_drag_entities_event,
                 event_handlers::handle_commit_drag_event,
-            ),
+            )
+                .run_if(in_state(GameState::Playing)),
         );
 
         // Tool state

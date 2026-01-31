@@ -23,9 +23,13 @@ const PRISMATIC_MAX_DEFAULT: f32 = 10.0;
 /// Plugin for the Inspector UI.
 pub struct InspectorPlugin;
 
+/// System set for the inspector UI.
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub struct InspectorSet;
+
 impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, inspector_ui);
+        app.add_systems(Update, inspector_ui.in_set(InspectorSet));
     }
 }
 
