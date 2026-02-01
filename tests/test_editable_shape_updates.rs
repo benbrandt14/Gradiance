@@ -4,7 +4,6 @@ use bevy_rapier2d::prelude::*;
 use bevy_rapier2d::rapier::math::Isometry;
 use gradiance::geometry::extrusion::{ExtrudableShape, ExtrusionPlugin};
 use gradiance::input::editable_shape::{EditableShape, ShapeType};
-use gradiance::prelude::*;
 
 #[test]
 fn test_editable_shape_update_triggers_mesh_update() {

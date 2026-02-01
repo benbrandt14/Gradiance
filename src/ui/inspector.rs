@@ -1128,13 +1128,8 @@ fn apply_stroke_change(
     }
 }
 
-fn wake_up(_entity: Entity, _inspector: &mut InspectorQuery) {
-    // Wake up is now handled by the event handler
-}
-
 fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[Entity]) {
     let resolve = |e: Entity, insp: &InspectorQuery| -> Entity {
-// [dunnage] WARN: function `wake_up` is never used
         if let Ok(connector) = insp.connector_query.get(e) {
             connector.entity_a
         } else {
@@ -1417,73 +1412,3 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
     }
 }
 
-fn apply_alignment<'w, 's, F>(
-    inspector: &mut InspectorQuery<'w, 's>,
-    entities: &[Entity],
-    mut accessor: F,
-    action: AlignmentAction,
-) where
-    F: for<'a> FnMut(Entity, &'a mut InspectorQuery<'w, 's>) -> Option<&'a mut f32>,
-// [dunnage] WARN: function `apply_alignment` is never used
-{
-    if entities.len() < 2 {
-        return;
-    }
-
-    // 1. Read values
-    let mut values: Vec<(Entity, f32)> = Vec::with_capacity(entities.len());
-    for &e in entities {
-        if let Some(val) = accessor(e, inspector) {
-            values.push((e, *val));
-        }
-    }
-
-    if values.is_empty() {
-        return;
-    }
-
-    // 2. Sort
-    values.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    let min = values.first().unwrap().1;
-    let max = values.last().unwrap().1;
-
-    match action {
-        AlignmentAction::Min => {
-            for (e, _) in values {
-                if let Some(val) = accessor(e, inspector) {
-                    *val = min;
-                }
-            }
-        }
-        AlignmentAction::Max => {
-            for (e, _) in values {
-                if let Some(val) = accessor(e, inspector) {
-                    *val = max;
-                }
-            }
-        }
-        AlignmentAction::Center => {
-            let center = (min + max) * 0.5;
-            for (e, _) in values {
-                if let Some(val) = accessor(e, inspector) {
-                    *val = center;
-                }
-            }
-        }
-        AlignmentAction::Distribute => {
-            if values.len() < 3 {
-                return;
-            }
-            let count = values.len() as f32;
-            let step = (max - min) / (count - 1.0);
-
-            for (i, (e, _)) in values.iter().enumerate() {
-                let target = min + (i as f32) * step;
-                if let Some(val) = accessor(*e, inspector) {
-                    *val = target;
-                }
-            }
-        }
-    }
-}
