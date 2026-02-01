@@ -18,6 +18,7 @@ enum Action {
     Update,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum Operation {
     SpawnBox { start: Vec2, end: Vec2 },
@@ -63,6 +64,7 @@ fn action_strategy() -> impl Strategy<Value = Action> {
     ]
 }
 
+#[allow(dead_code)]
 fn operation_strategy() -> impl Strategy<Value = Operation> {
     prop_oneof![
         (
@@ -104,6 +106,7 @@ fn apply_action(app: &mut App, action: &Action) {
     }
 }
 
+#[allow(dead_code)]
 fn apply_operation(app: &mut App, op: &Operation) {
     match op {
         Operation::SpawnBox { start, end } => {
@@ -172,6 +175,7 @@ proptest! {
 }
 
 // Strategy for Stability Test: Exclude Drag and Delete
+#[allow(dead_code)]
 fn safe_action_strategy() -> impl Strategy<Value = Action> {
     prop_oneof![
         // Filter out Drag

@@ -19,7 +19,7 @@ impl Plugin for DragToolPlugin {
             Update,
             (
                 drag_tool_input,
-                drag_tool_physics,
+                drag_tool_physics.after(drag_tool_input),
             )
                 .run_if(in_state(ToolState::Drag)),
         );
