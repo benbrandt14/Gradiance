@@ -15,6 +15,9 @@ mod tests {
         app.add_systems(Update, event_handlers::handle_spawn_shape_event);
 
         app.add_plugins(AssetPlugin::default());
+        app.init_asset::<Mesh>();
+        app.init_asset::<StandardMaterial>();
+        app.init_asset::<Image>();
 
         // Fire event
         app.world_mut().send_event(SpawnShapeEvent {

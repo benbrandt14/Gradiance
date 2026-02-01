@@ -1128,6 +1128,7 @@ fn apply_stroke_change(
 }
 
 // TODO: Remove this unused function or re-integrate if needed.
+#[allow(dead_code)]
 fn wake_up(_entity: Entity, _inspector: &mut InspectorQuery) {
     // Wake up is now handled by the event handler
 }
@@ -1362,6 +1363,7 @@ fn inspect_joint(ui: &mut egui::Ui, inspector: &mut InspectorQuery, entities: &[
 }
 
 // TODO: This function is currently unused. Hook it up to the alignment buttons or remove it.
+#[allow(dead_code)]
 fn apply_alignment<'w, 's, F>(
     inspector: &mut InspectorQuery<'w, 's>,
     entities: &[Entity],

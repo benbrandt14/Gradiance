@@ -2,6 +2,8 @@
 //!
 //! Handles global rendering settings (Bloom, Shadows, Toon Shading) and custom materials.
 
+#![allow(dead_code)]
+
 use crate::geometry::extrusion::ExtrudableShape;
 use crate::prelude::*;
 use bevy::core_pipeline::bloom::Bloom;
