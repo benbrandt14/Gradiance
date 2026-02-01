@@ -79,7 +79,14 @@ fn my_tool_update(
 
 ### 3. Rendering
 *   **Status**: `bevy_prototype_lyon` 0.13.0 is compatible with Bevy 0.15 and enabled.
-*   **Note**: Vector rendering can be performance intensive. Consider `bevy_vello` for future high-performance needs.
+*   **Note**: Vector rendering can be performance intensive. **Recommendation**: Evaluate `bevy_vello` for "Phase 2" features (Sketch/Cut) as it uses GPU compute shaders.
+
+### 4. Advanced Physics Patterns
+*   **Collision Filtering**:
+    *   Use `CollisionGroups` (Membership/Filter) to prevent collisions between specific objects (e.g., Pin anchor vs Pinned Body).
+    *   `SolverGroups` only affect the contact solver, not the broadphase. Using `CollisionGroups` is safer for preventing explosions.
+*   **Stability**:
+    *   When constraining bodies, ensure they do not start in a state of deep penetration unless collisions are explicitly disabled via `CollisionGroups`.
 
 ## Future Roadmap (Design Goals)
 

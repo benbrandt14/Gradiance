@@ -218,6 +218,7 @@ Tasks:
 
     [ ] Fix Pin Collision:
         Ensure pinned bodies do not collide with their pin anchor (Explosion risk).
+        *Status*: Needs Fix (See TECH_DEBT.md).
 
     [ ] Implement Spring/Slider Tool.
 
@@ -228,6 +229,13 @@ Tasks:
     [ ] Chain Tool.
 
 (Phases 4-6 remain unchanged)
+
+## Maintenance & Refactoring
+- [ ] **Technical Debt**: Address items in `TECH_DEBT.md`.
+    - [ ] Pin Collision Instability.
+    - [ ] Drag Tool Offset.
+    - [ ] Inspector Query Simplification.
+- [ ] **Documentation**: Maintain `AGENTS.md` and `RUST_GUIDELINES.md`.
 
 ## Technical Debt & Issues
 See `TECH_DEBT.md` for detailed analysis of architectural hurdles and known issues.

@@ -321,6 +321,11 @@ impl GameCommand for SpawnJointCommand {
         }
 
         let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
+        // TODO: Implement CollisionGroups filtering for the pin entity.
+        // Currently, we only modify SolverGroups, which disables contact resolution but not broadphase intersection.
+        // This can still cause instability or explosions in some Rapier configurations.
+        // Add `CollisionGroups::new(PIN_GROUP, Group::ALL)` (or similar filter) to the pin spawn logic
+        // in `resolve_joint_targets` or here.
 
         let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
             world,
