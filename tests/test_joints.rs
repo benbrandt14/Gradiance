@@ -51,12 +51,20 @@ fn test_spawn_prismatic_joint() {
         .expect("Joint not found");
     assert_eq!(joint.parent, entity_b);
 
-    if let TypedJoint::PrismaticJoint(prism) = joint.data {
-        // Rapier uses nalgebra::Vector, Bevy uses Vec2. Bevy Rapier converts them.
-        // Assuming axis 1 is set correctly.
-        assert!((prism.local_axis1().x - 1.0).abs() < 1e-5);
-    } else {
-        panic!("Joint is not Prismatic");
+    match joint.data {
+        TypedJoint::PrismaticJoint(prism) => {
+            assert!((prism.local_axis1().x - 1.0).abs() < 1e-5);
+        }
+        TypedJoint::GenericJoint(generic) => {
+            // Prismatic allows X movement.
+            // Bevy Rapier GenericJoint wrapping is opaque, but we can check constraints.
+            // Actually, we can check if it supports X axis.
+            use bevy_rapier2d::rapier::dynamics::JointAxesMask;
+            assert!(generic.locked_axes().contains(JointAxesMask::LIN_Y));
+            assert!(generic.locked_axes().contains(JointAxesMask::ANG_X));
+            assert!(!generic.locked_axes().contains(JointAxesMask::LIN_X));
+        }
+        _ => panic!("Joint is not Prismatic or Generic Prismatic"),
     }
 }
 
@@ -98,22 +106,36 @@ fn test_joint_motor_properties() {
     cmd_rev.apply(app.world_mut()).unwrap();
 
     // Modify Motor
+    use bevy_rapier2d::rapier::dynamics::JointAxis;
     let mut joint = app.world_mut().get_mut::<ImpulseJoint>(entity_a).unwrap();
-    if let TypedJoint::RevoluteJoint(ref mut rev) = joint.data {
-        rev.set_motor_velocity(5.0, 0.5); // target vel, damping
-        rev.set_motor_max_force(100.0);
+    match &mut joint.data {
+        TypedJoint::RevoluteJoint(rev) => {
+            rev.set_motor_velocity(5.0, 0.5);
+            rev.set_motor_max_force(100.0);
+        }
+        TypedJoint::GenericJoint(g) => {
+            g.set_motor_velocity(JointAxis::AngX, 5.0, 0.5);
+            g.set_motor_max_force(JointAxis::AngX, 100.0);
+        }
+        _ => panic!("Unexpected joint type for update"),
     }
 
     // Verify
     let joint = app.world().get::<ImpulseJoint>(entity_a).unwrap();
-    if let TypedJoint::RevoluteJoint(rev) = joint.data {
-        // Access fields via .data.raw.as_revolute()
-        let raw = rev.data.raw.as_revolute().unwrap();
-        let motor = &raw.data.motors[2];
-        assert!(motor.target_vel == 5.0);
-        assert!(motor.damping == 0.5);
-        assert!(motor.max_force == 100.0);
-    } else {
-        panic!("Not revolute");
+    match &joint.data {
+        TypedJoint::RevoluteJoint(rev) => {
+            let raw = rev.data.raw.as_revolute().unwrap();
+            let motor = &raw.data.motors[2];
+            assert!(motor.target_vel == 5.0);
+            assert!(motor.damping == 0.5);
+            assert!(motor.max_force == 100.0);
+        }
+        TypedJoint::GenericJoint(g) => {
+            let motor = g.motor(JointAxis::AngX).unwrap();
+            assert_eq!(motor.target_vel, 5.0);
+            assert_eq!(motor.damping, 0.5);
+            assert_eq!(motor.max_force, 100.0);
+        }
+        _ => panic!("Unexpected joint type for verification"),
     }
 }
