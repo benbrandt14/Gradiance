@@ -16,6 +16,7 @@ use gradiance::input::ToolState;
 use gradiance::input::ZIndex;
 use gradiance::input::commands::CommandStack;
 use gradiance::input::cursor::CursorWorldPos;
+use gradiance::input::event_handlers;
 use gradiance::input::selection::{NextGroupID, Selection, SelectionFilter};
 use gradiance::input::tools::box_tool::BoxToolPlugin;
 use gradiance::input::tools::circle_tool::CircleToolPlugin;
@@ -51,6 +52,8 @@ pub fn create_test_app() -> App {
     app.init_resource::<Assets<StandardMaterial>>(); // Initialize StandardMaterial for Extrusion
 
     app.add_plugins(bevy_egui::EguiPlugin); // Added EguiPlugin
+    // Add EditableShapePlugin explicitly to handle EditableShape component logic
+    app.add_plugins(gradiance::input::editable_shape::EditableShapePlugin);
     app.init_resource::<EguiUserTextures>();
     app.init_resource::<Events<bevy::picking::backend::PointerHits>>();
 
@@ -73,6 +76,20 @@ pub fn create_test_app() -> App {
 
     // Events
     app.add_plugins(GameEventsPlugin);
+
+    // Register Event Handlers (Critical for tool tests)
+    app.add_systems(Update, (
+        event_handlers::handle_spawn_shape_event,
+        event_handlers::handle_spawn_ground_event,
+        event_handlers::handle_spawn_joint_event,
+        event_handlers::handle_spawn_prismatic_joint_event,
+        event_handlers::handle_spawn_fixed_joint_event,
+        event_handlers::handle_undo_event,
+        event_handlers::handle_redo_event,
+        event_handlers::handle_duplicate_entities_event,
+        event_handlers::handle_drag_entities_event,
+        event_handlers::handle_commit_drag_event,
+    ));
 
     // Tools
     app.add_plugins(BoxToolPlugin);
