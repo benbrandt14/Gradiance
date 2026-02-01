@@ -318,7 +318,14 @@ fn select_tool_update(
                  for (entity, global_transform) in &aux.selectable {
                     let t = global_transform.translation().truncate();
                     if is_point_in_box(t, min, max) {
-                        if selection.0.insert(entity) {
+                        let is_connector = aux.connector.contains(entity);
+                        let pass = match *selection_filter {
+                            SelectionFilter::All => true,
+                            SelectionFilter::Shapes => !is_connector,
+                            SelectionFilter::Joints => is_connector,
+                        };
+
+                        if pass && selection.0.insert(entity) {
                             count += 1;
                         }
                     }

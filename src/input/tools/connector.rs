@@ -94,6 +94,22 @@ fn update_connector_visuals(
 
             transform.translation.x = local_midpoint.x;
             transform.translation.y = local_midpoint.y;
+
+            // Rotation Logic:
+            // Pin: World Aligned (0 rotation relative to world).
+            // Joint: Aligned with Entity B (shows relative rotation if A rotates).
+            let desired_rotation = if let Some(e_b) = connector.entity_b {
+                if let Ok(t_b) = global_transforms.get(e_b) {
+                    t_b.compute_transform().rotation
+                } else {
+                    Quat::IDENTITY
+                }
+            } else {
+                Quat::IDENTITY
+            };
+
+            let parent_rot_inv = parent_global.compute_transform().rotation.inverse();
+            transform.rotation = parent_rot_inv * desired_rotation;
         }
     }
 }
@@ -133,7 +149,7 @@ fn update_connector(
     tool_state: Res<State<ToolState>>,
     bodies: Query<(Entity, &GlobalTransform), With<RigidBody>>,
     parents: Query<&Parent>,
-    transforms: Query<&Transform>,
+    transforms: Query<&GlobalTransform>,
 ) {
     if pointer_over_ui.0 {
         return;
@@ -179,9 +195,10 @@ fn update_connector(
         };
 
         let get_local_and_rot = |e: Entity| -> (Vec2, f32) {
-            if let Ok(t) = transforms.get(e) {
+            if let Ok(gt) = transforms.get(e) {
+                let t = gt.compute_transform();
                 let rot = t.rotation.to_euler(EulerRot::XYZ).2;
-                (calculate_local_anchor(t, pos), rot)
+                (calculate_local_anchor(&t, pos), rot)
             } else {
                 (Vec2::ZERO, 0.0)
             }
@@ -191,7 +208,7 @@ fn update_connector(
         let (anchor_b, rot_b) = if let Some(e_b) = entity_b {
             get_local_and_rot(e_b)
         } else {
-            (Vec2::ZERO, 0.0)
+            (pos, 0.0)
         };
 
         // TODO: Use EventWriter for all these commands.

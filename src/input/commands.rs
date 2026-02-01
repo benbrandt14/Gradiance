@@ -10,6 +10,8 @@ use crate::prelude::*;
 use crate::prelude::EntityId;
 use anyhow::{Result, bail};
 use bevy_prototype_lyon::prelude::*;
+use bevy_rapier2d::dynamics::{GenericJoint as BevyGenericJoint, TypedJoint};
+use bevy_rapier2d::rapier::dynamics::{GenericJoint as RapierGenericJoint};
 use std::fmt::Debug;
 
 const GROUND_WIDTH: f32 = 100_000.0;
@@ -335,9 +337,17 @@ impl GameCommand for SpawnJointCommand {
             .local_anchor1(local_anchor_1)
             .local_anchor2(local_anchor_2);
 
+        let typed: TypedJoint = joint_data.into();
+        let mut rapier_generic: RapierGenericJoint = match typed {
+            TypedJoint::RevoluteJoint(wrapper) => wrapper.data.raw,
+            _ => unreachable!(),
+        };
+        rapier_generic.set_contacts_enabled(false);
+        let bevy_generic = BevyGenericJoint { raw: rapier_generic };
+
         world
             .entity_mut(self.entity_a.0)
-            .insert(ImpulseJoint::new(target_entity, joint_data));
+            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(bevy_generic)));
         Ok(())
     }
 
@@ -447,9 +457,17 @@ impl GameCommand for SpawnPrismaticJointCommand {
             .local_anchor1(local_anchor_1)
             .local_anchor2(local_anchor_2);
 
+        let typed: TypedJoint = joint_data.into();
+        let mut rapier_generic: RapierGenericJoint = match typed {
+            TypedJoint::PrismaticJoint(wrapper) => wrapper.data.raw,
+            _ => unreachable!(),
+        };
+        rapier_generic.set_contacts_enabled(false);
+        let bevy_generic = BevyGenericJoint { raw: rapier_generic };
+
         world
             .entity_mut(self.entity_a.0)
-            .insert(ImpulseJoint::new(target_entity, joint_data));
+            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(bevy_generic)));
         Ok(())
     }
 
@@ -563,9 +581,17 @@ impl GameCommand for SpawnFixedJointCommand {
             .local_basis1(-self.rot_a)
             .local_basis2(-self.rot_b);
 
+        let typed: TypedJoint = joint_data.into();
+        let mut rapier_generic: RapierGenericJoint = match typed {
+            TypedJoint::FixedJoint(wrapper) => wrapper.data.raw,
+            _ => unreachable!(),
+        };
+        rapier_generic.set_contacts_enabled(false);
+        let bevy_generic = BevyGenericJoint { raw: rapier_generic };
+
         world
             .entity_mut(self.entity_a.0)
-            .insert(ImpulseJoint::new(target_entity, joint_data));
+            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(bevy_generic)));
         Ok(())
     }
 

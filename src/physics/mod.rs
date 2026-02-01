@@ -9,6 +9,7 @@ use bevy_rapier2d::render::DebugRenderContext;
 pub mod config;
 pub mod constraints;
 pub mod floor;
+pub mod controllers;
 
 const PIXELS_PER_METER: f32 = 100.0;
 const GRAVITY: Vec2 = Vec2::new(0.0, -1000.0);
@@ -35,6 +36,8 @@ impl Plugin for GradiancePhysicsPlugin {
 
         // Setup Floor
         app.add_plugins(floor::FloorPlugin);
+
+        app.add_systems(Update, controllers::motor_controller_system);
     }
 }
 
