@@ -3,7 +3,6 @@ use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
 use gradiance::geometry::extrusion::ExtrudableShape;
 use gradiance::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
-use gradiance::prelude::*;
 
 #[test]
 fn test_copy_logic_extrusion_behavior() {

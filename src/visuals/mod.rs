@@ -2,6 +2,8 @@
 //!
 //! Handles global rendering settings (Bloom, Shadows, Toon Shading) and custom materials.
 
+#![allow(unused)]
+
 use crate::geometry::extrusion::ExtrudableShape;
 use crate::prelude::*;
 use bevy::core_pipeline::bloom::Bloom;
@@ -102,30 +104,25 @@ pub struct ToonMaterial {
 
 /// Uniform struct for ToonMaterial.
 #[derive(ShaderType, Clone, Debug)]
+#[allow(dead_code)]
 pub struct ToonMaterialUniform {
     /// Base color.
     pub color: LinearRgba,
-// [dunnage] WARN: function `check` is never used
     /// Sun direction.
     pub sun_dir: Vec3,
     /// Sun color.
-// [dunnage] WARN: function `check` is never used
     pub sun_color: LinearRgba,
     /// Camera position.
     pub camera_pos: Vec3,
-// [dunnage] WARN: function `check` is never used
     /// Ambient color.
     pub ambient_color: LinearRgba,
     /// Shading steps.
-// [dunnage] WARN: function `check` is never used
     pub steps: u32,
 }
 
-// [dunnage] WARN: function `check` is never used
 impl From<&ToonMaterial> for ToonMaterialUniform {
     fn from(m: &ToonMaterial) -> Self {
         Self {
-// [dunnage] WARN: function `check` is never used
             color: m.color,
             sun_dir: m.sun_dir,
             sun_color: m.sun_color,
