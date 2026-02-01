@@ -222,6 +222,7 @@ fn update_toon_shader(
 }
 
 /// Syncs `RenderSettings` to Bevy's rendering components/resources.
+// TODO: Refactor to reduce arguments (e.g. use a SystemParam struct)
 fn apply_render_settings(
     settings: Res<RenderSettings>,
     mut bloom_query: Query<&mut Bloom>,

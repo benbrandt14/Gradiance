@@ -29,6 +29,12 @@ pub fn to_clipper_path(_points: &[Vec2]) {
 /// Placeholder for performing a cut operation on world geometry.
 ///
 /// **Note:** Work in Progress.
+/// TODO: Implement CSG logic using Clipper2.
+/// 1. Create cut polygon (thick line).
+/// 2. Query intersecting bodies.
+/// 3. Convert body geometry to Clipper path.
+/// 4. Perform Difference op.
+/// 5. Rebuild bodies (decompose to convex if needed).
 ///
 /// # Arguments
 ///

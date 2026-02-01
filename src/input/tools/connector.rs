@@ -120,6 +120,7 @@ impl ConnectorType {
     }
 }
 
+// TODO: Refactor to reduce arguments (e.g. use a SystemParam struct)
 fn update_connector(
 // [dunnage] WARN: this function has too many arguments (12/7)
     mut ev_joint: EventWriter<SpawnJointEvent>,

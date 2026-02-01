@@ -108,7 +108,7 @@ UI & UX
 
     [x] Context Menu: Right-click entity to show actions.
 
-    [ ] Inspector: Sidebar showing properties of selected object.
+    [x] Inspector: Sidebar showing properties of selected object.
 
     [x] Grid: Snapping and visual grid.
 
@@ -195,7 +195,7 @@ Tasks:
         Implement utility fn to_clipper_path(Vec<Vec2>) -> Vec<Point64>.
 
     [ ] Implement Cut Tool (Laser):
-        CSG operations on bodies.
+        CSG operations on bodies. (Placeholder in `src/geometry/csg.rs`)
 
     [ ] Implement Polygon Decomposition:
         Use parry2d's convex decomposition.

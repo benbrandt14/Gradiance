@@ -16,9 +16,10 @@
 
 ### Pin Collision Instability
 - **Severity**: High
-- **Description**: The `SpawnJointCommand` (for Hinges and Fixed joints) creates a "Pin" entity (`RigidBody::Fixed`) when connecting a dynamic body to the world. Currently, this pin is spawned at the anchor point. If the dynamic body overlaps with this pin (which it must to be pinned), Rapier's solver may attempt to separate them violently if collision is not disabled.
-- **Fix**: Implement `CollisionGroups` or collision filtering in `SpawnJointCommand` to ignore collisions between the pin entity and the constrained body.
-- **Location**: `src/input/commands.rs`, `SpawnJointCommand::apply`.
+- **Description**: The `SpawnJointCommand` creates a "Pin" entity (`RigidBody::Fixed`) overlapping the body. Rapier's solver may violently separate them if collisions aren't disabled.
+- **Status**: Logic exists in `SpawnJointCommand` to set `SolverGroups`, but effectiveness needs verification.
+- **Action**: Verify if `PIN_GROUP` is correctly ignored by the body's filters.
+- **Location**: `src/input/commands.rs`.
 
 ### Joint Limits & Breakage
 - **Severity**: Medium
@@ -50,3 +51,29 @@
 - **Description**: `DragTool` has known offset issues where the object snaps to the center rather than maintaining the grab offset.
 - **Location**: `src/input/tools/drag_tool.rs`.
 
+## Code Quality & Refactoring
+
+### Complex Types & Logic
+- **Severity**: Low
+- **Description**: Several systems use very complex queries or tuples that should be refactored into `SystemParam` structs or type aliases.
+- **Locations**:
+    - `src/ui/inspector.rs`: `InspectorQuery`, `extract_inspector_state`.
+    - `src/ui/inspector_handlers.rs`.
+    - `src/input/tools/drag_tool.rs`.
+    - `src/input/tools/select_tool.rs`.
+
+### Argument Count
+- **Severity**: Low
+- **Description**: Multiple functions exceed the recommended argument count (clippy `too_many_arguments`).
+- **Locations**:
+    - `src/input/tools/connector.rs`: `update_connector` (12 args).
+    - `src/visuals/mod.rs`: `apply_render_settings` (13 args).
+    - `src/input/tools/polygon_tool.rs` (8 args).
+    - `src/input/tools/utils.rs` (9 args).
+    - `src/ui/context_menu.rs` (11 args).
+    - `src/ui/menu.rs` (8 args).
+
+### Unused Code
+- **Severity**: Low
+- **Description**: Unused functions in `inspector.rs`.
+- **Locations**: `src/ui/inspector.rs` (`wake_up`, `apply_alignment`).
