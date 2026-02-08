@@ -263,6 +263,7 @@ impl GameCommand for SpawnShapeCommand {
 }
 
 /// Command to spawn a Revolute Joint (Hinge).
+// TODO: Refactor: Extract common visual spawning and target resolution logic to avoid duplication with other joint commands.
 #[derive(Debug)]
 pub struct SpawnJointCommand {
     /// The first body.
@@ -321,7 +322,7 @@ impl GameCommand for SpawnJointCommand {
         }
 
         let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
-        // TODO: Implement CollisionGroups filtering for the pin entity.
+        // TODO: Fix: Implement CollisionGroups filtering for the pin entity. See TECH_DEBT.md.
         // Currently, we only modify SolverGroups, which disables contact resolution but not broadphase intersection.
         // This can still cause instability or explosions in some Rapier configurations.
         // Add `CollisionGroups::new(PIN_GROUP, Group::ALL)` (or similar filter) to the pin spawn logic
@@ -388,6 +389,7 @@ impl GameCommand for SpawnJointCommand {
 }
 
 /// Command to spawn a Prismatic Joint (Slider).
+// TODO: Refactor: Extract common visual spawning and target resolution logic to avoid duplication with other joint commands.
 #[derive(Debug)]
 pub struct SpawnPrismaticJointCommand {
     /// The first body.
@@ -508,6 +510,7 @@ impl GameCommand for SpawnPrismaticJointCommand {
 }
 
 /// Command to spawn a Fixed Joint (Weld).
+// TODO: Refactor: Extract common visual spawning and target resolution logic to avoid duplication with other joint commands.
 #[derive(Debug)]
 pub struct SpawnFixedJointCommand {
     /// The first body.

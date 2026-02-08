@@ -6,16 +6,16 @@
 - [x] add hinge behavior
 - [x] add fix behavior ( ie make static )
 - [ ] add collision layers
-- [ ] add infinite plane tool (Currently approximated with large box)
-- [ ] add restitution and friction
+- [x] add infinite plane tool (Approximated with large box, shader pending)
+- [ ] add restitution and friction (Partial support in Inspector)
 - [x] add square selection tool
 - [ ] add a lasso selection tool
-- [ ] add multiselect with shift+click
+- [x] add multiselect with shift+click
 - [ ] add copy/paste shortcuts by holding CTRL and dragging
 - [ ] add tracers
 - [x] add grid w/ locking
 - [ ] add ability to modify colors ( background and objects )
-- [ ] be able to modify attributes of multiple selected objects
+- [x] be able to modify attributes of multiple selected objects (Implemented in Inspector)
 - [ ] add cutting tool and CSG operations ( later on )
 - [ ] add save/load behavior
 - [ ] document anything else that bevy/Rapier2d can expose as right clickable
@@ -23,7 +23,7 @@
 - [ ] add lasers / optics behavior
 - [ ] add translucency
 - [ ] add attraction/repulsion
-- [ ] be able to modify density & other physical attributes ( friction )
+- [x] be able to modify density & other physical attributes ( friction )
 - [ ] add sketch tool
 - [ ] add CAD style constraint-based sketching (much later)
 - [ ] add drag-and-drop SVG support (much later)
@@ -56,7 +56,7 @@
 
     [ ] Cut Tool: CSG difference operation on World geometry.
 
-    [x] Drag Tool: MouseJoint implementation. (Needs offset fix)
+    [x] Drag Tool: MouseJoint implementation. (CRITICAL: Needs offset fix)
 
     [ ] Scale/Rotate Tool: Gizmos for transforming entities (use bevy_transform_gizmo).
 
@@ -108,7 +108,7 @@ UI & UX
 
     [x] Context Menu: Right-click entity to show actions.
 
-    [ ] Inspector: Sidebar showing properties of selected object.
+    [x] Inspector: Sidebar showing properties of selected object (Needs Refactoring).
 
     [x] Grid: Snapping and visual grid.
 
@@ -169,7 +169,7 @@ Tasks:
 
     [x] Implement MouseJoint (The "Hand" Tool):
         On drag start: Spawn DistanceJoint.
-        *Issue*: Offset calculation needs fixing.
+        *Issue*: Offset calculation needs fixing (High Priority).
 
 Phase 2: Geometry & CSG Pipeline (Months 3–4)
 
@@ -187,6 +187,9 @@ Tasks:
 
     [x] Integrate bevy_prototype_lyon:
         Verified working with 0.13.0.
+
+    [ ] Evaluate `bevy_vello`:
+        Check suitability for GPU-accelerated vector rendering vs Lyon.
 
     [ ] Implement Sketch Tool:
         Capture points -> Ramer-Douglas-Peucker simplification -> Lyon Path.
@@ -218,7 +221,7 @@ Tasks:
 
     [ ] Fix Pin Collision:
         Ensure pinned bodies do not collide with their pin anchor (Explosion risk).
-        *Status*: Needs Fix (See TECH_DEBT.md).
+        *Status*: Critical Tech Debt (See TECH_DEBT.md).
 
     [ ] Implement Spring/Slider Tool.
 
@@ -232,9 +235,10 @@ Tasks:
 
 ## Maintenance & Refactoring
 - [ ] **Technical Debt**: Address items in `TECH_DEBT.md`.
-    - [ ] Pin Collision Instability.
-    - [ ] Drag Tool Offset.
-    - [ ] Inspector Query Simplification.
+    - [ ] Pin Collision Instability (Critical).
+    - [ ] Drag Tool Offset (High).
+    - [ ] Inspector Query Simplification (Architectural).
+    - [ ] Code Duplication in Joint Commands.
 - [ ] **Documentation**: Maintain `AGENTS.md` and `RUST_GUIDELINES.md`.
 
 ## Technical Debt & Issues
