@@ -34,9 +34,9 @@ impl Plugin for InspectorPlugin {
     }
 }
 
-// TODO: Refactor this large struct.
-// Consider splitting into multiple focused queries or using a custom `SystemParam` struct
-// that encapsulates the component data more cleanly. The current tuple is brittle.
+// TODO: Refactor this massive SystemParam struct.
+// It is brittle and difficult to maintain. Consider using `bevy_inspector_egui` or splitting
+// the inspector into smaller, focused widgets that query only what they need.
 #[derive(SystemParam)]
 struct InspectorQuery<'w, 's> {
     selection: Res<'w, Selection>,

@@ -3,20 +3,21 @@
 ## Functionality
 - **Grid**: Rendering and scaling can be improved. Infinite grid shader not implemented, not currently visible.
 - **Ground Plane**: Not infinite. Does not have a tool to create it.
-- **Drag Tool**: In play mode the object is not interacted upon with the correct offset, it latches to the center incorrectly
-- **Rotate**: Right click + drag should rotate items
-- **Scale**: Not implemented, when shape is selected and scale tool is active, scale handles should appear on the bounding box 
-- **Inspector**: Minimal context menu items & actions available.
+- **Drag Tool**: In play mode the object is not interacted upon with the correct offset, it latches to the center incorrectly. (See TECH_DEBT.md)
+- **Rotate**: Right click + drag should rotate items (Not implemented).
+- **Scale**: Not implemented, when shape is selected and scale tool is active, scale handles should appear on the bounding box.
+- **Inspector**: Minimal context menu items & actions available. Code is monolithic (See TECH_DEBT.md).
 - **Collision**: RevoluteJoint tool (Pin) creates a static body that overlaps with the pinned body. This may cause explosions if collision layers are not managed. Currently, the Pin has no collider (visual only) to avoid this, but it means the pin itself doesn't collide with anything.
+- **Motor Controller**: Logic for oscillating motors is flawed for joints with non-trivial anchors. It uses global transform difference instead of joint angle.
 
 # Technical Debt
-- **Polygon Tool**: Does not always create correct nonconvex collider.
+See `TECH_DEBT.md` for a comprehensive list.
 
 ## Physics & Constraints
 
 ### Pin Collision Instability
 - **Severity**: High
-- **Description**: The `SpawnJointCommand` (for Hinges and Fixed joints) creates a "Pin" entity (`RigidBody::Fixed`) when connecting a dynamic body to the world. Currently, this pin is spawned at the anchor point. If the dynamic body overlaps with this pin (which it must to be pinned), Rapier's solver may attempt to separate them violently if collision is not disabled.
+- **Description**: The `SpawnJointCommand` (for Hinges and Fixed joints) creates a "Pin" entity (`RigidBody::Fixed`) at the anchor point. If the dynamic body overlaps with this pin (which it must to be pinned), Rapier's solver may attempt to separate them violently if collision is not disabled.
 - **Fix**: Implement `CollisionGroups` or collision filtering in `SpawnJointCommand` to ignore collisions between the pin entity and the constrained body.
 - **Location**: `src/input/commands.rs`, `SpawnJointCommand::apply`.
 
@@ -49,4 +50,3 @@
 - **Severity**: Low
 - **Description**: `DragTool` has known offset issues where the object snaps to the center rather than maintaining the grab offset.
 - **Location**: `src/input/tools/drag_tool.rs`.
-

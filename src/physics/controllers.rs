@@ -38,6 +38,10 @@ pub fn motor_controller_system(
             continue;
         }
 
+        // TODO: This logic uses global transform differences to estimate joint angles/distances.
+        // This is incorrect for joints where local anchors are not aligned with the body origin or frame.
+        // We should instead query Rapier's internal joint state or correctly implement the relative transform math using local anchors.
+
         // Helper to get angle
         let get_angle = |e_a, e_b, transforms: &Query<&GlobalTransform>| {
              if let Ok(t_a) = transforms.get(e_a)

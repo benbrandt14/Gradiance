@@ -44,7 +44,7 @@
 
 ## Core Tools ( Polish & Feature Complete )
 
-    [x] Plane Tool: Spawns static ground (Approximated). Needs infinite shader.
+    [x] Plane Tool: Functional but visual approximation. Needs infinite shader.
 
     [x] Box Tool: Spawns Collider::cuboid.
 
@@ -52,13 +52,13 @@
 
     [x] Polygon Tool: Click-to-place vertices, close loop to spawn.
 
-    [ ] Brush/Sketch Tool: Freehand draw -> simplify -> polygon.
+    [ ] Brush/Sketch Tool: Freehand draw (Planned).
 
-    [ ] Cut Tool: CSG difference operation on World geometry.
+    [ ] Cut Tool: CSG difference operation (Planned).
 
-    [x] Drag Tool: MouseJoint implementation. (Needs offset fix)
+    [x] Drag Tool: Functional but inaccurate. (See TECH_DEBT.md).
 
-    [ ] Scale/Rotate Tool: Gizmos for transforming entities (use bevy_transform_gizmo).
+    [ ] Scale/Rotate Tool: Planned. (use bevy_transform_gizmo).
 
     [x] Select Tool: Box selection and Move functionality.
 
@@ -210,6 +210,8 @@ Milestones:
 
     Custom Solvers: Gear and Pulley constraints.
 
+    Visualization: Seeing the joints.
+
 Tasks:
 
     [x] Implement Hinge Tool (ConnectorTool).
@@ -228,6 +230,10 @@ Tasks:
 
     [ ] Chain Tool.
 
+    [ ] Motor Controller Logic:
+        Ensure motor limits and target velocities are calculated correctly relative to joint anchors.
+        *Status*: Partial implementation in `src/physics/controllers.rs`, needs correction.
+
 (Phases 4-6 remain unchanged)
 
 ## Maintenance & Refactoring
@@ -235,6 +241,8 @@ Tasks:
     - [ ] Pin Collision Instability.
     - [ ] Drag Tool Offset.
     - [ ] Inspector Query Simplification.
+    - [ ] Code Duplication in Commands.
+    - [ ] Motor Controller Logic.
 - [ ] **Documentation**: Maintain `AGENTS.md` and `RUST_GUIDELINES.md`.
 
 ## Technical Debt & Issues

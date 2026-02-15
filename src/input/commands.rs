@@ -263,6 +263,9 @@ impl GameCommand for SpawnShapeCommand {
 }
 
 /// Command to spawn a Revolute Joint (Hinge).
+// TODO: Refactor `SpawnJointCommand`, `SpawnPrismaticJointCommand`, and `SpawnFixedJointCommand`.
+// They share significant logic for resolving targets, spawning visuals, and handling pins.
+// Extract this common logic into a shared helper or builder pattern to reduce duplication.
 #[derive(Debug)]
 pub struct SpawnJointCommand {
     /// The first body.
