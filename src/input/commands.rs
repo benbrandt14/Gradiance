@@ -114,6 +114,11 @@ impl CommandStack {
 }
 
 /// Helper to resolve joint targets and handle pinning.
+///
+/// TODO: Reduce duplication in spawn commands.
+/// `SpawnJointCommand`, `SpawnFixedJointCommand`, etc., share this logic.
+/// Consider extracting this and other common steps (visual spawning, group mgmt)
+/// into a builder or helper struct. See REFACTOR_PLAN.md.
 fn resolve_joint_targets(
     world: &mut World,
     entity_a: EntityId,
@@ -324,8 +329,7 @@ impl GameCommand for SpawnJointCommand {
         // TODO: Implement CollisionGroups filtering for the pin entity.
         // Currently, we only modify SolverGroups, which disables contact resolution but not broadphase intersection.
         // This can still cause instability or explosions in some Rapier configurations.
-        // Add `CollisionGroups::new(PIN_GROUP, Group::ALL)` (or similar filter) to the pin spawn logic
-        // in `resolve_joint_targets` or here.
+        // See REFACTOR_PLAN.md for the solution using `CollisionGroups`.
 
         let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
             world,

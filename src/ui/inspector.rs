@@ -115,6 +115,13 @@ struct InspectorState {
 // TODO: Refactor to separate View (UI) from Model (Logic).
 // Instead of mutating components directly in the UI system, emit events (e.g. `PropertyChangeEvent`)
 // and handle them in a separate system. This improves testability and undo/redo support.
+//
+// TODO: Implement Undo/Redo integration.
+// Currently, `PropertyChangeEvent` is handled by directly mutating components in `inspector_handlers.rs`.
+// This bypasses `CommandStack`. We need to:
+// 1. Capture "start" value on slider drag start.
+// 2. Emit a "Commit" event on slider release.
+// 3. Create a `ModifyPropertyCommand` that is pushed to `CommandStack`.
 fn inspector_ui(mut contexts: EguiContexts, mut inspector: InspectorQuery) {
     let ctx = contexts.ctx_mut();
 

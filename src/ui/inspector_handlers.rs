@@ -9,6 +9,10 @@ use bevy_rapier2d::prelude::*;
 use bevy_rapier2d::rapier::dynamics::{JointAxis};
 
 /// Handles `PropertyChangeEvent` by applying changes to entities.
+///
+/// TODO: Integrate with `CommandStack` for Undo/Redo.
+/// Currently, this system mutates components directly. It should instead construct
+/// a `ModifyPropertyCommand` (to be implemented) and push it to the stack.
 pub fn handle_property_change_event(
     mut events: EventReader<PropertyChangeEvent>,
     mut commands: Commands,
@@ -149,6 +153,9 @@ pub fn handle_property_change_event(
                         }
 
                         if updated {
+                            // TODO: Avoid hardcoding `oscillate: true`.
+                            // This should be exposed in `PropertyChangeEvent` and the Inspector UI.
+                            // Users might want a simple motor without oscillation.
                             let controller = MotorController {
                                 target_vel: *target_vel,
                                 damping: *damping,

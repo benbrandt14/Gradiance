@@ -168,6 +168,7 @@ fn drag_tool_physics(
         // and this physics update, or if the hand spawn position (target_pos) is slightly different
         // from the click position, the joint will snap the body.
         // Fix: Capture exact world click pos and body transform in `DragToolData` and use them here.
+        // See REFACTOR_PLAN.md for details.
         let joint = RevoluteJointBuilder::new()
             .local_anchor1(Vec2::ZERO)
             .local_anchor2(data.local_anchor);

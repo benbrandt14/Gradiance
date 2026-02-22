@@ -70,7 +70,7 @@ Physics & Constraints
 
     [ ] Spring: DistanceJoint with soft compliance.
 
-    [ ] Slider: PrismaticJoint with limits.
+    [x] Slider: PrismaticJoint with limits (Implemented via ConnectorTool, limits exposed in Inspector).
 
     [ ] Chain: Procedurally generated linked bodies.
 
@@ -235,6 +235,7 @@ Tasks:
     - [ ] Pin Collision Instability.
     - [ ] Drag Tool Offset.
     - [ ] Inspector Query Simplification.
+    - [ ] Inspector Undo/Redo Integration.
 - [ ] **Documentation**: Maintain `AGENTS.md` and `RUST_GUIDELINES.md`.
 
 ## Technical Debt & Issues

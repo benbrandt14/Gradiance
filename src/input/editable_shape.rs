@@ -96,6 +96,9 @@ pub fn generate_shape_components(shape_type: &ShapeType) -> Option<(Path, Collid
                 closed: true,
             };
 
+            // TODO: Ensure robust decomposition for nonconvex polygons.
+            // Currently using `SharedShape::convex_decomposition` which generally works,
+            // but complex shapes might fail or produce inefficient colliders.
             let vertices: Vec<Point2<f32>> = points.iter().map(|v| Point2::new(v.x, v.y)).collect();
             let indices: Vec<[u32; 2]> = (0..vertices.len())
                 .map(|i| [i as u32, ((i + 1) % vertices.len()) as u32])
