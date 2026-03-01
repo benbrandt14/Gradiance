@@ -34,9 +34,10 @@ impl Plugin for InspectorPlugin {
     }
 }
 
-// TODO: Refactor this large struct.
-// Consider splitting into multiple focused queries or using a custom `SystemParam` struct
-// that encapsulates the component data more cleanly. The current tuple is brittle.
+// TODO: Refactor this large struct. (See TECH_DEBT.md)
+// The InspectorQuery tuple is massive, brittle, and increases compile time/complexity.
+// Consider splitting into multiple focused queries or widgets, or using a custom `SystemParam` struct
+// that encapsulates the component data more cleanly.
 #[derive(SystemParam)]
 struct InspectorQuery<'w, 's> {
     selection: Res<'w, Selection>,
@@ -721,6 +722,7 @@ fn inspect_friction(
         on_align(act);
     }
 
+    // TODO: Fix styling issue - use `matches!` macro instead of this `match` statement.
     if match val {
         InspectorValue::Mixed => true,
 // [dunnage] WARN: match expression looks like `matches!` macro
@@ -753,6 +755,7 @@ fn inspect_restitution(
         on_align(act);
     }
 
+    // TODO: Fix styling issue - use `matches!` macro instead of this `match` statement.
     if match val {
         InspectorValue::Mixed => true,
         _ => false,

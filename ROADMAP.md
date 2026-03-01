@@ -203,6 +203,7 @@ Tasks:
 Phase 3: The Mechanical Engineer (Months 5–6)
 
 Goal: Advanced constraints. Gears, Pulleys, and Linkages.
+*Note: Before proceeding with advanced constraints in Phase 3, it is critical to resolve the "Pin Collision Instability" and "Drag Tool Offset" technical debt items to ensure a stable foundation.*
 
 Milestones:
 

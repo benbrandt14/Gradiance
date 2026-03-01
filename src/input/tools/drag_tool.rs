@@ -162,12 +162,11 @@ fn drag_tool_physics(
         data.hand_entity = Some(hand);
 
         // Create Joint
-        // TODO: Fix offset drift / "latch to center" issue.
-        // The `local_anchor2` calculation (via `calculate_local_anchor`) assumes the body's
-        // transform at the moment of the click. If the body moves between the click (input system)
-        // and this physics update, or if the hand spawn position (target_pos) is slightly different
-        // from the click position, the joint will snap the body.
-        // Fix: Capture exact world click pos and body transform in `DragToolData` and use them here.
+        // TODO: Fix offset drift / "latch to center" issue (see TECH_DEBT.md).
+        // The "Hand" tool incorrectly latches to the center of objects due to a synchronization gap
+        // between the input click and the physics update. The `local_anchor2` calculation assumes the body's
+        // transform at the moment of the click.
+        // Fix: Capture exact world click pos and body transform synchronously in `DragToolData` and use them here.
         let joint = RevoluteJointBuilder::new()
             .local_anchor1(Vec2::ZERO)
             .local_anchor2(data.local_anchor);

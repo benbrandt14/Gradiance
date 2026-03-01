@@ -29,6 +29,10 @@ impl Default for MotorController {
 }
 
 /// System to update motor controllers.
+// TODO: Refactor global transform logic.
+// The current implementation (`get_angle`, `get_dist`) uses flawed global transform logic
+// that ignores local anchors, leading to incorrect limit detection for complex joints.
+// Refactor to use Rapier's internal joint state or calculate relative to local anchors.
 pub fn motor_controller_system(
     mut query: Query<(Entity, &mut MotorController, &mut ImpulseJoint)>,
     transforms: Query<&GlobalTransform>,
