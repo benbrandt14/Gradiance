@@ -262,6 +262,7 @@ impl GameCommand for SpawnShapeCommand {
     }
 }
 
+// TODO(TECH_DEBT.md): Code Duplication in Spawn Commands - Extract common logic into a shared helper or builder pattern.
 /// Command to spawn a Revolute Joint (Hinge).
 #[derive(Debug)]
 pub struct SpawnJointCommand {
@@ -283,6 +284,7 @@ pub struct SpawnJointCommand {
     pub original_solver_groups: Option<SolverGroups>,
 }
 
+// TODO(TECH_DEBT.md): Pin Collision Instability - Explicitly filter at the broadphase level.
 impl GameCommand for SpawnJointCommand {
     fn name(&self) -> String {
         "Spawn Joint".to_string()

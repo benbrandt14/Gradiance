@@ -140,6 +140,7 @@ fn drag_tool_input(
     }
 }
 
+// TODO(TECH_DEBT.md): Drag Tool Offset - The 'Hand' tool incorrectly latches to the center of objects. Fix requires capturing the exact world click position.
 /// Handles physics of dragging (Spawning hand, moving hand).
 fn drag_tool_physics(
     mut commands: Commands,

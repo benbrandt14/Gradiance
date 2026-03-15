@@ -40,7 +40,3 @@ This document tracks architectural hurdles, complex implementations, and known t
 ### 6. Code Duplication in Commands
 - **Context**: `SpawnJointCommand`, `SpawnFixedJointCommand`, and `SpawnPrismaticJointCommand` share significant logic for resolving targets and spawning visuals.
 - **Fix**: Extract common logic into a shared helper or builder pattern within `commands.rs`.
-
-### 7. Unused Dependencies
-- **Context**: `Cargo.toml` may contain unused dependencies (e.g. `bevy_vello` is mentioned in docs but is it used?).
-- **Fix**: Audit `Cargo.toml` and remove unused crates to improve build times.

@@ -34,9 +34,7 @@ impl Plugin for InspectorPlugin {
     }
 }
 
-// TODO: Refactor this large struct.
-// Consider splitting into multiple focused queries or using a custom `SystemParam` struct
-// that encapsulates the component data more cleanly. The current tuple is brittle.
+// TODO(TECH_DEBT.md): Inspector Query Complexity - Refactor `InspectorQuery` into a custom `SystemParam` struct or split the inspector into smaller, focused systems/widgets.
 #[derive(SystemParam)]
 struct InspectorQuery<'w, 's> {
     selection: Res<'w, Selection>,

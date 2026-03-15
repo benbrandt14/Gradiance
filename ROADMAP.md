@@ -202,7 +202,7 @@ Tasks:
 
 Phase 3: The Mechanical Engineer (Months 5–6)
 
-Goal: Advanced constraints. Gears, Pulleys, and Linkages.
+Goal: Advanced constraints. Gears, Pulleys, and Linkages. (Blocked until critical tech debt: Pin Collision Instability, Drag Tool Offset is resolved)
 
 Milestones:
 
@@ -231,7 +231,7 @@ Tasks:
 (Phases 4-6 remain unchanged)
 
 ## Maintenance & Refactoring
-- [ ] **Technical Debt**: Address items in `TECH_DEBT.md`.
+- [ ] **Technical Debt**: Address items in `TECH_DEBT.md`. (Includes Pin Collision Instability, Drag Tool Offset, Inspector Query Simplification)
     - [ ] Pin Collision Instability.
     - [ ] Drag Tool Offset.
     - [ ] Inspector Query Simplification.

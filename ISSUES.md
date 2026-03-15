@@ -50,3 +50,14 @@
 - **Description**: `DragTool` has known offset issues where the object snaps to the center rather than maintaining the grab offset.
 - **Location**: `src/input/tools/drag_tool.rs`.
 
+### Inspector Query Complexity
+- **Severity**: Medium
+- **Description**: `InspectorQuery` in `src/ui/inspector.rs` is a brittle, large tuple struct that should be split or refactored.
+
+### Code Duplication in Commands
+- **Severity**: Low
+- **Description**: Code duplication in `src/input/commands.rs` for `SpawnJointCommand`, `SpawnFixedJointCommand`, and `SpawnPrismaticJointCommand` for visual spawning and target resolution that must be extracted to a shared helper.
+
+### Excessive Arguments in Tools
+- **Severity**: Low
+- **Description**: `update_connector` in `src/input/tools/connector.rs` has excessive arguments and needs refactoring.
