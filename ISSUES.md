@@ -43,10 +43,15 @@
 ### Command Pattern Scope
 - **Severity**: Low
 - **Description**: The `CommandStack` pattern works well for creation/deletion. However, modifying continuous properties (like dragging a slider for stiffness) via individual commands can flood the undo stack.
-- **Refactoring**: Consider a "Transaction" or "Transient Command" pattern for continuous modifications.
+- **Refactoring**: Ensure "Transient" changes (during drag) are applied directly or via temporary events, and only the "Commit" (mouse release) creates a `GameCommand`.
+
+### Inspector State Management Complexity
+- **Severity**: Medium
+- **Description**: The inspector manually computes and manages an `InspectorValue::Mixed` state across multiple selected objects, which is extremely verbose and brittle. This logic requires maintenance for every single component/property added to the editor.
+- **Refactoring**: Introduce a generic abstraction for handling properties on multiple entities, or consider only displaying values when a single entity is selected until a better abstraction is built.
 
 ### Input Handling
 - **Severity**: Low
-- **Description**: `DragTool` has known offset issues where the object snaps to the center rather than maintaining the grab offset.
+- **Description**: `DragTool` has known offset issues where the object snaps to the center rather than maintaining the grab offset. This happens because the initial world click position isn't accurately captured and preserved relative to the body's starting transform, causing it to "latch to center".
 - **Location**: `src/input/tools/drag_tool.rs`.
 

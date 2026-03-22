@@ -41,6 +41,16 @@ This document tracks architectural hurdles, complex implementations, and known t
 - **Context**: `SpawnJointCommand`, `SpawnFixedJointCommand`, and `SpawnPrismaticJointCommand` share significant logic for resolving targets and spawning visuals.
 - **Fix**: Extract common logic into a shared helper or builder pattern within `commands.rs`.
 
-### 7. Unused Dependencies
+### 7. Connector Tool Complexity
+- **Context**: `update_connector` in `src/input/tools/connector.rs` takes 12 arguments, which is a Bevy anti-pattern and close to the limit of system parameters.
+- **Issue**: It makes the function hard to read, maintain, and test.
+- **Fix**: Group related parameters into a custom `SystemParam` or split the logic into smaller, more focused systems.
+
+### 8. Inspector State Management Complexity
+- **Context**: `extract_inspector_state` and the `InspectorValue::Mixed` state management logic are overly complex and error-prone.
+- **Issue**: Manually managing `Mixed` state across multiple entities for each property adds maintenance burden that likely outweighs its value at this stage.
+- **Fix**: Simplify the inspector logic, possibly by only showing properties common to all selected entities, or deferring "Mixed" state handling to a more robust, generic abstraction.
+
+### 9. Unused Dependencies
 - **Context**: `Cargo.toml` may contain unused dependencies (e.g. `bevy_vello` is mentioned in docs but is it used?).
 - **Fix**: Audit `Cargo.toml` and remove unused crates to improve build times.

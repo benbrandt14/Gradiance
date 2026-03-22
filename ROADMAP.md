@@ -70,7 +70,7 @@ Physics & Constraints
 
     [ ] Spring: DistanceJoint with soft compliance.
 
-    [ ] Slider: PrismaticJoint with limits.
+    [x] Slider: PrismaticJoint with limits.
 
     [ ] Chain: Procedurally generated linked bodies.
 
@@ -220,7 +220,8 @@ Tasks:
         Ensure pinned bodies do not collide with their pin anchor (Explosion risk).
         *Status*: Needs Fix (See TECH_DEBT.md).
 
-    [ ] Implement Spring/Slider Tool.
+    [x] Implement Slider Tool.
+    [ ] Implement Spring Tool.
 
     [ ] Custom Constraint: Gear Joint.
 
