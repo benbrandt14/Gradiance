@@ -14,6 +14,12 @@
 
 ## Physics & Constraints
 
+### Motor Controller Limits Logic
+- **Severity**: High
+- **Description**: The `MotorController` limits logic inside `src/physics/controllers.rs` relies on flawed `GlobalTransform` angles instead of correctly using local anchors or Rapier internals. This leads to broken or erratic behavior when oscillating joints.
+- **Fix**: Re-implement angle tracking or limit detection properly.
+- **Location**: `src/physics/controllers.rs`.
+
 ### Pin Collision Instability
 - **Severity**: High
 - **Description**: The `SpawnJointCommand` (for Hinges and Fixed joints) creates a "Pin" entity (`RigidBody::Fixed`) when connecting a dynamic body to the world. Currently, this pin is spawned at the anchor point. If the dynamic body overlaps with this pin (which it must to be pinned), Rapier's solver may attempt to separate them violently if collision is not disabled.

@@ -6,7 +6,7 @@
 - [x] add hinge behavior
 - [x] add fix behavior ( ie make static )
 - [ ] add collision layers
-- [ ] add infinite plane tool (Currently approximated with large box)
+- [x] add infinite plane tool (Currently approximated with large box)
 - [ ] add restitution and friction
 - [x] add square selection tool
 - [ ] add a lasso selection tool
@@ -15,7 +15,7 @@
 - [ ] add tracers
 - [x] add grid w/ locking
 - [ ] add ability to modify colors ( background and objects )
-- [ ] be able to modify attributes of multiple selected objects
+- [x] be able to modify attributes of multiple selected objects
 - [ ] add cutting tool and CSG operations ( later on )
 - [ ] add save/load behavior
 - [ ] document anything else that bevy/Rapier2d can expose as right clickable
@@ -108,7 +108,7 @@ UI & UX
 
     [x] Context Menu: Right-click entity to show actions.
 
-    [ ] Inspector: Sidebar showing properties of selected object.
+    [x] Inspector: Sidebar showing properties of selected object.
 
     [x] Grid: Snapping and visual grid.
 
@@ -177,7 +177,7 @@ Goal: The "Sketch" and "Cut" tools. Creating custom shapes and slicing them.
 
 Milestones:
 
-    Vector Rendering: High-fidelity shape drawing.
+    Vector Rendering: High-fidelity shape drawing. Evaluating `bevy_vello` as a replacement/supplement to `bevy_prototype_lyon` for high-performance geometry/compute shader capabilities.
 
     CSG Kernel: Boolean operations (Cut, Weld).
 
@@ -194,7 +194,7 @@ Tasks:
     [ ] Integrate clipper2 crate:
         Implement utility fn to_clipper_path(Vec<Vec2>) -> Vec<Point64>.
 
-    [ ] Implement Cut Tool (Laser):
+    [ ] Implement Cut Tool (Laser) (Currently a placeholder, plan to implement Boolean operations using Clipper2 and scaling factor 100,000.0):
         CSG operations on bodies.
 
     [ ] Implement Polygon Decomposition:
@@ -203,6 +203,8 @@ Tasks:
 Phase 3: The Mechanical Engineer (Months 5–6)
 
 Goal: Advanced constraints. Gears, Pulleys, and Linkages.
+
+**Status**: ⛔ Blocked until critical tech debt (Pin Collision Instability, Drag Tool Offset) is resolved.
 
 Milestones:
 
@@ -234,7 +236,9 @@ Tasks:
 - [ ] **Technical Debt**: Address items in `TECH_DEBT.md`.
     - [ ] Pin Collision Instability.
     - [ ] Drag Tool Offset.
-    - [ ] Inspector Query Simplification.
+    - [ ] Code Duplication in Spawn Commands.
+    - [ ] Inspector Query Complexity.
+    - [ ] Motor Controller Logic.
 - [ ] **Documentation**: Maintain `AGENTS.md` and `RUST_GUIDELINES.md`.
 
 ## Technical Debt & Issues
