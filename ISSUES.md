@@ -3,10 +3,12 @@
 ## Functionality
 - **Grid**: Rendering and scaling can be improved. Infinite grid shader not implemented, not currently visible.
 - **Ground Plane**: Not infinite. Does not have a tool to create it.
-- **Drag Tool**: In play mode the object is not interacted upon with the correct offset, it latches to the center incorrectly
-- **Rotate**: Right click + drag should rotate items
-- **Scale**: Not implemented, when shape is selected and scale tool is active, scale handles should appear on the bounding box 
-- **Inspector**: Minimal context menu items & actions available.
+- **Drag Tool**: In play mode the object is not interacted upon with the correct offset, it latches to the center incorrectly.
+- **Motor Controller Limits**: Angle/distance checks for motors ignore `local_anchor` offsets, causing joints like hinges not at the center to fail limit logic.
+- **Material Update**: Extrudable shapes overwrite their material each frame when updated, deleting custom material settings.
+- **Rotate**: Right click + drag should rotate items.
+- **Scale**: Not implemented, when shape is selected and scale tool is active, scale handles should appear on the bounding box.
+- **Inspector**: Minimal context menu items & actions available. Mixing event emission and direct state manipulation is confusing.
 - **Collision**: RevoluteJoint tool (Pin) creates a static body that overlaps with the pinned body. This may cause explosions if collision layers are not managed. Currently, the Pin has no collider (visual only) to avoid this, but it means the pin itself doesn't collide with anything.
 
 # Technical Debt

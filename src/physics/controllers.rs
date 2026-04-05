@@ -39,6 +39,12 @@ pub fn motor_controller_system(
         }
 
         // Helper to get angle
+        // TODO(TECH_DEBT): Motor Controller Logic calculation is flawed.
+        // It uses raw GlobalTransform differences to calculate joint angle, which ignores
+        // `local_anchor1` and `local_anchor2`. This breaks for joints where anchors are not
+        // at the center of the bodies. It needs to project local anchors to world space
+        // and calculate the angle/distance between them or retrieve the constrained value
+        // from Rapier's internal joint state directly.
         let get_angle = |e_a, e_b, transforms: &Query<&GlobalTransform>| {
              if let Ok(t_a) = transforms.get(e_a)
                 && let Ok(t_b) = transforms.get(e_b) {

@@ -171,7 +171,19 @@ Tasks:
         On drag start: Spawn DistanceJoint.
         *Issue*: Offset calculation needs fixing.
 
-Phase 2: Geometry & CSG Pipeline (Months 3–4)
+Phase 2: Tech Debt Paydown (Crucial Blocker)
+
+Goal: Fix core bugs, improve maintainability, and solidify architecture before adding more complex features.
+
+Tasks:
+    [ ] Fix Pin Collision Instability (Explosions).
+    [ ] Fix Drag Tool Offset calculation (Latching to center).
+    [ ] Refactor Inspector Query Complexity.
+    [ ] Extract duplicated logic in Spawner Commands.
+    [ ] Fix Extrusion Material State Loss.
+    [ ] Fix Motor Controller limits calculation (ignores local anchors).
+
+Phase 3: Geometry & CSG Pipeline (Months 3–4)
 
 Goal: The "Sketch" and "Cut" tools. Creating custom shapes and slicing them.
 
@@ -200,9 +212,9 @@ Tasks:
     [ ] Implement Polygon Decomposition:
         Use parry2d's convex decomposition.
 
-Phase 3: The Mechanical Engineer (Months 5–6)
+Phase 4: The Mechanical Engineer (Months 5–6)
 
-Goal: Advanced constraints. Gears, Pulleys, and Linkages.
+Goal: Advanced constraints. Gears, Pulleys, and Linkages. *Note: Blocked until Phase 2 (Tech Debt Paydown) is complete.*
 
 Milestones:
 
@@ -216,10 +228,6 @@ Tasks:
 
     [x] Implement Fixed Tool (ConnectorTool).
 
-    [ ] Fix Pin Collision:
-        Ensure pinned bodies do not collide with their pin anchor (Explosion risk).
-        *Status*: Needs Fix (See TECH_DEBT.md).
-
     [ ] Implement Spring/Slider Tool.
 
     [ ] Custom Constraint: Gear Joint.
@@ -228,7 +236,7 @@ Tasks:
 
     [ ] Chain Tool.
 
-(Phases 4-6 remain unchanged)
+(Phases 5-7 remain unchanged)
 
 ## Maintenance & Refactoring
 - [ ] **Technical Debt**: Address items in `TECH_DEBT.md`.

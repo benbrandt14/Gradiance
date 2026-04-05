@@ -262,6 +262,11 @@ impl GameCommand for SpawnShapeCommand {
     }
 }
 
+// TODO(TECH_DEBT): Code Duplication in Commands.
+// `SpawnJointCommand`, `SpawnFixedJointCommand`, and `SpawnPrismaticJointCommand`
+// share a significant amount of duplicated logic for creating the visual connector,
+// modifying solver groups, resolving pin targets, and implementing `undo()`.
+// This should be refactored into a shared helper or builder pattern.
 /// Command to spawn a Revolute Joint (Hinge).
 #[derive(Debug)]
 pub struct SpawnJointCommand {

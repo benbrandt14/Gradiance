@@ -34,7 +34,7 @@ impl Plugin for InspectorPlugin {
     }
 }
 
-// TODO: Refactor this large struct.
+// TODO(TECH_DEBT): Inspector Query Complexity
 // Consider splitting into multiple focused queries or using a custom `SystemParam` struct
 // that encapsulates the component data more cleanly. The current tuple is brittle.
 #[derive(SystemParam)]
@@ -91,6 +91,10 @@ enum ShapeField {
     Radius,
 }
 
+// TODO(TECH_DEBT): The `InspectorValue::Mixed` state tracking is overly complex.
+// The logic for extracting and merging states across multiple selected entities is hard
+// to read and maintain. Simplify the state extraction to reduce coupling between the UI
+// representation and the Bevy component structure.
 #[derive(Clone, PartialEq, Debug)]
 enum InspectorValue<T> {
     Same(T),
