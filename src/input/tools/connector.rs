@@ -137,7 +137,7 @@ impl ConnectorType {
 }
 
 fn update_connector(
-// [dunnage] WARN: this function has too many arguments (12/7)
+    // [dunnage] WARN: this function has too many arguments (12/7)
     mut ev_joint: EventWriter<SpawnJointEvent>,
     mut ev_fixed: EventWriter<SpawnFixedJointEvent>,
     mut ev_prism: EventWriter<SpawnPrismaticJointEvent>,

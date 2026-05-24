@@ -123,6 +123,7 @@ fn test_spawn_joint_command(mut world: World) {
         visual_entity: None,
         pin_entity: None,
         original_solver_groups: None,
+        original_collision_groups: None,
     };
 
     // Apply
@@ -254,6 +255,7 @@ fn test_spawn_fixed_joint_command(mut world: World) {
         visual_entity: None,
         pin_entity: None,
         original_solver_groups: None,
+        original_collision_groups: None,
         rot_a: 0.0,
         rot_b: 0.0,
     };
@@ -297,6 +299,7 @@ fn test_spawn_joint_command_two_bodies(mut world: World) {
         visual_entity: None,
         pin_entity: None,
         original_solver_groups: None,
+        original_collision_groups: None,
     };
 
     // Apply

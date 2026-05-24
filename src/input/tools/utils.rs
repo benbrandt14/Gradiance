@@ -77,7 +77,7 @@ impl DragResult {
 
 /// Pure logic for drag input handling, separated for testing.
 pub fn handle_drag_input_logic(
-// [dunnage] WARN: this function has too many arguments (9/7)
+    // [dunnage] WARN: this function has too many arguments (9/7)
     cursor_pos: Option<Vec2>,
     mouse_just_pressed: bool,
     mouse_pressed: bool,

@@ -6,12 +6,12 @@ use crate::geometry::extrusion::ExtrudableShape;
 use crate::input::editable_shape::{EditableShape, ShapeType, generate_shape_components};
 use crate::input::tools::connector::Connector;
 use crate::physics::floor::GroundPlane;
-use crate::prelude::*;
 use crate::prelude::EntityId;
+use crate::prelude::*;
 use anyhow::{Result, bail};
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::dynamics::{GenericJoint as BevyGenericJoint, TypedJoint};
-use bevy_rapier2d::rapier::dynamics::{GenericJoint as RapierGenericJoint};
+use bevy_rapier2d::rapier::dynamics::GenericJoint as RapierGenericJoint;
 use std::fmt::Debug;
 
 const GROUND_WIDTH: f32 = 100_000.0;
@@ -148,6 +148,7 @@ fn resolve_joint_targets(
                 Transform::from_translation(world_pos),
                 Collider::ball(CONNECTOR_COLLIDER_RADIUS),
                 pin_solver_groups,
+                CollisionGroups::new(PIN_GROUP, Group::ALL),
                 StateScoped(GameState::Playing),
             ))
             .id();
@@ -281,6 +282,8 @@ pub struct SpawnJointCommand {
     pub pin_entity: Option<EntityId>,
     /// Previous solver groups of the pinned body.
     pub original_solver_groups: Option<SolverGroups>,
+    /// Previous collision groups of the pinned body.
+    pub original_collision_groups: Option<CollisionGroups>,
 }
 
 impl GameCommand for SpawnJointCommand {
@@ -318,14 +321,19 @@ impl GameCommand for SpawnJointCommand {
             new_groups.filters &= !PIN_GROUP;
 
             world.entity_mut(self.entity_a.0).insert(new_groups);
+
+            let old_cg = world.get::<CollisionGroups>(self.entity_a.0).copied();
+            self.original_collision_groups = old_cg;
+
+            let mut new_cg = old_cg.unwrap_or(CollisionGroups {
+                memberships: Group::ALL,
+                filters: Group::ALL,
+            });
+            new_cg.filters &= !PIN_GROUP;
+            world.entity_mut(self.entity_a.0).insert(new_cg);
         }
 
         let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
-        // TODO: Implement CollisionGroups filtering for the pin entity.
-        // Currently, we only modify SolverGroups, which disables contact resolution but not broadphase intersection.
-        // This can still cause instability or explosions in some Rapier configurations.
-        // Add `CollisionGroups::new(PIN_GROUP, Group::ALL)` (or similar filter) to the pin spawn logic
-        // in `resolve_joint_targets` or here.
 
         let (target_entity, pin_entity, local_anchor_1, local_anchor_2) = resolve_joint_targets(
             world,
@@ -348,11 +356,14 @@ impl GameCommand for SpawnJointCommand {
             _ => unreachable!(),
         };
         rapier_generic.set_contacts_enabled(false);
-        let bevy_generic = BevyGenericJoint { raw: rapier_generic };
+        let bevy_generic = BevyGenericJoint {
+            raw: rapier_generic,
+        };
 
-        world
-            .entity_mut(self.entity_a.0)
-            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(bevy_generic)));
+        world.entity_mut(self.entity_a.0).insert(ImpulseJoint::new(
+            target_entity,
+            TypedJoint::GenericJoint(bevy_generic),
+        ));
         Ok(())
     }
 
@@ -383,6 +394,13 @@ impl GameCommand for SpawnJointCommand {
             } else if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
                 e.remove::<SolverGroups>();
             }
+            if let Some(cg) = self.original_collision_groups {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
+                    e.insert(cg);
+                }
+            } else if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
+                e.remove::<CollisionGroups>();
+            }
         }
     }
 }
@@ -408,6 +426,8 @@ pub struct SpawnPrismaticJointCommand {
     pub pin_entity: Option<EntityId>,
     /// Previous solver groups of the pinned body.
     pub original_solver_groups: Option<SolverGroups>,
+    /// Previous collision groups of the pinned body.
+    pub original_collision_groups: Option<CollisionGroups>,
 }
 
 impl GameCommand for SpawnPrismaticJointCommand {
@@ -443,6 +463,16 @@ impl GameCommand for SpawnPrismaticJointCommand {
             new_groups.filters &= !PIN_GROUP;
 
             world.entity_mut(self.entity_a.0).insert(new_groups);
+
+            let old_cg = world.get::<CollisionGroups>(self.entity_a.0).copied();
+            self.original_collision_groups = old_cg;
+
+            let mut new_cg = old_cg.unwrap_or(CollisionGroups {
+                memberships: Group::ALL,
+                filters: Group::ALL,
+            });
+            new_cg.filters &= !PIN_GROUP;
+            world.entity_mut(self.entity_a.0).insert(new_cg);
         }
 
         let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
@@ -468,11 +498,14 @@ impl GameCommand for SpawnPrismaticJointCommand {
             _ => unreachable!(),
         };
         rapier_generic.set_contacts_enabled(false);
-        let bevy_generic = BevyGenericJoint { raw: rapier_generic };
+        let bevy_generic = BevyGenericJoint {
+            raw: rapier_generic,
+        };
 
-        world
-            .entity_mut(self.entity_a.0)
-            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(bevy_generic)));
+        world.entity_mut(self.entity_a.0).insert(ImpulseJoint::new(
+            target_entity,
+            TypedJoint::GenericJoint(bevy_generic),
+        ));
         Ok(())
     }
 
@@ -503,6 +536,13 @@ impl GameCommand for SpawnPrismaticJointCommand {
             } else if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
                 e.remove::<SolverGroups>();
             }
+            if let Some(cg) = self.original_collision_groups {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
+                    e.insert(cg);
+                }
+            } else if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
+                e.remove::<CollisionGroups>();
+            }
         }
     }
 }
@@ -530,6 +570,8 @@ pub struct SpawnFixedJointCommand {
     pub rot_a: f32,
     /// Rotation of body B.
     pub rot_b: f32,
+    /// Previous collision groups of the pinned body.
+    pub original_collision_groups: Option<CollisionGroups>,
 }
 
 impl GameCommand for SpawnFixedJointCommand {
@@ -565,6 +607,16 @@ impl GameCommand for SpawnFixedJointCommand {
             new_groups.filters &= !PIN_GROUP;
 
             world.entity_mut(self.entity_a.0).insert(new_groups);
+
+            let old_cg = world.get::<CollisionGroups>(self.entity_a.0).copied();
+            self.original_collision_groups = old_cg;
+
+            let mut new_cg = old_cg.unwrap_or(CollisionGroups {
+                memberships: Group::ALL,
+                filters: Group::ALL,
+            });
+            new_cg.filters &= !PIN_GROUP;
+            world.entity_mut(self.entity_a.0).insert(new_cg);
         }
 
         let pin_groups = SolverGroups::new(PIN_GROUP, Group::ALL);
@@ -592,11 +644,14 @@ impl GameCommand for SpawnFixedJointCommand {
             _ => unreachable!(),
         };
         rapier_generic.set_contacts_enabled(false);
-        let bevy_generic = BevyGenericJoint { raw: rapier_generic };
+        let bevy_generic = BevyGenericJoint {
+            raw: rapier_generic,
+        };
 
-        world
-            .entity_mut(self.entity_a.0)
-            .insert(ImpulseJoint::new(target_entity, TypedJoint::GenericJoint(bevy_generic)));
+        world.entity_mut(self.entity_a.0).insert(ImpulseJoint::new(
+            target_entity,
+            TypedJoint::GenericJoint(bevy_generic),
+        ));
         Ok(())
     }
 
@@ -626,6 +681,13 @@ impl GameCommand for SpawnFixedJointCommand {
                 }
             } else if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
                 e.remove::<SolverGroups>();
+            }
+            if let Some(cg) = self.original_collision_groups {
+                if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
+                    e.insert(cg);
+                }
+            } else if let Ok(mut e) = world.get_entity_mut(self.entity_a.0) {
+                e.remove::<CollisionGroups>();
             }
         }
     }
@@ -786,7 +848,9 @@ impl GameCommand for DuplicateEntitiesCommand {
                 new_t.translation += Vec3::new(self.offset.x, self.offset.y, 0.0);
                 builder.insert(new_t);
 
-                if let Some(c) = collider { builder.insert(c); }
+                if let Some(c) = collider {
+                    builder.insert(c);
+                }
 
                 if self.make_kinematic {
                     builder.insert(RigidBody::KinematicPositionBased);
@@ -794,16 +858,36 @@ impl GameCommand for DuplicateEntitiesCommand {
                     builder.insert(c);
                 }
 
-                if let Some(c) = eshape { builder.insert(c); }
-                if let Some(c) = fill { builder.insert(c); }
-                if let Some(c) = stroke { builder.insert(c); }
-                if let Some(c) = friction { builder.insert(c); }
-                if let Some(c) = restitution { builder.insert(c); }
-                if let Some(c) = density { builder.insert(c); }
-                if let Some(c) = gravity { builder.insert(c); }
-                if let Some(c) = locked { builder.insert(c); }
-                if let Some(c) = sensor { builder.insert(c); }
-                if let Some(c) = groups { builder.insert(c); }
+                if let Some(c) = eshape {
+                    builder.insert(c);
+                }
+                if let Some(c) = fill {
+                    builder.insert(c);
+                }
+                if let Some(c) = stroke {
+                    builder.insert(c);
+                }
+                if let Some(c) = friction {
+                    builder.insert(c);
+                }
+                if let Some(c) = restitution {
+                    builder.insert(c);
+                }
+                if let Some(c) = density {
+                    builder.insert(c);
+                }
+                if let Some(c) = gravity {
+                    builder.insert(c);
+                }
+                if let Some(c) = locked {
+                    builder.insert(c);
+                }
+                if let Some(c) = sensor {
+                    builder.insert(c);
+                }
+                if let Some(c) = groups {
+                    builder.insert(c);
+                }
 
                 builder.insert(Name::new("Duplicated Entity"));
                 builder.insert(StateScoped(GameState::Playing));

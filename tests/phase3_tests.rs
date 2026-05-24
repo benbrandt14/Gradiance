@@ -7,13 +7,17 @@ use bevy::window::{PrimaryWindow, WindowCreated, WindowResized, WindowScaleFacto
 
 use bevy_egui::EguiUserTextures;
 use bevy_prototype_lyon::plugin::ShapePlugin;
+use bevy_prototype_lyon::prelude::{Fill, Stroke};
+use gradiance::events::GameEventsPlugin;
+use gradiance::geometry::GeometryPlugin;
+use gradiance::geometry::extrusion::ExtrudableShape;
+use gradiance::input::PointerOverUi;
 use gradiance::input::ToolState;
 use gradiance::input::ZIndex;
-use gradiance::input::PointerOverUi;
 use gradiance::input::commands::CommandStack;
 use gradiance::input::cursor::CursorWorldPos;
 use gradiance::input::editable_shape::{EditableShape, ShapeType};
-use gradiance::geometry::extrusion::ExtrudableShape;
+use gradiance::input::event_handlers;
 use gradiance::input::selection::{Selection, SelectionFilter, SelectionPlugin};
 use gradiance::input::shortcuts::ShortcutsPlugin;
 use gradiance::input::tools::box_tool::BoxToolPlugin;
@@ -25,10 +29,6 @@ use gradiance::input::tools::select_tool::SelectToolPlugin;
 use gradiance::physics::floor::GroundPlane;
 use gradiance::prelude::*;
 use gradiance::ui::grid::GridSettings;
-use gradiance::events::GameEventsPlugin;
-use gradiance::input::event_handlers;
-use gradiance::geometry::GeometryPlugin;
-use bevy_prototype_lyon::prelude::{Fill, Stroke};
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -86,20 +86,27 @@ fn app() -> App {
     // SelectionPlugin inits Selection, SelectionFilter, NextGroupID
 
     // Add event handlers manually since GradianceInputPlugin is not added
-    app.add_systems(Update, (
-        event_handlers::handle_spawn_shape_event,
-        event_handlers::handle_spawn_ground_event,
-        event_handlers::handle_spawn_joint_event,
-        event_handlers::handle_spawn_prismatic_joint_event,
-        event_handlers::handle_spawn_fixed_joint_event,
-        event_handlers::handle_undo_event,
-        event_handlers::handle_redo_event,
-        event_handlers::handle_duplicate_entities_event,
-        event_handlers::handle_drag_entities_event,
-        event_handlers::handle_commit_drag_event,
-    ).chain());
+    app.add_systems(
+        Update,
+        (
+            event_handlers::handle_spawn_shape_event,
+            event_handlers::handle_spawn_ground_event,
+            event_handlers::handle_spawn_joint_event,
+            event_handlers::handle_spawn_prismatic_joint_event,
+            event_handlers::handle_spawn_fixed_joint_event,
+            event_handlers::handle_undo_event,
+            event_handlers::handle_redo_event,
+            event_handlers::handle_duplicate_entities_event,
+            event_handlers::handle_drag_entities_event,
+            event_handlers::handle_commit_drag_event,
+        )
+            .chain(),
+    );
 
-    assert!(app.world().contains_resource::<PointerOverUi>(), "PointerOverUi not found!");
+    assert!(
+        app.world().contains_resource::<PointerOverUi>(),
+        "PointerOverUi not found!"
+    );
     app.update();
     app
 }

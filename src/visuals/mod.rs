@@ -226,7 +226,7 @@ fn apply_render_settings(
     point_light_query: Query<(Entity, &mut PointLight), With<ScenePointLight>>,
     mut ambient_light: ResMut<AmbientLight>,
     mut clear_color: ResMut<ClearColor>,
-// [dunnage] WARN: this function has too many arguments (13/7)
+    // [dunnage] WARN: this function has too many arguments (13/7)
     mut commands: Commands,
     mut camera_query: Query<(Entity, Option<&mut Msaa>), With<Camera3d>>,
     bloom_removals: Query<Entity, (With<Camera3d>, With<Bloom>)>,
@@ -270,9 +270,10 @@ fn apply_render_settings(
         // TAA
         if settings.taa_enabled {
             if let Some(mut msaa) = msaa_opt
-                && *msaa != Msaa::Off {
-                    *msaa = Msaa::Off;
-                }
+                && *msaa != Msaa::Off
+            {
+                *msaa = Msaa::Off;
+            }
             entity_cmds.insert(TemporalAntiAliasing::default());
         } else if taa_removals.contains(entity) {
             entity_cmds.remove::<TemporalAntiAliasing>();

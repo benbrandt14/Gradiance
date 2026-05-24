@@ -107,7 +107,7 @@ struct ContextMenuData<'w, 's> {
 // TODO: Refactor logic (grouping, duplicating, layer distribution) out of the UI system.
 // Use `EventWriter` to trigger these actions.
 fn context_menu_ui(
-// [dunnage] WARN: this function has too many arguments (11/7)
+    // [dunnage] WARN: this function has too many arguments (11/7)
     mut state: ResMut<ContextMenuState>,
     mut contexts: EguiContexts,
     mut commands: Commands,
@@ -393,7 +393,9 @@ fn context_menu_ui(
                     }
 
                     if ui.button("Distribute Layers").clicked() {
-                        let mut entities: Vec<_> = selection.0.iter()
+                        let mut entities: Vec<_> = selection
+                            .0
+                            .iter()
                             .copied()
                             .filter(|e| !connector_query.contains(*e))
                             .collect();
@@ -436,13 +438,14 @@ fn context_menu_ui(
                     // Get initial values from first selected entity
                     if let Some(first) = selection.0.iter().next()
                         && let Ok(handle) = data.materials.get(*first)
-                            && let Some(mat) = data.assets.get(&handle.0) {
-                                current_color = mat.base_color;
-                                metallic = mat.metallic;
-                                roughness = mat.perceptual_roughness;
-                                reflectance = mat.reflectance;
-                                has_material = true;
-                            }
+                        && let Some(mat) = data.assets.get(&handle.0)
+                    {
+                        current_color = mat.base_color;
+                        metallic = mat.metallic;
+                        roughness = mat.perceptual_roughness;
+                        reflectance = mat.reflectance;
+                        has_material = true;
+                    }
 
                     if has_material {
                         let mut changed = false;
@@ -482,12 +485,13 @@ fn context_menu_ui(
                         if changed {
                             for entity in &selection.0 {
                                 if let Ok(handle) = data.materials.get(*entity)
-                                    && let Some(mat) = data.assets.get_mut(&handle.0) {
-                                        mat.base_color = current_color;
-                                        mat.metallic = metallic;
-                                        mat.perceptual_roughness = roughness;
-                                        mat.reflectance = reflectance;
-                                    }
+                                    && let Some(mat) = data.assets.get_mut(&handle.0)
+                                {
+                                    mat.base_color = current_color;
+                                    mat.metallic = metallic;
+                                    mat.perceptual_roughness = roughness;
+                                    mat.reflectance = reflectance;
+                                }
                             }
                         }
                     } else {

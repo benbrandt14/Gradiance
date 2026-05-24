@@ -183,12 +183,18 @@ fn select_tool_update(
             if shift {
                 let any_selected = entities_to_select.iter().any(|e| selection.0.contains(e));
                 if any_selected {
-                    for e in entities_to_select { selection.remove(e); }
+                    for e in entities_to_select {
+                        selection.remove(e);
+                    }
                 } else {
-                    for e in entities_to_select { selection.add(e); }
+                    for e in entities_to_select {
+                        selection.add(e);
+                    }
                 }
             } else if !clicked_already_selected {
-                for e in entities_to_select { selection.add(e); }
+                for e in entities_to_select {
+                    selection.add(e);
+                }
             }
 
             // Duplicate or Move
@@ -202,7 +208,6 @@ fn select_tool_update(
 
                 data.is_moving = true;
                 data.initial_state.clear();
-
             } else if selection.0.contains(&entity) {
                 // Move
                 data.is_moving = true;
@@ -210,7 +215,11 @@ fn select_tool_update(
                 data.initial_state.clear();
                 for &e in &selection.0 {
                     if let Ok(t) = aux.transforms.get(e) {
-                        data.initial_state.push((e, t.translation.truncate(), t.rotation.to_euler(EulerRot::XYZ).2));
+                        data.initial_state.push((
+                            e,
+                            t.translation.truncate(),
+                            t.rotation.to_euler(EulerRot::XYZ).2,
+                        ));
                         // Set Kinematic
                         ev_prop.send(PropertyChangeEvent {
                             entity: e,
@@ -233,8 +242,12 @@ fn select_tool_update(
     if data.is_moving && data.initial_state.is_empty() && !selection.0.is_empty() {
         // Selection populated (likely from duplication)
         for &e in &selection.0 {
-             if let Ok(t) = aux.transforms.get(e) {
-                data.initial_state.push((e, t.translation.truncate(), t.rotation.to_euler(EulerRot::XYZ).2));
+            if let Ok(t) = aux.transforms.get(e) {
+                data.initial_state.push((
+                    e,
+                    t.translation.truncate(),
+                    t.rotation.to_euler(EulerRot::XYZ).2,
+                ));
                 // Ensure Kinematic (DuplicateEntitiesEvent handles it, but just in case)
                 ev_prop.send(PropertyChangeEvent {
                     entity: e,
@@ -285,27 +298,27 @@ fn select_tool_update(
             // Commit
             let mut pos_changes = Vec::new();
             for (entity, initial_pos, _) in &data.initial_state {
-                 let new_pos = *initial_pos + delta;
-                 pos_changes.push((*entity, *initial_pos, new_pos));
+                let new_pos = *initial_pos + delta;
+                pos_changes.push((*entity, *initial_pos, new_pos));
 
-                 // Restore Dynamic
-                 ev_prop.send(PropertyChangeEvent {
+                // Restore Dynamic
+                ev_prop.send(PropertyChangeEvent {
                     entity: *entity,
                     change: PropertyChange::RigidBody(RigidBody::Dynamic),
-                 });
-                 // Also restore sleeping enabled?
-                 ev_prop.send(PropertyChangeEvent {
+                });
+                // Also restore sleeping enabled?
+                ev_prop.send(PropertyChangeEvent {
                     entity: *entity,
                     change: PropertyChange::Restitution(0.0),
-                 });
+                });
             }
 
             if !pos_changes.is_empty() {
-                 ev_commit.send(CommitDragEvent {
-                     position_changes: pos_changes,
-                     rotation_changes: Vec::new(),
-                 });
-                 info!("Moved {} entities", data.initial_state.len());
+                ev_commit.send(CommitDragEvent {
+                    position_changes: pos_changes,
+                    rotation_changes: Vec::new(),
+                });
+                info!("Moved {} entities", data.initial_state.len());
             }
         } else if let Some(start) = data.drag_start {
             // Box Select Finalize
@@ -315,7 +328,7 @@ fn select_tool_update(
 
             if size.x > 0.1 && size.y > 0.1 {
                 let mut count = 0;
-                 for (entity, global_transform) in &aux.selectable {
+                for (entity, global_transform) in &aux.selectable {
                     let t = global_transform.translation().truncate();
                     if is_point_in_box(t, min, max) {
                         let is_connector = aux.connector.contains(entity);
@@ -344,9 +357,9 @@ fn select_tool_update(
     // Right Click Rotation
     if mouse.just_pressed(MouseButton::Right) && !selection.0.is_empty() {
         let mut pointer_over_selection = false;
-         if let Some(rapier_context) = rapier_context_query.iter().next() {
+        if let Some(rapier_context) = rapier_context_query.iter().next() {
             let filter = QueryFilter::default().exclude_sensors();
-             rapier_context.intersections_with_point(current_pos, filter, |entity| {
+            rapier_context.intersections_with_point(current_pos, filter, |entity| {
                 if selection.0.contains(&entity) {
                     pointer_over_selection = true;
                     false
@@ -366,17 +379,17 @@ fn select_tool_update(
 
             for &e in &selection.0 {
                 if let Ok(t) = aux.transforms.get(e) {
-                     let pos = t.translation.truncate();
-                     let rot = t.rotation.to_euler(EulerRot::XYZ).2;
-                     data.initial_state.push((e, pos, rot));
-                     centroid += pos;
-                     count += 1.0;
+                    let pos = t.translation.truncate();
+                    let rot = t.rotation.to_euler(EulerRot::XYZ).2;
+                    data.initial_state.push((e, pos, rot));
+                    centroid += pos;
+                    count += 1.0;
 
-                     // Set Kinematic
-                     ev_prop.send(PropertyChangeEvent {
+                    // Set Kinematic
+                    ev_prop.send(PropertyChangeEvent {
                         entity: e,
                         change: PropertyChange::RigidBody(RigidBody::KinematicPositionBased),
-                     });
+                    });
                 }
             }
             if count > 0.0 {
@@ -391,11 +404,11 @@ fn select_tool_update(
         let mut rot_updates = Vec::new();
 
         for (entity, initial_pos, initial_rot) in &data.initial_state {
-             let (new_pos, new_rot) = calculate_rotation_update(
+            let (new_pos, new_rot) = calculate_rotation_update(
                 *initial_pos,
                 *initial_rot,
                 data.rotation_centroid,
-                delta
+                delta,
             );
             pos_updates.push((*entity, new_pos));
             rot_updates.push((*entity, Quat::from_rotation_z(new_rot)));
@@ -409,33 +422,37 @@ fn select_tool_update(
 
     if mouse.just_released(MouseButton::Right) {
         if data.is_rotating {
-             // Commit
-             let delta = current_pos - data.rotate_start_pos;
-             let mut pos_changes = Vec::new();
-             let mut rot_changes = Vec::new();
+            // Commit
+            let delta = current_pos - data.rotate_start_pos;
+            let mut pos_changes = Vec::new();
+            let mut rot_changes = Vec::new();
 
-             for (entity, initial_pos, initial_rot) in &data.initial_state {
-                 let (new_pos, new_rot) = calculate_rotation_update(
+            for (entity, initial_pos, initial_rot) in &data.initial_state {
+                let (new_pos, new_rot) = calculate_rotation_update(
                     *initial_pos,
                     *initial_rot,
                     data.rotation_centroid,
-                    delta
+                    delta,
                 );
 
                 pos_changes.push((*entity, *initial_pos, new_pos));
-                rot_changes.push((*entity, Quat::from_rotation_z(*initial_rot), Quat::from_rotation_z(new_rot)));
+                rot_changes.push((
+                    *entity,
+                    Quat::from_rotation_z(*initial_rot),
+                    Quat::from_rotation_z(new_rot),
+                ));
 
                 // Restore Dynamic
-                 ev_prop.send(PropertyChangeEvent {
+                ev_prop.send(PropertyChangeEvent {
                     entity: *entity,
                     change: PropertyChange::RigidBody(RigidBody::Dynamic),
-                 });
-             }
+                });
+            }
 
-             ev_commit.send(CommitDragEvent {
-                 position_changes: pos_changes,
-                 rotation_changes: rot_changes,
-             });
+            ev_commit.send(CommitDragEvent {
+                position_changes: pos_changes,
+                rotation_changes: rot_changes,
+            });
         }
         data.is_rotating = false;
         data.initial_state.clear();

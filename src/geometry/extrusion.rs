@@ -46,7 +46,34 @@ fn generate_mesh_hook(
 
     let groups = groups.unwrap_or(CollisionGroups::default());
 
-    let (mesh, material) = create_extruded_mesh(&path, groups);
+    let mesh = create_extruded_mesh(&path, groups);
+
+    // Parse memberships to generate initial color
+    let memberships = groups.memberships.bits();
+    let mut min_i = 32;
+    let mut max_i = 0;
+    for i in 0..32 {
+        if (memberships & (1 << i)) != 0 {
+            if i < min_i {
+                min_i = i;
+            }
+            if i > max_i {
+                max_i = i;
+            }
+        }
+    }
+    if min_i == 32 {
+        min_i = 0;
+    }
+
+    let hue = min_i as f32 * 30.0;
+    let color = Color::hsl(hue, 0.8, 0.5);
+    let material = StandardMaterial {
+        base_color: color,
+        perceptual_roughness: 0.8,
+        metallic: 0.1,
+        ..default()
+    };
 
     // Asset Registration
     let mesh_handle = {
@@ -70,9 +97,8 @@ fn generate_mesh_hook(
 fn update_extrusion_mesh(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<
-// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
+        // [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
         (
             Entity,
             &Path,
@@ -90,29 +116,23 @@ fn update_extrusion_mesh(
         ),
     >,
 ) {
-    for (entity, path, groups, mesh_handle, mat_handle) in query.iter() {
-        let (mesh, material) = create_extruded_mesh(&path.0, *groups);
+    for (entity, path, groups, mesh_handle, _mat_handle) in query.iter() {
+        let mesh = create_extruded_mesh(&path.0, *groups);
 
-        // Remove old assets to prevent leaks
+        // Remove old mesh to prevent leaks
         meshes.remove(&mesh_handle.0);
-        materials.remove(&mat_handle.0);
+        // We do NOT remove or replace the material, so user modifications are preserved
 
         let new_mesh_handle = meshes.add(mesh);
-        let new_mat_handle = materials.add(material);
 
-        commands
-            .entity(entity)
-            .insert((Mesh3d(new_mesh_handle), MeshMaterial3d(new_mat_handle)));
+        commands.entity(entity).insert(Mesh3d(new_mesh_handle));
     }
 }
 
 // TODO: Separate Mesh generation from Material generation.
 // Currently, this function creates a new StandardMaterial every time, which overwrites any
 // custom material properties (color, roughness) set by the user when the mesh is updated.
-fn create_extruded_mesh(
-    path: &lyon::path::Path,
-    groups: CollisionGroups,
-) -> (Mesh, StandardMaterial) {
+fn create_extruded_mesh(path: &lyon::path::Path, groups: CollisionGroups) -> Mesh {
     // Parse memberships
     let layer_h = 10.0;
     let memberships = groups.memberships.bits();
@@ -134,12 +154,9 @@ fn create_extruded_mesh(
     }
 
     if !active {
-        return (
-            Mesh::new(
-                PrimitiveTopology::TriangleList,
-                bevy::render::render_asset::RenderAssetUsages::default(),
-            ),
-            StandardMaterial::default(),
+        return Mesh::new(
+            PrimitiveTopology::TriangleList,
+            bevy::render::render_asset::RenderAssetUsages::default(),
         );
     }
 
@@ -290,21 +307,7 @@ fn create_extruded_mesh(
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_indices(Indices::U32(indices));
 
-    // Material
-    // Color based on layer index (min_i) to distinguish zones
-    let hue = min_i as f32 * 30.0;
-    let color = Color::hsl(hue, 0.8, 0.5);
-    let material = StandardMaterial {
-        base_color: color,
-        perceptual_roughness: 0.5,
-        metallic: 0.0,
-        // Disabled culling to ensure visibility
-        cull_mode: None,
-        double_sided: true,
-        ..default()
-    };
-
-    (mesh, material)
+    mesh
 }
 
 fn point_to_vec2(p: lyon::math::Point) -> Vec2 {
