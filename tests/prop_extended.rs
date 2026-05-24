@@ -82,6 +82,7 @@ proptest! {
                 visual_entity: None,
                 pin_entity: None,
                 original_solver_groups: None,
+                original_collision_groups: None,
                 rot_a: rot1,
                 rot_b: rot2,
             })
@@ -95,6 +96,7 @@ proptest! {
                 visual_entity: None,
                 pin_entity: None,
                 original_solver_groups: None,
+                original_collision_groups: None,
             })
         };
 
@@ -184,6 +186,7 @@ proptest! {
                 visual_entity: None,
                 pin_entity: None,
                 original_solver_groups: None,
+                original_collision_groups: None,
             }),
             4 => Box::new(SpawnFixedJointCommand {
                 entity_a: EntityId(id1),
@@ -194,6 +197,7 @@ proptest! {
                 visual_entity: None,
                 pin_entity: None,
                 original_solver_groups: None,
+                original_collision_groups: None,
                 rot_a: 0.0,
                 rot_b: 0.0,
             }),

@@ -78,18 +78,21 @@ pub fn create_test_app() -> App {
     app.add_plugins(GameEventsPlugin);
 
     // Register Event Handlers (Critical for tool tests)
-    app.add_systems(Update, (
-        event_handlers::handle_spawn_shape_event,
-        event_handlers::handle_spawn_ground_event,
-        event_handlers::handle_spawn_joint_event,
-        event_handlers::handle_spawn_prismatic_joint_event,
-        event_handlers::handle_spawn_fixed_joint_event,
-        event_handlers::handle_undo_event,
-        event_handlers::handle_redo_event,
-        event_handlers::handle_duplicate_entities_event,
-        event_handlers::handle_drag_entities_event,
-        event_handlers::handle_commit_drag_event,
-    ));
+    app.add_systems(
+        Update,
+        (
+            event_handlers::handle_spawn_shape_event,
+            event_handlers::handle_spawn_ground_event,
+            event_handlers::handle_spawn_joint_event,
+            event_handlers::handle_spawn_prismatic_joint_event,
+            event_handlers::handle_spawn_fixed_joint_event,
+            event_handlers::handle_undo_event,
+            event_handlers::handle_redo_event,
+            event_handlers::handle_duplicate_entities_event,
+            event_handlers::handle_drag_entities_event,
+            event_handlers::handle_commit_drag_event,
+        ),
+    );
 
     // Tools
     app.add_plugins(BoxToolPlugin);

@@ -6,14 +6,14 @@ use crate::physics::controllers::MotorController;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use bevy_rapier2d::prelude::*;
-use bevy_rapier2d::rapier::dynamics::{JointAxis};
+use bevy_rapier2d::rapier::dynamics::JointAxis;
 
 /// Handles `PropertyChangeEvent` by applying changes to entities.
 pub fn handle_property_change_event(
     mut events: EventReader<PropertyChangeEvent>,
     mut commands: Commands,
     mut query: Query<(
-// [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
+        // [dunnage] WARN: very complex type used. Consider factoring parts into `type` definitions
         Option<&mut Transform>,
         Option<&mut RigidBody>,
         Option<&mut Friction>,
@@ -118,7 +118,9 @@ pub fn handle_property_change_event(
                 PropertyChange::RevoluteLimits(limits) => {
                     if let Some(joint) = &mut joint {
                         match &mut joint.data {
-                            TypedJoint::RevoluteJoint(r) => { r.set_limits(*limits); }
+                            TypedJoint::RevoluteJoint(r) => {
+                                r.set_limits(*limits);
+                            }
                             TypedJoint::GenericJoint(g) => {
                                 // Assume AngZ -> AngX
                                 g.set_limits(JointAxis::AngX, *limits);
@@ -166,7 +168,9 @@ pub fn handle_property_change_event(
                 PropertyChange::PrismaticLimits(limits) => {
                     if let Some(joint) = &mut joint {
                         match &mut joint.data {
-                            TypedJoint::PrismaticJoint(p) => { p.set_limits(*limits); }
+                            TypedJoint::PrismaticJoint(p) => {
+                                p.set_limits(*limits);
+                            }
                             TypedJoint::GenericJoint(g) => {
                                 // Assume X -> LinX
                                 g.set_limits(JointAxis::LinX, *limits);

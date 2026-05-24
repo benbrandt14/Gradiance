@@ -3,8 +3,8 @@ mod tests {
     use bevy::prelude::*;
     use gradiance::events::*;
     use gradiance::input::commands::CommandStack;
-    use gradiance::input::event_handlers;
     use gradiance::input::editable_shape::ShapeType;
+    use gradiance::input::event_handlers;
 
     #[test]
     fn test_spawn_shape_event() {
@@ -21,7 +21,10 @@ mod tests {
         // Fire event
         app.world_mut().send_event(SpawnShapeEvent {
             position: Vec2::new(10.0, 20.0),
-            shape: ShapeType::Box { width: 1.0, height: 1.0 },
+            shape: ShapeType::Box {
+                width: 1.0,
+                height: 1.0,
+            },
         });
 
         app.update();
@@ -44,7 +47,10 @@ mod tests {
         app.add_plugins(GameEventsPlugin);
         app.add_systems(Update, event_handlers::handle_drag_entities_event);
 
-        let entity = app.world_mut().spawn(Transform::from_xyz(0.0, 0.0, 0.0)).id();
+        let entity = app
+            .world_mut()
+            .spawn(Transform::from_xyz(0.0, 0.0, 0.0))
+            .id();
 
         app.world_mut().send_event(DragEntitiesEvent {
             positions: vec![(entity, Vec2::new(5.0, 5.0))],
@@ -64,13 +70,19 @@ mod tests {
         app.add_plugins(MinimalPlugins);
         app.add_plugins(GameEventsPlugin);
         app.init_resource::<CommandStack>();
-        app.add_systems(Update, (
-            event_handlers::handle_commit_drag_event,
-            event_handlers::handle_undo_event,
-            event_handlers::handle_redo_event,
-        ));
+        app.add_systems(
+            Update,
+            (
+                event_handlers::handle_commit_drag_event,
+                event_handlers::handle_undo_event,
+                event_handlers::handle_redo_event,
+            ),
+        );
 
-        let entity = app.world_mut().spawn(Transform::from_xyz(0.0, 0.0, 0.0)).id();
+        let entity = app
+            .world_mut()
+            .spawn(Transform::from_xyz(0.0, 0.0, 0.0))
+            .id();
 
         // Commit drag
         app.world_mut().send_event(CommitDragEvent {

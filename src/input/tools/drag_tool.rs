@@ -17,10 +17,7 @@ impl Plugin for DragToolPlugin {
         app.init_resource::<DragToolData>();
         app.add_systems(
             Update,
-            (
-                drag_tool_input,
-                drag_tool_physics.after(drag_tool_input),
-            )
+            (drag_tool_input, drag_tool_physics.after(drag_tool_input))
                 .run_if(in_state(ToolState::Drag)),
         );
         app.add_systems(OnExit(ToolState::Drag), drag_tool_reset);
@@ -58,10 +55,7 @@ fn drag_tool_input(
     cursor_pos: Res<CursorWorldPos>,
     mouse: Res<ButtonInput<MouseButton>>,
     rapier_context_query: Query<&RapierContext>,
-    query: Query<
-        (Entity, &Transform),
-        (With<RigidBody>, With<Collider>, Without<GroundPlane>),
-    >,
+    query: Query<(Entity, &Transform), (With<RigidBody>, With<Collider>, Without<GroundPlane>)>,
     pointer_over_ui: Res<PointerOverUi>,
     virtual_time: Res<Time<Virtual>>,
     mut ev_drag: EventWriter<DragEntitiesEvent>,
@@ -102,20 +96,18 @@ fn drag_tool_input(
     }
 
     // Drag Update (Paused Mode)
-    if data.dragged_entity.is_some() && virtual_time.is_paused() {
-        if let Some(entity) = data.dragged_entity {
-            if let Ok((_, transform)) = query.get(entity) {
-                 let rotation = transform.rotation.to_euler(EulerRot::XYZ).2;
-                 let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
-                 let new_pos = current_pos - rotated_anchor;
+    if data.dragged_entity.is_some() && virtual_time.is_paused()
+        && let Some(entity) = data.dragged_entity
+            && let Ok((_, transform)) = query.get(entity) {
+                let rotation = transform.rotation.to_euler(EulerRot::XYZ).2;
+                let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
+                let new_pos = current_pos - rotated_anchor;
 
-                 ev_drag.send(DragEntitiesEvent {
-                     positions: vec![(entity, new_pos)],
-                     rotations: Vec::new(),
-                 });
+                ev_drag.send(DragEntitiesEvent {
+                    positions: vec![(entity, new_pos)],
+                    rotations: Vec::new(),
+                });
             }
-        }
-    }
 
     if mouse.just_released(MouseButton::Left) {
         if let Some(entity) = data.dragged_entity {
@@ -127,12 +119,16 @@ fn drag_tool_input(
 
                 // Only commit if changed
                 if (end_pos - data.start_pos).length_squared() > 0.001
-                   || (end_rot.to_euler(EulerRot::XYZ).2 - data.start_rot).abs() > 0.001
+                    || (end_rot.to_euler(EulerRot::XYZ).2 - data.start_rot).abs() > 0.001
                 {
-                     ev_commit.send(CommitDragEvent {
-                         position_changes: vec![(entity, data.start_pos, end_pos)],
-                         rotation_changes: vec![(entity, Quat::from_rotation_z(data.start_rot), end_rot)],
-                     });
+                    ev_commit.send(CommitDragEvent {
+                        position_changes: vec![(entity, data.start_pos, end_pos)],
+                        rotation_changes: vec![(
+                            entity,
+                            Quat::from_rotation_z(data.start_rot),
+                            end_rot,
+                        )],
+                    });
                 }
             }
         }
@@ -195,14 +191,13 @@ fn drag_tool_physics(
         }
 
         // Draw gizmo line
-        if let Some(dragged) = data.dragged_entity {
-            if let Ok(t) = query.get(dragged) {
-                 let rotation = t.rotation.to_euler(EulerRot::XYZ).2;
-                 let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
-                 let anchor_world = t.translation.truncate() + rotated_anchor;
-                 gizmos.line_2d(anchor_world, target, Color::WHITE);
+        if let Some(dragged) = data.dragged_entity
+            && let Ok(t) = query.get(dragged) {
+                let rotation = t.rotation.to_euler(EulerRot::XYZ).2;
+                let rotated_anchor = calculate_rotated_anchor(data.local_anchor, rotation);
+                let anchor_world = t.translation.truncate() + rotated_anchor;
+                gizmos.line_2d(anchor_world, target, Color::WHITE);
             }
-        }
     }
 }
 

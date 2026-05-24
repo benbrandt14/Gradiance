@@ -57,6 +57,7 @@ pub fn handle_spawn_joint_event(mut events: EventReader<SpawnJointEvent>, mut co
             visual_entity: None,
             pin_entity: None,
             original_solver_groups: None,
+            original_collision_groups: None,
         };
         commands.queue(move |world: &mut World| {
             world.resource_scope(|world, mut stack: Mut<CommandStack>| {
@@ -82,6 +83,7 @@ pub fn handle_spawn_prismatic_joint_event(
             visual_entity: None,
             pin_entity: None,
             original_solver_groups: None,
+            original_collision_groups: None,
         };
         commands.queue(move |world: &mut World| {
             world.resource_scope(|world, mut stack: Mut<CommandStack>| {
@@ -108,6 +110,7 @@ pub fn handle_spawn_fixed_joint_event(
             visual_entity: None,
             pin_entity: None,
             original_solver_groups: None,
+            original_collision_groups: None,
         };
         commands.queue(move |world: &mut World| {
             world.resource_scope(|world, mut stack: Mut<CommandStack>| {
@@ -194,10 +197,7 @@ pub fn handle_drag_entities_event(
 }
 
 /// Handles `CommitDragEvent` (Undoable command).
-pub fn handle_commit_drag_event(
-    mut events: EventReader<CommitDragEvent>,
-    mut commands: Commands,
-) {
+pub fn handle_commit_drag_event(mut events: EventReader<CommitDragEvent>, mut commands: Commands) {
     for event in events.read() {
         let pos_changes = event
             .position_changes

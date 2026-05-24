@@ -40,6 +40,7 @@ fn test_pin_collision_solver_groups(mut app: App) {
         visual_entity: None,
         pin_entity: None,
         original_solver_groups: None,
+        original_collision_groups: None,
     };
 
     cmd.apply(app.world_mut()).unwrap();
@@ -99,6 +100,7 @@ fn test_joint_two_bodies_no_solver_group_change(mut app: App) {
         visual_entity: None,
         pin_entity: None,
         original_solver_groups: None,
+        original_collision_groups: None,
     };
 
     cmd.apply(app.world_mut()).unwrap();

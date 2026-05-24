@@ -38,6 +38,7 @@ fn test_spawn_prismatic_joint() {
         visual_entity: None,
         pin_entity: None,
         original_solver_groups: None,
+        original_collision_groups: None,
     };
 
     command
@@ -102,6 +103,7 @@ fn test_joint_motor_properties() {
         visual_entity: None,
         pin_entity: None,
         original_solver_groups: None,
+        original_collision_groups: None,
     };
     cmd_rev.apply(app.world_mut()).unwrap();
 

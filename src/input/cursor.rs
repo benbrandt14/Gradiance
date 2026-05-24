@@ -21,7 +21,7 @@ pub struct CursorWorldPos(pub Option<Vec2>);
 /// Projects the window cursor position to world coordinates.
 /// Returns `None` if the cursor is over an Egui UI area.
 pub fn update_cursor_pos(
-// [dunnage] WARN: this function has too many arguments (8/7)
+    // [dunnage] WARN: this function has too many arguments (8/7)
     mut cursor_pos: ResMut<CursorWorldPos>,
     mut snap_status: ResMut<SnappingStatus>,
     grid_settings: Res<GridSettings>,
