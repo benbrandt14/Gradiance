@@ -124,6 +124,7 @@ impl CommandStack {
 pub struct CommandDispatchSet;
 
 /// Registers the command stack, all intent messages, and the dispatcher.
+#[derive(Default)]
 pub struct CommandPlugin;
 
 impl Plugin for CommandPlugin {

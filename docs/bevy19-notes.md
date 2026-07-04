@@ -37,10 +37,21 @@ world.entity_mut(e).observe(|e: On<Zap>| { .. });            // per-entity obser
 #[component(on_add = my_hook, on_remove = my_unhook)]
 struct Thing;
 // Hook signature CHANGED: fn(DeferredWorld, HookContext)
+// HookContext path: bevy::ecs::lifecycle::HookContext (NOT ecs::component)
 fn my_hook(mut world: DeferredWorld, ctx: HookContext) {
     let entity = ctx.entity;    // HookContext { entity, component_id, caller, relationship_hook_mode }
 }
+// Derive-supported hook keys: on_add, on_insert, on_discard (≈old on_replace:
+// value about to be dropped on replace/remove), on_remove (removal AND despawn),
+// on_despawn, immutable, clone_behavior, map_entities. NO `on_replace` key.
+// `immutable` forbids &mut queries — right for index-backed components like StableId.
 ```
+
+## Plugin groups
+
+`bevy::app::plugin_group!` requires every member plugin to implement `Default`
+(members are constructed via `::default()`). Syntax: `crate::path:::PluginName`
+(triple colon between module path and type).
 
 ## States (bevy_state)
 

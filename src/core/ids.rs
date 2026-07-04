@@ -6,7 +6,7 @@
 //! it instead of `Entity`. The [`IdIndex`] resource resolves ids back to
 //! live entities and is maintained automatically by component hooks.
 
-use bevy::ecs::component::HookContext;
+use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
@@ -15,7 +15,12 @@ use uuid::Uuid;
 
 /// A globally unique, persistence-safe identifier for an authored entity.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[component(on_insert = on_insert_stable_id, on_replace = on_replace_stable_id)]
+#[component(
+    immutable,
+    on_insert = on_insert_stable_id,
+    on_discard = on_discard_stable_id,
+    on_remove = on_discard_stable_id
+)]
 pub struct StableId(pub Uuid);
 
 impl StableId {
@@ -69,7 +74,7 @@ fn on_insert_stable_id(mut world: DeferredWorld, ctx: HookContext) {
     }
 }
 
-fn on_replace_stable_id(mut world: DeferredWorld, ctx: HookContext) {
+fn on_discard_stable_id(mut world: DeferredWorld, ctx: HookContext) {
     let Some(&id) = world.get::<StableId>(ctx.entity) else {
         return;
     };

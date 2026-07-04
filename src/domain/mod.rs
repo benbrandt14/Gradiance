@@ -19,6 +19,7 @@ use bevy::prelude::*;
 pub struct Body;
 
 /// Registers domain-level requirements (currently nothing beyond types).
+#[derive(Default)]
 pub struct DomainPlugin;
 
 impl Plugin for DomainPlugin {

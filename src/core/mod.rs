@@ -10,6 +10,7 @@ pub mod units;
 use bevy::prelude::*;
 
 /// Registers the app-wide states and the [`ids::IdIndex`].
+#[derive(Default)]
 pub struct CorePlugin;
 
 impl Plugin for CorePlugin {
