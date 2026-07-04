@@ -27,6 +27,7 @@ pub fn pan_and_zoom_camera(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
     over_ui: Res<PointerOverUi>,
+    gesture: Res<crate::interaction::tools::ActiveGesture>,
     time: Res<Time>,
 ) {
     let Ok((mut transform, mut projection, camera, global)) = cameras.single_mut() else {
@@ -52,7 +53,12 @@ pub fn pan_and_zoom_camera(
     }
     let mut delta = pan * KEY_PAN_SPEED * time.delta_secs() * ortho.scale;
 
-    if !over_ui.0 && (buttons.pressed(MouseButton::Right) || buttons.pressed(MouseButton::Middle)) {
+    // Right-drag pans only when no tool gesture owns the pointer (the
+    // select tool uses right-drag for rotation).
+    if !over_ui.0
+        && !gesture.0
+        && (buttons.pressed(MouseButton::Right) || buttons.pressed(MouseButton::Middle))
+    {
         // Screen-space motion: X right, Y down → world X right, Y up.
         let m = motion.delta;
         delta += Vec2::new(-m.x, m.y) * ortho.scale;

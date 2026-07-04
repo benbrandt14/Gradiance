@@ -20,8 +20,10 @@ pub mod cursor;
 pub mod gesture;
 pub mod indicators;
 pub mod input;
+pub mod pointer;
 pub mod selection;
 pub mod snap;
+pub mod tools;
 
 use bevy::prelude::*;
 
@@ -42,18 +44,22 @@ pub struct InteractionPlugin;
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PointerOverUi>();
+        app.init_resource::<pointer::PointerButtons>();
         app.init_resource::<cursor::CursorWorldPos>();
         app.init_resource::<selection::Selection>();
         app.init_resource::<snap::SnappedCursor>();
+        app.init_resource::<snap::SnapExclusions>();
         app.init_resource::<gesture::GestureConstraints>();
         app.init_resource::<crate::domain::settings::GridSettings>();
         app.init_resource::<crate::domain::settings::SnapConfig>();
 
         app.add_plugins(input::EditorInputPlugin);
+        app.add_plugins(tools::ToolsPlugin);
 
         app.add_systems(
             PreUpdate,
             (
+                pointer::update_pointer_buttons,
                 cursor::update_cursor_world_pos,
                 gesture::update_gesture_constraints,
                 snap::update_snapped_cursor,

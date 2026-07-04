@@ -1,8 +1,9 @@
 //! Convenience re-exports for internal modules and tests.
 
+pub use crate::command::array_cmd::ArrayMode;
 pub use crate::command::intent::{
-    CommitTransformIntent, DeleteIntent, DuplicateIntent, RedoIntent, SpawnBodyIntent,
-    TransformChange, UndoIntent,
+    ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, RedoIntent, ScaleIntent,
+    SpawnBodyIntent, TransformChange, UndoIntent,
 };
 pub use crate::command::snapshot::BodyRecord;
 // Note: `CommandStack` is deliberately NOT re-exported — only the dispatcher
@@ -26,4 +27,6 @@ pub use crate::interaction::cursor::CursorWorldPos;
 pub use crate::interaction::gesture::{AxisConstraint, GestureConstraints};
 pub use crate::interaction::selection::Selection;
 pub use crate::interaction::snap::{SnapKind, SnappedCursor};
+pub use crate::interaction::tools::ActiveGesture;
+pub use crate::interaction::tools::handles::ScaleFrame;
 pub use crate::interaction::{InteractionPlugin, PointerOverUi};

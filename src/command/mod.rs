@@ -4,8 +4,10 @@
 //! them, builds [`GameCommand`]s, and applies them through the
 //! [`CommandStack`]. Nothing else may mutate authored components.
 
+pub mod array_cmd;
 pub mod dispatch;
 pub mod intent;
+pub mod scale_cmd;
 pub mod snapshot;
 pub mod spawn;
 pub mod transform_cmd;
@@ -134,6 +136,8 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::DeleteIntent>();
         app.add_message::<intent::DuplicateIntent>();
         app.add_message::<intent::CommitTransformIntent>();
+        app.add_message::<intent::ScaleIntent>();
+        app.add_message::<intent::ArrayIntent>();
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
         app.add_systems(

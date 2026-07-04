@@ -29,6 +29,12 @@ pub enum SnapKind {
     Edge,
 }
 
+/// Entities excluded from object snapping — the bodies currently being
+/// dragged (CAD behavior: you never snap to what you're moving). Tools
+/// set this at gesture start and clear it on release.
+#[derive(Resource, Default, Debug)]
+pub struct SnapExclusions(pub Vec<Entity>);
+
 /// The snapped cursor — the position tools should use.
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct SnappedCursor {
@@ -55,6 +61,7 @@ pub fn update_snapped_cursor(
     cursor: Res<CursorWorldPos>,
     grid: Res<GridSettings>,
     config: Res<SnapConfig>,
+    exclusions: Res<SnapExclusions>,
     physics: PhysicsQueries,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
     projections: Query<&Projection, With<Camera3d>>,
@@ -84,6 +91,9 @@ pub fn update_snapped_cursor(
 
         let pad = Vec2::splat(radius);
         for entity in physics.bodies_in_aabb(p - pad * 8.0, p + pad * 8.0) {
+            if exclusions.0.contains(&entity) {
+                continue;
+            }
             let Ok((shape, transform)) = bodies.get(entity) else {
                 continue;
             };

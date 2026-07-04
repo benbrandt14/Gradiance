@@ -14,8 +14,12 @@ pub fn update_cursor_world_pos(
     cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut out: ResMut<CursorWorldPos>,
 ) {
+    // Headless (no window): leave the resource alone so tests can inject
+    // cursor positions directly.
+    let Some(window) = windows.iter().next() else {
+        return;
+    };
     out.0 = (|| {
-        let window = windows.iter().next()?;
         let cursor = window.cursor_position()?;
         let (camera, transform) = cameras.iter().next()?;
         camera.viewport_to_world_2d(transform, cursor).ok()

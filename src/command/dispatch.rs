@@ -1,8 +1,11 @@
 //! The single choke point turning intents into applied commands.
 
+use crate::command::array_cmd::ArrayCommand;
 use crate::command::intent::{
-    CommitTransformIntent, DeleteIntent, DuplicateIntent, RedoIntent, SpawnBodyIntent, UndoIntent,
+    ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, RedoIntent, ScaleIntent,
+    SpawnBodyIntent, UndoIntent,
 };
+use crate::command::scale_cmd::ScaleCommand;
 use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnBodyCommand};
 use crate::command::transform_cmd::MoveRotateCommand;
 use crate::command::{CommandStack, GameCommand};
@@ -32,6 +35,21 @@ pub fn dispatch_intents(world: &mut World) {
         commands.push(Box::new(MoveRotateCommand {
             changes: intent.changes,
         }));
+    }
+    for intent in drain::<ScaleIntent>(world) {
+        commands.push(Box::new(ScaleCommand::new(
+            intent.targets,
+            intent.pivot,
+            intent.frame_rot,
+            intent.factors,
+        )));
+    }
+    for intent in drain::<ArrayIntent>(world) {
+        commands.push(Box::new(ArrayCommand::new(
+            intent.sources,
+            intent.count,
+            intent.mode,
+        )));
     }
     for intent in drain::<DuplicateIntent>(world) {
         commands.push(Box::new(DuplicateCommand::new(
