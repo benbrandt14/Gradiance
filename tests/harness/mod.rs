@@ -1,6 +1,10 @@
 //! Headless test harness: a windowless, renderless app with the full
 //! Gradiance plugin stack, plus helpers shared by the integration suites.
 
+// This module is compiled once per test binary; not every binary uses
+// every helper.
+#![allow(dead_code)]
+
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy::time::TimeUpdateStrategy;
