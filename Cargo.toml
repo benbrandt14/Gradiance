@@ -48,6 +48,9 @@ dbg_macro = "deny"
 pedantic = { level = "warn", priority = -1 }
 type_complexity = "allow"             # Bevy Query types are inherently "complex"
 needless_pass_by_value = "allow"      # Bevy systems take Res/Query by value
+too_many_arguments = "allow"          # Bevy systems are parameter lists by design
+many_single_char_names = "allow"      # p, a, b, u, v ARE the math vocabulary
+struct_excessive_bools = "allow"      # editor configs are independent toggles
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 missing_panics_doc = "allow"

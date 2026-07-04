@@ -10,6 +10,7 @@ pub mod group;
 pub mod joint;
 pub mod layers;
 pub mod props;
+pub mod settings;
 pub mod shape;
 
 use bevy::prelude::*;

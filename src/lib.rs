@@ -17,6 +17,7 @@ pub mod command;
 pub mod core;
 pub mod domain;
 pub mod geometry;
+pub mod interaction;
 pub mod physics;
 pub mod prelude;
 pub mod render;
@@ -30,6 +31,7 @@ plugin_group! {
         crate::domain:::DomainPlugin,
         crate::command:::CommandPlugin,
         crate::physics:::GradiancePhysicsPlugin,
+        crate::interaction:::InteractionPlugin,
         crate::render:::GradianceRenderPlugin,
     }
 }
