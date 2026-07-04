@@ -1,9 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 8a5fb4ef7690e6b331ca0490b82fb79a750ce58cdadc929134485a8e1d76820e # shrinks to t1 = Transform { translation: Vec3(0.0, 0.0, 0.0), rotation: Quat(0.0, 0.0, 0.0, 1.0), scale: Vec3(1.0, 1.0, 1.0) }, t2 = Transform { translation: Vec3(0.0, 0.0, 0.0), rotation: Quat(0.0, 0.0, 0.0, 1.0), scale: Vec3(1.0, 1.0, 1.0) }, anchor_world = (0.0, 0.0), is_fixed = false
-cc c610d052fbf9824596275e3500febd4bcc20eb0df76d937f21dee01872435581 # shrinks to t1 = Transform { translation: Vec3(0.0, 0.0, 0.0), rotation: Quat(0.0, 0.0, 0.0, 1.0), scale: Vec3(1.0, 1.0, 1.0) }, t2 = Transform { translation: Vec3(0.0, -19.239613, 0.0), rotation: Quat(0.0, 0.0, 0.0, 1.0), scale: Vec3(1.0, 1.0, 1.0) }, anchor_world = (0.0, 0.0), is_fixed = true
-cc 3f6c6841d40054b3fb95a24edd4d9d90bcdf129caa860be10647ca48636e0d95 # shrinks to t1 = Transform { translation: Vec3(-48.679005, 0.0, 0.0), rotation: Quat(0.0, 0.0, -0.8753499, 0.48349), scale: Vec3(1.0, 1.0, 1.0) }, t2 = Transform { translation: Vec3(0.0, 0.0, 0.0), rotation: Quat(0.0, 0.0, 0.0, 1.0), scale: Vec3(1.0, 1.0, 1.0) }, anchor_world = (0.0, 30.668951), is_fixed = false

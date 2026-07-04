@@ -1,16 +1,23 @@
-//! Common imports for Gradiance.
-//!
-//! Re-exports commonly used types from Bevy, Rapier, and internal modules.
+//! Convenience re-exports for internal modules and tests.
 
-// TODO: Structure prelude to re-export internal sub-modules (e.g. `pub mod physics { pub use crate::physics::prelude::*; }`)
-// to create a self-documenting and easy-to-use API surface.
-pub use crate::GameState;
-pub use bevy::prelude::*;
-pub use bevy_rapier2d::prelude::Real;
-pub use bevy_rapier2d::prelude::*;
-
-/// Strong ID wrapper for persistent references.
-// TODO: Note that Entity is ephemeral and not suitable for long-term persistence (save/load) or networking.
-// Consider implementing a stable ID system (e.g. Uuid) if persistence is required.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EntityId(pub Entity);
+pub use crate::command::intent::{
+    CommitTransformIntent, DeleteIntent, DuplicateIntent, RedoIntent, SpawnBodyIntent,
+    TransformChange, UndoIntent,
+};
+pub use crate::command::snapshot::BodyRecord;
+// Note: `CommandStack` is deliberately NOT re-exported — only the dispatcher
+// (and tests, via the full `crate::command::CommandStack` path) may name it.
+pub use crate::GradiancePlugins;
+pub use crate::command::{CommandDispatchSet, CommandError, CommandPlugin, GameCommand};
+pub use crate::core::CorePlugin;
+pub use crate::core::constants::*;
+pub use crate::core::ids::{IdIndex, StableId};
+pub use crate::core::states::{GameState, ToolState};
+pub use crate::core::units::PosRot;
+pub use crate::domain::appearance::{Appearance, Rgba};
+pub use crate::domain::group::SelectionGroup;
+pub use crate::domain::joint::{JointDef, JointKind, MotorDef};
+pub use crate::domain::layers::LayerMask32;
+pub use crate::domain::props::{BodyKind, PhysicalProps};
+pub use crate::domain::shape::{ShapeDef, ShapeError};
+pub use crate::domain::{Body, DomainPlugin};

@@ -1,354 +1,216 @@
+//! Command-layer integration tests: intents → dispatch → stack semantics.
+
+mod harness;
+
 use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
-use gradiance::geometry::extrusion::ExtrudableShape;
-use gradiance::input::ZIndex as GameZIndex;
-use gradiance::input::commands::{
-    CommandStack, GameCommand, SpawnFixedJointCommand, SpawnGroundCommand, SpawnJointCommand,
-    SpawnShapeCommand,
-};
-use gradiance::input::editable_shape::{EditableShape, ShapeType};
-use gradiance::input::tools::connector::Connector;
-use gradiance::physics::floor::GroundPlane;
-use gradiance::prelude::EntityId;
-use rstest::{fixture, rstest};
+use gradiance::command::CommandStack;
+use gradiance::prelude::*;
+use harness::{body_count, box_record, entity_of, headless_app, redo, undo};
 
-#[fixture]
-fn world() -> World {
-    let mut world = World::new();
-    world.init_resource::<GameZIndex>();
-    // Initialize Assets for ExtrusionPlugin hook
-    world.init_resource::<Assets<Mesh>>();
-    world.init_resource::<Assets<StandardMaterial>>();
-    world
+fn stack_lens(app: &App) -> (usize, usize) {
+    let stack = app.world().resource::<CommandStack>();
+    (stack.undo_len(), stack.redo_len())
 }
 
-#[rstest]
-fn test_spawn_polygon_command_failure(mut world: World) {
-    let vertices = vec![Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0)]; // Only 2 vertices
-    let mut cmd = SpawnShapeCommand {
-        position: Vec2::new(0.0, 0.0),
-        shape: ShapeType::Polygon { points: vertices },
-        entity: None,
+#[test]
+fn spawn_intent_creates_a_complete_body() {
+    let mut app = headless_app();
+    let record = box_record(Vec2::new(10.0, 20.0), 40.0, 30.0);
+    let id = record.id;
+
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+
+    assert_eq!(body_count(&mut app), 1);
+    let entity = entity_of(&app, id).expect("body indexed by stable id");
+    let world = app.world();
+    assert!(world.get::<ShapeDef>(entity).is_some());
+    assert!(world.get::<PhysicalProps>(entity).is_some());
+    assert!(world.get::<Appearance>(entity).is_some());
+    assert!(world.get::<LayerMask32>(entity).is_some());
+    let transform = world.get::<Transform>(entity).unwrap();
+    assert_eq!(transform.translation.truncate(), Vec2::new(10.0, 20.0));
+    assert_eq!(stack_lens(&app), (1, 0));
+}
+
+#[test]
+fn invalid_shapes_are_refused_and_not_recorded() {
+    let mut app = headless_app();
+    let mut record = box_record(Vec2::ZERO, 40.0, 30.0);
+    record.shape = ShapeDef::Box {
+        width: 0.0,
+        height: 30.0,
     };
 
-    // Apply should fail (generate_shape_components returns None)
-    let result = cmd.apply(&mut world);
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Invalid shape parameters");
-    assert!(cmd.entity.is_none());
-}
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
 
-#[rstest]
-fn test_spawn_box_command(mut world: World) {
-    let mut cmd = SpawnShapeCommand {
-        position: Vec2::new(10.0, 20.0),
-        shape: ShapeType::Box {
-            width: 5.0,
-            height: 5.0,
-        },
-        entity: None,
+    assert_eq!(body_count(&mut app), 0);
+    assert_eq!(stack_lens(&app), (0, 0));
+
+    let mut record = box_record(Vec2::ZERO, 1.0, 1.0);
+    record.shape = ShapeDef::Polygon {
+        outline: vec![Vec2::ZERO, Vec2::X],
+        holes: vec![],
     };
-
-    // Apply
-    assert!(cmd.apply(&mut world).is_ok());
-
-    assert!(cmd.entity.is_some());
-    let entity_id = cmd.entity.unwrap();
-    let entity = entity_id.0;
-
-    let transform = world.get::<Transform>(entity);
-    assert!(transform.is_some());
-    assert_eq!(
-        transform.unwrap().translation.truncate(),
-        Vec2::new(10.0, 20.0)
-    );
-
-    assert!(world.get::<RigidBody>(entity).is_some());
-    assert!(world.get::<Collider>(entity).is_some());
-    assert!(world.get::<EditableShape>(entity).is_some());
-    assert!(world.get::<ExtrudableShape>(entity).is_some());
-
-    // Undo
-    cmd.undo(&mut world);
-
-    // In Bevy 0.15+, get_entity returns a Result. If despawned, it should be Err.
-    assert!(world.get_entity(entity).is_err());
-    assert!(cmd.entity.is_none());
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    assert_eq!(body_count(&mut app), 0);
+    assert_eq!(stack_lens(&app), (0, 0));
 }
 
-#[rstest]
-fn test_spawn_circle_command(mut world: World) {
-    let mut cmd = SpawnShapeCommand {
-        position: Vec2::new(-5.0, 5.0),
-        shape: ShapeType::Circle { radius: 3.0 },
-        entity: None,
-    };
+#[test]
+fn undo_redo_round_trips_a_spawn_preserving_the_id() {
+    let mut app = headless_app();
+    let record = box_record(Vec2::new(5.0, 5.0), 10.0, 10.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
 
-    // Apply
-    assert!(cmd.apply(&mut world).is_ok());
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 0);
+    assert_eq!(entity_of(&app, id), None);
+    assert_eq!(stack_lens(&app), (0, 1));
 
-    assert!(cmd.entity.is_some());
-    let entity_id = cmd.entity.unwrap();
-    let entity = entity_id.0;
-
-    let transform = world.get::<Transform>(entity);
-    assert!(transform.is_some());
-    assert_eq!(
-        transform.unwrap().translation.truncate(),
-        Vec2::new(-5.0, 5.0)
-    );
-
-    assert!(world.get::<RigidBody>(entity).is_some());
-    assert!(world.get::<Collider>(entity).is_some());
-    assert!(world.get::<EditableShape>(entity).is_some());
-
-    // Undo
-    cmd.undo(&mut world);
-
-    assert!(world.get_entity(entity).is_err());
-    assert!(cmd.entity.is_none());
+    redo(&mut app);
+    assert_eq!(body_count(&mut app), 1);
+    assert!(entity_of(&app, id).is_some(), "redo restores the same id");
+    assert_eq!(stack_lens(&app), (1, 0));
 }
 
-#[rstest]
-fn test_spawn_joint_command(mut world: World) {
-    // Setup entity_a
-    let entity_a = world.spawn(Transform::default()).id();
-
-    let mut cmd = SpawnJointCommand {
-        entity_a: EntityId(entity_a),
-        entity_b: None, // Pin to world
-        anchor_a: Vec2::ZERO,
-        anchor_b: Vec2::ZERO,
-        compliance: 0.0,
-        visual_entity: None,
-        pin_entity: None,
-        original_solver_groups: None,
-        original_collision_groups: None,
-    };
-
-    // Apply
-    assert!(cmd.apply(&mut world).is_ok());
-
-    // Check ImpulseJoint on entity_a
-    assert!(world.get::<ImpulseJoint>(entity_a).is_some());
-
-    // Check visual entity spawned (child of entity_a)
-    let children = world.get::<Children>(entity_a);
-    assert!(children.is_some());
-    let visual_id = children
-        .unwrap()
-        .iter()
-        .find(|&&child| world.get::<Connector>(child).is_some());
-    assert!(visual_id.is_some());
-    let visual_id = *visual_id.unwrap();
-
-    // Check pin entity
-    assert!(cmd.pin_entity.is_some());
-    let pin_id = cmd.pin_entity.unwrap().0;
-    assert!(world.get::<RigidBody>(pin_id).is_some());
-
-    // Undo
-    cmd.undo(&mut world);
-
-    // Check ImpulseJoint removed
-    assert!(world.get::<ImpulseJoint>(entity_a).is_none());
-
-    // Check visual entity despawned
-    assert!(world.get_entity(visual_id).is_err());
-
-    // Check pin entity despawned
-    assert!(world.get_entity(pin_id).is_err());
-}
-
-#[rstest]
-fn test_spawn_polygon_command(mut world: World) {
-    let vertices = vec![
-        Vec2::new(0.0, 0.0),
-        Vec2::new(10.0, 0.0),
-        Vec2::new(0.0, 10.0),
-    ];
-    let mut cmd = SpawnShapeCommand {
-        position: Vec2::new(0.0, 0.0),
-        shape: ShapeType::Polygon { points: vertices },
-        entity: None,
-    };
-
-    // Apply
-    assert!(cmd.apply(&mut world).is_ok());
-
-    assert!(cmd.entity.is_some());
-    let entity_id = cmd.entity.unwrap();
-    let entity = entity_id.0;
-
-    assert!(world.get::<RigidBody>(entity).is_some());
-    assert!(world.get::<Collider>(entity).is_some());
-    assert!(world.get::<Transform>(entity).is_some());
-
-    // Undo
-    cmd.undo(&mut world);
-
-    assert!(world.get_entity(entity).is_err());
-    assert!(cmd.entity.is_none());
-}
-
-#[rstest]
-fn test_command_stack(mut world: World) {
-    let mut stack = CommandStack::default();
-
-    // 1. Push Box
-    let box_cmd = Box::new(SpawnShapeCommand {
-        position: Vec2::ZERO,
-        shape: ShapeType::Box {
-            width: 1.0,
-            height: 1.0,
-        },
-        entity: None,
+#[test]
+fn a_new_command_truncates_the_redo_branch() {
+    let mut app = headless_app();
+    app.world_mut().write_message(SpawnBodyIntent {
+        record: box_record(Vec2::ZERO, 10.0, 10.0),
     });
-    stack.push(box_cmd, &mut world);
-
-    assert_eq!(stack.current_index(), 1);
-    assert_eq!(stack.history_len(), 1);
-    assert_eq!(world.entities().len(), 1);
-
-    // 2. Undo
-    stack.undo(&mut world);
-    assert_eq!(stack.current_index(), 0);
-    assert_eq!(stack.history_len(), 1);
-    assert_eq!(world.entities().len(), 0);
-
-    // 3. Redo
-    stack.redo(&mut world);
-    assert_eq!(stack.current_index(), 1);
-    assert_eq!(world.entities().len(), 1);
-
-    // 4. Undo again
-    stack.undo(&mut world);
-    assert_eq!(stack.current_index(), 0);
-    assert_eq!(world.entities().len(), 0);
-
-    // 5. Push new command (Circle), should truncate history
-    let circle_cmd = Box::new(SpawnShapeCommand {
-        position: Vec2::new(10.0, 0.0),
-        shape: ShapeType::Circle { radius: 1.0 },
-        entity: None,
+    app.update();
+    app.world_mut().write_message(SpawnBodyIntent {
+        record: box_record(Vec2::new(50.0, 0.0), 10.0, 10.0),
     });
-    stack.push(circle_cmd, &mut world);
+    app.update();
+    assert_eq!(stack_lens(&app), (2, 0));
 
-    assert_eq!(stack.current_index(), 1);
-    assert_eq!(stack.history_len(), 1);
-    assert_eq!(world.entities().len(), 1);
+    undo(&mut app);
+    assert_eq!(stack_lens(&app), (1, 1));
 
-    let entity = world.iter_entities().next().unwrap().id();
-    assert!(world.get::<EditableShape>(entity).is_some());
+    app.world_mut().write_message(SpawnBodyIntent {
+        record: box_record(Vec2::new(0.0, 50.0), 10.0, 10.0),
+    });
+    app.update();
+    assert_eq!(stack_lens(&app), (2, 0), "redo branch dropped");
+    assert_eq!(body_count(&mut app), 2);
 }
 
-#[rstest]
-fn test_spawn_fixed_joint_command(mut world: World) {
-    let entity_a = world.spawn(Transform::default()).id();
+#[test]
+fn delete_restores_full_state_on_undo() {
+    let mut app = headless_app();
+    let record = box_record(Vec2::new(-3.0, 7.0), 12.0, 8.0);
+    let id = record.id;
+    let expected_pose = record.pose;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
 
-    let mut cmd = SpawnFixedJointCommand {
-        entity_a: EntityId(entity_a),
-        entity_b: None,
-        anchor_a: Vec2::ZERO,
-        anchor_b: Vec2::ZERO,
-        compliance: 0.0,
-        visual_entity: None,
-        pin_entity: None,
-        original_solver_groups: None,
-        original_collision_groups: None,
-        rot_a: 0.0,
-        rot_b: 0.0,
+    app.world_mut()
+        .write_message(DeleteIntent { targets: vec![id] });
+    app.update();
+    assert_eq!(body_count(&mut app), 0);
+    assert_eq!(entity_of(&app, id), None);
+
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 1);
+    let entity = entity_of(&app, id).expect("same stable id restored");
+    let transform = app.world().get::<Transform>(entity).unwrap();
+    assert_eq!(transform.translation.truncate(), expected_pose.pos);
+}
+
+#[test]
+fn duplicate_clones_with_offset_and_reuses_ids_on_redo() {
+    let mut app = headless_app();
+    let record = box_record(Vec2::new(1.0, 2.0), 10.0, 10.0);
+    let source = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+
+    app.world_mut().write_message(DuplicateIntent {
+        sources: vec![source],
+        offset: Vec2::new(100.0, 0.0),
+    });
+    app.update();
+    assert_eq!(body_count(&mut app), 2);
+
+    // Find the clone: the body that isn't the source.
+    let clone_id = {
+        let mut ids = Vec::new();
+        let mut query = app.world_mut().query_filtered::<&StableId, With<Body>>();
+        for id in query.iter(app.world()) {
+            if *id != source {
+                ids.push(*id);
+            }
+        }
+        assert_eq!(ids.len(), 1);
+        ids[0]
     };
-
-    // Apply
-    assert!(cmd.apply(&mut world).is_ok());
-
-    assert!(world.get::<ImpulseJoint>(entity_a).is_some());
-
-    let children = world.get::<Children>(entity_a);
-    assert!(children.is_some());
-    let visual_id = *children
+    let clone_entity = entity_of(&app, clone_id).unwrap();
+    let clone_pos = app
+        .world()
+        .get::<Transform>(clone_entity)
         .unwrap()
-        .iter()
-        .find(|&&child| world.get::<Connector>(child).is_some())
-        .unwrap();
+        .translation
+        .truncate();
+    assert_eq!(clone_pos, Vec2::new(101.0, 2.0));
 
-    assert!(cmd.pin_entity.is_some());
-    let pin_id = cmd.pin_entity.unwrap().0;
-    assert!(world.get::<RigidBody>(pin_id).is_some());
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 1);
+    assert_eq!(entity_of(&app, clone_id), None);
 
-    // Undo
-    cmd.undo(&mut world);
-
-    assert!(world.get::<ImpulseJoint>(entity_a).is_none());
-    assert!(world.get_entity(pin_id).is_err());
-    assert!(world.get_entity(visual_id).is_err());
+    redo(&mut app);
+    assert_eq!(body_count(&mut app), 2);
+    assert!(
+        entity_of(&app, clone_id).is_some(),
+        "redo respawns the clone under the same stable id"
+    );
 }
 
-#[rstest]
-fn test_spawn_joint_command_two_bodies(mut world: World) {
-    let entity_a = world.spawn(Transform::default()).id();
-    let entity_b = world.spawn(Transform::default()).id();
+#[test]
+fn transform_commit_moves_and_undo_restores() {
+    let mut app = headless_app();
+    let record = box_record(Vec2::ZERO, 10.0, 10.0);
+    let id = record.id;
+    let old = record.pose;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
 
-    let mut cmd = SpawnJointCommand {
-        entity_a: EntityId(entity_a),
-        entity_b: Some(EntityId(entity_b)),
-        anchor_a: Vec2::ZERO,
-        anchor_b: Vec2::ZERO,
-        compliance: 0.0,
-        visual_entity: None,
-        pin_entity: None,
-        original_solver_groups: None,
-        original_collision_groups: None,
+    let new = PosRot {
+        pos: Vec2::new(30.0, -10.0),
+        rot: 1.0,
     };
+    app.world_mut().write_message(CommitTransformIntent {
+        changes: vec![TransformChange { id, old, new }],
+    });
+    app.update();
 
-    // Apply
-    assert!(cmd.apply(&mut world).is_ok());
+    let entity = entity_of(&app, id).unwrap();
+    let t = app.world().get::<Transform>(entity).unwrap();
+    assert_eq!(t.translation.truncate(), new.pos);
 
-    assert!(world.get::<ImpulseJoint>(entity_a).is_some());
-
-    let joint = world.get::<ImpulseJoint>(entity_a).unwrap();
-    assert_eq!(joint.parent, entity_b);
-
-    let children = world.get::<Children>(entity_a);
-    assert!(children.is_some());
-    let visual_id = *children
-        .unwrap()
-        .iter()
-        .find(|&&child| world.get::<Connector>(child).is_some())
-        .unwrap();
-
-    assert!(cmd.pin_entity.is_none());
-
-    // Undo
-    cmd.undo(&mut world);
-
-    assert!(world.get::<ImpulseJoint>(entity_a).is_none());
-    assert!(world.get_entity(visual_id).is_err());
+    undo(&mut app);
+    let t = app.world().get::<Transform>(entity).unwrap();
+    assert_eq!(t.translation.truncate(), old.pos);
+    assert!(t.rotation.angle_between(Quat::IDENTITY) < 1e-5);
 }
 
-#[rstest]
-fn test_spawn_ground_command(mut world: World) {
-    let mut cmd = SpawnGroundCommand {
-        position: Vec2::new(10.0, 10.0),
-        rotation: 0.0,
-        entity: None,
-    };
+#[test]
+fn id_index_tracks_spawn_and_despawn() {
+    let mut app = headless_app();
+    let record = box_record(Vec2::ZERO, 10.0, 10.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    assert_eq!(app.world().resource::<IdIndex>().len(), 1);
 
-    // Apply
-    assert!(cmd.apply(&mut world).is_ok());
-
-    assert!(cmd.entity.is_some());
-    let entity_id = cmd.entity.unwrap();
-    let entity = entity_id.0;
-
-    assert!(world.get::<RigidBody>(entity).is_some());
-    assert!(world.get::<Collider>(entity).is_some());
-    assert!(world.get::<GroundPlane>(entity).is_some());
-    assert!(world.get::<Transform>(entity).is_some());
-
-    // Undo
-    cmd.undo(&mut world);
-
-    assert!(world.get_entity(entity).is_err());
+    app.world_mut()
+        .write_message(DeleteIntent { targets: vec![id] });
+    app.update();
+    assert!(app.world().resource::<IdIndex>().is_empty());
 }

@@ -1,13 +1,14 @@
+//! Gradiance binary entry point.
+
 use bevy::prelude::*;
-use gradiance::GamePlugin;
-use mimalloc::MiMalloc;
+use gradiance::GradiancePlugins;
 
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(GamePlugin)
+        .add_plugins(GradiancePlugins)
         .run();
 }
