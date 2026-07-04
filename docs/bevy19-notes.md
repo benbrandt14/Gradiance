@@ -160,8 +160,10 @@ fn my_ui(mut contexts: EguiContexts) -> Result {                // fallible syst
 - Camera: `commands.spawn((Camera3d::default(), Transform::from_xyz(..).looking_at(..)))`;
   `Projection::Orthographic(OrthographicProjection { .. })` ⚠ verify ortho fields at M3.
 - `Camera::viewport_to_world_2d(&GlobalTransform, Vec2) -> Result<Vec2, ViewportConversionError>`.
-- Light: `DirectionalLight { color, illuminance, shadows_enabled: true, .. }` + Transform.
-  `AmbientLight` resource ⚠ verify fields.
+- Light: `DirectionalLight { color, illuminance, shadow_maps_enabled: true, .. }` + Transform
+  (`shadows_enabled` was RENAMED; there's also `contact_shadows_enabled`).
+  Ambient: `GlobalAmbientLight { color, brightness, .. }` **resource**; `AmbientLight` is now a
+  per-camera *component* (requires Camera).
 - Mesh: `Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())`,
   `.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec<[f32;3]>)`, `ATTRIBUTE_NORMAL`, `ATTRIBUTE_UV_0`,
   `.insert_indices(Indices::U32(v))`. Components: `Mesh3d(Handle<Mesh>)`,

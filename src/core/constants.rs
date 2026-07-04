@@ -22,3 +22,9 @@ pub const CLIPPER_SCALE: f64 = 100_000.0;
 
 /// Number of segments used when discretizing a circle into a polygon.
 pub const CIRCLE_SEGMENTS: usize = 48;
+
+/// Rendered width of the (physically infinite) ground half-plane slab.
+pub const GROUND_SLAB_WIDTH: f32 = 100_000.0;
+
+/// Rendered downward extent of the ground half-plane slab.
+pub const GROUND_SLAB_DEPTH: f32 = 2_000.0;
