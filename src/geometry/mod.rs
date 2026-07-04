@@ -7,4 +7,5 @@
 pub mod contours;
 pub mod extrusion;
 pub mod polygonize;
+pub mod snapping;
 pub mod tessellate;

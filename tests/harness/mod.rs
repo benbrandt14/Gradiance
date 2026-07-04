@@ -18,7 +18,12 @@ pub const FRAME: Duration = Duration::from_micros(16_667);
 /// and a deterministic, manually-advanced clock.
 pub fn headless_app() -> App {
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, StatesPlugin, TransformPlugin));
+    app.add_plugins((
+        MinimalPlugins,
+        StatesPlugin,
+        TransformPlugin,
+        bevy::input::InputPlugin,
+    ));
     app.add_plugins(GradiancePlugins);
     // Advance exactly one frame of virtual time per update, regardless of
     // wall-clock speed, so physics assertions are reproducible.
