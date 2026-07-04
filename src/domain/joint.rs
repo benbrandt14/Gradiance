@@ -1,26 +1,51 @@
-//! Authored joint definitions.
+//! Authored joint (constraint) definitions.
 //!
-//! A joint is its own authored entity carrying a [`JointDef`] (+ `StableId`).
-//! The physics seam resolves the referenced body ids and maintains a derived
-//! engine joint alongside it.
+//! A joint is its own authored entity: `StableId` + [`JointDef`] + the
+//! [`Joint`](crate::domain::Joint) marker. The physics seam
+//! (`physics::joint_sync`) derives the engine constraint from it; undo,
+//! duplicate, delete, and persistence all treat joints exactly like
+//! bodies (snapshot records), which is what keeps the combinatorics of
+//! tools × commands × primitives tractable.
+//!
+//! # Adding a new constraint kind (the extension path)
+//!
+//! 1. Add a [`JointKind`] variant carrying its authored parameters
+//!    (serde-compatible; reference bodies only by `StableId`).
+//! 2. Add a match arm in `physics::joint_sync::derived_joint_bundle`
+//!    mapping it onto the engine's native representation (avian joints
+//!    are entities with components — prefer native limits/motors over
+//!    hand-rolled controllers).
+//! 3. Optionally add a tool (one file under `interaction/tools/`, gated
+//!    on a new `ToolState`) and an inspector section (M7+). Existing
+//!    commands (spawn/delete/duplicate/array/undo) work unchanged.
+//!
+//! Planned variants that slot in this way: `Spring { rest_length,
+//! frequency, damping_ratio }` (avian `DistanceJoint`), `PlanarContact`,
+//! `Cam { profile }`, `Magnet { strength, falloff }` (force field, not a
+//! joint — pairs with a `physics/forces.rs` seam). Per-joint `breaking
+//! force` and backlash are authored-parameter additions to
+//! [`JointCommon`] with enforcement in the seam.
 
 use crate::core::ids::StableId;
 use bevy::math::Vec2;
 use bevy::prelude::Component;
 use serde::{Deserialize, Serialize};
 
-/// Motor settings for hinge and slider joints.
+/// Motor settings shared by hinge (angular) and slider (linear) joints.
+///
+/// Maps onto the engine's native velocity-controlled motor with an
+/// acceleration-based model (`stiffness = 0`, `damping` as configured).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct MotorDef {
     /// Target velocity (rad/s for hinges, px/s for sliders).
     pub target_velocity: f32,
     /// Maximum torque (hinge) or force (slider) the motor may exert.
     pub max_force: f32,
-    /// Velocity-tracking damping (acceleration-based motor model).
+    /// Velocity-tracking damping of the motor model.
     pub damping: f32,
-    /// When set, the motor reverses direction at the joint limits.
+    /// Reverse direction at the joint limits (requires limits).
     pub oscillate: bool,
-    /// Whether the motor is currently powered.
+    /// Whether the motor is powered.
     pub enabled: bool,
 }
 
@@ -36,43 +61,63 @@ impl Default for MotorDef {
     }
 }
 
+/// Parameters common to every joint kind.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct JointCommon {
+    /// Whether the two connected bodies still collide with each other
+    /// (off by default, the Algodoo convention).
+    pub collide_connected: bool,
+}
+
 /// The kind-specific parameters of a joint.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum JointKind {
-    /// Revolute joint: bodies rotate freely around the shared anchor.
+    /// Revolute: bodies rotate freely about the shared anchor.
     Hinge {
-        /// Optional `[min, max]` relative-angle limits in radians.
+        /// Optional `[min, max]` relative-angle limits (radians).
         limits: Option<[f32; 2]>,
         /// Optional angular motor.
         motor: Option<MotorDef>,
     },
-    /// Fixed joint: bodies are rigidly welded at the anchor.
+    /// Fixed: bodies are rigidly welded (rigid kinematic chains compose
+    /// from welds).
     Weld,
-    /// Prismatic joint: bodies slide along `axis` through the anchor.
+    /// Prismatic: bodies slide along `axis` through the anchor.
     Slider {
         /// Slide axis in body-A local space (unit length).
         axis: Vec2,
-        /// Optional `[min, max]` translation limits in pixels.
+        /// Optional `[min, max]` translation limits (pixels).
         limits: Option<[f32; 2]>,
         /// Optional linear motor.
         motor: Option<MotorDef>,
     },
 }
 
-/// The authored definition of a joint between two bodies.
+/// The authored definition of one constraint between two bodies (or one
+/// body and the world).
 ///
-/// References bodies by [`StableId`], never by `Entity`. `body_b == None`
-/// pins `body_a` to the world at the anchor.
+/// References bodies by [`StableId`], never `Entity`. `body_b == None`
+/// pins `body_a` to the world at `anchor_b` (a **world-space** point);
+/// otherwise `anchor_b` is body-B local.
 #[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JointDef {
     /// Kind-specific parameters.
     pub kind: JointKind,
+    /// Cross-kind parameters.
+    pub common: JointCommon,
     /// First connected body.
     pub body_a: StableId,
     /// Second connected body, or `None` to pin to the world.
     pub body_b: Option<StableId>,
     /// Anchor in body-A local space (pixels).
     pub anchor_a: Vec2,
-    /// Anchor in body-B local space, or world space for world pins.
+    /// Anchor in body-B local space — or world space for world pins.
     pub anchor_b: Vec2,
+}
+
+impl JointDef {
+    /// Ids of the bodies this joint references.
+    pub fn referenced_bodies(&self) -> impl Iterator<Item = StableId> {
+        std::iter::once(self.body_a).chain(self.body_b)
+    }
 }

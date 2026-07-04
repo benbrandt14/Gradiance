@@ -12,6 +12,8 @@
 pub mod body_sync;
 pub mod grab;
 pub mod hold;
+pub mod joint_sync;
+pub mod motor;
 pub mod queries;
 
 use crate::core::constants::{GRAVITY, PIXELS_PER_METER};
@@ -26,7 +28,17 @@ pub struct GradiancePhysicsPlugin;
 
 impl Plugin for GradiancePhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(PhysicsPlugins::default().with_length_unit(PIXELS_PER_METER));
+        // Islands (sleeping optimization) are disabled: avian 0.7's island
+        // bookkeeping panics when a contact pair is removed by inserting
+        // `JointCollisionDisabled` on already-touching bodies — a routine
+        // editor operation (welding touching boxes). Avian documents the
+        // plugin as safely omittable.
+        app.add_plugins(
+            PhysicsPlugins::default()
+                .with_length_unit(PIXELS_PER_METER)
+                .build()
+                .disable::<IslandPlugin>(),
+        );
         // The collider picking backend needs bevy's core picking plugin
         // (present under DefaultPlugins, absent in headless test apps).
         if app.is_plugin_added::<bevy::picking::PickingPlugin>() {
@@ -47,9 +59,13 @@ impl Plugin for GradiancePhysicsPlugin {
                 body_sync::sync_colliders,
                 body_sync::sync_rigid_bodies,
                 body_sync::sync_collision_layers,
+                joint_sync::guard_dangling_joints,
+                joint_sync::sync_joints,
             )
+                .chain()
                 .in_set(BodySyncSet),
         );
+        app.add_systems(Update, motor::drive_oscillating_motors);
     }
 }
 

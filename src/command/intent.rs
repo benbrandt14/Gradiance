@@ -76,6 +76,14 @@ pub struct ArrayIntent {
     pub mode: crate::command::array_cmd::ArrayMode,
 }
 
+/// Request to create one fully-specified joint.
+#[derive(Message, Debug, Clone)]
+pub struct SpawnJointIntent {
+    /// The complete authored joint (id minted by the tool, stable across
+    /// redo).
+    pub record: crate::command::snapshot::JointRecord,
+}
+
 /// Request to undo the last command.
 #[derive(Message, Debug, Clone, Copy, Default)]
 pub struct UndoIntent;

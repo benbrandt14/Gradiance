@@ -7,6 +7,7 @@
 pub mod array_cmd;
 pub mod dispatch;
 pub mod intent;
+pub mod joint_cmd;
 pub mod scale_cmd;
 pub mod snapshot;
 pub mod spawn;
@@ -138,6 +139,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::CommitTransformIntent>();
         app.add_message::<intent::ScaleIntent>();
         app.add_message::<intent::ArrayIntent>();
+        app.add_message::<intent::SpawnJointIntent>();
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
         app.add_systems(
