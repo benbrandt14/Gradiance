@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Architecture boundaries
+        run: |
+          # avian2d may only be referenced from the physics seam.
+          ! grep -rn 'avian2d' src --include='*.rs' | grep -v '^src/physics/'
+          # egui may only be referenced from the ui layer.
+          ! grep -rn -w 'egui' src --include='*.rs' | grep -v '^src/ui/'
+          # The command stack is only driven by the dispatcher.
+          ! grep -rn 'CommandStack' src --include='*.rs' | grep -v -e '^src/command/'
+
+      - name: Test
+        run: cargo test
