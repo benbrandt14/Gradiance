@@ -15,6 +15,7 @@ leafwing-input-manager = "=0.21.0"
 # Geometry
 lyon = "1.0"
 clipper2 = "0.6"
+glam = { version = "0.32", features = ["serde"] }
 
 # Identity + persistence
 uuid = { version = "1", features = ["v4", "serde"] }

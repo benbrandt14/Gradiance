@@ -1,0 +1,143 @@
+//! The command layer: every world mutation, undoable, through one choke point.
+//!
+//! Tools and UI emit *intents* ([`intent`]); the [`dispatch`] system drains
+//! them, builds [`GameCommand`]s, and applies them through the
+//! [`CommandStack`]. Nothing else may mutate authored components.
+
+pub mod dispatch;
+pub mod intent;
+pub mod snapshot;
+pub mod spawn;
+pub mod transform_cmd;
+
+use crate::core::ids::StableId;
+use crate::domain::shape::ShapeError;
+use bevy::prelude::*;
+
+/// Why a command could not be applied.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum CommandError {
+    /// The command's shape parameters were invalid.
+    #[error(transparent)]
+    Shape(#[from] ShapeError),
+    /// A referenced body no longer exists.
+    #[error("no live entity for stable id {0}")]
+    MissingEntity(StableId),
+    /// The command resolved to nothing to do (not recorded in history).
+    #[error("command had no effect")]
+    NoEffect,
+}
+
+/// An undoable world mutation.
+///
+/// `apply` must either fully succeed or leave the world untouched and
+/// return an error; failed commands are never recorded. `undo` reverses a
+/// previously successful `apply`. Commands reference bodies by
+/// [`StableId`] and resolve entities at execution time, so they stay valid
+/// across undo/redo cycles that respawn entities.
+pub trait GameCommand: Send + Sync + std::fmt::Debug {
+    /// Applies the mutation.
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError>;
+    /// Reverses a successful [`apply`](GameCommand::apply).
+    fn undo(&mut self, world: &mut World) -> Result<(), CommandError>;
+    /// Short human-readable name (for logs and UI).
+    fn name(&self) -> &'static str;
+}
+
+/// The application-wide undo/redo history.
+#[derive(Resource, Default)]
+pub struct CommandStack {
+    undo: Vec<Box<dyn GameCommand>>,
+    redo: Vec<Box<dyn GameCommand>>,
+}
+
+impl CommandStack {
+    /// Applies `command`; on success records it and clears the redo branch.
+    ///
+    /// On failure the command is dropped and the history is unchanged.
+    pub fn push_apply(
+        &mut self,
+        mut command: Box<dyn GameCommand>,
+        world: &mut World,
+    ) -> Result<(), CommandError> {
+        match command.apply(world) {
+            Ok(()) => {
+                debug!(name = command.name(), "command applied");
+                self.undo.push(command);
+                self.redo.clear();
+                Ok(())
+            }
+            Err(e) => {
+                warn!(name = command.name(), error = %e, "command failed");
+                Err(e)
+            }
+        }
+    }
+
+    /// Undoes the most recent command, if any.
+    pub fn undo(&mut self, world: &mut World) {
+        if let Some(mut command) = self.undo.pop() {
+            match command.undo(world) {
+                Ok(()) => {
+                    debug!(name = command.name(), "command undone");
+                    self.redo.push(command);
+                }
+                Err(e) => {
+                    // An un-undoable command is a bug; drop it rather than
+                    // corrupt the history with a half-reversed entry.
+                    error!(name = command.name(), error = %e, "undo failed; dropping entry");
+                }
+            }
+        }
+    }
+
+    /// Re-applies the most recently undone command, if any.
+    pub fn redo(&mut self, world: &mut World) {
+        if let Some(mut command) = self.redo.pop() {
+            match command.apply(world) {
+                Ok(()) => {
+                    debug!(name = command.name(), "command redone");
+                    self.undo.push(command);
+                }
+                Err(e) => {
+                    error!(name = command.name(), error = %e, "redo failed; dropping entry");
+                }
+            }
+        }
+    }
+
+    /// Number of commands available to undo.
+    pub fn undo_len(&self) -> usize {
+        self.undo.len()
+    }
+
+    /// Number of commands available to redo.
+    pub fn redo_len(&self) -> usize {
+        self.redo.len()
+    }
+}
+
+/// System set containing the intent dispatcher; producers of intents must
+/// schedule `.before(CommandDispatchSet)` (or rely on the default: the
+/// dispatcher runs late in `Update`).
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CommandDispatchSet;
+
+/// Registers the command stack, all intent messages, and the dispatcher.
+pub struct CommandPlugin;
+
+impl Plugin for CommandPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<CommandStack>();
+        app.add_message::<intent::SpawnBodyIntent>();
+        app.add_message::<intent::DeleteIntent>();
+        app.add_message::<intent::DuplicateIntent>();
+        app.add_message::<intent::CommitTransformIntent>();
+        app.add_message::<intent::UndoIntent>();
+        app.add_message::<intent::RedoIntent>();
+        app.add_systems(
+            Update,
+            dispatch::dispatch_intents.in_set(CommandDispatchSet),
+        );
+    }
+}
