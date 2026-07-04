@@ -3,16 +3,32 @@
 
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
+use bevy::time::TimeUpdateStrategy;
 use gradiance::prelude::*;
+use std::time::Duration;
 
-/// Builds a headless app with core/domain/command plugins installed.
+/// The fixed frame duration used by [`step`] (60 fps).
+pub const FRAME: Duration = Duration::from_micros(16_667);
+
+/// Builds a headless app with the full Gradiance stack (including physics)
+/// and a deterministic, manually-advanced clock.
 pub fn headless_app() -> App {
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, StatesPlugin));
+    app.add_plugins((MinimalPlugins, StatesPlugin, TransformPlugin));
     app.add_plugins(GradiancePlugins);
+    // Advance exactly one frame of virtual time per update, regardless of
+    // wall-clock speed, so physics assertions are reproducible.
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(FRAME));
     // Flush startup so states and resources are initialized.
     app.update();
     app
+}
+
+/// Advances the app by `frames` fixed 60 fps frames.
+pub fn step(app: &mut App, frames: usize) {
+    for _ in 0..frames {
+        app.update();
+    }
 }
 
 /// A fully-specified box body record at `pos`.
