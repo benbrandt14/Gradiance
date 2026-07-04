@@ -7,6 +7,7 @@
 
 pub mod extrude_sync;
 pub mod grid;
+pub mod joint_viz;
 pub mod material_sync;
 
 use bevy::light::GlobalAmbientLight;
@@ -36,7 +37,7 @@ impl Plugin for GradianceRenderPlugin {
                 material_sync::sync_body_materials,
             ),
         );
-        app.add_systems(Update, grid::draw_grid);
+        app.add_systems(Update, (grid::draw_grid, joint_viz::draw_joints));
     }
 }
 

@@ -13,6 +13,7 @@
 
 pub mod box_tool;
 pub mod circle_tool;
+pub mod connector_tool;
 pub mod drag_tool;
 pub mod ground_tool;
 pub mod handles;
@@ -40,6 +41,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<ActiveGesture>();
         app.init_resource::<select::SelectGesture>();
         app.init_resource::<handles::ScaleFrame>();
+        app.init_resource::<connector_tool::ConnectorDraft>();
         app.init_resource::<box_tool::BoxDraft>();
         app.init_resource::<circle_tool::CircleDraft>();
         app.init_resource::<ground_tool::GroundDraft>();
@@ -54,6 +56,7 @@ impl Plugin for ToolsPlugin {
                 circle_tool::run_circle_tool.run_if(in_state(ToolState::Circle)),
                 ground_tool::run_ground_tool.run_if(in_state(ToolState::Ground)),
                 polygon_tool::run_polygon_tool.run_if(in_state(ToolState::Polygon)),
+                connector_tool::run_connector_tool,
             )
                 .in_set(InteractionSet)
                 .before(crate::command::CommandDispatchSet),
@@ -69,34 +72,43 @@ impl Plugin for ToolsPlugin {
                     circle_tool::draw_circle_preview.run_if(in_state(ToolState::Circle)),
                     ground_tool::draw_ground_preview.run_if(in_state(ToolState::Ground)),
                     polygon_tool::draw_polygon_preview.run_if(in_state(ToolState::Polygon)),
+                    connector_tool::draw_connector_preview,
                 ),
             );
         }
     }
 }
 
-/// Hit-tests the topmost authored body at `p`.
+/// All authored bodies at `p`, topmost first.
 ///
-/// Front-most layer bit wins; ground half-planes always lose to shapes
+/// Front-most layer bit wins; ground half-planes always sort last
 /// (Algodoo behavior: you never accidentally grab the floor).
+pub fn bodies_at_sorted(
+    p: Vec2,
+    physics: &PhysicsQueries,
+    bodies: &Query<(&ShapeDef, &LayerMask32), With<Body>>,
+) -> Vec<Entity> {
+    let mut hits: Vec<(bool, u32, Entity)> = physics
+        .bodies_at_point(p)
+        .into_iter()
+        .filter_map(|entity| {
+            let (shape, layers) = bodies.get(entity).ok()?;
+            let is_ground = matches!(shape, ShapeDef::HalfPlane);
+            let front_bit = layers.occupied_range().map_or(32, |(min, _)| min);
+            Some((is_ground, front_bit, entity))
+        })
+        .collect();
+    hits.sort_by_key(|(ground, bit, entity)| (*ground, *bit, entity.index()));
+    hits.into_iter().map(|(_, _, e)| e).collect()
+}
+
+/// Hit-tests the topmost authored body at `p`.
 pub fn topmost_body_at(
     p: Vec2,
     physics: &PhysicsQueries,
     bodies: &Query<(&ShapeDef, &LayerMask32), With<Body>>,
 ) -> Option<Entity> {
-    let mut best: Option<(bool, u32, Entity)> = None;
-    for entity in physics.bodies_at_point(p) {
-        let Ok((shape, layers)) = bodies.get(entity) else {
-            continue;
-        };
-        let is_ground = matches!(shape, ShapeDef::HalfPlane);
-        let front_bit = layers.occupied_range().map_or(32, |(min, _)| min);
-        let key = (is_ground, front_bit, entity);
-        if best.is_none_or(|b| (key.0, key.1) < (b.0, b.1)) {
-            best = Some(key);
-        }
-    }
-    best.map(|(_, _, e)| e)
+    bodies_at_sorted(p, physics, bodies).first().copied()
 }
 
 /// Default appearance for newly authored bodies: hue follows the

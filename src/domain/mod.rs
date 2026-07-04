@@ -19,6 +19,10 @@ use bevy::prelude::*;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct Body;
 
+/// Marker component present on every authored joint.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct Joint;
+
 /// Registers domain-level requirements (currently nothing beyond types).
 #[derive(Default)]
 pub struct DomainPlugin;

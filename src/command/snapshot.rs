@@ -69,3 +69,41 @@ impl BodyRecord {
         entity.id()
     }
 }
+
+/// A complete authored-state snapshot of one joint.
+///
+/// The joint analogue of [`BodyRecord`]: shared by undo records,
+/// duplicate/array cloning, and scene files.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JointRecord {
+    /// Stable identity.
+    pub id: StableId,
+    /// The authored joint definition.
+    pub def: crate::domain::joint::JointDef,
+}
+
+impl JointRecord {
+    /// Captures the authored state of a joint entity.
+    pub fn capture(world: &World, entity: Entity) -> Option<Self> {
+        let entity_ref = world.get_entity(entity).ok()?;
+        Some(Self {
+            id: *entity_ref.get::<StableId>()?,
+            def: entity_ref.get::<crate::domain::joint::JointDef>()?.clone(),
+        })
+    }
+
+    /// Spawns a joint entity with exactly this authored state.
+    ///
+    /// The joint entity carries an identity `Transform` so derived pin
+    /// anchors can live as its children.
+    pub fn spawn(&self, world: &mut World) -> Entity {
+        world
+            .spawn((
+                crate::domain::Joint,
+                self.id,
+                self.def.clone(),
+                Transform::default(),
+            ))
+            .id()
+    }
+}

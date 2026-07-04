@@ -3,8 +3,9 @@
 use crate::command::array_cmd::ArrayCommand;
 use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, RedoIntent, ScaleIntent,
-    SpawnBodyIntent, UndoIntent,
+    SpawnBodyIntent, SpawnJointIntent, UndoIntent,
 };
+use crate::command::joint_cmd::SpawnJointCommand;
 use crate::command::scale_cmd::ScaleCommand;
 use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnBodyCommand};
 use crate::command::transform_cmd::MoveRotateCommand;
@@ -34,6 +35,11 @@ pub fn dispatch_intents(world: &mut World) {
     for intent in drain::<CommitTransformIntent>(world) {
         commands.push(Box::new(MoveRotateCommand {
             changes: intent.changes,
+        }));
+    }
+    for intent in drain::<SpawnJointIntent>(world) {
+        commands.push(Box::new(SpawnJointCommand {
+            record: intent.record,
         }));
     }
     for intent in drain::<ScaleIntent>(world) {
