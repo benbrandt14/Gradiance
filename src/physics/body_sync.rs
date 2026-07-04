@@ -33,6 +33,9 @@ fn collider_for(shape: &ShapeDef) -> Option<Collider> {
             }
             Some(Collider::convex_decomposition(vertices, indices))
         }
+        // Truly infinite: the surface passes through the body origin with
+        // local +Y outward; body rotation orients it.
+        ShapeDef::HalfPlane => Some(Collider::half_space(Vector::Y)),
     }
 }
 

@@ -33,6 +33,12 @@ pub enum ShapeDef {
         /// Interior holes, each clockwise.
         holes: Vec<Vec<Vec2>>,
     },
+    /// An infinite half-plane whose surface passes through the body origin.
+    ///
+    /// The solid side is local −Y (surface normal +Y); the body's rotation
+    /// orients it. Used by the ground tool; physically boundless, rendered
+    /// as a large slab.
+    HalfPlane,
 }
 
 /// Why a [`ShapeDef`] was rejected.
@@ -85,6 +91,7 @@ impl ShapeDef {
                 }
                 Ok(())
             }
+            Self::HalfPlane => Ok(()),
         }
     }
 }
