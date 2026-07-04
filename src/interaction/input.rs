@@ -27,6 +27,8 @@ pub enum EditorAction {
     SelectAll,
     /// Clear the selection (Escape).
     Deselect,
+    /// Toggle the scale-handle frame between global and local axes (F).
+    ToggleScaleFrame,
     /// Switch to the select tool (S).
     ToolSelect,
     /// Switch to the drag tool (D).
@@ -97,6 +99,7 @@ fn default_input_map() -> InputMap<EditorAction> {
     map.insert(A::TogglePause, KeyCode::Space);
     map.insert(A::SelectAll, ModifierKey::Control.with(KeyCode::KeyA));
     map.insert(A::Deselect, KeyCode::Escape);
+    map.insert(A::ToggleScaleFrame, KeyCode::KeyF);
     map.insert(A::ToolSelect, KeyCode::KeyS);
     map.insert(A::ToolDrag, KeyCode::KeyD);
     map.insert(A::ToolBox, KeyCode::KeyB);
@@ -136,6 +139,7 @@ pub fn apply_shortcuts(
     game_state: Res<State<GameState>>,
     mut next_game: ResMut<NextState<GameState>>,
     mut next_tool: ResMut<NextState<ToolState>>,
+    mut scale_frame: ResMut<crate::interaction::tools::handles::ScaleFrame>,
 ) {
     let Ok(actions) = actions.single() else {
         return;
@@ -170,6 +174,13 @@ pub fn apply_shortcuts(
     }
     if actions.just_pressed(&EditorAction::Deselect) {
         selection.clear();
+    }
+    if actions.just_pressed(&EditorAction::ToggleScaleFrame) {
+        use crate::interaction::tools::handles::ScaleFrame;
+        *scale_frame = match *scale_frame {
+            ScaleFrame::Global => ScaleFrame::Local,
+            ScaleFrame::Local => ScaleFrame::Global,
+        };
     }
     for tool_action in EditorAction::TOOLS {
         if actions.just_pressed(&tool_action)

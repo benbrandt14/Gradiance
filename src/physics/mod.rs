@@ -10,6 +10,8 @@
 //! ordinary `Static` body with a large box shape.
 
 pub mod body_sync;
+pub mod grab;
+pub mod hold;
 pub mod queries;
 
 use crate::core::constants::{GRAVITY, PIXELS_PER_METER};
@@ -31,8 +33,14 @@ impl Plugin for GradiancePhysicsPlugin {
             app.add_plugins(PhysicsPickingPlugin);
         }
         app.insert_resource(Gravity(GRAVITY));
+        app.init_resource::<hold::KinematicHold>();
+        app.init_resource::<grab::MouseSpring>();
         app.add_systems(OnEnter(GameState::Paused), pause_physics_clock);
         app.add_systems(OnExit(GameState::Paused), resume_physics_clock);
+        app.add_systems(
+            Update,
+            (hold::apply_kinematic_hold, grab::apply_mouse_spring),
+        );
         app.add_systems(
             PostUpdate,
             (

@@ -52,6 +52,30 @@ pub struct CommitTransformIntent {
     pub changes: Vec<TransformChange>,
 }
 
+/// Commit of a completed scale gesture (or a numeric scale edit).
+#[derive(Message, Debug, Clone)]
+pub struct ScaleIntent {
+    /// Bodies to scale.
+    pub targets: Vec<StableId>,
+    /// Fixed point, world space.
+    pub pivot: Vec2,
+    /// Frame rotation: 0 = global axes, body rotation = local axes.
+    pub frame_rot: f32,
+    /// Per-axis factors along the frame axes.
+    pub factors: Vec2,
+}
+
+/// Request to pattern-copy bodies (linear or radial array).
+#[derive(Message, Debug, Clone)]
+pub struct ArrayIntent {
+    /// Bodies to pattern.
+    pub sources: Vec<StableId>,
+    /// Number of copies.
+    pub count: u32,
+    /// Placement rule.
+    pub mode: crate::command::array_cmd::ArrayMode,
+}
+
 /// Request to undo the last command.
 #[derive(Message, Debug, Clone, Copy, Default)]
 pub struct UndoIntent;
