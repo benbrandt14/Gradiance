@@ -5,7 +5,7 @@ mod harness;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, headless_app, redo, undo};
+use harness::{body_count, box_record, entity_of, paused_app, redo, undo};
 
 fn stack_lens(app: &App) -> (usize, usize) {
     let stack = app.world().resource::<CommandStack>();
@@ -14,7 +14,7 @@ fn stack_lens(app: &App) -> (usize, usize) {
 
 #[test]
 fn spawn_intent_creates_a_complete_body() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     let record = box_record(Vec2::new(10.0, 20.0), 40.0, 30.0);
     let id = record.id;
 
@@ -35,7 +35,7 @@ fn spawn_intent_creates_a_complete_body() {
 
 #[test]
 fn invalid_shapes_are_refused_and_not_recorded() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     let mut record = box_record(Vec2::ZERO, 40.0, 30.0);
     record.shape = ShapeDef::Box {
         width: 0.0,
@@ -61,7 +61,7 @@ fn invalid_shapes_are_refused_and_not_recorded() {
 
 #[test]
 fn undo_redo_round_trips_a_spawn_preserving_the_id() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     let record = box_record(Vec2::new(5.0, 5.0), 10.0, 10.0);
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
@@ -80,7 +80,7 @@ fn undo_redo_round_trips_a_spawn_preserving_the_id() {
 
 #[test]
 fn a_new_command_truncates_the_redo_branch() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     app.world_mut().write_message(SpawnBodyIntent {
         record: box_record(Vec2::ZERO, 10.0, 10.0),
     });
@@ -104,7 +104,7 @@ fn a_new_command_truncates_the_redo_branch() {
 
 #[test]
 fn delete_restores_full_state_on_undo() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     let record = box_record(Vec2::new(-3.0, 7.0), 12.0, 8.0);
     let id = record.id;
     let expected_pose = record.pose;
@@ -126,7 +126,7 @@ fn delete_restores_full_state_on_undo() {
 
 #[test]
 fn duplicate_clones_with_offset_and_reuses_ids_on_redo() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     let record = box_record(Vec2::new(1.0, 2.0), 10.0, 10.0);
     let source = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
@@ -174,7 +174,7 @@ fn duplicate_clones_with_offset_and_reuses_ids_on_redo() {
 
 #[test]
 fn transform_commit_moves_and_undo_restores() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     let record = box_record(Vec2::ZERO, 10.0, 10.0);
     let id = record.id;
     let old = record.pose;
@@ -202,7 +202,7 @@ fn transform_commit_moves_and_undo_restores() {
 
 #[test]
 fn id_index_tracks_spawn_and_despawn() {
-    let mut app = headless_app();
+    let mut app = paused_app();
     let record = box_record(Vec2::ZERO, 10.0, 10.0);
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });

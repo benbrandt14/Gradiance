@@ -24,9 +24,7 @@ fn spawned_body_gains_engine_components() {
     let world = app.world();
     assert_eq!(world.get::<RigidBody>(entity), Some(&RigidBody::Dynamic));
     assert!(
-        world
-            .get::<avian2d::prelude::Collider>(entity)
-            .is_some(),
+        world.get::<avian2d::prelude::Collider>(entity).is_some(),
         "collider derived from ShapeDef"
     );
     assert_eq!(
@@ -107,8 +105,10 @@ fn falling_box_scene(app: &mut App) -> (StableId, StableId) {
     let mut floor = box_record(Vec2::new(0.0, -100.0), 1000.0, 20.0);
     floor.props.body = BodyKind::Static;
     let floor_id = floor.id;
-    app.world_mut().write_message(SpawnBodyIntent { record: falling });
-    app.world_mut().write_message(SpawnBodyIntent { record: floor });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: falling });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: floor });
     step(app, 2);
     (falling_id, floor_id)
 }
@@ -121,15 +121,13 @@ fn dynamic_bodies_fall_and_rest_on_static_ground() {
     step(&mut app, 240); // 4 simulated seconds
 
     let entity = entity_of(&app, falling_id).unwrap();
-    let y = app
-        .world()
-        .get::<Transform>(entity)
-        .unwrap()
-        .translation
-        .y;
+    let y = app.world().get::<Transform>(entity).unwrap().translation.y;
     // Floor top is at -90, box half-height is 10 → rest around y = -80.
     assert!(y < 100.0, "box fell (y = {y})");
-    assert!((-95.0..=-60.0).contains(&y), "box rests on the floor (y = {y})");
+    assert!(
+        (-95.0..=-60.0).contains(&y),
+        "box rests on the floor (y = {y})"
+    );
 }
 
 #[test]

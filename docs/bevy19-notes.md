@@ -186,6 +186,15 @@ fn my_ui(mut contexts: EguiContexts) -> Result {                // fallible syst
 Unchanged from prior experience: `lyon::path::Path` builder, `FillTessellator::tessellate_path`
 (or `tessellate` with iterator), `VertexBuffers` + `BuffersBuilder`, `FillOptions::tolerance(..)`.
 
+## Headless test apps
+
+- Call `app.finish(); app.cleanup();` after adding plugins and before the first
+  `app.update()` — plugin `finish()` hooks (where avian registers diagnostics
+  resources) otherwise never run and systems fail parameter validation.
+- Insert `TimeUpdateStrategy::ManualDuration(frame)` for deterministic stepping.
+- `PhysicsPickingPlugin` requires bevy's core `PickingPlugin` (absent headless);
+  gate it with `app.is_plugin_added::<bevy::picking::PickingPlugin>()`.
+
 ## Gotchas checklist
 
 - `StateScoped` → `DespawnOnExit`. `add_event` → `add_message`. `EventReader.send` → `MessageWriter.write`.
