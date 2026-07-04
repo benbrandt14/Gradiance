@@ -16,6 +16,7 @@
 pub mod command;
 pub mod core;
 pub mod domain;
+pub mod physics;
 pub mod prelude;
 
 use bevy::app::plugin_group;
@@ -26,5 +27,6 @@ plugin_group! {
         crate::core:::CorePlugin,
         crate::domain:::DomainPlugin,
         crate::command:::CommandPlugin,
+        crate::physics:::GradiancePhysicsPlugin,
     }
 }
