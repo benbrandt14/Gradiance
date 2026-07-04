@@ -19,6 +19,10 @@ pub fn headless_app() -> App {
     // Advance exactly one frame of virtual time per update, regardless of
     // wall-clock speed, so physics assertions are reproducible.
     app.insert_resource(TimeUpdateStrategy::ManualDuration(FRAME));
+    // Without a runner, plugin `finish`/`cleanup` never run — avian
+    // registers diagnostics resources there, so run them explicitly.
+    app.finish();
+    app.cleanup();
     // Flush startup so states and resources are initialized.
     app.update();
     app
@@ -29,6 +33,17 @@ pub fn step(app: &mut App, frames: usize) {
     for _ in 0..frames {
         app.update();
     }
+}
+
+/// A headless app with the simulation paused — for tests that assert
+/// exact authored state without physics drift.
+pub fn paused_app() -> App {
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<NextState<GameState>>()
+        .set(GameState::Paused);
+    app.update();
+    app
 }
 
 /// A fully-specified box body record at `pos`.

@@ -25,7 +25,11 @@ pub struct GradiancePhysicsPlugin;
 impl Plugin for GradiancePhysicsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(PhysicsPlugins::default().with_length_unit(PIXELS_PER_METER));
-        app.add_plugins(PhysicsPickingPlugin);
+        // The collider picking backend needs bevy's core picking plugin
+        // (present under DefaultPlugins, absent in headless test apps).
+        if app.is_plugin_added::<bevy::picking::PickingPlugin>() {
+            app.add_plugins(PhysicsPickingPlugin);
+        }
         app.insert_resource(Gravity(GRAVITY));
         app.add_systems(OnEnter(GameState::Paused), pause_physics_clock);
         app.add_systems(OnExit(GameState::Paused), resume_physics_clock);

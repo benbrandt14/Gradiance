@@ -1,9 +1,9 @@
 //! Authored components → engine components, `Changed<>`-driven and idempotent.
 
+use crate::domain::Body;
 use crate::domain::layers::LayerMask32;
 use crate::domain::props::{BodyKind, PhysicalProps};
 use crate::domain::shape::ShapeDef;
-use crate::domain::Body;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -92,8 +92,9 @@ pub fn sync_collision_layers(
     changed: Query<(Entity, &LayerMask32), (With<Body>, Changed<LayerMask32>)>,
 ) {
     for (entity, layers) in &changed {
-        commands
-            .entity(entity)
-            .insert(CollisionLayers::from_bits(layers.memberships, layers.filters));
+        commands.entity(entity).insert(CollisionLayers::from_bits(
+            layers.memberships,
+            layers.filters,
+        ));
     }
 }
