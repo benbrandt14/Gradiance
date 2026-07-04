@@ -3,6 +3,7 @@
 mod harness;
 
 use bevy::prelude::*;
+use gradiance::command::CommandStack;
 use gradiance::prelude::*;
 use harness::{body_count, box_record, entity_of, headless_app, redo, undo};
 
@@ -110,7 +111,8 @@ fn delete_restores_full_state_on_undo() {
     app.world_mut().write_message(SpawnBodyIntent { record });
     app.update();
 
-    app.world_mut().write_message(DeleteIntent { targets: vec![id] });
+    app.world_mut()
+        .write_message(DeleteIntent { targets: vec![id] });
     app.update();
     assert_eq!(body_count(&mut app), 0);
     assert_eq!(entity_of(&app, id), None);
@@ -207,7 +209,8 @@ fn id_index_tracks_spawn_and_despawn() {
     app.update();
     assert_eq!(app.world().resource::<IdIndex>().len(), 1);
 
-    app.world_mut().write_message(DeleteIntent { targets: vec![id] });
+    app.world_mut()
+        .write_message(DeleteIntent { targets: vec![id] });
     app.update();
     assert!(app.world().resource::<IdIndex>().is_empty());
 }

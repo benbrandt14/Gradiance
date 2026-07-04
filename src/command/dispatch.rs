@@ -34,7 +34,10 @@ pub fn dispatch_intents(world: &mut World) {
         }));
     }
     for intent in drain::<DuplicateIntent>(world) {
-        commands.push(Box::new(DuplicateCommand::new(intent.sources, intent.offset)));
+        commands.push(Box::new(DuplicateCommand::new(
+            intent.sources,
+            intent.offset,
+        )));
     }
     for intent in drain::<DeleteIntent>(world) {
         commands.push(Box::new(DeleteCommand::new(intent.targets)));

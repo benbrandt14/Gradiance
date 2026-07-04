@@ -2,12 +2,12 @@
 
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
+use crate::domain::Body;
 use crate::domain::appearance::Appearance;
 use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
 use crate::domain::props::PhysicalProps;
 use crate::domain::shape::ShapeDef;
-use crate::domain::Body;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 

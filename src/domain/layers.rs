@@ -33,7 +33,7 @@ impl LayerMask32 {
             return None;
         }
         let min = self.memberships.trailing_zeros();
-        let max = 31 - self.memberships.leading_zeros();
+        let max = self.memberships.ilog2();
         Some((min, max))
     }
 }

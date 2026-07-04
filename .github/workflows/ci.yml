@@ -32,13 +32,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Architecture boundaries
-        run: |
-          # avian2d may only be referenced from the physics seam.
-          ! grep -rn 'avian2d' src --include='*.rs' | grep -v '^src/physics/'
-          # egui may only be referenced from the ui layer.
-          ! grep -rn -w 'egui' src --include='*.rs' | grep -v '^src/ui/'
-          # The command stack is only driven by the dispatcher.
-          ! grep -rn 'CommandStack' src --include='*.rs' | grep -v -e '^src/command/'
+        run: cargo test --test boundaries
 
       - name: Test
         run: cargo test

@@ -4,12 +4,17 @@
 //! boundary. They are the local mirror of the CI "Architecture boundaries"
 //! step and the mechanical enforcement of the invariants in `CLAUDE.md`.
 
+// Test-only file: panics are the failure mechanism (clippy's
+// allow-*-in-tests config does not extend to integration-test helpers).
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+
 use std::path::{Path, PathBuf};
 
 /// Recursively collect all `.rs` files under `dir`.
 fn rust_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    let entries = std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {dir:?}: {e}"));
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()));
     for entry in entries {
         let path = entry.expect("dir entry").path();
         if path.is_dir() {
@@ -38,7 +43,14 @@ fn violations(needle: &str, allowed: &[&str]) -> Vec<String> {
         }
         let text = std::fs::read_to_string(&file).expect("readable source file");
         for (i, line) in text.lines().enumerate() {
-            if line.contains(needle) {
+            let trimmed = line.trim_start();
+            // Comments may mention foreign crates; only code counts.
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            // Strip a trailing line comment before matching.
+            let code = trimmed.split("//").next().unwrap_or(trimmed);
+            if code.contains(needle) {
                 found.push(format!("{rel}:{}: {}", i + 1, line.trim()));
             }
         }
