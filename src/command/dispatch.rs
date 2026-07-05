@@ -1,11 +1,14 @@
 //! The single choke point turning intents into applied commands.
 
 use crate::command::array_cmd::ArrayCommand;
+use crate::command::group_cmd::{GroupCommand, UngroupCommand};
 use crate::command::intent::{
-    ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, RedoIntent, ScaleIntent,
-    SpawnBodyIntent, SpawnJointIntent, UndoIntent,
+    ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, GroupIntent,
+    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent, UndoIntent,
+    UngroupIntent,
 };
 use crate::command::joint_cmd::SpawnJointCommand;
+use crate::command::property::SetPropertyCommand;
 use crate::command::scale_cmd::ScaleCommand;
 use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnBodyCommand};
 use crate::command::transform_cmd::MoveRotateCommand;
@@ -41,6 +44,17 @@ pub fn dispatch_intents(world: &mut World) {
         commands.push(Box::new(SpawnJointCommand {
             record: intent.record,
         }));
+    }
+    for intent in drain::<PropertyEditIntent>(world) {
+        commands.push(Box::new(SetPropertyCommand {
+            changes: intent.changes,
+        }));
+    }
+    for intent in drain::<GroupIntent>(world) {
+        commands.push(Box::new(GroupCommand::new(intent.targets)));
+    }
+    for intent in drain::<UngroupIntent>(world) {
+        commands.push(Box::new(UngroupCommand::new(intent.targets)));
     }
     for intent in drain::<ScaleIntent>(world) {
         commands.push(Box::new(ScaleCommand::new(

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Extensible: adding a variant means implementing its snap math in
 /// `geometry::snapping` and its drawing in `render::grid`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub enum GridSystem {
     /// Standard square grid.
     Cartesian,
@@ -29,7 +29,7 @@ pub enum GridSystem {
 ///
 /// The grid has its own origin and rotation — a movable "user coordinate
 /// system" in CAD terms — so sketching against a tilted structure works.
-#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct GridSettings {
     /// Draw the grid.
     pub visible: bool,
@@ -59,7 +59,7 @@ impl Default for GridSettings {
 }
 
 /// Which object features act as snap sources (CAD "object snaps").
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct SnapSources {
     /// Shape outline vertices.
     pub vertices: bool,
@@ -86,7 +86,7 @@ impl Default for SnapSources {
 ///
 /// Object snaps always take priority over the grid (CAD convention);
 /// among object snaps, the nearest candidate wins.
-#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct SnapConfig {
     /// Master toggle for object snapping.
     pub objects_enabled: bool,
@@ -106,6 +106,27 @@ impl Default for SnapConfig {
             max_screen_distance: 12.0,
             sources: SnapSources::default(),
             rotation_step_deg: 15.0,
+        }
+    }
+}
+
+/// Simulation tuning (the Algodoo-style "Simulation" settings tab).
+///
+/// Authored/persisted like the grid; the physics seam applies changes to
+/// the engine (`Gravity`, physics clock speed) — UI never touches avian.
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct SimSettings {
+    /// World gravity, px/s².
+    pub gravity: Vec2,
+    /// Simulation speed multiplier (1 = realtime).
+    pub speed: f32,
+}
+
+impl Default for SimSettings {
+    fn default() -> Self {
+        Self {
+            gravity: Vec2::new(0.0, -1000.0),
+            speed: 1.0,
         }
     }
 }

@@ -15,6 +15,7 @@ use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
 use crate::domain::settings::SnapConfig;
 use crate::domain::shape::ShapeDef;
+use crate::geometry::contours::point_in_ring;
 use crate::geometry::polygonize::polygonize;
 use crate::geometry::scale::scale_point;
 use crate::interaction::PointerOverUi;
@@ -61,6 +62,14 @@ pub enum SelectGesture {
     BoxSelect {
         /// Press position.
         start: Vec2,
+        /// Keep the existing selection (shift held at press).
+        additive: bool,
+    },
+    /// Freeform loop selection (Alt-drag on empty canvas): bodies whose
+    /// center falls inside the drawn loop are selected.
+    Lasso {
+        /// Loop points so far, world space.
+        points: Vec<Vec2>,
         /// Keep the existing selection (shift held at press).
         additive: bool,
     },
@@ -136,6 +145,7 @@ pub fn run_select_tool(
         Query<(&ShapeDef, &LayerMask32), With<Body>>,
         Query<(&ShapeDef, &Transform), With<Body>>,
         Query<&mut Transform, With<Body>>,
+        Query<(Entity, &Transform), With<Body>>,
     )>,
     ids: Query<&StableId>,
     groups: Query<(Entity, &SelectionGroup), With<Body>>,
@@ -272,10 +282,18 @@ pub fn run_select_tool(
                 return;
             }
 
-            // 3. Empty canvas → rubber band.
-            **gesture = SelectGesture::BoxSelect {
-                start: p,
-                additive: shift,
+            // 3. Empty canvas → rubber band (Alt = freeform loop).
+            let alt = keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight);
+            **gesture = if alt {
+                SelectGesture::Lasso {
+                    points: vec![p],
+                    additive: shift,
+                }
+            } else {
+                SelectGesture::BoxSelect {
+                    start: p,
+                    additive: shift,
+                }
             };
             active.0 = true;
         }
@@ -378,6 +396,13 @@ pub fn run_select_tool(
                 *factors = f;
             }
         }
+        SelectGesture::Lasso { points, .. } => {
+            if let Some(p) = snapped.raw
+                && points.last().is_none_or(|last| last.distance(p) > 4.0)
+            {
+                points.push(p);
+            }
+        }
         SelectGesture::Idle | SelectGesture::BoxSelect { .. } | SelectGesture::DupDrag { .. } => {}
     }
 
@@ -446,6 +471,27 @@ pub fn run_select_tool(
                 }
             }
         }
+        SelectGesture::Lasso { points, additive } if left_up => {
+            active.0 = false;
+            if points.len() >= 3 {
+                if !additive {
+                    selection.clear();
+                }
+                // CONTRACT: a body is loop-selected iff its center lies
+                // inside the drawn ring (matching Algodoo); group members
+                // come along with any selected member.
+                let mut hits: Vec<Entity> = transforms
+                    .p3()
+                    .iter()
+                    .filter(|(_, t)| point_in_ring(t.translation.truncate(), &points))
+                    .map(|(e, _)| e)
+                    .collect();
+                expand_groups(&mut hits, &groups);
+                for e in hits {
+                    selection.add(e);
+                }
+            }
+        }
         SelectGesture::DupDrag { start, sources, .. } if left_up => {
             active.0 = false;
             if let Some(p) = cursor {
@@ -498,6 +544,15 @@ pub fn draw_select_previews(
                     size,
                     css::LIGHT_SKY_BLUE.with_alpha(0.8),
                 );
+            }
+        }
+        SelectGesture::Lasso { points, .. } => {
+            if points.len() >= 2 {
+                let mut pts = points.clone();
+                if let Some(first) = pts.first().copied() {
+                    pts.push(first);
+                }
+                gizmos.linestrip_2d(pts, css::LIGHT_SKY_BLUE.with_alpha(0.8));
             }
         }
         SelectGesture::DupDrag { start, ghosts, .. } => {

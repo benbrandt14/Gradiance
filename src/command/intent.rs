@@ -84,6 +84,27 @@ pub struct SpawnJointIntent {
     pub record: crate::command::snapshot::JointRecord,
 }
 
+/// Batched property edit (one gesture across N targets = one undo step).
+#[derive(Message, Debug, Clone)]
+pub struct PropertyEditIntent {
+    /// Old → new value per target.
+    pub changes: Vec<crate::command::property::PropertyChange>,
+}
+
+/// Request to group bodies together.
+#[derive(Message, Debug, Clone)]
+pub struct GroupIntent {
+    /// Bodies to group.
+    pub targets: Vec<StableId>,
+}
+
+/// Request to remove bodies from their groups.
+#[derive(Message, Debug, Clone)]
+pub struct UngroupIntent {
+    /// Bodies to ungroup.
+    pub targets: Vec<StableId>,
+}
+
 /// Request to undo the last command.
 #[derive(Message, Debug, Clone, Copy, Default)]
 pub struct UndoIntent;
