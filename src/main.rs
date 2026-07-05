@@ -7,8 +7,13 @@ use gradiance::GradiancePlugins;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(GradiancePlugins)
-        .run();
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins)
+        .add_plugins(GradiancePlugins);
+    // Repro workflow: `gradiance <scene.ron>` opens a scene (e.g. a debug
+    // snapshot) directly.
+    if let Some(path) = std::env::args().nth(1) {
+        app.insert_resource(gradiance::persist::StartupScene(path.into()));
+    }
+    app.run();
 }

@@ -105,6 +105,13 @@ pub struct UngroupIntent {
     pub targets: Vec<StableId>,
 }
 
+/// Request to replace the whole world with a scene (undoable).
+#[derive(Message, Debug, Clone)]
+pub struct LoadSceneIntent {
+    /// The parsed scene to load.
+    pub scene: crate::command::snapshot::SceneRecord,
+}
+
 /// Request to undo the last command.
 #[derive(Message, Debug, Clone, Copy, Default)]
 pub struct UndoIntent;

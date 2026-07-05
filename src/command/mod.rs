@@ -11,6 +11,7 @@ pub mod intent;
 pub mod joint_cmd;
 pub mod property;
 pub mod scale_cmd;
+pub mod scene_cmd;
 pub mod snapshot;
 pub mod spawn;
 pub mod transform_cmd;
@@ -145,6 +146,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::PropertyEditIntent>();
         app.add_message::<intent::GroupIntent>();
         app.add_message::<intent::UngroupIntent>();
+        app.add_message::<intent::LoadSceneIntent>();
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
         app.add_systems(
