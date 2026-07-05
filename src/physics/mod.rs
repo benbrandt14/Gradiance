@@ -45,6 +45,11 @@ impl Plugin for GradiancePhysicsPlugin {
             app.add_plugins(PhysicsPickingPlugin);
         }
         app.insert_resource(Gravity(GRAVITY));
+        app.init_resource::<crate::domain::settings::SimSettings>();
+        app.add_systems(
+            Update,
+            apply_sim_settings.run_if(resource_changed::<crate::domain::settings::SimSettings>),
+        );
         app.init_resource::<hold::KinematicHold>();
         app.init_resource::<grab::MouseSpring>();
         app.add_systems(OnEnter(GameState::Paused), pause_physics_clock);
@@ -73,6 +78,16 @@ impl Plugin for GradiancePhysicsPlugin {
 /// `PostUpdate`, after commands mutated authored components in `Update`).
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BodySyncSet;
+
+/// Applies authored simulation settings to the engine.
+fn apply_sim_settings(
+    settings: Res<crate::domain::settings::SimSettings>,
+    mut gravity: ResMut<Gravity>,
+    mut time: ResMut<Time<Physics>>,
+) {
+    gravity.0 = settings.gravity;
+    time.set_relative_speed(settings.speed.clamp(0.0, 10.0));
+}
 
 fn pause_physics_clock(mut time: ResMut<Time<Physics>>) {
     time.pause();

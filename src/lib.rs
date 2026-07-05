@@ -21,6 +21,7 @@ pub mod interaction;
 pub mod physics;
 pub mod prelude;
 pub mod render;
+pub mod ui;
 
 use bevy::app::plugin_group;
 
@@ -33,5 +34,6 @@ plugin_group! {
         crate::physics:::GradiancePhysicsPlugin,
         crate::interaction:::InteractionPlugin,
         crate::render:::GradianceRenderPlugin,
+        crate::ui:::GradianceUiPlugin,
     }
 }

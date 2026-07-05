@@ -15,7 +15,10 @@ Algodoo-inspired 2.5D physics sandbox. Bevy 0.19 + Avian2d 0.7 + bevy_egui 0.41 
    engine-agnostic domain components and the `physics::queries` facade. This preserves
    the option to swap physics engines.
 4. **`egui`/`bevy_egui` is imported only inside `src/ui/`.** UI reads component copies
-   and emits intents; it never mutates the `World` directly.
+   and emits intents; it never mutates authored components directly. Sole exception:
+   editor **settings resources** (`GridSettings`, `SnapConfig`, `SimSettings`) are
+   non-authored configuration and may be written by UI; seams consume them via change
+   detection (physics applies `SimSettings` — UI still never touches avian).
 5. **Authored vs derived:** components in `src/domain/` (+ `StableId`) are the save file.
    Derived components (colliders, meshes, materials, avian joints) are rebuilt by
    `Changed<>`-driven sync systems and are never serialized, never captured in undo

@@ -57,6 +57,27 @@ impl Contours {
     }
 }
 
+/// Even-odd point-in-polygon test against one ring.
+pub fn point_in_ring(p: Vec2, ring: &[Vec2]) -> bool {
+    let mut inside = false;
+    let n = ring.len();
+    if n < 3 {
+        return false;
+    }
+    let mut j = n - 1;
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[j]);
+        if (a.y > p.y) != (b.y > p.y) {
+            let x = a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x);
+            if p.x < x {
+                inside = !inside;
+            }
+        }
+        j = i;
+    }
+    inside
+}
+
 /// Signed area of one ring (positive for counter-clockwise winding).
 pub fn ring_signed_area(ring: &[Vec2]) -> f32 {
     if ring.len() < 3 {
