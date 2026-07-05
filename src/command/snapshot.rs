@@ -107,3 +107,101 @@ impl JointRecord {
             .id()
     }
 }
+
+/// Persisted editor environment (settings that travel with the scene).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EnvironmentRecord {
+    /// Simulation tuning.
+    pub sim: crate::domain::settings::SimSettings,
+    /// Grid configuration.
+    pub grid: crate::domain::settings::GridSettings,
+    /// Snap configuration.
+    pub snap: crate::domain::settings::SnapConfig,
+}
+
+/// A complete scene: the save file, and the unit of whole-world undo.
+///
+/// Bodies and joints are sorted by [`StableId`] so capture is
+/// deterministic — saving the same world twice yields identical bytes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SceneRecord {
+    /// Format version (see `persist::FORMAT_VERSION`).
+    pub version: u32,
+    /// `CARGO_PKG_VERSION` of the app that wrote the file (repro aid).
+    pub app_version: String,
+    /// All authored bodies.
+    pub bodies: Vec<BodyRecord>,
+    /// All authored joints.
+    pub joints: Vec<JointRecord>,
+    /// Scene-level settings.
+    pub environment: EnvironmentRecord,
+}
+
+impl SceneRecord {
+    /// Captures the entire authored world, deterministically ordered.
+    pub fn capture(world: &mut World) -> Self {
+        let mut bodies: Vec<BodyRecord> = {
+            let mut query = world.query_filtered::<Entity, With<Body>>();
+            let entities: Vec<Entity> = query.iter(world).collect();
+            entities
+                .into_iter()
+                .filter_map(|e| BodyRecord::capture(world, e))
+                .collect()
+        };
+        bodies.sort_by_key(|r| r.id.0);
+        let mut joints: Vec<JointRecord> = {
+            let mut query = world.query_filtered::<Entity, With<crate::domain::Joint>>();
+            let entities: Vec<Entity> = query.iter(world).collect();
+            entities
+                .into_iter()
+                .filter_map(|e| JointRecord::capture(world, e))
+                .collect()
+        };
+        joints.sort_by_key(|r| r.id.0);
+        Self {
+            version: 1,
+            app_version: env!("CARGO_PKG_VERSION").to_owned(),
+            bodies,
+            joints,
+            environment: EnvironmentRecord {
+                sim: world
+                    .get_resource::<crate::domain::settings::SimSettings>()
+                    .cloned()
+                    .unwrap_or_default(),
+                grid: world
+                    .get_resource::<crate::domain::settings::GridSettings>()
+                    .cloned()
+                    .unwrap_or_default(),
+                snap: world
+                    .get_resource::<crate::domain::settings::SnapConfig>()
+                    .cloned()
+                    .unwrap_or_default(),
+            },
+        }
+    }
+
+    /// Despawns every authored entity, then spawns this scene and applies
+    /// its environment. Derived state (colliders, meshes, engine joints)
+    /// rebuilds through the ordinary sync systems — loading has no
+    /// special cases.
+    pub fn apply(&self, world: &mut World) {
+        let existing: Vec<Entity> = {
+            let mut query = world.query_filtered::<Entity, With<StableId>>();
+            query.iter(world).collect()
+        };
+        for entity in existing {
+            if world.get_entity(entity).is_ok() {
+                world.despawn(entity);
+            }
+        }
+        for record in &self.bodies {
+            record.spawn(world);
+        }
+        for record in &self.joints {
+            record.spawn(world);
+        }
+        world.insert_resource(self.environment.sim.clone());
+        world.insert_resource(self.environment.grid.clone());
+        world.insert_resource(self.environment.snap.clone());
+    }
+}

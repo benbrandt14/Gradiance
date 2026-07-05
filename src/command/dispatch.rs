@@ -2,6 +2,7 @@
 
 use crate::command::array_cmd::ArrayCommand;
 use crate::command::group_cmd::{GroupCommand, UngroupCommand};
+use crate::command::intent::LoadSceneIntent;
 use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, GroupIntent,
     PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent, UndoIntent,
@@ -10,6 +11,7 @@ use crate::command::intent::{
 use crate::command::joint_cmd::SpawnJointCommand;
 use crate::command::property::SetPropertyCommand;
 use crate::command::scale_cmd::ScaleCommand;
+use crate::command::scene_cmd::LoadSceneCommand;
 use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnBodyCommand};
 use crate::command::transform_cmd::MoveRotateCommand;
 use crate::command::{CommandStack, GameCommand};
@@ -44,6 +46,9 @@ pub fn dispatch_intents(world: &mut World) {
         commands.push(Box::new(SpawnJointCommand {
             record: intent.record,
         }));
+    }
+    for intent in drain::<LoadSceneIntent>(world) {
+        commands.push(Box::new(LoadSceneCommand::new(intent.scene)));
     }
     for intent in drain::<PropertyEditIntent>(world) {
         commands.push(Box::new(SetPropertyCommand {

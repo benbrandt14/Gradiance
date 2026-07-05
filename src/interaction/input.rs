@@ -29,6 +29,14 @@ pub enum EditorAction {
     Deselect,
     /// Toggle the scale-handle frame between global and local axes (F).
     ToggleScaleFrame,
+    /// Save the scene (Ctrl+S; remembered path or dialog).
+    Save,
+    /// Save the scene to a new file (Ctrl+Shift+S).
+    SaveAs,
+    /// Open a scene (Ctrl+O).
+    Open,
+    /// Dump a timestamped debug snapshot (F12).
+    Snapshot,
     /// Switch to the select tool (S).
     ToolSelect,
     /// Switch to the drag tool (D).
@@ -100,6 +108,15 @@ fn default_input_map() -> InputMap<EditorAction> {
     map.insert(A::SelectAll, ModifierKey::Control.with(KeyCode::KeyA));
     map.insert(A::Deselect, KeyCode::Escape);
     map.insert(A::ToggleScaleFrame, KeyCode::KeyF);
+    map.insert(A::Save, ModifierKey::Control.with(KeyCode::KeyS));
+    map.insert(
+        A::SaveAs,
+        ButtonlikeChord::from_single(ModifierKey::Control)
+            .with(ModifierKey::Shift)
+            .with(KeyCode::KeyS),
+    );
+    map.insert(A::Open, ModifierKey::Control.with(KeyCode::KeyO));
+    map.insert(A::Snapshot, KeyCode::F12);
     map.insert(A::ToolSelect, KeyCode::KeyS);
     map.insert(A::ToolDrag, KeyCode::KeyD);
     map.insert(A::ToolBox, KeyCode::KeyB);
@@ -140,6 +157,10 @@ pub fn apply_shortcuts(
     mut next_game: ResMut<NextState<GameState>>,
     mut next_tool: ResMut<NextState<ToolState>>,
     mut scale_frame: ResMut<crate::interaction::tools::handles::ScaleFrame>,
+    mut save: MessageWriter<crate::persist::SaveSceneRequest>,
+    mut load: MessageWriter<crate::persist::LoadSceneRequest>,
+    mut snapshot: MessageWriter<crate::persist::SnapshotRequest>,
+    mut last_path: ResMut<crate::persist::LastScenePath>,
 ) {
     let Ok(actions) = actions.single() else {
         return;
@@ -174,6 +195,19 @@ pub fn apply_shortcuts(
     }
     if actions.just_pressed(&EditorAction::Deselect) {
         selection.clear();
+    }
+    if actions.just_pressed(&EditorAction::Save) {
+        save.write(crate::persist::SaveSceneRequest { path: None });
+    }
+    if actions.just_pressed(&EditorAction::SaveAs) {
+        last_path.0 = None; // force the dialog
+        save.write(crate::persist::SaveSceneRequest { path: None });
+    }
+    if actions.just_pressed(&EditorAction::Open) {
+        load.write(crate::persist::LoadSceneRequest { path: None });
+    }
+    if actions.just_pressed(&EditorAction::Snapshot) {
+        snapshot.write(crate::persist::SnapshotRequest::default());
     }
     if actions.just_pressed(&EditorAction::ToggleScaleFrame) {
         use crate::interaction::tools::handles::ScaleFrame;

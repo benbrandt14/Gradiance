@@ -17,12 +17,21 @@ pub struct PosRot {
 }
 
 impl PosRot {
+    /// Rotation capture resolution in radians (≈ 0.0006°).
+    ///
+    /// Quaternion→angle extraction is not bit-idempotent (it oscillates by
+    /// ~1 ULP), which would make save→load→save never reach a byte-stable
+    /// fixpoint. Snapping to a grid ~40× coarser than that noise — and far
+    /// below any physical significance — makes capture deterministic.
+    const ROT_RESOLUTION: f32 = 1e-5;
+
     /// Builds a [`PosRot`] from a Bevy [`Transform`](bevy::prelude::Transform),
     /// discarding Z and scale.
     pub fn from_transform(transform: &bevy::prelude::Transform) -> Self {
+        let raw = transform.rotation.to_euler(bevy::math::EulerRot::ZYX).0;
         Self {
             pos: transform.translation.truncate(),
-            rot: transform.rotation.to_euler(bevy::math::EulerRot::ZYX).0,
+            rot: (raw / Self::ROT_RESOLUTION).round() * Self::ROT_RESOLUTION,
         }
     }
 

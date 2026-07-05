@@ -1,13 +1,14 @@
 //! Convenience re-exports for internal modules and tests.
 
 pub use crate::command::array_cmd::ArrayMode;
+pub use crate::command::intent::LoadSceneIntent;
 pub use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, GroupIntent,
     PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
     TransformChange, UndoIntent, UngroupIntent,
 };
 pub use crate::command::property::{PropertyChange, PropertyValue};
-pub use crate::command::snapshot::{BodyRecord, JointRecord};
+pub use crate::command::snapshot::{BodyRecord, EnvironmentRecord, JointRecord, SceneRecord};
 // Note: `CommandStack` is deliberately NOT re-exported — only the dispatcher
 // (and tests, via the full `crate::command::CommandStack` path) may name it.
 pub use crate::GradiancePlugins;

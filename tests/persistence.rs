@@ -1,0 +1,419 @@
+//! Persistence tests: arbitrary-scene round trips (proptest), file I/O,
+//! undoable loads, and debug snapshots.
+
+mod harness;
+
+use bevy::prelude::*;
+use gradiance::domain::settings::{GridSettings, GridSystem, SimSettings, SnapConfig};
+use gradiance::persist::{from_ron, to_ron};
+use gradiance::prelude::*;
+use harness::{body_count, box_record, entity_of, paused_app, undo};
+use proptest::prelude::*;
+
+// ---------- Arbitrary scene generation ----------
+
+fn shape_strategy() -> impl Strategy<Value = ShapeDef> {
+    prop_oneof![
+        (1.0f32..400.0, 1.0f32..400.0).prop_map(|(width, height)| ShapeDef::Box { width, height }),
+        (0.5f32..200.0).prop_map(|radius| ShapeDef::Circle { radius }),
+        // Star-shaped n-gons: always simple, CCW, centroid-near-origin.
+        (3usize..9, 10.0f32..100.0, 0.0f32..1.0).prop_map(|(n, r, jitter)| {
+            let outline = (0..n)
+                .map(|i| {
+                    let theta = std::f32::consts::TAU * (i as f32) / (n as f32);
+                    let radius = r * (1.0 + 0.3 * jitter * (i as f32).sin());
+                    Vec2::new(theta.cos(), theta.sin()) * radius
+                })
+                .collect();
+            ShapeDef::Polygon {
+                outline,
+                holes: vec![],
+            }
+        }),
+        Just(ShapeDef::HalfPlane),
+    ]
+}
+
+fn props_strategy() -> impl Strategy<Value = PhysicalProps> {
+    (
+        prop_oneof![
+            Just(BodyKind::Dynamic),
+            Just(BodyKind::Static),
+            Just(BodyKind::Kinematic)
+        ],
+        0.1f32..10.0,
+        0.0f32..2.0,
+        0.0f32..1.0,
+        -2.0f32..2.0,
+        any::<bool>(),
+        any::<bool>(),
+    )
+        .prop_map(
+            |(body, density, friction, restitution, gravity_scale, sensor, rotation_locked)| {
+                PhysicalProps {
+                    body,
+                    density,
+                    friction,
+                    restitution,
+                    gravity_scale,
+                    sensor,
+                    rotation_locked,
+                }
+            },
+        )
+}
+
+fn body_strategy() -> impl Strategy<Value = BodyRecord> {
+    (
+        shape_strategy(),
+        props_strategy(),
+        (-1000.0f32..1000.0, -1000.0f32..1000.0),
+        -3.0f32..3.0,
+        1u32..256,
+        1u32..=u32::MAX,
+        (0.0f32..1.0, 0.0f32..1.0, 0.0f32..1.0, 0.1f32..1.0),
+        proptest::option::of(0u32..5),
+    )
+        .prop_map(
+            |(shape, props, (x, y), rot, memberships, filters, (r, g, b, a), group)| BodyRecord {
+                id: StableId::new(),
+                pose: PosRot {
+                    pos: Vec2::new(x, y),
+                    rot,
+                },
+                shape,
+                props,
+                appearance: Appearance {
+                    fill: Rgba { r, g, b, a },
+                },
+                layers: LayerMask32 {
+                    memberships,
+                    filters,
+                },
+                group,
+            },
+        )
+}
+
+fn motor_strategy() -> impl Strategy<Value = MotorDef> {
+    (
+        -10.0f32..10.0,
+        1.0f32..1.0e8,
+        0.0f32..2.0,
+        any::<bool>(),
+        any::<bool>(),
+    )
+        .prop_map(
+            |(target_velocity, max_force, damping, oscillate, enabled)| MotorDef {
+                target_velocity,
+                max_force,
+                damping,
+                oscillate,
+                enabled,
+            },
+        )
+}
+
+/// Joint blueprint by body index (resolved against the generated bodies).
+type JointSeed = (usize, Option<usize>, u8, Option<[f32; 2]>, Option<MotorDef>);
+
+fn joint_seed_strategy() -> impl Strategy<Value = JointSeed> {
+    (
+        0usize..16,
+        proptest::option::of(0usize..16),
+        0u8..3,
+        proptest::option::of((-2.0f32..0.0, 0.0f32..2.0).prop_map(|(a, b)| [a, b])),
+        proptest::option::of(motor_strategy()),
+    )
+}
+
+fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
+    (
+        proptest::collection::vec(body_strategy(), 0..10),
+        proptest::collection::vec(joint_seed_strategy(), 0..6),
+        (-2000.0f32..2000.0, -2000.0f32..2000.0),
+        0.0f32..5.0,
+    )
+        .prop_map(|(bodies, seeds, gravity, speed)| {
+            let joints = seeds
+                .into_iter()
+                .filter_map(|(a, b, kind, limits, motor)| {
+                    let body_a = bodies.get(a)?.id;
+                    let body_b = match b {
+                        Some(i) => {
+                            let id = bodies.get(i)?.id;
+                            if id == body_a {
+                                return None;
+                            }
+                            Some(id)
+                        }
+                        None => None,
+                    };
+                    let kind = match kind {
+                        0 => JointKind::Hinge { limits, motor },
+                        1 => JointKind::Weld,
+                        _ => JointKind::Slider {
+                            axis: Vec2::X,
+                            limits,
+                            motor,
+                        },
+                    };
+                    Some(JointRecord {
+                        id: StableId::new(),
+                        def: JointDef {
+                            kind,
+                            common: JointCommon::default(),
+                            body_a,
+                            body_b,
+                            anchor_a: Vec2::new(5.0, -3.0),
+                            anchor_b: Vec2::new(-2.0, 4.0),
+                        },
+                    })
+                })
+                .collect();
+            let mut scene = SceneRecord {
+                version: 1,
+                app_version: String::new(),
+                bodies,
+                joints,
+                environment: EnvironmentRecord {
+                    sim: SimSettings {
+                        gravity: Vec2::new(gravity.0, gravity.1),
+                        speed,
+                    },
+                    grid: GridSettings {
+                        system: GridSystem::Isometric,
+                        ..GridSettings::default()
+                    },
+                    snap: SnapConfig::default(),
+                },
+            };
+            scene.bodies.sort_by_key(|r| r.id.0);
+            scene.joints.sort_by_key(|r| r.id.0);
+            scene
+        })
+}
+
+/// A bare world that supports capture/apply (no app machinery — fast).
+fn bare_world() -> World {
+    let mut world = World::new();
+    world.init_resource::<IdIndex>();
+    world
+}
+
+// ---------- The round-trip property ----------
+
+#[test]
+fn any_scene_round_trips_through_world_and_ron_to_a_fixpoint() {
+    let mut runner = proptest::test_runner::TestRunner::new(proptest::test_runner::Config {
+        cases: 48,
+        ..Default::default()
+    });
+    runner
+        .run(&scene_strategy(), |scene| {
+            // Generation 1: raw records → world → capture.
+            let mut w1 = bare_world();
+            scene.apply(&mut w1);
+            let s1 = SceneRecord::capture(&mut w1);
+
+            // Everything except pose must survive exactly.
+            prop_assert_eq!(s1.bodies.len(), scene.bodies.len());
+            prop_assert_eq!(s1.joints.len(), scene.joints.len());
+            for (a, b) in scene.bodies.iter().zip(&s1.bodies) {
+                prop_assert_eq!(a.id, b.id);
+                prop_assert_eq!(&a.shape, &b.shape);
+                prop_assert_eq!(a.props, b.props);
+                prop_assert_eq!(a.appearance, b.appearance);
+                prop_assert_eq!(a.layers, b.layers);
+                prop_assert_eq!(a.group, b.group);
+                prop_assert!((a.pose.pos - b.pose.pos).length() < 1e-3);
+                prop_assert!((a.pose.rot - b.pose.rot).abs() < 1e-3);
+            }
+            for (a, b) in scene.joints.iter().zip(&s1.joints) {
+                prop_assert_eq!(a.id, b.id);
+                prop_assert_eq!(&a.def, &b.def);
+            }
+            prop_assert_eq!(&scene.environment, &s1.environment);
+
+            // Generation 2 via RON: text → scene → world → capture.
+            let text1 = to_ron(&s1).expect("serialize");
+            let parsed = from_ron(&text1).expect("parse");
+            let mut w2 = bare_world();
+            parsed.apply(&mut w2);
+            let s2 = SceneRecord::capture(&mut w2);
+
+            // Generation 3: the fixpoint — bytes must now be identical.
+            let text2 = to_ron(&s2).expect("serialize");
+            let mut w3 = bare_world();
+            from_ron(&text2).expect("parse").apply(&mut w3);
+            let s3 = SceneRecord::capture(&mut w3);
+            let text3 = to_ron(&s3).expect("serialize");
+            prop_assert_eq!(text2, text3, "save→load→save reached a byte fixpoint");
+            Ok(())
+        })
+        .unwrap();
+}
+
+// ---------- Full-app integration ----------
+
+#[test]
+fn loading_a_scene_is_one_undoable_command() {
+    let mut app = paused_app();
+    let keep = spawn_via_intent(&mut app, Vec2::new(7.0, 7.0));
+
+    // A one-box scene to load.
+    let incoming_body = box_record(Vec2::new(50.0, 0.0), 30.0, 30.0);
+    let incoming_id = incoming_body.id;
+    let scene = SceneRecord {
+        version: 1,
+        app_version: String::new(),
+        bodies: vec![incoming_body],
+        joints: vec![],
+        environment: EnvironmentRecord {
+            sim: SimSettings::default(),
+            grid: GridSettings::default(),
+            snap: SnapConfig::default(),
+        },
+    };
+
+    app.world_mut().write_message(LoadSceneIntent { scene });
+    app.update();
+    assert_eq!(body_count(&mut app), 1, "load replaced the world");
+    assert!(entity_of(&app, incoming_id).is_some());
+    assert!(entity_of(&app, keep).is_none());
+
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 1, "undo restored the old world");
+    assert!(entity_of(&app, keep).is_some(), "original body is back");
+    assert!(entity_of(&app, incoming_id).is_none());
+}
+
+fn spawn_via_intent(app: &mut App, pos: Vec2) -> StableId {
+    let record = box_record(pos, 40.0, 20.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    id
+}
+
+#[test]
+fn save_and_load_requests_round_trip_through_a_file() {
+    let dir = std::env::temp_dir().join(format!("gradiance-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("scene.ron");
+
+    let mut app = paused_app();
+    let a = spawn_via_intent(&mut app, Vec2::new(12.0, -5.0));
+    app.world_mut()
+        .write_message(gradiance::persist::SaveSceneRequest {
+            path: Some(path.clone()),
+        });
+    app.update();
+    assert!(path.exists(), "scene file written");
+
+    // Fresh app: load the file, world matches.
+    let mut app2 = paused_app();
+    app2.world_mut()
+        .write_message(gradiance::persist::LoadSceneRequest {
+            path: Some(path.clone()),
+        });
+    app2.update(); // request → intent
+    app2.update(); // intent → command
+    assert_eq!(body_count(&mut app2), 1);
+    let entity = entity_of(&app2, a).expect("stable id survived the file");
+    let pos = app2
+        .world()
+        .get::<Transform>(entity)
+        .unwrap()
+        .translation
+        .truncate();
+    assert!((pos - Vec2::new(12.0, -5.0)).length() < 1e-3);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn joints_survive_files_and_resolve_after_load() {
+    let dir = std::env::temp_dir().join(format!("gradiance-test-j-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("jointed.ron");
+
+    let mut app = paused_app();
+    let a = spawn_via_intent(&mut app, Vec2::ZERO);
+    let b = spawn_via_intent(&mut app, Vec2::new(30.0, 0.0));
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def: JointDef {
+                kind: JointKind::Hinge {
+                    limits: Some([-1.0, 1.0]),
+                    motor: Some(MotorDef::default()),
+                },
+                common: JointCommon::default(),
+                body_a: a,
+                body_b: Some(b),
+                anchor_a: Vec2::new(15.0, 0.0),
+                anchor_b: Vec2::new(-15.0, 0.0),
+            },
+        },
+    });
+    app.update();
+    app.world_mut()
+        .write_message(gradiance::persist::SaveSceneRequest {
+            path: Some(path.clone()),
+        });
+    app.update();
+
+    let mut app2 = paused_app();
+    app2.world_mut()
+        .write_message(gradiance::persist::LoadSceneRequest {
+            path: Some(path.clone()),
+        });
+    app2.update();
+    app2.update();
+    app2.update(); // joint_sync resolution frame
+
+    let mut q = app2.world_mut().query::<&JointDef>();
+    let def = q.iter(app2.world()).next().expect("joint loaded").clone();
+    assert_eq!(def.body_a, a);
+    assert_eq!(def.body_b, Some(b));
+    assert!(entity_of(&app2, a).is_some() && entity_of(&app2, b).is_some());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn version_mismatch_is_rejected() {
+    let text = to_ron(&SceneRecord {
+        version: 99,
+        app_version: String::new(),
+        bodies: vec![],
+        joints: vec![],
+        environment: EnvironmentRecord {
+            sim: SimSettings::default(),
+            grid: GridSettings::default(),
+            snap: SnapConfig::default(),
+        },
+    })
+    .unwrap();
+    assert!(from_ron(&text).is_err(), "future versions must not load");
+}
+
+#[test]
+fn snapshot_request_writes_a_timestamped_repro_file() {
+    let dir = std::env::temp_dir().join(format!("gradiance-snap-{}", std::process::id()));
+    let mut app = paused_app();
+    spawn_via_intent(&mut app, Vec2::ZERO);
+    app.world_mut()
+        .write_message(gradiance::persist::SnapshotRequest {
+            dir: Some(dir.clone()),
+        });
+    app.update();
+
+    let entries: Vec<_> = std::fs::read_dir(&dir).unwrap().collect();
+    assert_eq!(entries.len(), 1, "one snapshot written");
+    let path = entries[0].as_ref().unwrap().path();
+    let scene = from_ron(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(scene.bodies.len(), 1, "snapshot captured the live scene");
+    std::fs::remove_dir_all(&dir).ok();
+}
