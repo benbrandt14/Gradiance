@@ -4,7 +4,7 @@
 //! gestures) reads raw input/picking directly. All world mutation still
 //! flows through intents.
 
-use crate::command::intent::{DeleteIntent, RedoIntent, UndoIntent};
+use crate::command::intent::{DeleteIntent, GroupIntent, RedoIntent, UndoIntent, UngroupIntent};
 use crate::core::ids::StableId;
 use crate::core::states::{GameState, ToolState};
 use crate::domain::Body;
@@ -37,6 +37,10 @@ pub enum EditorAction {
     Open,
     /// Dump a timestamped debug snapshot (F12).
     Snapshot,
+    /// Group the selection (Ctrl+G).
+    Group,
+    /// Ungroup the selection (Ctrl+Shift+G).
+    Ungroup,
     /// Switch to the select tool (S).
     ToolSelect,
     /// Switch to the drag tool (D).
@@ -117,6 +121,13 @@ fn default_input_map() -> InputMap<EditorAction> {
     );
     map.insert(A::Open, ModifierKey::Control.with(KeyCode::KeyO));
     map.insert(A::Snapshot, KeyCode::F12);
+    map.insert(A::Group, ModifierKey::Control.with(KeyCode::KeyG));
+    map.insert(
+        A::Ungroup,
+        ButtonlikeChord::from_single(ModifierKey::Control)
+            .with(ModifierKey::Shift)
+            .with(KeyCode::KeyG),
+    );
     map.insert(A::ToolSelect, KeyCode::KeyS);
     map.insert(A::ToolDrag, KeyCode::KeyD);
     map.insert(A::ToolBox, KeyCode::KeyB);
@@ -144,12 +155,26 @@ impl Plugin for EditorInputPlugin {
     }
 }
 
+/// All the outgoing messages shortcuts can emit (grouped to stay under
+/// the system-parameter limit).
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct ShortcutWriters<'w> {
+    undo: MessageWriter<'w, UndoIntent>,
+    redo: MessageWriter<'w, RedoIntent>,
+    delete: MessageWriter<'w, DeleteIntent>,
+    group: MessageWriter<'w, GroupIntent>,
+    ungroup: MessageWriter<'w, UngroupIntent>,
+    save: MessageWriter<'w, crate::persist::SaveSceneRequest>,
+    load: MessageWriter<'w, crate::persist::LoadSceneRequest>,
+    snapshot: MessageWriter<'w, crate::persist::SnapshotRequest>,
+}
+
 /// Translates just-pressed actions into intents / state changes.
 pub fn apply_shortcuts(
     actions: Query<&ActionState<EditorAction>, With<EditorControls>>,
-    mut undo: MessageWriter<UndoIntent>,
-    mut redo: MessageWriter<RedoIntent>,
-    mut delete: MessageWriter<DeleteIntent>,
+    keys: Res<ButtonInput<KeyCode>>,
+    keyboard_captured: Res<crate::interaction::KeyboardCaptured>,
+    mut writers: ShortcutWriters,
     mut selection: ResMut<Selection>,
     ids: Query<&StableId>,
     bodies: Query<Entity, With<Body>>,
@@ -157,28 +182,44 @@ pub fn apply_shortcuts(
     mut next_game: ResMut<NextState<GameState>>,
     mut next_tool: ResMut<NextState<ToolState>>,
     mut scale_frame: ResMut<crate::interaction::tools::handles::ScaleFrame>,
-    mut save: MessageWriter<crate::persist::SaveSceneRequest>,
-    mut load: MessageWriter<crate::persist::LoadSceneRequest>,
-    mut snapshot: MessageWriter<crate::persist::SnapshotRequest>,
     mut last_path: ResMut<crate::persist::LastScenePath>,
 ) {
+    // Typing in a UI field must never trigger editor shortcuts.
+    if keyboard_captured.0 {
+        return;
+    }
     let Ok(actions) = actions.single() else {
         return;
     };
-
-    if actions.just_pressed(&EditorAction::Undo) {
-        undo.write(UndoIntent);
-    }
-    if actions.just_pressed(&EditorAction::Redo) {
-        redo.write(RedoIntent);
-    }
-    if actions.just_pressed(&EditorAction::DeleteSelection) && !selection.is_empty() {
-        let targets: Vec<StableId> = selection
+    let selected_ids = |selection: &Selection| -> Vec<StableId> {
+        selection
             .iter()
             .filter_map(|e| ids.get(e).ok().copied())
-            .collect();
+            .collect()
+    };
+
+    if actions.just_pressed(&EditorAction::Undo) {
+        writers.undo.write(UndoIntent);
+    }
+    if actions.just_pressed(&EditorAction::Redo) {
+        writers.redo.write(RedoIntent);
+    }
+    if actions.just_pressed(&EditorAction::DeleteSelection) && !selection.is_empty() {
+        let targets = selected_ids(&selection);
         if !targets.is_empty() {
-            delete.write(DeleteIntent { targets });
+            writers.delete.write(DeleteIntent { targets });
+        }
+    }
+    // Ungroup first: its chord (Ctrl+Shift+G) also satisfies Group's.
+    if actions.just_pressed(&EditorAction::Ungroup) {
+        let targets = selected_ids(&selection);
+        if !targets.is_empty() {
+            writers.ungroup.write(UngroupIntent { targets });
+        }
+    } else if actions.just_pressed(&EditorAction::Group) {
+        let targets = selected_ids(&selection);
+        if targets.len() >= 2 {
+            writers.group.write(GroupIntent { targets });
         }
     }
     if actions.just_pressed(&EditorAction::TogglePause) {
@@ -197,17 +238,25 @@ pub fn apply_shortcuts(
         selection.clear();
     }
     if actions.just_pressed(&EditorAction::Save) {
-        save.write(crate::persist::SaveSceneRequest { path: None });
+        writers
+            .save
+            .write(crate::persist::SaveSceneRequest { path: None });
     }
     if actions.just_pressed(&EditorAction::SaveAs) {
         last_path.0 = None; // force the dialog
-        save.write(crate::persist::SaveSceneRequest { path: None });
+        writers
+            .save
+            .write(crate::persist::SaveSceneRequest { path: None });
     }
     if actions.just_pressed(&EditorAction::Open) {
-        load.write(crate::persist::LoadSceneRequest { path: None });
+        writers
+            .load
+            .write(crate::persist::LoadSceneRequest { path: None });
     }
     if actions.just_pressed(&EditorAction::Snapshot) {
-        snapshot.write(crate::persist::SnapshotRequest::default());
+        writers
+            .snapshot
+            .write(crate::persist::SnapshotRequest::default());
     }
     if actions.just_pressed(&EditorAction::ToggleScaleFrame) {
         use crate::interaction::tools::handles::ScaleFrame;
@@ -215,6 +264,12 @@ pub fn apply_shortcuts(
             ScaleFrame::Global => ScaleFrame::Local,
             ScaleFrame::Local => ScaleFrame::Global,
         };
+    }
+    // Bare-letter hotkeys (tools, frame toggle) must not fire as part of
+    // a Ctrl chord — Ctrl+S is "save", not "save and switch to select".
+    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+    if ctrl {
+        return;
     }
     for tool_action in EditorAction::TOOLS {
         if actions.just_pressed(&tool_action)

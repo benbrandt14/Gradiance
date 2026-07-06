@@ -389,3 +389,52 @@ fn ground_tool_spawns_static_half_plane_with_drag_tilt() {
     let rot = PosRot::from_transform(transform).rot;
     assert!((rot - expected).abs() < 1e-3, "tilt follows drag ({rot})");
 }
+
+// ---------- Right-click contract (context menu path) ----------
+
+/// A right *click* (no drag) on a selected body must not move anything
+/// and must not create an undo entry — the click belongs to the context
+/// menu. A right *drag* still rotates.
+#[test]
+fn right_click_on_selection_commits_nothing() {
+    let mut app = paused_app();
+    let id = spawn_box_at(&mut app, Vec2::ZERO, 40.0, 40.0);
+    let entity = entity_of(&app, id).unwrap();
+    app.world_mut().resource_mut::<Selection>().set(entity);
+
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, MouseButton::Right, true);
+    app.update();
+    mouse(&mut app, MouseButton::Right, false);
+    app.update();
+
+    assert_eq!(stack_undo_len(&app), 1, "only the spawn is recorded");
+    let pose = app.world().get::<Transform>(entity).unwrap();
+    assert!(pose.translation.truncate().length() < 1e-3);
+    assert!((pose.rotation.to_euler(EulerRot::ZYX).0).abs() < 1e-4);
+}
+
+/// Dragging right past the deadzone still rotates and commits one step.
+#[test]
+fn right_drag_past_deadzone_still_rotates() {
+    let mut app = paused_app();
+    let id = spawn_box_at(&mut app, Vec2::ZERO, 40.0, 40.0);
+    let entity = entity_of(&app, id).unwrap();
+    app.world_mut().resource_mut::<Selection>().set(entity);
+
+    // Grab to the right of the pivot, sweep up 90°.
+    set_cursor(&mut app, Vec2::new(20.0, 0.0));
+    mouse(&mut app, MouseButton::Right, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(0.0, 20.0));
+    app.update();
+    mouse(&mut app, MouseButton::Right, false);
+    app.update();
+
+    assert_eq!(stack_undo_len(&app), 2, "rotation committed one step");
+    let rot = PosRot::from_transform(app.world().get::<Transform>(entity).unwrap()).rot;
+    assert!(
+        (rot - std::f32::consts::FRAC_PI_2).abs() < 0.05,
+        "quarter turn, got {rot}"
+    );
+}

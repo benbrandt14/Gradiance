@@ -216,6 +216,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                         toon_enabled: render.0,
                         bands: render.1,
                         rim_strength: render.2,
+                        ..RenderSettings::default()
                     },
                 },
             };

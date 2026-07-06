@@ -4,8 +4,16 @@
 //! the UI automatically. Enums (not reflect-derivable into widgets) get
 //! explicit rows; that is the sanctioned escape hatch.
 
-use crate::domain::settings::{GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig};
+use crate::core::ids::StableId;
+use crate::core::states::ToolState;
+use crate::domain::Body;
+use crate::domain::joint::{JointDef, JointKind};
+use crate::domain::settings::{
+    DebugSettings, GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
+};
+use crate::domain::shape::ShapeDef;
 use crate::ui::reflect_grid::reflect_grid;
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
@@ -19,6 +27,21 @@ pub enum SettingsTab {
     GridSnap,
     /// Rendering style.
     Rendering,
+    /// Debug overlays and internals readouts.
+    Debug,
+}
+
+/// Read-only internals shown by the Debug tab.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct DebugReadouts<'w, 's> {
+    history: Res<'w, crate::command::HistoryInfo>,
+    selection: Res<'w, crate::interaction::selection::Selection>,
+    tool: Res<'w, State<ToolState>>,
+    snapped: Res<'w, crate::interaction::snap::SnappedCursor>,
+    diagnostics: Option<Res<'w, DiagnosticsStore>>,
+    bodies: Query<'w, 's, (&'static StableId, &'static ShapeDef), With<Body>>,
+    joints: Query<'w, 's, (&'static StableId, &'static JointDef)>,
+    ids: Query<'w, 's, &'static StableId>,
 }
 
 /// Settings window state.
@@ -38,6 +61,8 @@ pub fn settings_window(
     mut grid: ResMut<GridSettings>,
     mut snap: ResMut<SnapConfig>,
     mut render: ResMut<RenderSettings>,
+    mut debug: ResMut<DebugSettings>,
+    readouts: DebugReadouts,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -53,6 +78,7 @@ pub fn settings_window(
                 ui.selectable_value(&mut window.tab, SettingsTab::Simulation, "Simulation");
                 ui.selectable_value(&mut window.tab, SettingsTab::GridSnap, "Grid & Snap");
                 ui.selectable_value(&mut window.tab, SettingsTab::Rendering, "Rendering");
+                ui.selectable_value(&mut window.tab, SettingsTab::Debug, "Debug");
             });
             ui.separator();
             match window.tab {
@@ -105,8 +131,97 @@ pub fn settings_window(
                     );
                     render.set_changed();
                 }
+                SettingsTab::Debug => {
+                    reflect_grid(ui, egui::Id::new("debug"), debug.bypass_change_detection());
+                    debug.set_changed();
+                    ui.label(
+                        egui::RichText::new("hold Tab in the viewport for the depth peek").weak(),
+                    );
+                    ui.separator();
+                    debug_readouts(ui, &readouts);
+                }
             }
         });
     window.open = open;
     Ok(())
+}
+
+/// One line per internals fact — the "what is the editor actually doing"
+/// readout that grounds bug reports.
+fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
+    ui.label(egui::RichText::new("Internals").strong());
+    if let Some(fps) = r
+        .diagnostics
+        .as_ref()
+        .and_then(|d| d.get(&FrameTimeDiagnosticsPlugin::FPS))
+        .and_then(bevy::diagnostic::Diagnostic::smoothed)
+    {
+        ui.label(format!("fps: {fps:.0}"));
+    }
+    ui.label(format!(
+        "bodies: {} · joints: {} · undo: {} · redo: {}",
+        r.bodies.iter().count(),
+        r.joints.iter().count(),
+        r.history.undo_depth,
+        r.history.redo_depth,
+    ));
+    ui.label(format!("tool: {:?}", r.tool.get()));
+    ui.label(format!(
+        "cursor: {:?} · snap: {:?}",
+        r.snapped.effective().map(|p| (p.x.round(), p.y.round())),
+        r.snapped.kind,
+    ));
+
+    ui.separator();
+    ui.label(egui::RichText::new("Selection").strong());
+    let ids: Vec<String> = r
+        .selection
+        .iter()
+        .filter_map(|e| r.ids.get(e).ok())
+        .map(|id| format!("{id:.8}"))
+        .collect();
+    ui.label(format!("{} selected: {}", ids.len(), ids.join(", ")));
+    if let Some(primary) = r.selection.primary()
+        && let Ok((_, shape)) = r.bodies.get(primary)
+    {
+        ui.label(format!("primary shape: {}", shape_summary(shape)));
+    }
+
+    ui.separator();
+    ui.label(egui::RichText::new("Joints (authored)").strong());
+    for (id, def) in &r.joints {
+        let kind = match &def.kind {
+            JointKind::Hinge { limits, motor } => format!(
+                "Hinge{}{}",
+                if limits.is_some() { " +limits" } else { "" },
+                if motor.is_some() { " +motor" } else { "" },
+            ),
+            JointKind::Weld => "Weld".to_owned(),
+            JointKind::Slider { limits, motor, .. } => format!(
+                "Slider{}{}",
+                if limits.is_some() { " +limits" } else { "" },
+                if motor.is_some() { " +motor" } else { "" },
+            ),
+        };
+        let target = def
+            .body_b
+            .map_or("world pin".to_owned(), |b| format!("{b:.8}"));
+        ui.label(format!("{id:.8}: {kind} · {:.8} ↔ {target}", def.body_a));
+    }
+}
+
+/// Compact one-line description of a shape tree.
+fn shape_summary(shape: &ShapeDef) -> String {
+    match shape {
+        ShapeDef::Box { width, height } => format!("Box {width:.1}×{height:.1}"),
+        ShapeDef::Circle { radius } => format!("Circle r={radius:.1}"),
+        ShapeDef::Polygon { outline, holes } => {
+            format!("Polygon {}v {}h", outline.len(), holes.len())
+        }
+        ShapeDef::HalfPlane => "HalfPlane".to_owned(),
+        ShapeDef::Csg { op, lhs, rhs } => {
+            format!("({} {op:?} {})", shape_summary(lhs), shape_summary(rhs))
+        }
+        ShapeDef::Placed { shape, .. } => format!("Placed({})", shape_summary(shape)),
+    }
 }

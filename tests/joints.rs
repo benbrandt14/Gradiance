@@ -544,3 +544,42 @@ fn random_command_sequences_never_leave_dangling_joints() {
         })
         .unwrap();
 }
+
+// ---------- Hinge vs weld: the behavioral distinction ----------
+
+/// A dynamic arm hanging off a static block: hinged it swings down under
+/// gravity (relative rotation), welded it holds its pose rigidly. This is
+/// the contract the two tools differ by.
+#[test]
+fn hinges_rotate_freely_where_welds_stay_rigid() {
+    for weld in [false, true] {
+        let mut app = headless_app();
+        let mut anchor_block = box_record(Vec2::ZERO, 20.0, 20.0);
+        anchor_block.props.body = BodyKind::Static;
+        let block = spawn_body(&mut app, anchor_block);
+        // Horizontal arm extending to the right of the block.
+        let arm = spawn_body(&mut app, box_record(Vec2::new(40.0, 0.0), 60.0, 8.0));
+
+        let mut def = hinge(
+            block,
+            Some(arm),
+            Vec2::new(10.0, 0.0),
+            Vec2::new(-30.0, 0.0),
+        );
+        if weld {
+            def.kind = JointKind::Weld;
+        }
+        spawn_joint(&mut app, def);
+        step(&mut app, 240);
+
+        let rot = pose_of(&app, arm).rot.abs();
+        if weld {
+            assert!(rot < 0.05, "welded arm must stay rigid (rot {rot})");
+        } else {
+            assert!(
+                rot > 0.4,
+                "hinged arm must swing down under gravity (rot {rot})"
+            );
+        }
+    }
+}

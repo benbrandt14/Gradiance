@@ -39,7 +39,12 @@ pub fn params_of(settings: &RenderSettings) -> Vec4 {
     } else {
         0.0
     };
-    Vec4::new(bands, settings.rim_strength, 0.0, 0.0)
+    Vec4::new(
+        bands,
+        settings.rim_strength,
+        settings.white_point.max(0.05),
+        0.0,
+    )
 }
 
 /// Installs the toon material pipeline and its embedded shader.

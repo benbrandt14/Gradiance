@@ -5,6 +5,7 @@
 //! rebuilt from authored components by `Changed<>`-driven sync systems and
 //! never serialized.
 
+pub mod debug_viz;
 pub mod extrude_sync;
 pub mod grid;
 pub mod joint_viz;
@@ -42,7 +43,15 @@ impl Plugin for GradianceRenderPlugin {
                 material_sync::sync_body_materials,
             ),
         );
-        app.add_systems(Update, (grid::draw_grid, joint_viz::draw_joints));
+        app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default());
+        app.add_systems(
+            Update,
+            (
+                grid::draw_grid,
+                joint_viz::draw_joints,
+                debug_viz::draw_debug_overlays,
+            ),
+        );
         app.add_systems(
             PostUpdate,
             toon::apply_render_settings
@@ -51,8 +60,13 @@ impl Plugin for GradianceRenderPlugin {
     }
 }
 
-/// Spawns the editor camera and the shadow-casting key light.
-fn setup_scene(mut commands: Commands) {
+/// Spawns the editor camera, the shadow-casting key light, and the
+/// backdrop.
+fn setup_scene(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     // Orthographic 3D camera looking down −Z at the XY sandbox plane;
     // extruded bodies span z ∈ [-320, 0].
     commands.spawn((
@@ -68,5 +82,23 @@ fn setup_scene(mut commands: Commands) {
             ..default()
         },
         Transform::from_xyz(-400.0, 700.0, 500.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+    // Backdrop: a huge matte wall behind the deepest layer. This is what
+    // *catches cast shadows* — without it every drop shadow falls into the
+    // void and the whole scene reads as flat, unlit 2D. Render-only:
+    // no collider, no StableId, never saved.
+    commands.spawn((
+        Mesh3d(meshes.add(Mesh::from(Rectangle::new(200_000.0, 200_000.0)))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.82, 0.83, 0.85),
+            perceptual_roughness: 1.0,
+            metallic: 0.0,
+            ..default()
+        })),
+        Transform::from_xyz(
+            0.0,
+            0.0,
+            -(32.0 * crate::core::constants::LAYER_HEIGHT) - 20.0,
+        ),
     ));
 }

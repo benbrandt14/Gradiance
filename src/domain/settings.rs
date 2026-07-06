@@ -143,6 +143,14 @@ pub struct RenderSettings {
     pub bands: u32,
     /// Rim-light strength (0 = none) — silhouettes read better in toon.
     pub rim_strength: f32,
+    /// Lit/albedo ratio mapped to the top band. Raise it if everything
+    /// saturates into one flat band; lower it if the scene looks dark.
+    #[serde(default = "default_white_point")]
+    pub white_point: f32,
+}
+
+fn default_white_point() -> f32 {
+    RenderSettings::default().white_point
 }
 
 impl Default for RenderSettings {
@@ -151,6 +159,40 @@ impl Default for RenderSettings {
             toon_enabled: true,
             bands: 4,
             rim_strength: 0.25,
+            white_point: 1.3,
+        }
+    }
+}
+
+/// Editor debugging overlays and internals readouts (the "Debug"
+/// settings tab). Never persisted — this is workstation state, not scene
+/// state.
+#[derive(Resource, Debug, Clone, PartialEq, bevy::reflect::Reflect)]
+pub struct DebugSettings {
+    /// Outline every collider's polygon (the *physics* view of shapes).
+    pub show_colliders: bool,
+    /// Draw each body's world-space AABB.
+    pub show_aabbs: bool,
+    /// Mark body origins (crosshair) — distinct from shape centroids
+    /// after CSG reshapes.
+    pub show_origins: bool,
+    /// Mark joint anchors and their body links.
+    pub show_joint_anchors: bool,
+    /// Draw velocity vectors (and mark sleeping bodies).
+    pub show_velocities: bool,
+    /// Camera pitch while the depth-peek key (Tab) is held, degrees.
+    pub peek_tilt_deg: f32,
+}
+
+impl Default for DebugSettings {
+    fn default() -> Self {
+        Self {
+            show_colliders: false,
+            show_aabbs: false,
+            show_origins: false,
+            show_joint_anchors: true,
+            show_velocities: false,
+            peek_tilt_deg: 35.0,
         }
     }
 }
