@@ -6,6 +6,7 @@
 //! never serialized.
 
 pub mod debug_viz;
+pub mod decorations;
 pub mod extrude_sync;
 pub mod grid;
 pub mod joint_viz;
@@ -49,6 +50,7 @@ impl Plugin for GradianceRenderPlugin {
             (
                 grid::draw_grid,
                 joint_viz::draw_joints,
+                decorations::draw_circle_radius_lines,
                 debug_viz::draw_debug_overlays,
             ),
         );

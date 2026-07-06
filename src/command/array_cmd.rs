@@ -72,7 +72,9 @@ impl GameCommand for ArrayCommand {
         if self.clones.is_empty() {
             let mut clones = Vec::with_capacity(self.sources.len() * self.count as usize);
             let mut joint_clones = Vec::new();
+            let mut next_group = crate::command::spawn::next_group_id(world);
             for k in 1..=self.count {
+                let copy_start = clones.len();
                 let mut id_map = Vec::with_capacity(self.sources.len());
                 for &id in &self.sources {
                     let entity = world
@@ -102,11 +104,25 @@ impl GameCommand for ArrayCommand {
                     id_map.push((id, clone.id));
                     clones.push(clone);
                 }
+                let rot_offset = match self.mode {
+                    ArrayMode::Radial {
+                        angle_step,
+                        rotate_items: true,
+                        ..
+                    } => angle_step * k as f32,
+                    _ => 0.0,
+                };
                 joint_clones.extend(crate::command::spawn::clone_internal_joints(
                     world,
                     &id_map,
                     copy_map(self.mode, k),
+                    rot_offset,
                 ));
+                // Each copy gets its own selection groups.
+                crate::command::spawn::remap_clone_groups(
+                    &mut clones[copy_start..],
+                    &mut next_group,
+                );
             }
             self.clones = clones;
             self.joint_clones = joint_clones;

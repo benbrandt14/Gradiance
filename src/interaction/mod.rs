@@ -60,7 +60,7 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<crate::domain::settings::GridSettings>();
         app.init_resource::<crate::domain::settings::SnapConfig>();
         app.init_resource::<crate::domain::settings::DebugSettings>();
-        app.init_resource::<camera::DepthPeek>();
+        app.init_resource::<camera::CameraRig>();
 
         app.add_plugins(input::EditorInputPlugin);
         app.add_plugins(tools::ToolsPlugin);
@@ -79,7 +79,7 @@ impl Plugin for InteractionPlugin {
             Update,
             (
                 camera::pan_and_zoom_camera,
-                camera::depth_peek,
+                camera::apply_camera_rig,
                 input::apply_shortcuts,
                 selection::prune_dead_selection,
             )

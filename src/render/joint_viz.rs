@@ -12,8 +12,11 @@ pub fn draw_joints(
     joints: Query<&JointDef>,
     index: Res<IdIndex>,
     transforms: Query<&Transform>,
+    projections: Query<&Projection, With<Camera3d>>,
     mut gizmos: Gizmos,
 ) {
+    // Screen-constant glyph size: readable at any zoom.
+    let s = crate::interaction::camera::camera_scale(&projections);
     for def in &joints {
         let Some(entity_a) = index.entity(def.body_a) else {
             continue;
@@ -29,20 +32,20 @@ pub fn draw_joints(
         };
         match &def.kind {
             JointKind::Hinge { .. } => {
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.0, color);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 1.5, color);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.0 * s, color);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 1.5 * s, color);
             }
             JointKind::Weld => {
                 gizmos.rect_2d(
                     Isometry2d::new(anchor, Rot2::radians(pose_a.rot)),
-                    Vec2::splat(9.0),
+                    Vec2::splat(9.0 * s),
                     color,
                 );
             }
             JointKind::Slider { axis, .. } => {
                 let dir = Vec2::from_angle(pose_a.rot).rotate(*axis);
-                gizmos.line_2d(anchor - dir * 40.0, anchor + dir * 40.0, color);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.0, color);
+                gizmos.line_2d(anchor - dir * 40.0 * s, anchor + dir * 40.0 * s, color);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.0 * s, color);
             }
         }
     }

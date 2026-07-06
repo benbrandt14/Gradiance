@@ -66,17 +66,30 @@ pub fn draw_grid(
             let max_radius = (center - grid.origin).length() + half * 1.5;
             let mut r = spacing;
             while r <= max_radius {
-                gizmos.circle_2d(Isometry2d::from_translation(grid.origin), r, minor);
+                gizmos.circle(
+                    Isometry3d::from_translation(grid.origin.extend(GRID_Z)),
+                    r,
+                    minor,
+                );
                 r += spacing;
             }
             let step = std::f32::consts::TAU / angular_divisions.max(1) as f32;
             for i in 0..angular_divisions.max(1) {
                 let dir = Vec2::from_angle(grid.rotation + step * i as f32);
-                gizmos.line_2d(grid.origin, grid.origin + dir * max_radius, minor);
+                gizmos.line(
+                    grid.origin.extend(GRID_Z),
+                    (grid.origin + dir * max_radius).extend(GRID_Z),
+                    minor,
+                );
             }
         }
     }
 }
+
+/// Depth of grid lines: behind every body layer (deepest back face is
+/// −320), in front of the backdrop (−340) — the grid never draws over
+/// bodies or tool ghosts.
+const GRID_Z: f32 = -330.0;
 
 /// Scales base spacing by powers of two until on-screen spacing falls in
 /// the preferred band.
@@ -118,7 +131,11 @@ fn line_family(
     for i in first..=last {
         let base = origin + normal * (i as f32 * spacing);
         let color: Color = if i == 0 { axis.into() } else { minor.into() };
-        gizmos.line_2d(base - dir * reach, base + dir * reach, color);
+        gizmos.line(
+            (base - dir * reach).extend(GRID_Z),
+            (base + dir * reach).extend(GRID_Z),
+            color,
+        );
     }
 }
 

@@ -8,11 +8,11 @@ use bevy::window::PrimaryWindow;
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct CursorWorldPos(pub Option<Vec2>);
 
-/// Updates [`CursorWorldPos`] from the primary window + editor camera.
+/// Updates [`CursorWorldPos`] by intersecting the camera ray with the
+/// sandbox plane — exact under any camera orbit, not just straight-on.
 pub fn update_cursor_world_pos(
     windows: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    peek: Res<crate::interaction::camera::DepthPeek>,
     mut out: ResMut<CursorWorldPos>,
 ) {
     // Headless (no window): leave the resource alone so tests can inject
@@ -20,15 +20,9 @@ pub fn update_cursor_world_pos(
     let Some(window) = windows.iter().next() else {
         return;
     };
-    // Depth peek is view-only: with the camera tilted, the flat 2D
-    // projection is meaningless, so tools see "no cursor".
-    if peek.active() {
-        out.0 = None;
-        return;
-    }
     out.0 = (|| {
         let cursor = window.cursor_position()?;
         let (camera, transform) = cameras.iter().next()?;
-        camera.viewport_to_world_2d(transform, cursor).ok()
+        crate::interaction::camera::plane_point(camera, transform, cursor)
     })();
 }

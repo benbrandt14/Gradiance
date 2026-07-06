@@ -20,14 +20,11 @@ use crate::command::{CommandError, GameCommand};
 use crate::core::ids::{IdIndex, StableId};
 use crate::domain::Body;
 use crate::domain::joint::JointDef;
-use crate::domain::shape::{CsgOp, MAX_CSG_DEPTH, ShapeDef};
-use crate::geometry::contours::{Contours, point_in_ring};
+use crate::domain::shape::{CsgOp, ShapeDef};
+use crate::geometry::contours::point_in_ring;
 use crate::geometry::polygonize::polygonize_components;
 use crate::geometry::sdf;
 use bevy::prelude::*;
-
-/// Relative area change below which a body counts as untouched.
-const AREA_EPSILON: f32 = 1e-4;
 
 fn resolve(world: &World, id: StableId) -> Result<Entity, CommandError> {
     world
@@ -39,11 +36,6 @@ fn resolve(world: &World, id: StableId) -> Result<Entity, CommandError> {
 /// What happened to one cut body.
 #[derive(Debug)]
 enum Replacement {
-    /// Still one piece: the body keeps its identity with a new shape.
-    Reshape {
-        /// The post-cut shape (tree, or polygon bake).
-        new_shape: ShapeDef,
-    },
     /// Severed: the body is replaced by fresh polygon-leaf pieces.
     Split {
         /// Piece records (ids minted at staging, stable across redo).
@@ -131,36 +123,16 @@ impl CutCommand {
                 lhs: Box::new(original.shape.clone()),
                 rhs: Box::new(strip),
             };
-            let mut components = polygonize_components(&cut_tree);
-            let old_area: f32 = polygonize_components(&original.shape)
-                .iter()
-                .map(Contours::area)
-                .sum();
-            let new_area: f32 = components.iter().map(Contours::area).sum();
+            let components = polygonize_components(&cut_tree);
 
+            // Cuts only *sever*: a stroke that fails to pass fully through
+            // leaves the body untouched (no notches, no microscopic thin
+            // features). CSG modeling (boolean ops between bodies) is a
+            // separate planned feature.
             let replacement = if components.is_empty() {
                 Replacement::Destroy
             } else if components.len() == 1 {
-                if (old_area - new_area).abs() <= (old_area * AREA_EPSILON).max(1.0) {
-                    continue; // The strip missed (or merely grazed) the body.
-                }
-                // Polygon sources bake immediately (their field evaluation
-                // is the costly one); analytic trees stay exact until the
-                // depth cap.
-                let bake = matches!(original.shape, ShapeDef::Polygon { .. })
-                    || cut_tree.depth() > MAX_CSG_DEPTH;
-                let new_shape = if bake {
-                    let piece = components.remove(0);
-                    // Not recentered: keeping the body origin keeps pose,
-                    // joints, and selection untouched.
-                    ShapeDef::Polygon {
-                        outline: piece.outline,
-                        holes: piece.holes,
-                    }
-                } else {
-                    cut_tree
-                };
-                Replacement::Reshape { new_shape }
+                continue;
             } else {
                 let pieces = components
                     .into_iter()
@@ -188,7 +160,6 @@ impl CutCommand {
             };
 
             let joint_changes = match &replacement {
-                Replacement::Reshape { .. } => Vec::new(),
                 Replacement::Destroy => {
                     crate::command::joint_cmd::joints_referencing(world, &[original.id])
                         .into_iter()
@@ -278,12 +249,6 @@ impl GameCommand for CutCommand {
         }
         for outcome in &self.outcomes {
             match &outcome.replacement {
-                Replacement::Reshape { new_shape } => {
-                    let entity = resolve(world, outcome.original.id)?;
-                    if let Some(mut shape) = world.get_mut::<ShapeDef>(entity) {
-                        *shape = new_shape.clone();
-                    }
-                }
                 Replacement::Split { pieces } => {
                     let entity = resolve(world, outcome.original.id)?;
                     world.despawn(entity);
@@ -305,12 +270,6 @@ impl GameCommand for CutCommand {
     fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
         for outcome in self.outcomes.iter().rev() {
             match &outcome.replacement {
-                Replacement::Reshape { .. } => {
-                    let entity = resolve(world, outcome.original.id)?;
-                    if let Some(mut shape) = world.get_mut::<ShapeDef>(entity) {
-                        *shape = outcome.original.shape.clone();
-                    }
-                }
                 Replacement::Split { pieces } => {
                     for piece in pieces {
                         let entity = resolve(world, piece.id)?;

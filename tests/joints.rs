@@ -52,6 +52,8 @@ fn hinge(body_a: StableId, body_b: Option<StableId>, anchor_a: Vec2, anchor_b: V
         body_b,
         anchor_a,
         anchor_b,
+        rest_rot_a: 0.0,
+        rest_rot_b: 0.0,
     }
 }
 
@@ -84,6 +86,8 @@ fn motorized_hinge_oscillates_between_its_limits() {
             body_b: Some(arm_id),
             anchor_a: Vec2::ZERO,
             anchor_b: Vec2::new(-40.0, 0.0),
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
         },
     );
 
@@ -179,6 +183,8 @@ fn welded_chain_stays_rigid_through_a_fall() {
                 body_b: Some(pair[1]),
                 anchor_a: Vec2::new(20.0, 0.0),
                 anchor_b: Vec2::new(-20.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
             },
         );
     }
@@ -222,6 +228,8 @@ fn slider_constrains_motion_to_the_axis_and_respects_limits() {
             body_b: Some(cart_id),
             anchor_a: Vec2::ZERO,
             anchor_b: Vec2::ZERO,
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
         },
     );
 
@@ -471,6 +479,8 @@ fn random_command_sequences_never_leave_dangling_joints() {
                                     body_b: Some(b),
                                     anchor_a: Vec2::ZERO,
                                     anchor_b: Vec2::ZERO,
+                                    rest_rot_a: 0.0,
+                                    rest_rot_b: 0.0,
                                 },
                             };
                             app.world_mut().write_message(SpawnJointIntent { record });
@@ -490,6 +500,8 @@ fn random_command_sequences_never_leave_dangling_joints() {
                                     body_b: None,
                                     anchor_a: Vec2::ZERO,
                                     anchor_b: Vec2::ZERO,
+                                    rest_rot_a: 0.0,
+                                    rest_rot_b: 0.0,
                                 },
                             };
                             app.world_mut().write_message(SpawnJointIntent { record });
@@ -582,4 +594,105 @@ fn hinges_rotate_freely_where_welds_stay_rigid() {
             );
         }
     }
+}
+
+// ---------- Rest-orientation frames (user snapshot regressions) ----------
+
+/// The user's snapshot gradiance-1783344618.ron distilled: a rotated body
+/// on a world-pin slider. With identity joint frames the solver snaps the
+/// body upright and it jitters and explodes; rest-rotation frames must
+/// keep it stable, rotation-locked at its authored angle, and sliding
+/// only along the axis.
+#[test]
+fn rotated_world_pin_slider_stays_stable_and_rotation_locked() {
+    let mut app = headless_app();
+    let rot = -1.254;
+    let start = Vec2::new(-31.9, 259.6);
+    let mut record = box_record(start, 79.0, 44.9);
+    record.pose.rot = rot;
+    let body = spawn_body(&mut app, record);
+    let axis = Vec2::new(-0.774_418_2, -0.632_674_04);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Slider {
+                axis,
+                limits: None,
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: body,
+            body_b: None,
+            anchor_a: Vec2::ZERO,
+            anchor_b: start,
+            rest_rot_a: rot,
+            rest_rot_b: 0.0,
+        },
+    );
+    step(&mut app, 300);
+
+    // With no limits and no friction the body slides freely downhill —
+    // far, but finitely and smoothly. Explosion = NaN or absurd distance.
+    let pose = pose_of(&app, body);
+    assert!(
+        pose.pos.is_finite() && pose.pos.length() < 100_000.0,
+        "no explosion (at {})",
+        pose.pos
+    );
+    assert!(
+        (pose.rot - rot).abs() < 0.05,
+        "slider locks rotation at its rest angle (rot {})",
+        pose.rot
+    );
+    // Whatever gravity did, motion stays on the slider line.
+    let world_axis = Vec2::from_angle(rot).rotate(axis);
+    let disp = pose.pos - start;
+    if disp.length() > 1.0 {
+        assert!(
+            disp.normalize().perp_dot(world_axis).abs() < 0.05,
+            "displacement {disp} leaves the slider axis"
+        );
+    }
+}
+
+/// Welding two *rotated* bodies must freeze their creation-time relative
+/// angle — not snap them into alignment.
+#[test]
+fn welding_rotated_bodies_preserves_their_relative_angle() {
+    let mut app = headless_app();
+    let mut anchor_block = box_record(Vec2::ZERO, 40.0, 40.0);
+    anchor_block.pose.rot = 0.7;
+    anchor_block.props.body = BodyKind::Static;
+    let a = spawn_body(&mut app, anchor_block);
+    let mut arm = box_record(Vec2::new(50.0, 0.0), 40.0, 20.0);
+    arm.pose.rot = -0.4;
+    let b = spawn_body(&mut app, arm.clone());
+
+    let world_anchor = Vec2::new(25.0, 0.0);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Weld,
+            common: JointCommon::default(),
+            body_a: a,
+            body_b: Some(b),
+            anchor_a: Vec2::from_angle(-0.7).rotate(world_anchor),
+            anchor_b: Vec2::from_angle(0.4).rotate(world_anchor - Vec2::new(50.0, 0.0)),
+            rest_rot_a: 0.7,
+            rest_rot_b: -0.4,
+        },
+    );
+    step(&mut app, 240);
+
+    let pose = pose_of(&app, b);
+    assert!(
+        (pose.rot + 0.4).abs() < 0.05,
+        "welded arm keeps its authored angle (rot {}, expected -0.4)",
+        pose.rot
+    );
+    assert!(
+        (pose.pos - Vec2::new(50.0, 0.0)).length() < 5.0,
+        "welded arm stays put (at {})",
+        pose.pos
+    );
 }

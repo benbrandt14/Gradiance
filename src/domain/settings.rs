@@ -180,8 +180,6 @@ pub struct DebugSettings {
     pub show_joint_anchors: bool,
     /// Draw velocity vectors (and mark sleeping bodies).
     pub show_velocities: bool,
-    /// Camera pitch while the depth-peek key (Tab) is held, degrees.
-    pub peek_tilt_deg: f32,
 }
 
 impl Default for DebugSettings {
@@ -192,7 +190,6 @@ impl Default for DebugSettings {
             show_origins: false,
             show_joint_anchors: true,
             show_velocities: false,
-            peek_tilt_deg: 35.0,
         }
     }
 }

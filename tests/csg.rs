@@ -83,7 +83,9 @@ fn severing_a_box_splits_it_into_two_recentered_pieces() {
 }
 
 #[test]
-fn notching_a_circle_keeps_the_body_and_its_analytic_tree() {
+fn partial_cuts_are_rejected_entirely() {
+    // User contract: a cut only applies when it severs — no notches, no
+    // microscopic thin features, and no undo entry for a failed stroke.
     let mut app = paused_app();
     let record = BodyRecord {
         shape: ShapeDef::Circle { radius: 50.0 },
@@ -92,32 +94,27 @@ fn notching_a_circle_keeps_the_body_and_its_analytic_tree() {
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
     app.update();
-    let before = total_area(&mut app);
+    let depth = app.world().resource::<CommandStack>().undo_len();
 
-    // A slot from above the circle down into its interior: one component.
+    // A slot from above into the interior: would notch, not sever.
     cut(&mut app, Vec2::new(0.0, 70.0), Vec2::new(0.0, 30.0), 4.0);
 
-    assert_eq!(body_count(&mut app), 1, "notch does not split");
-    let entity = entity_of(&app, id).expect("body keeps its identity");
-    let shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
-    let ShapeDef::Csg { op, lhs, .. } = &shape else {
-        panic!("notched circle stays an analytic tree, got {shape:?}");
-    };
-    assert_eq!(*op, CsgOp::Subtract);
-    assert_eq!(**lhs, ShapeDef::Circle { radius: 50.0 }, "circle preserved");
-    let after = total_area(&mut app);
-    assert!(
-        after < before - 20.0,
-        "material removed ({before} -> {after})"
+    assert_eq!(body_count(&mut app), 1);
+    let entity = entity_of(&app, id).expect("body untouched");
+    assert_eq!(
+        app.world().get::<ShapeDef>(entity),
+        Some(&ShapeDef::Circle { radius: 50.0 }),
+        "no notch is applied"
     );
-
-    undo(&mut app);
-    let shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
-    assert_eq!(shape, ShapeDef::Circle { radius: 50.0 });
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        depth,
+        "rejected cuts leave history untouched"
+    );
 }
 
 #[test]
-fn cutting_a_polygon_body_bakes_back_to_a_polygon_leaf() {
+fn severing_a_polygon_body_yields_polygon_pieces() {
     let mut app = paused_app();
     let square: Vec<Vec2> = vec![
         Vec2::new(-40.0, -40.0),
@@ -132,28 +129,16 @@ fn cutting_a_polygon_body_bakes_back_to_a_polygon_leaf() {
         },
         ..box_record(Vec2::ZERO, 1.0, 1.0)
     };
-    let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
     app.update();
 
-    // A notch from the top edge: still one component.
-    cut(&mut app, Vec2::new(0.0, 60.0), Vec2::new(0.0, 10.0), 6.0);
+    cut(&mut app, Vec2::new(0.0, -60.0), Vec2::new(0.0, 60.0), 6.0);
 
-    let entity = entity_of(&app, id).expect("reshape keeps identity");
-    let shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
+    assert_eq!(body_count(&mut app), 2, "square severed");
+    let total = total_area(&mut app);
     assert!(
-        matches!(shape, ShapeDef::Polygon { .. }),
-        "polygon sources bake immediately, got {shape:?}"
-    );
-    // Strip: length 50 + one width of end-cap extension, so it reaches
-    // from y = 7 into the square's top at y = 40: a 6 × 33 notch.
-    let area: f32 = polygonize_components(&shape)
-        .iter()
-        .map(gradiance::geometry::contours::Contours::area)
-        .sum();
-    assert!(
-        (area - (6400.0 - 6.0 * 33.0)).abs() < 40.0,
-        "notched square area {area}"
+        (total - (6400.0 - 6.0 * 80.0)).abs() < 60.0,
+        "area conserved minus the slit ({total})"
     );
 }
 
@@ -171,6 +156,8 @@ fn joints_reattach_to_the_piece_containing_their_anchor() {
         body_b: None,
         anchor_a: Vec2::new(-40.0, 0.0),
         anchor_b: Vec2::new(-40.0, 0.0),
+        rest_rot_a: 0.0,
+        rest_rot_b: 0.0,
     };
     app.world_mut().write_message(SpawnJointIntent {
         record: JointRecord {
@@ -225,6 +212,8 @@ fn joints_whose_anchor_material_is_destroyed_are_deleted() {
                 body_b: None,
                 anchor_a: Vec2::ZERO,
                 anchor_b: Vec2::ZERO,
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
             },
         },
     });
@@ -287,12 +276,23 @@ fn a_cut_that_misses_everything_is_not_recorded() {
 fn csg_trees_survive_scene_round_trips() {
     let mut app = paused_app();
     let record = BodyRecord {
-        shape: ShapeDef::Circle { radius: 50.0 },
+        // What future boolean-modeling ops produce: an analytic tree.
+        shape: ShapeDef::Csg {
+            op: CsgOp::Subtract,
+            lhs: Box::new(ShapeDef::Circle { radius: 50.0 }),
+            rhs: Box::new(ShapeDef::Placed {
+                pos: Vec2::new(0.0, 50.0),
+                rot: 0.3,
+                shape: Box::new(ShapeDef::Box {
+                    width: 44.0,
+                    height: 4.0,
+                }),
+            }),
+        },
         ..box_record(Vec2::ZERO, 1.0, 1.0)
     };
     app.world_mut().write_message(SpawnBodyIntent { record });
     app.update();
-    cut(&mut app, Vec2::new(0.0, 70.0), Vec2::new(0.0, 30.0), 4.0);
 
     let scene = SceneRecord::capture(app.world_mut());
     let text = gradiance::persist::to_ron(&scene).expect("serialize");
@@ -362,6 +362,8 @@ mod conservation {
                         body_b: None,
                         anchor_a: Vec2::ZERO,
                         anchor_b: Vec2::ZERO,
+                        rest_rot_a: 0.0,
+                        rest_rot_b: 0.0,
                     },
                 },
             });

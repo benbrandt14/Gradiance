@@ -193,6 +193,8 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                             body_b,
                             anchor_a: Vec2::new(5.0, -3.0),
                             anchor_b: Vec2::new(-2.0, 4.0),
+                            rest_rot_a: 0.0,
+                            rest_rot_b: 0.0,
                         },
                     })
                 })
@@ -387,6 +389,8 @@ fn joints_survive_files_and_resolve_after_load() {
                 body_b: Some(b),
                 anchor_a: Vec2::new(15.0, 0.0),
                 anchor_b: Vec2::new(-15.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
             },
         },
     });

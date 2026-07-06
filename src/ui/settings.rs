@@ -135,7 +135,10 @@ pub fn settings_window(
                     reflect_grid(ui, egui::Id::new("debug"), debug.bypass_change_detection());
                     debug.set_changed();
                     ui.label(
-                        egui::RichText::new("hold Tab in the viewport for the depth peek").weak(),
+                        egui::RichText::new(
+                            "middle-drag orbits the 3D view · Home glides back to 2D",
+                        )
+                        .weak(),
                     );
                     ui.separator();
                     debug_readouts(ui, &readouts);

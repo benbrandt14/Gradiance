@@ -108,6 +108,8 @@ pub fn run_connector_tool(
             body_b: None,
             anchor_a: to_local(pose_a, anchor),
             anchor_b: anchor, // world point for the world-pin case
+            rest_rot_a: pose_a.rot,
+            rest_rot_b: 0.0,
         };
         if let Some(&body_b) = hits.get(1) {
             let (Ok(&id_b), Ok(pose_b)) = (
@@ -118,6 +120,7 @@ pub fn run_connector_tool(
             };
             def.body_b = Some(id_b);
             def.anchor_b = to_local(pose_b, anchor);
+            def.rest_rot_b = pose_b.rot;
         }
 
         spawn.write(SpawnJointIntent {
