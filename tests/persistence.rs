@@ -158,8 +158,9 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
         proptest::collection::vec(joint_seed_strategy(), 0..6),
         (-2000.0f32..2000.0, -2000.0f32..2000.0),
         0.0f32..5.0,
+        (any::<bool>(), 1u32..12, 0.0f32..1.0),
     )
-        .prop_map(|(bodies, seeds, gravity, speed)| {
+        .prop_map(|(bodies, seeds, gravity, speed, render)| {
             let joints = seeds
                 .into_iter()
                 .filter_map(|(a, b, kind, limits, motor)| {
@@ -211,6 +212,11 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                         ..GridSettings::default()
                     },
                     snap: SnapConfig::default(),
+                    render: RenderSettings {
+                        toon_enabled: render.0,
+                        bands: render.1,
+                        rim_strength: render.2,
+                    },
                 },
             };
             scene.bodies.sort_by_key(|r| r.id.0);
@@ -298,6 +304,7 @@ fn loading_a_scene_is_one_undoable_command() {
             sim: SimSettings::default(),
             grid: GridSettings::default(),
             snap: SnapConfig::default(),
+            render: RenderSettings::default(),
         },
     };
 
@@ -418,10 +425,36 @@ fn version_mismatch_is_rejected() {
             sim: SimSettings::default(),
             grid: GridSettings::default(),
             snap: SnapConfig::default(),
+            render: RenderSettings::default(),
         },
     })
     .unwrap();
     assert!(from_ron(&text).is_err(), "future versions must not load");
+}
+
+#[test]
+fn pre_render_settings_files_still_parse() {
+    // Simulate a pre-M10 save: serialize a current scene, then strip the
+    // trailing `render` field from its environment block.
+    let scene = SceneRecord {
+        version: 1,
+        app_version: String::new(),
+        bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
+        joints: vec![],
+        environment: EnvironmentRecord {
+            sim: SimSettings::default(),
+            grid: GridSettings::default(),
+            snap: SnapConfig::default(),
+            render: RenderSettings::default(),
+        },
+    };
+    let text = to_ron(&scene).unwrap();
+    let cut_at = text.find("render:").expect("render field serialized");
+    let legacy = format!("{})\n)", &text[..cut_at]);
+
+    let parsed = from_ron(&legacy).expect("legacy files without render settings must load");
+    assert_eq!(parsed.environment.render, RenderSettings::default());
+    assert_eq!(parsed.bodies.len(), 1);
 }
 
 #[test]
