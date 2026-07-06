@@ -205,3 +205,22 @@ Unchanged from prior experience: `lyon::path::Path` builder, `FillTessellator::t
 - Pointer drag deltas are screen-space (Y inverted vs world).
 - avian `Scalar`/`Vector` = f32/Vec2 under default `parry-f32`.
 - rustc ≥ 1.95 required by bevy 0.19 (container toolchain updated to 1.96.1).
+
+## Custom materials (verified against bevy_pbr 0.19 sources, M10)
+
+- Extend `StandardMaterial` instead of replacing it:
+  `ExtendedMaterial<StandardMaterial, MyExtension>` + `MaterialPlugin::<That>::default()`.
+  The extension derives `Asset, AsBindGroup, TypePath, Clone` and implements
+  `MaterialExtension` (`fragment_shader() -> ShaderRef`); base-material shadow
+  maps, clustered lights, and the prepass keep working untouched.
+- Extension bind-group entries must start at `@binding(100)` to avoid clashing
+  with `StandardMaterial`'s bindings; in WGSL the material group index is the
+  preprocessor def `#{MATERIAL_BIND_GROUP}`.
+- Fragment recipe (from `pbr_fragment.wgsl` / `pbr_functions.wgsl`):
+  `pbr_input_from_standard_material(in, is_front)` → `alpha_discard` →
+  `apply_pbr_lighting(pbr_input)` → tweak → `main_pass_post_lighting_processing`.
+  `PbrInput` exposes `N` and `V` for rim/fresnel terms.
+- Ship shaders inside the binary with `bevy::asset::embedded_asset!(app, "file.wgsl")`
+  (path relative to the calling file, `src/` stripped) and reference them as
+  `"embedded://<crate>/<dir>/file.wgsl"`. `ShaderRef: From<&'static str>`.
+- `bevy_shader` is re-exported as `bevy::shader` (home of `ShaderRef`).

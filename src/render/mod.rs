@@ -9,21 +9,26 @@ pub mod extrude_sync;
 pub mod grid;
 pub mod joint_viz;
 pub mod material_sync;
+pub mod toon;
 
 use bevy::light::GlobalAmbientLight;
 use bevy::prelude::*;
 
 /// Installs cameras, lights, and the derived-visuals sync systems.
 ///
-/// A no-op in headless apps (no render plugin present).
+/// A no-op in headless apps (no render plugin present) apart from the
+/// [`RenderSettings`](crate::domain::settings::RenderSettings) resource,
+/// which persistence captures regardless of a renderer being attached.
 #[derive(Default)]
 pub struct GradianceRenderPlugin;
 
 impl Plugin for GradianceRenderPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<crate::domain::settings::RenderSettings>();
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }
+        toon::install(app);
         app.insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
             brightness: 300.0,
@@ -38,6 +43,11 @@ impl Plugin for GradianceRenderPlugin {
             ),
         );
         app.add_systems(Update, (grid::draw_grid, joint_viz::draw_joints));
+        app.add_systems(
+            PostUpdate,
+            toon::apply_render_settings
+                .run_if(resource_changed::<crate::domain::settings::RenderSettings>),
+        );
     }
 }
 

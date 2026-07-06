@@ -130,3 +130,27 @@ impl Default for SimSettings {
         }
     }
 }
+
+/// Rendering style (the "Rendering" settings tab).
+///
+/// Consumed by `render::toon` via change detection — the toon banding is
+/// a shader parameter, so toggling styles never rebuilds materials.
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct RenderSettings {
+    /// Quantize lighting into bands (toon look). Off = smooth matte PBR.
+    pub toon_enabled: bool,
+    /// Number of light bands when toon shading is on.
+    pub bands: u32,
+    /// Rim-light strength (0 = none) — silhouettes read better in toon.
+    pub rim_strength: f32,
+}
+
+impl Default for RenderSettings {
+    fn default() -> Self {
+        Self {
+            toon_enabled: true,
+            bands: 4,
+            rim_strength: 0.25,
+        }
+    }
+}

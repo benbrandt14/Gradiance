@@ -117,6 +117,9 @@ pub struct EnvironmentRecord {
     pub grid: crate::domain::settings::GridSettings,
     /// Snap configuration.
     pub snap: crate::domain::settings::SnapConfig,
+    /// Rendering style (defaulted when absent — pre-M10 files).
+    #[serde(default)]
+    pub render: crate::domain::settings::RenderSettings,
 }
 
 /// A complete scene: the save file, and the unit of whole-world undo.
@@ -176,6 +179,10 @@ impl SceneRecord {
                     .get_resource::<crate::domain::settings::SnapConfig>()
                     .cloned()
                     .unwrap_or_default(),
+                render: world
+                    .get_resource::<crate::domain::settings::RenderSettings>()
+                    .cloned()
+                    .unwrap_or_default(),
             },
         }
     }
@@ -203,5 +210,6 @@ impl SceneRecord {
         world.insert_resource(self.environment.sim.clone());
         world.insert_resource(self.environment.grid.clone());
         world.insert_resource(self.environment.snap.clone());
+        world.insert_resource(self.environment.render.clone());
     }
 }

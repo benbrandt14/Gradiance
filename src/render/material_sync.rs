@@ -1,7 +1,9 @@
-//! Authored appearance → derived matte material.
+//! Authored appearance → derived body material (toon-banded matte).
 
 use crate::domain::Body;
 use crate::domain::appearance::{Appearance, Rgba};
+use crate::domain::settings::RenderSettings;
+use crate::render::toon::{ToonExtension, ToonMaterial, params_of};
 use bevy::prelude::*;
 
 /// Converts a domain color into a Bevy color (sRGB).
@@ -9,24 +11,30 @@ pub fn color_of(rgba: Rgba) -> Color {
     Color::srgba(rgba.r, rgba.g, rgba.b, rgba.a)
 }
 
-/// The standard matte body material for a given appearance.
-fn matte_material(appearance: &Appearance) -> StandardMaterial {
-    StandardMaterial {
-        base_color: color_of(appearance.fill),
-        perceptual_roughness: 0.92,
-        metallic: 0.0,
-        ..default()
+/// The standard body material: matte base, toon banding per settings.
+fn body_material(appearance: &Appearance, settings: &RenderSettings) -> ToonMaterial {
+    ToonMaterial {
+        base: StandardMaterial {
+            base_color: color_of(appearance.fill),
+            perceptual_roughness: 0.92,
+            metallic: 0.0,
+            ..default()
+        },
+        extension: ToonExtension {
+            params: params_of(settings),
+        },
     }
 }
 
 /// (Re)builds a body's material when its appearance changes.
 pub fn sync_body_materials(
     mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<ToonMaterial>>,
+    settings: Res<RenderSettings>,
     changed: Query<(Entity, &Appearance), (With<Body>, Changed<Appearance>)>,
 ) {
     for (entity, appearance) in &changed {
-        let handle = materials.add(matte_material(appearance));
+        let handle = materials.add(body_material(appearance, &settings));
         commands.entity(entity).insert(MeshMaterial3d(handle));
     }
 }

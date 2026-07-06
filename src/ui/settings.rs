@@ -4,7 +4,7 @@
 //! the UI automatically. Enums (not reflect-derivable into widgets) get
 //! explicit rows; that is the sanctioned escape hatch.
 
-use crate::domain::settings::{GridSettings, GridSystem, SimSettings, SnapConfig};
+use crate::domain::settings::{GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig};
 use crate::ui::reflect_grid::reflect_grid;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -17,6 +17,8 @@ pub enum SettingsTab {
     Simulation,
     /// Grid & snapping.
     GridSnap,
+    /// Rendering style.
+    Rendering,
 }
 
 /// Settings window state.
@@ -35,6 +37,7 @@ pub fn settings_window(
     mut sim: ResMut<SimSettings>,
     mut grid: ResMut<GridSettings>,
     mut snap: ResMut<SnapConfig>,
+    mut render: ResMut<RenderSettings>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -49,6 +52,7 @@ pub fn settings_window(
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut window.tab, SettingsTab::Simulation, "Simulation");
                 ui.selectable_value(&mut window.tab, SettingsTab::GridSnap, "Grid & Snap");
+                ui.selectable_value(&mut window.tab, SettingsTab::Rendering, "Rendering");
             });
             ui.separator();
             match window.tab {
@@ -92,6 +96,14 @@ pub fn settings_window(
                     ui.label(egui::RichText::new("Snapping").strong());
                     reflect_grid(ui, egui::Id::new("snap"), snap.bypass_change_detection());
                     snap.set_changed();
+                }
+                SettingsTab::Rendering => {
+                    reflect_grid(
+                        ui,
+                        egui::Id::new("render"),
+                        render.bypass_change_detection(),
+                    );
+                    render.set_changed();
                 }
             }
         });
