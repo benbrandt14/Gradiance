@@ -1,0 +1,91 @@
+(
+    version: 1,
+    app_version: "0.2.0",
+    bodies: [
+        (
+            id: ("6a8ce3cc-103a-4143-8809-636e525f57f1"),
+            pose: (
+                pos: (3104.144, 110.91638),
+                rot: -1.2540699,
+            ),
+            shape: Box(
+                width: 1266.0363,
+                height: 416.13293,
+            ),
+            props: (
+                body: Dynamic,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.9,
+                    g: 0.099999994,
+                    b: 0.099999994,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+    ],
+    joints: [
+        (
+            id: ("f7a57537-aa79-42a2-b892-311b118d3551"),
+            def: (
+                kind: Slider(
+                    axis: (-0.7744182, -0.63267404),
+                    limits: None,
+                    motor: None,
+                ),
+                common: (
+                    collide_connected: false,
+                ),
+                body_a: ("6a8ce3cc-103a-4143-8809-636e525f57f1"),
+                body_b: None,
+                anchor_a: (-402.93787, 10.687012),
+                anchor_b: (1723.9259, 1467.2632),
+            ),
+        ),
+    ],
+    environment: (
+        sim: (
+            gravity: (0.0, -1000.0),
+            speed: 1.0,
+        ),
+        grid: (
+            visible: false,
+            snap_enabled: false,
+            system: Polar(
+                angular_divisions: 12,
+            ),
+            spacing: 68.0,
+            origin: (0.0, 0.0),
+            rotation: 0.0,
+        ),
+        snap: (
+            objects_enabled: true,
+            max_screen_distance: 12.0,
+            sources: (
+                vertices: true,
+                midpoints: true,
+                centers: true,
+                edges: true,
+            ),
+            rotation_step_deg: 15.0,
+        ),
+        render: (
+            toon_enabled: true,
+            bands: 4,
+            rim_strength: 0.25,
+            white_point: 1.3,
+        ),
+    ),
+)

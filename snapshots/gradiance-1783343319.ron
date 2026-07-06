@@ -1,0 +1,266 @@
+(
+    version: 1,
+    app_version: "0.2.0",
+    bodies: [
+        (
+            id: ("32d6f037-c336-47c0-99e5-b151d986af32"),
+            pose: (
+                pos: (-2000.0, -200.0),
+                rot: 0.0,
+            ),
+            shape: HalfPlane,
+            props: (
+                body: Static,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.35,
+                    g: 0.4,
+                    b: 0.35,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+        (
+            id: ("340d85f8-2d58-406c-ab58-ab78bba94d26"),
+            pose: (
+                pos: (-1358.5743, -150.07742),
+                rot: 0.0,
+            ),
+            shape: Box(
+                width: 1700.0,
+                height: 100.0,
+            ),
+            props: (
+                body: Dynamic,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.9,
+                    g: 0.099999994,
+                    b: 0.099999994,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+        (
+            id: ("34a64abb-edc5-4855-be64-9eb3a5a30ccf"),
+            pose: (
+                pos: (-1295.1461, 1649.4524),
+                rot: -0.00035,
+            ),
+            shape: Box(
+                width: 400.0,
+                height: 300.0,
+            ),
+            props: (
+                body: Dynamic,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.9,
+                    g: 0.099999994,
+                    b: 0.099999994,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+        (
+            id: ("4aac5163-52ff-4e6f-9a5e-ae52a4f97e2e"),
+            pose: (
+                pos: (-1501.7566, 99.60508),
+                rot: -0.00035,
+            ),
+            shape: Box(
+                width: 1800.0,
+                height: 400.0,
+            ),
+            props: (
+                body: Dynamic,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.9,
+                    g: 0.099999994,
+                    b: 0.099999994,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+        (
+            id: ("7a34f9c7-1789-42ca-a7f6-53463697d367"),
+            pose: (
+                pos: (821.9973, 769.217),
+                rot: -0.00035,
+            ),
+            shape: Box(
+                width: 1100.0,
+                height: 500.0,
+            ),
+            props: (
+                body: Dynamic,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.9,
+                    g: 0.099999994,
+                    b: 0.099999994,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+        (
+            id: ("8e4e2819-5a49-41d1-97ad-08ab498426ce"),
+            pose: (
+                pos: (594.4442, 2149.4634),
+                rot: -0.00035,
+            ),
+            shape: Box(
+                width: 1200.0,
+                height: 700.0,
+            ),
+            props: (
+                body: Dynamic,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.9,
+                    g: 0.099999994,
+                    b: 0.099999994,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+        (
+            id: ("a94c0680-a43a-4be6-bc07-7ccf9782f0d9"),
+            pose: (
+                pos: (559.47754, 1549.4769),
+                rot: -0.00035,
+            ),
+            shape: Box(
+                width: 1100.0,
+                height: 500.0,
+            ),
+            props: (
+                body: Dynamic,
+                density: 1.0,
+                friction: 0.5,
+                restitution: 0.3,
+                gravity_scale: 1.0,
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.9,
+                    g: 0.099999994,
+                    b: 0.099999994,
+                    a: 1.0,
+                ),
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            group: None,
+        ),
+    ],
+    joints: [],
+    environment: (
+        sim: (
+            gravity: (0.0, -1000.0),
+            speed: 1.0,
+        ),
+        grid: (
+            visible: true,
+            snap_enabled: true,
+            system: Cartesian,
+            spacing: 100.0,
+            origin: (0.0, 0.0),
+            rotation: 0.0,
+        ),
+        snap: (
+            objects_enabled: true,
+            max_screen_distance: 12.0,
+            sources: (
+                vertices: true,
+                midpoints: true,
+                centers: true,
+                edges: true,
+            ),
+            rotation_step_deg: 15.0,
+        ),
+        render: (
+            toon_enabled: true,
+            bands: 4,
+            rim_strength: 0.25,
+            white_point: 1.3,
+        ),
+    ),
+)
