@@ -11,7 +11,7 @@ use crate::interaction::PointerOverUi;
 use crate::interaction::cursor::CursorWorldPos;
 use crate::interaction::pointer::PointerButtons;
 use crate::interaction::selection::Selection;
-use crate::interaction::tools::{ActiveGesture, bodies_at_sorted};
+use crate::interaction::tools::bodies_at_sorted;
 use crate::physics::queries::PhysicsQueries;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -28,14 +28,15 @@ pub struct ContextMenu {
     pub under: Vec<StableId>,
 }
 
-/// Opens the menu on a right *click* (release without drag, no rotate
-/// gesture in progress).
+/// Opens the menu on a right *click* — a release within a small screen
+/// deadzone of the press. Gestures that need right-drag (selection
+/// rotate, camera pan) use the same deadzone, so a click reaches the
+/// menu and a drag never does; no cross-system ordering is involved.
 pub fn open_context_menu(
     buttons: Res<PointerButtons>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cursor: Res<CursorWorldPos>,
     over_ui: Res<PointerOverUi>,
-    active: Res<ActiveGesture>,
     physics: PhysicsQueries,
     bodies: Query<(&ShapeDef, &LayerMask32), With<Body>>,
     ids: Query<&StableId>,
@@ -43,11 +44,10 @@ pub fn open_context_menu(
     mut menu: ResMut<ContextMenu>,
 ) {
     let screen = windows.iter().next().and_then(Window::cursor_position);
-    if buttons.just_pressed(MouseButton::Right) && !over_ui.0 && !active.0 {
+    if buttons.just_pressed(MouseButton::Right) && !over_ui.0 {
         *press_pos = screen;
     }
     if buttons.just_released(MouseButton::Right)
-        && !active.0
         && let (Some(start), Some(now)) = (press_pos.take(), screen)
         && start.distance(now) < 4.0
         && let Some(world) = cursor.0

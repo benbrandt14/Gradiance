@@ -88,6 +88,52 @@ pub fn pan_and_zoom_camera(
     }
 }
 
+/// Saved straight-on camera pose while the depth peek (Tab) is held.
+///
+/// The peek tilts the camera about its ground focus so the 2.5D
+/// extrusion and layer depth become visible; it is **view-only** — the
+/// cursor goes inert while peeking (see `cursor::update_cursor_world_pos`)
+/// so no tool ever acts on a tilted projection.
+#[derive(Resource, Default, Debug)]
+pub struct DepthPeek {
+    saved: Option<Transform>,
+}
+
+impl DepthPeek {
+    /// Whether the peek view is currently active.
+    pub fn active(&self) -> bool {
+        self.saved.is_some()
+    }
+}
+
+/// Holds Tab to orbit the camera down by `DebugSettings::peek_tilt_deg`,
+/// releasing snaps back to the straight-on editing view.
+pub fn depth_peek(
+    keys: Res<ButtonInput<KeyCode>>,
+    keyboard_captured: Res<crate::interaction::KeyboardCaptured>,
+    debug: Res<crate::domain::settings::DebugSettings>,
+    mut peek: ResMut<DepthPeek>,
+    mut cameras: Query<&mut Transform, With<Camera3d>>,
+) {
+    let Ok(mut transform) = cameras.single_mut() else {
+        return;
+    };
+    if keys.pressed(KeyCode::Tab) && !keyboard_captured.0 {
+        if peek.saved.is_none() {
+            peek.saved = Some(*transform);
+        }
+        if let Some(base) = peek.saved {
+            let focus = Vec3::new(base.translation.x, base.translation.y, 0.0);
+            let distance = base.translation.z.max(1.0);
+            let q = Quat::from_rotation_x(-debug.peek_tilt_deg.to_radians());
+            *transform = Transform::from_translation(focus + q * Vec3::new(0.0, 0.0, distance))
+                .with_rotation(q);
+        }
+    } else if let Some(saved) = peek.saved.take() {
+        *transform = saved;
+    }
+}
+
 /// The current world-units-per-screen-pixel factor of the editor camera.
 pub fn camera_scale(cameras: &Query<&Projection, With<Camera3d>>) -> f32 {
     cameras

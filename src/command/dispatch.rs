@@ -105,5 +105,9 @@ pub fn dispatch_intents(world: &mut World) {
         for _ in 0..redos {
             stack.redo(world);
         }
+        world.insert_resource(crate::command::HistoryInfo {
+            undo_depth: stack.undo_len(),
+            redo_depth: stack.redo_len(),
+        });
     });
 }

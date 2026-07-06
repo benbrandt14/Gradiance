@@ -14,7 +14,8 @@
 }
 
 struct ToonParams {
-    // x = band count (0 disables banding), y = rim strength, z, w unused.
+    // x = band count (0 disables banding), y = rim strength,
+    // z = white point (lit/albedo ratio mapped to the top band), w unused.
     data: vec4<f32>,
 }
 
@@ -35,7 +36,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // How lit the surface is relative to its albedo: shadows, shading,
         // and ambient all move this ratio, so bands track real lighting.
         let lit = out.color.rgb / base;
-        let level = clamp(dot(lit, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+        let level = clamp(dot(lit, vec3(0.2126, 0.7152, 0.0722)) / toon.data.z, 0.0, 1.0);
         let banded = ceil(level * bands) / bands;
         // Rim light: brighten grazing view angles (silhouette definition).
         let n_dot_v = saturate(dot(pbr_input.N, pbr_input.V));

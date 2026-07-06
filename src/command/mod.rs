@@ -124,6 +124,18 @@ impl CommandStack {
     }
 }
 
+/// Read-only mirror of the history depths, refreshed by the dispatcher.
+///
+/// Exists so UI (and the debug tab) can show undo/redo state without
+/// naming the `CommandStack` (which stays private to the dispatcher).
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct HistoryInfo {
+    /// Commands available to undo.
+    pub undo_depth: usize,
+    /// Commands available to redo.
+    pub redo_depth: usize,
+}
+
 /// System set containing the intent dispatcher; producers of intents must
 /// schedule `.before(CommandDispatchSet)` (or rely on the default: the
 /// dispatcher runs late in `Update`).
@@ -137,6 +149,7 @@ pub struct CommandPlugin;
 impl Plugin for CommandPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CommandStack>();
+        app.init_resource::<HistoryInfo>();
         app.add_message::<intent::SpawnBodyIntent>();
         app.add_message::<intent::DeleteIntent>();
         app.add_message::<intent::DuplicateIntent>();

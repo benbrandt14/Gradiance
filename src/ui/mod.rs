@@ -47,12 +47,15 @@ impl Plugin for GradianceUiPlugin {
     }
 }
 
-/// Publishes whether egui wants the pointer, for tool/camera gating.
+/// Publishes whether egui wants the pointer/keyboard, for shortcut and
+/// tool/camera gating.
 fn capture_pointer_over_ui(
     mut contexts: EguiContexts,
     mut over_ui: ResMut<PointerOverUi>,
+    mut keyboard: ResMut<crate::interaction::KeyboardCaptured>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     over_ui.0 = ctx.is_pointer_over_egui();
+    keyboard.0 = ctx.egui_wants_keyboard_input();
     Ok(())
 }

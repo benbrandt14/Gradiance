@@ -50,11 +50,19 @@ pub enum SelectGesture {
         bodies: Vec<(Entity, StableId, PosRot)>,
     },
     /// Right-drag rotating the selection about its centroid.
+    ///
+    /// Armed on right-press but only **engages** (kinematic hold, preview)
+    /// once the cursor leaves a small deadzone — a right *click* commits
+    /// nothing and falls through to the context menu.
     Rotate {
         /// Rotation pivot (selection centroid).
         pivot: Vec2,
         /// Cursor angle at press.
         start_angle: f32,
+        /// Cursor position at press (deadzone reference).
+        press: Vec2,
+        /// Whether the deadzone was left (rotation actually running).
+        engaged: bool,
         /// `(entity, id, original pose)` per rotated body.
         bodies: Vec<(Entity, StableId, PosRot)>,
     },
@@ -322,11 +330,13 @@ pub fn run_select_tool(
                 let pivot =
                     bodies.iter().map(|(_, _, p)| p.pos).sum::<Vec2>() / bodies.len().max(1) as f32;
                 let start_angle = (p - pivot).to_angle();
-                hold.entities = bodies.iter().map(|(e, ..)| *e).collect();
-                exclusions.0.clone_from(&hold.entities);
+                // Hold/exclusions wait for the deadzone: a plain right
+                // click must leave the world untouched (context menu).
                 **gesture = SelectGesture::Rotate {
                     pivot,
                     start_angle,
+                    press: p,
+                    engaged: false,
                     bodies,
                 };
                 active.0 = true;
@@ -353,19 +363,28 @@ pub fn run_select_tool(
         SelectGesture::Rotate {
             pivot,
             start_angle,
+            press,
+            engaged,
             bodies,
         } => {
             if let Some(p) = snapped.raw {
-                let mut angle = (p - *pivot).to_angle() - *start_angle;
-                angle = constraints.apply_rotation(angle, config);
-                let rot = Vec2::from_angle(angle);
-                for (entity, _, original) in bodies.iter() {
-                    if let Ok(mut t) = transforms.p2().get_mut(*entity) {
-                        PosRot {
-                            pos: *pivot + rot.rotate(original.pos - *pivot),
-                            rot: original.rot + angle,
+                if !*engaged && press.distance(p) > 4.0 * cam_scale {
+                    *engaged = true;
+                    hold.entities = bodies.iter().map(|(e, ..)| *e).collect();
+                    exclusions.0.clone_from(&hold.entities);
+                }
+                if *engaged {
+                    let mut angle = (p - *pivot).to_angle() - *start_angle;
+                    angle = constraints.apply_rotation(angle, config);
+                    let rot = Vec2::from_angle(angle);
+                    for (entity, _, original) in bodies.iter() {
+                        if let Ok(mut t) = transforms.p2().get_mut(*entity) {
+                            PosRot {
+                                pos: *pivot + rot.rotate(original.pos - *pivot),
+                                rot: original.rot + angle,
+                            }
+                            .apply_to(&mut t);
                         }
-                        .apply_to(&mut t);
                     }
                 }
             }

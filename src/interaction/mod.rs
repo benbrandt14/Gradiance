@@ -37,6 +37,12 @@ pub struct InteractionSet;
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct PointerOverUi(pub bool);
 
+/// True while UI text editing wants the keyboard; editor shortcuts must
+/// not fire then (typing "s" in a field is not a tool switch). Written
+/// by the UI layer, read here.
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct KeyboardCaptured(pub bool);
+
 /// Installs the interaction layer.
 #[derive(Default)]
 pub struct InteractionPlugin;
@@ -44,6 +50,7 @@ pub struct InteractionPlugin;
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PointerOverUi>();
+        app.init_resource::<KeyboardCaptured>();
         app.init_resource::<pointer::PointerButtons>();
         app.init_resource::<cursor::CursorWorldPos>();
         app.init_resource::<selection::Selection>();
@@ -52,6 +59,8 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<gesture::GestureConstraints>();
         app.init_resource::<crate::domain::settings::GridSettings>();
         app.init_resource::<crate::domain::settings::SnapConfig>();
+        app.init_resource::<crate::domain::settings::DebugSettings>();
+        app.init_resource::<camera::DepthPeek>();
 
         app.add_plugins(input::EditorInputPlugin);
         app.add_plugins(tools::ToolsPlugin);
@@ -70,9 +79,11 @@ impl Plugin for InteractionPlugin {
             Update,
             (
                 camera::pan_and_zoom_camera,
+                camera::depth_peek,
                 input::apply_shortcuts,
                 selection::prune_dead_selection,
             )
+                .chain()
                 .in_set(InteractionSet)
                 .before(crate::command::CommandDispatchSet),
         );
