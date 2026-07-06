@@ -103,13 +103,43 @@ impl GameCommand for DeleteCommand {
     }
 }
 
+/// The next unused selection-group id.
+pub(crate) fn next_group_id(world: &mut World) -> u32 {
+    let mut query = world.query::<&crate::domain::group::SelectionGroup>();
+    query.iter(world).map(|g| g.0).max().map_or(1, |m| m + 1)
+}
+
+/// Rewrites cloned bodies' selection groups to fresh ids (one fresh id
+/// per distinct source group), so duplicates form their *own* groups
+/// instead of joining the originals' — the "group selection deteriorates
+/// after repeated operations" bug.
+pub(crate) fn remap_clone_groups(clones: &mut [BodyRecord], next_group: &mut u32) {
+    let mut remap: Vec<(u32, u32)> = Vec::new();
+    for record in clones {
+        if let Some(group) = record.group {
+            let new = if let Some((_, new)) = remap.iter().find(|(old, _)| *old == group) {
+                *new
+            } else {
+                let new = *next_group;
+                *next_group += 1;
+                remap.push((group, new));
+                new
+            };
+            record.group = Some(new);
+        }
+    }
+}
+
 /// Clones the joints internal to a cloned body set: every joint whose
 /// referenced bodies all lie within `id_map` is copied with fresh ids,
-/// endpoints remapped, and world anchors transformed by `map_world`.
+/// endpoints remapped, world anchors transformed by `map_world`, and
+/// rest rotations advanced by `rot_offset` (the rotation the cloned
+/// bodies received — radial arrays with rotated items).
 pub(crate) fn clone_internal_joints(
     world: &mut World,
     id_map: &[(StableId, StableId)],
     map_world: impl Fn(Vec2) -> Vec2,
+    rot_offset: f32,
 ) -> Vec<crate::command::snapshot::JointRecord> {
     let sources: Vec<StableId> = id_map.iter().map(|(old, _)| *old).collect();
     let remap = |id: StableId| {
@@ -124,10 +154,15 @@ pub(crate) fn clone_internal_joints(
             let mut def = record.def;
             // Every endpoint must be inside the cloned set.
             def.body_a = remap(def.body_a)?;
+            def.rest_rot_a += rot_offset;
             match def.body_b {
-                Some(b) => def.body_b = Some(remap(b)?),
+                Some(b) => {
+                    def.body_b = Some(remap(b)?);
+                    def.rest_rot_b += rot_offset;
+                }
                 // World pin: the anchor is a world point — transform it
-                // like the cloned bodies.
+                // like the cloned bodies. The pin itself never rotates,
+                // so only `rest_rot_a` advanced.
                 None => def.anchor_b = map_world(def.anchor_b),
             }
             Some(crate::command::snapshot::JointRecord {
@@ -184,7 +219,9 @@ impl GameCommand for DuplicateCommand {
                 return Err(CommandError::NoEffect);
             }
             let offset = self.offset;
-            self.joint_clones = clone_internal_joints(world, &id_map, |p| p + offset);
+            self.joint_clones = clone_internal_joints(world, &id_map, |p| p + offset, 0.0);
+            let mut next_group = next_group_id(world);
+            remap_clone_groups(&mut clones, &mut next_group);
             self.clones = clones;
         }
         for record in &self.clones {

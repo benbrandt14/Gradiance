@@ -23,6 +23,8 @@ pub fn run_ground_tool(
     buttons: Res<crate::interaction::pointer::PointerButtons>,
     snapped: Res<SnappedCursor>,
     over_ui: Res<PointerOverUi>,
+    constraints: Res<crate::interaction::gesture::GestureConstraints>,
+    config: Res<crate::domain::settings::SnapConfig>,
     mut draft: ResMut<GroundDraft>,
     mut active: ResMut<ActiveGesture>,
     mut spawn: MessageWriter<SpawnBodyIntent>,
@@ -43,7 +45,8 @@ pub fn run_ground_tool(
             let rot = if drag.length() < FLAT_THRESHOLD {
                 0.0
             } else {
-                drag.to_angle()
+                // Ctrl quantizes the tilt like any rotation gesture.
+                constraints.apply_rotation(drag.to_angle(), &config)
             };
             let mut record = new_body_record(ShapeDef::HalfPlane, anchor, rot);
             record.props.body = BodyKind::Static;

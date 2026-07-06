@@ -106,7 +106,9 @@ pub fn draw_selection_outlines(
             if let Some(first) = points.first().copied() {
                 points.push(first);
             }
-            gizmos.linestrip_2d(points, css::ORANGE);
+            // Drawn in front of every body layer so the selection is
+            // always visible above outlines and grids.
+            gizmos.linestrip(points.into_iter().map(|p| p.extend(6.0)), css::ORANGE);
         }
     }
 }

@@ -141,7 +141,7 @@ pub fn context_menu(
                         }
                     }
                 });
-                if ui.button("Isolate collisions within selection").clicked() {
+                if ui.button("No self-collisions (within selection)").clicked() {
                     // Move the selection to a free layer bit that ignores
                     // itself: members stop colliding with each other but
                     // still collide with everything else.
@@ -156,7 +156,7 @@ pub fn context_menu(
                     });
                     close = true;
                 }
-                if ui.button("Reset layers (self-collide on)").clicked() {
+                if ui.button("Reset collision layers").clicked() {
                     layer_edit(&selection, &ids, &layers_q, &mut edits, |_| {
                         LayerMask32::default()
                     });

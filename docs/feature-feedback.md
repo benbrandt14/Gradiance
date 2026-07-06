@@ -5,12 +5,20 @@ supposed to meet. Fill in the **Feedback** column (works / broken how /
 wrong feel / missing) — item numbers make replies easy to itemize.
 Where a reported issue is already known it is noted inline.
 
+> **Status (M12):** feedback triaged — immediate fixes landed (joint rest
+> frames from your slider snapshot, cut severs-only, selection
+> containment/ground exclusion, group-id remap on duplicate, lasso on
+> Ctrl+drag, random body colors, grid-behind/selection-in-front, CAD
+> orbit camera with ray-plane picking replacing the broken Tab peek —
+> **middle-drag orbits, Home returns to 2D**). Everything else is
+> scheduled in `docs/roadmap.md` with your item numbers.
+
 The **Debug tab** (Settings → Debug) exists to ground this feedback:
 overlays for colliders/AABBs/origins/joint anchors/velocities, live
 internals (fps, counts, undo depth, tool, snap state, selection ids,
 primary shape tree), and an authored-joints readout showing exactly what
-kind/anchors each joint has. Hold **Tab** for the depth peek (tilted
-view of the 2.5D extrusion). **F12** writes a scene snapshot you can
+kind/anchors each joint has. **Middle-drag orbits** the 3D view
+(`Home` glides back to 2D). **F12** writes a scene snapshot you can
 attach to any item.
 
 ## 1. Creation tools

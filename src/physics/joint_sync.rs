@@ -94,11 +94,19 @@ pub fn sync_joints(
         let mut entity_commands = commands.entity(entity);
         entity_commands.remove::<JointUnresolved>();
 
+        // Rest orientation: body A's basis stays identity (so authored
+        // axes are body-A local) and body B's basis absorbs the authored
+        // relative angle. The constraint's rest state is then the
+        // *creation-time* pose — welds hold it, sliders lock rotation to
+        // it, hinge limits measure from it — instead of snapping rotated
+        // bodies into alignment.
+        let basis_b = def.rest_rot_a - def.rest_rot_b;
         match &def.kind {
             JointKind::Hinge { limits, motor } => {
                 let mut joint = RevoluteJoint::new(body_a, body_b)
                     .with_local_anchor1(Vector::from(def.anchor_a))
-                    .with_local_anchor2(Vector::from(anchor_b));
+                    .with_local_anchor2(Vector::from(anchor_b))
+                    .with_local_basis2(basis_b);
                 if let Some([min, max]) = limits {
                     joint = joint.with_angle_limits(*min, *max);
                 }
@@ -110,7 +118,8 @@ pub fn sync_joints(
             JointKind::Weld => {
                 let joint = FixedJoint::new(body_a, body_b)
                     .with_local_anchor1(Vector::from(def.anchor_a))
-                    .with_local_anchor2(Vector::from(anchor_b));
+                    .with_local_anchor2(Vector::from(anchor_b))
+                    .with_local_basis2(basis_b);
                 entity_commands.insert(joint);
             }
             JointKind::Slider {
@@ -121,6 +130,7 @@ pub fn sync_joints(
                 let mut joint = PrismaticJoint::new(body_a, body_b)
                     .with_local_anchor1(Vector::from(def.anchor_a))
                     .with_local_anchor2(Vector::from(anchor_b))
+                    .with_local_basis2(basis_b)
                     .with_slider_axis(Vector::from(*axis));
                 if let Some([min, max]) = limits {
                     joint = joint.with_limits(*min, *max);

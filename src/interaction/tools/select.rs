@@ -290,9 +290,10 @@ pub fn run_select_tool(
                 return;
             }
 
-            // 3. Empty canvas → rubber band (Alt = freeform loop).
+            // 3. Empty canvas → rubber band (Ctrl = freeform loop; Alt
+            // also works where the window manager doesn't grab it).
             let alt = keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight);
-            **gesture = if alt {
+            **gesture = if alt || ctrl {
                 SelectGesture::Lasso {
                     points: vec![p],
                     additive: shift,
@@ -368,7 +369,7 @@ pub fn run_select_tool(
             bodies,
         } => {
             if let Some(p) = snapped.raw {
-                if !*engaged && press.distance(p) > 4.0 * cam_scale {
+                if !*engaged && press.distance(p) > 8.0 * cam_scale {
                     *engaged = true;
                     hold.entities = bodies.iter().map(|(e, ..)| *e).collect();
                     exclusions.0.clone_from(&hold.entities);
@@ -479,10 +480,20 @@ pub fn run_select_tool(
                     selection.clear();
                 }
                 let (min, max) = (start.min(p), start.max(p));
+                // CONTRACT: box selection takes only bodies FULLY inside
+                // the rectangle (no partials), and never the infinite
+                // ground (its AABB overlaps everything).
+                let shapes = transforms.p1();
                 let mut hits: Vec<Entity> = physics
                     .bodies_in_aabb(min, max)
                     .into_iter()
-                    .filter(|e| transforms.p0().contains(*e))
+                    .filter(|e| {
+                        let Ok((shape, transform)) = shapes.get(*e) else {
+                            return false;
+                        };
+                        !shape.contains_half_plane()
+                            && body_fully_inside(shape, transform, min, max)
+                    })
                     .collect();
                 expand_groups(&mut hits, &groups);
                 for e in hits {
@@ -498,11 +509,22 @@ pub fn run_select_tool(
                 }
                 // CONTRACT: a body is loop-selected iff its center lies
                 // inside the drawn ring (matching Algodoo); group members
-                // come along with any selected member.
-                let mut hits: Vec<Entity> = transforms
+                // come along with any selected member. The infinite
+                // ground is never lasso-selected.
+                let centers: Vec<(Entity, Vec2)> = transforms
                     .p3()
                     .iter()
                     .filter(|(_, t)| point_in_ring(t.translation.truncate(), &points))
+                    .map(|(e, t)| (e, t.translation.truncate()))
+                    .collect();
+                let shapes = transforms.p0();
+                let mut hits: Vec<Entity> = centers
+                    .into_iter()
+                    .filter(|(e, _)| {
+                        shapes
+                            .get(*e)
+                            .is_ok_and(|(shape, _)| !shape.contains_half_plane())
+                    })
                     .map(|(e, _)| e)
                     .collect();
                 expand_groups(&mut hits, &groups);
@@ -629,4 +651,22 @@ fn draw_shape_outline(gizmos: &mut Gizmos, shape: &ShapeDef, pose: PosRot, color
         }
         gizmos.linestrip_2d(pts, color);
     }
+}
+
+/// Whether a body's (conservative) world bounds lie fully inside the
+/// axis-aligned box — the "no partials" rule for box selection.
+fn body_fully_inside(shape: &ShapeDef, transform: &Transform, min: Vec2, max: Vec2) -> bool {
+    let (smin, smax) = crate::geometry::sdf::aabb(shape);
+    let affine = transform.compute_affine();
+    [
+        Vec2::new(smin.x, smin.y),
+        Vec2::new(smax.x, smin.y),
+        Vec2::new(smax.x, smax.y),
+        Vec2::new(smin.x, smax.y),
+    ]
+    .into_iter()
+    .all(|corner| {
+        let w = affine.transform_point3(corner.extend(0.0)).truncate();
+        w.x >= min.x && w.x <= max.x && w.y >= min.y && w.y <= max.y
+    })
 }

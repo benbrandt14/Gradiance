@@ -204,6 +204,8 @@ fn box_selected_assembly_deletes_and_restores_with_its_constraints() {
                 body_b: Some(b),
                 anchor_a: Vec2::new(15.0, 0.0),
                 anchor_b: Vec2::new(-15.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
             },
         },
     });
@@ -249,6 +251,8 @@ fn box_selected_assembly_duplicates_with_its_constraints() {
                 body_b: Some(b),
                 anchor_a: Vec2::new(15.0, 0.0),
                 anchor_b: Vec2::new(-15.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
             },
         },
     });
@@ -278,4 +282,42 @@ fn sim_settings_gravity_is_applied_by_the_physics_seam() {
     let entity = entity_of(&app, id).unwrap();
     let y = app.world().get::<Transform>(entity).unwrap().translation.y;
     assert!(y > 50.0, "body rose under inverted gravity (y = {y})");
+}
+
+/// Duplicating a grouped assembly must create an independent group —
+/// clones joining the originals' group was the "group selection
+/// deteriorates after repeated operations" bug (feedback 2.3).
+#[test]
+fn duplicated_groups_are_independent_of_their_source_group() {
+    let mut app = paused_app();
+    let a = spawn_box(&mut app, Vec2::new(-30.0, 0.0));
+    let b = spawn_box(&mut app, Vec2::new(30.0, 0.0));
+    app.world_mut().write_message(GroupIntent {
+        targets: vec![a, b],
+    });
+    app.update();
+
+    app.world_mut().write_message(DuplicateIntent {
+        sources: vec![a, b],
+        offset: Vec2::new(200.0, 0.0),
+    });
+    app.update();
+
+    let mut groups: Vec<u32> = app
+        .world_mut()
+        .query::<&SelectionGroup>()
+        .iter(app.world())
+        .map(|g| g.0)
+        .collect();
+    groups.sort_unstable();
+    assert_eq!(groups.len(), 4, "both pairs grouped");
+    assert_eq!(
+        groups[0], groups[1],
+        "originals share a group; clones share a group"
+    );
+    assert_eq!(groups[2], groups[3]);
+    assert_ne!(
+        groups[0], groups[2],
+        "clone group must be distinct from the source group"
+    );
 }

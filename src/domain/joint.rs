@@ -113,6 +113,18 @@ pub struct JointDef {
     pub anchor_a: Vec2,
     /// Anchor in body-B local space — or world space for world pins.
     pub anchor_b: Vec2,
+    /// Body A's rotation when the joint was authored (radians).
+    ///
+    /// Together with [`rest_rot_b`](Self::rest_rot_b) this defines the
+    /// constraint's rest orientation: welds hold the bodies at their
+    /// *creation-time* relative angle, sliders lock rotation to it, and
+    /// hinge limits are measured from it. Without this, joints between
+    /// rotated bodies violently snap into alignment at spawn.
+    #[serde(default)]
+    pub rest_rot_a: f32,
+    /// Body B's rotation when the joint was authored (0 for world pins).
+    #[serde(default)]
+    pub rest_rot_b: f32,
 }
 
 impl JointDef {

@@ -115,12 +115,13 @@ pub fn topmost_body_at(
     bodies_at_sorted(p, physics, bodies).first().copied()
 }
 
-/// Default appearance for newly authored bodies: hue follows the
-/// front-most layer bit (`hsl(bit · 30°, 0.8, 0.5)`).
-pub fn appearance_for_layers(layers: &LayerMask32) -> crate::domain::appearance::Appearance {
-    let bit = layers.occupied_range().map_or(0, |(min, _)| min);
+/// Default appearance for a newly authored body: a random pleasant hue
+/// derived from its stable id (Algodoo behavior — every new body gets
+/// its own color; deterministic per id, so undo/redo repaint the same).
+pub fn appearance_for_id(id: crate::core::ids::StableId) -> crate::domain::appearance::Appearance {
+    let hue = (id.0.as_u128() % 360) as f32;
     crate::domain::appearance::Appearance {
-        fill: crate::domain::appearance::Rgba::from_hsl(bit as f32 * 30.0, 0.8, 0.5),
+        fill: crate::domain::appearance::Rgba::from_hsl(hue, 0.65, 0.55),
     }
 }
 
@@ -130,14 +131,14 @@ pub fn new_body_record(
     pos: Vec2,
     rot: f32,
 ) -> crate::command::snapshot::BodyRecord {
-    let layers = LayerMask32::default();
+    let id = crate::core::ids::StableId::new();
     crate::command::snapshot::BodyRecord {
-        id: crate::core::ids::StableId::new(),
+        id,
         pose: crate::core::units::PosRot { pos, rot },
         shape,
         props: crate::domain::props::PhysicalProps::default(),
-        appearance: appearance_for_layers(&layers),
-        layers,
+        appearance: appearance_for_id(id),
+        layers: LayerMask32::default(),
         group: None,
     }
 }
