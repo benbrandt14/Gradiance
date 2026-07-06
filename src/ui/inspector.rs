@@ -213,6 +213,9 @@ pub fn inspector_window(
                     ShapeDef::HalfPlane => {
                         ui.label("infinite ground plane");
                     }
+                    tree @ (ShapeDef::Csg { .. } | ShapeDef::Placed { .. }) => {
+                        ui.label(format!("CSG shape · depth {}", tree.depth()));
+                    }
                 }
             }
 

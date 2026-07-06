@@ -18,25 +18,38 @@ fn collider_for(shape: &ShapeDef) -> Option<Collider> {
         ShapeDef::Box { width, height } => Some(Collider::rectangle(*width, *height)),
         ShapeDef::Circle { radius } => Some(Collider::circle(*radius)),
         ShapeDef::Polygon { outline, holes } => {
-            // Outline and each hole become closed loops of segment indices;
-            // convex decomposition handles concavity and holes alike.
-            let mut vertices: Vec<Vector> = Vec::new();
-            let mut indices: Vec<[u32; 2]> = Vec::new();
-            for ring in std::iter::once(outline).chain(holes.iter()) {
-                let start = vertices.len() as u32;
-                let n = ring.len() as u32;
-                if n < 3 {
-                    return None;
-                }
-                vertices.extend(ring.iter().copied());
-                indices.extend((0..n).map(|i| [start + i, start + (i + 1) % n]));
-            }
-            Some(Collider::convex_decomposition(vertices, indices))
+            decomposition_collider(std::iter::once(outline).chain(holes.iter()))
         }
         // Truly infinite: the surface passes through the body origin with
         // local +Y outward; body rotation orients it.
         ShapeDef::HalfPlane => Some(Collider::half_space(Vector::Y)),
+        // CSG trees collide as their contoured polygon (the one
+        // discretization point, `geometry::polygonize`).
+        ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => {
+            let contours = crate::geometry::polygonize::polygonize(shape);
+            decomposition_collider(contours.rings())
+        }
     }
+}
+
+/// Convex-decomposes closed rings (outline + holes) into one collider;
+/// concavity and holes are handled alike.
+fn decomposition_collider<'a>(rings: impl Iterator<Item = &'a Vec<Vec2>>) -> Option<Collider> {
+    let mut vertices: Vec<Vector> = Vec::new();
+    let mut indices: Vec<[u32; 2]> = Vec::new();
+    for ring in rings {
+        let start = vertices.len() as u32;
+        let n = ring.len() as u32;
+        if n < 3 {
+            return None;
+        }
+        vertices.extend(ring.iter().copied());
+        indices.extend((0..n).map(|i| [start + i, start + (i + 1) % n]));
+    }
+    if vertices.is_empty() {
+        return None;
+    }
+    Some(Collider::convex_decomposition(vertices, indices))
 }
 
 /// Regenerates colliders for bodies whose shape changed.

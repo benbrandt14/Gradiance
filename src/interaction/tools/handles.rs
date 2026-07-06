@@ -120,7 +120,7 @@ pub fn selection_box(
         let Ok((shape, transform)) = bodies.get(entity) else {
             continue;
         };
-        if matches!(shape, ShapeDef::HalfPlane) {
+        if shape.contains_half_plane() {
             continue;
         }
         let affine = transform.compute_affine();

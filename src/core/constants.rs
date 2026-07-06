@@ -17,9 +17,6 @@ pub const GRAVITY: bevy::math::Vec2 = bevy::math::Vec2::new(0.0, -1000.0);
 /// (bit 0 is the front-most layer, bit 31 the back-most).
 pub const LAYER_HEIGHT: f32 = 10.0;
 
-/// Fixed-point scale used for CSG boolean operations (5 decimal places).
-pub const CLIPPER_SCALE: f64 = 100_000.0;
-
 /// Number of segments used when discretizing a circle into a polygon.
 pub const CIRCLE_SEGMENTS: usize = 48;
 

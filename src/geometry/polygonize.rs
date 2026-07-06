@@ -1,15 +1,24 @@
-//! Converting authored shapes into [`Contours`].
+//! Converting authored shapes into [`Contours`] — the **single
+//! discretization point** between SDF trees and every polygon consumer
+//! (colliders, meshes, snapping, scaling).
 
 use crate::core::constants::{CIRCLE_SEGMENTS, GROUND_SLAB_DEPTH, GROUND_SLAB_WIDTH};
 use crate::domain::shape::ShapeDef;
+use crate::geometry::contour::{FIELD_CELLS, contour_components};
 use crate::geometry::contours::Contours;
+use crate::geometry::sdf;
 use bevy::math::Vec2;
 
 /// Converts a shape into explicit contours (counter-clockwise outline).
 ///
-/// Circles are discretized with [`CIRCLE_SEGMENTS`] segments. The infinite
-/// half-plane becomes a large finite slab (its rendered / CSG stand-in):
-/// surface along local `y = 0`, extending [`GROUND_SLAB_DEPTH`] downward.
+/// Leaves take exact paths: circles are discretized with
+/// [`CIRCLE_SEGMENTS`] segments; the infinite half-plane becomes a large
+/// finite slab (its rendered / CSG stand-in): surface along local
+/// `y = 0`, extending [`GROUND_SLAB_DEPTH`] downward. CSG trees are
+/// contoured from their distance field; when the field splits into
+/// several components this returns the **largest** (commands keep bodies
+/// single-component by splitting cut results — see
+/// [`polygonize_components`] for all of them).
 pub fn polygonize(shape: &ShapeDef) -> Contours {
     match shape {
         ShapeDef::Box { width, height } => rectangle(*width, *height, Vec2::ZERO),
@@ -34,6 +43,30 @@ pub fn polygonize(shape: &ShapeDef) -> Contours {
             GROUND_SLAB_DEPTH,
             Vec2::new(0.0, -GROUND_SLAB_DEPTH / 2.0),
         ),
+        ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => polygonize_components(shape)
+            .into_iter()
+            .max_by(|a, b| {
+                a.area()
+                    .partial_cmp(&b.area())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(Contours {
+                outline: vec![],
+                holes: vec![],
+            }),
+    }
+}
+
+/// Converts a shape into contours, one [`Contours`] per connected
+/// component (leaves are always a single component).
+pub fn polygonize_components(shape: &ShapeDef) -> Vec<Contours> {
+    match shape {
+        ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => {
+            let (min, max) = sdf::aabb(shape);
+            let cell = (max - min).max_element() / FIELD_CELLS;
+            contour_components(|p| sdf::eval(shape, p), min, max, cell)
+        }
+        leaf => vec![polygonize(leaf)],
     }
 }
 

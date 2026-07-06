@@ -31,6 +31,31 @@ fn shape_strategy() -> impl Strategy<Value = ShapeDef> {
             }
         }),
         Just(ShapeDef::HalfPlane),
+        // CSG trees: a leaf op a placed leaf (what cutting produces).
+        (
+            (1.0f32..200.0, 1.0f32..200.0),
+            (0.5f32..100.0),
+            (
+                -100.0f32..100.0,
+                -100.0f32..100.0,
+                0.0f32..std::f32::consts::TAU
+            ),
+            prop_oneof![
+                Just(CsgOp::Union),
+                Just(CsgOp::Subtract),
+                Just(CsgOp::Intersect),
+                (0.5f32..20.0).prop_map(|radius| CsgOp::SmoothUnion { radius }),
+            ],
+        )
+            .prop_map(|((width, height), radius, (x, y, rot), op)| ShapeDef::Csg {
+                op,
+                lhs: Box::new(ShapeDef::Box { width, height }),
+                rhs: Box::new(ShapeDef::Placed {
+                    pos: Vec2::new(x, y),
+                    rot,
+                    shape: Box::new(ShapeDef::Circle { radius }),
+                }),
+            }),
     ]
 }
 
