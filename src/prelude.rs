@@ -3,7 +3,7 @@
 pub use crate::command::array_cmd::ArrayMode;
 pub use crate::command::intent::LoadSceneIntent;
 pub use crate::command::intent::{
-    ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, GroupIntent,
+    ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DuplicateIntent, GroupIntent,
     PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
     TransformChange, UndoIntent, UngroupIntent,
 };
@@ -24,7 +24,7 @@ pub use crate::domain::joint::{JointCommon, JointDef, JointKind, MotorDef};
 pub use crate::domain::layers::LayerMask32;
 pub use crate::domain::props::{BodyKind, PhysicalProps};
 pub use crate::domain::settings::{GridSettings, GridSystem, SnapConfig, SnapSources};
-pub use crate::domain::shape::{ShapeDef, ShapeError};
+pub use crate::domain::shape::{CsgOp, MAX_CSG_DEPTH, ShapeDef, ShapeError};
 pub use crate::domain::{Body, DomainPlugin, Joint};
 pub use crate::interaction::cursor::CursorWorldPos;
 pub use crate::interaction::gesture::{AxisConstraint, GestureConstraints};

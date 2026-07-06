@@ -1,10 +1,11 @@
 //! The single choke point turning intents into applied commands.
 
 use crate::command::array_cmd::ArrayCommand;
+use crate::command::cut_cmd::CutCommand;
 use crate::command::group_cmd::{GroupCommand, UngroupCommand};
 use crate::command::intent::LoadSceneIntent;
 use crate::command::intent::{
-    ArrayIntent, CommitTransformIntent, DeleteIntent, DuplicateIntent, GroupIntent,
+    ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DuplicateIntent, GroupIntent,
     PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent, UndoIntent,
     UngroupIntent,
 };
@@ -75,6 +76,9 @@ pub fn dispatch_intents(world: &mut World) {
             intent.count,
             intent.mode,
         )));
+    }
+    for intent in drain::<CutIntent>(world) {
+        commands.push(Box::new(CutCommand::new(intent.a, intent.b, intent.width)));
     }
     for intent in drain::<DuplicateIntent>(world) {
         commands.push(Box::new(DuplicateCommand::new(

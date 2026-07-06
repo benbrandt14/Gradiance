@@ -5,6 +5,7 @@
 //! [`CommandStack`]. Nothing else may mutate authored components.
 
 pub mod array_cmd;
+pub mod cut_cmd;
 pub mod dispatch;
 pub mod group_cmd;
 pub mod intent;
@@ -146,6 +147,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::PropertyEditIntent>();
         app.add_message::<intent::GroupIntent>();
         app.add_message::<intent::UngroupIntent>();
+        app.add_message::<intent::CutIntent>();
         app.add_message::<intent::LoadSceneIntent>();
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();

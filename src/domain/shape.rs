@@ -1,4 +1,12 @@
 //! The authored geometry of a body.
+//!
+//! `ShapeDef` is a **signed-distance-function tree**: analytic leaves
+//! (`Box`, `Circle`, `Polygon`, `HalfPlane`) composed by CSG operators
+//! (`Csg`) and rigid placements (`Placed`). Leaves polygonize exactly;
+//! operator trees are contoured from the field (`geometry::contour`).
+//! Every derived consumer — colliders, meshes, snapping — reads the tree
+//! through one adapter (`geometry::polygonize`), so the representation
+//! has a single discretization point.
 
 use bevy::math::Vec2;
 use bevy::prelude::Component;
@@ -7,11 +15,33 @@ use serde::{Deserialize, Serialize};
 /// Minimum linear dimension accepted for authored shapes, in world pixels.
 pub const MIN_SHAPE_SIZE: f32 = 0.01;
 
+/// Maximum CSG tree depth before commands must bake results to a
+/// [`ShapeDef::Polygon`] leaf (bounds evaluation cost under repeated cuts).
+pub const MAX_CSG_DEPTH: u32 = 8;
+
+/// A CSG boolean operator over two SDF subtrees.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum CsgOp {
+    /// Material in either operand (`min` of fields).
+    Union,
+    /// Material of `lhs` minus material of `rhs` (`max(a, -b)`).
+    Subtract,
+    /// Material in both operands (`max` of fields).
+    Intersect,
+    /// Union with a fillet of the given radius (polynomial smooth-min) —
+    /// blends the operands where they meet.
+    SmoothUnion {
+        /// Blend radius in world pixels (> 0).
+        radius: f32,
+    },
+}
+
 /// The engine-agnostic source-of-truth geometry of a body.
 ///
 /// Editing this component live-regenerates the collider and the rendered
 /// mesh via the physics/render sync systems. Polygon vertices are
-/// **centroid-relative**; `holes` are produced by CSG cuts.
+/// **centroid-relative at authoring time** (CSG reshapes may leave the
+/// body origin off-centroid); `holes` are produced by CSG cuts.
 #[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ShapeDef {
     /// An axis-aligned rectangle (before body rotation).
@@ -39,6 +69,25 @@ pub enum ShapeDef {
     /// orients it. Used by the ground tool; physically boundless, rendered
     /// as a large slab.
     HalfPlane,
+    /// A CSG boolean over two subtrees (fields in this shape's space).
+    Csg {
+        /// The operator.
+        op: CsgOp,
+        /// Left operand.
+        lhs: Box<ShapeDef>,
+        /// Right operand.
+        rhs: Box<ShapeDef>,
+    },
+    /// A subtree rigidly placed within this shape's space (rotation and
+    /// translation only — isometries keep the field an exact distance).
+    Placed {
+        /// Subtree origin in this shape's space.
+        pos: Vec2,
+        /// Subtree rotation, radians.
+        rot: f32,
+        /// The placed subtree.
+        shape: Box<ShapeDef>,
+    },
 }
 
 /// Why a [`ShapeDef`] was rejected.
@@ -92,6 +141,40 @@ impl ShapeDef {
                 Ok(())
             }
             Self::HalfPlane => Ok(()),
+            Self::Csg { op, lhs, rhs } => {
+                if let CsgOp::SmoothUnion { radius } = op
+                    && !(radius.is_finite() && *radius > 0.0)
+                {
+                    return Err(ShapeError::Degenerate);
+                }
+                lhs.validate()?;
+                rhs.validate()
+            }
+            Self::Placed { pos, rot, shape } => {
+                if !(pos.is_finite() && rot.is_finite()) {
+                    return Err(ShapeError::NonFinite);
+                }
+                shape.validate()
+            }
+        }
+    }
+
+    /// Depth of the CSG tree (leaves are 1).
+    pub fn depth(&self) -> u32 {
+        match self {
+            Self::Box { .. } | Self::Circle { .. } | Self::Polygon { .. } | Self::HalfPlane => 1,
+            Self::Csg { lhs, rhs, .. } => 1 + lhs.depth().max(rhs.depth()),
+            Self::Placed { shape, .. } => 1 + shape.depth(),
+        }
+    }
+
+    /// Whether any leaf of this tree is the infinite ground half-plane.
+    pub fn contains_half_plane(&self) -> bool {
+        match self {
+            Self::HalfPlane => true,
+            Self::Box { .. } | Self::Circle { .. } | Self::Polygon { .. } => false,
+            Self::Csg { lhs, rhs, .. } => lhs.contains_half_plane() || rhs.contains_half_plane(),
+            Self::Placed { shape, .. } => shape.contains_half_plane(),
         }
     }
 }

@@ -112,6 +112,18 @@ pub struct LoadSceneIntent {
     pub scene: crate::command::snapshot::SceneRecord,
 }
 
+/// Request to cut every body crossed by a stroke (CSG subtract; severed
+/// bodies split into pieces).
+#[derive(Message, Debug, Clone)]
+pub struct CutIntent {
+    /// Stroke start, world space.
+    pub a: Vec2,
+    /// Stroke end, world space.
+    pub b: Vec2,
+    /// Stroke width, world pixels.
+    pub width: f32,
+}
+
 /// Request to undo the last command.
 #[derive(Message, Debug, Clone, Copy, Default)]
 pub struct UndoIntent;

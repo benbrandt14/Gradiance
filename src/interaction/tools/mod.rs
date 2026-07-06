@@ -14,6 +14,7 @@
 pub mod box_tool;
 pub mod circle_tool;
 pub mod connector_tool;
+pub mod cut_tool;
 pub mod drag_tool;
 pub mod ground_tool;
 pub mod handles;
@@ -43,6 +44,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<handles::ScaleFrame>();
         app.init_resource::<connector_tool::ConnectorDraft>();
         app.init_resource::<box_tool::BoxDraft>();
+        app.init_resource::<cut_tool::CutDraft>();
         app.init_resource::<circle_tool::CircleDraft>();
         app.init_resource::<ground_tool::GroundDraft>();
         app.init_resource::<polygon_tool::PolygonDraft>();
@@ -53,6 +55,7 @@ impl Plugin for ToolsPlugin {
                 select::run_select_tool.run_if(in_state(ToolState::Select)),
                 drag_tool::run_drag_tool.run_if(in_state(ToolState::Drag)),
                 box_tool::run_box_tool.run_if(in_state(ToolState::Box)),
+                cut_tool::run_cut_tool.run_if(in_state(ToolState::Cut)),
                 circle_tool::run_circle_tool.run_if(in_state(ToolState::Circle)),
                 ground_tool::run_ground_tool.run_if(in_state(ToolState::Ground)),
                 polygon_tool::run_polygon_tool.run_if(in_state(ToolState::Polygon)),
@@ -69,6 +72,7 @@ impl Plugin for ToolsPlugin {
                     select::draw_select_previews.run_if(in_state(ToolState::Select)),
                     handles::draw_handles.run_if(in_state(ToolState::Select)),
                     box_tool::draw_box_preview.run_if(in_state(ToolState::Box)),
+                    cut_tool::draw_cut_preview.run_if(in_state(ToolState::Cut)),
                     circle_tool::draw_circle_preview.run_if(in_state(ToolState::Circle)),
                     ground_tool::draw_ground_preview.run_if(in_state(ToolState::Ground)),
                     polygon_tool::draw_polygon_preview.run_if(in_state(ToolState::Polygon)),
@@ -93,7 +97,7 @@ pub fn bodies_at_sorted(
         .into_iter()
         .filter_map(|entity| {
             let (shape, layers) = bodies.get(entity).ok()?;
-            let is_ground = matches!(shape, ShapeDef::HalfPlane);
+            let is_ground = shape.contains_half_plane();
             let front_bit = layers.occupied_range().map_or(32, |(min, _)| min);
             Some((is_ground, front_bit, entity))
         })

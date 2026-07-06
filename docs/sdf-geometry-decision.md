@@ -83,6 +83,39 @@ available later without touching geometry, physics, or tools.
   velocity inheritance `v + ω × r`, joint reattach-or-delete.
 - Old scene files parse unchanged (new enum variants are additive for RON).
 
+## Build vs. reuse (ecosystem survey, 2026-07-06)
+
+Surveyed before hand-rolling anything:
+
+- **`fidget` 0.4.3** (actively maintained) is the industrial implicit-
+  modeling library — JIT/VM evaluation with interval-arithmetic pruning.
+  It earns its weight on *large* expression trees; ours are depth ≤ 8 over
+  four leaf kinds, and the authored type must be our own serde enum (it
+  *is* the save format), so fidget could only sit behind, not replace, the
+  domain type. It is the named **escalation path** if tree evaluation ever
+  becomes the bottleneck: swap it in behind `polygonize` without touching
+  any consumer.
+- **`contour` 0.13** (d3-contour port) does marching squares, but over a
+  pre-sampled grid with linear interpolation only — no access to the
+  analytic field for vertex refinement or saddle disambiguation, which is
+  where our accuracy comes from. Using it would be more glue than
+  algorithm.
+- **`sdfu`** is unmaintained (2021). **`bevy_smud`** pins bevy ^0.16 and
+  is flat screen-space 2D; useful later only as a WGSL reference corpus.
+
+Net hand-rolled surface: ~90 lines of textbook primitive distance
+formulas plus ~250 lines of marching squares — all pure, all proptested.
+
+## Rendering follow-up: extrusion of the same field
+
+A 2D SDF extrudes into an *exact* 3D SDF with the standard two-line
+`opExtrusion` pattern, so the future raymarched render path (M10+)
+evaluates the **same** `ShapeDef` tree in WGSL — each variant is a few
+shader ops — and inherits the 2.5D layer-depth look with correct depth
+(and therefore shadow maps) from a fragment-depth write. Until then the
+derived-mesh extrusion of the contoured field renders identically to
+today's bodies.
+
 ## What this buys beyond the cut tool
 
 Analytic circles under uniform scale (removes the polygonize-on-scale
