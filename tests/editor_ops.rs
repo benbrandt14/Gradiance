@@ -128,9 +128,9 @@ fn grouping_makes_click_select_the_whole_group_and_undoes() {
     app.update();
 
     let (ea, eb) = (entity_of(&app, a).unwrap(), entity_of(&app, b).unwrap());
-    let ga = app.world().get::<SelectionGroup>(ea).map(|g| g.0);
-    let gb = app.world().get::<SelectionGroup>(eb).map(|g| g.0);
-    assert!(ga.is_some() && ga == gb, "same fresh group id");
+    let ga = app.world().get::<SelectionGroup>(ea).map(|g| g.0.clone());
+    let gb = app.world().get::<SelectionGroup>(eb).map(|g| g.0.clone());
+    assert!(ga.is_some() && ga == gb, "same fresh group stack");
 
     // CONTRACT: clicking one member selects the whole group.
     set_cursor(&mut app, Vec2::new(0.0, 0.0));
@@ -307,7 +307,7 @@ fn duplicated_groups_are_independent_of_their_source_group() {
         .world_mut()
         .query::<&SelectionGroup>()
         .iter(app.world())
-        .map(|g| g.0)
+        .filter_map(SelectionGroup::outermost)
         .collect();
     groups.sort_unstable();
     assert_eq!(groups.len(), 4, "both pairs grouped");
@@ -320,4 +320,66 @@ fn duplicated_groups_are_independent_of_their_source_group() {
         groups[0], groups[2],
         "clone group must be distinct from the source group"
     );
+}
+
+/// Hierarchical grouping: `ungroup(group(group(A,B,C), D))` must leave
+/// the inner group `(A,B,C)` intact — the user's exact contract.
+#[test]
+fn ungroup_peels_only_the_outermost_group() {
+    let mut app = paused_app();
+    let a = spawn_box(&mut app, Vec2::new(0.0, 0.0));
+    let b = spawn_box(&mut app, Vec2::new(30.0, 0.0));
+    let c = spawn_box(&mut app, Vec2::new(60.0, 0.0));
+    let d = spawn_box(&mut app, Vec2::new(200.0, 0.0));
+    app.update();
+
+    // Inner group over A, B, C.
+    app.world_mut().write_message(GroupIntent {
+        targets: vec![a, b, c],
+    });
+    app.update();
+    // Outer group wrapping the inner assembly plus D.
+    app.world_mut().write_message(GroupIntent {
+        targets: vec![a, b, c, d],
+    });
+    app.update();
+
+    let stack = |app: &App, id| {
+        entity_of(app, id)
+            .and_then(|e| app.world().get::<SelectionGroup>(e).map(|g| g.0.clone()))
+            .unwrap_or_default()
+    };
+    assert_eq!(stack(&app, a).len(), 2, "A is in inner + outer group");
+    assert_eq!(stack(&app, d).len(), 1, "D is only in the outer group");
+    // Every member shares the same outermost id.
+    let outer = *stack(&app, a).last().unwrap();
+    assert_eq!(stack(&app, d).last(), Some(&outer));
+
+    // Ungroup the whole outer selection.
+    app.world_mut().write_message(UngroupIntent {
+        targets: vec![a, b, c, d],
+    });
+    app.update();
+
+    // Inner group survives on A, B, C; D is fully ungrouped.
+    let inner = stack(&app, a);
+    assert_eq!(inner.len(), 1, "A keeps its inner group");
+    assert_eq!(stack(&app, b), inner, "B shares the inner group");
+    assert_eq!(stack(&app, c), inner, "C shares the inner group");
+    assert!(stack(&app, d).is_empty(), "D is fully ungrouped");
+
+    // Clicking A now selects only the inner trio, not D.
+    set_cursor(&mut app, Vec2::new(0.0, 0.0));
+    mouse(&mut app, true);
+    app.update();
+    mouse(&mut app, false);
+    app.update();
+    assert_eq!(
+        app.world().resource::<Selection>().len(),
+        3,
+        "inner group selects A, B, C — not D"
+    );
+
+    undo(&mut app);
+    assert_eq!(stack(&app, d).len(), 1, "undo restores D's outer group");
 }

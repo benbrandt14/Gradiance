@@ -149,7 +149,8 @@ impl CutCommand {
                             props: original.props,
                             appearance: original.appearance,
                             layers: original.layers,
-                            group: original.group,
+                            groups: original.groups.clone(),
+                            group: None,
                         }
                     })
                     .collect();

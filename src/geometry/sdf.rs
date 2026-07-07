@@ -1,10 +1,39 @@
 //! Signed-distance evaluation of [`ShapeDef`] trees.
 //!
-//! Negative inside, positive outside, zero on the boundary. Leaves are
-//! exact distances; `Placed` is an isometry so exactness is preserved.
-//! After a boolean the field is a *conservative bound* rather than a true
-//! distance (the classic min/max property) — still exact on the boundary,
-//! which is all contouring and field forces need.
+//! Every body's geometry is an SDF: negative inside, positive outside,
+//! zero on the boundary. Leaves ([`Box`](ShapeDef::Box),
+//! [`Circle`](ShapeDef::Circle), …) are exact distances;
+//! [`Placed`](ShapeDef::Placed) is a rigid isometry so exactness is
+//! preserved. After a CSG boolean the field is a *conservative bound*
+//! rather than a true distance (the classic min/max property) — still
+//! exact on the boundary, which is all contouring
+//! ([`geometry::contour`](crate::geometry::contour)) and field forces
+//! need.
+//!
+//! This is the seam that makes CSG cheap: subtracting a shape is one
+//! [`Subtract`](CsgOp::Subtract) node, merging two bodies is one
+//! [`Union`](CsgOp::Union) node — no mesh booleans.
+//!
+//! ```
+//! use gradiance::domain::shape::{CsgOp, ShapeDef};
+//! use gradiance::geometry::sdf::eval;
+//! use bevy::math::Vec2;
+//!
+//! // A disc of radius 10: the field is exactly `|p| - r`.
+//! let disc = ShapeDef::Circle { radius: 10.0 };
+//! assert!((eval(&disc, Vec2::ZERO) + 10.0).abs() < 1e-5); // -10 at center
+//! assert!((eval(&disc, Vec2::new(10.0, 0.0))).abs() < 1e-5); // 0 on rim
+//!
+//! // Punch a hole: disc − a small disc at the origin. The center that
+//! // was solid (-10) is now outside the material (positive).
+//! let ring = ShapeDef::Csg {
+//!     op: CsgOp::Subtract,
+//!     lhs: Box::new(disc),
+//!     rhs: Box::new(ShapeDef::Circle { radius: 4.0 }),
+//! };
+//! assert!(eval(&ring, Vec2::ZERO) > 0.0);
+//! assert!(eval(&ring, Vec2::new(7.0, 0.0)) < 0.0); // still solid mid-ring
+//! ```
 
 use crate::core::constants::{GROUND_SLAB_DEPTH, GROUND_SLAB_WIDTH};
 use crate::domain::shape::{CsgOp, ShapeDef};

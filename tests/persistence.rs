@@ -97,10 +97,10 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
         1u32..256,
         1u32..=u32::MAX,
         (0.0f32..1.0, 0.0f32..1.0, 0.0f32..1.0, 0.1f32..1.0),
-        proptest::option::of(0u32..5),
+        proptest::collection::vec(1u32..6, 0..3),
     )
         .prop_map(
-            |(shape, props, (x, y), rot, memberships, filters, (r, g, b, a), group)| BodyRecord {
+            |(shape, props, (x, y), rot, memberships, filters, (r, g, b, a), groups)| BodyRecord {
                 id: StableId::new(),
                 pose: PosRot {
                     pos: Vec2::new(x, y),
@@ -116,7 +116,8 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                     memberships,
                     filters,
                 },
-                group,
+                groups,
+                group: None,
             },
         )
 }
@@ -261,7 +262,7 @@ fn any_scene_round_trips_through_world_and_ron_to_a_fixpoint() {
                 prop_assert_eq!(a.props, b.props);
                 prop_assert_eq!(a.appearance, b.appearance);
                 prop_assert_eq!(a.layers, b.layers);
-                prop_assert_eq!(a.group, b.group);
+                prop_assert_eq!(&a.groups, &b.groups);
                 prop_assert!((a.pose.pos - b.pose.pos).length() < 1e-3);
                 prop_assert!((a.pose.rot - b.pose.rot).abs() < 1e-3);
             }

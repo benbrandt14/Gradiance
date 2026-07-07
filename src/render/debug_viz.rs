@@ -1,6 +1,5 @@
 //! Debug overlays: gizmo visualizations of editor/physics internals,
-//! toggled from the Debug settings tab
-//! ([`DebugSettings`](crate::domain::settings::DebugSettings)).
+//! toggled from the Debug settings tab ([`DebugSettings`]).
 //!
 //! Everything here reads authored components, the pure geometry layer,
 //! and the engine-agnostic `physics::queries` facade — no avian types.

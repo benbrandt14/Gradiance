@@ -2,8 +2,8 @@
 //!
 //! Tools and UI construct fully-specified intents (records built, ids
 //! resolved, old/new values captured) and write them with a
-//! `MessageWriter`. The dispatcher turns each into a [`GameCommand`]
-//! (one intent, one undo step).
+//! `MessageWriter`. The dispatcher turns each into a
+//! [`GameCommand`](crate::command::GameCommand) (one intent, one undo step).
 
 use crate::command::snapshot::BodyRecord;
 use crate::core::ids::StableId;
