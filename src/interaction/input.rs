@@ -164,6 +164,7 @@ pub struct ShortcutWriters<'w> {
     delete: MessageWriter<'w, DeleteIntent>,
     group: MessageWriter<'w, GroupIntent>,
     ungroup: MessageWriter<'w, UngroupIntent>,
+    delete_joint: MessageWriter<'w, crate::command::intent::DeleteJointIntent>,
     save: MessageWriter<'w, crate::persist::SaveSceneRequest>,
     load: MessageWriter<'w, crate::persist::LoadSceneRequest>,
     snapshot: MessageWriter<'w, crate::persist::SnapshotRequest>,
@@ -176,6 +177,7 @@ pub fn apply_shortcuts(
     keyboard_captured: Res<crate::interaction::KeyboardCaptured>,
     mut writers: ShortcutWriters,
     mut selection: ResMut<Selection>,
+    selected_joint: Res<crate::interaction::selection::SelectedJoint>,
     ids: Query<&StableId>,
     bodies: Query<Entity, With<Body>>,
     game_state: Res<State<GameState>>,
@@ -204,10 +206,19 @@ pub fn apply_shortcuts(
     if actions.just_pressed(&EditorAction::Redo) {
         writers.redo.write(RedoIntent);
     }
-    if actions.just_pressed(&EditorAction::DeleteSelection) && !selection.is_empty() {
-        let targets = selected_ids(&selection);
-        if !targets.is_empty() {
-            writers.delete.write(DeleteIntent { targets });
+    if actions.just_pressed(&EditorAction::DeleteSelection) {
+        // A selected joint takes delete priority (it consumed selection).
+        if let Some(joint) = selected_joint.0
+            && let Ok(&id) = ids.get(joint)
+        {
+            writers
+                .delete_joint
+                .write(crate::command::intent::DeleteJointIntent { id });
+        } else if !selection.is_empty() {
+            let targets = selected_ids(&selection);
+            if !targets.is_empty() {
+                writers.delete.write(DeleteIntent { targets });
+            }
         }
     }
     // Ungroup first: its chord (Ctrl+Shift+G) also satisfies Group's.

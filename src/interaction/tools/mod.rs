@@ -52,6 +52,13 @@ impl Plugin for ToolsPlugin {
         app.add_systems(
             Update,
             (
+                // Joint picking runs first: a joint click consumes the
+                // press so the body select tool skips it this frame.
+                crate::interaction::joint_edit::pick_joint
+                    .run_if(in_state(ToolState::Select))
+                    .before(select::run_select_tool),
+                crate::interaction::joint_edit::drag_joint_anchor
+                    .run_if(in_state(ToolState::Select)),
                 select::run_select_tool.run_if(in_state(ToolState::Select)),
                 drag_tool::run_drag_tool.run_if(in_state(ToolState::Drag)),
                 box_tool::run_box_tool.run_if(in_state(ToolState::Box)),

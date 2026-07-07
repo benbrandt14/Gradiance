@@ -112,6 +112,13 @@ pub struct LoadSceneIntent {
     pub scene: crate::command::snapshot::SceneRecord,
 }
 
+/// Request to delete one joint (undoable, restores the same id).
+#[derive(Message, Debug, Clone)]
+pub struct DeleteJointIntent {
+    /// The joint to delete.
+    pub id: StableId,
+}
+
 /// Request to cut every body crossed by a stroke (CSG subtract; severed
 /// bodies split into pieces).
 #[derive(Message, Debug, Clone)]

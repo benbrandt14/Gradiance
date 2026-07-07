@@ -5,11 +5,11 @@ use crate::command::cut_cmd::CutCommand;
 use crate::command::group_cmd::{GroupCommand, UngroupCommand};
 use crate::command::intent::LoadSceneIntent;
 use crate::command::intent::{
-    ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DuplicateIntent, GroupIntent,
-    MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
-    UndoIntent, UngroupIntent,
+    ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
+    DuplicateIntent, GroupIntent, MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent,
+    SpawnBodyIntent, SpawnJointIntent, UndoIntent, UngroupIntent,
 };
-use crate::command::joint_cmd::SpawnJointCommand;
+use crate::command::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::command::merge_cmd::MergeCommand;
 use crate::command::property::SetPropertyCommand;
 use crate::command::scale_cmd::ScaleCommand;
@@ -80,6 +80,9 @@ pub fn dispatch_intents(world: &mut World) {
     }
     for intent in drain::<CutIntent>(world) {
         commands.push(Box::new(CutCommand::new(intent.a, intent.b, intent.width)));
+    }
+    for intent in drain::<DeleteJointIntent>(world) {
+        commands.push(Box::new(DeleteJointCommand::new(intent.id)));
     }
     for intent in drain::<MergeIntent>(world) {
         commands.push(Box::new(MergeCommand::new(intent.targets)));

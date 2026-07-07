@@ -45,20 +45,35 @@ Updated after the M12 feedback round.
   diagrams (dataflow, command lifecycle, layer boundaries, SDF pipeline,
   depth mapping). CI now builds docs with `-D warnings` (no broken links).
 
-## M15 — Interaction & selection feel (Algodoo parity)
+## Addressed in M15
+
+- **Selectable joints** (2.8, 4.1, 4.5): clicking a joint's anchor glyph
+  selects it (clearing the body selection). A selected joint shows the
+  **joint inspector** — kind, connected bodies, `collide_connected`,
+  limits (angle/travel), and motor (target velocity, max effort,
+  oscillate, powered) — editing through the same undoable
+  `PropertyEditIntent`/`PropertyValue::Joint` path. Delete removes just
+  the joint (undoable, no body cascade). In pause mode the anchor drags
+  to relocate the joint (one undoable move). The selected joint is
+  ringed, and a powered motor draws a direction arrow (curved for hinges,
+  straight for sliders) whose length tracks target velocity — the "motor
+  state" visualization requested in 4.1.
+- **Hinge-vs-weld re-diagnosis tooling** (4.1): the joint inspector now
+  labels the kind unambiguously ("Hinge (revolute)" / "Weld (fixed)"),
+  so clicking the joint in a live scene shows exactly what it is. The
+  headless swing-vs-rigid contrast test still passes.
+
+## M16 — Interaction & selection feel (Algodoo parity)
 
 - Selection works from every tool (click falls through to select) (2.1)
 - Shift-drag / modifier semantics rework; no gesture dead-ends (1.1, 2.2)
 - Play-mode right-drag applies torque (dynamic rotate, non-fixed pivot) (2.6)
-- **Joints as selectable entities**: pickable, right-click opens their
-  configuration (motors, limits — 4.5), movable in pause mode, never
-  displaced by body resize (2.8, 4.1)
 - Inspector re-architecture: context-menu-first, inspector as pop-out (2.8)
 - Collision-layer set visualization UI (5.4)
-- Re-diagnose "hinge behaves like weld" with joint selection + circle
-  radius indicator + orbit view in hand (4.1)
+- Joint config also reachable via right-click context menu (not only the
+  select-and-inspect flow landed in M15) (2.8)
 
-## M14 — Grids & snapping (CAD pass)
+## M17 — Grids & snapping (CAD pass)
 
 - Major/minor grid lines; snap points provably on the grid at every
   adaptive zoom level (3.3, 2.5)
@@ -70,7 +85,7 @@ Updated after the M12 feedback round.
   edges curve in polar grids) (3.3)
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4)
 
-## M15 — Rendering & camera polish
+## M18 — Rendering & camera polish
 
 - Emissive material option; ambient occlusion / contact shadows for the
   clay-matte look (9.3)
@@ -81,7 +96,7 @@ Updated after the M12 feedback round.
 - Camera settings section (zoom sensitivity etc.) (10.2)
 - Sim-settings UI: scrub-drag values, gravity direction widget (8.2)
 
-## M16 — Constraints II
+## M19 — Constraints II
 
 - Weld rework: merge bodies into one (SDF `Union` — the tree makes this
   natural) or make-static, replacing the weld-as-joint model (4.2)
@@ -93,7 +108,7 @@ Updated after the M12 feedback round.
 - Engine tuning: timestep/substeps in Simulation settings, substep debug
   view (8.3)
 
-## M17 — CSG modeling & pieces
+## M20 — CSG modeling & pieces
 
 - Boolean operations between bodies via context menu (join / subtract /
   intersect / xor) producing analytic trees (7.3)

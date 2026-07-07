@@ -132,4 +132,13 @@ impl JointDef {
     pub fn referenced_bodies(&self) -> impl Iterator<Item = StableId> {
         std::iter::once(self.body_a).chain(self.body_b)
     }
+
+    /// The joint's world-space anchor position, given body A's pose.
+    ///
+    /// This is where the glyph is drawn and where picking tests against —
+    /// `anchor_a` is body-A local, so it rotates and translates with the
+    /// body.
+    pub fn anchor_world(&self, body_a_pos: Vec2, body_a_rot: f32) -> Vec2 {
+        body_a_pos + Vec2::from_angle(body_a_rot).rotate(self.anchor_a)
+    }
 }

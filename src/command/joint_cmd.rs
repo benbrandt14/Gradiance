@@ -58,3 +58,45 @@ impl GameCommand for SpawnJointCommand {
         "Spawn joint"
     }
 }
+
+/// Deletes one joint, restoring it (same id) on undo.
+#[derive(Debug)]
+pub struct DeleteJointCommand {
+    /// The joint to delete.
+    pub id: StableId,
+    /// Captured state for undo; filled during `apply`.
+    record: Option<JointRecord>,
+}
+
+impl DeleteJointCommand {
+    /// Builds a delete command for one joint.
+    pub fn new(id: StableId) -> Self {
+        Self { id, record: None }
+    }
+}
+
+impl GameCommand for DeleteJointCommand {
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
+        let entity = world
+            .resource::<IdIndex>()
+            .entity(self.id)
+            .ok_or(CommandError::MissingEntity(self.id))?;
+        self.record = JointRecord::capture(world, entity);
+        if self.record.is_none() {
+            return Err(CommandError::NoEffect);
+        }
+        world.despawn(entity);
+        Ok(())
+    }
+
+    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
+        if let Some(record) = &self.record {
+            record.spawn(world);
+        }
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        "Delete joint"
+    }
+}
