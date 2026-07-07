@@ -84,9 +84,11 @@ fn apply_sim_settings(
     settings: Res<crate::domain::settings::SimSettings>,
     mut gravity: ResMut<Gravity>,
     mut time: ResMut<Time<Physics>>,
+    mut substeps: ResMut<SubstepCount>,
 ) {
     gravity.0 = settings.gravity;
     time.set_relative_speed(settings.speed.clamp(0.0, 10.0));
+    substeps.0 = settings.substeps.clamp(1, 64);
 }
 
 fn pause_physics_clock(mut time: ResMut<Time<Physics>>) {

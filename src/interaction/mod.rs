@@ -15,6 +15,7 @@
 //! This module may not import `avian2d` (uses `physics::queries`) or
 //! `egui` (UI publishes [`PointerOverUi`] instead).
 
+pub mod align;
 pub mod camera;
 pub mod cursor;
 pub mod gesture;

@@ -10,6 +10,7 @@ pub mod dispatch;
 pub mod group_cmd;
 pub mod intent;
 pub mod joint_cmd;
+pub mod merge_cmd;
 pub mod property;
 pub mod scale_cmd;
 pub mod scene_cmd;
@@ -161,6 +162,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::GroupIntent>();
         app.add_message::<intent::UngroupIntent>();
         app.add_message::<intent::CutIntent>();
+        app.add_message::<intent::MergeIntent>();
         app.add_message::<intent::LoadSceneIntent>();
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();

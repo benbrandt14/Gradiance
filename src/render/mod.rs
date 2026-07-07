@@ -51,6 +51,7 @@ impl Plugin for GradianceRenderPlugin {
                 grid::draw_grid,
                 joint_viz::draw_joints,
                 decorations::draw_circle_radius_lines,
+                decorations::draw_body_borders,
                 debug_viz::draw_debug_overlays,
             ),
         );

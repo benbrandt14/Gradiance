@@ -122,6 +122,7 @@ pub fn appearance_for_id(id: crate::core::ids::StableId) -> crate::domain::appea
     let hue = (id.0.as_u128() % 360) as f32;
     crate::domain::appearance::Appearance {
         fill: crate::domain::appearance::Rgba::from_hsl(hue, 0.65, 0.55),
+        ..Default::default()
     }
 }
 

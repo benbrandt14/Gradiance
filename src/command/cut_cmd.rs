@@ -1,19 +1,16 @@
 //! The CSG cut command: subtract a stroke strip from every body it
 //! crosses.
 //!
-//! Cutting is a **`Subtract` node** on the body's SDF tree
-//! (`domain::shape`). When the remainder stays connected the body keeps
-//! its tree — analytic leaves survive cuts exactly (a notched circle is
-//! still a circle minus a box). When the remainder separates, the
-//! components become fresh polygon-leaf bodies (connectivity is a
+//! Cuts only **sever**: subtracting the strip must separate the body
+//! into components (or swallow it entirely) — partial strokes are
+//! rejected, so no notches or microscopic thin features can appear.
+//! Pieces become fresh polygon-leaf bodies (connectivity is a
 //! topological property no field boolean can express, so splitting is
-//! where discretization is inherent). Polygon-leaf bodies bake their cut
-//! immediately, and trees deeper than [`MAX_CSG_DEPTH`] bake too, so
-//! repeated cutting never grows evaluation cost unboundedly.
+//! where discretization is inherent).
 //!
 //! Joints referencing a split body reattach to the piece containing
 //! their anchor (anchor remapped into the piece's frame) and are deleted
-//! when no piece contains it. Reshapes keep joints untouched.
+//! when no piece contains it.
 
 use crate::command::snapshot::{BodyRecord, JointRecord};
 use crate::command::{CommandError, GameCommand};
@@ -292,7 +289,7 @@ impl GameCommand for CutCommand {
     }
 }
 
-fn apply_joint_changes(
+pub(crate) fn apply_joint_changes(
     world: &mut World,
     changes: &[(JointRecord, Option<JointDef>)],
 ) -> Result<(), CommandError> {
@@ -312,7 +309,7 @@ fn apply_joint_changes(
     Ok(())
 }
 
-fn revert_joint_changes(
+pub(crate) fn revert_joint_changes(
     world: &mut World,
     changes: &[(JointRecord, Option<JointDef>)],
 ) -> Result<(), CommandError> {

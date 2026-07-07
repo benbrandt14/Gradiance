@@ -130,7 +130,15 @@ fn line_family(
     let reach = half * 1.6;
     for i in first..=last {
         let base = origin + normal * (i as f32 * spacing);
-        let color: Color = if i == 0 { axis.into() } else { minor.into() };
+        // Major line every 5th lattice step; origin line in axis color.
+        let color: Color = if i == 0 {
+            axis.into()
+        } else if i.rem_euclid(5) == 0 {
+            let c: Color = minor.into();
+            c.with_alpha(c.alpha() * 2.5)
+        } else {
+            minor.into()
+        };
         gizmos.line(
             (base - dir * reach).extend(GRID_Z),
             (base + dir * reach).extend(GRID_Z),

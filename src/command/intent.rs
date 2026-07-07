@@ -124,6 +124,13 @@ pub struct CutIntent {
     pub width: f32,
 }
 
+/// Request to merge bodies into one (SDF union; first target hosts).
+#[derive(Message, Debug, Clone)]
+pub struct MergeIntent {
+    /// Bodies to merge; the first survives with the union of all shapes.
+    pub targets: Vec<StableId>,
+}
+
 /// Request to undo the last command.
 #[derive(Message, Debug, Clone, Copy, Default)]
 pub struct UndoIntent;

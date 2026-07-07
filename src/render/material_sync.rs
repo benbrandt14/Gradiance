@@ -13,11 +13,19 @@ pub fn color_of(rgba: Rgba) -> Color {
 
 /// The standard body material: matte base, toon banding per settings.
 fn body_material(appearance: &Appearance, settings: &RenderSettings) -> ToonMaterial {
+    let fill = appearance.fill;
     ToonMaterial {
         base: StandardMaterial {
-            base_color: color_of(appearance.fill),
+            base_color: color_of(fill),
             perceptual_roughness: 0.92,
             metallic: 0.0,
+            // Emissive glow in the fill's hue (0 = matte).
+            emissive: LinearRgba::new(
+                fill.r * appearance.emissive,
+                fill.g * appearance.emissive,
+                fill.b * appearance.emissive,
+                1.0,
+            ),
             ..default()
         },
         extension: ToonExtension {

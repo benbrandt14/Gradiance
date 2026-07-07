@@ -1,13 +1,17 @@
 //! Right-click context menu: grouping, pick-from-stack, and collision
 //! layer operations.
 
-use crate::command::intent::{GroupIntent, PropertyEditIntent, UngroupIntent};
+use crate::command::intent::{
+    CommitTransformIntent, GroupIntent, MergeIntent, PropertyEditIntent, UngroupIntent,
+};
 use crate::command::property::{PropertyChange, PropertyValue};
 use crate::core::ids::{IdIndex, StableId};
 use crate::domain::Body;
+use crate::domain::appearance::{Appearance, Rgba};
 use crate::domain::layers::LayerMask32;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::PointerOverUi;
+use crate::interaction::align::{AlignItem, AlignOp, align_changes};
 use crate::interaction::cursor::CursorWorldPos;
 use crate::interaction::pointer::PointerButtons;
 use crate::interaction::selection::Selection;
@@ -64,6 +68,7 @@ pub fn open_context_menu(
 }
 
 /// Renders the menu and emits intents for its actions.
+#[expect(clippy::too_many_lines)] // one menu, plain sections in order
 pub fn context_menu(
     mut contexts: EguiContexts,
     mut menu: ResMut<ContextMenu>,
@@ -72,9 +77,12 @@ pub fn context_menu(
     ids: Query<&StableId>,
     layers_q: Query<&LayerMask32, With<Body>>,
     all_layers: Query<&LayerMask32, With<Body>>,
+    bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     mut group: MessageWriter<GroupIntent>,
     mut ungroup: MessageWriter<UngroupIntent>,
     mut edits: MessageWriter<PropertyEditIntent>,
+    mut merge: MessageWriter<MergeIntent>,
+    mut moves: MessageWriter<CommitTransformIntent>,
 ) -> Result {
     if !menu.open {
         return Ok(());
@@ -110,7 +118,63 @@ pub fn context_menu(
                     });
                     close = true;
                 }
+                if ui
+                    .add_enabled(
+                        selected_ids.len() >= 2,
+                        egui::Button::new("Merge into one body"),
+                    )
+                    .clicked()
+                {
+                    merge.write(MergeIntent {
+                        targets: selected_ids.clone(),
+                    });
+                    close = true;
+                }
                 ui.separator();
+
+                // Align & distribute (one undo step via the move command).
+                if selected_ids.len() >= 2 {
+                    ui.label(egui::RichText::new("Align").weak());
+                    let items: Vec<AlignItem> = selection
+                        .iter()
+                        .filter_map(|e| {
+                            let id = ids.get(e).ok().copied()?;
+                            let (shape, transform, _) = bodies_q.get(e).ok()?;
+                            if shape.contains_half_plane() {
+                                return None;
+                            }
+                            Some((
+                                id,
+                                crate::core::units::PosRot::from_transform(transform),
+                                world_bounds(shape, transform),
+                            ))
+                        })
+                        .collect();
+                    let mut emit = |op: AlignOp| {
+                        let changes = align_changes(&items, op);
+                        if !changes.is_empty() {
+                            moves.write(CommitTransformIntent { changes });
+                        }
+                        close = true;
+                    };
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, op) in [
+                            ("⏴ left", AlignOp::Left),
+                            ("right ⏵", AlignOp::Right),
+                            ("⏶ top", AlignOp::Top),
+                            ("bottom ⏷", AlignOp::Bottom),
+                            ("center ↕", AlignOp::CenterY),
+                            ("center ↔", AlignOp::CenterX),
+                            ("distribute ↔", AlignOp::DistributeX),
+                            ("distribute ↕", AlignOp::DistributeY),
+                        ] {
+                            if ui.small_button(label).clicked() {
+                                emit(op);
+                            }
+                        }
+                    });
+                    ui.separator();
+                }
 
                 // Pick from overlapping bodies under the click.
                 if !menu.under.is_empty() {
@@ -162,6 +226,66 @@ pub fn context_menu(
                     });
                     close = true;
                 }
+                ui.label(egui::RichText::new("Depth").weak());
+                ui.horizontal_wrapped(|ui| {
+                    // Depth = layer bits (bit 0 front … bit 31 back).
+                    let shift = |edits: &mut MessageWriter<PropertyEditIntent>,
+                                 f: &dyn Fn(&LayerMask32) -> u32| {
+                        layer_edit(&selection, &ids, &layers_q, edits, |old| LayerMask32 {
+                            memberships: f(old).max(1),
+                            filters: old.filters,
+                        });
+                    };
+                    if ui.small_button("to front").clicked() {
+                        shift(&mut edits, &|_| 1);
+                        close = true;
+                    }
+                    if ui.small_button("forward").clicked() {
+                        shift(&mut edits, &|old| old.memberships >> 1);
+                        close = true;
+                    }
+                    if ui.small_button("backward").clicked() {
+                        shift(&mut edits, &|old| {
+                            if old.memberships & (1 << 31) == 0 {
+                                old.memberships << 1
+                            } else {
+                                old.memberships
+                            }
+                        });
+                        close = true;
+                    }
+                    if ui.small_button("to back").clicked() {
+                        shift(&mut edits, &|_| 1 << 7);
+                        close = true;
+                    }
+                });
+                ui.separator();
+                if ui.button("Random colors (per body)").clicked() {
+                    let changes: Vec<PropertyChange> = selection
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, e)| {
+                            let id = ids.get(e).ok().copied()?;
+                            let (_, _, old) = bodies_q.get(e).ok()?;
+                            // Golden-angle hue walk from each body's id.
+                            let base = (id.0.as_u128() % 360) as f32;
+                            let hue = base + 137.5 * (index as f32 + 1.0);
+                            let new = Appearance {
+                                fill: Rgba::from_hsl(hue, 0.65, 0.55),
+                                ..*old
+                            };
+                            Some(PropertyChange {
+                                id,
+                                old: PropertyValue::Appearance(*old),
+                                new: PropertyValue::Appearance(new),
+                            })
+                        })
+                        .collect();
+                    if !changes.is_empty() {
+                        edits.write(PropertyEditIntent { changes });
+                    }
+                    close = true;
+                }
             });
         })
         .response;
@@ -194,4 +318,24 @@ fn layer_edit(
     if !changes.is_empty() {
         edits.write(PropertyEditIntent { changes });
     }
+}
+
+/// A body's conservative world-space AABB.
+fn world_bounds(shape: &ShapeDef, transform: &Transform) -> (Vec2, Vec2) {
+    let (min, max) = crate::geometry::sdf::aabb(shape);
+    let affine = transform.compute_affine();
+    let corners = [
+        Vec2::new(min.x, min.y),
+        Vec2::new(max.x, min.y),
+        Vec2::new(max.x, max.y),
+        Vec2::new(min.x, max.y),
+    ];
+    let mut wmin = Vec2::splat(f32::MAX);
+    let mut wmax = Vec2::splat(f32::MIN);
+    for corner in corners {
+        let w = affine.transform_point3(corner.extend(0.0)).truncate();
+        wmin = wmin.min(w);
+        wmax = wmax.max(w);
+    }
+    (wmin, wmax)
 }

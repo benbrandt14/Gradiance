@@ -409,7 +409,10 @@ pub fn run_select_tool(
                     f.y = cur_f.y / start_f.y;
                 }
                 // Shift on a corner = uniform scale (larger magnitude wins).
-                if sx && sy && keys.pressed(KeyCode::ShiftLeft) {
+                if sx
+                    && sy
+                    && (keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight))
+                {
                     let m = if f.x.abs() > f.y.abs() { f.x } else { f.y };
                     f = Vec2::new(m.abs().copysign(f.x), m.abs().copysign(f.y));
                 }
