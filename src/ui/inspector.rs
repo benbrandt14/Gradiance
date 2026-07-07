@@ -223,20 +223,45 @@ pub fn inspector_window(
             if let Ok(appearance) = appearance_q.get(primary) {
                 ui.separator();
                 ui.label(egui::RichText::new("Appearance").strong());
-                let f = appearance.fill;
-                let mut rgba = [f.r, f.g, f.b, f.a];
-                if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+                let to_array = |c: crate::domain::appearance::Rgba| [c.r, c.g, c.b, c.a];
+                let to_rgba = |c: [f32; 4]| crate::domain::appearance::Rgba {
+                    r: c[0],
+                    g: c[1],
+                    b: c[2],
+                    a: c[3],
+                };
+                let mut fill = to_array(appearance.fill);
+                let mut border = to_array(appearance.border);
+                let mut fill_changed = false;
+                let mut border_changed = false;
+                ui.horizontal(|ui| {
+                    ui.label("fill");
+                    fill_changed = ui.color_edit_button_rgba_unmultiplied(&mut fill).changed();
+                    ui.label("border");
+                    border_changed = ui
+                        .color_edit_button_rgba_unmultiplied(&mut border)
+                        .changed();
+                });
+                let mut emissive = appearance.emissive;
+                let ce = ui
+                    .horizontal(|ui| {
+                        ui.label("emissive");
+                        precise_drag(ui, egui::Id::new("app-emissive"), &mut emissive, 0.0, 0.05)
+                    })
+                    .inner;
+                if fill_changed || border_changed || matches!(ce, Commit::Done(..)) {
                     commit_to_selection(
                         &selection,
                         &ids,
                         &appearance_q,
                         PropertyValue::Appearance,
-                        |_| Appearance {
-                            fill: crate::domain::appearance::Rgba {
-                                r: rgba[0],
-                                g: rgba[1],
-                                b: rgba[2],
-                                a: rgba[3],
+                        |old| Appearance {
+                            fill: to_rgba(fill),
+                            border: to_rgba(border),
+                            emissive: if matches!(ce, Commit::Done(..)) {
+                                emissive.max(0.0)
+                            } else {
+                                old.emissive
                             },
                         },
                         &mut writer,

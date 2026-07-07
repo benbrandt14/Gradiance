@@ -6,10 +6,11 @@ use crate::command::group_cmd::{GroupCommand, UngroupCommand};
 use crate::command::intent::LoadSceneIntent;
 use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DuplicateIntent, GroupIntent,
-    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent, UndoIntent,
-    UngroupIntent,
+    MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
+    UndoIntent, UngroupIntent,
 };
 use crate::command::joint_cmd::SpawnJointCommand;
+use crate::command::merge_cmd::MergeCommand;
 use crate::command::property::SetPropertyCommand;
 use crate::command::scale_cmd::ScaleCommand;
 use crate::command::scene_cmd::LoadSceneCommand;
@@ -79,6 +80,9 @@ pub fn dispatch_intents(world: &mut World) {
     }
     for intent in drain::<CutIntent>(world) {
         commands.push(Box::new(CutCommand::new(intent.a, intent.b, intent.width)));
+    }
+    for intent in drain::<MergeIntent>(world) {
+        commands.push(Box::new(MergeCommand::new(intent.targets)));
     }
     for intent in drain::<DuplicateIntent>(world) {
         commands.push(Box::new(DuplicateCommand::new(

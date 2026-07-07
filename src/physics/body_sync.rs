@@ -23,11 +23,16 @@ fn collider_for(shape: &ShapeDef) -> Option<Collider> {
         // Truly infinite: the surface passes through the body origin with
         // local +Y outward; body rotation orients it.
         ShapeDef::HalfPlane => Some(Collider::half_space(Vector::Y)),
-        // CSG trees collide as their contoured polygon (the one
-        // discretization point, `geometry::polygonize`).
+        // CSG trees collide as their contoured polygons — every connected
+        // component's rings, so merged-but-barely-touching unions keep
+        // full collision coverage.
         ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => {
-            let contours = crate::geometry::polygonize::polygonize(shape);
-            decomposition_collider(contours.rings())
+            let components = crate::geometry::polygonize::polygonize_components(shape);
+            decomposition_collider(
+                components
+                    .iter()
+                    .flat_map(crate::geometry::contours::Contours::rings),
+            )
         }
     }
 }

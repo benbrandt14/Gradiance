@@ -110,6 +110,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                 props,
                 appearance: Appearance {
                     fill: Rgba { r, g, b, a },
+                    ..Appearance::default()
                 },
                 layers: LayerMask32 {
                     memberships,
@@ -208,6 +209,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                     sim: SimSettings {
                         gravity: Vec2::new(gravity.0, gravity.1),
                         speed,
+                        ..SimSettings::default()
                     },
                     grid: GridSettings {
                         system: GridSystem::Isometric,

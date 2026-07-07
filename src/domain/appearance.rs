@@ -49,12 +49,29 @@ impl Rgba {
 pub struct Appearance {
     /// Fill color of the extruded mesh.
     pub fill: Rgba,
+    /// Outline color (alpha 0 hides the outline).
+    #[serde(default = "default_border")]
+    pub border: Rgba,
+    /// Emissive strength: 0 = matte, higher values glow in `fill`'s hue.
+    #[serde(default)]
+    pub emissive: f32,
+}
+
+fn default_border() -> Rgba {
+    Rgba {
+        r: 0.13,
+        g: 0.13,
+        b: 0.15,
+        a: 1.0,
+    }
 }
 
 impl Default for Appearance {
     fn default() -> Self {
         Self {
             fill: Rgba::rgb(0.6, 0.6, 0.65),
+            border: default_border(),
+            emissive: 0.0,
         }
     }
 }

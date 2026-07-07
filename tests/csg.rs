@@ -408,3 +408,141 @@ mod conservation {
         }
     }
 }
+
+// ---------- Merge (weld-as-one-body) ----------
+
+#[test]
+fn merging_overlapping_boxes_makes_one_union_body() {
+    let mut app = paused_app();
+    let host = spawn_box_at(&mut app, Vec2::ZERO, 80.0, 40.0);
+    let absorbed = spawn_box_at(&mut app, Vec2::new(60.0, 0.0), 80.0, 40.0);
+
+    app.world_mut().write_message(MergeIntent {
+        targets: vec![host, absorbed],
+    });
+    app.update();
+
+    assert_eq!(body_count(&mut app), 1, "two bodies became one");
+    assert!(entity_of(&app, absorbed).is_none());
+    let entity = entity_of(&app, host).expect("host survives with its id");
+    let shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
+    assert!(
+        matches!(
+            shape,
+            ShapeDef::Csg {
+                op: CsgOp::Union,
+                ..
+            }
+        ),
+        "merged shape is a union tree, got {shape:?}"
+    );
+    let area: f32 = polygonize_components(&shape)
+        .iter()
+        .map(gradiance::geometry::contours::Contours::area)
+        .sum();
+    let ideal = 80.0 * 40.0 * 2.0 - 20.0 * 40.0; // minus the overlap
+    assert!(
+        (area - ideal).abs() / ideal < 0.02,
+        "union area {area} vs {ideal}"
+    );
+
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 2, "undo restores both bodies");
+    assert!(entity_of(&app, absorbed).is_some());
+    let shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
+    assert!(matches!(shape, ShapeDef::Box { .. }), "host shape restored");
+
+    redo(&mut app);
+    assert_eq!(body_count(&mut app), 1, "redo replays the merge");
+}
+
+#[test]
+fn merging_disjoint_bodies_is_refused() {
+    let mut app = paused_app();
+    let a = spawn_box_at(&mut app, Vec2::ZERO, 40.0, 40.0);
+    let b = spawn_box_at(&mut app, Vec2::new(300.0, 0.0), 40.0, 40.0);
+    let depth = app.world().resource::<CommandStack>().undo_len();
+
+    app.world_mut().write_message(MergeIntent {
+        targets: vec![a, b],
+    });
+    app.update();
+
+    assert_eq!(body_count(&mut app), 2, "disjoint bodies stay separate");
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        depth,
+        "refused merges leave history untouched (grouping is for rigid links)"
+    );
+}
+
+#[test]
+fn merge_rewires_external_joints_and_deletes_internal_ones() {
+    let mut app = paused_app();
+    let host = spawn_box_at(&mut app, Vec2::ZERO, 80.0, 40.0);
+    let absorbed = spawn_box_at(&mut app, Vec2::new(60.0, 0.0), 80.0, 40.0);
+
+    // External: a world pin on the absorbed body at world (70, 0).
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def: JointDef {
+                kind: JointKind::Hinge {
+                    limits: None,
+                    motor: None,
+                },
+                common: JointCommon::default(),
+                body_a: absorbed,
+                body_b: None,
+                anchor_a: Vec2::new(10.0, 0.0),
+                anchor_b: Vec2::new(70.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
+            },
+        },
+    });
+    // Internal: a weld between the two merged bodies.
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def: JointDef {
+                kind: JointKind::Weld,
+                common: JointCommon::default(),
+                body_a: host,
+                body_b: Some(absorbed),
+                anchor_a: Vec2::new(30.0, 0.0),
+                anchor_b: Vec2::new(-30.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
+            },
+        },
+    });
+    app.update();
+
+    app.world_mut().write_message(MergeIntent {
+        targets: vec![host, absorbed],
+    });
+    app.update();
+
+    let defs: Vec<JointDef> = app
+        .world_mut()
+        .query::<&JointDef>()
+        .iter(app.world())
+        .cloned()
+        .collect();
+    assert_eq!(defs.len(), 1, "internal weld deleted, external pin kept");
+    assert_eq!(defs[0].body_a, host, "pin rewired onto the host");
+    assert!(
+        (defs[0].anchor_a - Vec2::new(70.0, 0.0)).length() < 1e-3,
+        "anchor keeps its world point in host space (got {})",
+        defs[0].anchor_a
+    );
+
+    undo(&mut app);
+    let joints = app
+        .world_mut()
+        .query::<&JointDef>()
+        .iter(app.world())
+        .count();
+    assert_eq!(joints, 2, "undo restores both joints");
+}

@@ -120,6 +120,13 @@ pub struct SimSettings {
     pub gravity: Vec2,
     /// Simulation speed multiplier (1 = realtime).
     pub speed: f32,
+    /// Solver substeps per physics step (stiffness/accuracy knob).
+    #[serde(default = "default_substeps")]
+    pub substeps: u32,
+}
+
+fn default_substeps() -> u32 {
+    SimSettings::default().substeps
 }
 
 impl Default for SimSettings {
@@ -127,6 +134,7 @@ impl Default for SimSettings {
         Self {
             gravity: Vec2::new(0.0, -1000.0),
             speed: 1.0,
+            substeps: 6,
         }
     }
 }

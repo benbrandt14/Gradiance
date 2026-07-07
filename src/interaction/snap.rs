@@ -135,7 +135,9 @@ pub fn update_snapped_cursor(
     }
 
     // --- Grid snap. ---
-    if grid.snap_enabled {
+    // Grid snapping only applies when the grid is visible (invisible
+    // magnetism is disorienting).
+    if grid.snap_enabled && grid.visible {
         let snapped = match grid.system {
             GridSystem::Cartesian => cartesian_snap(p, grid.origin, grid.rotation, grid.spacing),
             GridSystem::Isometric => isometric_snap(p, grid.origin, grid.rotation, grid.spacing),

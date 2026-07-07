@@ -4,7 +4,7 @@ pub use crate::command::array_cmd::ArrayMode;
 pub use crate::command::intent::LoadSceneIntent;
 pub use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DuplicateIntent, GroupIntent,
-    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
+    MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
     TransformChange, UndoIntent, UngroupIntent,
 };
 pub use crate::command::property::{PropertyChange, PropertyValue};
