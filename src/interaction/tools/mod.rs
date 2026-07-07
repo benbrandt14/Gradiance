@@ -140,6 +140,7 @@ pub fn new_body_record(
         props: crate::domain::props::PhysicalProps::default(),
         appearance: appearance_for_id(id),
         layers: LayerMask32::default(),
+        groups: Vec::new(),
         group: None,
     }
 }

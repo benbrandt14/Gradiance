@@ -11,8 +11,8 @@ use bevy::prelude::*;
 
 /// A snapshot of one editable authored component.
 ///
-/// Adding a new editable component = one variant + one arm in
-/// [`PropertyValue::write`]/[`read`](PropertyValue::read).
+/// Adding a new editable component = one variant + one arm in this
+/// enum's `write`/`read` methods.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyValue {
     /// Body geometry.

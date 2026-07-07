@@ -31,18 +31,25 @@ Updated after the M12 feedback round.
   with zoom (4.7 partial); gentler zoom (10.2 partial); context-menu
   renames "No self-collisions" / "Reset collision layers" (5.5, 5.6).
 
-## M13 — Interaction & selection feel (Algodoo parity)
+## Addressed in M14
+
+- **Hierarchical groups** (2.9): `SelectionGroup` is now a stack;
+  `ungroup(group(group(A,B,C), D))` peels only the outer group and keeps
+  `group(A,B,C)`. Selection expands by the outermost id; duplicate/array
+  remap every stack level. Old saves migrate (single id → one-deep stack).
+- **Documentation overhaul**: crate-level architecture docs with a
+  dataflow diagram + module map; per-module docs on the command layer
+  (lifecycle diagram + "add a command" recipe) and the SDF core; runnable
+  **doctests** on the pure APIs (`PosRot`, `LayerMask32`, `layer_z_range`,
+  `sdf::eval`, `SelectionGroup`); `docs/architecture.md` with mermaid
+  diagrams (dataflow, command lifecycle, layer boundaries, SDF pipeline,
+  depth mapping). CI now builds docs with `-D warnings` (no broken links).
+
+## M15 — Interaction & selection feel (Algodoo parity)
 
 - Selection works from every tool (click falls through to select) (2.1)
 - Shift-drag / modifier semantics rework; no gesture dead-ends (1.1, 2.2)
 - Play-mode right-drag applies torque (dynamic rotate, non-fixed pivot) (2.6)
-- Shift = aspect-locked scaling (2.7)
-- **Hierarchical groups**: `ungroup(group(group(A,B,C), D))` keeps the
-  inner group (2.9)
-- Z-order operations: move up/down/front/back (5.3)
-- Align/distribute (PowerPoint-style), later generalized to *any
-  attribute* over a selection (e.g. logarithmic mass distribution via a
-  range slider context action) (5.3)
 - **Joints as selectable entities**: pickable, right-click opens their
   configuration (motors, limits — 4.5), movable in pause mode, never
   displaced by body resize (2.8, 4.1)

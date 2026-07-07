@@ -91,16 +91,23 @@ pub fn expand_groups(
     entities: &mut Vec<Entity>,
     groups: &Query<(Entity, &SelectionGroup), With<Body>>,
 ) {
+    // Expansion follows the *outermost* group id — selecting a member of
+    // a nested assembly selects the whole assembly.
     let mut group_ids: Vec<u32> = Vec::new();
     for entity in entities.iter() {
         if let Ok((_, group)) = groups.get(*entity)
-            && !group_ids.contains(&group.0)
+            && let Some(outer) = group.outermost()
+            && !group_ids.contains(&outer)
         {
-            group_ids.push(group.0);
+            group_ids.push(outer);
         }
     }
     for (entity, group) in groups.iter() {
-        if group_ids.contains(&group.0) && !entities.contains(&entity) {
+        if group
+            .outermost()
+            .is_some_and(|outer| group_ids.contains(&outer))
+            && !entities.contains(&entity)
+        {
             entities.push(entity);
         }
     }

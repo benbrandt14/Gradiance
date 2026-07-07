@@ -106,7 +106,11 @@ impl GameCommand for DeleteCommand {
 /// The next unused selection-group id.
 pub(crate) fn next_group_id(world: &mut World) -> u32 {
     let mut query = world.query::<&crate::domain::group::SelectionGroup>();
-    query.iter(world).map(|g| g.0).max().map_or(1, |m| m + 1)
+    query
+        .iter(world)
+        .flat_map(|g| g.0.iter().copied())
+        .max()
+        .map_or(1, |m| m + 1)
 }
 
 /// Rewrites cloned bodies' selection groups to fresh ids (one fresh id
@@ -116,16 +120,16 @@ pub(crate) fn next_group_id(world: &mut World) -> u32 {
 pub(crate) fn remap_clone_groups(clones: &mut [BodyRecord], next_group: &mut u32) {
     let mut remap: Vec<(u32, u32)> = Vec::new();
     for record in clones {
-        if let Some(group) = record.group {
-            let new = if let Some((_, new)) = remap.iter().find(|(old, _)| *old == group) {
+        for group in &mut record.groups {
+            let new = if let Some((_, new)) = remap.iter().find(|(old, _)| *old == *group) {
                 *new
             } else {
                 let new = *next_group;
                 *next_group += 1;
-                remap.push((group, new));
+                remap.push((*group, new));
                 new
             };
-            record.group = Some(new);
+            *group = new;
         }
     }
 }

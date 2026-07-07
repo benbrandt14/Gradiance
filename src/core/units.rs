@@ -8,6 +8,28 @@ use serde::{Deserialize, Serialize};
 /// This is the unit moved by transform commands and stored in snapshots;
 /// it deliberately excludes scale (bodies are resized by editing their
 /// [`ShapeDef`](crate::domain::shape::ShapeDef), never by scaling).
+///
+/// Capture from a Bevy `Transform` round-trips its X/Y and Z-rotation
+/// while dropping Z-depth and scale — and it quantizes rotation so that
+/// `save → load → save` reaches a byte-stable fixpoint:
+///
+/// ```
+/// use gradiance::core::units::PosRot;
+/// use bevy::prelude::Transform;
+/// use bevy::math::Vec3;
+///
+/// let mut t = Transform::from_translation(Vec3::new(10.0, -4.0, 99.0));
+/// t.rotation = bevy::math::Quat::from_rotation_z(0.5);
+///
+/// let pose = PosRot::from_transform(&t);
+/// assert_eq!(pose.pos, bevy::math::Vec2::new(10.0, -4.0)); // Z dropped
+/// assert!((pose.rot - 0.5).abs() < 1e-4);
+///
+/// // Writing back preserves the Transform's Z and scale.
+/// let mut back = Transform::from_translation(Vec3::new(0.0, 0.0, 99.0));
+/// pose.apply_to(&mut back);
+/// assert_eq!(back.translation.z, 99.0);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PosRot {
     /// World-space translation in pixels.

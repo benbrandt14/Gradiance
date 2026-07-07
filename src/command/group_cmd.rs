@@ -1,4 +1,8 @@
-//! Grouping commands.
+//! Grouping commands (hierarchical — see [`SelectionGroup`]).
+//!
+//! Grouping pushes a fresh id onto every target's stack; ungrouping pops
+//! each target's **outermost** id, so `ungroup(group(group(A,B,C), D))`
+//! leaves `group(A,B,C)` intact.
 
 use crate::command::{CommandError, GameCommand};
 use crate::core::ids::{IdIndex, StableId};
@@ -8,7 +12,7 @@ use bevy::prelude::*;
 fn prior_groups(
     world: &mut World,
     targets: &[StableId],
-) -> Result<Vec<(StableId, Option<u32>)>, CommandError> {
+) -> Result<Vec<(StableId, Option<SelectionGroup>)>, CommandError> {
     targets
         .iter()
         .map(|&id| {
@@ -16,17 +20,17 @@ fn prior_groups(
                 .resource::<IdIndex>()
                 .entity(id)
                 .ok_or(CommandError::MissingEntity(id))?;
-            Ok((id, world.get::<SelectionGroup>(entity).map(|g| g.0)))
+            Ok((id, world.get::<SelectionGroup>(entity).cloned()))
         })
         .collect()
 }
 
-fn restore_groups(world: &mut World, prior: &[(StableId, Option<u32>)]) {
+fn restore_groups(world: &mut World, prior: &[(StableId, Option<SelectionGroup>)]) {
     for (id, group) in prior {
         if let Some(entity) = world.resource::<IdIndex>().entity(*id) {
             match group {
                 Some(g) => {
-                    world.entity_mut(entity).insert(SelectionGroup(*g));
+                    world.entity_mut(entity).insert(g.clone());
                 }
                 None => {
                     world.entity_mut(entity).remove::<SelectionGroup>();
@@ -36,12 +40,23 @@ fn restore_groups(world: &mut World, prior: &[(StableId, Option<u32>)]) {
     }
 }
 
-/// Puts the targets into one fresh group (select-one-selects-all).
+/// The next unused group id across every stack in the world.
+fn fresh_group_id(world: &mut World) -> u32 {
+    let mut query = world.query::<&SelectionGroup>();
+    query
+        .iter(world)
+        .flat_map(|g| g.0.iter().copied())
+        .max()
+        .map_or(1, |m| m + 1)
+}
+
+/// Wraps the targets in one fresh group (pushed *around* any groups they
+/// already form — hierarchical).
 #[derive(Debug)]
 pub struct GroupCommand {
     /// Bodies to group.
     pub targets: Vec<StableId>,
-    prior: Vec<(StableId, Option<u32>)>,
+    prior: Vec<(StableId, Option<SelectionGroup>)>,
 }
 
 impl GroupCommand {
@@ -60,14 +75,15 @@ impl GameCommand for GroupCommand {
             return Err(CommandError::NoEffect);
         }
         let prior = prior_groups(world, &self.targets)?;
-        // Fresh id: one past the largest in use.
-        let next = {
-            let mut query = world.query::<&SelectionGroup>();
-            query.iter(world).map(|g| g.0).max().map_or(1, |m| m + 1)
-        };
+        let next = fresh_group_id(world);
         for &id in &self.targets {
             if let Some(entity) = world.resource::<IdIndex>().entity(id) {
-                world.entity_mut(entity).insert(SelectionGroup(next));
+                let mut stack = world
+                    .get::<SelectionGroup>(entity)
+                    .cloned()
+                    .unwrap_or(SelectionGroup(Vec::new()));
+                stack.0.push(next);
+                world.entity_mut(entity).insert(stack);
             }
         }
         if self.prior.is_empty() {
@@ -86,12 +102,12 @@ impl GameCommand for GroupCommand {
     }
 }
 
-/// Removes the targets from their groups.
+/// Pops each target's outermost group (inner groups survive).
 #[derive(Debug)]
 pub struct UngroupCommand {
     /// Bodies to ungroup.
     pub targets: Vec<StableId>,
-    prior: Vec<(StableId, Option<u32>)>,
+    prior: Vec<(StableId, Option<SelectionGroup>)>,
 }
 
 impl UngroupCommand {
@@ -111,7 +127,17 @@ impl GameCommand for UngroupCommand {
             return Err(CommandError::NoEffect);
         }
         for &id in &self.targets {
-            if let Some(entity) = world.resource::<IdIndex>().entity(id) {
+            let Some(entity) = world.resource::<IdIndex>().entity(id) else {
+                continue;
+            };
+            let now_empty = match world.get_mut::<SelectionGroup>(entity) {
+                Some(mut stack) => {
+                    stack.0.pop();
+                    stack.0.is_empty()
+                }
+                None => false,
+            };
+            if now_empty {
                 world.entity_mut(entity).remove::<SelectionGroup>();
             }
         }

@@ -3,6 +3,43 @@
 //! Tools and UI emit *intents* ([`intent`]); the [`dispatch`] system drains
 //! them, builds [`GameCommand`]s, and applies them through the
 //! [`CommandStack`]. Nothing else may mutate authored components.
+//!
+//! # Lifecycle of one edit
+//!
+//! ```text
+//!   drag release ─▶ SpawnBodyIntent ─▶ dispatch drains it
+//!                                        │
+//!                                        ▼
+//!                              Box<dyn GameCommand>
+//!                                        │ stack.push_apply(cmd, world)
+//!                                        ▼
+//!                    ┌───────────────────────────────────┐
+//!                    │ apply() ── Ok ─▶ pushed to undo    │
+//!                    │           └ Err ▶ dropped, no trace│
+//!                    └───────────────────────────────────┘
+//!   Ctrl+Z ─▶ UndoIntent ─▶ stack.undo() ─▶ cmd.undo(world) ─▶ redo stack
+//! ```
+//!
+//! # Why a trait object per edit
+//!
+//! Each [`GameCommand`] captures exactly what it needs to reverse itself
+//! (a spawn remembers its id; a delete captures the full records it
+//! removed). Because commands resolve entities by
+//! [`StableId`] at execution time — never by
+//! holding a raw `Entity` — they stay valid across undo/redo cycles that
+//! despawn and respawn the same logical body.
+//!
+//! # Adding a command (the extension recipe)
+//!
+//! 1. Add an intent struct in [`intent`] (`#[derive(Message)]`).
+//! 2. Register it in [`CommandPlugin::build`] with `add_message`.
+//! 3. Add a `struct MyCommand` implementing [`GameCommand`] (stage on
+//!    first `apply`, replay on redo — see [`spawn`] for the pattern).
+//! 4. Drain the intent → push the command in [`dispatch`].
+//!
+//! Undo/redo, history depth, and persistence then work for free; the
+//! combinatorial test in `tests/joints.rs` fuzzes arbitrary command
+//! sequences to prove they compose.
 
 pub mod array_cmd;
 pub mod cut_cmd;

@@ -22,6 +22,16 @@ pub struct MeshBuffers {
 }
 
 /// Maps occupied layer bits to `(z_front, depth)`.
+///
+/// ```
+/// use gradiance::geometry::extrusion::layer_z_range;
+///
+/// // A body on layer bit 0 alone: front face at z=0, one layer deep.
+/// assert_eq!(layer_z_range(0, 0), (0.0, 10.0));
+///
+/// // Occupying bits 1..=3: front pushed back to -10, three layers deep.
+/// assert_eq!(layer_z_range(1, 3), (-10.0, 30.0));
+/// ```
 pub fn layer_z_range(min_bit: u32, max_bit: u32) -> (f32, f32) {
     let z_front = -(min_bit as f32 * LAYER_HEIGHT);
     let depth = (max_bit - min_bit + 1) as f32 * LAYER_HEIGHT;
