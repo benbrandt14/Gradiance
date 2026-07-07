@@ -199,6 +199,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::GroupIntent>();
         app.add_message::<intent::UngroupIntent>();
         app.add_message::<intent::CutIntent>();
+        app.add_message::<intent::DeleteJointIntent>();
         app.add_message::<intent::MergeIntent>();
         app.add_message::<intent::LoadSceneIntent>();
         app.add_message::<intent::UndoIntent>();

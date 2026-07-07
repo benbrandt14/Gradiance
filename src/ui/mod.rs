@@ -11,6 +11,7 @@
 
 pub mod context_menu;
 pub mod inspector;
+pub mod joint_inspector;
 pub mod reflect_grid;
 pub mod settings;
 pub mod toolbar;
@@ -37,6 +38,7 @@ impl Plugin for GradianceUiPlugin {
             (
                 toolbar::toolbar,
                 inspector::inspector_window,
+                joint_inspector::joint_inspector,
                 settings::settings_window,
                 context_menu::context_menu,
                 capture_pointer_over_ui,

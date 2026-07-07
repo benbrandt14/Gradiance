@@ -21,6 +21,7 @@ pub mod cursor;
 pub mod gesture;
 pub mod indicators;
 pub mod input;
+pub mod joint_edit;
 pub mod pointer;
 pub mod selection;
 pub mod snap;
@@ -55,6 +56,9 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<pointer::PointerButtons>();
         app.init_resource::<cursor::CursorWorldPos>();
         app.init_resource::<selection::Selection>();
+        app.init_resource::<selection::SelectedJoint>();
+        app.init_resource::<joint_edit::SuppressSelectPress>();
+        app.init_resource::<joint_edit::JointAnchorDrag>();
         app.init_resource::<snap::SnappedCursor>();
         app.init_resource::<snap::SnapExclusions>();
         app.init_resource::<gesture::GestureConstraints>();
@@ -83,6 +87,7 @@ impl Plugin for InteractionPlugin {
                 camera::apply_camera_rig,
                 input::apply_shortcuts,
                 selection::prune_dead_selection,
+                joint_edit::clear_joint_on_tool_change,
             )
                 .chain()
                 .in_set(InteractionSet)

@@ -120,6 +120,7 @@ pub struct SelectInputs<'w> {
     constraints: Res<'w, GestureConstraints>,
     config: Res<'w, SnapConfig>,
     frame: Res<'w, ScaleFrame>,
+    suppress: Res<'w, crate::interaction::joint_edit::SuppressSelectPress>,
 }
 
 /// Mutable editor state driven by the select tool.
@@ -167,6 +168,7 @@ pub fn run_select_tool(
         constraints,
         config,
         frame,
+        suppress,
     } = &inputs;
     let SelectState {
         gesture,
@@ -179,7 +181,10 @@ pub fn run_select_tool(
     let cam_scale = crate::interaction::camera::camera_scale(&projections);
 
     // ---- Press: start a gesture. ----
+    // A joint pick this frame consumed the press (joint_edit::pick_joint
+    // ran first) — don't also start a body gesture.
     if buttons.just_pressed(MouseButton::Left)
+        && !suppress.0
         && !over_ui.0
         && let Some(p) = cursor
     {

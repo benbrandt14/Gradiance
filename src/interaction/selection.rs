@@ -78,10 +78,29 @@ impl Selection {
     }
 }
 
+/// The currently selected **joint**, if any.
+///
+/// Joints are selected separately from bodies: clicking a joint's anchor
+/// glyph selects the joint (and clears the body [`Selection`]); clicking a
+/// body clears this. A selected joint drives the joint inspector and the
+/// delete/anchor-drag gestures.
+#[derive(Resource, Default, Debug)]
+pub struct SelectedJoint(pub Option<Entity>);
+
 /// Drops despawned entities from the selection.
-pub fn prune_dead_selection(mut selection: ResMut<Selection>, bodies: Query<(), With<Body>>) {
+pub fn prune_dead_selection(
+    mut selection: ResMut<Selection>,
+    mut selected_joint: ResMut<SelectedJoint>,
+    bodies: Query<(), With<Body>>,
+    joints: Query<(), With<crate::domain::Joint>>,
+) {
     if !selection.is_empty() {
         selection.retain(|e| bodies.contains(*e));
+    }
+    if let Some(joint) = selected_joint.0
+        && !joints.contains(joint)
+    {
+        selected_joint.0 = None;
     }
 }
 
