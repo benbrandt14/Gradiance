@@ -272,18 +272,55 @@ rules to `tests/boundaries.rs`.
   `catch_unwind` + converted to `ScriptError`; no file/net from scripts by
   default. Scripts cannot break invariants (they only emit intents).
 
-## Linchpin spikes (do before committing code)
+## Linchpin spikes (do before committing code) — BOTH PASSED (2026-07-08)
+
+Full results in `docs/script-spike-findings.md`. Verdict: proceed; neither
+"rethink" branch triggered.
 
 1. **`bevy_reflect` ↔ steel value bridge.** The whole low-boilerplate
    "everything programmable" vision rests on writing this converter *once* so
    every `#[derive(Reflect)]` type becomes scriptable. Narrow spike: reflect one
    intent + one settings resource, round-trip through steel, dispatch through
    the seam. If clean → cheap endgame; if painful → rethink (hand-rolled core
-   returns to the table).
+   returns to the table). **Result: clean** — a steel script drives gradiance's
+   real `SimSettings` (f32, nested glam `Vec2`, u32) through a generic bridge
+   that never names a field; opaque custom types (the `ShapeDef`-handle path)
+   round-trip too. Promoted to a feature-gated product module
+   (`src/script/reflect_bridge.rs`, `--features script`).
 2. **DSL-subset → Tier-B kernel over a query.** Prove a compiled numeric
    expression drives N components per fixed-step at target scale with no VM in
    the loop and no per-element allocation. This de-risks the particle/fluid
-   ceiling.
+   ceiling. **Result: `src/script/kernel.rs`**, ~27.7 M evals/s (debug) at
+   particle scale, VM-free and allocation-free.
+
+## The World-integration constraint (Spike 1 finding — shapes P0)
+
+steel's `register_fn` requires `Fn(..) + Send + Sync + 'static`, so a script
+builtin **cannot capture `&mut World`**. This is not a limitation to work
+around — it *is* the architecture pointing at itself. The authored-world path
+must be: **a script emits operation data (reflected intent values); an exclusive
+system drains the buffer and dispatches through the existing intent bus.** The
+steel `Engine` lives in a resource; builtins push operation records to a queue;
+one exclusive system (beside `dispatch_intents`) applies them. This mechanically
+enforces invariants 1–2 (no new mutation path) — scripts *physically cannot*
+hold the World, so they can only emit intents, exactly like tools and UI.
+
+Consequence for the two seams:
+- **Settings/config writes** may be applied directly (the spike used
+  `Arc<Mutex<Resource>>`) because settings resources are the sanctioned
+  non-authored seam.
+- **Authored-world writes** go through the emit-then-dispatch queue above —
+  never a direct reflected `get_mut` on an authored component.
+
+## Interaction with an avian-only refactor (if the engine-swap boat is burned)
+
+The reflection bridge is engine-agnostic by construction: it reflects over
+components/resources regardless of whether physics types are facade-wrapped or
+avian-direct. If the `physics::queries` read facade is dissolved, the governance
+principle is unchanged — **reads stay total** — only the mechanism shifts to
+direct reflection over avian components (which then must derive `Reflect`; verify
+when that refactor lands). No scripting decision changes; only `tests/boundaries.rs`
+and `CLAUDE.md` are co-edited by both efforts and must be sequenced.
 
 ## Milestone impact (accrete, don't big-bang)
 
