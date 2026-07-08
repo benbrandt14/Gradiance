@@ -63,6 +63,7 @@
 //! | [`render`] | derived meshes, materials, lighting, gizmos | domain, geometry |
 //! | [`ui`] | the egui editor | **`egui`** (only here) |
 //! | [`persist`] | RON save/load, snapshots | command snapshots |
+//! | [`script`] | scripting/driver core (spike stage) | pure math, no ECS yet |
 //!
 //! These boundaries are **mechanically enforced** by `tests/boundaries.rs`
 //! (and CI): `avian2d` appears only inside [`physics`], `egui` only inside
@@ -80,6 +81,7 @@ pub mod persist;
 pub mod physics;
 pub mod prelude;
 pub mod render;
+pub mod script;
 pub mod ui;
 
 use bevy::app::plugin_group;
