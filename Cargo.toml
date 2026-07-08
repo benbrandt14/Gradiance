@@ -31,6 +31,11 @@ mimalloc = "0.1"
 [dev-dependencies]
 proptest = "1.9"
 rstest = "0.26"
+# Spike 1 only (dev-dependency, not linked into the app): validates the
+# bevy_reflect <-> steel bridge in `tests/script_spike.rs`. Promoted to a
+# real (feature-gated) dependency inside `src/script/` at P0. See
+# docs/script-lisp-decision.md and docs/script-spike-findings.md.
+steel-core = "=0.8.2"
 
 [lints.rust]
 missing_docs = "deny"
