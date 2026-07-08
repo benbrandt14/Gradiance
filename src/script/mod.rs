@@ -14,10 +14,18 @@
 //!   interpreter/VM and no per-element allocation in the loop. This is the
 //!   property that keeps particle/fluid-scale per-frame updates feasible.
 //!
-//! Not yet present (later phases, see the decision record): the steel
-//! embedding, the `bevy_reflect`-backed operation registry, the driver
-//! component + dataflow seam, and the REPL. This module intentionally has
-//! **no ECS imports** yet — the pure core comes first, exactly as the
-//! `geometry` module is structured.
+//! - [`reflect_bridge`] — **Spike 1 (feature-gated).** The generic
+//!   `bevy_reflect` <-> steel value bridge behind the `script` feature: read
+//!   any `#[derive(Reflect)]` value by reflect-path, write scalars back, and
+//!   convert whole values to steel data. Off by default; the only place
+//!   `steel` may be imported.
+//!
+//! Not yet present (later phases, see the decision record): the World-facing
+//! operation registry that dispatches through intents/settings, the driver
+//! component + dataflow seam, and the REPL. The pure core (`kernel`) has
+//! **no ECS imports**, exactly as the `geometry` module is structured.
 
 pub mod kernel;
+
+#[cfg(feature = "script")]
+pub mod reflect_bridge;

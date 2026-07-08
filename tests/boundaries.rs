@@ -79,6 +79,17 @@ fn egui_is_confined_to_the_ui_layer() {
 }
 
 #[test]
+fn steel_is_confined_to_the_script_layer() {
+    let v = violations("steel", &["src/script/"]);
+    assert!(
+        v.is_empty(),
+        "the steel scripting engine may only be referenced from src/script/ \
+         (Tier-A authoring seam):\n{}",
+        v.join("\n")
+    );
+}
+
+#[test]
 fn command_stack_is_only_driven_by_the_command_module() {
     let v = violations("CommandStack", &["src/command/"]);
     assert!(

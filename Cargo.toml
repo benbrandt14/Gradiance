@@ -28,14 +28,20 @@ thiserror = "2"
 rand = "0.9"
 mimalloc = "0.1"
 
+# Scripting (Tier-A authoring engine). Optional + feature-gated: the default
+# build and CI never compile it, so its weight stays entirely on the
+# authoring path per the two-tier rule in docs/script-lisp-decision.md.
+# Confined to `src/script/` (enforced by tests/boundaries.rs).
+steel-core = { version = "=0.8.2", optional = true }
+
+[features]
+# Enables the Lisp scripting layer (`src/script` steel-backed modules).
+# Off by default; exercise with `cargo test --features script`.
+script = ["dep:steel-core"]
+
 [dev-dependencies]
 proptest = "1.9"
 rstest = "0.26"
-# Spike 1 only (dev-dependency, not linked into the app): validates the
-# bevy_reflect <-> steel bridge in `tests/script_spike.rs`. Promoted to a
-# real (feature-gated) dependency inside `src/script/` at P0. See
-# docs/script-lisp-decision.md and docs/script-spike-findings.md.
-steel-core = "=0.8.2"
 
 [lints.rust]
 missing_docs = "deny"
