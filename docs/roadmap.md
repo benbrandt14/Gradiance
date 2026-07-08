@@ -154,10 +154,29 @@ Updated after the M12 feedback round.
 - Piece velocity inheritance `v + ω × r` on severing cuts (7.5)
 - Smooth-union (fillet) modeling tools (12)
 
+## Scripting & symbolic modeling (design accepted)
+
+Direction is ratified in `docs/script-lisp-decision.md`: a Lisp/DSL over a
+governed, homoiconic operation registry as the tool's control plane, with a
+two-tier execution model (authoring VM cold; compiled numeric kernels hot).
+Programmability is not one milestone — it *accretes through* M16–M18 (tool
+`ToolContext` shape, settings/grid ops, `Reflect` derives) per the decision
+record. Gated on two linchpin spikes before feature code lands:
+
+- **Spike 2 (perf) — done.** `src/script/kernel.rs`: numeric DSL → flat
+  allocation-free tape, VM-free hot-path eval over SoA columns; proptested,
+  ~27.7 M evals/s (debug) at particle scale. De-risks the fluid/particle ceiling.
+- **Spike 1 (reflect↔steel bridge) — pending.** The linchpin for low-boilerplate
+  "everything programmable"; must run before embedding steel.
+
+The former backlog lines below are now subsumed by that record:
+
 ## Backlog / later
 
-- Curve pickers (lightroom-style), symbolic & equation input (12)
-- Tracers, scripting, fluids (12)
+- Curve pickers (lightroom-style), symbolic & equation input — see the scripting
+  section above and `docs/script-lisp-decision.md` (12)
+- Tracers / live plotters, scripting, fluids — enabled by the read-total facade
+  and Tier-B kernels in the decision record (12)
 - Investigate: load-time crash reported with a pre-M12 partial-cut save
   (11.1) — cuts no longer produce those trees, but saved ones must render;
   add a Csg tessellation robustness proptest when touching the mesher.
