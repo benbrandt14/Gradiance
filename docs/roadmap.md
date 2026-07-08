@@ -94,6 +94,41 @@ Updated after the M12 feedback round.
   each because closing them now would add churn out of proportion to the
   benefit.
 
+## Addressed in M17 (tools rework + scripting substrate)
+
+Built *through* the seams the scripting/symbolic direction requires (see
+`docs/script-lisp-decision.md`), so programmability accretes rather than
+bolts on later.
+
+- **`ToolContext` facade → `(preview, commit-intent)`**: the pure creation
+  tools (box, circle, polygon, ground, cut) now implement one interface,
+  `DraftTool` — `update(&ToolContext) -> Option<ToolCommit>` +
+  `preview(&ToolContext, &mut ToolPreview)`. A single generic driver
+  (`run_draft_tool::<T>` / `draw_draft_preview::<T>`) owns all the
+  press/drag/release/gizmo plumbing, so each tool file is just its draft
+  state plus decision logic. `ToolCommit` is a front-end-agnostic runtime
+  representation of an authoring action that the driver translates into the
+  real intent — the *same* intent seam tools already use, so tools keep no
+  bespoke mutation path. This makes "a scripted tool is later just a
+  closure implementing `DraftTool`" literally true; a pure unit test drives
+  `BoxTool` through a hand-built context (no ECS) to lock the contract.
+- **Reflection substrate**: `CutIntent` is the first intent to derive
+  `Reflect` (all-leaf fields), and the config-seam settings resources
+  (`GridSettings`, `SnapConfig`, `SimSettings`, `RenderSettings`,
+  `DebugSettings`) plus `CutIntent` are now **registered in the
+  `TypeRegistry`**, so the scripting registry can address them by reflected
+  name. Config edits continue to flow only through settings resources; the
+  `physics::queries` read facade stays the sole simulation-read path.
+- **Deferred to linchpin spike #1** (`bevy_reflect` ↔ steel bridge):
+  authored-body intents (`SpawnBodyIntent` → `BodyRecord` → `ShapeDef` /
+  `StableId(Uuid)`) stay non-reflected until the spike settles `Uuid` /
+  `ShapeDef` opacity — the decision doc keeps `ShapeDef` an opaque foreign
+  value, so we don't front-run it with a broad, throwaway derive.
+- **Deferred**: the manipulation tools (`select`, `drag`, connector) keep
+  their bespoke systems for now — they need world reads (physics queries,
+  kinematic hold) beyond the pure-authoring `ToolContext`, so a richer
+  context is a follow-up once the scripted-tool interface firms up.
+
 ## M16 residual / deferred (Algodoo parity, queued)
 
 - Selection works from every tool (click falls through to select) (2.1)

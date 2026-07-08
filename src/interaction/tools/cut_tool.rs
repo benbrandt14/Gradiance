@@ -1,10 +1,9 @@
 //! Cut tool: drag a stroke; every body it crosses is CSG-subtracted
 //! (severed bodies split into independent pieces).
 
-use crate::command::intent::CutIntent;
-use crate::interaction::PointerOverUi;
-use crate::interaction::snap::SnappedCursor;
-use crate::interaction::tools::ActiveGesture;
+use crate::interaction::tools::context::{
+    DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview,
+};
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -17,46 +16,35 @@ const MIN_STROKE: f32 = 1.0;
 
 /// In-progress cut stroke (anchor point).
 #[derive(Resource, Default, Debug)]
-pub struct CutDraft(pub Option<Vec2>);
+pub struct CutTool(pub Option<Vec2>);
 
-/// Drag-a-stroke state machine: press anchors, release commits one
-/// [`CutIntent`].
-pub fn run_cut_tool(
-    buttons: Res<crate::interaction::pointer::PointerButtons>,
-    snapped: Res<SnappedCursor>,
-    over_ui: Res<PointerOverUi>,
-    projections: Query<&Projection, With<Camera3d>>,
-    mut draft: ResMut<CutDraft>,
-    mut active: ResMut<ActiveGesture>,
-    mut cuts: MessageWriter<CutIntent>,
-) {
-    if buttons.just_pressed(MouseButton::Left)
-        && !over_ui.0
-        && let Some(p) = snapped.effective()
-    {
-        draft.0 = Some(p);
-        active.0 = true;
-    }
-    if buttons.just_released(MouseButton::Left)
-        && let Some(anchor) = draft.0.take()
-    {
-        active.0 = false;
-        if let Some(p) = snapped.effective()
-            && anchor.distance(p) >= MIN_STROKE
-        {
-            let scale = crate::interaction::camera::camera_scale(&projections);
-            cuts.write(CutIntent {
-                a: anchor,
-                b: p,
-                width: CUT_SCREEN_WIDTH * scale,
-            });
+impl DraftTool for CutTool {
+    fn update(&mut self, ctx: &ToolContext) -> Option<ToolCommit> {
+        match ctx.phase {
+            GesturePhase::Pressed => {
+                self.0 = ctx.cursor;
+                None
+            }
+            GesturePhase::Released => {
+                let anchor = self.0.take()?;
+                let p = ctx.cursor?;
+                (anchor.distance(p) >= MIN_STROKE).then_some(ToolCommit::Cut {
+                    a: anchor,
+                    b: p,
+                    width: CUT_SCREEN_WIDTH * ctx.cam_scale,
+                })
+            }
+            GesturePhase::Idle | GesturePhase::Held => None,
         }
     }
-}
 
-/// Stroke preview while dragging.
-pub fn draw_cut_preview(draft: Res<CutDraft>, snapped: Res<SnappedCursor>, mut gizmos: Gizmos) {
-    if let (Some(anchor), Some(p)) = (draft.0, snapped.effective()) {
-        gizmos.line_2d(anchor, p, css::ORANGE_RED);
+    fn drafting(&self) -> bool {
+        self.0.is_some()
+    }
+
+    fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview) {
+        if let (Some(anchor), Some(p)) = (self.0, ctx.cursor) {
+            out.line(anchor, p, css::ORANGE_RED);
+        }
     }
 }

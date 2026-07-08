@@ -204,6 +204,10 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::LoadSceneIntent>();
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
+        // Reflection registry: the scripting layer binds operations by
+        // reflected type name (see `docs/script-lisp-decision.md`). Intents
+        // register here as they gain `Reflect`; `CutIntent` is the first.
+        app.register_type::<intent::CutIntent>();
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),

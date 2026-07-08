@@ -65,6 +65,12 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<crate::domain::settings::GridSettings>();
         app.init_resource::<crate::domain::settings::SnapConfig>();
         app.init_resource::<crate::domain::settings::DebugSettings>();
+        // Register the config-seam settings for reflection: the scripting
+        // registry addresses these resources by reflected type name
+        // (see `docs/script-lisp-decision.md`).
+        app.register_type::<crate::domain::settings::GridSettings>();
+        app.register_type::<crate::domain::settings::SnapConfig>();
+        app.register_type::<crate::domain::settings::DebugSettings>();
         app.init_resource::<camera::CameraRig>();
 
         app.add_plugins(input::EditorInputPlugin);

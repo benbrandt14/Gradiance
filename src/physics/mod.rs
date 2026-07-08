@@ -46,6 +46,8 @@ impl Plugin for GradiancePhysicsPlugin {
         }
         app.insert_resource(Gravity(GRAVITY));
         app.init_resource::<crate::domain::settings::SimSettings>();
+        // Reflected config seam for scripting (see script-lisp-decision.md).
+        app.register_type::<crate::domain::settings::SimSettings>();
         app.add_systems(
             Update,
             apply_sim_settings.run_if(resource_changed::<crate::domain::settings::SimSettings>),

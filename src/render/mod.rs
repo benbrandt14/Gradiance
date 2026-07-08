@@ -27,6 +27,8 @@ pub struct GradianceRenderPlugin;
 impl Plugin for GradianceRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<crate::domain::settings::RenderSettings>();
+        // Reflected config seam for scripting (see script-lisp-decision.md).
+        app.register_type::<crate::domain::settings::RenderSettings>();
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }

@@ -14,12 +14,15 @@
 pub mod box_tool;
 pub mod circle_tool;
 pub mod connector_tool;
+pub mod context;
 pub mod cut_tool;
 pub mod drag_tool;
 pub mod ground_tool;
 pub mod handles;
 pub mod polygon_tool;
 pub mod select;
+
+use context::{draw_draft_preview, run_draft_tool};
 
 use crate::core::states::ToolState;
 use crate::domain::Body;
@@ -43,11 +46,11 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<select::SelectGesture>();
         app.init_resource::<handles::ScaleFrame>();
         app.init_resource::<connector_tool::ConnectorDraft>();
-        app.init_resource::<box_tool::BoxDraft>();
-        app.init_resource::<cut_tool::CutDraft>();
-        app.init_resource::<circle_tool::CircleDraft>();
-        app.init_resource::<ground_tool::GroundDraft>();
-        app.init_resource::<polygon_tool::PolygonDraft>();
+        app.init_resource::<box_tool::BoxTool>();
+        app.init_resource::<cut_tool::CutTool>();
+        app.init_resource::<circle_tool::CircleTool>();
+        app.init_resource::<ground_tool::GroundTool>();
+        app.init_resource::<polygon_tool::PolygonTool>();
 
         app.add_systems(
             Update,
@@ -61,11 +64,13 @@ impl Plugin for ToolsPlugin {
                     .run_if(in_state(ToolState::Select)),
                 select::run_select_tool.run_if(in_state(ToolState::Select)),
                 drag_tool::run_drag_tool.run_if(in_state(ToolState::Drag)),
-                box_tool::run_box_tool.run_if(in_state(ToolState::Box)),
-                cut_tool::run_cut_tool.run_if(in_state(ToolState::Cut)),
-                circle_tool::run_circle_tool.run_if(in_state(ToolState::Circle)),
-                ground_tool::run_ground_tool.run_if(in_state(ToolState::Ground)),
-                polygon_tool::run_polygon_tool.run_if(in_state(ToolState::Polygon)),
+                // Pure creation tools share one generic driver over the
+                // DraftTool facade (see `context`).
+                run_draft_tool::<box_tool::BoxTool>.run_if(in_state(ToolState::Box)),
+                run_draft_tool::<cut_tool::CutTool>.run_if(in_state(ToolState::Cut)),
+                run_draft_tool::<circle_tool::CircleTool>.run_if(in_state(ToolState::Circle)),
+                run_draft_tool::<ground_tool::GroundTool>.run_if(in_state(ToolState::Ground)),
+                run_draft_tool::<polygon_tool::PolygonTool>.run_if(in_state(ToolState::Polygon)),
                 connector_tool::run_connector_tool,
             )
                 .in_set(InteractionSet)
@@ -78,11 +83,14 @@ impl Plugin for ToolsPlugin {
                 (
                     select::draw_select_previews.run_if(in_state(ToolState::Select)),
                     handles::draw_handles.run_if(in_state(ToolState::Select)),
-                    box_tool::draw_box_preview.run_if(in_state(ToolState::Box)),
-                    cut_tool::draw_cut_preview.run_if(in_state(ToolState::Cut)),
-                    circle_tool::draw_circle_preview.run_if(in_state(ToolState::Circle)),
-                    ground_tool::draw_ground_preview.run_if(in_state(ToolState::Ground)),
-                    polygon_tool::draw_polygon_preview.run_if(in_state(ToolState::Polygon)),
+                    draw_draft_preview::<box_tool::BoxTool>.run_if(in_state(ToolState::Box)),
+                    draw_draft_preview::<cut_tool::CutTool>.run_if(in_state(ToolState::Cut)),
+                    draw_draft_preview::<circle_tool::CircleTool>
+                        .run_if(in_state(ToolState::Circle)),
+                    draw_draft_preview::<ground_tool::GroundTool>
+                        .run_if(in_state(ToolState::Ground)),
+                    draw_draft_preview::<polygon_tool::PolygonTool>
+                        .run_if(in_state(ToolState::Polygon)),
                     connector_tool::draw_connector_preview,
                 ),
             );

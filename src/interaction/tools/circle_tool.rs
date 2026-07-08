@@ -1,10 +1,10 @@
 //! Circle creation tool: press at the center, drag out the radius.
 
-use crate::command::intent::SpawnBodyIntent;
 use crate::domain::shape::ShapeDef;
-use crate::interaction::PointerOverUi;
-use crate::interaction::snap::SnappedCursor;
-use crate::interaction::tools::{ActiveGesture, new_body_record};
+use crate::interaction::tools::context::{
+    DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview,
+};
+use crate::interaction::tools::new_body_record;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -13,51 +13,39 @@ const MIN_RADIUS: f32 = 0.5;
 
 /// In-progress circle draft (center).
 #[derive(Resource, Default, Debug)]
-pub struct CircleDraft(pub Option<Vec2>);
+pub struct CircleTool(pub Option<Vec2>);
 
-/// Center-then-radius state machine.
-pub fn run_circle_tool(
-    buttons: Res<crate::interaction::pointer::PointerButtons>,
-    snapped: Res<SnappedCursor>,
-    over_ui: Res<PointerOverUi>,
-    mut draft: ResMut<CircleDraft>,
-    mut active: ResMut<ActiveGesture>,
-    mut spawn: MessageWriter<SpawnBodyIntent>,
-) {
-    if buttons.just_pressed(MouseButton::Left)
-        && !over_ui.0
-        && let Some(p) = snapped.effective()
-    {
-        draft.0 = Some(p);
-        active.0 = true;
-    }
-    if buttons.just_released(MouseButton::Left)
-        && let Some(center) = draft.0.take()
-    {
-        active.0 = false;
-        if let Some(p) = snapped.effective() {
-            let radius = center.distance(p);
-            if radius >= MIN_RADIUS {
-                spawn.write(SpawnBodyIntent {
-                    record: new_body_record(ShapeDef::Circle { radius }, center, 0.0),
-                });
+impl DraftTool for CircleTool {
+    fn update(&mut self, ctx: &ToolContext) -> Option<ToolCommit> {
+        match ctx.phase {
+            GesturePhase::Pressed => {
+                self.0 = ctx.cursor;
+                None
             }
+            GesturePhase::Released => {
+                let center = self.0.take()?;
+                let p = ctx.cursor?;
+                let radius = center.distance(p);
+                (radius >= MIN_RADIUS).then(|| {
+                    ToolCommit::SpawnBody(Box::new(new_body_record(
+                        ShapeDef::Circle { radius },
+                        center,
+                        0.0,
+                    )))
+                })
+            }
+            GesturePhase::Idle | GesturePhase::Held => None,
         }
     }
-}
 
-/// Radius preview.
-pub fn draw_circle_preview(
-    draft: Res<CircleDraft>,
-    snapped: Res<SnappedCursor>,
-    mut gizmos: Gizmos,
-) {
-    if let (Some(center), Some(p)) = (draft.0, snapped.effective()) {
-        gizmos.circle_2d(
-            Isometry2d::from_translation(center),
-            center.distance(p).max(0.1),
-            css::AQUAMARINE,
-        );
-        gizmos.line_2d(center, p, css::AQUAMARINE.with_alpha(0.5));
+    fn drafting(&self) -> bool {
+        self.0.is_some()
+    }
+
+    fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview) {
+        if let (Some(center), Some(p)) = (self.0, ctx.cursor) {
+            out.circle(center, center.distance(p).max(0.1), css::AQUAMARINE);
+            out.line(center, p, css::AQUAMARINE.with_alpha(0.5));
+        }
     }
 }

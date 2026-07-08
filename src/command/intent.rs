@@ -121,7 +121,14 @@ pub struct DeleteJointIntent {
 
 /// Request to cut every body crossed by a stroke (CSG subtract; severed
 /// bodies split into pieces).
-#[derive(Message, Debug, Clone)]
+///
+/// This is the first intent to derive `Reflect`:
+/// its fields are all leaf-reflectable (`Vec2`/`f32`), so it is the natural
+/// beachhead for the scripting registry's `bevy_reflect`-addressable intent
+/// surface (see `docs/script-lisp-decision.md`). Authored-body intents
+/// (`SpawnBodyIntent` → `BodyRecord` → `ShapeDef`/`StableId`) stay
+/// non-reflected until linchpin spike #1 settles `Uuid`/`ShapeDef` opacity.
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct CutIntent {
     /// Stroke start, world space.
     pub a: Vec2,
