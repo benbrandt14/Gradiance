@@ -1,0 +1,99 @@
+# Scripting spikes — findings
+
+Status: **both linchpin spikes passed** (2026-07-08). Companion to
+`docs/script-lisp-decision.md`, which gated any feature code on these two
+experiments. Verdict: **proceed — the design's load-bearing assumptions hold,
+and neither "rethink" branch is triggered.**
+
+## Spike 2 — Tier-B driver kernel (perf) — PASS
+
+Question: can driver expressions be evaluated at particle/fluid scale without
+the scripting VM in the per-frame loop?
+
+Landed in `src/script/kernel.rs` (pure, proptested). A numeric `Expr` tree
+compiles once to a flat postfix tape; the hot path is a stack machine over a
+fixed scratch array — no recursion, no dynamic dispatch, no heap — and `drive`
+applies it across columnar SoA data with one reused variable buffer (zero
+allocation per element).
+
+- Correctness: proptested against a tree-walking oracle.
+- Throughput (debug, opt-level 1): **~27.7 M evals/s** — 1M elements × 20
+  frames of an 8-instruction `amp·sin(freq·t+phase)` in 723 ms.
+- Reading: the structural claim (VM-free, alloc-free) is the result; the number
+  confirms the ballpark, with release + SIMD + the GPU-portable flat-tape design
+  as documented headroom. The particle/fluid ceiling is avian's object count,
+  not the kernel.
+
+## Spike 1 — bevy_reflect ↔ steel bridge — PASS
+
+Question (the higher-risk linchpin): can ONE generic, reflection-driven bridge
+make every `#[derive(Reflect)]` type scriptable with no per-field Rust code —
+cheaply enough that "everything programmable" is a derive, not N builtins?
+
+Validated first in an isolated crate (fast iteration), then in-repo against
+gradiance's **real** `SimSettings` — the integration test `tests/script_spike.rs`
+on branch `claude/script-reflect-steel-spike`, with steel as a dev-dependency so
+nothing is committed to the shipping build (or to `main`'s build cost) yet.
+
+**Result: clean.** A steel script mutates a real Rust value entirely through
+reflect paths — `speed` (f32), nested `gravity.y` (glam `Vec2`), `substeps`
+(u32 via numeric coercion) — leaving untouched fields intact, and the whole
+value round-trips to steel data for the "reads are total" path:
+`(("gravity" (("x" 0.0) ("y" -500.0))) ("speed" 2.0) ("substeps" 12))`. The
+Rust bridge (`read_path`/`write_path`/`reflect_to_steel`) **never names a
+field** — it is purely reflection-driven, so it generalizes to any Reflect type.
+
+Opaque custom types (the `ShapeDef`-as-handle path for geometry constructors)
+also round-trip: `impl steel::rvals::Custom for T {}` is legal for user types
+(`Sealed` is blanket-impl'd for `T: Any`), and `(shape-radius (make-circle
+7.0)) => 7.0` confirms a Rust value carried through steel and back.
+
+### steel viability
+
+- On crates.io as `steel-core` v0.8.2 (lib name `steel`), plus `steel-derive`,
+  `steel-interpreter`. Exact-pinnable, consistent with the repo's `=`-pin
+  discipline.
+- Standalone build ~1 min; dependency tree is moderate (im-lists, bincode,
+  arc-swap, crossbeam, inventory, which, xdg, …). Because steel is the
+  *authoring-time* (Tier A) engine and never runs in the per-frame loop, this
+  weight stays off the hot path — the two-tier rule is what makes a heavy
+  engine acceptable.
+- `register_fn` requires `Fn(..) -> R: IntoSteelVal` with `Send + Sync +
+  'static`, so closures capturing `Arc<Mutex<..>>` work (the seam-bound
+  builtin pattern). `run` returns `Result<Vec<SteelVal>, _>`.
+
+### API gotchas (captured so P0 doesn't rediscover them)
+
+- **`dyn PartialReflect` does not satisfy the `GetPath` blanket impl.** Keep
+  reflect-path helpers generic over the concrete `T: Reflect`; erase to
+  `&dyn PartialReflect` only for the structural walk (`reflect_ref`,
+  `try_as_reflect`), which works on trait objects.
+- **`Struct` is at `bevy_reflect::structs::Struct`** (not root-re-exported);
+  `ReflectRef`/`GetPath` are root-exported. Trait-object methods on
+  `ReflectRef::Struct(&dyn Struct)` need no import.
+- **Leaf writes:** "try each concrete `try_apply`" (f32/f64/u32/i32/bool) is a
+  clean, TypeId-free way to coerce a scalar onto an unknown leaf type;
+  `try_apply` checks type first, so failed attempts don't mutate.
+- **steel is Scheme:** avoid builtin names that collide with special forms
+  (`set!`); and integer literals arrive as `IntV`, not `NumV`, so numeric
+  setters should accept `SteelVal` and coerce rather than bind `f64` directly.
+
+## What the spikes did *not* cover (P0 scope)
+
+- Dispatching through the **intent** seam (vs. the settings-resource seam shown
+  here) inside a real `&mut World` exclusive system — the same bridge, a
+  different sink. Straightforward given the above; it is P0 wiring, not a risk.
+- The operation **registry** enumerating `Reflect`-derived ops for
+  discoverability (`(ops)`, `(describe …)`).
+- Promoting the bridge from `tests/` into `src/script/` as product code, with
+  steel a feature-gated real dependency, `ScriptError` (thiserror) in place of
+  test-only `expect`, a fuel/step budget, and a `catch_unwind` boundary.
+- A `tests/boundaries.rs` rule confining `steel` to `src/script/` — added when
+  steel becomes a product dependency (nothing to confine while it is dev-only).
+
+## Recommendation
+
+Adopt steel and proceed to P0 as scoped in the decision record. The bridge is
+low-boilerplate exactly as hoped: one converter, and every `Reflect` type is
+scriptable. The only standing cost is build weight, which the two-tier
+architecture already quarantines to the authoring path.
