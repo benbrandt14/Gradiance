@@ -30,6 +30,7 @@ pub fn toolbar(
     mut undo: MessageWriter<UndoIntent>,
     mut redo: MessageWriter<RedoIntent>,
     mut settings: ResMut<crate::ui::settings::SettingsWindow>,
+    mut rig: ResMut<crate::interaction::camera::CameraRig>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -67,6 +68,16 @@ pub fn toolbar(
                         ScaleFrame::Global => ScaleFrame::Local,
                         ScaleFrame::Local => ScaleFrame::Global,
                     };
+                }
+                ui.separator();
+                // Re-home the orbited view back to the straight-on 2D
+                // view (also bound to Home). Enabled only when tilted.
+                if ui
+                    .add_enabled(!rig.is_flat(), egui::Button::new("⌂ 2D view"))
+                    .on_hover_text("return the camera to the flat 2D view (Home)")
+                    .clicked()
+                {
+                    rig.homing = true;
                 }
                 ui.separator();
                 if ui.button("⚙ Settings").clicked() {

@@ -19,6 +19,13 @@ fn body_material(appearance: &Appearance, settings: &RenderSettings) -> ToonMate
             base_color: color_of(fill),
             perceptual_roughness: 0.92,
             metallic: 0.0,
+            // Double-sided: the extruded front cap follows lyon's fill
+            // winding, which faces away from the camera and would be
+            // back-face culled otherwise (the "front face not visible"
+            // bug). Bevy flips the normal for back faces so lighting
+            // stays correct on both sides.
+            double_sided: true,
+            cull_mode: None,
             // Emissive glow in the fill's hue (0 = matte).
             emissive: LinearRgba::new(
                 fill.r * appearance.emissive,

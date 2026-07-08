@@ -71,10 +71,18 @@ fn setup_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Orthographic 3D camera looking down −Z at the XY sandbox plane;
-    // extruded bodies span z ∈ [-320, 0].
+    // extruded bodies span z ∈ [-320, 0]. The depth slab is made very
+    // wide (near/far ±50k) so orbiting the view never pushes the scene —
+    // or the huge backdrop — outside the frustum (the "background clips
+    // when the view tilts" bug); orthographic near/far only define a
+    // depth range, so a large slab costs nothing.
     commands.spawn((
         Camera3d::default(),
-        Projection::Orthographic(OrthographicProjection::default_3d()),
+        Projection::Orthographic(OrthographicProjection {
+            near: -50_000.0,
+            far: 50_000.0,
+            ..OrthographicProjection::default_3d()
+        }),
         Transform::from_xyz(0.0, 0.0, 600.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     // Angled key light so extrusion depth reads through cast shadows.

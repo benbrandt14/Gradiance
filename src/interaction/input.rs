@@ -8,7 +8,7 @@ use crate::command::intent::{DeleteIntent, GroupIntent, RedoIntent, UndoIntent, 
 use crate::core::ids::StableId;
 use crate::core::states::{GameState, ToolState};
 use crate::domain::Body;
-use crate::interaction::selection::Selection;
+use crate::interaction::selection::{SelectTransition, Selection};
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
@@ -177,7 +177,8 @@ pub fn apply_shortcuts(
     keyboard_captured: Res<crate::interaction::KeyboardCaptured>,
     mut writers: ShortcutWriters,
     mut selection: ResMut<Selection>,
-    selected_joint: Res<crate::interaction::selection::SelectedJoint>,
+    mut selected_joint: ResMut<crate::interaction::selection::SelectedJoint>,
+    groups: Query<(Entity, &crate::domain::group::SelectionGroup), With<Body>>,
     ids: Query<&StableId>,
     bodies: Query<Entity, With<Body>>,
     game_state: Res<State<GameState>>,
@@ -240,13 +241,11 @@ pub fn apply_shortcuts(
         });
     }
     if actions.just_pressed(&EditorAction::SelectAll) {
-        selection.clear();
-        for entity in &bodies {
-            selection.add(entity);
-        }
+        let all = bodies.iter().collect();
+        SelectTransition::SetBodies(all).apply(&mut selection, &mut selected_joint, &groups);
     }
     if actions.just_pressed(&EditorAction::Deselect) {
-        selection.clear();
+        SelectTransition::Clear.apply(&mut selection, &mut selected_joint, &groups);
     }
     if actions.just_pressed(&EditorAction::Save) {
         writers

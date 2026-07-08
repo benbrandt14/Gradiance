@@ -63,7 +63,38 @@ Updated after the M12 feedback round.
   so clicking the joint in a live scene shows exactly what it is. The
   headless swing-vs-rigid contrast test still passes.
 
-## M16 — Interaction & selection feel (Algodoo parity)
+## Addressed in M16 (interaction foundation + fixes)
+
+- **Selection state machine** (2.2, 2.3 hardening): all selection changes
+  now go through one function, `SelectTransition::apply`, which is the
+  transition alphabet of a small FSM (`SetBodies`/`AddBodies`/
+  `ToggleBodies`/`SelectJoint`/`DeselectJoint`/`Clear`). It enforces the
+  **joint-xor-bodies invariant** (body and joint selection are never both
+  populated) and group expansion in exactly one place, so every call site
+  — select tool, joint pick, context menu "select from stack", Ctrl+A,
+  Escape — is a one-line transition instead of ad-hoc resource pokes. This
+  removes the class of "both selections live at once" glitches behind the
+  stability smell (the lingering-joint bug). New interactions extend the
+  vocabulary rather than touching the resources directly. Module docs carry
+  the state diagram; a regression test in `tests/interaction.rs` locks the
+  invariant.
+- **Rendering fixes** (from feedback): the prism **front face is visible**
+  again (base material is `double_sided` / `cull_mode: None` so the
+  lyon-wound front cap isn't back-face culled); the **backdrop no longer
+  clips on tilt** (orthographic near/far widened to a ±50 000 slab so the
+  far plane clears the layer stack); and there is a **re-home control** —
+  a "⌂ 2D view" transport button (enabled only when tilted) alongside the
+  existing `Home` key, both routed through `CameraRig::homing`.
+- **Bevy-features audit** (recurring check): confirmed idiomatic use of the
+  high-value 0.19 features — component **hooks** maintain `IdIndex`,
+  `Changed<>`-driven sync rebuilds all derived data, `States` + `run_if`
+  gate tool systems, an exclusive dispatcher drains `Messages<Intent>`,
+  and `SystemParam`/`ParamSet` bundles keep systems under the arg limit.
+  Two divergences from the original plan are deferred as issues (below),
+  each because closing them now would add churn out of proportion to the
+  benefit.
+
+## M16 residual / deferred (Algodoo parity, queued)
 
 - Selection works from every tool (click falls through to select) (2.1)
 - Shift-drag / modifier semantics rework; no gesture dead-ends (1.1, 2.2)
@@ -72,6 +103,14 @@ Updated after the M12 feedback round.
 - Collision-layer set visualization UI (5.4)
 - Joint config also reachable via right-click context menu (not only the
   select-and-inspect flow landed in M15) (2.8)
+- **Deferred (Bevy audit):** migrate tool gestures from polling
+  `PointerButtons`/`SnappedCursor` to first-party `bevy_picking` observers
+  (`On<Pointer<…>>`), as the original plan intended — large surface, best
+  done as its own pass so the drag contract is ported wholesale.
+- **Deferred (Bevy audit):** enforce the authored `Body`/`Joint` archetype
+  with **required components** (`#[require(...)]`) once the domain types
+  carry sensible `Default`s (`ShapeDef` is a `Default`-less enum today), so
+  a body can never exist missing `LayerMask32`/`Appearance`/etc.
 
 ## M17 — Grids & snapping (CAD pass)
 
