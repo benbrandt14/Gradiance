@@ -73,10 +73,12 @@ pub fn context_menu(
     mut contexts: EguiContexts,
     mut menu: ResMut<ContextMenu>,
     mut selection: ResMut<Selection>,
+    mut selected_joint: ResMut<crate::interaction::selection::SelectedJoint>,
     index: Res<IdIndex>,
     ids: Query<&StableId>,
     layers_q: Query<&LayerMask32, With<Body>>,
     all_layers: Query<&LayerMask32, With<Body>>,
+    groups: Query<(Entity, &crate::domain::group::SelectionGroup), With<Body>>,
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     mut group: MessageWriter<GroupIntent>,
     mut ungroup: MessageWriter<UngroupIntent>,
@@ -182,7 +184,14 @@ pub fn context_menu(
                     for (i, id) in menu.under.clone().into_iter().enumerate() {
                         if ui.button(format!("· body {i} ({id:.8})")).clicked() {
                             if let Some(entity) = index.entity(id) {
-                                selection.set(entity);
+                                crate::interaction::selection::SelectTransition::SetBodies(vec![
+                                    entity,
+                                ])
+                                .apply(
+                                    &mut selection,
+                                    &mut selected_joint,
+                                    &groups,
+                                );
                             }
                             close = true;
                         }

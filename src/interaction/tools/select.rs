@@ -20,7 +20,7 @@ use crate::geometry::polygonize::polygonize;
 use crate::geometry::scale::scale_point;
 use crate::interaction::PointerOverUi;
 use crate::interaction::gesture::GestureConstraints;
-use crate::interaction::selection::{Selection, expand_groups};
+use crate::interaction::selection::{SelectTransition, Selection, expand_groups};
 use crate::interaction::snap::SnappedCursor;
 use crate::interaction::tools::handles::{
     HandleKind, ScaleFrame, SelectionBox, hit_handle, selection_box,
@@ -128,6 +128,7 @@ pub struct SelectInputs<'w> {
 pub struct SelectState<'w> {
     gesture: ResMut<'w, SelectGesture>,
     selection: ResMut<'w, Selection>,
+    joint: ResMut<'w, crate::interaction::selection::SelectedJoint>,
     active: ResMut<'w, ActiveGesture>,
     hold: ResMut<'w, KinematicHold>,
     exclusions: ResMut<'w, crate::interaction::snap::SnapExclusions>,
@@ -173,6 +174,7 @@ pub fn run_select_tool(
     let SelectState {
         gesture,
         selection,
+        joint,
         active,
         hold,
         exclusions,
@@ -267,16 +269,15 @@ pub fn run_select_tool(
                     return;
                 }
                 if shift {
-                    for m in &members {
-                        selection.toggle(*m);
-                    }
+                    SelectTransition::ToggleBodies(members.clone())
+                        .apply(selection, joint, &groups);
                     return; // toggle click, no drag gesture
                 }
-                if !selection.contains(hit) {
-                    selection.clear();
-                    for m in &members {
-                        selection.add(*m);
-                    }
+                if selection.contains(hit) {
+                    // Already selected — a joint may be lingering; drop it.
+                    joint.0 = None;
+                } else {
+                    SelectTransition::SetBodies(members.clone()).apply(selection, joint, &groups);
                 }
                 // Start moving the selection.
                 let poses = transforms.p1();
@@ -297,6 +298,8 @@ pub fn run_select_tool(
 
             // 3. Empty canvas → rubber band (Ctrl = freeform loop; Alt
             // also works where the window manager doesn't grab it).
+            // Pressing empty space drops any selected joint immediately.
+            joint.0 = None;
             let alt = keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight);
             **gesture = if alt || ctrl {
                 SelectGesture::Lasso {
@@ -484,15 +487,12 @@ pub fn run_select_tool(
         SelectGesture::BoxSelect { start, additive } if left_up => {
             active.0 = false;
             if let Some(p) = cursor {
-                if !additive {
-                    selection.clear();
-                }
                 let (min, max) = (start.min(p), start.max(p));
                 // CONTRACT: box selection takes only bodies FULLY inside
                 // the rectangle (no partials), and never the infinite
                 // ground (its AABB overlaps everything).
                 let shapes = transforms.p1();
-                let mut hits: Vec<Entity> = physics
+                let hits: Vec<Entity> = physics
                     .bodies_in_aabb(min, max)
                     .into_iter()
                     .filter(|e| {
@@ -503,18 +503,17 @@ pub fn run_select_tool(
                             && body_fully_inside(shape, transform, min, max)
                     })
                     .collect();
-                expand_groups(&mut hits, &groups);
-                for e in hits {
-                    selection.add(e);
-                }
+                let transition = if additive {
+                    SelectTransition::AddBodies(hits)
+                } else {
+                    SelectTransition::SetBodies(hits)
+                };
+                transition.apply(selection, joint, &groups);
             }
         }
         SelectGesture::Lasso { points, additive } if left_up => {
             active.0 = false;
             if points.len() >= 3 {
-                if !additive {
-                    selection.clear();
-                }
                 // CONTRACT: a body is loop-selected iff its center lies
                 // inside the drawn ring (matching Algodoo); group members
                 // come along with any selected member. The infinite
@@ -526,7 +525,7 @@ pub fn run_select_tool(
                     .map(|(e, t)| (e, t.translation.truncate()))
                     .collect();
                 let shapes = transforms.p0();
-                let mut hits: Vec<Entity> = centers
+                let hits: Vec<Entity> = centers
                     .into_iter()
                     .filter(|(e, _)| {
                         shapes
@@ -535,10 +534,12 @@ pub fn run_select_tool(
                     })
                     .map(|(e, _)| e)
                     .collect();
-                expand_groups(&mut hits, &groups);
-                for e in hits {
-                    selection.add(e);
-                }
+                let transition = if additive {
+                    SelectTransition::AddBodies(hits)
+                } else {
+                    SelectTransition::SetBodies(hits)
+                };
+                transition.apply(selection, joint, &groups);
             }
         }
         SelectGesture::DupDrag { start, sources, .. } if left_up => {

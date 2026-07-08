@@ -20,10 +20,11 @@ use crate::core::ids::{IdIndex, StableId};
 use crate::core::states::{GameState, ToolState};
 use crate::core::units::PosRot;
 use crate::domain::Body;
+use crate::domain::group::SelectionGroup;
 use crate::domain::joint::JointDef;
 use crate::interaction::PointerOverUi;
 use crate::interaction::pointer::PointerButtons;
-use crate::interaction::selection::{SelectedJoint, Selection};
+use crate::interaction::selection::{SelectTransition, SelectedJoint, Selection};
 use crate::interaction::snap::SnappedCursor;
 use crate::interaction::tools::ActiveGesture;
 use bevy::prelude::*;
@@ -59,6 +60,7 @@ pub fn pick_joint(
     state: Res<State<GameState>>,
     joints: Query<(Entity, &JointDef)>,
     bodies: Query<&Transform, With<Body>>,
+    groups: Query<(Entity, &SelectionGroup), With<Body>>,
     index: Res<IdIndex>,
     projections: Query<&Projection, With<Camera3d>>,
     mut selected_joint: ResMut<SelectedJoint>,
@@ -97,8 +99,13 @@ pub fn pick_joint(
     }
 
     if let Some((_, joint)) = best {
-        selected_joint.0 = Some(joint);
-        body_selection.clear();
+        // Selecting the joint clears the body selection (the invariant is
+        // enforced by the transition, not by hand here).
+        SelectTransition::SelectJoint(joint).apply(
+            &mut body_selection,
+            &mut selected_joint,
+            &groups,
+        );
         suppress.0 = true;
         // Anchor dragging only while paused (never fight the solver).
         if *state.get() == GameState::Paused {
@@ -107,9 +114,9 @@ pub fn pick_joint(
             active.0 = true;
         }
     } else {
-        // A non-joint press deselects the joint; the body tool handles the
+        // A non-joint press drops joint focus; the body tool handles the
         // rest (body select / box select / clear).
-        selected_joint.0 = None;
+        SelectTransition::DeselectJoint.apply(&mut body_selection, &mut selected_joint, &groups);
     }
 }
 

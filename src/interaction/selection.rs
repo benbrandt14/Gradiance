@@ -1,4 +1,30 @@
-//! The selection set.
+//! The selection set and its transition state machine.
+//!
+//! Selection state is two resources — the body [`Selection`] and the
+//! [`SelectedJoint`] — under one **invariant**: they are never both
+//! populated (you are editing bodies *or* a joint, never both). Every
+//! change goes through one function, [`SelectTransition::apply`], so the
+//! invariant lives in exactly one place and new interactions extend the
+//! vocabulary instead of poking the resources directly.
+//!
+//! ```text
+//!                    ┌──────────────── Clear ───────────────┐
+//!                    ▼                                       │
+//!              ┌───────────┐   SelectJoint(j)        ┌──────────────┐
+//!              │  Empty    │ ─────────────────────▶  │ Joint(j)     │
+//!              │ (nothing) │ ◀───── DeselectJoint ── │              │
+//!              └───────────┘                         └──────────────┘
+//!                    │  ▲                                    │
+//!     SetBodies /    │  │ Clear                              │ SetBodies /
+//!     Add / Toggle   ▼  │                                    │ Add / Toggle
+//!              ┌──────────────┐  ◀───────────────────────────┘
+//!              │  Bodies{…}   │   (any body transition clears the joint)
+//!              └──────────────┘
+//! ```
+//!
+//! Group expansion (selecting one member selects its whole group) happens
+//! inside the body transitions, so callers pass raw hits and never worry
+//! about it.
 
 use crate::domain::Body;
 use crate::domain::group::SelectionGroup;
@@ -83,9 +109,82 @@ impl Selection {
 /// Joints are selected separately from bodies: clicking a joint's anchor
 /// glyph selects the joint (and clears the body [`Selection`]); clicking a
 /// body clears this. A selected joint drives the joint inspector and the
-/// delete/anchor-drag gestures.
+/// delete/anchor-drag gestures. Mutated only via [`SelectTransition`].
 #[derive(Resource, Default, Debug)]
 pub struct SelectedJoint(pub Option<Entity>);
+
+/// The complete vocabulary of selection changes — the transition alphabet
+/// of the selection state machine (see the [module docs](self)).
+///
+/// This is the **only** sanctioned way to change selection; going through
+/// it guarantees the joint-xor-bodies invariant and group expansion.
+#[derive(Debug, Clone)]
+pub enum SelectTransition {
+    /// Replace the body selection with these hits (group-expanded).
+    SetBodies(Vec<Entity>),
+    /// Add these hits to the body selection (group-expanded).
+    AddBodies(Vec<Entity>),
+    /// Toggle these hits in the body selection (group-expanded).
+    ToggleBodies(Vec<Entity>),
+    /// Select a single joint (clears the body selection).
+    SelectJoint(Entity),
+    /// Clear the joint only, leaving the body selection untouched.
+    DeselectJoint,
+    /// Clear everything.
+    Clear,
+}
+
+impl SelectTransition {
+    /// Applies the transition, maintaining the invariant that the body
+    /// selection and the joint selection are never both populated.
+    pub fn apply(
+        self,
+        bodies: &mut Selection,
+        joint: &mut SelectedJoint,
+        groups: &Query<(Entity, &SelectionGroup), With<Body>>,
+    ) {
+        match self {
+            Self::SetBodies(mut hits) => {
+                expand_groups(&mut hits, groups);
+                bodies.entities = dedup_preserving_order(hits);
+                joint.0 = None;
+            }
+            Self::AddBodies(mut hits) => {
+                expand_groups(&mut hits, groups);
+                for e in hits {
+                    bodies.add(e);
+                }
+                joint.0 = None;
+            }
+            Self::ToggleBodies(mut hits) => {
+                expand_groups(&mut hits, groups);
+                for e in hits {
+                    bodies.toggle(e);
+                }
+                joint.0 = None;
+            }
+            Self::SelectJoint(e) => {
+                bodies.clear();
+                joint.0 = Some(e);
+            }
+            Self::DeselectJoint => joint.0 = None,
+            Self::Clear => {
+                bodies.clear();
+                joint.0 = None;
+            }
+        }
+    }
+}
+
+fn dedup_preserving_order(entities: Vec<Entity>) -> Vec<Entity> {
+    let mut out = Vec::with_capacity(entities.len());
+    for e in entities {
+        if !out.contains(&e) {
+            out.push(e);
+        }
+    }
+    out
+}
 
 /// Drops despawned entities from the selection.
 pub fn prune_dead_selection(

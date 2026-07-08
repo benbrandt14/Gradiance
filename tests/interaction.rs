@@ -107,6 +107,38 @@ fn ctrl_a_selects_all_and_escape_clears() {
 }
 
 #[test]
+fn select_all_and_clear_maintain_the_joint_xor_bodies_invariant() {
+    use gradiance::interaction::selection::SelectedJoint;
+    let mut app = paused_app();
+    spawn_box(&mut app, Vec2::ZERO);
+    spawn_box(&mut app, Vec2::new(100.0, 0.0));
+
+    // Simulate a lingering joint selection (as if a joint were picked).
+    // The Joint marker keeps it alive through prune_dead_selection, so
+    // only the transition can clear it — isolating the invariant.
+    let phantom = app.world_mut().spawn(gradiance::domain::Joint).id();
+    app.world_mut().resource_mut::<SelectedJoint>().0 = Some(phantom);
+
+    // Ctrl+A must select the bodies AND drop the joint — the two are
+    // never populated at once.
+    press(&mut app, &[KeyCode::ControlLeft, KeyCode::KeyA]);
+    assert_eq!(app.world().resource::<Selection>().len(), 2);
+    assert!(
+        app.world().resource::<SelectedJoint>().0.is_none(),
+        "selecting bodies clears the joint (invariant)"
+    );
+
+    // Re-arm the joint, then Escape clears everything.
+    app.world_mut().resource_mut::<SelectedJoint>().0 = Some(phantom);
+    press(&mut app, &[KeyCode::Escape]);
+    assert!(app.world().resource::<Selection>().is_empty());
+    assert!(
+        app.world().resource::<SelectedJoint>().0.is_none(),
+        "Escape clears both bodies and joint"
+    );
+}
+
+#[test]
 fn object_snap_beats_grid_and_picks_the_vertex() {
     let mut app = paused_app();
     // Box centered at origin: corners at (±20, ±10).
