@@ -6,7 +6,7 @@ use crate::domain::Body;
 use crate::domain::appearance::Appearance;
 use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
-use crate::domain::props::PhysicalProps;
+use crate::domain::props::BodyPhysics;
 use crate::domain::shape::ShapeDef;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -24,8 +24,9 @@ pub struct BodyRecord {
     pub pose: PosRot,
     /// Authored geometry.
     pub shape: ShapeDef,
-    /// Authored physical properties.
-    pub props: PhysicalProps,
+    /// Authored physics (avian components, grouped for the record).
+    #[serde(default)]
+    pub physics: BodyPhysics,
     /// Authored appearance.
     pub appearance: Appearance,
     /// Collision layers / depth mapping.
@@ -48,7 +49,7 @@ impl BodyRecord {
             id: *entity_ref.get::<StableId>()?,
             pose: PosRot::from_transform(entity_ref.get::<Transform>()?),
             shape: entity_ref.get::<ShapeDef>()?.clone(),
-            props: *entity_ref.get::<PhysicalProps>()?,
+            physics: BodyPhysics::capture(&entity_ref),
             appearance: *entity_ref.get::<Appearance>()?,
             layers: *entity_ref.get::<LayerMask32>()?,
             groups: entity_ref
@@ -68,10 +69,10 @@ impl BodyRecord {
             self.id,
             transform,
             self.shape.clone(),
-            self.props,
             self.appearance,
             self.layers,
         ));
+        self.physics.insert_into(&mut entity);
         let mut groups = self.groups.clone();
         if groups.is_empty()
             && let Some(legacy) = self.group

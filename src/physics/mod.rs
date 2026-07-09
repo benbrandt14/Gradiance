@@ -62,7 +62,6 @@ impl Plugin for GradiancePhysicsPlugin {
             PostUpdate,
             (
                 body_sync::sync_colliders,
-                body_sync::sync_rigid_bodies,
                 body_sync::sync_collision_layers,
                 joint_sync::guard_dangling_joints,
                 joint_sync::sync_joints,
