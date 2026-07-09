@@ -22,8 +22,12 @@
 //! (see `docs/script-lisp-decision.md`). Tools therefore never get a
 //! bespoke mutation path.
 
-use crate::command::intent::{CutIntent, SpawnBodyIntent};
-use crate::command::snapshot::BodyRecord;
+use crate::command::intent::{
+    CommitTransformIntent, CutIntent, DuplicateIntent, ScaleIntent, SpawnBodyIntent,
+    SpawnJointIntent, TransformChange,
+};
+use crate::command::snapshot::{BodyRecord, JointRecord};
+use crate::core::ids::StableId;
 use crate::domain::settings::SnapConfig;
 use crate::interaction::PointerOverUi;
 use crate::interaction::gesture::GestureConstraints;
@@ -81,7 +85,8 @@ pub struct ToolContext<'a> {
 ///
 /// The driver turns each variant into the corresponding intent message, so
 /// the command discipline is untouched; scripting and a future node editor
-/// produce the same values through the same seam.
+/// produce the same values through the same seam. Creation tools emit the
+/// first two; manipulation tools (drag/select/connector) emit the rest.
 #[derive(Debug, Clone)]
 pub enum ToolCommit {
     /// Author a new body (box/circle/polygon/ground).
@@ -94,6 +99,28 @@ pub enum ToolCommit {
         b: Vec2,
         /// Stroke width, world space.
         width: f32,
+    },
+    /// Author a new joint (hinge/weld/slider — the connector tools).
+    SpawnJoint(Box<JointRecord>),
+    /// Commit a completed move/rotate gesture (one undo step for the batch).
+    Move(Vec<TransformChange>),
+    /// Commit a completed bounding-box scale gesture.
+    Scale {
+        /// Bodies to scale.
+        targets: Vec<StableId>,
+        /// Fixed point, world space.
+        pivot: Vec2,
+        /// Frame rotation: 0 = global axes, body rotation = local axes.
+        frame_rot: f32,
+        /// Per-axis factors along the frame axes.
+        factors: Vec2,
+    },
+    /// Pattern-copy bodies at an offset (ctrl-drag duplicate).
+    Duplicate {
+        /// Bodies to clone.
+        sources: Vec<StableId>,
+        /// World-space offset applied to each clone.
+        offset: Vec2,
     },
 }
 
@@ -227,11 +254,15 @@ pub trait DraftTool: Resource<Mutability = Mutable> {
 }
 
 /// Message writers a [`ToolCommit`] fans out to. Grouped so the generic
-/// driver stays under the system-parameter limit.
+/// drivers stay under the system-parameter limit.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct ToolCommitWriters<'w> {
     spawn: MessageWriter<'w, SpawnBodyIntent>,
     cut: MessageWriter<'w, CutIntent>,
+    joint: MessageWriter<'w, SpawnJointIntent>,
+    moves: MessageWriter<'w, CommitTransformIntent>,
+    scales: MessageWriter<'w, ScaleIntent>,
+    dups: MessageWriter<'w, DuplicateIntent>,
 }
 
 impl ToolCommitWriters<'_> {
@@ -244,6 +275,28 @@ impl ToolCommitWriters<'_> {
             }
             ToolCommit::Cut { a, b, width } => {
                 self.cut.write(CutIntent { a, b, width });
+            }
+            ToolCommit::SpawnJoint(record) => {
+                self.joint.write(SpawnJointIntent { record: *record });
+            }
+            ToolCommit::Move(changes) => {
+                self.moves.write(CommitTransformIntent { changes });
+            }
+            ToolCommit::Scale {
+                targets,
+                pivot,
+                frame_rot,
+                factors,
+            } => {
+                self.scales.write(ScaleIntent {
+                    targets,
+                    pivot,
+                    frame_rot,
+                    factors,
+                });
+            }
+            ToolCommit::Duplicate { sources, offset } => {
+                self.dups.write(DuplicateIntent { sources, offset });
             }
         }
     }
