@@ -22,7 +22,7 @@ pub mod handles;
 pub mod polygon_tool;
 pub mod select;
 
-use context::{draw_draft_preview, run_draft_tool};
+use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_tool};
 
 use crate::core::states::ToolState;
 use crate::domain::Body;
@@ -46,6 +46,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<select::SelectGesture>();
         app.init_resource::<handles::ScaleFrame>();
         app.init_resource::<connector_tool::ConnectorDraft>();
+        app.init_resource::<drag_tool::DragTool>();
         app.init_resource::<box_tool::BoxTool>();
         app.init_resource::<cut_tool::CutTool>();
         app.init_resource::<circle_tool::CircleTool>();
@@ -63,7 +64,7 @@ impl Plugin for ToolsPlugin {
                 crate::interaction::joint_edit::drag_joint_anchor
                     .run_if(in_state(ToolState::Select)),
                 select::run_select_tool.run_if(in_state(ToolState::Select)),
-                drag_tool::run_drag_tool.run_if(in_state(ToolState::Drag)),
+                run_manip_tool::<drag_tool::DragTool>.run_if(in_state(ToolState::Drag)),
                 // Pure creation tools share one generic driver over the
                 // DraftTool facade (see `context`).
                 run_draft_tool::<box_tool::BoxTool>.run_if(in_state(ToolState::Box)),
@@ -71,7 +72,8 @@ impl Plugin for ToolsPlugin {
                 run_draft_tool::<circle_tool::CircleTool>.run_if(in_state(ToolState::Circle)),
                 run_draft_tool::<ground_tool::GroundTool>.run_if(in_state(ToolState::Ground)),
                 run_draft_tool::<polygon_tool::PolygonTool>.run_if(in_state(ToolState::Polygon)),
-                connector_tool::run_connector_tool,
+                run_manip_tool::<connector_tool::ConnectorDraft>
+                    .run_if(connector_tool::connector_active),
             )
                 .in_set(InteractionSet)
                 .before(crate::command::CommandDispatchSet),
@@ -91,7 +93,8 @@ impl Plugin for ToolsPlugin {
                         .run_if(in_state(ToolState::Ground)),
                     draw_draft_preview::<polygon_tool::PolygonTool>
                         .run_if(in_state(ToolState::Polygon)),
-                    connector_tool::draw_connector_preview,
+                    draw_manip_preview::<connector_tool::ConnectorDraft>
+                        .run_if(connector_tool::connector_active),
                 ),
             );
         }

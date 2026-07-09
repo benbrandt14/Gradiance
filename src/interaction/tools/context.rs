@@ -28,13 +28,25 @@ use crate::command::intent::{
 };
 use crate::command::snapshot::{BodyRecord, JointRecord};
 use crate::core::ids::StableId;
+use crate::core::states::{GameState, ToolState};
+use crate::core::units::PosRot;
+use crate::domain::Body;
+use crate::domain::group::SelectionGroup;
+use crate::domain::layers::LayerMask32;
 use crate::domain::settings::SnapConfig;
+use crate::domain::shape::ShapeDef;
 use crate::interaction::PointerOverUi;
 use crate::interaction::gesture::GestureConstraints;
+use crate::interaction::joint_edit::SuppressSelectPress;
 use crate::interaction::pointer::PointerButtons;
-use crate::interaction::snap::SnappedCursor;
+use crate::interaction::selection::{SelectTransition, SelectedJoint, Selection};
+use crate::interaction::snap::{SnapExclusions, SnappedCursor};
 use crate::interaction::tools::ActiveGesture;
+use crate::physics::grab::{Grab, MouseSpring};
+use crate::physics::hold::KinematicHold;
+use crate::physics::queries::PhysicsQueries;
 use bevy::ecs::component::Mutable;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 /// The pointer-gesture phase for the primary (left) button this frame.
@@ -302,22 +314,28 @@ impl ToolCommitWriters<'_> {
     }
 }
 
-/// Computes this frame's [`GesturePhase`] from the pointer state. A press
-/// over the UI is suppressed to `Idle`.
-fn phase_of(buttons: PointerButtons, over_ui: bool) -> GesturePhase {
-    if buttons.just_released(MouseButton::Left) {
+/// Computes this frame's [`GesturePhase`] for `button`. A press over the UI is
+/// suppressed to `Idle` (a tool must not start a gesture on a click egui owns);
+/// a release always reports `Released` regardless of what the cursor is over.
+fn phase_of_button(buttons: PointerButtons, button: MouseButton, over_ui: bool) -> GesturePhase {
+    if buttons.just_released(button) {
         GesturePhase::Released
-    } else if buttons.just_pressed(MouseButton::Left) {
+    } else if buttons.just_pressed(button) {
         if over_ui {
             GesturePhase::Idle
         } else {
             GesturePhase::Pressed
         }
-    } else if buttons.pressed(MouseButton::Left) {
+    } else if buttons.pressed(button) {
         GesturePhase::Held
     } else {
         GesturePhase::Idle
     }
+}
+
+/// The primary (left) button's phase this frame.
+fn phase_of(buttons: PointerButtons, over_ui: bool) -> GesturePhase {
+    phase_of_button(buttons, MouseButton::Left, over_ui)
 }
 
 /// Generic driver: builds a [`ToolContext`], advances the tool `T`, and
@@ -379,6 +397,277 @@ pub fn draw_draft_preview<T: DraftTool>(
         snap: &snap,
         cam_scale: 1.0,
     };
+    let mut preview = ToolPreview::default();
+    tool.preview(&ctx, &mut preview);
+    preview.draw(&mut gizmos);
+}
+
+// ============================================================================
+// Manipulation-tool half of the facade
+// ============================================================================
+//
+// Creation tools ([`DraftTool`]) are pure functions of draft state + a pure
+// [`ToolContext`]. Manipulation tools (drag, select, connector) additionally
+// need **total world reads** (hit-testing, poses, ids) and, during a gesture,
+// **transient world writes** (kinematic-held `Transform`). They express those
+// through this richer half: reads via [`ToolWorld`] (a read facade — "reads are
+// total"), writes as a returned [`ManipOutput`] the driver applies (commits →
+// intents, holds → kinematic `Transform`, selection → editor state). A tool
+// still touches no authored component and no command stack, so the gesture
+// contract (invariants 1–2) holds by construction.
+
+/// Read-only world facade a [`ManipTool`] queries during a gesture.
+///
+/// Reads are total (the governance model's read half): a manipulation tool
+/// hit-tests and resolves poses/ids through this instead of holding raw
+/// queries, exactly as a script or plotter reads through `physics::queries`.
+#[derive(SystemParam)]
+pub struct ToolWorld<'w, 's> {
+    physics: PhysicsQueries<'w, 's>,
+    hit: Query<'w, 's, (&'static ShapeDef, &'static LayerMask32), With<Body>>,
+    poses: Query<'w, 's, &'static Transform, With<Body>>,
+    ids: Query<'w, 's, &'static StableId>,
+}
+
+impl ToolWorld<'_, '_> {
+    /// The topmost authored body at a world point (front layer wins; the
+    /// infinite ground sorts last).
+    pub fn topmost_body_at(&self, p: Vec2) -> Option<Entity> {
+        super::topmost_body_at(p, &self.physics, &self.hit)
+    }
+
+    /// Every authored body at a point, topmost first.
+    pub fn bodies_at(&self, p: Vec2) -> Vec<Entity> {
+        super::bodies_at_sorted(p, &self.physics, &self.hit)
+    }
+
+    /// A body entity's authored pose.
+    pub fn pose_of(&self, entity: Entity) -> Option<PosRot> {
+        self.poses.get(entity).ok().map(PosRot::from_transform)
+    }
+
+    /// A body entity's stable id.
+    pub fn id_of(&self, entity: Entity) -> Option<StableId> {
+        self.ids.get(entity).ok().copied()
+    }
+}
+
+/// A transient kinematic-hold request for one frame.
+///
+/// Move/rotate previews compute target poses each frame and let the driver
+/// apply them under [`KinematicHold`] — the sanctioned transient preview state
+/// (invariant #2), never an authored-component write.
+#[derive(Debug, Clone, Default)]
+pub enum HoldState {
+    /// Leave any existing hold untouched (tools that don't hold).
+    #[default]
+    Keep,
+    /// Hold exactly these bodies at these poses this frame.
+    Set(Vec<(Entity, PosRot)>),
+    /// Release the hold (gesture ended).
+    Clear,
+}
+
+/// A transient mouse-spring (physical grab) request for one frame — the
+/// play-mode drag interaction. Not undoable (physical interaction, matching
+/// Algodoo), so it never touches the command seam.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum GrabState {
+    /// Leave any existing spring untouched.
+    #[default]
+    Keep,
+    /// Grab with this spring this frame.
+    Set(Grab),
+    /// Release the spring.
+    Clear,
+}
+
+/// What a [`ManipTool`] asks the driver to apply this frame.
+///
+/// Every field routes through an existing seam: `commit` → intents (undoable),
+/// `hold`/`grab` → transient physics preview state (kinematic `Transform` /
+/// mouse spring), `selection` → editor-state resources. The tool itself
+/// mutates nothing outside its own draft state.
+#[derive(Default)]
+pub struct ManipOutput {
+    /// One authoring action to commit (at most one per gesture — invariant).
+    pub commit: Option<ToolCommit>,
+    /// Transient kinematic hold for this frame (move/rotate previews).
+    pub hold: HoldState,
+    /// Transient mouse-spring grab for this frame (play-mode drag).
+    pub grab: GrabState,
+    /// Editor selection change (applied via [`SelectTransition`]).
+    pub selection: Option<SelectTransition>,
+}
+
+impl ManipOutput {
+    /// Shorthand for a frame whose only effect is a commit.
+    pub fn commit(commit: ToolCommit) -> Self {
+        Self {
+            commit: Some(commit),
+            ..Default::default()
+        }
+    }
+}
+
+/// Read-only per-frame inputs for a manipulation gesture (the manipulation
+/// analogue of [`ToolContext`]).
+pub struct ManipContext<'a> {
+    /// Left-button gesture phase.
+    pub left: GesturePhase,
+    /// Right-button gesture phase (rotation gestures).
+    pub right: GesturePhase,
+    /// Snapped, effective cursor. `None` off-screen.
+    pub cursor: Option<Vec2>,
+    /// Snapped raw cursor (freeform strokes / deadzone tests).
+    pub raw_cursor: Option<Vec2>,
+    /// Whether the pointer is over egui.
+    pub over_ui: bool,
+    /// A joint pick consumed the press this frame (skip body gestures).
+    pub suppress_press: bool,
+    /// Ctrl held (duplicate / freeform loop).
+    pub ctrl: bool,
+    /// Shift held (additive select / uniform scale).
+    pub shift: bool,
+    /// Alt held (freeform loop).
+    pub alt: bool,
+    /// Whether the simulation is playing (drag: spring vs. move).
+    pub playing: bool,
+    /// The active tool (connector variant: hinge/weld/slider).
+    pub tool: ToolState,
+    /// Axis/rotation gesture constraints.
+    pub constraints: &'a GestureConstraints,
+    /// Snapping configuration.
+    pub snap: &'a SnapConfig,
+    /// World units per logical screen pixel.
+    pub cam_scale: f32,
+}
+
+/// The uniform interface a world-reading, transient-writing tool implements —
+/// the manipulation analogue of [`DraftTool`].
+///
+/// `update` is a function of draft state + [`ManipContext`] + read-only
+/// [`ToolWorld`], returning a [`ManipOutput`] the driver applies. A scripted
+/// manipulation is later just another implementor.
+pub trait ManipTool: Resource<Mutability = Mutable> {
+    /// Advances the gesture for this frame.
+    fn update(&mut self, ctx: &ManipContext, world: &ToolWorld) -> ManipOutput;
+
+    /// Whether a gesture is in progress (drives [`ActiveGesture`] and preview).
+    fn drafting(&self) -> bool;
+
+    /// Renders the in-progress preview from draft state.
+    fn preview(&self, ctx: &ManipContext, out: &mut ToolPreview);
+}
+
+/// Pointer/tool-state inputs for the manipulation drivers, bundled to stay
+/// under the system-parameter limit.
+#[derive(SystemParam)]
+pub struct ManipInputs<'w, 's> {
+    buttons: Res<'w, PointerButtons>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    snapped: Res<'w, SnappedCursor>,
+    over_ui: Res<'w, PointerOverUi>,
+    suppress: Res<'w, SuppressSelectPress>,
+    constraints: Res<'w, GestureConstraints>,
+    snap: Res<'w, SnapConfig>,
+    tool_state: Res<'w, State<ToolState>>,
+    game_state: Res<'w, State<GameState>>,
+    projections: Query<'w, 's, &'static Projection, With<Camera3d>>,
+}
+
+impl ManipInputs<'_, '_> {
+    /// Builds this frame's read-only manipulation context.
+    fn manip_context(&self) -> ManipContext<'_> {
+        let held = |a, b| self.keys.pressed(a) || self.keys.pressed(b);
+        ManipContext {
+            left: phase_of_button(*self.buttons, MouseButton::Left, self.over_ui.0),
+            right: phase_of_button(*self.buttons, MouseButton::Right, self.over_ui.0),
+            cursor: self.snapped.effective(),
+            raw_cursor: self.snapped.raw,
+            over_ui: self.over_ui.0,
+            suppress_press: self.suppress.0,
+            ctrl: held(KeyCode::ControlLeft, KeyCode::ControlRight),
+            shift: held(KeyCode::ShiftLeft, KeyCode::ShiftRight),
+            alt: held(KeyCode::AltLeft, KeyCode::AltRight),
+            playing: *self.game_state.get() == GameState::Playing,
+            tool: *self.tool_state.get(),
+            constraints: &self.constraints,
+            snap: &self.snap,
+            cam_scale: crate::interaction::camera::camera_scale(&self.projections),
+        }
+    }
+}
+
+/// Editor-state a manipulation gesture drives (transient hold + selection),
+/// bundled for the driver.
+#[derive(SystemParam)]
+pub struct ManipEditor<'w, 's> {
+    active: ResMut<'w, ActiveGesture>,
+    hold: ResMut<'w, KinematicHold>,
+    exclusions: ResMut<'w, SnapExclusions>,
+    spring: ResMut<'w, MouseSpring>,
+    selection: ResMut<'w, Selection>,
+    joint: ResMut<'w, SelectedJoint>,
+    groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
+}
+
+/// Generic driver: builds a [`ManipContext`], advances the tool `T`, and
+/// applies its [`ManipOutput`] through the existing seams (commit → intent,
+/// hold → kinematic `Transform`, selection → editor state). One instance runs
+/// per manipulation tool, gated by `run_if(in_state(..))`.
+pub fn run_manip_tool<T: ManipTool>(
+    inputs: ManipInputs,
+    mut editor: ManipEditor,
+    mut world: ParamSet<(ToolWorld, Query<&mut Transform, With<Body>>)>,
+    mut writers: ToolCommitWriters,
+    mut tool: ResMut<T>,
+) {
+    let ctx = inputs.manip_context();
+    let out = tool.update(&ctx, &world.p0());
+
+    if let Some(commit) = out.commit {
+        writers.emit(commit);
+    }
+    if let Some(transition) = out.selection {
+        transition.apply(&mut editor.selection, &mut editor.joint, &editor.groups);
+    }
+    match out.grab {
+        GrabState::Keep => {}
+        GrabState::Set(grab) => editor.spring.0 = Some(grab),
+        GrabState::Clear => editor.spring.0 = None,
+    }
+    match out.hold {
+        HoldState::Keep => {}
+        HoldState::Clear => {
+            editor.hold.entities.clear();
+            editor.exclusions.0.clear();
+        }
+        HoldState::Set(poses) => {
+            editor.hold.entities = poses.iter().map(|(e, _)| *e).collect();
+            editor.exclusions.0.clone_from(&editor.hold.entities);
+            let mut transforms = world.p1();
+            for (entity, pose) in &poses {
+                if let Ok(mut transform) = transforms.get_mut(*entity) {
+                    pose.apply_to(&mut transform);
+                }
+            }
+        }
+    }
+
+    let drafting = tool.drafting();
+    if editor.active.0 != drafting {
+        editor.active.0 = drafting;
+    }
+}
+
+/// Generic preview: draws manipulation tool `T`'s in-progress gizmo. Runs only
+/// with the render plugin present.
+pub fn draw_manip_preview<T: ManipTool>(inputs: ManipInputs, tool: Res<T>, mut gizmos: Gizmos) {
+    if !tool.drafting() {
+        return;
+    }
+    let ctx = inputs.manip_context();
     let mut preview = ToolPreview::default();
     tool.preview(&ctx, &mut preview);
     preview.draw(&mut gizmos);
