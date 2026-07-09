@@ -12,8 +12,9 @@
 //!   rotatable basis, and pluggable geometry (Cartesian / Isometric /
 //!   Polar) via `GridSystem`.
 //!
-//! This module may not import `avian2d` (uses `physics::queries`) or
-//! `egui` (UI publishes [`PointerOverUi`] instead).
+//! This module may read avian directly (or through the `physics::queries`
+//! read facade) but must not import `egui` (UI publishes [`PointerOverUi`]
+//! instead).
 
 pub mod align;
 pub mod camera;
