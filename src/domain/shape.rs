@@ -42,7 +42,16 @@ pub enum CsgOp {
 /// mesh via the physics/render sync systems. Polygon vertices are
 /// **centroid-relative at authoring time** (CSG reshapes may leave the
 /// body origin off-centroid); `holes` are produced by CSG cuts.
-#[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// Reflects as an **opaque** value (`#[reflect(opaque)]`), the ratified design
+/// for scripting: `ShapeDef` is a foreign value built by geometry constructor
+/// builtins and passed as a handle, never authored field-by-field through
+/// reflection (see `docs/script-lisp-decision.md`). Opacity insulates the
+/// scripting surface from the SDF enum's churn and lets records that embed a
+/// `ShapeDef` (`BodyRecord`, `PropertyValue::Shape`) derive `Reflect`. Script
+/// tree-walking, if ever wanted, is additive later via accessor builtins.
+#[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+#[reflect(opaque)]
 pub enum ShapeDef {
     /// An axis-aligned rectangle (before body rotation).
     Box {

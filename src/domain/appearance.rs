@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Deliberately not Bevy's `Color` so the save format stays decoupled from
 /// engine color-space enums; the render layer converts on sync.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct Rgba {
     /// Red in `[0, 1]`.
     pub r: f32,
@@ -45,7 +45,7 @@ impl Rgba {
 }
 
 /// The authored appearance of a body.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct Appearance {
     /// Fill color of the extruded mesh.
     pub fill: Rgba,

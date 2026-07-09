@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 /// let picky = LayerMask32 { memberships: 0b0001, filters: 0b0001 };
 /// assert!(!collides(&picky, &back));
 /// ```
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct LayerMask32 {
     /// Layers this body occupies.
     pub memberships: u32,

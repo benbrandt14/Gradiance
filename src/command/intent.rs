@@ -11,21 +11,21 @@ use crate::core::units::PosRot;
 use bevy::prelude::*;
 
 /// Request to spawn one fully-specified body.
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct SpawnBodyIntent {
     /// The complete authored state to create.
     pub record: BodyRecord,
 }
 
 /// Request to delete a set of bodies.
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct DeleteIntent {
     /// Bodies to delete.
     pub targets: Vec<StableId>,
 }
 
 /// Request to duplicate a set of bodies at an offset.
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct DuplicateIntent {
     /// Bodies to clone.
     pub sources: Vec<StableId>,
@@ -34,7 +34,7 @@ pub struct DuplicateIntent {
 }
 
 /// One body's pose change within a [`CommitTransformIntent`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Reflect)]
 pub struct TransformChange {
     /// The body that moved.
     pub id: StableId,
@@ -46,14 +46,14 @@ pub struct TransformChange {
 
 /// Commit of a completed move/rotate gesture (one undo step for the whole
 /// gesture, however many bodies it touched).
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct CommitTransformIntent {
     /// Every body's old and new pose.
     pub changes: Vec<TransformChange>,
 }
 
 /// Commit of a completed scale gesture (or a numeric scale edit).
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct ScaleIntent {
     /// Bodies to scale.
     pub targets: Vec<StableId>,
@@ -66,7 +66,7 @@ pub struct ScaleIntent {
 }
 
 /// Request to pattern-copy bodies (linear or radial array).
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct ArrayIntent {
     /// Bodies to pattern.
     pub sources: Vec<StableId>,
@@ -77,7 +77,7 @@ pub struct ArrayIntent {
 }
 
 /// Request to create one fully-specified joint.
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct SpawnJointIntent {
     /// The complete authored joint (id minted by the tool, stable across
     /// redo).
@@ -85,35 +85,35 @@ pub struct SpawnJointIntent {
 }
 
 /// Batched property edit (one gesture across N targets = one undo step).
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct PropertyEditIntent {
     /// Old → new value per target.
     pub changes: Vec<crate::command::property::PropertyChange>,
 }
 
 /// Request to group bodies together.
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct GroupIntent {
     /// Bodies to group.
     pub targets: Vec<StableId>,
 }
 
 /// Request to remove bodies from their groups.
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct UngroupIntent {
     /// Bodies to ungroup.
     pub targets: Vec<StableId>,
 }
 
 /// Request to replace the whole world with a scene (undoable).
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct LoadSceneIntent {
     /// The parsed scene to load.
     pub scene: crate::command::snapshot::SceneRecord,
 }
 
 /// Request to delete one joint (undoable, restores the same id).
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct DeleteJointIntent {
     /// The joint to delete.
     pub id: StableId,
@@ -122,12 +122,11 @@ pub struct DeleteJointIntent {
 /// Request to cut every body crossed by a stroke (CSG subtract; severed
 /// bodies split into pieces).
 ///
-/// This is the first intent to derive `Reflect`:
-/// its fields are all leaf-reflectable (`Vec2`/`f32`), so it is the natural
-/// beachhead for the scripting registry's `bevy_reflect`-addressable intent
-/// surface (see `docs/script-lisp-decision.md`). Authored-body intents
-/// (`SpawnBodyIntent` → `BodyRecord` → `ShapeDef`/`StableId`) stay
-/// non-reflected until linchpin spike #1 settles `Uuid`/`ShapeDef` opacity.
+/// Its fields are all leaf-reflectable (`Vec2`/`f32`); it was the first
+/// intent to derive `Reflect`. The rest of the authored intent surface
+/// (`SpawnBodyIntent`, `SpawnJointIntent`, …) now derives `Reflect` too, once
+/// spike #1 settled `StableId`/`ShapeDef` reflect-opacity — see
+/// `docs/script-spike-findings.md`.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct CutIntent {
     /// Stroke start, world space.
@@ -139,16 +138,16 @@ pub struct CutIntent {
 }
 
 /// Request to merge bodies into one (SDF union; first target hosts).
-#[derive(Message, Debug, Clone)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct MergeIntent {
     /// Bodies to merge; the first survives with the union of all shapes.
     pub targets: Vec<StableId>,
 }
 
 /// Request to undo the last command.
-#[derive(Message, Debug, Clone, Copy, Default)]
+#[derive(Message, Debug, Clone, Copy, Default, Reflect)]
 pub struct UndoIntent;
 
 /// Request to redo the last undone command.
-#[derive(Message, Debug, Clone, Copy, Default)]
+#[derive(Message, Debug, Clone, Copy, Default, Reflect)]
 pub struct RedoIntent;

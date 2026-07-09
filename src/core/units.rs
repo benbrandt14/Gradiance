@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 /// pose.apply_to(&mut back);
 /// assert_eq!(back.translation.z, 99.0);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct PosRot {
     /// World-space translation in pixels.
     pub pos: Vec2,

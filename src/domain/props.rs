@@ -35,7 +35,11 @@ pub fn default_gravity_scale() -> GravityScale {
 /// This value object assembles them ([`capture`](BodyPhysics::capture)) and
 /// applies them ([`insert_into`](BodyPhysics::insert_into)), so records and the
 /// scene file stay one flat struct.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+///
+/// Reflects structurally: the avian component fields all derive `Reflect`, so
+/// the scripting registry can inspect a captured body's physics field-by-field
+/// (the read-total path) and construct a `SpawnBodyIntent` that carries it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct BodyPhysics {
     /// Simulation role.
     #[serde(default)]

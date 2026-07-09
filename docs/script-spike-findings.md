@@ -97,3 +97,61 @@ Adopt steel and proceed to P0 as scoped in the decision record. The bridge is
 low-boilerplate exactly as hoped: one converter, and every `Reflect` type is
 scriptable. The only standing cost is build weight, which the two-tier
 architecture already quarantines to the authoring path.
+
+## Spike #1 follow-through — `StableId`/`ShapeDef` reflect-opacity (RESOLVED 2026-07-09)
+
+Spike 1 proved the bridge on a *settings resource* but deferred the harder
+question that actually blocks the operation registry: **how do the authored
+intents reflect?** `SpawnBodyIntent`/`SpawnJointIntent` reach `StableId` (a
+`Uuid` newtype) and `ShapeDef` (an SDF enum still in flux) — neither of which
+derived `Reflect` — so the registry could not yet bind body/joint ops by name.
+`CutIntent` (all-`Vec2`/`f32` leaves) was the only reflected intent. Resolution:
+
+- **Both reflect as opaque** via `#[reflect(opaque)]`. The attribute needs only
+  `Clone` (both satisfy it) and auto-derives `FromReflect`, so a value round-trips
+  by clone. Opacity is the *correct* model, not a workaround:
+  - `StableId` is an identity **handle**, never authored byte-by-byte through
+    reflection; opacity also keeps the reflect graph off bevy_reflect's optional
+    `uuid` feature.
+  - `ShapeDef` is the ratified **opaque foreign value** (`script-lisp-decision.md`):
+    built by geometry constructor builtins, passed as a handle. Opacity insulates
+    the scripting surface from the enum's churn; script-side tree-walking is
+    additive later via accessor builtins.
+- **Everything else reflects structurally** — no further opacity was needed:
+  `PosRot`, `Rgba`, `Appearance`, `LayerMask32`, `MotorDef`, `JointCommon`,
+  `JointKind`, `JointDef`, `BodyRecord`/`JointRecord`/`EnvironmentRecord`/
+  `SceneRecord`, `PropertyValue`/`PropertyChange`, `ArrayMode`, `TransformChange`.
+  Crucially, **`BodyPhysics` reflects over avian's own components**: avian derives
+  `Reflect` on `RigidBody`/`Friction`/`Restitution`/`ColliderDensity`/
+  `GravityScale` unconditionally (it turns on bevy's `bevy_reflect` feature), and
+  with our `serialize` feature they even carry `reflect(Serialize, Deserialize)`.
+  The de-adapter collapse thus *helps* introspection exactly as predicted — the
+  read-total path reads authored physics through reflection over avian directly.
+- **The whole authored intent surface now derives `Reflect` and is registered**
+  in `CommandPlugin`. `App::register_type` recursively registers each intent's
+  field types, so one call per intent gives the read-total path a complete
+  registry (records → opaque handles → domain types → avian components) without
+  naming those types individually.
+
+Verified **feature-independently** by `tests/reflect_intents.rs` (runs in normal
+`cargo test`, no `--features script`): `ReflectRef::Opaque` for
+`StableId`/`ShapeDef` (incl. a deep CSG tree as one leaf); top-level + transitive
+registration (down to avian `RigidBody`/`Friction`); and a `to_dynamic()` →
+`from_reflect()` round-trip for `SpawnBodyIntent`/`SpawnJointIntent` that
+reconstructs the record intact across the opaque leaves.
+
+**API notes (so P1 doesn't rediscover them):**
+- `#[reflect(opaque)]` forgoes `Struct`/`Enum` (`reflect_ref()` → `Opaque`) and
+  requires `Clone`; `FromReflect` is auto-provided unless `from_reflect = false`.
+- Deriving `Reflect` on a struct requires each non-ignored field to be
+  `FromReflect + TypePath` — opaque leaves satisfy this, which is why records
+  embedding `StableId`/`ShapeDef` derive cleanly.
+- `PartialReflect::to_dynamic()` (bevy 0.19; the former `clone_value`) →
+  `FromReflect::from_reflect(&dyn PartialReflect)` is the round-trip; opaque
+  fields survive it by clone.
+
+**Unblocked next (P1):** the emit-then-dispatch operation registry can now
+construct these intents from steel data via the generic bridge and enumerate
+them by reflected type name — the World-integration constraint (scripts emit
+intent values; one exclusive system dispatches through the intent bus) is
+unchanged.

@@ -6,7 +6,7 @@ use crate::core::ids::{IdIndex, StableId};
 use bevy::prelude::*;
 
 /// How array copies are placed.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Reflect)]
 pub enum ArrayMode {
     /// Copies at `offset`, `2·offset`, … `count·offset`.
     Linear {

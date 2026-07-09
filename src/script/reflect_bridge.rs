@@ -179,4 +179,50 @@ mod tests {
             .expect("opaque round-trips");
         assert!(matches!(out.last(), Some(SteelVal::NumV(v)) if (*v - 7.0).abs() < 1e-9));
     }
+
+    #[test]
+    fn bridge_reads_a_real_authored_intent() {
+        // Closes the loop from spike #1: the same generic bridge that drove
+        // `SimSettings` now reads a real, newly-`Reflect` authored intent —
+        // the read-total path the operation registry / live plotters use.
+        use crate::command::intent::SpawnBodyIntent;
+        use crate::command::snapshot::BodyRecord;
+        use crate::core::ids::StableId;
+        use crate::core::units::PosRot;
+        use crate::domain::appearance::Appearance;
+        use crate::domain::layers::LayerMask32;
+        use crate::domain::props::BodyPhysics;
+        use crate::domain::shape::ShapeDef;
+        use bevy::math::Vec2;
+
+        let intent = SpawnBodyIntent {
+            record: BodyRecord {
+                id: StableId::new(),
+                pose: PosRot {
+                    pos: Vec2::new(12.0, -3.5),
+                    rot: 0.0,
+                },
+                shape: ShapeDef::Circle { radius: 9.0 },
+                physics: BodyPhysics::default(),
+                appearance: Appearance::default(),
+                layers: LayerMask32 {
+                    memberships: 1,
+                    filters: u32::MAX,
+                },
+                groups: Vec::new(),
+                group: None,
+            },
+        };
+
+        // Reflect-path reads reach the numeric leaves of a real intent,
+        // never naming a field on the Rust side.
+        assert_eq!(read_path(&intent, "record.pose.pos.x"), Some(12.0));
+        assert_eq!(read_path(&intent, "record.layers.memberships"), Some(1.0));
+
+        // The whole value converts to steel struct data. Opaque handles
+        // (`StableId`, `ShapeDef`) degrade to `Void` by design — they are
+        // built via constructor builtins, not read field-by-field.
+        let data = reflect_to_steel(&intent as &dyn PartialReflect);
+        assert!(matches!(data, SteelVal::ListV(_)));
+    }
 }

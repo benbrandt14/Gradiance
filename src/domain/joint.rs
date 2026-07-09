@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Maps onto the engine's native velocity-controlled motor with an
 /// acceleration-based model (`stiffness = 0`, `damping` as configured).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct MotorDef {
     /// Target velocity (rad/s for hinges, px/s for sliders).
     pub target_velocity: f32,
@@ -62,7 +62,7 @@ impl Default for MotorDef {
 }
 
 /// Parameters common to every joint kind.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct JointCommon {
     /// Whether the two connected bodies still collide with each other
     /// (off by default, the Algodoo convention).
@@ -70,7 +70,7 @@ pub struct JointCommon {
 }
 
 /// The kind-specific parameters of a joint.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub enum JointKind {
     /// Revolute: bodies rotate freely about the shared anchor.
     Hinge {
@@ -99,7 +99,7 @@ pub enum JointKind {
 /// References bodies by [`StableId`], never `Entity`. `body_b == None`
 /// pins `body_a` to the world at `anchor_b` (a **world-space** point);
 /// otherwise `anchor_b` is body-B local.
-#[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct JointDef {
     /// Kind-specific parameters.
     pub kind: JointKind,

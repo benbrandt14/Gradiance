@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// Captures exactly the components that constitute the save file; spawning
 /// a record recreates the body and every derived component follows via the
 /// sync systems. Used by undo records and by scene files alike.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub struct BodyRecord {
     /// Stable identity (preserved across undo/redo and save/load).
     pub id: StableId,
@@ -90,7 +90,7 @@ impl BodyRecord {
 ///
 /// The joint analogue of [`BodyRecord`]: shared by undo records,
 /// duplicate/array cloning, and scene files.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub struct JointRecord {
     /// Stable identity.
     pub id: StableId,
@@ -125,7 +125,7 @@ impl JointRecord {
 }
 
 /// Persisted editor environment (settings that travel with the scene).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub struct EnvironmentRecord {
     /// Simulation tuning.
     pub sim: crate::domain::settings::SimSettings,
@@ -142,7 +142,7 @@ pub struct EnvironmentRecord {
 ///
 /// Bodies and joints are sorted by [`StableId`] so capture is
 /// deterministic — saving the same world twice yields identical bytes.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub struct SceneRecord {
     /// Format version (see `persist::FORMAT_VERSION`).
     pub version: u32,

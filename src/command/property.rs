@@ -13,7 +13,7 @@ use bevy::prelude::*;
 ///
 /// Adding a new editable component = one variant + one arm in this
 /// enum's `write`/`read` methods.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Reflect)]
 pub enum PropertyValue {
     /// Body geometry.
     Shape(ShapeDef),
@@ -93,7 +93,7 @@ impl PropertyValue {
 }
 
 /// One target's old → new property change.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Reflect)]
 pub struct PropertyChange {
     /// The authored entity being edited.
     pub id: StableId,

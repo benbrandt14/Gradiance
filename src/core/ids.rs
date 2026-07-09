@@ -14,7 +14,17 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A globally unique, persistence-safe identifier for an authored entity.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// Reflects as an **opaque** value (`#[reflect(opaque)]`): the wrapped
+/// [`Uuid`] is an identity handle, not a script-authorable field structure, so
+/// the reflection API sees `StableId` as a single leaf rather than recursing
+/// into its bytes. This is what lets authored intents/records that reference
+/// bodies by id (`SpawnBodyIntent`, `JointDef`, …) derive `Reflect` and
+/// register with the scripting operation registry — see
+/// `docs/script-spike-findings.md` (spike #1 resolution). Opacity also keeps
+/// the reflect graph free of bevy_reflect's optional `uuid` feature.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
+#[reflect(opaque)]
 #[component(
     immutable,
     on_insert = on_insert_stable_id,

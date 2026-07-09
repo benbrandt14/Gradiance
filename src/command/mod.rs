@@ -205,9 +205,29 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
         // Reflection registry: the scripting layer binds operations by
-        // reflected type name (see `docs/script-lisp-decision.md`). Intents
-        // register here as they gain `Reflect`; `CutIntent` is the first.
+        // reflected type name (see `docs/script-lisp-decision.md`). Every
+        // authored intent now derives `Reflect` (spike #1 settled
+        // `StableId`/`ShapeDef` opacity — see `docs/script-spike-findings.md`),
+        // so the whole intent surface is registered here. `register_type`
+        // pulls in each intent's transitive field types (records, domain
+        // types, avian components), giving the read-total path a complete
+        // registry without naming those types individually.
+        app.register_type::<intent::SpawnBodyIntent>();
+        app.register_type::<intent::DeleteIntent>();
+        app.register_type::<intent::DuplicateIntent>();
+        app.register_type::<intent::CommitTransformIntent>();
+        app.register_type::<intent::ScaleIntent>();
+        app.register_type::<intent::ArrayIntent>();
+        app.register_type::<intent::SpawnJointIntent>();
+        app.register_type::<intent::PropertyEditIntent>();
+        app.register_type::<intent::GroupIntent>();
+        app.register_type::<intent::UngroupIntent>();
         app.register_type::<intent::CutIntent>();
+        app.register_type::<intent::DeleteJointIntent>();
+        app.register_type::<intent::MergeIntent>();
+        app.register_type::<intent::LoadSceneIntent>();
+        app.register_type::<intent::UndoIntent>();
+        app.register_type::<intent::RedoIntent>();
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),
