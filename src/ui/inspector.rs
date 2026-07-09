@@ -133,9 +133,13 @@ pub fn inspector_window(
                 let mut density = density_q.get(primary).map_or(1.0, |d| d.0);
                 ui.horizontal(|ui| {
                     ui.label("density");
-                    if let Commit::Done(_, new) =
-                        precise_drag(ui, egui::Id::new(("props", "density")), &mut density, 1.0, 0.01)
-                    {
+                    if let Commit::Done(_, new) = precise_drag(
+                        ui,
+                        egui::Id::new(("props", "density")),
+                        &mut density,
+                        1.0,
+                        0.01,
+                    ) {
                         commit_to_selection(
                             &selection,
                             &ids,
@@ -148,7 +152,9 @@ pub fn inspector_window(
                 });
 
                 // Friction (a single coefficient drives both static and dynamic).
-                let mut friction = friction_q.get(primary).map_or(0.5, |f| f.dynamic_coefficient);
+                let mut friction = friction_q
+                    .get(primary)
+                    .map_or(0.5, |f| f.dynamic_coefficient);
                 ui.horizontal(|ui| {
                     ui.label("friction");
                     if let Commit::Done(_, new) = precise_drag(
@@ -202,9 +208,13 @@ pub fn inspector_window(
                 let mut gravity = gravity_q.get(primary).map_or(1.0, |g| g.0);
                 ui.horizontal(|ui| {
                     ui.label("gravity scale");
-                    if let Commit::Done(_, new) =
-                        precise_drag(ui, egui::Id::new(("props", "gravity")), &mut gravity, 1.0, 0.01)
-                    {
+                    if let Commit::Done(_, new) = precise_drag(
+                        ui,
+                        egui::Id::new(("props", "gravity")),
+                        &mut gravity,
+                        1.0,
+                        0.01,
+                    ) {
                         commit_to_selection(
                             &selection,
                             &ids,

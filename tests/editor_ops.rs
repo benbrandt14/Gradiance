@@ -4,6 +4,7 @@
 
 mod harness;
 
+use avian2d::prelude::Friction;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
@@ -48,15 +49,16 @@ fn property_edit_batches_multi_target_into_one_undo_step() {
         .into_iter()
         .map(|id| {
             let entity = entity_of(&app, id).unwrap();
-            let old = *app.world().get::<PhysicalProps>(entity).unwrap();
-            let new = PhysicalProps {
-                friction: 0.9,
+            let old = *app.world().get::<Friction>(entity).unwrap();
+            let new = Friction {
+                dynamic_coefficient: 0.9,
+                static_coefficient: 0.9,
                 ..old
             };
             PropertyChange {
                 id,
-                old: PropertyValue::Props(old),
-                new: PropertyValue::Props(new),
+                old: PropertyValue::Friction(old),
+                new: PropertyValue::Friction(new),
             }
         })
         .collect();
@@ -71,13 +73,27 @@ fn property_edit_batches_multi_target_into_one_undo_step() {
     );
     for id in [a, b] {
         let entity = entity_of(&app, id).unwrap();
-        assert!((app.world().get::<PhysicalProps>(entity).unwrap().friction - 0.9).abs() < 1e-6);
+        assert!(
+            (app.world()
+                .get::<Friction>(entity)
+                .unwrap()
+                .dynamic_coefficient
+                - 0.9)
+                .abs()
+                < 1e-6
+        );
     }
     undo(&mut app);
     for id in [a, b] {
         let entity = entity_of(&app, id).unwrap();
         assert!(
-            (app.world().get::<PhysicalProps>(entity).unwrap().friction - 0.5).abs() < 1e-6,
+            (app.world()
+                .get::<Friction>(entity)
+                .unwrap()
+                .dynamic_coefficient
+                - 0.5)
+                .abs()
+                < 1e-6,
             "undo restored both targets"
         );
     }

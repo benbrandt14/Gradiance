@@ -2,10 +2,10 @@
 
 use crate::command::intent::SpawnBodyIntent;
 use crate::domain::shape::ShapeDef;
-use avian2d::prelude::RigidBody;
 use crate::interaction::PointerOverUi;
 use crate::interaction::snap::SnappedCursor;
 use crate::interaction::tools::{ActiveGesture, new_body_record};
+use avian2d::prelude::RigidBody;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
