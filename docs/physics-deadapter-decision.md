@@ -1,9 +1,17 @@
 # Decision: collapse the avian adapter (burn the rapier boat)
 
-Status: **accepted** (2026-07-09). Retires the engine-swap seam (invariant #3).
-Supersedes the "engine-agnostic domain + `physics::queries` facade" adapter with
-**direct, idiomatic avian usage where physics is actually done**, while keeping
-the authored/derived split (#5) and the command/intent discipline (#1–#2).
+Status: **accepted + complete** (2026-07-09). Retires the engine-swap seam
+(invariant #3). Supersedes the "engine-agnostic domain + `physics::queries`
+facade" adapter with **direct, idiomatic avian usage where physics is actually
+done**, while keeping the authored/derived split (#5) and the command/intent
+discipline (#1–#2).
+
+> **Completion note (2026-07-09).** The collapse is done: `PhysicalProps` and its
+> per-frame translation are gone (`BodyPhysics` is now a capture/undo value object
+> over the authored avian components), the read facade returns avian types, and
+> `FORMAT_VERSION` is at 2. The one increment this document **over-scoped** was
+> joints/motors (increment 3): they were already avian-native and required **no
+> code change** — see the corrected §3 below.
 
 ## Why
 
@@ -23,14 +31,23 @@ files is acceptable.** So we collapse to avian types.
   `Sensor` (presence), `LockedAxes`. No per-frame prop sync — avian owns them.
   `body_sync` shrinks to the one genuine derivation it always was: **`ShapeDef`
   → `Collider`** (via `geometry::polygonize`).
-- **`domain::joint::{JointDef, MotorDef}` mirrors → thin, avian-shaped.** Joint
-  authoring maps 1:1 onto avian joint kinds (`RevoluteJoint`, `PrismaticJoint`,
-  `FixedJoint`) and **native motors** (`AngularMotor`/`LinearMotor` +
-  `MotorModel`).
-- **`physics::motor.rs` (hand-rolled velocity controller) → deleted.** Replaced
-  by avian native motors (the joint doc already said "prefer native").
-- **`physics::joint_sync` translation → a direct constructor.** Its remaining,
-  necessary job: resolve `StableId` → `Entity` and build the avian joint.
+> **Correction (2026-07-09): joints were never part of the collapse.** The three
+> bullets originally here over-scoped the work — joints have been avian-native
+> since M6 and needed **no change**:
+>
+> - `domain::joint::{JointDef, MotorDef}` are **not mirrors**; they are the thin,
+>   `StableId`-keyed authored layer that is *genuinely necessary* (avian joints
+>   hold a raw `Entity`, which invariant-#5/identity rules forbid persisting).
+>   They are already avian-shaped (a near-1:1 description of kind + anchors +
+>   limits + native-motor params).
+> - `physics::joint_sync` was **already a direct constructor**, not a translation:
+>   it resolves `StableId` → `Entity` and builds `RevoluteJoint`/`FixedJoint`/
+>   `PrismaticJoint` with native `AngularMotor`/`LinearMotor` directly.
+> - `physics::motor.rs` is **not a hand-rolled velocity controller** and is
+>   **kept, not deleted**: avian owns velocity tracking / max-force / damping; the
+>   file is a ~90-line feature that only flips a native motor's target velocity at
+>   the joint limits (the Algodoo "oscillate" behavior). Deleting it would delete
+>   a feature, not adapter cruft.
 
 ## What stays (thin, because it is genuinely necessary)
 
@@ -87,9 +104,14 @@ through reflection — the collapse *helps* introspection.
    capture/spawn, `SpawnBodyCommand`, `property.rs`, inspector, `FORMAT_VERSION`.
 2. **Read facade.** Thin `physics::queries` to return avian types; update the ~7
    consumers; delete now-pointless wrapping.
-3. **Joints/constraints/motors (the core).** Thin avian-shaped joint record;
-   `joint_sync` → direct constructor with native motors; delete `motor.rs`;
-   update joint inspector, joint commands, joint tests.
+3. **Joints/constraints/motors (the core) — ALREADY SATISFIED, no code change.**
+   This increment was over-scoped: the desired end-state already existed as of
+   M6. The joint record is already thin and avian-shaped, `joint_sync` is already
+   a direct constructor emitting native motors, and `motor.rs` is a thin
+   oscillate *feature* (kept, not deleted — see the correction above). Nothing to
+   migrate; the joint inspector, joint commands, and `tests/joints.rs` /
+   `tests/joint_edit.rs` were already exercising the avian-native path and stay
+   green as-is.
 4. **Invariants + boundaries + docs.** Rewrite #3/#5 in `CLAUDE.md`; drop the
    avian boundary test; refresh `docs/architecture.md` physics section.
 
