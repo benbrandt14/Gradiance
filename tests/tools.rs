@@ -3,6 +3,7 @@
 
 mod harness;
 
+use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
@@ -381,10 +382,10 @@ fn ground_tool_spawns_static_half_plane_with_drag_tilt() {
 
     let mut q = app
         .world_mut()
-        .query_filtered::<(&ShapeDef, &PhysicalProps, &Transform), With<Body>>();
+        .query_filtered::<(&ShapeDef, &RigidBody, &Transform), With<Body>>();
     let (shape, props, transform) = q.iter(app.world()).next().expect("ground spawned");
     assert_eq!(*shape, ShapeDef::HalfPlane);
-    assert_eq!(props.body, BodyKind::Static);
+    assert_eq!(*props, RigidBody::Static);
     let expected = (Vec2::new(100.0, -20.0) - Vec2::new(0.0, -50.0)).to_angle();
     let rot = PosRot::from_transform(transform).rot;
     assert!((rot - expected).abs() < 1e-3, "tilt follows drag ({rot})");

@@ -75,10 +75,10 @@ fn sensor_and_rotation_lock_follow_props() {
 
     // Simulate a property command's authored mutation.
     {
-        let mut props = app.world_mut().get_mut::<PhysicalProps>(entity).unwrap();
-        props.sensor = true;
-        props.rotation_locked = true;
-        props.body = BodyKind::Kinematic;
+        let mut e = app.world_mut().entity_mut(entity);
+        e.insert(RigidBody::Kinematic);
+        e.insert(Sensor);
+        e.insert(LockedAxes::ROTATION_LOCKED);
     }
     step(&mut app, 2);
     assert!(app.world().get::<Sensor>(entity).is_some());
@@ -89,9 +89,9 @@ fn sensor_and_rotation_lock_follow_props() {
     );
 
     {
-        let mut props = app.world_mut().get_mut::<PhysicalProps>(entity).unwrap();
-        props.sensor = false;
-        props.rotation_locked = false;
+        let mut e = app.world_mut().entity_mut(entity);
+        e.remove::<Sensor>();
+        e.remove::<LockedAxes>();
     }
     step(&mut app, 2);
     assert!(app.world().get::<Sensor>(entity).is_none());
@@ -103,7 +103,7 @@ fn falling_box_scene(app: &mut App) -> (StableId, StableId) {
     let falling = box_record(Vec2::new(0.0, 200.0), 20.0, 20.0);
     let falling_id = falling.id;
     let mut floor = box_record(Vec2::new(0.0, -100.0), 1000.0, 20.0);
-    floor.props.body = BodyKind::Static;
+    floor.physics.rigid_body = RigidBody::Static;
     let floor_id = floor.id;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: falling });
