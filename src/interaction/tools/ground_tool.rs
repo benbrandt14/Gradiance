@@ -1,11 +1,11 @@
 //! Ground tool: place an infinite half-plane; drag sets its tilt.
 
-use crate::domain::props::BodyKind;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::tools::context::{
     DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview,
 };
 use crate::interaction::tools::new_body_record;
+use avian2d::prelude::RigidBody;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -34,7 +34,7 @@ impl DraftTool for GroundTool {
                     ctx.constraints.apply_rotation(drag.to_angle(), ctx.snap)
                 };
                 let mut record = new_body_record(ShapeDef::HalfPlane, anchor, rot);
-                record.props.body = BodyKind::Static;
+                record.physics.rigid_body = RigidBody::Static;
                 record.appearance.fill = crate::domain::appearance::Rgba::rgb(0.35, 0.4, 0.35);
                 Some(ToolCommit::SpawnBody(Box::new(record)))
             }

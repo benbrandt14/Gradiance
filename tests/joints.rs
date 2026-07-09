@@ -7,6 +7,7 @@
 
 mod harness;
 
+use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance::prelude::*;
 use harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
@@ -63,7 +64,7 @@ fn hinge(body_a: StableId, body_b: Option<StableId>, anchor_a: Vec2, anchor_b: V
 fn motorized_hinge_oscillates_between_its_limits() {
     let mut app = headless_app();
     let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
-    anchor.props.body = BodyKind::Static;
+    anchor.physics.rigid_body = RigidBody::Static;
     let anchor_id = spawn_body(&mut app, anchor);
     // Arm hinged at its left end to the anchor's center.
     let arm = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
@@ -170,7 +171,7 @@ fn welded_chain_stays_rigid_through_a_fall() {
         ids.push(spawn_body(&mut app, record));
     }
     let mut floor = box_record(Vec2::new(40.0, -50.0), 2000.0, 20.0);
-    floor.props.body = BodyKind::Static;
+    floor.physics.rigid_body = RigidBody::Static;
     spawn_body(&mut app, floor);
 
     for pair in ids.windows(2) {
@@ -210,7 +211,7 @@ fn welded_chain_stays_rigid_through_a_fall() {
 fn slider_constrains_motion_to_the_axis_and_respects_limits() {
     let mut app = headless_app();
     let mut rail = box_record(Vec2::ZERO, 20.0, 20.0);
-    rail.props.body = BodyKind::Static;
+    rail.physics.rigid_body = RigidBody::Static;
     let rail_id = spawn_body(&mut app, rail);
     let cart = box_record(Vec2::new(0.0, -30.0), 20.0, 20.0);
     let cart_id = spawn_body(&mut app, cart);
@@ -567,7 +568,7 @@ fn hinges_rotate_freely_where_welds_stay_rigid() {
     for weld in [false, true] {
         let mut app = headless_app();
         let mut anchor_block = box_record(Vec2::ZERO, 20.0, 20.0);
-        anchor_block.props.body = BodyKind::Static;
+        anchor_block.physics.rigid_body = RigidBody::Static;
         let block = spawn_body(&mut app, anchor_block);
         // Horizontal arm extending to the right of the block.
         let arm = spawn_body(&mut app, box_record(Vec2::new(40.0, 0.0), 60.0, 8.0));
@@ -662,7 +663,7 @@ fn welding_rotated_bodies_preserves_their_relative_angle() {
     let mut app = headless_app();
     let mut anchor_block = box_record(Vec2::ZERO, 40.0, 40.0);
     anchor_block.pose.rot = 0.7;
-    anchor_block.props.body = BodyKind::Static;
+    anchor_block.physics.rigid_body = RigidBody::Static;
     let a = spawn_body(&mut app, anchor_block);
     let mut arm = box_record(Vec2::new(50.0, 0.0), 40.0, 20.0);
     arm.pose.rot = -0.4;

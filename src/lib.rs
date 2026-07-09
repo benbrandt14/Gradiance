@@ -55,19 +55,22 @@
 //! | Module | Role | May import |
 //! |---|---|---|
 //! | [`core`] | ids, states, units, constants | glam, serde |
-//! | [`domain`] | authored components = the save file | glam, serde |
+//! | [`domain`] | authored components = the save file (incl. avian physics) | glam, serde, avian2d |
 //! | [`geometry`] | pure 2D/2.5D math (SDF, contours, extrusion) | glam, lyon |
 //! | [`command`] | intents, commands, undo, snapshots | domain, geometry |
-//! | [`physics`] | the avian seam | **`avian2d`** (only here) |
+//! | [`physics`] | avian systems: collider/joint derivation, read facade | avian2d |
 //! | [`interaction`] | cursor, camera, selection, tools, snapping | command intents |
 //! | [`render`] | derived meshes, materials, lighting, gizmos | domain, geometry |
 //! | [`ui`] | the egui editor | **`egui`** (only here) |
 //! | [`persist`] | RON save/load, snapshots | command snapshots |
+//! | [`script`] | scripting/driver core (spike stage) | pure math, no ECS yet |
 //!
 //! These boundaries are **mechanically enforced** by `tests/boundaries.rs`
-//! (and CI): `avian2d` appears only inside [`physics`], `egui` only inside
-//! [`ui`], and [`CommandStack`](command::CommandStack) only inside
-//! [`command`]. Violating a boundary fails the build — see `CLAUDE.md`
+//! (and CI): `egui` appears only inside [`ui`], `steel` only inside
+//! [`script`], and [`CommandStack`](command::CommandStack) only inside
+//! [`command`]. avian is now used directly wherever physics is done (the
+//! engine-swap seam was retired). Violating a boundary fails the build — see
+//! `CLAUDE.md`
 //! for the full contract and `docs/bevy19-notes.md` for verified Bevy
 //! 0.19 API notes.
 
@@ -80,6 +83,7 @@ pub mod persist;
 pub mod physics;
 pub mod prelude;
 pub mod render;
+pub mod script;
 pub mod ui;
 
 use bevy::app::plugin_group;

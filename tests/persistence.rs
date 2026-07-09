@@ -3,6 +3,7 @@
 
 mod harness;
 
+use avian2d::prelude::{ColliderDensity, Friction, GravityScale, Restitution, RigidBody};
 use bevy::prelude::*;
 use gradiance::domain::settings::{GridSettings, GridSystem, SimSettings, SnapConfig};
 use gradiance::persist::{from_ron, to_ron};
@@ -59,12 +60,12 @@ fn shape_strategy() -> impl Strategy<Value = ShapeDef> {
     ]
 }
 
-fn props_strategy() -> impl Strategy<Value = PhysicalProps> {
+fn physics_strategy() -> impl Strategy<Value = BodyPhysics> {
     (
         prop_oneof![
-            Just(BodyKind::Dynamic),
-            Just(BodyKind::Static),
-            Just(BodyKind::Kinematic)
+            Just(RigidBody::Dynamic),
+            Just(RigidBody::Static),
+            Just(RigidBody::Kinematic)
         ],
         0.1f32..10.0,
         0.0f32..2.0,
@@ -74,13 +75,21 @@ fn props_strategy() -> impl Strategy<Value = PhysicalProps> {
         any::<bool>(),
     )
         .prop_map(
-            |(body, density, friction, restitution, gravity_scale, sensor, rotation_locked)| {
-                PhysicalProps {
-                    body,
-                    density,
-                    friction,
-                    restitution,
-                    gravity_scale,
+            |(
+                rigid_body,
+                density,
+                friction,
+                restitution,
+                gravity_scale,
+                sensor,
+                rotation_locked,
+            )| {
+                BodyPhysics {
+                    rigid_body,
+                    friction: Friction::new(friction),
+                    restitution: Restitution::new(restitution),
+                    density: ColliderDensity(density),
+                    gravity_scale: GravityScale(gravity_scale),
                     sensor,
                     rotation_locked,
                 }
@@ -91,7 +100,7 @@ fn props_strategy() -> impl Strategy<Value = PhysicalProps> {
 fn body_strategy() -> impl Strategy<Value = BodyRecord> {
     (
         shape_strategy(),
-        props_strategy(),
+        physics_strategy(),
         (-1000.0f32..1000.0, -1000.0f32..1000.0),
         -3.0f32..3.0,
         1u32..256,
@@ -100,24 +109,26 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
         proptest::collection::vec(1u32..6, 0..3),
     )
         .prop_map(
-            |(shape, props, (x, y), rot, memberships, filters, (r, g, b, a), groups)| BodyRecord {
-                id: StableId::new(),
-                pose: PosRot {
-                    pos: Vec2::new(x, y),
-                    rot,
-                },
-                shape,
-                props,
-                appearance: Appearance {
-                    fill: Rgba { r, g, b, a },
-                    ..Appearance::default()
-                },
-                layers: LayerMask32 {
-                    memberships,
-                    filters,
-                },
-                groups,
-                group: None,
+            |(shape, physics, (x, y), rot, memberships, filters, (r, g, b, a), groups)| {
+                BodyRecord {
+                    id: StableId::new(),
+                    pose: PosRot {
+                        pos: Vec2::new(x, y),
+                        rot,
+                    },
+                    shape,
+                    physics,
+                    appearance: Appearance {
+                        fill: Rgba { r, g, b, a },
+                        ..Appearance::default()
+                    },
+                    layers: LayerMask32 {
+                        memberships,
+                        filters,
+                    },
+                    groups,
+                    group: None,
+                }
             },
         )
 }
@@ -202,7 +213,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                 })
                 .collect();
             let mut scene = SceneRecord {
-                version: 1,
+                version: 2,
                 app_version: String::new(),
                 bodies,
                 joints,
@@ -259,7 +270,7 @@ fn any_scene_round_trips_through_world_and_ron_to_a_fixpoint() {
             for (a, b) in scene.bodies.iter().zip(&s1.bodies) {
                 prop_assert_eq!(a.id, b.id);
                 prop_assert_eq!(&a.shape, &b.shape);
-                prop_assert_eq!(a.props, b.props);
+                prop_assert_eq!(a.physics, b.physics);
                 prop_assert_eq!(a.appearance, b.appearance);
                 prop_assert_eq!(a.layers, b.layers);
                 prop_assert_eq!(&a.groups, &b.groups);
@@ -302,7 +313,7 @@ fn loading_a_scene_is_one_undoable_command() {
     let incoming_body = box_record(Vec2::new(50.0, 0.0), 30.0, 30.0);
     let incoming_id = incoming_body.id;
     let scene = SceneRecord {
-        version: 1,
+        version: 2,
         app_version: String::new(),
         bodies: vec![incoming_body],
         joints: vec![],
@@ -445,7 +456,7 @@ fn pre_render_settings_files_still_parse() {
     // Simulate a pre-M10 save: serialize a current scene, then strip the
     // trailing `render` field from its environment block.
     let scene = SceneRecord {
-        version: 1,
+        version: 2,
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],

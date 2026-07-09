@@ -1,8 +1,11 @@
-//! Engine-agnostic spatial query facade.
+//! The physics read cut-point: one thin, testable facade over avian's
+//! spatial/velocity queries.
 //!
-//! Tools and interaction code use this instead of avian types, keeping the
-//! engine swap seam intact. Everything is expressed in world-space `Vec2`
-//! and plain `Entity` lists.
+//! Post de-adapter (`docs/physics-deadapter-decision.md`) this is a
+//! convenience layer, not an abstraction boundary — consumers *may* read avian
+//! components directly (and the scripting reflection bridge does). It survives
+//! because it keeps common reads in one discoverable, unit-testable place and
+//! returns plain `Vec2`/`Entity`, which is what most callers want.
 
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;

@@ -152,7 +152,7 @@ pub fn new_body_record(
         id,
         pose: crate::core::units::PosRot { pos, rot },
         shape,
-        props: crate::domain::props::PhysicalProps::default(),
+        physics: crate::domain::props::BodyPhysics::default(),
         appearance: appearance_for_id(id),
         layers: LayerMask32::default(),
         groups: Vec::new(),

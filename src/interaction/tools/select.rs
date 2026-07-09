@@ -596,14 +596,12 @@ pub fn draw_select_previews(
                 );
             }
         }
-        SelectGesture::Lasso { points, .. } => {
-            if points.len() >= 2 {
-                let mut pts = points.clone();
-                if let Some(first) = pts.first().copied() {
-                    pts.push(first);
-                }
-                gizmos.linestrip_2d(pts, css::LIGHT_SKY_BLUE.with_alpha(0.8));
+        SelectGesture::Lasso { points, .. } if points.len() >= 2 => {
+            let mut pts = points.clone();
+            if let Some(first) = pts.first().copied() {
+                pts.push(first);
             }
+            gizmos.linestrip_2d(pts, css::LIGHT_SKY_BLUE.with_alpha(0.8));
         }
         SelectGesture::DupDrag { start, ghosts, .. } => {
             if let Some(p) = snapped.effective() {

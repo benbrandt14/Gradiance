@@ -58,15 +58,10 @@ fn violations(needle: &str, allowed: &[&str]) -> Vec<String> {
     found
 }
 
-#[test]
-fn avian_is_confined_to_the_physics_seam() {
-    let v = violations("avian2d", &["src/physics/"]);
-    assert!(
-        v.is_empty(),
-        "avian2d may only be referenced from src/physics/ (engine-swap seam):\n{}",
-        v.join("\n")
-    );
-}
+// NOTE: the avian-confinement rule was retired by the de-adapter collapse
+// (docs/physics-deadapter-decision.md). avian is now used directly wherever
+// physics is done; authored physics state *is* avian components. Identity is
+// still `StableId` and raw `Entity` is never persisted.
 
 #[test]
 fn egui_is_confined_to_the_ui_layer() {
@@ -74,6 +69,17 @@ fn egui_is_confined_to_the_ui_layer() {
     assert!(
         v.is_empty(),
         "egui may only be referenced from src/ui/:\n{}",
+        v.join("\n")
+    );
+}
+
+#[test]
+fn steel_is_confined_to_the_script_layer() {
+    let v = violations("steel", &["src/script/"]);
+    assert!(
+        v.is_empty(),
+        "the steel scripting engine may only be referenced from src/script/ \
+         (Tier-A authoring seam):\n{}",
         v.join("\n")
     );
 }

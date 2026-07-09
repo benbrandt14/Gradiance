@@ -39,7 +39,39 @@ Algodoo-inspired 2.5D physics sandbox. Bevy 0.19 + Avian2d 0.7 + bevy_egui 0.41 
 - `src/geometry/` is pure (no ECS imports) — put all testable math there.
 - Errors: `thiserror` enums; no `unwrap`/`expect`/`panic!` outside tests (clippy denies).
 
+## Scripting & symbolic modeling (foundation forming — read `docs/script-lisp-decision.md`)
+
+The accepted plan makes the whole tool programmable via a Lisp/DSL. It is being
+built by *accretion*, not big-bang: honor these when your work touches an
+adjacent seam, so the layer lands uniformly instead of as an unmaintained
+side-car.
+
+- **No new mutation path.** Scripting reuses the *same* intent seam as tools/UI
+  (invariants 1–2). A future operation registry may only dispatch through
+  intents / settings resources — never `get_mut` an authored component.
+  Governance is asymmetric: **reads are total** (script/plotters may query any
+  component or resource), **writes are seam-mediated**. Keep the
+  `physics::queries` read facade complete — live plotters and scripts read
+  through it.
+- **Two tiers, one language — the perf rule.** The scripting VM (authoring/cold
+  path) must **never** run in the per-frame loop. Continuous drivers lower to a
+  compiled, allocation-free numeric kernel (`src/script/kernel.rs`, Tier B) that
+  runs over queries/buffers in one system. Bulk/particle updates are *derived*
+  (never commands, never undo-recorded, never persisted).
+- **`src/script/` is pure at the core** (no ECS imports yet), like
+  `src/geometry/` — put testable math there.
+- **Persistence stays single-format RON** of materialized authored state; the
+  operation registry is a runtime construct, not a second on-disk representation.
+- **When you rework tools/settings:** shape tools as `ToolContext →
+  (preview, commit-intent)`, keep config edits on the settings resources, and
+  derive `bevy_reflect::Reflect` on intents/settings/domain *as you touch them*
+  (the registry binds to reflection). Do not blanket-derive ahead of need.
+
 ## Build & test
+
+Toolchain: **rustc ≥ 1.95.0** (Bevy 0.19's floor; CI uses `@stable`). Native
+builds also need `libasound2-dev libudev-dev`.
+
 
 ```sh
 cargo fmt --all -- --check

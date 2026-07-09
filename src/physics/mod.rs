@@ -1,10 +1,10 @@
-//! The physics seam — the **only** module allowed to reference `avian2d`.
+//! The physics systems: collider/joint derivation and the read facade.
 //!
-//! Authored domain components are translated into engine components by
-//! `Changed<>`-driven sync systems ([`body_sync`]); everything outside this
-//! module interacts with physics exclusively through domain components and
-//! the [`queries`] facade. Swapping physics engines means rewriting this
-//! module and nothing else.
+//! Post de-adapter (`docs/physics-deadapter-decision.md`) authored physics
+//! state *is* avian components on the entity; this module no longer translates
+//! a mirror. It still owns the genuine derivations — `ShapeDef` → `Collider`
+//! and `LayerMask32` → `CollisionLayers` ([`body_sync`]) — and the
+//! [`queries`] read facade. avian is used directly here and elsewhere.
 //!
 //! Ground planes need no special support here: the ground tool authors an
 //! ordinary `Static` body with a large box shape.
@@ -64,7 +64,6 @@ impl Plugin for GradiancePhysicsPlugin {
             PostUpdate,
             (
                 body_sync::sync_colliders,
-                body_sync::sync_rigid_bodies,
                 body_sync::sync_collision_layers,
                 joint_sync::guard_dangling_joints,
                 joint_sync::sync_joints,
