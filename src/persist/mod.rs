@@ -20,7 +20,11 @@ use bevy::prelude::*;
 use std::path::PathBuf;
 
 /// Scene format version accepted by this build.
-pub const FORMAT_VERSION: u32 = 1;
+///
+/// v2: the de-adapter collapse — authored physics is now avian components
+/// serialized directly (`docs/physics-deadapter-decision.md`). v1 files do
+/// not load (save-format stability across the collapse is not a goal).
+pub const FORMAT_VERSION: u32 = 2;
 
 /// What went wrong while persisting.
 #[derive(Debug, thiserror::Error)]

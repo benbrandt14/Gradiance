@@ -146,7 +146,7 @@ impl CutCommand {
                                 outline: piece.outline,
                                 holes: piece.holes,
                             },
-                            props: original.props,
+                            physics: original.physics,
                             appearance: original.appearance,
                             layers: original.layers,
                             groups: original.groups.clone(),
