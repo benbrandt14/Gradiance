@@ -11,10 +11,10 @@ use crate::core::ids::StableId;
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
 use crate::domain::layers::LayerMask32;
-use crate::domain::props::{BodyKind, PhysicalProps};
 use crate::domain::shape::ShapeDef;
 use crate::interaction::selection::Selection;
 use crate::ui::widgets::{Commit, precise_drag};
+use avian2d::prelude::*;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
@@ -46,13 +46,46 @@ fn commit_to_selection<C: Component + Clone>(
     }
 }
 
+/// Commits a boolean flag (marker-component presence) across the selection,
+/// reading each target's current value via `current`. Markers cannot use
+/// [`commit_to_selection`] because an absent marker has no `&C` to read.
+fn commit_flag(
+    selection: &Selection,
+    ids: &Query<&StableId>,
+    current: impl Fn(Entity) -> Option<bool>,
+    wrap: impl Fn(bool) -> PropertyValue,
+    new: bool,
+    writer: &mut MessageWriter<PropertyEditIntent>,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = ids.get(e).ok().copied()?;
+            let old = current(e)?;
+            Some(PropertyChange {
+                id,
+                old: wrap(old),
+                new: wrap(new),
+            })
+        })
+        .collect();
+    if !changes.is_empty() {
+        writer.write(PropertyEditIntent { changes });
+    }
+}
+
 /// Renders the inspector window for the current selection.
 #[expect(clippy::too_many_lines)] // one window, plain sections in order
 pub fn inspector_window(
     mut contexts: EguiContexts,
     selection: Res<Selection>,
     ids: Query<&StableId>,
-    props_q: Query<&PhysicalProps, With<Body>>,
+    body_q: Query<&RigidBody, With<Body>>,
+    friction_q: Query<&Friction, With<Body>>,
+    restitution_q: Query<&Restitution, With<Body>>,
+    density_q: Query<&ColliderDensity, With<Body>>,
+    gravity_q: Query<&GravityScale, With<Body>>,
+    flags_q: Query<(Has<Sensor>, Has<LockedAxes>), With<Body>>,
     shapes_q: Query<&ShapeDef, With<Body>>,
     appearance_q: Query<&Appearance, With<Body>>,
     layers_q: Query<&LayerMask32, With<Body>>,
@@ -68,91 +101,144 @@ pub fn inspector_window(
         .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
         .show(ctx, |ui| {
             ui.heading(format!("Selection ({})", selection.len()));
-            let defaults = PhysicalProps::default();
-
             // ---- Physics ----
-            if let Ok(props) = props_q.get(primary) {
-                let mut p = *props;
+            if let Ok(&rigid_body) = body_q.get(primary) {
                 ui.separator();
                 ui.label(egui::RichText::new("Physics").strong());
+
+                // Body kind (avian `RigidBody`).
+                let mut kind = rigid_body;
                 egui::ComboBox::from_label("body")
-                    .selected_text(format!("{:?}", p.body))
+                    .selected_text(format!("{kind:?}"))
                     .show_ui(ui, |ui| {
-                        for kind in [BodyKind::Dynamic, BodyKind::Static, BodyKind::Kinematic] {
+                        for option in [RigidBody::Dynamic, RigidBody::Static, RigidBody::Kinematic]
+                        {
                             if ui
-                                .selectable_value(&mut p.body, kind, format!("{kind:?}"))
+                                .selectable_value(&mut kind, option, format!("{option:?}"))
                                 .clicked()
                             {
-                                let kind = p.body;
                                 commit_to_selection(
                                     &selection,
                                     &ids,
-                                    &props_q,
-                                    PropertyValue::Props,
-                                    |old| PhysicalProps { body: kind, ..*old },
+                                    &body_q,
+                                    PropertyValue::RigidBody,
+                                    move |_| option,
                                     &mut writer,
                                 );
                             }
                         }
                     });
-                let fields: [(&str, fn(&mut PhysicalProps) -> &mut f32, f32); 4] = [
-                    ("density", |p| &mut p.density, defaults.density),
-                    ("friction", |p| &mut p.friction, defaults.friction),
-                    ("restitution", |p| &mut p.restitution, defaults.restitution),
-                    (
-                        "gravity scale",
-                        |p| &mut p.gravity_scale,
-                        defaults.gravity_scale,
-                    ),
-                ];
-                for (label, access, default) in fields {
-                    ui.horizontal(|ui| {
-                        ui.label(label);
-                        if let Commit::Done(_, new) = precise_drag(
-                            ui,
-                            egui::Id::new(("props", label)),
-                            access(&mut p),
-                            default,
-                            0.01,
-                        ) {
-                            commit_to_selection(
-                                &selection,
-                                &ids,
-                                &props_q,
-                                PropertyValue::Props,
-                                |old| {
-                                    let mut n = *old;
-                                    *access(&mut n) = new;
-                                    n
-                                },
-                                &mut writer,
-                            );
-                        }
-                    });
-                }
-                for (label, get) in [
-                    (
-                        "sensor",
-                        (|p: &mut PhysicalProps| &mut p.sensor)
-                            as fn(&mut PhysicalProps) -> &mut bool,
-                    ),
-                    ("lock rotation", |p| &mut p.rotation_locked),
-                ] {
-                    let mut v = *get(&mut p);
-                    if ui.checkbox(&mut v, label).changed() {
+
+                // Density.
+                let mut density = density_q.get(primary).map_or(1.0, |d| d.0);
+                ui.horizontal(|ui| {
+                    ui.label("density");
+                    if let Commit::Done(_, new) =
+                        precise_drag(ui, egui::Id::new(("props", "density")), &mut density, 1.0, 0.01)
+                    {
                         commit_to_selection(
                             &selection,
                             &ids,
-                            &props_q,
-                            PropertyValue::Props,
-                            |old| {
-                                let mut n = *old;
-                                *get(&mut n) = v;
-                                n
+                            &density_q,
+                            PropertyValue::Density,
+                            move |_| ColliderDensity(new),
+                            &mut writer,
+                        );
+                    }
+                });
+
+                // Friction (a single coefficient drives both static and dynamic).
+                let mut friction = friction_q.get(primary).map_or(0.5, |f| f.dynamic_coefficient);
+                ui.horizontal(|ui| {
+                    ui.label("friction");
+                    if let Commit::Done(_, new) = precise_drag(
+                        ui,
+                        egui::Id::new(("props", "friction")),
+                        &mut friction,
+                        0.5,
+                        0.01,
+                    ) {
+                        commit_to_selection(
+                            &selection,
+                            &ids,
+                            &friction_q,
+                            PropertyValue::Friction,
+                            move |old| Friction {
+                                dynamic_coefficient: new,
+                                static_coefficient: new,
+                                ..*old
                             },
                             &mut writer,
                         );
                     }
+                });
+
+                // Restitution.
+                let mut restitution = restitution_q.get(primary).map_or(0.3, |r| r.coefficient);
+                ui.horizontal(|ui| {
+                    ui.label("restitution");
+                    if let Commit::Done(_, new) = precise_drag(
+                        ui,
+                        egui::Id::new(("props", "restitution")),
+                        &mut restitution,
+                        0.3,
+                        0.01,
+                    ) {
+                        commit_to_selection(
+                            &selection,
+                            &ids,
+                            &restitution_q,
+                            PropertyValue::Restitution,
+                            move |old| Restitution {
+                                coefficient: new,
+                                ..*old
+                            },
+                            &mut writer,
+                        );
+                    }
+                });
+
+                // Gravity scale.
+                let mut gravity = gravity_q.get(primary).map_or(1.0, |g| g.0);
+                ui.horizontal(|ui| {
+                    ui.label("gravity scale");
+                    if let Commit::Done(_, new) =
+                        precise_drag(ui, egui::Id::new(("props", "gravity")), &mut gravity, 1.0, 0.01)
+                    {
+                        commit_to_selection(
+                            &selection,
+                            &ids,
+                            &gravity_q,
+                            PropertyValue::GravityScale,
+                            move |_| GravityScale(new),
+                            &mut writer,
+                        );
+                    }
+                });
+
+                // Flags (marker-component presence).
+                let (sensor_now, locked_now) = flags_q.get(primary).unwrap_or((false, false));
+                let mut sensor = sensor_now;
+                if ui.checkbox(&mut sensor, "sensor").changed() {
+                    commit_flag(
+                        &selection,
+                        &ids,
+                        |e| flags_q.get(e).ok().map(|(s, _)| s),
+                        PropertyValue::Sensor,
+                        sensor,
+                        &mut writer,
+                    );
+                }
+                let mut locked = locked_now;
+                if ui.checkbox(&mut locked, "lock rotation").changed() {
+                    commit_flag(
+                        &selection,
+                        &ids,
+                        |e| flags_q.get(e).ok().map(|(_, l)| l),
+                        PropertyValue::RotationLock,
+                        locked,
+                        &mut writer,
+                    );
                 }
             }
 

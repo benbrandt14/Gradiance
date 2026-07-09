@@ -178,7 +178,9 @@ impl SceneRecord {
         };
         joints.sort_by_key(|r| r.id.0);
         Self {
-            version: 1,
+            // Keep in sync with persist::FORMAT_VERSION (v2: avian-component
+            // physics — see docs/physics-deadapter-decision.md).
+            version: 2,
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
             bodies,
             joints,
