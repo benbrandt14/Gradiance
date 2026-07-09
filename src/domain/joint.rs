@@ -62,7 +62,9 @@ impl Default for MotorDef {
 }
 
 /// Parameters common to every joint kind.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, bevy::reflect::Reflect)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
 pub struct JointCommon {
     /// Whether the two connected bodies still collide with each other
     /// (off by default, the Algodoo convention).

@@ -45,7 +45,9 @@ impl Rgba {
 }
 
 /// The authored appearance of a body.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+#[derive(
+    Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
 pub struct Appearance {
     /// Fill color of the extruded mesh.
     pub fill: Rgba,

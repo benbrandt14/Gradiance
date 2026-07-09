@@ -22,7 +22,7 @@ use uuid::Uuid;
 /// bodies by id (`SpawnBodyIntent`, `JointDef`, …) derive `Reflect` and
 /// register with the scripting operation registry — see
 /// `docs/script-spike-findings.md` (spike #1 resolution). Opacity also keeps
-/// the reflect graph free of bevy_reflect's optional `uuid` feature.
+/// the reflect graph free of `bevy_reflect`'s optional `uuid` feature.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[reflect(opaque)]
 #[component(

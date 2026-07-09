@@ -62,26 +62,33 @@ fn authored_intents_are_registered() {
         .resource::<bevy::ecs::reflect::AppTypeRegistry>()
         .read();
 
-    // The whole authored intent surface must be addressable by type.
-    let registered = |name: &str| registry.get_with_type_path(name).is_some();
-    for path in [
-        std::any::type_name::<SpawnBodyIntent>(),
-        std::any::type_name::<SpawnJointIntent>(),
-        std::any::type_name::<DeleteIntent>(),
-        std::any::type_name::<DuplicateIntent>(),
-        std::any::type_name::<CommitTransformIntent>(),
-        std::any::type_name::<ScaleIntent>(),
-        std::any::type_name::<ArrayIntent>(),
-        std::any::type_name::<PropertyEditIntent>(),
-        std::any::type_name::<GroupIntent>(),
-        std::any::type_name::<UngroupIntent>(),
-        std::any::type_name::<CutIntent>(),
-        std::any::type_name::<DeleteJointIntent>(),
-        std::any::type_name::<MergeIntent>(),
-        std::any::type_name::<LoadSceneIntent>(),
-    ] {
-        assert!(registered(path), "intent `{path}` is not registered");
-    }
+    // The whole authored intent surface must be addressable by type (keyed by
+    // `TypeId`, the registry's identity — this is what lets the operation
+    // registry bind an op to its reflected type).
+    let registered = |id, name: &str| assert!(registry.contains(id), "intent `{name}` unregistered");
+    registered(std::any::TypeId::of::<SpawnBodyIntent>(), "SpawnBodyIntent");
+    registered(std::any::TypeId::of::<SpawnJointIntent>(), "SpawnJointIntent");
+    registered(std::any::TypeId::of::<DeleteIntent>(), "DeleteIntent");
+    registered(std::any::TypeId::of::<DuplicateIntent>(), "DuplicateIntent");
+    registered(
+        std::any::TypeId::of::<CommitTransformIntent>(),
+        "CommitTransformIntent",
+    );
+    registered(std::any::TypeId::of::<ScaleIntent>(), "ScaleIntent");
+    registered(std::any::TypeId::of::<ArrayIntent>(), "ArrayIntent");
+    registered(
+        std::any::TypeId::of::<PropertyEditIntent>(),
+        "PropertyEditIntent",
+    );
+    registered(std::any::TypeId::of::<GroupIntent>(), "GroupIntent");
+    registered(std::any::TypeId::of::<UngroupIntent>(), "UngroupIntent");
+    registered(std::any::TypeId::of::<CutIntent>(), "CutIntent");
+    registered(
+        std::any::TypeId::of::<DeleteJointIntent>(),
+        "DeleteJointIntent",
+    );
+    registered(std::any::TypeId::of::<MergeIntent>(), "MergeIntent");
+    registered(std::any::TypeId::of::<LoadSceneIntent>(), "LoadSceneIntent");
 }
 
 #[test]
@@ -139,7 +146,8 @@ fn spawn_body_intent_round_trips_through_reflection() {
     // this exercises `FromReflect` across the opaque `StableId`/`ShapeDef`
     // leaves and the structural avian-backed `BodyPhysics`.
     let dynamic = intent.to_dynamic();
-    let rebuilt = SpawnBodyIntent::from_reflect(&*dynamic).expect("from_reflect rebuilds the intent");
+    let rebuilt =
+        SpawnBodyIntent::from_reflect(&*dynamic).expect("from_reflect rebuilds the intent");
     assert_eq!(rebuilt.record, record);
 }
 
