@@ -3,9 +3,10 @@
 //!
 //! Tools put entities into [`KinematicHold`]; this seam swaps them to
 //! kinematic (so the solver neither fights the preview nor launches the
-//! body) and restores their authored body kind when released.
+//! body) and restores their authored body kind when released. Post-collapse
+//! `RigidBody` is both the authored and the live kind, so the pre-hold kind
+//! is remembered here rather than read from a separate mirror.
 
-use crate::domain::props::{BodyKind, PhysicalProps};
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
@@ -19,29 +20,29 @@ pub struct KinematicHold {
 /// Applies/releases the hold as the resource changes.
 pub fn apply_kinematic_hold(
     hold: Res<KinematicHold>,
-    mut previous: Local<Vec<Entity>>,
+    // The body kind each held entity had before the hold, to restore on release.
+    mut held: Local<Vec<(Entity, RigidBody)>>,
     mut commands: Commands,
-    props: Query<&PhysicalProps>,
+    bodies: Query<&RigidBody>,
     mut velocities: Query<(&mut LinearVelocity, &mut AngularVelocity)>,
 ) {
     if !hold.is_changed() {
         return;
     }
-    for entity in previous.iter().copied() {
-        if !hold.entities.contains(&entity) {
-            // Restore the authored body kind.
-            if let Ok(p) = props.get(entity) {
-                let kind = match p.body {
-                    BodyKind::Dynamic => RigidBody::Dynamic,
-                    BodyKind::Static => RigidBody::Static,
-                    BodyKind::Kinematic => RigidBody::Kinematic,
-                };
-                commands.entity(entity).try_insert(kind);
-            }
+    // Release: entities we were holding that are no longer held.
+    held.retain(|(entity, kind)| {
+        if hold.entities.contains(entity) {
+            true
+        } else {
+            commands.entity(*entity).try_insert(*kind);
+            false
         }
-    }
+    });
+    // Acquire: newly held entities — remember their kind, then park them.
     for entity in hold.entities.iter().copied() {
-        if !previous.contains(&entity) {
+        if !held.iter().any(|(e, _)| *e == entity) {
+            let kind = bodies.get(entity).copied().unwrap_or(RigidBody::Dynamic);
+            held.push((entity, kind));
             commands.entity(entity).try_insert(RigidBody::Kinematic);
             if let Ok((mut lin, mut ang)) = velocities.get_mut(entity) {
                 lin.0 = Vec2::ZERO;
@@ -49,5 +50,4 @@ pub fn apply_kinematic_hold(
             }
         }
     }
-    previous.clone_from(&hold.entities);
 }

@@ -1,8 +1,8 @@
 //! Ground tool: place an infinite half-plane; drag sets its tilt.
 
 use crate::command::intent::SpawnBodyIntent;
-use crate::domain::props::BodyKind;
 use crate::domain::shape::ShapeDef;
+use avian2d::prelude::RigidBody;
 use crate::interaction::PointerOverUi;
 use crate::interaction::snap::SnappedCursor;
 use crate::interaction::tools::{ActiveGesture, new_body_record};
@@ -49,7 +49,7 @@ pub fn run_ground_tool(
                 constraints.apply_rotation(drag.to_angle(), &config)
             };
             let mut record = new_body_record(ShapeDef::HalfPlane, anchor, rot);
-            record.props.body = BodyKind::Static;
+            record.physics.rigid_body = RigidBody::Static;
             record.appearance.fill = crate::domain::appearance::Rgba::rgb(0.35, 0.4, 0.35);
             spawn.write(SpawnBodyIntent { record });
         }

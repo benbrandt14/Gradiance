@@ -2,7 +2,6 @@
 
 use crate::domain::Body;
 use crate::domain::layers::LayerMask32;
-use crate::domain::props::{BodyKind, PhysicalProps};
 use crate::domain::shape::ShapeDef;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
@@ -70,39 +69,6 @@ pub fn sync_colliders(
             None => {
                 warn!(?entity, "invalid ShapeDef reached body_sync; collider kept");
             }
-        }
-    }
-}
-
-/// Applies rigid-body kind and material properties for bodies whose
-/// physical properties changed.
-pub fn sync_rigid_bodies(
-    mut commands: Commands,
-    changed: Query<(Entity, &PhysicalProps), (With<Body>, Changed<PhysicalProps>)>,
-) {
-    for (entity, props) in &changed {
-        let kind = match props.body {
-            BodyKind::Dynamic => RigidBody::Dynamic,
-            BodyKind::Static => RigidBody::Static,
-            BodyKind::Kinematic => RigidBody::Kinematic,
-        };
-        let mut entity_commands = commands.entity(entity);
-        entity_commands.insert((
-            kind,
-            ColliderDensity(props.density),
-            Friction::new(props.friction),
-            Restitution::new(props.restitution),
-            GravityScale(props.gravity_scale),
-        ));
-        if props.sensor {
-            entity_commands.insert(Sensor);
-        } else {
-            entity_commands.remove::<Sensor>();
-        }
-        if props.rotation_locked {
-            entity_commands.insert(LockedAxes::ROTATION_LOCKED);
-        } else {
-            entity_commands.remove::<LockedAxes>();
         }
     }
 }

@@ -8,7 +8,10 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 # Engine + physics. Versions are exact-pinned: agent sessions must not drift APIs.
 bevy = "=0.19.0"
-avian2d = "=0.7.0"
+# `serialize` lets authored avian components go straight into the RON save
+# (the de-adapter collapse — see docs/physics-deadapter-decision.md). Save
+# stability across avian versions is explicitly not a goal.
+avian2d = { version = "=0.7.0", features = ["serialize"] }
 bevy_egui = "=0.41.0"
 leafwing-input-manager = "=0.21.0"
 
