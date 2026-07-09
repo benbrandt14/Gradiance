@@ -65,9 +65,13 @@ fn authored_intents_are_registered() {
     // The whole authored intent surface must be addressable by type (keyed by
     // `TypeId`, the registry's identity — this is what lets the operation
     // registry bind an op to its reflected type).
-    let registered = |id, name: &str| assert!(registry.contains(id), "intent `{name}` unregistered");
+    let registered =
+        |id, name: &str| assert!(registry.contains(id), "intent `{name}` unregistered");
     registered(std::any::TypeId::of::<SpawnBodyIntent>(), "SpawnBodyIntent");
-    registered(std::any::TypeId::of::<SpawnJointIntent>(), "SpawnJointIntent");
+    registered(
+        std::any::TypeId::of::<SpawnJointIntent>(),
+        "SpawnJointIntent",
+    );
     registered(std::any::TypeId::of::<DeleteIntent>(), "DeleteIntent");
     registered(std::any::TypeId::of::<DuplicateIntent>(), "DuplicateIntent");
     registered(

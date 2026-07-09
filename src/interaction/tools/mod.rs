@@ -60,10 +60,10 @@ impl Plugin for ToolsPlugin {
                 // press so the body select tool skips it this frame.
                 crate::interaction::joint_edit::pick_joint
                     .run_if(in_state(ToolState::Select))
-                    .before(select::run_select_tool),
+                    .before(run_manip_tool::<select::SelectGesture>),
                 crate::interaction::joint_edit::drag_joint_anchor
                     .run_if(in_state(ToolState::Select)),
-                select::run_select_tool.run_if(in_state(ToolState::Select)),
+                run_manip_tool::<select::SelectGesture>.run_if(in_state(ToolState::Select)),
                 run_manip_tool::<drag_tool::DragTool>.run_if(in_state(ToolState::Drag)),
                 // Pure creation tools share one generic driver over the
                 // DraftTool facade (see `context`).
@@ -83,7 +83,7 @@ impl Plugin for ToolsPlugin {
             app.add_systems(
                 Update,
                 (
-                    select::draw_select_previews.run_if(in_state(ToolState::Select)),
+                    draw_manip_preview::<select::SelectGesture>.run_if(in_state(ToolState::Select)),
                     handles::draw_handles.run_if(in_state(ToolState::Select)),
                     draw_draft_preview::<box_tool::BoxTool>.run_if(in_state(ToolState::Box)),
                     draw_draft_preview::<cut_tool::CutTool>.run_if(in_state(ToolState::Cut)),

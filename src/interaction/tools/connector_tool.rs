@@ -17,6 +17,7 @@ use crate::core::ids::StableId;
 use crate::core::states::ToolState;
 use crate::core::units::PosRot;
 use crate::domain::joint::{JointCommon, JointDef, JointKind};
+use crate::interaction::selection::Selection;
 use crate::interaction::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
@@ -39,7 +40,12 @@ pub fn connector_active(tool: Res<State<ToolState>>) -> bool {
 }
 
 impl ManipTool for ConnectorDraft {
-    fn update(&mut self, ctx: &ManipContext, world: &ToolWorld) -> ManipOutput {
+    fn update(
+        &mut self,
+        ctx: &ManipContext,
+        world: &ToolWorld,
+        _selection: &Selection,
+    ) -> ManipOutput {
         // Press on the canvas: set the anchor (the snapped cursor).
         if ctx.left == GesturePhase::Pressed
             && let Some(p) = ctx.cursor

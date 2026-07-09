@@ -12,6 +12,7 @@
 use crate::command::intent::TransformChange;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
+use crate::interaction::selection::Selection;
 use crate::interaction::tools::context::{
     GesturePhase, GrabState, HoldState, ManipContext, ManipOutput, ManipTool, ToolCommit,
     ToolPreview, ToolWorld,
@@ -32,7 +33,12 @@ pub struct DragTool {
 }
 
 impl ManipTool for DragTool {
-    fn update(&mut self, ctx: &ManipContext, world: &ToolWorld) -> ManipOutput {
+    fn update(
+        &mut self,
+        ctx: &ManipContext,
+        world: &ToolWorld,
+        _selection: &Selection,
+    ) -> ManipOutput {
         let mut out = ManipOutput::default();
 
         // Press: grab the topmost body at the *raw* cursor (grabs land where

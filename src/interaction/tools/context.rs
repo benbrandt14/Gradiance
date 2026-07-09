@@ -21,6 +21,20 @@
 //! closure) returning `ToolCommit`s, going through the *same* intent seam
 //! (see `docs/script-lisp-decision.md`). Tools therefore never get a
 //! bespoke mutation path.
+//!
+//! # The manipulation half
+//!
+//! Select, drag, and the connector tools need more than a pure context: they
+//! **read the world** (hit-testing, poses, the selection box) and drive
+//! **transient world state** (kinematic-held `Transform`, the mouse spring)
+//! during a gesture. They implement the sibling [`ManipTool`] interface —
+//! `update(ctx, world, selection) -> ManipOutput` — where reads flow through
+//! the read-total [`ToolWorld`] facade and every write is a field of the
+//! returned [`ManipOutput`] that the generic driver ([`run_manip_tool`])
+//! applies through its existing seam: `commit` → the same `ToolCommit` →
+//! intent path, `hold`/`grab` → transient physics preview, `selection` →
+//! editor state. The tool still mutates nothing directly, so the same gesture
+//! contract holds — reads are total, writes are seam-mediated.
 
 use crate::command::intent::{
     CommitTransformIntent, CutIntent, DuplicateIntent, ScaleIntent, SpawnBodyIntent,
@@ -35,13 +49,15 @@ use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
 use crate::domain::settings::SnapConfig;
 use crate::domain::shape::ShapeDef;
+use crate::geometry::contours::point_in_ring;
 use crate::interaction::PointerOverUi;
 use crate::interaction::gesture::GestureConstraints;
 use crate::interaction::joint_edit::SuppressSelectPress;
 use crate::interaction::pointer::PointerButtons;
-use crate::interaction::selection::{SelectTransition, SelectedJoint, Selection};
+use crate::interaction::selection::{SelectTransition, SelectedJoint, Selection, expand_groups};
 use crate::interaction::snap::{SnapExclusions, SnappedCursor};
 use crate::interaction::tools::ActiveGesture;
+use crate::interaction::tools::handles::{ScaleFrame, SelectionBox, selection_box};
 use crate::physics::grab::{Grab, MouseSpring};
 use crate::physics::hold::KinematicHold;
 use crate::physics::queries::PhysicsQueries;
@@ -425,8 +441,10 @@ pub fn draw_draft_preview<T: DraftTool>(
 pub struct ToolWorld<'w, 's> {
     physics: PhysicsQueries<'w, 's>,
     hit: Query<'w, 's, (&'static ShapeDef, &'static LayerMask32), With<Body>>,
-    poses: Query<'w, 's, &'static Transform, With<Body>>,
+    shapes: Query<'w, 's, (&'static ShapeDef, &'static Transform), With<Body>>,
+    centers: Query<'w, 's, (Entity, &'static Transform), With<Body>>,
     ids: Query<'w, 's, &'static StableId>,
+    groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
 }
 
 impl ToolWorld<'_, '_> {
@@ -443,13 +461,83 @@ impl ToolWorld<'_, '_> {
 
     /// A body entity's authored pose.
     pub fn pose_of(&self, entity: Entity) -> Option<PosRot> {
-        self.poses.get(entity).ok().map(PosRot::from_transform)
+        self.shapes
+            .get(entity)
+            .ok()
+            .map(|(_, t)| PosRot::from_transform(t))
     }
 
     /// A body entity's stable id.
     pub fn id_of(&self, entity: Entity) -> Option<StableId> {
         self.ids.get(entity).ok().copied()
     }
+
+    /// A body entity's authored shape + pose (for ghost previews).
+    pub fn shape_pose(&self, entity: Entity) -> Option<(ShapeDef, PosRot)> {
+        self.shapes
+            .get(entity)
+            .ok()
+            .map(|(s, t)| (s.clone(), PosRot::from_transform(t)))
+    }
+
+    /// Expands `members` with every body sharing a [`SelectionGroup`] with one
+    /// of them (selecting one grouped body selects the whole assembly).
+    pub fn expand_group_members(&self, members: &mut Vec<Entity>) {
+        expand_groups(members, &self.groups);
+    }
+
+    /// The selection's oriented bounding box in `frame`, if anything scalable
+    /// is selected.
+    pub fn selection_box(&self, selection: &Selection, frame: ScaleFrame) -> Option<SelectionBox> {
+        selection_box(selection, frame, &self.shapes)
+    }
+
+    /// Bodies fully inside the axis-aligned box (the "no partials" rule for
+    /// box selection; the infinite ground is excluded).
+    pub fn bodies_in_box(&self, min: Vec2, max: Vec2) -> Vec<Entity> {
+        self.physics
+            .bodies_in_aabb(min, max)
+            .into_iter()
+            .filter(|e| {
+                self.shapes.get(*e).is_ok_and(|(shape, transform)| {
+                    !shape.contains_half_plane() && body_fully_inside(shape, transform, min, max)
+                })
+            })
+            .collect()
+    }
+
+    /// Bodies whose center lies inside the closed loop `ring` (the lasso rule;
+    /// the infinite ground is excluded).
+    pub fn bodies_in_ring(&self, ring: &[Vec2]) -> Vec<Entity> {
+        self.centers
+            .iter()
+            .filter(|(_, t)| point_in_ring(t.translation.truncate(), ring))
+            .filter(|(e, _)| {
+                self.shapes
+                    .get(*e)
+                    .is_ok_and(|(shape, _)| !shape.contains_half_plane())
+            })
+            .map(|(e, _)| e)
+            .collect()
+    }
+}
+
+/// Whether a body's (conservative) world bounds lie fully inside the
+/// axis-aligned box — the "no partials" rule for box selection.
+fn body_fully_inside(shape: &ShapeDef, transform: &Transform, min: Vec2, max: Vec2) -> bool {
+    let (smin, smax) = crate::geometry::sdf::aabb(shape);
+    let affine = transform.compute_affine();
+    [
+        Vec2::new(smin.x, smin.y),
+        Vec2::new(smax.x, smin.y),
+        Vec2::new(smax.x, smax.y),
+        Vec2::new(smin.x, smax.y),
+    ]
+    .into_iter()
+    .all(|corner| {
+        let w = affine.transform_point3(corner.extend(0.0)).truncate();
+        w.x >= min.x && w.x <= max.x && w.y >= min.y && w.y <= max.y
+    })
 }
 
 /// A transient kinematic-hold request for one frame.
@@ -462,6 +550,9 @@ pub enum HoldState {
     /// Leave any existing hold untouched (tools that don't hold).
     #[default]
     Keep,
+    /// Mark these bodies held (and snap-excluded) without moving them this
+    /// frame — the acquire frame of a move/rotate gesture.
+    Acquire(Vec<Entity>),
     /// Hold exactly these bodies at these poses this frame.
     Set(Vec<(Entity, PosRot)>),
     /// Release the hold (gesture ended).
@@ -535,6 +626,8 @@ pub struct ManipContext<'a> {
     pub playing: bool,
     /// The active tool (connector variant: hinge/weld/slider).
     pub tool: ToolState,
+    /// The active scale frame (global/local) for the selection box.
+    pub scale_frame: ScaleFrame,
     /// Axis/rotation gesture constraints.
     pub constraints: &'a GestureConstraints,
     /// Snapping configuration.
@@ -550,8 +643,15 @@ pub struct ManipContext<'a> {
 /// [`ToolWorld`], returning a [`ManipOutput`] the driver applies. A scripted
 /// manipulation is later just another implementor.
 pub trait ManipTool: Resource<Mutability = Mutable> {
-    /// Advances the gesture for this frame.
-    fn update(&mut self, ctx: &ManipContext, world: &ToolWorld) -> ManipOutput;
+    /// Advances the gesture for this frame. `selection` is the current body
+    /// selection (read-only); the driver applies any [`ManipOutput::selection`]
+    /// change afterward.
+    fn update(
+        &mut self,
+        ctx: &ManipContext,
+        world: &ToolWorld,
+        selection: &Selection,
+    ) -> ManipOutput;
 
     /// Whether a gesture is in progress (drives [`ActiveGesture`] and preview).
     fn drafting(&self) -> bool;
@@ -571,6 +671,7 @@ pub struct ManipInputs<'w, 's> {
     suppress: Res<'w, SuppressSelectPress>,
     constraints: Res<'w, GestureConstraints>,
     snap: Res<'w, SnapConfig>,
+    frame: Res<'w, ScaleFrame>,
     tool_state: Res<'w, State<ToolState>>,
     game_state: Res<'w, State<GameState>>,
     projections: Query<'w, 's, &'static Projection, With<Camera3d>>,
@@ -592,6 +693,7 @@ impl ManipInputs<'_, '_> {
             alt: held(KeyCode::AltLeft, KeyCode::AltRight),
             playing: *self.game_state.get() == GameState::Playing,
             tool: *self.tool_state.get(),
+            scale_frame: *self.frame,
             constraints: &self.constraints,
             snap: &self.snap,
             cam_scale: crate::interaction::camera::camera_scale(&self.projections),
@@ -624,7 +726,7 @@ pub fn run_manip_tool<T: ManipTool>(
     mut tool: ResMut<T>,
 ) {
     let ctx = inputs.manip_context();
-    let out = tool.update(&ctx, &world.p0());
+    let out = tool.update(&ctx, &world.p0(), &editor.selection);
 
     if let Some(commit) = out.commit {
         writers.emit(commit);
@@ -639,6 +741,10 @@ pub fn run_manip_tool<T: ManipTool>(
     }
     match out.hold {
         HoldState::Keep => {}
+        HoldState::Acquire(entities) => {
+            editor.hold.entities = entities;
+            editor.exclusions.0.clone_from(&editor.hold.entities);
+        }
         HoldState::Clear => {
             editor.hold.entities.clear();
             editor.exclusions.0.clear();
