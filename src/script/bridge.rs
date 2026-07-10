@@ -1,9 +1,10 @@
 //! The World-facing scripting seam (Tier-A authoring path).
 //!
 //! This is the **only ECS-touching part** of `src/script/`. It embeds the
-//! steel engine, registers scene-verb builtins, and runs the exclusive
-//! [`run_scripts`] system that dispatches script-emitted operation records
-//! through the *existing* intent bus.
+//! steel engine, registers scene-verb builtins (authored-world edits *and*
+//! read-total geometric queries), and runs the exclusive [`run_scripts`] system
+//! that dispatches script-emitted operation records through the *existing*
+//! intent bus.
 //!
 //! # The World-integration constraint (spike #1)
 //!
@@ -18,21 +19,35 @@
 //! registered for. The registry may `write_message`, never `get_mut` an
 //! authored component.
 //!
-//! Because `Reflect: Send + Sync`, the op queue (`Vec<Box<dyn Reflect>>`) is
-//! `Send + Sync` and a builtin may capture and push to it; the steel engine
-//! itself is the cold-path VM and lives as a `NonSend` resource on the main
-//! thread, so it never needs to be `Send`.
+//! # Reads are total, writes are seam-mediated
+//!
+//! The same `Send + Sync` constraint blocks a builtin from reading `&World`
+//! too. The read half of the governance model (`docs/script-lisp-decision.md`)
+//! is served by a [`SceneView`]: [`run_scripts`] snapshots the committed scene
+//! into a shared buffer before running a source, and the query builtins read
+//! that buffer. Reads therefore observe *last-committed* state (a script's own
+//! edits, being pending intents, land the same frame but after this system) —
+//! which is exactly the last-frame-read discipline the driver dataflow will
+//! also use.
+//!
+//! Because `Reflect: Send + Sync`, the op queue (`Vec<Box<dyn Reflect>>`) and
+//! the `SceneView` are `Send + Sync` and a builtin may capture them; the steel
+//! engine itself is the cold-path VM and lives as a `NonSend` resource on the
+//! main thread, so it never needs to be `Send`.
 
 use crate::command::CommandDispatchSet;
 use crate::command::intent::{CutIntent, SpawnBodyIntent};
 use crate::command::snapshot::BodyRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
+use crate::domain::Body;
 use crate::domain::appearance::Appearance;
 use crate::domain::layers::LayerMask32;
 use crate::domain::props::BodyPhysics;
 use crate::domain::shape::ShapeDef;
+use crate::geometry::sdf;
 use crate::script::reflect_bridge::steel_to_f64;
+use crate::script::registry::{OperationCatalog, name};
 use bevy::prelude::*;
 use bevy::reflect::Reflect;
 use std::any::TypeId;
@@ -46,6 +61,10 @@ use steel::steel_vm::register_fn::RegisterFn;
 /// shared between the steel builtins (producers) and the exclusive
 /// [`run_scripts`] system (consumer).
 type OpQueue = Arc<Mutex<Vec<Box<dyn Reflect>>>>;
+
+/// A read snapshot of the committed scene, shared between [`run_scripts`]
+/// (producer) and the query builtins (consumers).
+type SharedView = Arc<Mutex<SceneView>>;
 
 /// Why a script could not run.
 #[derive(Debug, thiserror::Error)]
@@ -69,6 +88,14 @@ impl ScriptInputs {
         self.0.push(source.into());
     }
 }
+
+/// The operation catalog surfaced as a resource, so the console (and later
+/// data-driven menus / user tools) read what the VM understands — completion,
+/// highlighting, and the reference panel all track the real op set. Built from
+/// the same [`OperationCatalog::builtin`] the steel builtins register against,
+/// so the advertised surface never drifts from the implemented one.
+#[derive(Resource, Default)]
+pub struct OperationRegistry(pub OperationCatalog);
 
 /// One entry in the console log: a submitted source and its outcome.
 #[derive(Debug, Clone)]
@@ -96,6 +123,92 @@ impl ScriptLog {
             let overflow = self.0.len() - Self::CAP;
             self.0.drain(0..overflow);
         }
+    }
+}
+
+/// One body in a [`SceneView`] snapshot (world pose + authored shape).
+struct BodyView {
+    pos: Vec2,
+    rot: f32,
+    shape: ShapeDef,
+}
+
+impl BodyView {
+    /// Whether the world point `p` lies inside this body's shape (exact SDF
+    /// containment, transforming the point into the body's local frame).
+    fn contains(&self, p: Vec2) -> bool {
+        let local = Vec2::from_angle(-self.rot).rotate(p - self.pos);
+        sdf::eval(&self.shape, local) <= 0.0
+    }
+}
+
+/// A read-only snapshot of the committed scene, refreshed once per
+/// [`run_scripts`] pass. Query builtins read from this — they cannot hold
+/// `&World` — giving scripts the read-total half of the governance model with
+/// no mutation path. Bodies are ordered by id so an index is stable across a
+/// run.
+#[derive(Default)]
+pub struct SceneView {
+    bodies: Vec<BodyView>,
+}
+
+impl SceneView {
+    /// Number of bodies.
+    fn count(&self) -> f64 {
+        self.bodies.len() as f64
+    }
+
+    /// X of the `i`-th body, or NaN if out of range.
+    fn x(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.x))
+    }
+
+    /// Y of the `i`-th body, or NaN if out of range.
+    fn y(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.y))
+    }
+
+    /// Rotation (radians) of the `i`-th body, or NaN if out of range.
+    fn rot(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.rot))
+    }
+
+    /// How many bodies contain the world point `p`.
+    fn count_at(&self, p: Vec2) -> f64 {
+        self.bodies.iter().filter(|b| b.contains(p)).count() as f64
+    }
+
+    /// Index of the body whose centre is nearest `p`, or -1 if the scene is
+    /// empty.
+    fn nearest_at(&self, p: Vec2) -> f64 {
+        self.bodies
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| {
+                a.pos
+                    .distance_squared(p)
+                    .total_cmp(&b.pos.distance_squared(p))
+            })
+            .map_or(-1.0, |(i, _)| i as f64)
+    }
+}
+
+/// Snapshots the committed scene (bodies ordered by id) for the read builtins.
+fn snapshot_scene(world: &mut World) -> SceneView {
+    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef)> = world
+        .query_filtered::<(&StableId, &Transform, &ShapeDef), With<Body>>()
+        .iter(world)
+        .map(|(id, transform, shape)| {
+            let pose = PosRot::from_transform(transform);
+            (*id, pose.pos, pose.rot, shape.clone())
+        })
+        .collect();
+    rows.sort_by_key(|(id, ..)| id.0);
+    SceneView {
+        bodies: rows
+            .into_iter()
+            .map(|(_, pos, rot, shape)| BodyView { pos, rot, shape })
+            .collect(),
     }
 }
 
@@ -128,20 +241,23 @@ impl IntentDispatch {
     }
 }
 
-/// The steel engine plus the shared op queue. A `NonSend` resource: the VM is
-/// the cold authoring path and lives on the main thread, so it never needs to
-/// be `Send`.
+/// The steel engine plus the shared op queue and read snapshot. A `NonSend`
+/// resource: the VM is the cold authoring path and lives on the main thread, so
+/// it never needs to be `Send`.
 pub struct ScriptEngine {
     engine: Engine,
     ops: OpQueue,
+    view: SharedView,
 }
 
 impl ScriptEngine {
     fn new() -> Self {
         let ops: OpQueue = Arc::new(Mutex::new(Vec::new()));
+        let view: SharedView = Arc::new(Mutex::new(SceneView::default()));
+        let catalog = Arc::new(OperationCatalog::builtin());
         let mut engine = Engine::new();
-        register_builtins(&mut engine, &ops);
-        Self { engine, ops }
+        register_builtins(&mut engine, &ops, &view, &catalog);
+        Self { engine, ops, view }
     }
 
     /// Runs one script source, converting steel errors to [`ScriptError`].
@@ -165,6 +281,13 @@ impl ScriptEngine {
 fn nums<const N: usize>(vals: [&SteelVal; N]) -> Option<[f64; N]> {
     let out = vals.map(|v| steel_to_f64(v).unwrap_or(f64::NAN));
     out.iter().all(|v| v.is_finite()).then_some(out)
+}
+
+/// Coerces one steel value to a non-negative array index, or `None`.
+fn index_arg(v: &SteelVal) -> Option<usize> {
+    steel_to_f64(v)
+        .filter(|n| n.is_finite() && *n >= 0.0)
+        .map(|n| n as usize)
 }
 
 /// Pushes one reflected operation record onto the shared queue.
@@ -192,14 +315,28 @@ fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
     }
 }
 
-/// Registers the scene-verb builtins on `engine`, each capturing a clone of the
-/// shared op queue. A new authored verb = one builtin here + one
+/// Registers the scene-verb builtins on `engine`. Edit verbs capture the shared
+/// op queue; query verbs capture the read snapshot; meta verbs capture the
+/// catalog. Adding an authored verb = one builtin here (under a [`name`]
+/// constant) + one entry in [`OperationCatalog::builtin`] + one
 /// [`IntentDispatch::register`] call in [`ScriptPlugin`].
-fn register_builtins(engine: &mut Engine, ops: &OpQueue) {
+fn register_builtins(
+    engine: &mut Engine,
+    ops: &OpQueue,
+    view: &SharedView,
+    catalog: &Arc<OperationCatalog>,
+) {
+    register_edit_verbs(engine, ops);
+    register_query_verbs(engine, view);
+    register_meta_verbs(engine, catalog);
+}
+
+/// Authored-world edits — each emits a reflected intent onto the op queue.
+fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
     // `(cut ax ay bx by width)` — sever bodies along a stroke.
     let cut_ops = Arc::clone(ops);
     engine.register_fn(
-        "cut",
+        name::CUT,
         move |ax: SteelVal, ay: SteelVal, bx: SteelVal, by: SteelVal, width: SteelVal| {
             if let Some([ax, ay, bx, by, width]) = nums([&ax, &ay, &bx, &by, &width]) {
                 emit(
@@ -217,7 +354,7 @@ fn register_builtins(engine: &mut Engine, ops: &OpQueue) {
     // `(spawn-box x y w h)` — author a box body centered at (x, y).
     let box_ops = Arc::clone(ops);
     engine.register_fn(
-        "spawn-box",
+        name::SPAWN_BOX,
         move |x: SteelVal, y: SteelVal, w: SteelVal, h: SteelVal| {
             if let Some([x, y, w, h]) = nums([&x, &y, &w, &h]) {
                 let shape = ShapeDef::Box {
@@ -237,7 +374,7 @@ fn register_builtins(engine: &mut Engine, ops: &OpQueue) {
     // `(spawn-circle x y r)` — author a circle body centered at (x, y).
     let circle_ops = Arc::clone(ops);
     engine.register_fn(
-        "spawn-circle",
+        name::SPAWN_CIRCLE,
         move |x: SteelVal, y: SteelVal, r: SteelVal| {
             if let Some([x, y, r]) = nums([&x, &y, &r]) {
                 let shape = ShapeDef::Circle { radius: r as f32 };
@@ -252,15 +389,97 @@ fn register_builtins(engine: &mut Engine, ops: &OpQueue) {
     );
 }
 
-/// Exclusive: runs any pending script source, then dispatches the operation
-/// records it emitted through the intent bus. Ordered before
-/// [`CommandDispatchSet`] so a script's edits become commands in the same
+/// Read-total geometric queries — each reads the [`SceneView`] snapshot and
+/// returns a number, mutating nothing.
+fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
+    let v = Arc::clone(view);
+    engine.register_fn(name::BODY_COUNT, move || -> f64 {
+        v.lock().map_or(f64::NAN, |view| view.count())
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::BODY_X, move |i: SteelVal| -> f64 {
+        match (v.lock(), index_arg(&i)) {
+            (Ok(view), Some(i)) => view.x(i),
+            _ => f64::NAN,
+        }
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::BODY_Y, move |i: SteelVal| -> f64 {
+        match (v.lock(), index_arg(&i)) {
+            (Ok(view), Some(i)) => view.y(i),
+            _ => f64::NAN,
+        }
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::BODY_ROT, move |i: SteelVal| -> f64 {
+        match (v.lock(), index_arg(&i)) {
+            (Ok(view), Some(i)) => view.rot(i),
+            _ => f64::NAN,
+        }
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::COUNT_AT, move |x: SteelVal, y: SteelVal| -> f64 {
+        match (nums([&x, &y]), v.lock()) {
+            (Some([x, y]), Ok(view)) => view.count_at(Vec2::new(x as f32, y as f32)),
+            _ => 0.0,
+        }
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::NEAREST_AT, move |x: SteelVal, y: SteelVal| -> f64 {
+        match (nums([&x, &y]), v.lock()) {
+            (Some([x, y]), Ok(view)) => view.nearest_at(Vec2::new(x as f32, y as f32)),
+            _ => -1.0,
+        }
+    });
+}
+
+/// Homoiconic introspection — the catalog reading itself.
+fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<OperationCatalog>) {
+    // `(ops)` — a list of every registered operation name.
+    let cat = Arc::clone(catalog);
+    engine.register_fn(name::OPS, move || -> SteelVal {
+        SteelVal::ListV(cat.names().map(|n| SteelVal::StringV(n.into())).collect())
+    });
+
+    // `(describe name)` — the signature and doc of one operation, as text.
+    let cat = Arc::clone(catalog);
+    engine.register_fn(name::DESCRIBE, move |n: String| -> String {
+        cat.find(&n).map_or_else(
+            || format!("unknown op: {n}"),
+            |op| format!("{}  —  {}", op.signature, op.doc),
+        )
+    });
+}
+
+/// Exclusive: refreshes the read snapshot, runs any pending script source, then
+/// dispatches the operation records it emitted through the intent bus. Ordered
+/// before [`CommandDispatchSet`] so a script's edits become commands in the same
 /// frame — one script run therefore collapses to one batch of undoable edits.
 pub fn run_scripts(world: &mut World) {
     let sources: Vec<String> = world
         .get_resource_mut::<ScriptInputs>()
         .map(|mut inputs| std::mem::take(&mut inputs.0))
         .unwrap_or_default();
+    if sources.is_empty() {
+        return;
+    }
+
+    // Refresh the read-total snapshot from the committed scene (releasing the
+    // engine borrow before querying the world).
+    if let Some(view) = world
+        .get_non_send::<ScriptEngine>()
+        .map(|e| Arc::clone(&e.view))
+    {
+        let snapshot = snapshot_scene(world);
+        if let Ok(mut guard) = view.lock() {
+            *guard = snapshot;
+        }
+    }
 
     for source in sources {
         // NonSend: the VM lives on the main thread (this exclusive system is
@@ -302,8 +521,9 @@ pub fn run_scripts(world: &mut World) {
 }
 
 /// Installs the scripting seam: embeds steel, registers the scene verbs and
-/// their intent dispatch, and runs the exclusive doorway system. Off by
-/// default — behind the `script` feature, and confined to `src/script/`.
+/// their intent dispatch, surfaces the operation catalog, and runs the
+/// exclusive doorway system. Always on (steel is a first-class dependency);
+/// confined to `src/script/`.
 #[derive(Default)]
 pub struct ScriptPlugin;
 
@@ -311,6 +531,7 @@ impl Plugin for ScriptPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ScriptInputs>();
         app.init_resource::<ScriptLog>();
+        app.init_resource::<OperationRegistry>();
         let mut dispatch = IntentDispatch::default();
         dispatch.register::<CutIntent>();
         dispatch.register::<SpawnBodyIntent>();
@@ -324,6 +545,7 @@ impl Plugin for ScriptPlugin {
 mod tests {
     #![allow(clippy::float_cmp)]
     use super::*;
+    use crate::script::registry::OpCategory;
 
     #[derive(Resource, Default)]
     struct Cuts(Vec<CutIntent>);
@@ -427,5 +649,19 @@ mod tests {
         run(&mut app, "(this-is-not-a-builtin 1 2)");
         assert!(app.world().resource::<Cuts>().0.is_empty());
         assert!(app.world().resource::<Spawns>().0.is_empty());
+    }
+
+    #[test]
+    fn the_registry_resource_lists_every_catalog_op() {
+        // The console reads this; it must equal the catalog the builtins bind
+        // against.
+        let app = bus_app();
+        let registry = app.world().resource::<OperationRegistry>();
+        assert!(registry.0.find(name::SPAWN_BOX).is_some());
+        assert!(registry.0.find(name::BODY_COUNT).is_some());
+        assert_eq!(
+            registry.0.find(name::CUT).map(|o| o.category),
+            Some(OpCategory::Edit),
+        );
     }
 }
