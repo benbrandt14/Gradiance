@@ -9,6 +9,7 @@
 //! `Changed<>`/`resource_changed` (physics applies `SimSettings`; UI never
 //! touches avian).
 
+pub mod console;
 pub mod context_menu;
 pub mod inspector;
 pub mod joint_inspector;
@@ -33,6 +34,7 @@ impl Plugin for GradianceUiPlugin {
         app.add_plugins(EguiPlugin::default());
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<context_menu::ContextMenu>();
+        app.init_resource::<console::ScriptConsole>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
@@ -40,6 +42,7 @@ impl Plugin for GradianceUiPlugin {
                 inspector::inspector_window,
                 joint_inspector::joint_inspector,
                 settings::settings_window,
+                console::script_console,
                 context_menu::context_menu,
                 capture_pointer_over_ui,
             )
