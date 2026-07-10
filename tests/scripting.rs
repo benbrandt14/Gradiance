@@ -91,3 +91,72 @@ fn scripted_edits_are_undoable_commands() {
     undo(&mut app);
     assert_eq!(body_count(&mut app), 0);
 }
+
+#[test]
+fn a_script_reads_the_committed_scene() {
+    // The read-total half of the governance model, end to end: a query builtin
+    // reads the committed scene and drives a conditional edit. Reads observe
+    // *last-committed* state (this frame's spawns are pending intents), so the
+    // snapshot the loop sees is fixed at 2 throughout the run.
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box -50 0 20 20) (spawn-box 50 0 20 20))",
+    );
+    assert_eq!(body_count(&mut app), 2);
+    run(
+        &mut app,
+        "(let loop ((i 0))
+            (when (< i (body-count))
+                (spawn-circle 0 (* i 40) 8)
+                (loop (+ i 1))))",
+    );
+    // Two bodies were seen, so two circles were authored: 2 + 2 = 4.
+    assert_eq!(body_count(&mut app), 4);
+}
+
+#[test]
+fn count_at_reports_shape_containment() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 40 40)"); // covers [-20,20]^2
+    // The origin is inside the box → the guard fires and a marker is authored.
+    run(
+        &mut app,
+        "(when (> (count-at 0 0) 0) (spawn-circle 200 0 5))",
+    );
+    assert_eq!(body_count(&mut app), 2);
+    // A far point is outside every shape → no edit.
+    run(
+        &mut app,
+        "(when (> (count-at 500 500) 0) (spawn-circle 300 0 5))",
+    );
+    assert_eq!(body_count(&mut app), 2);
+}
+
+#[test]
+fn body_accessors_read_positions() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 7 0 10 10)");
+    // Only one body, so index 0 is it: author a circle at twice its x (14).
+    run(&mut app, "(spawn-circle (* 2 (body-x 0)) 0 3)");
+    assert_eq!(body_count(&mut app), 2);
+    // Confirm the circle really landed at x = 14 (it, not the box, covers it).
+    run(
+        &mut app,
+        "(when (> (count-at 14 0) 0) (spawn-box 0 100 5 5))",
+    );
+    assert_eq!(body_count(&mut app), 3);
+}
+
+#[test]
+fn the_op_catalog_is_introspectable_from_a_script() {
+    // `(ops)` returns the registered op names and `(describe …)` their docs —
+    // the homoiconic surface, observed by letting it drive an edit.
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(when (and (> (length (ops)) 0) (string? (describe \"cut\")))
+            (spawn-box 0 0 10 10))",
+    );
+    assert_eq!(body_count(&mut app), 1);
+}

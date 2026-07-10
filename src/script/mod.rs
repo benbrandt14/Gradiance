@@ -20,18 +20,27 @@
 //!   and convert a whole value to steel data (the read-total path). Pure
 //!   w.r.t. the ECS.
 //!
+//! - [`registry`] — the **operation catalog**: pure metadata (name, signature,
+//!   doc, governance category) for every scene verb the VM understands. The
+//!   single source of truth the console, the in-VM `(ops)`/`(describe)`
+//!   builtins, and later data-driven menus / user tools bind to, so what the
+//!   editor advertises tracks what the VM implements. No ECS, no `steel`.
+//!
 //! - [`bridge`] — the **World-facing seam** (the only ECS-touching part).
-//!   Embeds the steel engine, registers scene-verb builtins, and runs the
-//!   exclusive `run_scripts` system that dispatches script-emitted operation
-//!   records through the intent bus (the World-integration constraint —
-//!   scripts emit intent *data*, never `&mut World`).
+//!   Embeds the steel engine, registers scene-verb builtins (edits *and*
+//!   read-total geometric queries), and runs the exclusive `run_scripts` system
+//!   that dispatches script-emitted operation records through the intent bus
+//!   (the World-integration constraint — scripts emit intent *data*, never
+//!   `&mut World`; reads come from a per-run [`bridge::SceneView`] snapshot).
 //!
 //! `steel` may be imported only in [`bridge`]/[`reflect_bridge`] (enforced by
 //! `tests/boundaries.rs`). Later phases (see the decision record): the driver
-//! component + named-signal dataflow seam over [`kernel`], and the REPL panel.
+//! component + named-signal dataflow seam over [`kernel`], and menus / tools
+//! authored as `.scm` over the same registry.
 
 pub mod bridge;
 pub mod kernel;
 pub mod reflect_bridge;
+pub mod registry;
 
 pub use bridge::ScriptPlugin;
