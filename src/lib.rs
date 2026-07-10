@@ -63,7 +63,7 @@
 //! | [`render`] | derived meshes, materials, lighting, gizmos | domain, geometry |
 //! | [`ui`] | the egui editor | **`egui`** (only here) |
 //! | [`persist`] | RON save/load, snapshots | command snapshots |
-//! | [`script`] | scripting/driver core (spike stage) | pure math, no ECS yet |
+//! | [`script`] | scripting: pure kernel + reflect bridge + the World-facing `bridge` seam (feature-gated) | pure math; `steel` + intents (only here) |
 //!
 //! These boundaries are **mechanically enforced** by `tests/boundaries.rs`
 //! (and CI): `egui` appears only inside [`ui`], `steel` only inside
