@@ -1,7 +1,9 @@
 # Roadmap
 
 Numbers in parentheses reference `docs/feature-feedback.md` items.
-Updated after the M12 feedback round.
+Updated after the M17.1 round (scripting substrate + full tool unification).
+Completed rounds run M12–M17.1; the next planned milestone is **scripting P1**
+(the first user-facing scripting doorway), with M18–M21 the queued editor work.
 
 ## Addressed in M12 (this round)
 
@@ -119,15 +121,28 @@ bolts on later.
   `TypeRegistry`**, so the scripting registry can address them by reflected
   name. Config edits continue to flow only through settings resources; the
   `physics::queries` read facade stays the sole simulation-read path.
-- **Deferred to linchpin spike #1** (`bevy_reflect` ↔ steel bridge):
-  authored-body intents (`SpawnBodyIntent` → `BodyRecord` → `ShapeDef` /
-  `StableId(Uuid)`) stay non-reflected until the spike settles `Uuid` /
-  `ShapeDef` opacity — the decision doc keeps `ShapeDef` an opaque foreign
-  value, so we don't front-run it with a broad, throwaway derive.
-- **Deferred**: the manipulation tools (`select`, `drag`, connector) keep
-  their bespoke systems for now — they need world reads (physics queries,
-  kinematic hold) beyond the pure-authoring `ToolContext`, so a richer
-  context is a follow-up once the scripted-tool interface firms up.
+## Addressed in M17.1 (scripting substrate completed + full tool unification)
+
+The two items M17 deferred are now done (merged), completing the tools/scripting
+substrate round.
+
+- **Spike #1 resolved — the full authored intent surface is reflectable.**
+  `StableId` (Uuid newtype) and `ShapeDef` (SDF enum) reflect as
+  `#[reflect(opaque)]` (FromReflect via `Clone`); everything else reflects
+  structurally, including `BodyPhysics` over avian's own `Reflect` components.
+  Every authored intent (`SpawnBodyIntent`, `SpawnJointIntent`, …) now derives
+  `Reflect` and is **registered in `CommandPlugin`**, so the operation registry
+  can bind body/joint ops by reflected name. The generic `bevy_reflect` ↔ steel
+  bridge (`src/script/reflect_bridge.rs`, feature-gated) reads a real intent.
+  See `docs/script-spike-findings.md` (spike #1 follow-through).
+- **Manipulation tools migrated onto the facade.** `select`, `drag`, and the
+  connector tools now implement the `ManipTool` half of the tool facade —
+  `update(ctx, world, selection) -> ManipOutput` — reading through the
+  read-total `ToolWorld` facade and returning commits (→ the same `ToolCommit`
+  → intent seam), a kinematic `HoldState`, a mouse-spring `GrabState`, and a
+  `SelectTransition`. No tool retains a bespoke intent-writing path: reads are
+  total, writes are seam-mediated. This is the seam a scripted or node-editor
+  tool reuses.
 
 ## M16 residual / deferred (Algodoo parity, queued)
 
@@ -147,7 +162,7 @@ bolts on later.
   carry sensible `Default`s (`ShapeDef` is a `Default`-less enum today), so
   a body can never exist missing `LayerMask32`/`Appearance`/etc.
 
-## M17 — Grids & snapping (CAD pass)
+## M18 — Grids & snapping (CAD pass)
 
 - Major/minor grid lines; snap points provably on the grid at every
   adaptive zoom level (3.3, 2.5)
@@ -159,7 +174,7 @@ bolts on later.
   edges curve in polar grids) (3.3)
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4)
 
-## M18 — Rendering & camera polish
+## M19 — Rendering & camera polish
 
 - Emissive material option; ambient occlusion / contact shadows for the
   clay-matte look (9.3)
@@ -170,7 +185,7 @@ bolts on later.
 - Camera settings section (zoom sensitivity etc.) (10.2)
 - Sim-settings UI: scrub-drag values, gravity direction widget (8.2)
 
-## M19 — Constraints II
+## M20 — Constraints II
 
 - Weld rework: merge bodies into one (SDF `Union` — the tree makes this
   natural) or make-static, replacing the weld-as-joint model (4.2)
@@ -182,7 +197,7 @@ bolts on later.
 - Engine tuning: timestep/substeps in Simulation settings, substep debug
   view (8.3)
 
-## M20 — CSG modeling & pieces
+## M21 — CSG modeling & pieces
 
 - Boolean operations between bodies via context menu (join / subtract /
   intersect / xor) producing analytic trees (7.3)
@@ -194,15 +209,38 @@ bolts on later.
 Direction is ratified in `docs/script-lisp-decision.md`: a Lisp/DSL over a
 governed, homoiconic operation registry as the tool's control plane, with a
 two-tier execution model (authoring VM cold; compiled numeric kernels hot).
-Programmability is not one milestone — it *accretes through* M16–M18 (tool
-`ToolContext` shape, settings/grid ops, `Reflect` derives) per the decision
-record. Gated on two linchpin spikes before feature code lands:
+Programmability is not one milestone — it *accretes through* M16–M17 (tool
+facade, settings/grid ops, `Reflect` derives) per the decision record.
+
+**Both linchpin spikes have passed (`docs/script-spike-findings.md`), and the
+substrate they gated is now in place** — so feature phases P0/P1 are unblocked:
 
 - **Spike 2 (perf) — done.** `src/script/kernel.rs`: numeric DSL → flat
   allocation-free tape, VM-free hot-path eval over SoA columns; proptested,
   ~27.7 M evals/s (debug) at particle scale. De-risks the fluid/particle ceiling.
-- **Spike 1 (reflect↔steel bridge) — pending.** The linchpin for low-boilerplate
-  "everything programmable"; must run before embedding steel.
+- **Spike 1 (reflect ↔ steel bridge) — done.** `src/script/reflect_bridge.rs`
+  (feature-gated): one generic converter reads/writes any `#[derive(Reflect)]`
+  value by reflect-path. Spike #1 follow-through (M17.1) then made the **whole
+  authored intent surface** reflectable + registered, and the bridge reads a
+  real intent. The "everything programmable" endgame is a derive, not N builtins.
+
+Feature phasing (`docs/script-lisp-decision.md` §"Feature-level phasing"):
+
+- **P0 — substrate (largely done).** `kernel.rs`, `reflect_bridge.rs`, the
+  reflect substrate (opaque `StableId`/`ShapeDef`, registered intents). Still to
+  land: `src/script/values.rs` (`ShapeDef` foreign type + geometry constructor
+  builtins), `ScriptError` (thiserror), and the `ScriptPlugin` embed + panic
+  guard + fuel budget in `src/script/mod.rs`.
+- **P1 — scripted editing (NEXT).** The "one doorway": `src/script/bridge.rs`,
+  an exclusive `run_script` system beside `dispatch_intents` that drains a queue
+  of script-emitted operation records and writes them to the intent bus (the
+  World-integration constraint — scripts emit intent *data*, the exclusive
+  system dispatches). The operation registry enumerates the `Reflect`-registered
+  intents by name; one script run = one undo entry; a headless `--script foo.scm`
+  entry point doubles as test fixtures. REPL panel (`src/ui/console.rs`) follows.
+- **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam;
+  `defparam` → auto-slider; live probes / tracers / plots.
+- **P3 — targeted symbolic ops** (`grad`/`solve`, symbolic field forces).
 
 The former backlog lines below are now subsumed by that record:
 
