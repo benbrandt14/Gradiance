@@ -58,8 +58,11 @@ side-car.
   compiled, allocation-free numeric kernel (`src/script/kernel.rs`, Tier B) that
   runs over queries/buffers in one system. Bulk/particle updates are *derived*
   (never commands, never undo-recorded, never persisted).
-- **`src/script/` is pure at the core** (no ECS imports yet), like
-  `src/geometry/` — put testable math there.
+- **`src/script/` is pure at the core** (`kernel`, `reflect_bridge`), like
+  `src/geometry/` — put testable math there. `src/script/bridge.rs` is the one
+  ECS-touching seam (exclusive `run_scripts` → intents). `steel` is a
+  first-class dependency but may be imported **only** in `src/script/`
+  (`bridge`/`reflect_bridge`), enforced by `tests/boundaries.rs`.
 - **Persistence stays single-format RON** of materialized authored state; the
   operation registry is a runtime construct, not a second on-disk representation.
 - **When you rework tools/settings:** shape tools as `ToolContext →

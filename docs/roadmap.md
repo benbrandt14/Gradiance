@@ -226,18 +226,22 @@ substrate they gated is now in place** — so feature phases P0/P1 are unblocked
 
 Feature phasing (`docs/script-lisp-decision.md` §"Feature-level phasing"):
 
-- **P0 — substrate (largely done).** `kernel.rs`, `reflect_bridge.rs`, the
-  reflect substrate (opaque `StableId`/`ShapeDef`, registered intents). Still to
-  land: `src/script/values.rs` (`ShapeDef` foreign type + geometry constructor
-  builtins), `ScriptError` (thiserror), and the `ScriptPlugin` embed + panic
-  guard + fuel budget in `src/script/mod.rs`.
-- **P1 — scripted editing (NEXT).** The "one doorway": `src/script/bridge.rs`,
-  an exclusive `run_script` system beside `dispatch_intents` that drains a queue
-  of script-emitted operation records and writes them to the intent bus (the
-  World-integration constraint — scripts emit intent *data*, the exclusive
-  system dispatches). The operation registry enumerates the `Reflect`-registered
-  intents by name; one script run = one undo entry; a headless `--script foo.scm`
-  entry point doubles as test fixtures. REPL panel (`src/ui/console.rs`) follows.
+**Scripting is now a first-class, always-on part of the tool** (`steel-core` is
+a normal dependency, not a cargo feature — see the decision doc's
+"Direction update"). The two-tier PERF rule still holds (VM cold-path only).
+
+- **P0 — substrate: done.** `kernel.rs`, `reflect_bridge.rs`, the reflect
+  substrate (opaque `StableId`/`ShapeDef`, registered intents), `ScriptError`
+  (thiserror) + a `catch_unwind` eval boundary, and `ScriptPlugin`. Remaining
+  P0 nicety: `src/script/values.rs` (`ShapeDef` foreign type + geometry
+  constructor builtins) and a fuel/step budget.
+- **P1 — scripted editing: doorway landed.** `src/script/bridge.rs`: the
+  exclusive `run_scripts` system drains script-emitted operation records and
+  writes them to the intent bus (World-integration constraint), before
+  `CommandDispatchSet`. First verb `(cut …)`; `IntentDispatch` binds
+  `Reflect`-registered intents by type. **In progress:** more scene verbs
+  (`spawn-body`, `set-*`) via reflect-construction; one script run = one undo
+  entry; the REPL panel (`src/ui/console.rs`); a `--script foo.scm` entry point.
 - **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam;
   `defparam` → auto-slider; live probes / tracers / plots.
 - **P3 — targeted symbolic ops** (`grad`/`solve`, symbolic field forces).

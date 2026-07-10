@@ -6,8 +6,8 @@
 //! there, and converts a whole value to steel data for the "reads are total"
 //! path. Validated by Spike 1 (`docs/script-spike-findings.md`).
 //!
-//! This module is **feature-gated** (`--features script`) and is the only
-//! place `steel` may be imported (enforced by `tests/boundaries.rs`). It is
+//! Alongside [`bridge`](crate::script::bridge) this is one of the only two
+//! places `steel` may be imported (enforced by `tests/boundaries.rs`). It is
 //! pure w.r.t. the ECS — it takes plain reflected values; the World-facing
 //! seam that dispatches through intents/settings resources builds on top of
 //! it.
@@ -110,7 +110,7 @@ pub fn steel_to_f64(v: &SteelVal) -> Option<f64> {
     }
 }
 
-#[cfg(all(test, feature = "script"))]
+#[cfg(test)]
 mod tests {
     // float_cmp: asserted values are set exactly through the bridge.
     #![allow(clippy::float_cmp)]
