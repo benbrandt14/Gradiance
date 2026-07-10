@@ -70,6 +70,35 @@ impl ScriptInputs {
     }
 }
 
+/// One entry in the console log: a submitted source and its outcome.
+#[derive(Debug, Clone)]
+pub struct ScriptEntry {
+    /// The source that ran.
+    pub input: String,
+    /// Outcome text (`ok`, or the error message).
+    pub output: String,
+    /// Whether the run succeeded.
+    pub ok: bool,
+}
+
+/// A rolling log of script runs and their outcomes — the console's output pane.
+/// Capped so a long REPL session cannot grow unbounded.
+#[derive(Resource, Default)]
+pub struct ScriptLog(pub Vec<ScriptEntry>);
+
+impl ScriptLog {
+    /// Newest entries a console keeps.
+    const CAP: usize = 500;
+
+    fn record(&mut self, entry: ScriptEntry) {
+        self.0.push(entry);
+        if self.0.len() > Self::CAP {
+            let overflow = self.0.len() - Self::CAP;
+            self.0.drain(0..overflow);
+        }
+    }
+}
+
 /// Routes a reflected intent value to its `Messages<T>` bus. This is the
 /// operation registry's dispatch half: a script names an op, the exclusive
 /// system routes the reflected value to the right intent channel. Registering
@@ -235,12 +264,24 @@ pub fn run_scripts(world: &mut World) {
 
     for source in sources {
         // NonSend: the VM lives on the main thread (this exclusive system is
-        // already there). Errors are surfaced, never fatal.
-        let outcome = world
-            .get_non_send_mut::<ScriptEngine>()
-            .map(|mut engine| engine.run(&source));
-        if let Some(Err(err)) = outcome {
-            warn!("{err}");
+        // already there). Errors are surfaced (log + console), never fatal.
+        let result = match world.get_non_send_mut::<ScriptEngine>() {
+            Some(mut engine) => engine.run(&source),
+            None => continue,
+        };
+        let output = match &result {
+            Ok(()) => "ok".to_string(),
+            Err(err) => {
+                warn!("{err}");
+                err.to_string()
+            }
+        };
+        if let Some(mut log) = world.get_resource_mut::<ScriptLog>() {
+            log.record(ScriptEntry {
+                input: source,
+                output,
+                ok: result.is_ok(),
+            });
         }
     }
 
@@ -269,6 +310,7 @@ pub struct ScriptPlugin;
 impl Plugin for ScriptPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ScriptInputs>();
+        app.init_resource::<ScriptLog>();
         let mut dispatch = IntentDispatch::default();
         dispatch.register::<CutIntent>();
         dispatch.register::<SpawnBodyIntent>();
