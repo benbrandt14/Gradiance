@@ -221,6 +221,13 @@ path — it is opt-in.
   its ecosystem is the extensibility multiplier (shareable `.scm` gadget
   libraries over our builtins-as-ABI). Trade-off: larger dependency/compile
   surface — acceptable because it is cold-path.
+  - **Direction update (2026-07-10): scripting is a first-class, always-on part
+    of the tool** — `steel-core` is a normal (non-optional) dependency, not a
+    cargo feature. The two-tier PERF rule is unchanged and is what makes this
+    fine: the VM only ever runs on the authoring/cold path, never per-frame.
+    Making it always-on lets scripts be a canonical way to *author tests* (lisp
+    scene fixtures) and removes a `--features` split from CI. `steel` remains
+    confined to `src/script/{bridge,reflect_bridge}` (`tests/boundaries.rs`).
 - **ketos** — lighter, Rust-native, built-in step-limit. Fallback if steel's
   build weight bites; quieter maintenance rubs against exact-pinning.
 - **`bevy_mod_scripting`** — proves the reflection-bridge approach at scale, but
@@ -285,8 +292,8 @@ Full results in `docs/script-spike-findings.md`. Verdict: proceed; neither
    returns to the table). **Result: clean** — a steel script drives gradiance's
    real `SimSettings` (f32, nested glam `Vec2`, u32) through a generic bridge
    that never names a field; opaque custom types (the `ShapeDef`-handle path)
-   round-trip too. Promoted to a feature-gated product module
-   (`src/script/reflect_bridge.rs`, `--features script`).
+   round-trip too. Landed as a product module (`src/script/reflect_bridge.rs`);
+   `steel` is now a first-class dependency (see the direction update above).
 2. **DSL-subset → Tier-B kernel over a query.** Prove a compiled numeric
    expression drives N components per fixed-step at target scale with no VM in
    the loop and no per-element allocation. This de-risks the particle/fluid

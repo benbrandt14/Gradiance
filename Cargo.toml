@@ -31,16 +31,12 @@ thiserror = "2"
 rand = "0.9"
 mimalloc = "0.1"
 
-# Scripting (Tier-A authoring engine). Optional + feature-gated: the default
-# build and CI never compile it, so its weight stays entirely on the
-# authoring path per the two-tier rule in docs/script-lisp-decision.md.
-# Confined to `src/script/` (enforced by tests/boundaries.rs).
-steel-core = { version = "=0.8.2", optional = true }
-
-[features]
-# Enables the Lisp scripting layer (`src/script` steel-backed modules).
-# Off by default; exercise with `cargo test --features script`.
-script = ["dep:steel-core"]
+# Scripting (Tier-A authoring engine): the Lisp control plane is a first-class
+# part of the tool, compiled into every build. The two-tier PERF rule still
+# holds — the steel VM runs only on the authoring (cold) path, never in the
+# per-frame loop (continuous drivers lower to `src/script/kernel.rs`); see
+# docs/script-lisp-decision.md. Confined to `src/script/` (tests/boundaries.rs).
+steel-core = "=0.8.2"
 
 [dev-dependencies]
 proptest = "1.9"

@@ -99,5 +99,6 @@ plugin_group! {
         crate::interaction:::InteractionPlugin,
         crate::render:::GradianceRenderPlugin,
         crate::ui:::GradianceUiPlugin,
+        crate::script:::ScriptPlugin,
     }
 }

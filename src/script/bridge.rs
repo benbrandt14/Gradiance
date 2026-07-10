@@ -1,4 +1,4 @@
-//! The World-facing scripting seam (Tier-A authoring path, feature-gated).
+//! The World-facing scripting seam (Tier-A authoring path).
 //!
 //! This is the **only ECS-touching part** of `src/script/`. It embeds the
 //! steel engine, registers scene-verb builtins, and runs the exclusive
