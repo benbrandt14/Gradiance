@@ -24,7 +24,14 @@
 //! thread, so it never needs to be `Send`.
 
 use crate::command::CommandDispatchSet;
-use crate::command::intent::CutIntent;
+use crate::command::intent::{CutIntent, SpawnBodyIntent};
+use crate::command::snapshot::BodyRecord;
+use crate::core::ids::StableId;
+use crate::core::units::PosRot;
+use crate::domain::appearance::Appearance;
+use crate::domain::layers::LayerMask32;
+use crate::domain::props::BodyPhysics;
+use crate::domain::shape::ShapeDef;
 use crate::script::reflect_bridge::steel_to_f64;
 use bevy::prelude::*;
 use bevy::reflect::Reflect;
@@ -122,26 +129,95 @@ impl ScriptEngine {
     }
 }
 
+/// Coerces `N` steel values to finite `f64`s, or `None` if any is non-numeric
+/// or non-finite (Scheme integer literals arrive as `IntV`, floats as `NumV` —
+/// [`steel_to_f64`] accepts both). A verb with a bad argument no-ops rather
+/// than emitting a malformed intent.
+fn nums<const N: usize>(vals: [&SteelVal; N]) -> Option<[f64; N]> {
+    let out = vals.map(|v| steel_to_f64(v).unwrap_or(f64::NAN));
+    out.iter().all(|v| v.is_finite()).then_some(out)
+}
+
+/// Pushes one reflected operation record onto the shared queue.
+fn emit(ops: &OpQueue, op: Box<dyn Reflect>) {
+    if let Ok(mut queue) = ops.lock() {
+        queue.push(op);
+    }
+}
+
+/// A default-styled body of `shape` centered at `(x, y)` — the record a
+/// `spawn-*` verb emits.
+fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
+    BodyRecord {
+        id: StableId::new(),
+        pose: PosRot {
+            pos: Vec2::new(x as f32, y as f32),
+            rot: 0.0,
+        },
+        shape,
+        physics: BodyPhysics::default(),
+        appearance: Appearance::default(),
+        layers: LayerMask32::default(),
+        groups: Vec::new(),
+        group: None,
+    }
+}
+
 /// Registers the scene-verb builtins on `engine`, each capturing a clone of the
 /// shared op queue. A new authored verb = one builtin here + one
 /// [`IntentDispatch::register`] call in [`ScriptPlugin`].
 fn register_builtins(engine: &mut Engine, ops: &OpQueue) {
-    // `(cut ax ay bx by width)` — sever bodies along a stroke. Args are
-    // coerced from any numeric steel value (Scheme integer literals arrive as
-    // `IntV`, not `NumV`).
+    // `(cut ax ay bx by width)` — sever bodies along a stroke.
     let cut_ops = Arc::clone(ops);
     engine.register_fn(
         "cut",
         move |ax: SteelVal, ay: SteelVal, bx: SteelVal, by: SteelVal, width: SteelVal| {
-            let c = [&ax, &ay, &bx, &by, &width].map(|v| steel_to_f64(v).unwrap_or(f64::NAN));
-            if c.iter().all(|v| v.is_finite())
-                && let Ok(mut queue) = cut_ops.lock()
-            {
-                queue.push(Box::new(CutIntent {
-                    a: Vec2::new(c[0] as f32, c[1] as f32),
-                    b: Vec2::new(c[2] as f32, c[3] as f32),
-                    width: c[4] as f32,
-                }));
+            if let Some([ax, ay, bx, by, width]) = nums([&ax, &ay, &bx, &by, &width]) {
+                emit(
+                    &cut_ops,
+                    Box::new(CutIntent {
+                        a: Vec2::new(ax as f32, ay as f32),
+                        b: Vec2::new(bx as f32, by as f32),
+                        width: width as f32,
+                    }),
+                );
+            }
+        },
+    );
+
+    // `(spawn-box x y w h)` — author a box body centered at (x, y).
+    let box_ops = Arc::clone(ops);
+    engine.register_fn(
+        "spawn-box",
+        move |x: SteelVal, y: SteelVal, w: SteelVal, h: SteelVal| {
+            if let Some([x, y, w, h]) = nums([&x, &y, &w, &h]) {
+                let shape = ShapeDef::Box {
+                    width: w as f32,
+                    height: h as f32,
+                };
+                emit(
+                    &box_ops,
+                    Box::new(SpawnBodyIntent {
+                        record: body_record(shape, x, y),
+                    }),
+                );
+            }
+        },
+    );
+
+    // `(spawn-circle x y r)` — author a circle body centered at (x, y).
+    let circle_ops = Arc::clone(ops);
+    engine.register_fn(
+        "spawn-circle",
+        move |x: SteelVal, y: SteelVal, r: SteelVal| {
+            if let Some([x, y, r]) = nums([&x, &y, &r]) {
+                let shape = ShapeDef::Circle { radius: r as f32 };
+                emit(
+                    &circle_ops,
+                    Box::new(SpawnBodyIntent {
+                        record: body_record(shape, x, y),
+                    }),
+                );
             }
         },
     );
@@ -195,6 +271,7 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptInputs>();
         let mut dispatch = IntentDispatch::default();
         dispatch.register::<CutIntent>();
+        dispatch.register::<SpawnBodyIntent>();
         app.insert_resource(dispatch);
         app.insert_non_send(ScriptEngine::new());
         app.add_systems(Update, run_scripts.before(CommandDispatchSet));
@@ -203,55 +280,110 @@ impl Plugin for ScriptPlugin {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::float_cmp)]
+    #![allow(clippy::float_cmp)]
     use super::*;
 
-    /// Captures every `CutIntent` that reached the bus this frame.
     #[derive(Resource, Default)]
-    struct Captured(Vec<CutIntent>);
+    struct Cuts(Vec<CutIntent>);
+    #[derive(Resource, Default)]
+    struct Spawns(Vec<SpawnBodyIntent>);
 
-    fn capture(mut reader: MessageReader<CutIntent>, mut out: ResMut<Captured>) {
-        for intent in reader.read() {
-            out.0.push(intent.clone());
+    fn capture_cuts(mut reader: MessageReader<CutIntent>, mut out: ResMut<Cuts>) {
+        for m in reader.read() {
+            out.0.push(m.clone());
+        }
+    }
+    fn capture_spawns(mut reader: MessageReader<SpawnBodyIntent>, mut out: ResMut<Spawns>) {
+        for m in reader.read() {
+            out.0.push(m.clone());
         }
     }
 
-    #[test]
-    fn script_op_reaches_the_intent_bus() {
+    /// A minimal app with the scripting seam + bus capture, but **no**
+    /// `CommandPlugin` — so a test observes exactly what the doorway writes to
+    /// the intent bus, with nothing draining it.
+    fn bus_app() -> App {
         let mut app = App::new();
         app.add_message::<CutIntent>();
-        app.init_resource::<Captured>();
+        app.add_message::<SpawnBodyIntent>();
+        app.init_resource::<Cuts>();
+        app.init_resource::<Spawns>();
         app.add_plugins(ScriptPlugin);
-        // Read the bus right after the doorway writes to it (no CommandPlugin,
-        // so nothing else drains it — we assert the doorway in isolation).
-        app.add_systems(Update, capture.after(run_scripts));
+        app.add_systems(Update, (capture_cuts, capture_spawns).after(run_scripts));
+        app
+    }
 
+    fn run(app: &mut App, source: &str) {
         app.world_mut()
             .resource_mut::<ScriptInputs>()
-            .submit("(cut 0 0 10 0 4)");
+            .submit(source);
         app.update();
+    }
 
-        let captured = &app.world().resource::<Captured>().0;
-        assert_eq!(captured.len(), 1, "one CutIntent should reach the bus");
-        assert_eq!(captured[0].a, Vec2::new(0.0, 0.0));
-        assert_eq!(captured[0].b, Vec2::new(10.0, 0.0));
-        assert_eq!(captured[0].width, 4.0);
+    #[test]
+    fn cut_reaches_the_bus_with_integer_literals() {
+        let mut app = bus_app();
+        run(&mut app, "(cut 0 0 10 0 4)"); // Scheme ints arrive as IntV
+        let cuts = &app.world().resource::<Cuts>().0;
+        assert_eq!(cuts.len(), 1);
+        assert_eq!(cuts[0].a, Vec2::new(0.0, 0.0));
+        assert_eq!(cuts[0].b, Vec2::new(10.0, 0.0));
+        assert_eq!(cuts[0].width, 4.0);
+    }
+
+    #[test]
+    fn float_literals_also_coerce() {
+        let mut app = bus_app();
+        run(&mut app, "(cut 0.0 0.0 10.5 0.0 4.0)");
+        assert_eq!(app.world().resource::<Cuts>().0[0].b.x, 10.5);
+    }
+
+    #[test]
+    fn spawn_verbs_reach_the_bus() {
+        let mut app = bus_app();
+        run(
+            &mut app,
+            "(begin (spawn-box 1 2 40 20) (spawn-circle 5 6 15))",
+        );
+        let spawns = &app.world().resource::<Spawns>().0;
+        assert_eq!(spawns.len(), 2);
+        assert!(matches!(
+            spawns[0].record.shape,
+            ShapeDef::Box { width, height } if width == 40.0 && height == 20.0
+        ));
+        assert_eq!(spawns[0].record.pose.pos, Vec2::new(1.0, 2.0));
+        assert!(matches!(
+            spawns[1].record.shape,
+            ShapeDef::Circle { radius } if radius == 15.0
+        ));
+    }
+
+    #[test]
+    fn several_ops_in_one_run_preserve_order() {
+        let mut app = bus_app();
+        run(
+            &mut app,
+            "(begin (cut 0 0 1 0 1) (cut 0 0 2 0 1) (cut 0 0 3 0 1))",
+        );
+        let cuts = &app.world().resource::<Cuts>().0;
+        assert_eq!(cuts.len(), 3);
+        assert_eq!(cuts[0].b.x, 1.0);
+        assert_eq!(cuts[2].b.x, 3.0);
+    }
+
+    #[test]
+    fn a_non_numeric_arg_no_ops() {
+        let mut app = bus_app();
+        run(&mut app, "(cut \"oops\" 0 0 0 1)");
+        assert!(app.world().resource::<Cuts>().0.is_empty());
     }
 
     #[test]
     fn a_script_error_is_non_fatal_and_emits_nothing() {
-        let mut app = App::new();
-        app.add_message::<CutIntent>();
-        app.init_resource::<Captured>();
-        app.add_plugins(ScriptPlugin);
-        app.add_systems(Update, capture.after(run_scripts));
-
+        let mut app = bus_app();
         // Unbound symbol → steel eval error; the frame must still complete.
-        app.world_mut()
-            .resource_mut::<ScriptInputs>()
-            .submit("(this-is-not-a-builtin 1 2)");
-        app.update();
-
-        assert!(app.world().resource::<Captured>().0.is_empty());
+        run(&mut app, "(this-is-not-a-builtin 1 2)");
+        assert!(app.world().resource::<Cuts>().0.is_empty());
+        assert!(app.world().resource::<Spawns>().0.is_empty());
     }
 }
