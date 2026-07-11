@@ -203,6 +203,44 @@ fn a_registered_action_runs_when_invoked() {
 }
 
 #[test]
+fn spawn_ground_authors_a_body() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-ground 0 -200 0)");
+    assert_eq!(body_count(&mut app), 1);
+    // A floor plus a box on top: the two-line scene-setup a fixture wants.
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    assert_eq!(body_count(&mut app), 2);
+}
+
+#[test]
+fn nearest_dist_and_index_at_compose_with_edits() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box -50 0 20 20) (spawn-box 50 0 20 20))",
+    );
+    assert_eq!(body_count(&mut app), 2);
+    // Nearest centre to (-40, 0) is the left box at distance 10 (< 60) → marker.
+    run(
+        &mut app,
+        "(when (< (nearest-dist -40 0) 60) (spawn-circle 0 100 5))",
+    );
+    assert_eq!(body_count(&mut app), 3);
+    // (-50, 0) is inside the left box → a real index (>= 0) → marker.
+    run(
+        &mut app,
+        "(when (>= (body-index-at -50 0) 0) (spawn-circle 0 200 5))",
+    );
+    assert_eq!(body_count(&mut app), 4);
+    // Empty space → -1 → no marker.
+    run(
+        &mut app,
+        "(when (>= (body-index-at 999 999) 0) (spawn-circle 0 300 5))",
+    );
+    assert_eq!(body_count(&mut app), 4);
+}
+
+#[test]
 fn the_op_catalog_is_introspectable_from_a_script() {
     // `(ops)` returns the registered op names and `(describe …)` their docs —
     // the homoiconic surface, observed by letting it drive an edit.

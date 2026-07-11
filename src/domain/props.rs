@@ -79,6 +79,17 @@ impl Default for BodyPhysics {
 }
 
 impl BodyPhysics {
+    /// A fixed (non-simulating) body's physics — e.g. the ground. Everything
+    /// but the [`RigidBody`] role matches [`default`](BodyPhysics::default). A
+    /// domain-level constructor so callers that must not name avian (the
+    /// scripting layer) can still author a static body.
+    pub fn fixed() -> Self {
+        Self {
+            rigid_body: RigidBody::Static,
+            ..Self::default()
+        }
+    }
+
     /// Assembles the authored physics from an entity's avian components,
     /// falling back to defaults for any that are absent.
     pub fn capture(entity: &EntityRef) -> Self {

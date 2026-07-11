@@ -24,6 +24,8 @@ pub mod name {
     pub const SPAWN_BOX: &str = "spawn-box";
     /// `(spawn-circle x y r)` — author a circle body.
     pub const SPAWN_CIRCLE: &str = "spawn-circle";
+    /// `(spawn-ground x y angle)` — author a fixed ground half-plane.
+    pub const SPAWN_GROUND: &str = "spawn-ground";
     /// `(body-count)` — how many bodies exist.
     pub const BODY_COUNT: &str = "body-count";
     /// `(body-x i)` — x of the i-th body (id order).
@@ -36,6 +38,10 @@ pub mod name {
     pub const COUNT_AT: &str = "count-at";
     /// `(nearest-at x y)` — index of the body whose centre is nearest the point.
     pub const NEAREST_AT: &str = "nearest-at";
+    /// `(nearest-dist x y)` — distance to the nearest body centre.
+    pub const NEAREST_DIST: &str = "nearest-dist";
+    /// `(body-index-at x y)` — index of a body whose shape contains the point.
+    pub const BODY_INDEX_AT: &str = "body-index-at";
     /// `(sim-get path)` — read a simulation setting by reflect-path.
     pub const SIM_GET: &str = "sim-get";
     /// `(sim-set path value)` — write a simulation setting by reflect-path.
@@ -152,6 +158,13 @@ fn edit_specs() -> Vec<OpSpec> {
             args: 3,
         },
         OpSpec {
+            name: name::SPAWN_GROUND,
+            signature: "(spawn-ground x y angle)",
+            doc: "Author a fixed ground half-plane through (x, y), tilted by angle radians.",
+            category: Edit,
+            args: 3,
+        },
+        OpSpec {
             name: name::CUT,
             signature: "(cut ax ay bx by width)",
             doc: "Sever every body crossed by the stroke a→b of the given width.",
@@ -204,6 +217,20 @@ fn query_specs() -> Vec<OpSpec> {
             name: name::NEAREST_AT,
             signature: "(nearest-at x y)",
             doc: "Index of the body whose centre is nearest (x, y); -1 if none.",
+            category: Query,
+            args: 2,
+        },
+        OpSpec {
+            name: name::NEAREST_DIST,
+            signature: "(nearest-dist x y)",
+            doc: "Distance from (x, y) to the nearest body centre; -1 if the scene is empty.",
+            category: Query,
+            args: 2,
+        },
+        OpSpec {
+            name: name::BODY_INDEX_AT,
+            signature: "(body-index-at x y)",
+            doc: "Index of a body whose shape contains (x, y) (first in id order); -1 if none.",
             category: Query,
             args: 2,
         },
