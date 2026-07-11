@@ -1,14 +1,12 @@
 //! Persistence tests: arbitrary-scene round trips (proptest), file I/O,
 //! undoable loads, and debug snapshots.
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, paused_app, undo};
 use avian2d::prelude::{ColliderDensity, Friction, GravityScale, Restitution, RigidBody};
 use bevy::prelude::*;
 use gradiance::domain::settings::{GridSettings, GridSystem, SimSettings, SnapConfig};
 use gradiance::persist::{from_ron, to_ron};
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, paused_app, undo};
 use proptest::prelude::*;
 
 // ---------- Arbitrary scene generation ----------

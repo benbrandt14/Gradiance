@@ -1,11 +1,9 @@
 //! Interaction-layer tests: shortcuts drive intents, snapping picks the
 //! right source, selection stays consistent.
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, paused_app, step};
 use bevy::prelude::*;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, paused_app, step};
 
 /// Presses (and holds) keys for one frame.
 fn press(app: &mut App, keys: &[KeyCode]) {

@@ -2,13 +2,11 @@
 //! selection semantics (with and without constraints), and settings
 //! application — everything below the egui skin, tested headless.
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::Friction;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 
 fn spawn_box(app: &mut App, pos: Vec2) -> StableId {
     let record = box_record(pos, 40.0, 20.0);

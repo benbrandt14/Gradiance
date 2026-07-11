@@ -7,12 +7,10 @@
 //! a scene fixture is a few lines of lisp, and the assertions are on the real
 //! authored world it produces.
 
-mod harness;
-
+use crate::harness::{body_count, paused_app, undo};
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
 use gradiance::script::bridge::{ScriptActions, ScriptInputs};
-use harness::{body_count, paused_app, undo};
 
 /// Submits `source` and advances one frame: `run_scripts` emits the intents,
 /// `dispatch_intents` (later the same frame) turns them into commands.
