@@ -1,9 +1,11 @@
 # Roadmap
 
 Numbers in parentheses reference `docs/feature-feedback.md` items.
-Updated after the M17.1 round (scripting substrate + full tool unification).
-Completed rounds run M12–M17.1; the next planned milestone is **scripting P1**
-(the first user-facing scripting doorway), with M18–M21 the queued editor work.
+Completed rounds run M12–M17.1 plus **scripting P1** (the operation registry,
+edit/config/query verbs, the REPL, and `--script` — see `docs/scripting.md`).
+Priority now rebalances to the **physics/interaction/visualization substrate
+before the scripting that drives it** — read "Sequencing after M17.1" below for
+the ordering; M18–M21 and the tracers/plotters milestone carry the detail.
 
 ## Addressed in M12 (this round)
 
@@ -144,6 +146,54 @@ substrate round.
   total, writes are seam-mediated. This is the seam a scripted or node-editor
   tool reuses.
 
+## Sequencing after M17.1 — substrate first, then script it
+
+Priority rebalance (2026-07-11): build the **physics / interaction /
+visualization substrate** — constraints, joints, interactions, tracers,
+plotters — *before* the scripting layer that drives or introspects them. The
+scripting P1 doorway (edits, config, reads, the operation registry, the REPL,
+`--script`) is done and stable; the deep scripting phases (P2 drivers/dataflow,
+P3 symbolic) are deliberately **queued behind** the substrate so we script real
+features, not placeholders. The accretion rule keeps this cheap rather than a
+rewrite-later trap: each substrate feature is built *through* the same seams the
+scripting layer binds to, so "script it" is a later derive.
+
+**Execution order** (UI interleaved — a physics feature is *not done* until its
+inspector / gizmo / context-menu UI lands, so UI is part of each step, not a
+trailing pass):
+
+1. **Interactions & joints/constraints** (M16 residual + M20). The core sim
+   substrate and its editing UI: selection-from-any-tool and shift-drag
+   semantics, play-mode torque, joint config in the context menu, then the
+   weld/spring/damper/motor and contact-force work of M20.
+2. **Tracers & plotters** (milestone below). Live physics introspection —
+   trajectories, time-series, probes — enabled purely by the read-total facade.
+   UI-heavy (overlays + dockable plot panels).
+3. **Script the above — scripting P2** (drivers as sensor/modulator/actuator
+   dataflow), now architecturally paid for: a **sensor** is a read over the
+   facade (step 2's readers), a **modulator** is a Tier-B `kernel`, an
+   **actuator** is a registered edit/config op (step 1's intents). Then P3
+   (symbolic field forces) over the SDF substrate.
+
+CAD polish (M18 grids/snapping) and rendering/camera (M19) interleave where they
+unblock the above — snapping aids constraint assembly; the M19 sim-settings UI
+pairs with the constraints work.
+
+**Architectural-readiness gates — we are ready; the gate is discipline, not a
+missing foundation:**
+
+- *Plotters/tracers* need the read-total facade (`physics::queries` + the
+  scripting `SceneView`). It exists — the rule is **keep it complete**: every
+  new physics quantity (constraint force, contact point, joint error) gets a
+  query *as it lands*, so plotters and scripts read it for free.
+- *Constraints-as-script* need each new constraint/joint intent to derive
+  `Reflect` and register in `CommandPlugin` — the established pattern (all
+  authored intents already do). Do it as each constraint type lands and the
+  operation registry binds it with no bespoke code.
+- *Drivers/dataflow (P2)* need the read facade (sensors), the Tier-B kernel
+  (modulators — done, `src/script/kernel.rs`), and the operation registry
+  (actuators — done). Unblocked the moment step-1/2 quantities are queryable.
+
 ## M16 residual / deferred (Algodoo parity, queued)
 
 - Selection works from every tool (click falls through to select) (2.1)
@@ -196,6 +246,26 @@ substrate round.
 - Contact point & force debug overlays (2.6, 8.3)
 - Engine tuning: timestep/substeps in Simulation settings, substep debug
   view (8.3)
+
+## Tracers, plotters & live probes (read-facade visualization)
+
+The visualization half of the constraints/joints work, and step 2 of the
+sequencing above. Enabled entirely by read-total governance — a plotter or
+tracer is *just another reader* of `physics::queries` / the scripting
+`SceneView`; no new mutation, no persistence, no invariant exception (see
+`docs/script-lisp-decision.md` §"Live plotters are enabled by read-total
+governance").
+
+- Body/point **tracers**: sampled trajectories drawn as fading polylines. A
+  tracer is an authored marker (one op); its samples are *derived*, never
+  command-wrapped or serialized (rule #5).
+- **Live plotters**: time-series of a queried scalar (speed, height, joint
+  angle, contact force) in a dockable egui panel — the data-out (`measure`) seam
+  the decision doc names.
+- **Probes**: hover or pin a body to read its live physics (velocity, forces,
+  sleep state) — the read facade surfaced in the UI.
+- Discipline it enforces: each new plottable quantity is *added to the query
+  surface*, which is exactly what makes it scriptable (a sensor) for free.
 
 ## M21 — CSG modeling & pieces
 
@@ -266,12 +336,13 @@ a normal dependency, not a cargo feature — see the decision doc's
     `register-action`). Doubles as a test-fixture runner.
   - **Remaining P1:** a fuel/step budget for runaway authoring scripts.
 - **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam
-  (`defsignal`/`defparam` → auto-slider; live probes / tracers / plots). This
-  is the substrate the sensor/modulator/actuator model plugs into: a **sensor**
-  is a read (a query builtin / reflect read), a **modulator** is a driver
-  kernel over signals, an **actuator** is a config- or edit-op the signal
-  drives — all three already have their seam (query surface, `kernel`, the
-  operation registry).
+  (`defsignal`/`defparam` → auto-slider; live probes / tracers / plots).
+  **Queued behind the physics/tracer substrate** (see "Sequencing after M17.1"):
+  we script drivers once the constraints/joints and the tracer/plotter read
+  surface they drive and observe are in place. The seams are ready — a **sensor**
+  is a read (a query builtin / reflect read over the facade), a **modulator** is
+  a `kernel` over signals, an **actuator** is a config- or edit-op the signal
+  drives — so P2 is a wiring layer, not new foundation.
 - **P3 — the extension surface (the tool authored in its own DSL).** Because
   edits, config, and reads all route through one registry, the editor's own
   chrome can be *authored as data over that registry*:
