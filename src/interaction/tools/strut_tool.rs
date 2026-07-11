@@ -165,6 +165,9 @@ mod tests {
             mass_proxy(&small) >= 1.0,
             "a floor keeps struts from being zero-stiffness"
         );
-        assert_eq!(mass_proxy(&ShapeDef::HalfPlane), 0.0, "ground doesn't sag");
+        assert!(
+            mass_proxy(&ShapeDef::HalfPlane).abs() < f32::EPSILON,
+            "ground doesn't sag"
+        );
     }
 }
