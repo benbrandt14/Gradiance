@@ -10,7 +10,14 @@ use crate::core::units::PosRot;
 use crate::domain::joint::{JointDef, JointKind, MotorDef};
 use crate::interaction::selection::SelectedJoint;
 use bevy::color::palettes::css;
+use bevy::gizmos::config::GizmoConfigGroup;
 use bevy::prelude::*;
+
+/// Gizmo config group for joint indicators. Configured with a negative
+/// `depth_bias` (see [`GradianceRenderPlugin`](crate::render)) so joint glyphs
+/// always draw in front of the extruded body prisms rather than being occluded.
+#[derive(Default, Reflect, GizmoConfigGroup)]
+pub struct JointGizmos;
 
 /// Draws every joint's anchor glyph (hinge = ring, weld = square,
 /// slider = axis line), following the connected bodies.
@@ -20,7 +27,7 @@ pub fn draw_joints(
     index: Res<IdIndex>,
     transforms: Query<&Transform>,
     projections: Query<&Projection, With<Camera3d>>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<JointGizmos>,
 ) {
     // Screen-constant glyph size: readable at any zoom.
     let s = crate::interaction::camera::camera_scale(&projections);
@@ -87,7 +94,7 @@ pub fn draw_joints(
 }
 
 /// A curved arrow around the hinge showing spin direction & strength.
-fn draw_angular_motor(gizmos: &mut Gizmos, anchor: Vec2, motor: MotorDef, s: f32) {
+fn draw_angular_motor(gizmos: &mut Gizmos<JointGizmos>, anchor: Vec2, motor: MotorDef, s: f32) {
     if !motor.enabled || motor.target_velocity.abs() < 1e-3 {
         return;
     }
@@ -119,7 +126,7 @@ fn draw_angular_motor(gizmos: &mut Gizmos, anchor: Vec2, motor: MotorDef, s: f32
 /// Draws a spring coil between two world points. Straight lead-ins at each end,
 /// a zigzag body in the middle, and a dot at each anchor. Amplitude is
 /// screen-constant (scaled by `s`); the coil count is fixed.
-fn draw_spring(gizmos: &mut Gizmos, a: Vec2, b: Vec2, s: f32) {
+fn draw_spring(gizmos: &mut Gizmos<JointGizmos>, a: Vec2, b: Vec2, s: f32) {
     const COILS: usize = 8;
     let color = css::SPRING_GREEN;
     let span = b - a;
@@ -151,7 +158,13 @@ fn draw_spring(gizmos: &mut Gizmos, a: Vec2, b: Vec2, s: f32) {
 }
 
 /// A straight arrow along the slider axis showing drive direction.
-fn draw_linear_motor(gizmos: &mut Gizmos, anchor: Vec2, dir: Vec2, motor: MotorDef, s: f32) {
+fn draw_linear_motor(
+    gizmos: &mut Gizmos<JointGizmos>,
+    anchor: Vec2,
+    dir: Vec2,
+    motor: MotorDef,
+    s: f32,
+) {
     if !motor.enabled || motor.target_velocity.abs() < 1e-3 {
         return;
     }

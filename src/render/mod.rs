@@ -13,6 +13,8 @@ pub mod joint_viz;
 pub mod material_sync;
 pub mod toon;
 
+use bevy::gizmos::AppGizmoBuilder;
+use bevy::gizmos::config::GizmoConfig;
 use bevy::light::GlobalAmbientLight;
 use bevy::prelude::*;
 
@@ -33,6 +35,15 @@ impl Plugin for GradianceRenderPlugin {
             return;
         }
         toon::install(app);
+        // Joint gizmos draw in front of the extruded body prisms (never
+        // occluded), unlike the default gizmo group.
+        app.insert_gizmo_config(
+            joint_viz::JointGizmos,
+            GizmoConfig {
+                depth_bias: -1.0,
+                ..default()
+            },
+        );
         app.insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
             brightness: 300.0,
