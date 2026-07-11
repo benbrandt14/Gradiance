@@ -94,29 +94,35 @@ pub enum JointKind {
         motor: Option<MotorDef>,
     },
     /// Spring-damper strut: a soft distance constraint between the two
-    /// anchors, drawn as a line. Maps onto avian's `DistanceJoint`
-    /// (`limits` = [`bounds`](Self::Spring::bounds), `compliance` =
-    /// `1 / stiffness`) plus a `JointDamping` component.
+    /// anchors, drawn as a coil. Maps onto avian's `DistanceJoint`
+    /// (`compliance` = `1 / stiffness`) plus a `JointDamping` component; when
+    /// unbounded the distance limit pins to `rest_length` (a pure spring), and
+    /// when a [`range`](Self::Spring::range) is set the limit becomes that band.
     Spring {
-        /// Allowed length band `[min, max]` in pixels. `min == max` is a
-        /// spring pinned to that length; `min < max` lets the strut float
-        /// freely within the band and spring back past either end.
-        bounds: [f32; 2],
+        /// The length the spring relaxes to (px) — the creation distance.
+        rest_length: f32,
         /// Spring constant (stiffness, N/px); the joint's compliance is
-        /// `1 / stiffness`, and `<= 0` is treated as rigid. The scalar a
+        /// `1 / stiffness`, and `<= 0` is treated as rigid. Set from the
+        /// connected mass at creation so the strut isn't too soft. The scalar a
         /// future curve editor would generalize to a nonlinear
         /// force-vs-displacement curve.
         stiffness: f32,
-        /// Linear velocity damping applied by the joint. The scalar a future
-        /// curve editor would generalize to a nonlinear damping curve.
+        /// Linear velocity damping applied by the joint (default 0). The scalar
+        /// a future curve editor would generalize to a nonlinear damping curve.
         damping: f32,
+        /// Optional hard length clamp `[min, max]` in pixels; `None` (the
+        /// default) leaves travel unbounded, so the spring is the only
+        /// restoring force. When set, the strut floats freely within the band
+        /// and springs back past either end.
+        range: Option<[f32; 2]>,
     },
 }
 
-/// Default spring constant for a freshly authored strut (N/px).
+/// Fallback spring constant for the inspector's reset (the strut tool computes
+/// a mass-based value at creation; see `interaction::tools::strut_tool`).
 pub const DEFAULT_SPRING_STIFFNESS: f32 = 1000.0;
 /// Default linear damping for a freshly authored strut.
-pub const DEFAULT_SPRING_DAMPING: f32 = 5.0;
+pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;
 
 /// The authored definition of one constraint between two bodies (or one
 /// body and the world).

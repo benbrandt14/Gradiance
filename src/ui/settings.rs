@@ -206,13 +206,14 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 if motor.is_some() { " +motor" } else { "" },
             ),
             JointKind::Spring {
-                bounds,
+                rest_length,
                 stiffness,
                 damping,
-            } => format!(
-                "Strut [{:.0},{:.0}] k={stiffness:.0} c={damping:.1}",
-                bounds[0], bounds[1],
-            ),
+                range,
+            } => {
+                let clamp = range.map_or(String::new(), |[lo, hi]| format!(" [{lo:.0},{hi:.0}]"));
+                format!("Strut rest={rest_length:.0} k={stiffness:.0} c={damping:.1}{clamp}")
+            }
         };
         let target = def
             .body_b

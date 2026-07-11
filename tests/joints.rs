@@ -698,12 +698,13 @@ fn welding_rotated_bodies_preserves_their_relative_angle() {
     );
 }
 
-fn strut(body_a: StableId, body_b: Option<StableId>, bounds: [f32; 2], stiffness: f32) -> JointDef {
+fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, stiffness: f32) -> JointDef {
     JointDef {
         kind: JointKind::Spring {
-            bounds,
+            rest_length,
             stiffness,
             damping: 5.0,
+            range: None,
         },
         common: JointCommon::default(),
         body_a,
@@ -721,7 +722,7 @@ fn strut_derives_a_distance_joint_and_damping() {
     let mut app = headless_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(60.0, 0.0), 20.0, 20.0));
-    let jid = spawn_joint(&mut app, strut(a, Some(b), [60.0, 60.0], 500.0));
+    let jid = spawn_joint(&mut app, strut(a, Some(b), 60.0, 500.0));
     step(&mut app, 2);
 
     let je = entity_of(&app, jid).unwrap();
@@ -750,10 +751,7 @@ fn strut_pulls_a_body_toward_its_rest_length() {
     ball.physics.gravity_scale = GravityScale(0.0);
     let ball_id = spawn_body(&mut app, ball);
     // A stiff strut with a 50 px rest length between their centres.
-    spawn_joint(
-        &mut app,
-        strut(anchor_id, Some(ball_id), [50.0, 50.0], 1000.0),
-    );
+    spawn_joint(&mut app, strut(anchor_id, Some(ball_id), 50.0, 1000.0));
 
     let start = pose_of(&app, ball_id).pos.x;
     assert!(
@@ -774,7 +772,7 @@ fn a_strut_is_undoable_and_persists_its_kind() {
     let mut app = paused_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(80.0, 0.0), 20.0, 20.0));
-    spawn_joint(&mut app, strut(a, Some(b), [40.0, 120.0], 250.0));
+    spawn_joint(&mut app, strut(a, Some(b), 80.0, 250.0));
     assert_eq!(joint_count(&mut app), 1);
     undo(&mut app);
     assert_eq!(
