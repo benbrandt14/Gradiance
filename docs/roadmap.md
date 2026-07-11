@@ -243,7 +243,10 @@ missing foundation:**
   (4.7); motor state (direction/torque) visualization (4.1)
 - Springs/dampers, cams, planar contact, magnetism (SDF force fields),
   breaking limits, backlash (12)
-- Contact point & force debug overlays (2.6, 8.3)
+- Contact point & force debug overlays (2.6, 8.3) — **first cut landed**:
+  `PhysicsQueries::contact_points()` reads avian's `ContactGraph` (read-only, so
+  the facade stays complete for plotters/scripts), and `DebugSettings.show_contacts`
+  draws each contact point and its impulse-scaled normal.
 - Engine tuning: timestep/substeps in Simulation settings, substep debug
   view (8.3)
 

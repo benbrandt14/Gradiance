@@ -130,6 +130,39 @@ fn dynamic_bodies_fall_and_rest_on_static_ground() {
     );
 }
 
+#[derive(Resource, Default)]
+struct CapturedContacts(Vec<gradiance::physics::queries::ContactSample>);
+
+fn capture_contacts(
+    physics: gradiance::physics::queries::PhysicsQueries,
+    mut out: ResMut<CapturedContacts>,
+) {
+    out.0 = physics.contact_points();
+}
+
+#[test]
+fn resting_bodies_report_contacts_through_the_facade() {
+    // The read facade the contact overlay (and future plotters/scripts) use: a
+    // box resting on the floor produces touching contacts near the interface.
+    let mut app = headless_app();
+    app.init_resource::<CapturedContacts>();
+    app.add_systems(Update, capture_contacts);
+    let (_falling, _floor) = falling_box_scene(&mut app);
+
+    step(&mut app, 240); // land and settle
+
+    let contacts = &app.world().resource::<CapturedContacts>().0;
+    assert!(
+        !contacts.is_empty(),
+        "a box resting on the floor generates contacts"
+    );
+    // Floor top is at y = -90; a contact lives near that interface.
+    assert!(
+        contacts.iter().any(|c| (c.point.y - (-90.0)).abs() < 30.0),
+        "a contact sits near the box-floor interface: {contacts:?}"
+    );
+}
+
 #[test]
 fn pausing_freezes_the_simulation() {
     let mut app = headless_app();

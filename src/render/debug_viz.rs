@@ -99,36 +99,69 @@ pub fn draw_debug_overlays(
     }
 
     if debug.show_joint_anchors {
-        for def in &joints {
-            let color = match def.kind {
-                JointKind::Hinge { .. } => css::ORANGE,
-                JointKind::Weld => css::CRIMSON,
-                JointKind::Slider { .. } => css::DEEP_SKY_BLUE,
-            };
-            let world_a = index
-                .entity(def.body_a)
+        draw_joint_anchors(&joints, &index, &poses, &mut gizmos);
+    }
+
+    if debug.show_contacts {
+        draw_contacts(&physics, &mut gizmos);
+    }
+}
+
+/// Draws each joint's anchor glyphs and its body links.
+fn draw_joint_anchors(
+    joints: &Query<&JointDef>,
+    index: &IdIndex,
+    poses: &Query<&Transform, With<Body>>,
+    gizmos: &mut Gizmos,
+) {
+    for def in joints {
+        let color = match def.kind {
+            JointKind::Hinge { .. } => css::ORANGE,
+            JointKind::Weld => css::CRIMSON,
+            JointKind::Slider { .. } => css::DEEP_SKY_BLUE,
+        };
+        let world_a = index
+            .entity(def.body_a)
+            .and_then(|e| poses.get(e).ok())
+            .map(|t| world_point(t, def.anchor_a));
+        let world_b = match def.body_b {
+            Some(id) => index
+                .entity(id)
                 .and_then(|e| poses.get(e).ok())
-                .map(|t| world_point(t, def.anchor_a));
-            let world_b = match def.body_b {
-                Some(id) => index
-                    .entity(id)
-                    .and_then(|e| poses.get(e).ok())
-                    .map(|t| world_point(t, def.anchor_b)),
-                None => Some(def.anchor_b), // world pin
-            };
-            if let Some(a) = world_a {
-                gizmos.circle_2d(Isometry2d::from_translation(a), 4.0, color);
-            }
-            if let Some(b) = world_b {
-                gizmos.circle_2d(Isometry2d::from_translation(b), 6.0, color);
-                if def.body_b.is_none() {
-                    gizmos.line_2d(b - Vec2::splat(4.0), b + Vec2::splat(4.0), color);
-                    gizmos.line_2d(b + Vec2::new(-4.0, 4.0), b + Vec2::new(4.0, -4.0), color);
-                }
-            }
-            if let (Some(a), Some(b)) = (world_a, world_b) {
-                gizmos.line_2d(a, b, color);
+                .map(|t| world_point(t, def.anchor_b)),
+            None => Some(def.anchor_b), // world pin
+        };
+        if let Some(a) = world_a {
+            gizmos.circle_2d(Isometry2d::from_translation(a), 4.0, color);
+        }
+        if let Some(b) = world_b {
+            gizmos.circle_2d(Isometry2d::from_translation(b), 6.0, color);
+            if def.body_b.is_none() {
+                gizmos.line_2d(b - Vec2::splat(4.0), b + Vec2::splat(4.0), color);
+                gizmos.line_2d(b + Vec2::new(-4.0, 4.0), b + Vec2::new(4.0, -4.0), color);
             }
         }
+        if let (Some(a), Some(b)) = (world_a, world_b) {
+            gizmos.line_2d(a, b, color);
+        }
+    }
+}
+
+/// Draws every touching contact point and its impulse-scaled normal.
+fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos) {
+    for contact in physics.contact_points() {
+        gizmos.circle_2d(
+            Isometry2d::from_translation(contact.point),
+            2.5,
+            css::MAGENTA,
+        );
+        // Normal length grows with the contact impulse (clamped so hard hits
+        // stay on-screen).
+        let length = 8.0 + contact.normal_impulse.min(1000.0) * 0.03;
+        gizmos.arrow_2d(
+            contact.point,
+            contact.point + contact.normal * length,
+            css::MAGENTA,
+        );
     }
 }
