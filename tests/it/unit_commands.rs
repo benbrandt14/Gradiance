@@ -1,12 +1,10 @@
 //! Command-layer integration tests: intents → dispatch → stack semantics.
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, paused_app, redo, undo};
 use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, paused_app, redo, undo};
 
 fn stack_lens(app: &App) -> (usize, usize) {
     let stack = app.world().resource::<CommandStack>();

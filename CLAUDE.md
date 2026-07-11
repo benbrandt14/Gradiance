@@ -11,17 +11,21 @@ Algodoo-inspired 2.5D physics sandbox. Bevy 0.19 + Avian2d 0.7 + bevy_egui 0.41 
 2. **Tools/UI never mutate directly.** During a drag gesture, tools may write transient
    preview state (kinematic-held `Transform`, gizmos) — never authored components, never
    the command stack. One gesture commits exactly one command on release.
-3. **`avian2d` is imported only inside `src/physics/`.** Everything else uses
-   engine-agnostic domain components and the `physics::queries` facade. This preserves
-   the option to swap physics engines.
+3. **Identity is `StableId`; raw `Entity` is never persisted or cross-referenced.**
+   (The former avian-confinement rule was retired by the de-adapter collapse —
+   `docs/physics-deadapter-decision.md`. avian is used directly wherever physics is
+   done; authored physics state *is* avian components. `physics::queries` remains as a
+   convenience/DRY read cut-point, not an abstraction boundary.)
 4. **`egui`/`bevy_egui` is imported only inside `src/ui/`.** UI reads component copies
    and emits intents; it never mutates authored components directly. Sole exception:
    editor **settings resources** (`GridSettings`, `SnapConfig`, `SimSettings`) are
    non-authored configuration and may be written by UI; seams consume them via change
-   detection (physics applies `SimSettings` — UI still never touches avian).
-5. **Authored vs derived:** components in `src/domain/` (+ `StableId`) are the save file.
-   Derived components (colliders, meshes, materials, avian joints) are rebuilt by
-   `Changed<>`-driven sync systems and are never serialized, never captured in undo
+   detection (physics applies `SimSettings` — UI edits authored state only via intents).
+5. **Authored vs derived:** components in `src/domain/` (+ `StableId`) plus the authored
+   avian components (`RigidBody`, `Friction`, `Restitution`, `ColliderDensity`,
+   `GravityScale`, `Sensor`, `LockedAxes`) are the save file. Derived state (`Collider`,
+   `Mass`, contacts, meshes, materials, live avian joint entities) is rebuilt by
+   `Changed<>`-driven sync systems and is never serialized, never captured in undo
    records, and never read by commands.
 
 ## Conventions
@@ -84,6 +88,13 @@ cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings   # lint gate == CI
 cargo test                                   # includes tests/boundaries.rs (layer rules)
 cargo run                                    # native app; needs libasound2-dev libudev-dev
+cargo run --features dev                     # dev inner loop: dynamic linking + asset hot-reload
 ```
+
+Integration tests live in the single umbrella binary `tests/it/` (one Bevy-sized
+link instead of one per file) — add new integration tests as a module there
+(`tests/it/main.rs` declares them). `tests/boundaries.rs` stays its own tiny binary.
+The `dev` feature is dev-only (never release/CI). Linking uses `lld` via
+`.cargo/config.toml` — needs `clang`+`lld` installed.
 
 Every change must leave fmt+clippy+test green; milestones are not done otherwise.

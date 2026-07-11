@@ -1,13 +1,11 @@
 //! Tool-layer tests: gestures drive exactly one command; scale and array
 //! commands behave exactly and undo cleanly.
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, paused_app, undo};
 use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, paused_app, undo};
 
 fn stack_undo_len(app: &App) -> usize {
     app.world().resource::<CommandStack>().undo_len()

@@ -5,12 +5,10 @@
 // body is one deliberate scenario script.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 
 fn spawn_body(app: &mut App, record: BodyRecord) -> StableId {
     let id = record.id;

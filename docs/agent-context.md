@@ -47,17 +47,22 @@ These are the load-bearing walls. Every feature is designed *around* them, and
    preview state (a kinematic-held `Transform`, gizmos) — never authored
    components, never the stack. One gesture commits exactly one command on
    release.
-3. **`avian2d` is imported only inside `src/physics/`.** Everything else uses
-   engine-agnostic domain components + the `physics::queries` read facade. This
-   keeps the physics engine swappable.
+3. **Identity is `StableId`; raw `Entity` is never persisted or
+   cross-referenced.** (The former avian-confinement rule was retired by the
+   de-adapter collapse — `docs/physics-deadapter-decision.md`. avian is used
+   directly wherever physics is done; authored physics state *is* avian
+   components. `physics::queries` stays as a convenience/DRY read cut-point,
+   not an abstraction boundary.)
 4. **`egui`/`bevy_egui` is imported only inside `src/ui/`.** UI reads component
    copies and emits intents. Sole exception: editor **settings resources**
    (`GridSettings`, `SnapConfig`, `SimSettings`) are non-authored config and may
    be written by UI; seams consume them via change detection.
-5. **Authored vs derived.** Components in `src/domain/` (+ `StableId`) *are* the
-   save file. Derived state (colliders, meshes, materials, avian joints) is
-   rebuilt by `Changed<>`-driven sync systems — never serialized, never in undo
-   records, never read by commands.
+5. **Authored vs derived.** Components in `src/domain/` (+ `StableId`) plus the
+   authored avian components (`RigidBody`, `Friction`, `Restitution`,
+   `ColliderDensity`, `GravityScale`, `Sensor`, `LockedAxes`) *are* the save
+   file. Derived state (`Collider`, `Mass`, contacts, meshes, materials, live
+   avian joint entities) is rebuilt by `Changed<>`-driven sync systems — never
+   serialized, never in undo records, never read by commands.
 
 **The governance model in one line:** *reads are total, writes are
 seam-mediated.* Any reader (plotter, script, probe) may query any component or
@@ -86,11 +91,13 @@ despawn/respawn.
 
 **Layer boundaries (compile-fenced by `tests/boundaries.rs`):**
 
-- Pure, no ECS engine deps: `core`, `domain`, `geometry`, and the `script` core
-  (`kernel`, `reflect_bridge`) — put testable math here.
-- ECS layers: `command`, `physics` ⟨only avian⟩, `interaction`, `render`,
+- Pure, no ECS engine deps: `core`, `geometry`, and the `script` core
+  (`kernel`, `reflect_bridge`) — put testable math here. (`domain` carries the
+  authored avian components post-collapse, so it is avian-shaped by design.)
+- ECS layers: `command`, `physics`, `interaction`, `render`,
   `ui` ⟨only egui⟩, `persist`, `script/bridge` ⟨only steel⟩.
-- `interaction`/plotters reach physics *only* through `physics::queries`.
+- `interaction`/plotters prefer the `physics::queries` read cut-point (a
+  convenience/DRY layer, no longer an enforced boundary).
 
 **Geometry — SDF trees are the base representation.** Every shape is a
 signed-distance-function tree (`ShapeDef`: `Box·Circle·Polygon·HalfPlane`
@@ -117,7 +124,7 @@ front … bit 31 back).
 | `domain/` | **Authored components = the save format**: `ShapeDef`, `JointDef`, `LayerMask32`, `Appearance`, settings resources. Pure. |
 | `geometry/` | SDF eval, `polygonize`/contour, extrusion. Pure, no ECS — all testable math. |
 | `command/` | The choke point: `intent` (typed events), `dispatch` (the sole mutator), `CommandStack`, snapshots for undo. |
-| `physics/` | **Only** avian import. Sync systems derive colliders/joints from authored state; `queries` is the read facade. |
+| `physics/` | Sync systems derive colliders/joints from authored state; `queries` is the shared read cut-point. (avian is used directly wherever physics is done — see `docs/physics-deadapter-decision.md`.) |
 | `interaction/` | Picking, selection, camera, and `tools/` (the tool facade — see §6). |
 | `render/` | Derived meshes/materials, toon look, grid, joint gizmos, debug overlays. |
 | `ui/` | **Only** egui import. Toolbar, inspectors, context menu, settings, script console, live plot panel. Thin projections + intents. |
@@ -258,8 +265,10 @@ then script it. Order: (1) interactions & joints/constraints + their UI →
   Getting this wrong is the most common architectural mistake here.
 - **Cold VM vs. hot kernel.** Per-frame or per-particle → kernel/derived.
   Authoring/one-shot → VM/commands. Never blur them.
-- **Physics-engine swappability.** Keep avian behind `physics/` and the read
-  facade complete; a feature that leaks avian types outward forecloses the swap.
+- **Identity discipline.** avian types may be used directly (swappability was
+  deliberately given up — `docs/physics-deadapter-decision.md`), but raw
+  `Entity` must never be persisted or cross-referenced; keep the
+  `physics::queries` read cut-point complete for plotters/scripts.
 - **UI as thin projection.** UI holds no decisions worth testing — it reads
   copies and emits intents. A proposal that wants "smart" UI logic probably
   wants a command or a script verb instead.

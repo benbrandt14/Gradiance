@@ -4,14 +4,12 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-mod harness;
-
+use crate::harness::{box_record, entity_of, paused_app};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::domain::joint::MotorDef;
 use gradiance::interaction::selection::{SelectedJoint, Selection};
 use gradiance::prelude::*;
-use harness::{box_record, entity_of, paused_app};
 
 fn spawn_box_at(app: &mut App, pos: Vec2, w: f32, h: f32) -> StableId {
     let record = box_record(pos, w, h);

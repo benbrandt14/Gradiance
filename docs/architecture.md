@@ -62,12 +62,12 @@ valid across undo/redo cycles that despawn and respawn the same body.
 flowchart LR
     subgraph pure["pure — no ECS engine deps"]
         core[core]
-        domain[domain]
         geometry[geometry]
     end
     subgraph app["ECS layers"]
+        domain["domain<br/>(authored, avian-shaped)"]
         command[command]
-        physics["physics<br/>⟨only avian2d⟩"]
+        physics[physics]
         interaction[interaction]
         render[render]
         ui["ui<br/>⟨only egui⟩"]
@@ -80,14 +80,17 @@ flowchart LR
     domain --> render
     geometry --> render
     command --> persist
-    interaction -- "physics::queries facade" --> physics
+    interaction -- "physics::queries read cut-point" --> physics
     ui -- "intents only" --> command
 ```
 
-`tests/boundaries.rs` scans the source and fails the build if `avian2d`
-escapes `physics/`, `egui` escapes `ui/`, or `CommandStack` is named
-outside `command/`. This is what lets the physics engine stay swappable
-and the UI stay a thin projection.
+`tests/boundaries.rs` scans the source and fails the build if `egui`
+escapes `ui/`, `steel` escapes `script/`, or `CommandStack` is named
+outside `command/`. (The avian-confinement rule was retired by the
+de-adapter collapse — `docs/physics-deadapter-decision.md`: avian is used
+directly wherever physics is done, and `physics::queries` is a
+convenience/DRY read cut-point, not an abstraction boundary.) This keeps
+the UI a thin projection and the scripting seam single.
 
 ## Geometry: SDF trees are the base representation
 

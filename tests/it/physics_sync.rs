@@ -1,12 +1,10 @@
 //! Physics seam tests: authored components drive engine components, and
 //! the simulation behaves qualitatively (falls, rests, pauses).
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, headless_app, step};
 use avian2d::prelude::{CollisionLayers, LockedAxes, RigidBody, Sensor};
 use bevy::prelude::*;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, headless_app, step};
 
 #[test]
 fn spawned_body_gains_engine_components() {
