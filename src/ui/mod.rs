@@ -13,11 +13,13 @@ pub mod console;
 pub mod context_menu;
 pub mod inspector;
 pub mod joint_inspector;
+pub mod plot;
 pub mod reflect_grid;
 pub mod settings;
 pub mod toolbar;
 pub mod widgets;
 
+use crate::core::states::GameState;
 use crate::interaction::PointerOverUi;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
@@ -35,6 +37,8 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<context_menu::ContextMenu>();
         app.init_resource::<console::ScriptConsole>();
+        app.init_resource::<plot::PlotHistory>();
+        app.init_resource::<plot::PlotPanel>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
@@ -43,12 +47,18 @@ impl Plugin for GradianceUiPlugin {
                 joint_inspector::joint_inspector,
                 settings::settings_window,
                 console::script_console,
+                plot::plot_panel,
                 context_menu::context_menu,
                 capture_pointer_over_ui,
             )
                 .chain(),
         );
         app.add_systems(Update, context_menu::open_context_menu);
+        // Sampling is a plain read; freeze it while paused.
+        app.add_systems(
+            Update,
+            plot::sample_plot.run_if(in_state(GameState::Playing)),
+        );
     }
 }
 
