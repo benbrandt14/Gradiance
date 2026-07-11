@@ -19,11 +19,11 @@
 //!    on a new `ToolState`) and an inspector section (M7+). Existing
 //!    commands (spawn/delete/duplicate/array/undo) work unchanged.
 //!
-//! Planned variants that slot in this way: `Spring { rest_length,
-//! frequency, damping_ratio }` (avian `DistanceJoint`), `PlanarContact`,
-//! `Cam { profile }`, `Magnet { strength, falloff }` (force field, not a
-//! joint — pairs with a `physics/forces.rs` seam). Per-joint `breaking
-//! force` and backlash are authored-parameter additions to
+//! [`JointKind::Spring`] (a spring-damper strut over avian's `DistanceJoint`)
+//! landed this way. Further planned variants that slot in the same way:
+//! `PlanarContact`, `Cam { profile }`, `Magnet { strength, falloff }` (force
+//! field, not a joint — pairs with a `physics/forces.rs` seam). Per-joint
+//! `breaking force` and backlash are authored-parameter additions to
 //! [`JointCommon`] with enforcement in the seam.
 
 use crate::core::ids::StableId;
@@ -93,7 +93,30 @@ pub enum JointKind {
         /// Optional linear motor.
         motor: Option<MotorDef>,
     },
+    /// Spring-damper strut: a soft distance constraint between the two
+    /// anchors, drawn as a line. Maps onto avian's `DistanceJoint`
+    /// (`limits` = [`bounds`](Self::Spring::bounds), `compliance` =
+    /// `1 / stiffness`) plus a `JointDamping` component.
+    Spring {
+        /// Allowed length band `[min, max]` in pixels. `min == max` is a
+        /// spring pinned to that length; `min < max` lets the strut float
+        /// freely within the band and spring back past either end.
+        bounds: [f32; 2],
+        /// Spring constant (stiffness, N/px); the joint's compliance is
+        /// `1 / stiffness`, and `<= 0` is treated as rigid. The scalar a
+        /// future curve editor would generalize to a nonlinear
+        /// force-vs-displacement curve.
+        stiffness: f32,
+        /// Linear velocity damping applied by the joint. The scalar a future
+        /// curve editor would generalize to a nonlinear damping curve.
+        damping: f32,
+    },
 }
+
+/// Default spring constant for a freshly authored strut (N/px).
+pub const DEFAULT_SPRING_STIFFNESS: f32 = 1000.0;
+/// Default linear damping for a freshly authored strut.
+pub const DEFAULT_SPRING_DAMPING: f32 = 5.0;
 
 /// The authored definition of one constraint between two bodies (or one
 /// body and the world).

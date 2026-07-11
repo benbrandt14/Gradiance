@@ -57,6 +57,8 @@ pub enum EditorAction {
     ToolWeld,
     /// Switch to the slider ("rail") tool (R).
     ToolSlider,
+    /// Switch to the strut (spring-damper) tool (T).
+    ToolStrut,
     /// Switch to the ground tool (G).
     ToolGround,
     /// Switch to the cut tool (K).
@@ -74,13 +76,14 @@ impl EditorAction {
             Self::ToolHinge => Some(ToolState::Hinge),
             Self::ToolWeld => Some(ToolState::Weld),
             Self::ToolSlider => Some(ToolState::Slider),
+            Self::ToolStrut => Some(ToolState::Strut),
             Self::ToolGround => Some(ToolState::Ground),
             Self::ToolCut => Some(ToolState::Cut),
             _ => None,
         }
     }
 
-    const TOOLS: [Self; 10] = [
+    const TOOLS: [Self; 11] = [
         Self::ToolSelect,
         Self::ToolDrag,
         Self::ToolBox,
@@ -89,6 +92,7 @@ impl EditorAction {
         Self::ToolHinge,
         Self::ToolWeld,
         Self::ToolSlider,
+        Self::ToolStrut,
         Self::ToolGround,
         Self::ToolCut,
     ];
@@ -136,6 +140,7 @@ fn default_input_map() -> InputMap<EditorAction> {
     map.insert(A::ToolHinge, KeyCode::KeyH);
     map.insert(A::ToolWeld, KeyCode::KeyW);
     map.insert(A::ToolSlider, KeyCode::KeyR);
+    map.insert(A::ToolStrut, KeyCode::KeyT);
     map.insert(A::ToolGround, KeyCode::KeyG);
     map.insert(A::ToolCut, KeyCode::KeyK);
     map

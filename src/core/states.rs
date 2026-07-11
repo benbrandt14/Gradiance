@@ -39,6 +39,9 @@ pub enum ToolState {
     Weld,
     /// Connect two bodies with a prismatic (slider) joint.
     Slider,
+    /// Connect two points with a spring-damper strut (drag from one anchor
+    /// to the other; the drag length sets the rest length).
+    Strut,
     /// Draw static ground planes.
     Ground,
     /// Cut bodies along a dragged segment (CSG difference).

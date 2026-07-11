@@ -10,6 +10,7 @@ use crate::core::ids::{IdIndex, StableId};
 use crate::domain::joint::{JointCommon, JointDef, JointKind, MotorDef};
 use avian2d::math::Vector;
 use avian2d::prelude::*;
+use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
 /// Marker: this joint's referenced bodies were not all alive at last
@@ -61,7 +62,13 @@ pub fn sync_joints(
     for (entity, def, old_pin) in &changed {
         // Drop any previously derived state (kind may have changed).
         let mut entity_commands = commands.entity(entity);
-        entity_commands.remove::<(RevoluteJoint, FixedJoint, PrismaticJoint)>();
+        entity_commands.remove::<(
+            RevoluteJoint,
+            FixedJoint,
+            PrismaticJoint,
+            DistanceJoint,
+            JointDamping,
+        )>();
         if let Some(pin) = old_pin {
             entity_commands.remove::<PinAnchor>();
             commands.entity(pin.0).despawn();
@@ -101,46 +108,7 @@ pub fn sync_joints(
         // it, hinge limits measure from it — instead of snapping rotated
         // bodies into alignment.
         let basis_b = def.rest_rot_a - def.rest_rot_b;
-        match &def.kind {
-            JointKind::Hinge { limits, motor } => {
-                let mut joint = RevoluteJoint::new(body_a, body_b)
-                    .with_local_anchor1(Vector::from(def.anchor_a))
-                    .with_local_anchor2(Vector::from(anchor_b))
-                    .with_local_basis2(basis_b);
-                if let Some([min, max]) = limits {
-                    joint = joint.with_angle_limits(*min, *max);
-                }
-                if let Some(m) = motor {
-                    joint = joint.with_motor(angular_motor(m));
-                }
-                entity_commands.insert(joint);
-            }
-            JointKind::Weld => {
-                let joint = FixedJoint::new(body_a, body_b)
-                    .with_local_anchor1(Vector::from(def.anchor_a))
-                    .with_local_anchor2(Vector::from(anchor_b))
-                    .with_local_basis2(basis_b);
-                entity_commands.insert(joint);
-            }
-            JointKind::Slider {
-                axis,
-                limits,
-                motor,
-            } => {
-                let mut joint = PrismaticJoint::new(body_a, body_b)
-                    .with_local_anchor1(Vector::from(def.anchor_a))
-                    .with_local_anchor2(Vector::from(anchor_b))
-                    .with_local_basis2(basis_b)
-                    .with_slider_axis(Vector::from(*axis));
-                if let Some([min, max]) = limits {
-                    joint = joint.with_limits(*min, *max);
-                }
-                if let Some(m) = motor {
-                    joint = joint.with_motor(linear_motor(m));
-                }
-                entity_commands.insert(joint);
-            }
-        }
+        insert_derived_joint(&mut entity_commands, def, body_a, body_b, anchor_b, basis_b);
 
         if def.common.collide_connected {
             entity_commands.remove::<JointCollisionDisabled>();
@@ -148,6 +116,84 @@ pub fn sync_joints(
             entity_commands.insert(JointCollisionDisabled);
         }
         let _ = JointCommon::default(); // referenced for doc-link stability
+    }
+}
+
+/// Inserts the engine joint (and, for a strut, its damping) for `def`'s kind.
+/// `anchor_b` is body-B local (or `Vec2::ZERO` for a world pin); `basis_b`
+/// carries the authored rest orientation.
+fn insert_derived_joint(
+    entity_commands: &mut EntityCommands,
+    def: &JointDef,
+    body_a: Entity,
+    body_b: Entity,
+    anchor_b: Vec2,
+    basis_b: f32,
+) {
+    match &def.kind {
+        JointKind::Hinge { limits, motor } => {
+            let mut joint = RevoluteJoint::new(body_a, body_b)
+                .with_local_anchor1(Vector::from(def.anchor_a))
+                .with_local_anchor2(Vector::from(anchor_b))
+                .with_local_basis2(basis_b);
+            if let Some([min, max]) = limits {
+                joint = joint.with_angle_limits(*min, *max);
+            }
+            if let Some(m) = motor {
+                joint = joint.with_motor(angular_motor(m));
+            }
+            entity_commands.insert(joint);
+        }
+        JointKind::Weld => {
+            let joint = FixedJoint::new(body_a, body_b)
+                .with_local_anchor1(Vector::from(def.anchor_a))
+                .with_local_anchor2(Vector::from(anchor_b))
+                .with_local_basis2(basis_b);
+            entity_commands.insert(joint);
+        }
+        JointKind::Slider {
+            axis,
+            limits,
+            motor,
+        } => {
+            let mut joint = PrismaticJoint::new(body_a, body_b)
+                .with_local_anchor1(Vector::from(def.anchor_a))
+                .with_local_anchor2(Vector::from(anchor_b))
+                .with_local_basis2(basis_b)
+                .with_slider_axis(Vector::from(*axis));
+            if let Some([min, max]) = limits {
+                joint = joint.with_limits(*min, *max);
+            }
+            if let Some(m) = motor {
+                joint = joint.with_motor(linear_motor(m));
+            }
+            entity_commands.insert(joint);
+        }
+        JointKind::Spring {
+            bounds,
+            stiffness,
+            damping,
+        } => {
+            // compliance = 1 / stiffness (0 = rigid); the band [min, max] is
+            // the strut's travel, damping is a separate joint component.
+            let compliance = if *stiffness > 0.0 {
+                1.0 / stiffness
+            } else {
+                0.0
+            };
+            let joint = DistanceJoint::new(body_a, body_b)
+                .with_local_anchor1(Vector::from(def.anchor_a))
+                .with_local_anchor2(Vector::from(anchor_b))
+                .with_limits(bounds[0], bounds[1])
+                .with_compliance(compliance);
+            entity_commands.insert((
+                joint,
+                JointDamping {
+                    linear: *damping,
+                    angular: 0.0,
+                },
+            ));
+        }
     }
 }
 
@@ -167,7 +213,13 @@ pub fn guard_dangling_joints(
             warn!(?entity, "joint lost a referenced body; disabling");
             commands
                 .entity(entity)
-                .remove::<(RevoluteJoint, FixedJoint, PrismaticJoint)>()
+                .remove::<(
+                    RevoluteJoint,
+                    FixedJoint,
+                    PrismaticJoint,
+                    DistanceJoint,
+                    JointDamping,
+                )>()
                 .insert(JointUnresolved);
         }
     }

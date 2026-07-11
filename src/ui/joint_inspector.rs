@@ -9,7 +9,9 @@
 use crate::command::intent::{DeleteJointIntent, PropertyEditIntent};
 use crate::command::property::{PropertyChange, PropertyValue};
 use crate::core::ids::StableId;
-use crate::domain::joint::{JointDef, JointKind, MotorDef};
+use crate::domain::joint::{
+    DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind, MotorDef,
+};
 use crate::interaction::selection::SelectedJoint;
 use crate::ui::widgets::{Commit, precise_drag};
 use bevy::prelude::*;
@@ -59,52 +61,7 @@ pub fn joint_inspector(
                 changed = true;
             }
 
-            match &def.kind {
-                JointKind::Weld => {
-                    ui.label(egui::RichText::new("rigid — no configurable freedom").weak());
-                }
-                JointKind::Hinge { limits, motor } => {
-                    if let Some(k) = limit_section(ui, *limits, "angle limits (deg)", true) {
-                        next.kind = JointKind::Hinge {
-                            limits: k,
-                            motor: *motor,
-                        };
-                        changed = true;
-                    }
-                    if let Some(m) = motor_section(ui, *motor, "rad/s", "torque") {
-                        // Re-read limits from `next` in case both changed.
-                        let cur_limits = current_limits(&next.kind);
-                        next.kind = JointKind::Hinge {
-                            limits: cur_limits,
-                            motor: m,
-                        };
-                        changed = true;
-                    }
-                }
-                JointKind::Slider {
-                    axis,
-                    limits,
-                    motor,
-                } => {
-                    if let Some(k) = limit_section(ui, *limits, "travel limits (px)", false) {
-                        next.kind = JointKind::Slider {
-                            axis: *axis,
-                            limits: k,
-                            motor: *motor,
-                        };
-                        changed = true;
-                    }
-                    if let Some(m) = motor_section(ui, *motor, "px/s", "force") {
-                        let cur_limits = current_limits(&next.kind);
-                        next.kind = JointKind::Slider {
-                            axis: *axis,
-                            limits: cur_limits,
-                            motor: m,
-                        };
-                        changed = true;
-                    }
-                }
-            }
+            changed |= configure_kind(ui, &def.kind, &mut next);
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -124,19 +81,83 @@ pub fn joint_inspector(
     Ok(())
 }
 
+/// Renders the kind-specific config controls, writing any edit into `next.kind`.
+/// Returns whether something changed.
+fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> bool {
+    let mut changed = false;
+    match kind {
+        JointKind::Weld => {
+            ui.label(egui::RichText::new("rigid — no configurable freedom").weak());
+        }
+        JointKind::Hinge { limits, motor } => {
+            if let Some(k) = limit_section(ui, *limits, "angle limits (deg)", true) {
+                next.kind = JointKind::Hinge {
+                    limits: k,
+                    motor: *motor,
+                };
+                changed = true;
+            }
+            if let Some(m) = motor_section(ui, *motor, "rad/s", "torque") {
+                // Re-read limits from `next` in case both changed.
+                let cur_limits = current_limits(&next.kind);
+                next.kind = JointKind::Hinge {
+                    limits: cur_limits,
+                    motor: m,
+                };
+                changed = true;
+            }
+        }
+        JointKind::Slider {
+            axis,
+            limits,
+            motor,
+        } => {
+            if let Some(k) = limit_section(ui, *limits, "travel limits (px)", false) {
+                next.kind = JointKind::Slider {
+                    axis: *axis,
+                    limits: k,
+                    motor: *motor,
+                };
+                changed = true;
+            }
+            if let Some(m) = motor_section(ui, *motor, "px/s", "force") {
+                let cur_limits = current_limits(&next.kind);
+                next.kind = JointKind::Slider {
+                    axis: *axis,
+                    limits: cur_limits,
+                    motor: m,
+                };
+                changed = true;
+            }
+        }
+        JointKind::Spring {
+            bounds,
+            stiffness,
+            damping,
+        } => {
+            if let Some(new_kind) = spring_section(ui, *bounds, *stiffness, *damping) {
+                next.kind = new_kind;
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
 /// A human label for a joint kind, shared with the context menu.
 pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "Hinge (revolute)",
         JointKind::Weld => "Weld (fixed)",
         JointKind::Slider { .. } => "Slider (prismatic)",
+        JointKind::Spring { .. } => "Strut (spring-damper)",
     }
 }
 
 fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
     match kind {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => *limits,
-        JointKind::Weld => None,
+        JointKind::Weld | JointKind::Spring { .. } => None,
     }
 }
 
@@ -234,4 +255,66 @@ fn motor_section(
         }
     }
     result
+}
+
+/// Strut config: the length band, spring constant, and damping — the three
+/// values a future curve editor would let vary nonlinearly. Returns the new
+/// `Spring` kind only on the frame something committed.
+fn spring_section(
+    ui: &mut egui::Ui,
+    bounds: [f32; 2],
+    stiffness: f32,
+    damping: f32,
+) -> Option<JointKind> {
+    let mut b = bounds;
+    let mut k = stiffness;
+    let mut c = damping;
+    let mut edited = false;
+    ui.horizontal(|ui| {
+        ui.label("length min");
+        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("spring-min"), &mut b[0], 0.0, 1.0)
+        {
+            edited = true;
+        }
+        ui.label("max");
+        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("spring-max"), &mut b[1], 0.0, 1.0)
+        {
+            edited = true;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("stiffness");
+        if let Commit::Done(..) = precise_drag(
+            ui,
+            egui::Id::new("spring-k"),
+            &mut k,
+            DEFAULT_SPRING_STIFFNESS,
+            10.0,
+        ) {
+            edited = true;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("damping");
+        if let Commit::Done(..) = precise_drag(
+            ui,
+            egui::Id::new("spring-c"),
+            &mut c,
+            DEFAULT_SPRING_DAMPING,
+            0.5,
+        ) {
+            edited = true;
+        }
+    });
+    if !edited {
+        return None;
+    }
+    if b[0] > b[1] {
+        b.swap(0, 1);
+    }
+    Some(JointKind::Spring {
+        bounds: b,
+        stiffness: k.max(0.0),
+        damping: c.max(0.0),
+    })
 }

@@ -241,8 +241,13 @@ missing foundation:**
   natural) or make-static, replacing the weld-as-joint model (4.2)
 - Slider default limits option; sprite-based joint glyphs with outlines
   (4.7); motor state (direction/torque) visualization (4.1)
-- Springs/dampers, cams, planar contact, magnetism (SDF force fields),
-  breaking limits, backlash (12)
+- Springs/dampers — **landed** as the **strut** tool (`JointKind::Spring`
+  over avian's `DistanceJoint` + `JointDamping`): drag from one anchor to the
+  other (drag length = rest length), configurable length bounds, spring
+  constant, and damping; drawn as a non-colliding spring-coil gizmo. The three
+  scalar knobs are the ones a future curve editor would let vary nonlinearly.
+- Cams, planar contact, magnetism (SDF force fields), breaking limits,
+  backlash (12)
 - Contact point & force debug overlays (2.6, 8.3) — **first cut landed**:
   `PhysicsQueries::contact_points()` reads avian's `ContactGraph` (read-only, so
   the facade stays complete for plotters/scripts), and `DebugSettings.show_contacts`

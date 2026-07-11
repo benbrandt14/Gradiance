@@ -205,6 +205,14 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 if limits.is_some() { " +limits" } else { "" },
                 if motor.is_some() { " +motor" } else { "" },
             ),
+            JointKind::Spring {
+                bounds,
+                stiffness,
+                damping,
+            } => format!(
+                "Strut [{:.0},{:.0}] k={stiffness:.0} c={damping:.1}",
+                bounds[0], bounds[1],
+            ),
         };
         let target = def
             .body_b

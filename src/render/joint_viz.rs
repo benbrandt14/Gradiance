@@ -60,6 +60,23 @@ pub fn draw_joints(
                     draw_linear_motor(&mut gizmos, anchor, dir, *m, s);
                 }
             }
+            JointKind::Spring { .. } => {
+                // A coil between the two anchors; the connected bodies don't
+                // collide, so it reads as a free spring, not a rod.
+                let world_b = match def.body_b {
+                    Some(id) => index
+                        .entity(id)
+                        .and_then(|e| transforms.get(e).ok())
+                        .map(PosRot::from_transform)
+                        .map(|pose_b| {
+                            pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b)
+                        }),
+                    None => Some(def.anchor_b), // world pin
+                };
+                if let Some(b) = world_b {
+                    draw_spring(&mut gizmos, anchor, b, s);
+                }
+            }
         }
 
         // Selection highlight.
@@ -97,6 +114,40 @@ fn draw_angular_motor(gizmos: &mut Gizmos, anchor: Vec2, motor: MotorDef, s: f32
         tip - tangent * 5.0 * s - (anchor - tip).normalize() * 4.0 * s,
         css::GOLD,
     );
+}
+
+/// Draws a spring coil between two world points. Straight lead-ins at each end,
+/// a zigzag body in the middle, and a dot at each anchor. Amplitude is
+/// screen-constant (scaled by `s`); the coil count is fixed.
+fn draw_spring(gizmos: &mut Gizmos, a: Vec2, b: Vec2, s: f32) {
+    const COILS: usize = 8;
+    let color = css::SPRING_GREEN;
+    let span = b - a;
+    let len = span.length();
+    gizmos.circle_2d(Isometry2d::from_translation(a), 3.0 * s, color);
+    gizmos.circle_2d(Isometry2d::from_translation(b), 3.0 * s, color);
+    if len < 1e-3 {
+        return;
+    }
+    let unit = span / len;
+    let perp = Vec2::new(-unit.y, unit.x);
+    let amp = 5.0 * s;
+    // Straight lead-ins so the coil doesn't start right at the anchors.
+    let lead = (len * 0.2).min(12.0 * s);
+    let start = a + unit * lead;
+    let end = b - unit * lead;
+    gizmos.line_2d(a, start, color);
+    gizmos.line_2d(end, b, color);
+    let seg = (end - start) / COILS as f32;
+    let mut prev = start;
+    for i in 1..COILS {
+        let along = start + seg * i as f32;
+        let side = if i % 2 == 1 { amp } else { -amp };
+        let point = along + perp * side;
+        gizmos.line_2d(prev, point, color);
+        prev = point;
+    }
+    gizmos.line_2d(prev, end, color);
 }
 
 /// A straight arrow along the slider axis showing drive direction.
