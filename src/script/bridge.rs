@@ -54,6 +54,7 @@ use bevy::prelude::*;
 use bevy::reflect::Reflect;
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use steel::rvals::SteelVal;
 use steel::steel_vm::engine::Engine;
@@ -132,6 +133,24 @@ impl ScriptInputs {
     /// Queues one script source to run next frame.
     pub fn submit(&mut self, source: impl Into<String>) {
         self.0.push(source.into());
+    }
+}
+
+/// Paths to `.scm` files to run once at startup — a user's init script, or
+/// files passed on the CLI (`--script foo.scm`). Each is read and submitted to
+/// [`ScriptInputs`], so it runs through the ordinary doorway on the first frame:
+/// the natural place to `register-action`, build a scene, or define helpers.
+/// Missing or unreadable files warn and are skipped.
+#[derive(Resource, Default)]
+pub struct StartupScripts(pub Vec<PathBuf>);
+
+/// Startup system: reads each configured script file and queues its source.
+fn load_startup_scripts(scripts: Res<StartupScripts>, mut inputs: ResMut<ScriptInputs>) {
+    for path in &scripts.0 {
+        match std::fs::read_to_string(path) {
+            Ok(source) => inputs.submit(source),
+            Err(err) => warn!("startup script {}: {err}", path.display()),
+        }
     }
 }
 
@@ -702,11 +721,13 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptLog>();
         app.init_resource::<OperationRegistry>();
         app.init_resource::<ScriptActions>();
+        app.init_resource::<StartupScripts>();
         let mut dispatch = IntentDispatch::default();
         dispatch.register::<CutIntent>();
         dispatch.register::<SpawnBodyIntent>();
         app.insert_resource(dispatch);
         app.insert_non_send(ScriptEngine::new());
+        app.add_systems(Startup, load_startup_scripts);
         app.add_systems(Update, run_scripts.before(CommandDispatchSet));
     }
 }
@@ -870,6 +891,48 @@ mod tests {
         let table = &app.world().resource::<ScriptActions>().0;
         assert_eq!(table.len(), 1);
         assert_eq!(table[0].source, "(spawn-circle 0 0 1)");
+    }
+
+    #[test]
+    fn a_startup_script_file_runs_on_boot() {
+        let path = std::env::temp_dir().join(format!("gradiance_boot_{}.scm", std::process::id()));
+        std::fs::write(&path, "(spawn-box 0 0 10 10)").expect("write temp script");
+        let mut app = bus_app();
+        app.insert_resource(StartupScripts(vec![path.clone()]));
+        app.update(); // Startup loads + submits; Update runs it
+        let spawned = app.world().resource::<Spawns>().0.len();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(spawned, 1);
+    }
+
+    #[test]
+    fn a_startup_script_registers_actions_on_boot() {
+        // The user scenario: a `.scm` loaded at startup populates the menu.
+        let path =
+            std::env::temp_dir().join(format!("gradiance_bootact_{}.scm", std::process::id()));
+        std::fs::write(&path, "(register-action \"Boot\" \"(spawn-box 0 0 5 5)\")")
+            .expect("write temp script");
+        let mut app = bus_app();
+        app.insert_resource(StartupScripts(vec![path.clone()]));
+        app.update();
+        let registered = app
+            .world()
+            .resource::<ScriptActions>()
+            .0
+            .iter()
+            .any(|a| a.label == "Boot");
+        let _ = std::fs::remove_file(&path);
+        assert!(registered);
+    }
+
+    #[test]
+    fn a_missing_startup_script_is_skipped_not_fatal() {
+        let mut app = bus_app();
+        app.insert_resource(StartupScripts(vec![PathBuf::from(
+            "/no/such/gradiance.scm",
+        )]));
+        app.update(); // must not panic
+        assert!(app.world().resource::<Spawns>().0.is_empty());
     }
 
     #[test]

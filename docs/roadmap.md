@@ -249,6 +249,10 @@ a normal dependency, not a cargo feature — see the decision doc's
   - **Edits (writes → intents).** `spawn-box`, `spawn-circle`, `cut`; each
     builtin emits a reflected intent, `IntentDispatch` binds it to its bus by
     type. No new mutation path.
+  - **Config (writes → settings resources).** `sim-get` / `sim-set` name any
+    `SimSettings` scalar by reflect-path (the spike-#1 bridge doing exactly its
+    job — no per-field builtin) and apply it through the invariant-#4 settings
+    seam, never the command stack. Completes the Edit/Config/Query triad.
   - **Reads (total, seam-free).** A per-run `SceneView` snapshot feeds
     geometric-query builtins — `body-count`, `body-x/y/rot`, `count-at` (exact
     SDF containment), `nearest-at` — so a script observes committed scene state
@@ -256,10 +260,11 @@ a normal dependency, not a cargo feature — see the decision doc's
   - **REPL panel** (`src/ui/console.rs`): a backquote-toggled lisp editor with
     registry-driven highlighting/completion, an output log, and a reference
     panel; submits to the same `ScriptInputs` queue tests and files use.
-  - **Remaining P1:** config verbs (`set-gravity`, `set-time-scale` → settings
-    resources, the invariant-#4 seam — completes the Edit/Config/Query triad);
-    a `--script foo.scm` headless entry point (doubles as a test-fixture
-    runner); a fuel/step budget.
+  - **`--script foo.scm` loader** (`StartupScripts` + a `Startup` system): CLI
+    or resource-supplied `.scm` files are read and run through the ordinary
+    doorway on boot — the "author from a file" path (scene setup, helpers,
+    `register-action`). Doubles as a test-fixture runner.
+  - **Remaining P1:** a fuel/step budget for runaway authoring scripts.
 - **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam
   (`defsignal`/`defparam` → auto-slider; live probes / tracers / plots). This
   is the substrate the sensor/modulator/actuator model plugs into: a **sensor**
@@ -270,10 +275,12 @@ a normal dependency, not a cargo feature — see the decision doc's
 - **P3 — the extension surface (the tool authored in its own DSL).** Because
   edits, config, and reads all route through one registry, the editor's own
   chrome can be *authored as data over that registry*:
-  - **Data-driven context-menu actions:** a menu entry is `(label, op-name,
-    arg-builder)` read from the registry; user `.scm` files register new
-    entries. The existing `src/ui/context_menu.rs` actions become the built-in
-    seed of that table rather than hard-coded buttons.
+  - **Data-driven context-menu actions (first cut landed).** `register-action`
+    (the `EditorState` seam) lets a `.scm` add a labelled action to the
+    `ScriptActions` table; the context menu's "Scripts" section surfaces them
+    and invoking one runs its source through `ScriptInputs`. Next: pass the
+    click point / selection into the action, and fold the existing hard-coded
+    `src/ui/context_menu.rs` buttons into the same table as the built-in seed.
   - **User tools from `.scm`:** a tool is a `ToolContext → (preview,
     commit-intent)` (M17's `DraftTool`) / `ManipTool` closure; the registry
     lets one be authored in lisp and registered by name, reusing the exact
