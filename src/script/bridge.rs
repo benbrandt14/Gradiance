@@ -286,6 +286,23 @@ impl SceneView {
             })
             .map_or(-1.0, |(i, _)| i as f64)
     }
+
+    /// Distance from `p` to the nearest body centre, or -1 if the scene is empty.
+    fn nearest_dist(&self, p: Vec2) -> f64 {
+        self.bodies
+            .iter()
+            .map(|b| b.pos.distance(p))
+            .min_by(f32::total_cmp)
+            .map_or(-1.0, f64::from)
+    }
+
+    /// Index of the first body (id order) whose shape contains `p`, or -1.
+    fn index_at(&self, p: Vec2) -> f64 {
+        self.bodies
+            .iter()
+            .position(|b| b.contains(p))
+            .map_or(-1.0, |i| i as f64)
+    }
 }
 
 /// Snapshots the committed scene (bodies ordered by id) for the read builtins.
@@ -407,6 +424,16 @@ fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
     }
 }
 
+/// A fixed ground half-plane through `(x, y)`, tilted by `angle` radians — the
+/// record `spawn-ground` emits. Static physics so it never falls; the surface
+/// passes through the body origin (see [`ShapeDef::HalfPlane`]).
+fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
+    let mut record = body_record(ShapeDef::HalfPlane, x, y);
+    record.pose.rot = angle as f32;
+    record.physics = BodyPhysics::fixed();
+    record
+}
+
 /// Registers the scene-verb builtins on `engine`. Edit verbs capture the op
 /// queue; query verbs capture the read snapshot; config verbs capture the sim
 /// mirror + config queue; meta verbs capture the catalog. Adding an authored
@@ -477,6 +504,23 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
             }
         },
     );
+
+    // `(spawn-ground x y angle)` — author a fixed ground half-plane through
+    // (x, y), tilted by `angle` radians.
+    let ground_ops = Arc::clone(ops);
+    engine.register_fn(
+        name::SPAWN_GROUND,
+        move |x: SteelVal, y: SteelVal, angle: SteelVal| {
+            if let Some([x, y, angle]) = nums([&x, &y, &angle]) {
+                emit(
+                    &ground_ops,
+                    Box::new(SpawnBodyIntent {
+                        record: ground_record(x, y, angle),
+                    }),
+                );
+            }
+        },
+    );
 }
 
 /// Read-total geometric queries — each reads the [`SceneView`] snapshot and
@@ -526,6 +570,25 @@ fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
             _ => -1.0,
         }
     });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::NEAREST_DIST, move |x: SteelVal, y: SteelVal| -> f64 {
+        match (nums([&x, &y]), v.lock()) {
+            (Some([x, y]), Ok(view)) => view.nearest_dist(Vec2::new(x as f32, y as f32)),
+            _ => -1.0,
+        }
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(
+        name::BODY_INDEX_AT,
+        move |x: SteelVal, y: SteelVal| -> f64 {
+            match (nums([&x, &y]), v.lock()) {
+                (Some([x, y]), Ok(view)) => view.index_at(Vec2::new(x as f32, y as f32)),
+                _ => -1.0,
+            }
+        },
+    );
 }
 
 /// Editor configuration — `sim-get` reads the settings mirror (a total read),
@@ -811,6 +874,17 @@ mod tests {
             spawns[1].record.shape,
             ShapeDef::Circle { radius } if radius == 15.0
         ));
+    }
+
+    #[test]
+    fn spawn_ground_emits_a_static_half_plane() {
+        let mut app = bus_app();
+        run(&mut app, "(spawn-ground 0 -100 0)");
+        let spawns = &app.world().resource::<Spawns>().0;
+        assert_eq!(spawns.len(), 1);
+        assert!(matches!(spawns[0].record.shape, ShapeDef::HalfPlane));
+        assert_eq!(spawns[0].record.physics, BodyPhysics::fixed());
+        assert_eq!(spawns[0].record.pose.pos, Vec2::new(0.0, -100.0));
     }
 
     #[test]
