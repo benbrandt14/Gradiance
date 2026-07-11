@@ -40,6 +40,8 @@ pub mod name {
     pub const SIM_GET: &str = "sim-get";
     /// `(sim-set path value)` — write a simulation setting by reflect-path.
     pub const SIM_SET: &str = "sim-set";
+    /// `(register-action label source)` — surface a named action in the editor.
+    pub const REGISTER_ACTION: &str = "register-action";
     /// `(ops)` — list of every registered operation name.
     pub const OPS: &str = "ops";
     /// `(describe name)` — the signature and doc of one operation.
@@ -56,6 +58,9 @@ pub enum OpCategory {
     Config,
     /// Read-only geometric / physics query → returns a value, mutates nothing.
     Query,
+    /// Editor-state change → writes a non-authored editor resource (e.g. the
+    /// action table the UI surfaces). Not authored, not undoable, not physics.
+    EditorState,
 }
 
 impl OpCategory {
@@ -65,6 +70,7 @@ impl OpCategory {
             Self::Edit => "edit",
             Self::Config => "config",
             Self::Query => "query",
+            Self::EditorState => "editor",
         }
     }
 }
@@ -93,104 +99,16 @@ pub struct OperationCatalog {
 impl OperationCatalog {
     /// The canonical built-in catalog. Each entry has a matching steel builtin
     /// registered in [`bridge`](crate::script::bridge) under the same
-    /// [`name`] constant.
+    /// [`name`] constant. Grouped by seam so the list stays maintainable as
+    /// verbs accrete.
     pub fn builtin() -> Self {
-        use OpCategory::{Config, Edit, Query};
-        Self {
-            ops: vec![
-                OpSpec {
-                    name: name::SPAWN_BOX,
-                    signature: "(spawn-box x y w h)",
-                    doc: "Author a box body of size w×h centred at (x, y).",
-                    category: Edit,
-                    args: 4,
-                },
-                OpSpec {
-                    name: name::SPAWN_CIRCLE,
-                    signature: "(spawn-circle x y r)",
-                    doc: "Author a circle body of radius r centred at (x, y).",
-                    category: Edit,
-                    args: 3,
-                },
-                OpSpec {
-                    name: name::CUT,
-                    signature: "(cut ax ay bx by width)",
-                    doc: "Sever every body crossed by the stroke a→b of the given width.",
-                    category: Edit,
-                    args: 5,
-                },
-                OpSpec {
-                    name: name::BODY_COUNT,
-                    signature: "(body-count)",
-                    doc: "Number of authored bodies in the committed scene.",
-                    category: Query,
-                    args: 0,
-                },
-                OpSpec {
-                    name: name::BODY_X,
-                    signature: "(body-x i)",
-                    doc: "X of the i-th body (bodies ordered by id); NaN if out of range.",
-                    category: Query,
-                    args: 1,
-                },
-                OpSpec {
-                    name: name::BODY_Y,
-                    signature: "(body-y i)",
-                    doc: "Y of the i-th body; NaN if out of range.",
-                    category: Query,
-                    args: 1,
-                },
-                OpSpec {
-                    name: name::BODY_ROT,
-                    signature: "(body-rot i)",
-                    doc: "Rotation (radians) of the i-th body; NaN if out of range.",
-                    category: Query,
-                    args: 1,
-                },
-                OpSpec {
-                    name: name::COUNT_AT,
-                    signature: "(count-at x y)",
-                    doc: "Number of bodies whose shape contains the world point (x, y).",
-                    category: Query,
-                    args: 2,
-                },
-                OpSpec {
-                    name: name::NEAREST_AT,
-                    signature: "(nearest-at x y)",
-                    doc: "Index of the body whose centre is nearest (x, y); -1 if none.",
-                    category: Query,
-                    args: 2,
-                },
-                OpSpec {
-                    name: name::SIM_GET,
-                    signature: "(sim-get path)",
-                    doc: "Read a simulation setting by reflect-path, e.g. \"gravity.y\", \"speed\".",
-                    category: Query,
-                    args: 1,
-                },
-                OpSpec {
-                    name: name::SIM_SET,
-                    signature: "(sim-set path value)",
-                    doc: "Set a simulation setting by reflect-path (config seam, not undoable).",
-                    category: Config,
-                    args: 2,
-                },
-                OpSpec {
-                    name: name::OPS,
-                    signature: "(ops)",
-                    doc: "List of every registered operation name.",
-                    category: Query,
-                    args: 0,
-                },
-                OpSpec {
-                    name: name::DESCRIBE,
-                    signature: "(describe name)",
-                    doc: "The signature and doc string of one operation, as text.",
-                    category: Query,
-                    args: 1,
-                },
-            ],
-        }
+        let mut ops = Vec::new();
+        ops.extend(edit_specs());
+        ops.extend(query_specs());
+        ops.extend(config_specs());
+        ops.extend(editor_specs());
+        ops.extend(meta_specs());
+        Self { ops }
     }
 
     /// Every entry, in catalog order (edits first, then queries).
@@ -213,6 +131,137 @@ impl Default for OperationCatalog {
     fn default() -> Self {
         Self::builtin()
     }
+}
+
+/// Authored-world edit verbs (→ intents).
+fn edit_specs() -> Vec<OpSpec> {
+    use OpCategory::Edit;
+    vec![
+        OpSpec {
+            name: name::SPAWN_BOX,
+            signature: "(spawn-box x y w h)",
+            doc: "Author a box body of size w×h centred at (x, y).",
+            category: Edit,
+            args: 4,
+        },
+        OpSpec {
+            name: name::SPAWN_CIRCLE,
+            signature: "(spawn-circle x y r)",
+            doc: "Author a circle body of radius r centred at (x, y).",
+            category: Edit,
+            args: 3,
+        },
+        OpSpec {
+            name: name::CUT,
+            signature: "(cut ax ay bx by width)",
+            doc: "Sever every body crossed by the stroke a→b of the given width.",
+            category: Edit,
+            args: 5,
+        },
+    ]
+}
+
+/// Read-total geometric query verbs (→ the scene snapshot).
+fn query_specs() -> Vec<OpSpec> {
+    use OpCategory::Query;
+    vec![
+        OpSpec {
+            name: name::BODY_COUNT,
+            signature: "(body-count)",
+            doc: "Number of authored bodies in the committed scene.",
+            category: Query,
+            args: 0,
+        },
+        OpSpec {
+            name: name::BODY_X,
+            signature: "(body-x i)",
+            doc: "X of the i-th body (bodies ordered by id); NaN if out of range.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_Y,
+            signature: "(body-y i)",
+            doc: "Y of the i-th body; NaN if out of range.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_ROT,
+            signature: "(body-rot i)",
+            doc: "Rotation (radians) of the i-th body; NaN if out of range.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::COUNT_AT,
+            signature: "(count-at x y)",
+            doc: "Number of bodies whose shape contains the world point (x, y).",
+            category: Query,
+            args: 2,
+        },
+        OpSpec {
+            name: name::NEAREST_AT,
+            signature: "(nearest-at x y)",
+            doc: "Index of the body whose centre is nearest (x, y); -1 if none.",
+            category: Query,
+            args: 2,
+        },
+    ]
+}
+
+/// Editor-configuration verbs (`sim-get` reads, `sim-set` writes the settings
+/// resource).
+fn config_specs() -> Vec<OpSpec> {
+    use OpCategory::{Config, Query};
+    vec![
+        OpSpec {
+            name: name::SIM_GET,
+            signature: "(sim-get path)",
+            doc: "Read a simulation setting by reflect-path, e.g. \"gravity.y\", \"speed\".",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::SIM_SET,
+            signature: "(sim-set path value)",
+            doc: "Set a simulation setting by reflect-path (config seam, not undoable).",
+            category: Config,
+            args: 2,
+        },
+    ]
+}
+
+/// Editor-state verbs (write non-authored editor resources).
+fn editor_specs() -> Vec<OpSpec> {
+    vec![OpSpec {
+        name: name::REGISTER_ACTION,
+        signature: "(register-action label source)",
+        doc: "Surface a named action (label + lisp source) in the editor's menus.",
+        category: OpCategory::EditorState,
+        args: 2,
+    }]
+}
+
+/// Homoiconic introspection verbs (the catalog reading itself).
+fn meta_specs() -> Vec<OpSpec> {
+    use OpCategory::Query;
+    vec![
+        OpSpec {
+            name: name::OPS,
+            signature: "(ops)",
+            doc: "List of every registered operation name.",
+            category: Query,
+            args: 0,
+        },
+        OpSpec {
+            name: name::DESCRIBE,
+            signature: "(describe name)",
+            doc: "The signature and doc string of one operation, as text.",
+            category: Query,
+            args: 1,
+        },
+    ]
 }
 
 #[cfg(test)]
