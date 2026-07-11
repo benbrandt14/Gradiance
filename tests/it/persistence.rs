@@ -344,6 +344,44 @@ fn spawn_via_intent(app: &mut App, pos: Vec2) -> StableId {
 }
 
 #[test]
+fn exit_autosave_writes_a_resumable_scene() {
+    let dir = std::env::temp_dir().join(format!("gradiance-autosave-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("session.ron");
+
+    let mut app = paused_app();
+    app.insert_resource(gradiance::persist::AutosavePath(path.clone()));
+    spawn_via_intent(&mut app, Vec2::new(3.0, 4.0));
+    app.world_mut().write_message(AppExit::Success);
+    app.update(); // Last-schedule autosave observes the exit message
+
+    let text = std::fs::read_to_string(&path).expect("autosave written on exit");
+    let scene = from_ron(&text).expect("autosave parses as a scene");
+    assert_eq!(scene.bodies.len(), 1);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_empty_scene_is_not_autosaved_over_the_last_session() {
+    let dir = std::env::temp_dir().join(format!("gradiance-autosave-empty-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("session.ron");
+    std::fs::write(&path, "previous session").unwrap();
+
+    let mut app = paused_app();
+    app.insert_resource(gradiance::persist::AutosavePath(path.clone()));
+    app.world_mut().write_message(AppExit::Success);
+    app.update();
+
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "previous session",
+        "an empty scene must not clobber the previous autosave"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn save_and_load_requests_round_trip_through_a_file() {
     let dir = std::env::temp_dir().join(format!("gradiance-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

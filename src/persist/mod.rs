@@ -89,6 +89,20 @@ pub struct LastScenePath(pub Option<PathBuf>);
 #[derive(Resource, Debug, Clone)]
 pub struct StartupScene(pub PathBuf);
 
+/// Default session-autosave file, written on exit and reopened by
+/// `gradiance --resume` (gitignored; crash-free sessions always leave one).
+pub const AUTOSAVE_FILE: &str = ".gradiance-session.ron";
+
+/// Where the exit autosave is written (tests point this at a temp dir).
+#[derive(Resource, Debug, Clone)]
+pub struct AutosavePath(pub PathBuf);
+
+impl Default for AutosavePath {
+    fn default() -> Self {
+        Self(PathBuf::from(AUTOSAVE_FILE))
+    }
+}
+
 /// Installs persistence handling.
 #[derive(Default)]
 pub struct PersistPlugin;
@@ -99,11 +113,13 @@ impl Plugin for PersistPlugin {
         app.add_message::<LoadSceneRequest>();
         app.add_message::<SnapshotRequest>();
         app.init_resource::<LastScenePath>();
+        app.init_resource::<AutosavePath>();
         app.add_systems(Startup, queue_startup_scene);
         app.add_systems(
             Update,
             handle_persist_requests.before(crate::command::CommandDispatchSet),
         );
+        app.add_systems(Last, autosave_on_exit);
     }
 }
 
@@ -172,6 +188,30 @@ pub fn handle_persist_requests(world: &mut World) {
             Ok(()) => info!(path = %path.display(), "debug snapshot written"),
             Err(e) => warn!(error = %e, "snapshot failed"),
         }
+    }
+}
+
+/// Writes the session autosave when the app is exiting (Tier-2 dev loop:
+/// `--resume` reopens it, so a rebuild lands back in the same scene).
+///
+/// An empty scene is not written — closing immediately after launch must not
+/// clobber the previous session.
+pub fn autosave_on_exit(world: &mut World) {
+    let exiting = world
+        .get_resource::<Messages<AppExit>>()
+        .is_some_and(|m| !m.is_empty());
+    if !exiting {
+        return;
+    }
+    let scene = SceneRecord::capture(world);
+    if scene.bodies.is_empty() && scene.joints.is_empty() {
+        return;
+    }
+    let path = world.resource::<AutosavePath>().0.clone();
+    match to_ron(&scene).map(|text| std::fs::write(&path, text)) {
+        Ok(Ok(())) => info!(path = %path.display(), "session autosaved (reopen with --resume)"),
+        Ok(Err(e)) => warn!(path = %path.display(), error = %e, "session autosave failed"),
+        Err(e) => warn!(error = %e, "session autosave serialize failed"),
     }
 }
 

@@ -138,23 +138,15 @@ Worth stating: this only works because of invariant #5. It is a nice concrete
 dividend of the authored/derived split and a reason to keep classifying new
 state correctly (per-particle state must be derived or it poisons autosave).
 
-### 3.3 Tier 3 — Rust code hotpatching (timeboxed spike, don't commit to it)
+### 3.3 Tier 3 — Rust code hotpatching: **rejected** (decided 2026-07-11)
 
-Bevy ships an **experimental `hotpatching` feature** (subsecond-based, driven
-by the Dioxus `dx` CLI) that live-patches system bodies; `dexterous_developer`
-is the third-party alternative. Honest assessment for this repo:
-
-- Best case: tweak-a-gizmo / tune-a-force loops without relaunch.
-- Caveats: experimental; system-body changes only (no struct layout/ECS schema
-  changes); another toolchain moving part in an exact-pinned repo; and our
-  Tier 1+2 already cover the authoring-loop cases where hot iteration matters
-  most. The per-frame numeric hot path is the *kernel*, which is script-side —
-  Tier 1 reloads it.
-- Recommendation: a **timeboxed spike behind a `hotpatch` feature**, evaluated
-  against `docs/bevy19-notes.md`-style verification (0.19 API reality, not
-  training-data memory). Adopt only if the spike shows it survives our egui +
-  avian + steel stack. It is an accelerator, not a foundation — nothing else
-  in this document depends on it.
+Bevy's experimental `hotpatching` feature (and `dexterous_developer`) were
+considered and **dropped without a spike**: experimental tooling and another
+moving part in an exact-pinned repo, buying little that Tiers 1+2 don't —
+the authoring loop reloads via scripts, the per-frame numeric hot path is the
+*kernel* (script-side, Tier-1-reloadable), and state-preserving restart covers
+the rest. Revisit only if the feature stabilizes *and* a concrete recurring
+pain point survives Tiers 1+2.
 
 ## 4. Reassessing the single-crate decision
 
@@ -300,7 +292,7 @@ doc drift has now happened once.)
    replace-by-name registration semantics; dev autosave/`--resume`.
 5. **Workspace pilot** (§4.3): extract `gradiance-geometry` + `gradiance-kernel`
    (+ optionally prove it with the SVG exporter as first external consumer).
-6. **Hotpatching spike** (§3.3), timeboxed, feature-gated, adopt only on a
-   clean result.
-7. **First real feature crate** when its §4.4 trigger fires — on current
+6. **First real feature crate** when its §4.4 trigger fires — on current
    roadmap ordering that is most plausibly the raytracer or MPM.
+
+(Hotpatching was cut from the sequence — see §3.3.)
