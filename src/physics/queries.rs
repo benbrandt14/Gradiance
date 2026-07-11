@@ -11,15 +11,52 @@ use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
+/// A world-space contact sample: the point, its unit normal, and the normal
+/// impulse. Divide the impulse by the timestep for the contact force.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContactSample {
+    /// World-space contact point.
+    pub point: Vec2,
+    /// Unit contact normal (world space, from the first shape toward the second).
+    pub normal: Vec2,
+    /// Normal impulse magnitude (N·s); force ≈ impulse / dt.
+    pub normal_impulse: f32,
+}
+
 /// Read-only spatial queries against the physics world.
 #[derive(SystemParam)]
 pub struct PhysicsQueries<'w, 's> {
     spatial: SpatialQuery<'w, 's>,
     velocities: Query<'w, 's, (&'static LinearVelocity, &'static AngularVelocity)>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
+    contacts: Res<'w, ContactGraph>,
 }
 
 impl PhysicsQueries<'_, '_> {
+    /// Every touching contact point in the world (active + sleeping). The read
+    /// facade for contact overlays and for scripts/plotters introspecting
+    /// contact forces — keeping this here is what makes those a *read*, not a
+    /// new physics-coupled path (`docs/script-lisp-decision.md`).
+    pub fn contact_points(&self) -> Vec<ContactSample> {
+        let mut samples = Vec::new();
+        for pair in self
+            .contacts
+            .iter_active_touching()
+            .chain(self.contacts.iter_sleeping_touching())
+        {
+            for manifold in &pair.manifolds {
+                for point in &manifold.points {
+                    samples.push(ContactSample {
+                        point: point.point,
+                        normal: manifold.normal,
+                        normal_impulse: point.normal_impulse,
+                    });
+                }
+            }
+        }
+        samples
+    }
+
     /// All collider entities containing `point`, unordered.
     pub fn bodies_at_point(&self, point: Vec2) -> Vec<Entity> {
         self.spatial
