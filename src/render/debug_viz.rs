@@ -119,6 +119,7 @@ fn draw_joint_anchors(
             JointKind::Hinge { .. } => css::ORANGE,
             JointKind::Weld => css::CRIMSON,
             JointKind::Slider { .. } => css::DEEP_SKY_BLUE,
+            JointKind::Spring { .. } => css::SPRING_GREEN,
         };
         let world_a = index
             .entity(def.body_a)

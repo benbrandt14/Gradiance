@@ -697,3 +697,89 @@ fn welding_rotated_bodies_preserves_their_relative_angle() {
         pose.pos
     );
 }
+
+fn strut(body_a: StableId, body_b: Option<StableId>, bounds: [f32; 2], stiffness: f32) -> JointDef {
+    JointDef {
+        kind: JointKind::Spring {
+            bounds,
+            stiffness,
+            damping: 5.0,
+        },
+        common: JointCommon::default(),
+        body_a,
+        body_b,
+        anchor_a: Vec2::ZERO,
+        anchor_b: Vec2::ZERO,
+        rest_rot_a: 0.0,
+        rest_rot_b: 0.0,
+    }
+}
+
+#[test]
+fn strut_derives_a_distance_joint_and_damping() {
+    use avian2d::prelude::{DistanceJoint, JointDamping};
+    let mut app = headless_app();
+    let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
+    let b = spawn_body(&mut app, box_record(Vec2::new(60.0, 0.0), 20.0, 20.0));
+    let jid = spawn_joint(&mut app, strut(a, Some(b), [60.0, 60.0], 500.0));
+    step(&mut app, 2);
+
+    let je = entity_of(&app, jid).unwrap();
+    assert!(
+        app.world().get::<DistanceJoint>(je).is_some(),
+        "strut derives a DistanceJoint"
+    );
+    let damping = app.world().get::<JointDamping>(je).unwrap();
+    assert!(
+        (damping.linear - 5.0).abs() < 1e-3,
+        "damping maps onto JointDamping ({})",
+        damping.linear
+    );
+}
+
+#[test]
+fn strut_pulls_a_body_toward_its_rest_length() {
+    use avian2d::prelude::GravityScale;
+    let mut app = headless_app();
+    // A static anchor at the origin.
+    let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
+    anchor.physics.rigid_body = RigidBody::Static;
+    let anchor_id = spawn_body(&mut app, anchor);
+    // A dynamic body 100 px away, gravity off so only the strut acts.
+    let mut ball = box_record(Vec2::new(100.0, 0.0), 20.0, 20.0);
+    ball.physics.gravity_scale = GravityScale(0.0);
+    let ball_id = spawn_body(&mut app, ball);
+    // A stiff strut with a 50 px rest length between their centres.
+    spawn_joint(
+        &mut app,
+        strut(anchor_id, Some(ball_id), [50.0, 50.0], 1000.0),
+    );
+
+    let start = pose_of(&app, ball_id).pos.x;
+    assert!(
+        (start - 100.0).abs() < 1.0,
+        "ball starts at x = 100 ({start})"
+    );
+    step(&mut app, 180);
+    let end = pose_of(&app, ball_id).pos.x;
+    assert!(end < 90.0, "the strut pulled the ball inward (x = {end})");
+    assert!(
+        (end - 50.0).abs() < 20.0,
+        "the ball settles near the 50 px rest length (x = {end})"
+    );
+}
+
+#[test]
+fn a_strut_is_undoable_and_persists_its_kind() {
+    let mut app = paused_app();
+    let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
+    let b = spawn_body(&mut app, box_record(Vec2::new(80.0, 0.0), 20.0, 20.0));
+    spawn_joint(&mut app, strut(a, Some(b), [40.0, 120.0], 250.0));
+    assert_eq!(joint_count(&mut app), 1);
+    undo(&mut app);
+    assert_eq!(
+        joint_count(&mut app),
+        0,
+        "a scripted strut is one undoable command"
+    );
+}
