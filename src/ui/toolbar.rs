@@ -31,6 +31,8 @@ pub fn toolbar(
     mut undo: MessageWriter<UndoIntent>,
     mut redo: MessageWriter<RedoIntent>,
     mut settings: ResMut<crate::ui::settings::SettingsWindow>,
+    mut plot: ResMut<crate::ui::plot::PlotPanel>,
+    mut console: ResMut<crate::ui::console::ScriptConsole>,
     mut rig: ResMut<crate::interaction::camera::CameraRig>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -79,6 +81,24 @@ pub fn toolbar(
                     .clicked()
                 {
                     rig.homing = true;
+                }
+                ui.separator();
+                // Toggles for the hotkey-only panels, so they're discoverable
+                // without knowing the `\` / backquote shortcuts. The buttons
+                // reflect each panel's open state.
+                if ui
+                    .selectable_label(plot.is_open(), "Plot")
+                    .on_hover_text("live plot of the selected body/joint (\\)")
+                    .clicked()
+                {
+                    plot.toggle();
+                }
+                if ui
+                    .selectable_label(console.is_open(), "λ Script")
+                    .on_hover_text("scripting console / REPL (`)")
+                    .clicked()
+                {
+                    console.toggle();
                 }
                 ui.separator();
                 if ui.button("⚙ Settings").clicked() {

@@ -44,6 +44,20 @@ pub struct ScriptConsole {
     completer: Option<Completer>,
 }
 
+impl ScriptConsole {
+    /// Whether the console is currently shown (read by the transport button so
+    /// it can reflect the open state).
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    /// Flips the console's visibility. Both the backquote shortcut and the
+    /// transport button toggle through here.
+    pub fn toggle(&mut self) {
+        self.open = !self.open;
+    }
+}
+
 /// The lisp syntax for the editor: the registered scene verbs plus the Scheme
 /// special forms. Highlighting *and* completion read this, so both track the
 /// real VM surface.
@@ -75,7 +89,7 @@ pub fn script_console(
 
     // Toggle with `\`` — but not while typing (so the key reaches the editor).
     if keys.just_pressed(KeyCode::Backquote) && !ctx.egui_wants_keyboard_input() {
-        console.open = !console.open;
+        console.toggle();
     }
     if !console.open {
         return Ok(());
