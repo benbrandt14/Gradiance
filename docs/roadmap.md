@@ -218,11 +218,11 @@ substrate they gated is now in place** — so feature phases P0/P1 are unblocked
 - **Spike 2 (perf) — done.** `src/script/kernel.rs`: numeric DSL → flat
   allocation-free tape, VM-free hot-path eval over SoA columns; proptested,
   ~27.7 M evals/s (debug) at particle scale. De-risks the fluid/particle ceiling.
-- **Spike 1 (reflect ↔ steel bridge) — done.** `src/script/reflect_bridge.rs`
-  (feature-gated): one generic converter reads/writes any `#[derive(Reflect)]`
-  value by reflect-path. Spike #1 follow-through (M17.1) then made the **whole
-  authored intent surface** reflectable + registered, and the bridge reads a
-  real intent. The "everything programmable" endgame is a derive, not N builtins.
+- **Spike 1 (reflect ↔ steel bridge) — done.** `src/script/reflect_bridge.rs`:
+  one generic converter reads/writes any `#[derive(Reflect)]` value by
+  reflect-path. Spike #1 follow-through (M17.1) then made the **whole authored
+  intent surface** reflectable + registered, and the bridge reads a real intent.
+  The "everything programmable" endgame is a derive, not N builtins.
 
 Feature phasing (`docs/script-lisp-decision.md` §"Feature-level phasing"):
 
@@ -235,16 +235,52 @@ a normal dependency, not a cargo feature — see the decision doc's
   (thiserror) + a `catch_unwind` eval boundary, and `ScriptPlugin`. Remaining
   P0 nicety: `src/script/values.rs` (`ShapeDef` foreign type + geometry
   constructor builtins) and a fuel/step budget.
-- **P1 — scripted editing: doorway landed.** `src/script/bridge.rs`: the
-  exclusive `run_scripts` system drains script-emitted operation records and
-  writes them to the intent bus (World-integration constraint), before
-  `CommandDispatchSet`. First verb `(cut …)`; `IntentDispatch` binds
-  `Reflect`-registered intents by type. **In progress:** more scene verbs
-  (`spawn-body`, `set-*`) via reflect-construction; one script run = one undo
-  entry; the REPL panel (`src/ui/console.rs`); a `--script foo.scm` entry point.
-- **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam;
-  `defparam` → auto-slider; live probes / tracers / plots.
-- **P3 — targeted symbolic ops** (`grad`/`solve`, symbolic field forces).
+- **P1 — scripted editing + reads: landed.** `src/script/bridge.rs` runs the
+  exclusive `run_scripts` doorway (before `CommandDispatchSet`, so one run =
+  one batch of undoable commands), and both halves of the governance model are
+  now concrete:
+  - **Operation registry (the homoiconic spine).** `src/script/registry.rs`
+    is a pure `OperationCatalog` — `OpSpec` metadata (name, signature, doc,
+    governance category) for every verb, keyed by shared `name` constants so
+    the catalog and the steel registration cannot drift. Surfaced as the
+    `OperationRegistry` resource that the console (highlighting, completion,
+    reference panel) reads, and that data-driven menus / user tools will bind
+    to. Introspectable from inside the VM via `(ops)` / `(describe …)`.
+  - **Edits (writes → intents).** `spawn-box`, `spawn-circle`, `cut`; each
+    builtin emits a reflected intent, `IntentDispatch` binds it to its bus by
+    type. No new mutation path.
+  - **Reads (total, seam-free).** A per-run `SceneView` snapshot feeds
+    geometric-query builtins — `body-count`, `body-x/y/rot`, `count-at` (exact
+    SDF containment), `nearest-at` — so a script observes committed scene state
+    without ever holding `&World`. This is the read facade live plotters reuse.
+  - **REPL panel** (`src/ui/console.rs`): a backquote-toggled lisp editor with
+    registry-driven highlighting/completion, an output log, and a reference
+    panel; submits to the same `ScriptInputs` queue tests and files use.
+  - **Remaining P1:** config verbs (`set-gravity`, `set-time-scale` → settings
+    resources, the invariant-#4 seam — completes the Edit/Config/Query triad);
+    a `--script foo.scm` headless entry point (doubles as a test-fixture
+    runner); a fuel/step budget.
+- **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam
+  (`defsignal`/`defparam` → auto-slider; live probes / tracers / plots). This
+  is the substrate the sensor/modulator/actuator model plugs into: a **sensor**
+  is a read (a query builtin / reflect read), a **modulator** is a driver
+  kernel over signals, an **actuator** is a config- or edit-op the signal
+  drives — all three already have their seam (query surface, `kernel`, the
+  operation registry).
+- **P3 — the extension surface (the tool authored in its own DSL).** Because
+  edits, config, and reads all route through one registry, the editor's own
+  chrome can be *authored as data over that registry*:
+  - **Data-driven context-menu actions:** a menu entry is `(label, op-name,
+    arg-builder)` read from the registry; user `.scm` files register new
+    entries. The existing `src/ui/context_menu.rs` actions become the built-in
+    seed of that table rather than hard-coded buttons.
+  - **User tools from `.scm`:** a tool is a `ToolContext → (preview,
+    commit-intent)` (M17's `DraftTool`) / `ManipTool` closure; the registry
+    lets one be authored in lisp and registered by name, reusing the exact
+    press/drag/release driver the built-in tools use.
+  - **Targeted symbolic ops** (`grad`/`solve`, symbolic **field forces** over
+    the SDF substrate — the flagship demo). Optional parametric `.scm` scene
+    export (RON stays canonical regardless).
 
 The former backlog lines below are now subsumed by that record:
 

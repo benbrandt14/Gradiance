@@ -1,16 +1,15 @@
 //! The in-editor **script console**: a lisp REPL / mini code-editor panel.
 //!
 //! A thin projection over the scripting seam (invariant #4): it never touches
-//! authored state. The editor's text is submitted to
-//! [`ScriptInputs`](crate::script::bridge::ScriptInputs) — the same input queue
-//! a `--script` file or a test uses — and the exclusive `run_scripts` system
-//! dispatches it through the intent bus. The output pane just displays
-//! [`ScriptLog`](crate::script::bridge::ScriptLog).
+//! authored state. The editor's text is submitted to [`ScriptInputs`] — the
+//! same input queue a `--script` file or a test uses — and the exclusive
+//! `run_scripts` system dispatches it through the intent bus. The output pane
+//! just displays [`ScriptLog`].
 //!
 //! Syntax highlighting, completion, *and* the reference panel are all driven by
-//! the [`OperationRegistry`](crate::script::bridge::OperationRegistry) — the
-//! same catalog the VM binds its builtins against — so what highlights,
-//! completes, and is documented always tracks what the VM actually understands.
+//! the [`OperationRegistry`] — the same catalog the VM binds its builtins
+//! against — so what highlights, completes, and is documented always tracks
+//! what the VM actually understands.
 
 use crate::script::bridge::{OperationRegistry, ScriptInputs, ScriptLog};
 use bevy::prelude::*;

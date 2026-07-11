@@ -358,6 +358,58 @@ Feature-level phasing once the spikes pass:
   substrate; the flagship demo). Optional parametric `.scm` scene export if the
   parametric workflow proves wanted (RON stays canonical regardless).
 
+## Direction update (2026-07-10, part 2): the registry is concrete, and the tool becomes its own extension surface
+
+The governance model above is no longer abstract — both halves are implemented,
+and that turns the long-range goal into a concrete engineering target: **the
+editor's own chrome (menus, tools) is authored as data over the operation
+registry**, so a user extends Gradiance by writing `.scm`, not Rust.
+
+What is now built (see `roadmap.md` P1):
+
+- **Operation registry (`src/script/registry.rs`).** A pure `OperationCatalog`
+  of `OpSpec` metadata (name, signature, doc, governance **category** —
+  `Edit`/`Config`/`Query`), keyed by shared `name` constants so the advertised
+  surface and the steel registration cannot drift. Surfaced as the
+  `OperationRegistry` resource; introspectable in-VM via `(ops)`/`(describe)`.
+  This *is* the homoiconic spine the decision promised — the single runtime
+  representation the REPL, and later the node editor and data-driven menus, all
+  bind to.
+- **Reads are total, concretely.** A per-run `SceneView` snapshot backs the
+  geometric-query builtins (`body-count`, `body-x/y/rot`, `count-at`,
+  `nearest-at`), reading committed state through `geometry::sdf` — no `&World`
+  in a builtin, no mutation path. Live plotters are "just another reader" of
+  this same snapshot seam.
+- **Writes are seam-mediated, concretely.** Edit verbs emit reflected intents
+  through `IntentDispatch`; config verbs (next) write settings resources. The
+  `OpCategory` on each `OpSpec` records which seam an op is allowed to use — the
+  machine-checkable statement of the read-total / write-mediated rule.
+
+The endgame this unlocks (the user-facing "extend the tool in the DSL" goal):
+
+- **Menus and context-menu actions as registry data.** A menu entry reduces to
+  `(label, op-name, arg-builder)`. Today's `src/ui/context_menu.rs` buttons
+  become the built-in seed of that table; a user `.scm` appends entries. The UI
+  stays a thin projection (invariant #4) — it reads the table and emits the
+  named op's intent, exactly as it emits intents today.
+- **Tools authored in lisp.** M17 already shaped tools as
+  `ToolContext → (preview, commit-intent)` (`DraftTool`) and the world-reading
+  `ManipTool`. A scripted tool is one such closure registered by name; it reuses
+  the identical press/drag/release driver and commits the same `ToolCommit` →
+  intent, so it is governed identically to a built-in tool.
+- **The sensor/modulator/actuator dataflow (P2) is the same three seams.** A
+  **sensor** is a read (a query builtin or reflect read over the `SceneView` /
+  `physics::queries` facade); a **modulator** is a Tier-B `kernel` over named
+  signals; an **actuator** is a config- or edit-op the signal drives. The
+  dataflow format therefore introduces no fourth mutation path — it is a
+  named-signal graph wiring existing reads to existing registered ops.
+
+Non-negotiables carried forward: no op may `get_mut` an authored component
+(`tests/boundaries.rs`); the VM stays cold-path only (drivers lower to
+`kernel`); RON of materialized state stays the single on-disk format (a
+registry table and user `.scm` are runtime/source artifacts, never a second
+save).
+
 ## Open questions (deferred, named so they are not forgotten)
 
 - Full **sim-event** design (spawn/destroy during play, triggers) — non-undoable

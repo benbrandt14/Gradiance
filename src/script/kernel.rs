@@ -264,8 +264,8 @@ impl Kernel {
     /// No recursion, no dynamic dispatch, no allocation: a fixed
     /// [`MAX_STACK`] scratch array lives on the call frame, and compilation
     /// already proved the tape never overflows it. Out-of-range variable
-    /// reads (impossible for a compiled kernel, since [`compile`] bounds
-    /// them) fall back to `0.0` rather than panicking.
+    /// reads (impossible for a compiled kernel, since [`compile`](Kernel::compile)
+    /// bounds them) fall back to `0.0` rather than panicking.
     #[inline]
     pub fn eval(&self, vars: &[f32]) -> f32 {
         let mut stack = [0.0_f32; MAX_STACK];
