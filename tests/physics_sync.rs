@@ -163,6 +163,39 @@ fn resting_bodies_report_contacts_through_the_facade() {
     );
 }
 
+#[derive(Resource, Default)]
+struct CapturedMass(Option<f32>);
+
+fn capture_mass(
+    physics: gradiance::physics::queries::PhysicsQueries,
+    bodies: Query<Entity, With<Body>>,
+    mut out: ResMut<CapturedMass>,
+) {
+    out.0 = bodies
+        .iter()
+        .filter_map(|e| physics.mass_of(e).filter(|m| m.is_finite() && *m > 0.0))
+        .fold(None, |acc, m| Some(acc.map_or(m, |a: f32| a.max(m))));
+}
+
+#[test]
+fn dynamic_bodies_report_mass_through_the_facade() {
+    // The mass read the live probe surfaces: a dynamic box gets a positive,
+    // finite computed mass from its collider; the static floor stays infinite
+    // (filtered out), so the max finite mass is the box's.
+    let mut app = headless_app();
+    app.init_resource::<CapturedMass>();
+    app.add_systems(Update, capture_mass);
+    let (_falling, _floor) = falling_box_scene(&mut app);
+
+    step(&mut app, 4);
+
+    let mass = app.world().resource::<CapturedMass>().0;
+    assert!(
+        mass.is_some_and(|m| m > 0.0),
+        "the dynamic box reports a positive finite mass: {mass:?}"
+    );
+}
+
 #[test]
 fn pausing_freezes_the_simulation() {
     let mut app = headless_app();

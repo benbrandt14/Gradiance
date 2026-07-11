@@ -29,6 +29,7 @@ pub struct PhysicsQueries<'w, 's> {
     spatial: SpatialQuery<'w, 's>,
     velocities: Query<'w, 's, (&'static LinearVelocity, &'static AngularVelocity)>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
+    masses: Query<'w, 's, &'static ComputedMass>,
     contacts: Res<'w, ContactGraph>,
 }
 
@@ -80,5 +81,12 @@ impl PhysicsQueries<'_, '_> {
     /// Whether the body is asleep (solver has parked it).
     pub fn is_sleeping(&self, entity: Entity) -> bool {
         self.sleeping.get(entity).unwrap_or(false)
+    }
+
+    /// The entity's total computed mass (kg), if it carries mass properties.
+    /// Statics/kinematics report an infinite mass; callers that only want a
+    /// finite number should filter with [`f32::is_finite`].
+    pub fn mass_of(&self, entity: Entity) -> Option<f32> {
+        self.masses.get(entity).ok().map(|m| m.value())
     }
 }

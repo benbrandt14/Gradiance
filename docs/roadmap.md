@@ -275,8 +275,13 @@ governance").
   the model is ready to back the `(measure …)` data-out seam. Hand-drawn with
   the egui painter, no plotting dependency. Next: contact-force signal, pinnable
   multi-body probes, and the script-driven `(measure …)` seam.
-- **Probes**: hover or pin a body to read its live physics (velocity, forces,
-  sleep state) — the read facade surfaced in the UI.
+- **Probes** — **hover cut landed** (`src/ui/probe.rs`): in the Select tool,
+  hovering a body shows a floating readout of its live physics — position,
+  angle, speed/velocity, spin, sleep state, and mass — reusing the tool's
+  front-most hit-test and reading purely through `physics::queries` (mass added
+  to the facade as `mass_of`). Non-interactable tooltip, so it never captures
+  the pointer. Next: pin the readout for a selected body, and a net contact
+  force (summing `contact_points` per body).
 - Discipline it enforces: each new plottable quantity is *added to the query
   surface*, which is exactly what makes it scriptable (a sensor) for free.
 
