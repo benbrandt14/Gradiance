@@ -93,6 +93,8 @@ struct Shared {
     sim: Arc<Mutex<SimSettings>>,
     /// Config writes emitted by `sim-set` → the settings resource.
     config: ConfigQueue,
+    /// Named actions emitted by `register-action` → the `ScriptActions` table.
+    actions: Arc<Mutex<Vec<ScriptAction>>>,
     /// The operation catalog → the `ops`/`describe` meta verbs.
     catalog: Arc<OperationCatalog>,
 }
@@ -104,6 +106,7 @@ impl Shared {
             view: Arc::new(Mutex::new(SceneView::default())),
             sim: Arc::new(Mutex::new(SimSettings::default())),
             config: Arc::new(Mutex::new(Vec::new())),
+            actions: Arc::new(Mutex::new(Vec::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
         }
     }
@@ -165,6 +168,36 @@ impl ScriptLog {
         if self.0.len() > Self::CAP {
             let overflow = self.0.len() - Self::CAP;
             self.0.drain(0..overflow);
+        }
+    }
+}
+
+/// A user-registered named action: a label plus the lisp source it runs.
+/// Invoking one submits its source through the same [`ScriptInputs`] seam a
+/// REPL line uses, so a script-authored action is governed exactly like any
+/// other script — no new mutation path. This is the seam that lets a user add
+/// menu entries from a `.scm` file.
+#[derive(Debug, Clone)]
+pub struct ScriptAction {
+    /// The label the editor shows.
+    pub label: String,
+    /// The lisp source the action runs when invoked.
+    pub source: String,
+}
+
+/// The table of user-registered actions, surfaced by the UI (e.g. the context
+/// menu). Populated by the `register-action` builtin; re-registering a label
+/// replaces its source, so re-running a registration script is idempotent.
+#[derive(Resource, Default)]
+pub struct ScriptActions(pub Vec<ScriptAction>);
+
+impl ScriptActions {
+    /// Inserts or updates an action by label.
+    fn upsert(&mut self, action: ScriptAction) {
+        if let Some(existing) = self.0.iter_mut().find(|a| a.label == action.label) {
+            existing.source = action.source;
+        } else {
+            self.0.push(action);
         }
     }
 }
@@ -365,6 +398,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_edit_verbs(engine, &shared.ops);
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
+    register_editor_verbs(engine, &shared.actions);
     register_meta_verbs(engine, &shared.catalog);
 }
 
@@ -499,6 +533,22 @@ fn register_config_verbs(engine: &mut Engine, config: &ConfigQueue, sim: &Arc<Mu
     });
 }
 
+/// Editor-state verbs — writes to non-authored editor resources. `register-action`
+/// appends to the action table the UI surfaces; it queues the entry (the exclusive
+/// system moves it into the `ScriptActions` resource), never touching the World.
+fn register_editor_verbs(engine: &mut Engine, actions: &Arc<Mutex<Vec<ScriptAction>>>) {
+    // `(register-action label source)` — surface a named action in the editor.
+    let a = Arc::clone(actions);
+    engine.register_fn(
+        name::REGISTER_ACTION,
+        move |label: String, source: String| {
+            if let Ok(mut queue) = a.lock() {
+                queue.push(ScriptAction { label, source });
+            }
+        },
+    );
+}
+
 /// Homoiconic introspection — the catalog reading itself.
 fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<OperationCatalog>) {
     // `(ops)` — a list of every registered operation name.
@@ -616,6 +666,27 @@ pub fn run_scripts(world: &mut World) {
             let _ = write_path(&mut *settings, &write.path, write.value);
         }
     }
+
+    // Drain the action queue into the `ScriptActions` table (upsert by label, so
+    // re-running a registration script is idempotent).
+    let actions: Vec<ScriptAction> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .actions
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if !actions.is_empty()
+        && let Some(mut table) = world.get_resource_mut::<ScriptActions>()
+    {
+        for action in actions {
+            table.upsert(action);
+        }
+    }
 }
 
 /// Installs the scripting seam: embeds steel, registers the scene verbs and
@@ -630,6 +701,7 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptInputs>();
         app.init_resource::<ScriptLog>();
         app.init_resource::<OperationRegistry>();
+        app.init_resource::<ScriptActions>();
         let mut dispatch = IntentDispatch::default();
         dispatch.register::<CutIntent>();
         dispatch.register::<SpawnBodyIntent>();
@@ -775,6 +847,29 @@ mod tests {
             "(when (< (sim-get \"gravity.y\") 0) (spawn-box 0 0 10 10))",
         );
         assert_eq!(app.world().resource::<Spawns>().0.len(), 1);
+    }
+
+    #[test]
+    fn register_action_populates_the_action_table() {
+        let mut app = bus_app();
+        run(
+            &mut app,
+            "(register-action \"Fill\" \"(spawn-box 0 0 10 10)\")",
+        );
+        let table = &app.world().resource::<ScriptActions>().0;
+        assert_eq!(table.len(), 1);
+        assert_eq!(table[0].label, "Fill");
+        assert_eq!(table[0].source, "(spawn-box 0 0 10 10)");
+    }
+
+    #[test]
+    fn re_registering_a_label_updates_in_place() {
+        let mut app = bus_app();
+        run(&mut app, "(register-action \"A\" \"(spawn-box 0 0 1 1)\")");
+        run(&mut app, "(register-action \"A\" \"(spawn-circle 0 0 1)\")");
+        let table = &app.world().resource::<ScriptActions>().0;
+        assert_eq!(table.len(), 1);
+        assert_eq!(table[0].source, "(spawn-circle 0 0 1)");
     }
 
     #[test]

@@ -11,7 +11,7 @@ mod harness;
 
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
-use gradiance::script::bridge::ScriptInputs;
+use gradiance::script::bridge::{ScriptActions, ScriptInputs};
 use harness::{body_count, paused_app, undo};
 
 /// Submits `source` and advances one frame: `run_scripts` emits the intents,
@@ -182,6 +182,24 @@ fn a_script_reads_config_and_scene_together() {
                     (loop (+ i 1)))))",
     );
     assert_eq!(body_count(&mut app), 4);
+}
+
+#[test]
+fn a_registered_action_runs_when_invoked() {
+    // The "add a menu action from a .scm file" loop end to end: a script
+    // registers a named action, and invoking it — submitting its stored source,
+    // exactly as the context menu does — authors the scene.
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(register-action \"Three boxes\"
+            \"(begin (spawn-box -30 0 10 10) (spawn-box 0 0 10 10) (spawn-box 30 0 10 10))\")",
+    );
+    // Registering an action does not run it.
+    assert_eq!(body_count(&mut app), 0);
+    let source = app.world().resource::<ScriptActions>().0[0].source.clone();
+    run(&mut app, &source);
+    assert_eq!(body_count(&mut app), 3);
 }
 
 #[test]

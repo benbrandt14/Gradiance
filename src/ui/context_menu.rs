@@ -17,9 +17,20 @@ use crate::interaction::pointer::PointerButtons;
 use crate::interaction::selection::Selection;
 use crate::interaction::tools::bodies_at_sorted;
 use crate::physics::queries::PhysicsQueries;
+use crate::script::bridge::{ScriptActions, ScriptInputs};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
+
+/// Script-action access, bundled into one `SystemParam` to keep `context_menu`
+/// under Bevy's system-parameter count limit. Reads the registered actions and
+/// submits an invoked one's source through the shared `ScriptInputs` queue.
+#[derive(SystemParam)]
+pub struct ScriptMenu<'w> {
+    actions: Res<'w, ScriptActions>,
+    inputs: ResMut<'w, ScriptInputs>,
+}
 
 /// Open context menu state.
 #[derive(Resource, Default, Debug)]
@@ -85,6 +96,7 @@ pub fn context_menu(
     mut edits: MessageWriter<PropertyEditIntent>,
     mut merge: MessageWriter<MergeIntent>,
     mut moves: MessageWriter<CommitTransformIntent>,
+    mut script: ScriptMenu,
 ) -> Result {
     if !menu.open {
         return Ok(());
@@ -294,6 +306,20 @@ pub fn context_menu(
                         edits.write(PropertyEditIntent { changes });
                     }
                     close = true;
+                }
+
+                // User-registered script actions (added from `.scm` via
+                // `register-action`). Invoking one submits its source through
+                // the same `ScriptInputs` seam a REPL line uses.
+                if !script.actions.0.is_empty() {
+                    ui.separator();
+                    ui.label(egui::RichText::new("Scripts").weak());
+                    for action in &script.actions.0 {
+                        if ui.button(&action.label).clicked() {
+                            script.inputs.submit(action.source.clone());
+                            close = true;
+                        }
+                    }
                 }
             });
         })
