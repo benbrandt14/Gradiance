@@ -10,6 +10,7 @@
 mod harness;
 
 use bevy::prelude::*;
+use gradiance::domain::settings::SimSettings;
 use gradiance::script::bridge::ScriptInputs;
 use harness::{body_count, paused_app, undo};
 
@@ -146,6 +147,41 @@ fn body_accessors_read_positions() {
         "(when (> (count-at 14 0) 0) (spawn-box 0 100 5 5))",
     );
     assert_eq!(body_count(&mut app), 3);
+}
+
+#[test]
+fn a_script_configures_the_simulation() {
+    let mut app = paused_app();
+    let gravity_y = |app: &mut App| app.world().resource::<SimSettings>().gravity.y;
+    assert!((gravity_y(&mut app) - (-250.0)).abs() > 1.0); // default is -1000
+    run(&mut app, "(sim-set \"gravity.y\" -250)");
+    // Config is not authored state: the write lands on the settings resource
+    // (the invariant-#4 seam), so it never touches the command stack.
+    assert!((gravity_y(&mut app) - (-250.0)).abs() < 1e-3);
+    // And an undo does not revert it (it was never a command).
+    undo(&mut app);
+    assert!((gravity_y(&mut app) - (-250.0)).abs() < 1e-3);
+}
+
+#[test]
+fn a_script_reads_config_and_scene_together() {
+    // sim-get and the scene queries compose: gravity points down, so drop a
+    // marker per existing body. Demonstrates reads spanning both facades.
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box -30 0 10 10) (spawn-box 30 0 10 10))",
+    );
+    assert_eq!(body_count(&mut app), 2);
+    run(
+        &mut app,
+        "(when (< (sim-get \"gravity.y\") 0)
+            (let loop ((i 0))
+                (when (< i (body-count))
+                    (spawn-circle (* i 20) -80 4)
+                    (loop (+ i 1)))))",
+    );
+    assert_eq!(body_count(&mut app), 4);
 }
 
 #[test]

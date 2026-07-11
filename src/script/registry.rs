@@ -36,6 +36,10 @@ pub mod name {
     pub const COUNT_AT: &str = "count-at";
     /// `(nearest-at x y)` — index of the body whose centre is nearest the point.
     pub const NEAREST_AT: &str = "nearest-at";
+    /// `(sim-get path)` — read a simulation setting by reflect-path.
+    pub const SIM_GET: &str = "sim-get";
+    /// `(sim-set path value)` — write a simulation setting by reflect-path.
+    pub const SIM_SET: &str = "sim-set";
     /// `(ops)` — list of every registered operation name.
     pub const OPS: &str = "ops";
     /// `(describe name)` — the signature and doc of one operation.
@@ -91,7 +95,7 @@ impl OperationCatalog {
     /// registered in [`bridge`](crate::script::bridge) under the same
     /// [`name`] constant.
     pub fn builtin() -> Self {
-        use OpCategory::{Edit, Query};
+        use OpCategory::{Config, Edit, Query};
         Self {
             ops: vec![
                 OpSpec {
@@ -155,6 +159,20 @@ impl OperationCatalog {
                     signature: "(nearest-at x y)",
                     doc: "Index of the body whose centre is nearest (x, y); -1 if none.",
                     category: Query,
+                    args: 2,
+                },
+                OpSpec {
+                    name: name::SIM_GET,
+                    signature: "(sim-get path)",
+                    doc: "Read a simulation setting by reflect-path, e.g. \"gravity.y\", \"speed\".",
+                    category: Query,
+                    args: 1,
+                },
+                OpSpec {
+                    name: name::SIM_SET,
+                    signature: "(sim-set path value)",
+                    doc: "Set a simulation setting by reflect-path (config seam, not undoable).",
+                    category: Config,
                     args: 2,
                 },
                 OpSpec {
