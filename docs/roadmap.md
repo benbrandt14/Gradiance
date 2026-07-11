@@ -267,9 +267,12 @@ governance").
 - Body/point **tracers**: sampled trajectories drawn as fading polylines. A
   tracer is an authored marker (one op); its samples are *derived*, never
   command-wrapped or serialized (rule #5).
-- **Live plotters**: time-series of a queried scalar (speed, height, joint
-  angle, contact force) in a dockable egui panel — the data-out (`measure`) seam
-  the decision doc names.
+- **Live plotters** — **first cut landed** (`src/ui/plot.rs`): a backslash-
+  toggled panel time-series-plots the selected body's speed and height, sampled
+  each frame while playing from `physics::queries` (a pure read; a pause freezes
+  the plot). Hand-drawn with the egui painter, no plotting dependency. Next:
+  more signals (joint angle, contact force), pinnable multi-body probes, and a
+  script-driven `(measure …)` data-out seam.
 - **Probes**: hover or pin a body to read its live physics (velocity, forces,
   sleep state) — the read facade surfaced in the UI.
 - Discipline it enforces: each new plottable quantity is *added to the query
