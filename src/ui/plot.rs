@@ -1,4 +1,5 @@
-//! The live plotter: a time-series panel for the selected body's physics.
+//! The live plotter: a time-series panel for the selected body's or joint's
+//! physics.
 //!
 //! A pure *read* — the plotter introspects `physics::queries` and `Transform`
 //! and records a rolling history; it never mutates authored state (invariant
@@ -6,54 +7,76 @@
 //! (`docs/script-lisp-decision.md` §"Live plotters"): a plotter is just another
 //! reader of the same facade scripts read through.
 //!
-//! `sample_plot` fills the history each frame while playing; `plot_panel`
-//! (backquote's neighbour, backslash) draws it. The plot is hand-rendered with
-//! the egui painter — no plotting dependency.
+//! The history is a set of **named signals**, so adding a plottable quantity is
+//! a one-line change and the model is ready to back the future `(measure …)`
+//! data-out seam. `sample_plot` fills it each frame while playing; `plot_panel`
+//! (backslash) draws it, hand-rendered with the egui painter — no plotting
+//! dependency.
 
-use crate::interaction::selection::Selection;
+use crate::core::ids::IdIndex;
+use crate::core::units::PosRot;
+use crate::domain::joint::{JointDef, JointKind};
+use crate::interaction::selection::{SelectedJoint, Selection};
 use crate::physics::queries::PhysicsQueries;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use std::collections::VecDeque;
 
-/// Rolling live-signal history for the plot panel. Records the *single* selected
-/// body's speed and height; switching bodies (or selecting zero/many) resets it.
+/// One named live signal — a label plus its rolling samples.
+struct Signal {
+    label: &'static str,
+    samples: VecDeque<f32>,
+}
+
+/// Rolling live-signal history for the plot panel. Records the currently
+/// selected body *or* joint; changing what (or which signals) is selected
+/// resets it, so a plot never mixes two sources' histories.
 #[derive(Resource, Default)]
 pub struct PlotHistory {
     tracked: Option<Entity>,
-    speed: VecDeque<f32>,
-    height: VecDeque<f32>,
+    signals: Vec<Signal>,
 }
 
 impl PlotHistory {
     /// Samples kept per signal (~10 s at 60 fps).
     const CAP: usize = 600;
 
-    /// Appends one sample for `entity`, resetting first if the tracked body
-    /// changed (so a plot never mixes two bodies' histories).
-    fn record(&mut self, entity: Entity, speed: f32, height: f32) {
-        if self.tracked != Some(entity) {
+    /// Points the history at `entity` with the given signal labels, rebuilding
+    /// (and clearing) only when the target or the signal set actually changed.
+    fn retarget(&mut self, entity: Entity, labels: &[&'static str]) {
+        let unchanged = self.tracked == Some(entity)
+            && self.signals.len() == labels.len()
+            && self
+                .signals
+                .iter()
+                .zip(labels)
+                .all(|(signal, label)| signal.label == *label);
+        if !unchanged {
             self.tracked = Some(entity);
-            self.speed.clear();
-            self.height.clear();
+            self.signals = labels
+                .iter()
+                .map(|&label| Signal {
+                    label,
+                    samples: VecDeque::new(),
+                })
+                .collect();
         }
-        push_capped(&mut self.speed, speed);
-        push_capped(&mut self.height, height);
     }
 
-    /// Forgets the tracked body and its history (nothing plottable selected).
+    /// Appends one sample per signal (values in signal order).
+    fn push(&mut self, values: &[f32]) {
+        for (signal, &value) in self.signals.iter_mut().zip(values) {
+            signal.samples.push_back(value);
+            while signal.samples.len() > Self::CAP {
+                signal.samples.pop_front();
+            }
+        }
+    }
+
+    /// Forgets the tracked source and its signals (nothing plottable selected).
     fn clear(&mut self) {
         self.tracked = None;
-        self.speed.clear();
-        self.height.clear();
-    }
-}
-
-/// Pushes `value`, dropping the oldest sample past [`PlotHistory::CAP`].
-fn push_capped(buf: &mut VecDeque<f32>, value: f32) {
-    buf.push_back(value);
-    while buf.len() > PlotHistory::CAP {
-        buf.pop_front();
+        self.signals.clear();
     }
 }
 
@@ -63,15 +86,45 @@ pub struct PlotPanel {
     open: bool,
 }
 
-/// Samples the selected body's live speed and height into the history. Gated on
-/// `Playing`, so a pause freezes the plot instead of scrolling flat lines.
+/// Colours cycled across a source's signals.
+const SIGNAL_COLORS: [egui::Color32; 4] = [
+    egui::Color32::from_rgb(120, 200, 255),
+    egui::Color32::from_rgb(255, 190, 120),
+    egui::Color32::from_rgb(150, 230, 150),
+    egui::Color32::from_rgb(230, 150, 230),
+];
+
+/// Samples the selected body's or joint's live signals into the history. Gated
+/// on `Playing`, so a pause freezes the plot instead of scrolling flat lines.
 pub fn sample_plot(
     selection: Res<Selection>,
+    selected_joint: Res<SelectedJoint>,
+    joints: Query<&JointDef>,
     transforms: Query<&Transform>,
+    index: Res<IdIndex>,
     physics: PhysicsQueries,
     mut history: ResMut<PlotHistory>,
 ) {
-    // Exactly one selected body is plottable.
+    // A selected joint takes precedence (body/joint selection are exclusive):
+    // plot its current length, and for a hinge its relative angle too.
+    if let Some(joint_entity) = selected_joint.0 {
+        if let Ok(def) = joints.get(joint_entity)
+            && let Some((length, angle)) = joint_signals(def, &transforms, &index)
+        {
+            if matches!(def.kind, JointKind::Hinge { .. }) {
+                history.retarget(joint_entity, &["length (px)", "angle (deg)"]);
+                history.push(&[length, angle]);
+            } else {
+                history.retarget(joint_entity, &["length (px)"]);
+                history.push(&[length]);
+            }
+        } else {
+            history.clear();
+        }
+        return;
+    }
+
+    // Otherwise, a single selected body: speed + height.
     let mut selected = selection.iter();
     let (Some(entity), None) = (selected.next(), selected.next()) else {
         history.clear();
@@ -79,7 +132,36 @@ pub fn sample_plot(
     };
     let height = transforms.get(entity).map_or(0.0, |t| t.translation.y);
     let speed = physics.velocity_of(entity).map_or(0.0, |(v, _)| v.length());
-    history.record(entity, speed, height);
+    history.retarget(entity, &["speed (px/s)", "height (px)"]);
+    history.push(&[speed, height]);
+}
+
+/// A joint's live geometry: current anchor-to-anchor length and the relative
+/// angle of its bodies (degrees). `None` if an endpoint can't be resolved.
+fn joint_signals(
+    def: &JointDef,
+    transforms: &Query<&Transform>,
+    index: &IdIndex,
+) -> Option<(f32, f32)> {
+    let pose_a = index
+        .entity(def.body_a)
+        .and_then(|e| transforms.get(e).ok())
+        .map(PosRot::from_transform)?;
+    let world_a = def.anchor_world(pose_a.pos, pose_a.rot);
+    let (world_b, rot_b) = match def.body_b {
+        Some(id) => {
+            let pose_b = index
+                .entity(id)
+                .and_then(|e| transforms.get(e).ok())
+                .map(PosRot::from_transform)?;
+            (
+                pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b),
+                pose_b.rot,
+            )
+        }
+        None => (def.anchor_b, 0.0), // world pin
+    };
+    Some((world_a.distance(world_b), (rot_b - pose_a.rot).to_degrees()))
 }
 
 /// Renders the live-plot panel (toggle with backslash).
@@ -102,23 +184,23 @@ pub fn plot_panel(
         .open(&mut open)
         .default_width(320.0)
         .show(ctx, |ui| {
-            if history.tracked.is_none() {
-                ui.label("Select one body and press Play to plot its speed and height.");
+            if history.signals.is_empty() {
+                ui.label(
+                    "Select one body (speed, height) or a joint (length, angle) and press Play.",
+                );
                 return;
             }
-            draw_series(
-                ui,
-                "speed (px/s)",
-                &history.speed,
-                egui::Color32::from_rgb(120, 200, 255),
-            );
-            ui.add_space(4.0);
-            draw_series(
-                ui,
-                "height (px)",
-                &history.height,
-                egui::Color32::from_rgb(255, 190, 120),
-            );
+            for (i, signal) in history.signals.iter().enumerate() {
+                if i > 0 {
+                    ui.add_space(4.0);
+                }
+                draw_series(
+                    ui,
+                    signal.label,
+                    &signal.samples,
+                    SIGNAL_COLORS[i % SIGNAL_COLORS.len()],
+                );
+            }
         });
     panel.open = open;
     Ok(())
@@ -182,25 +264,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn history_caps_and_resets_on_body_change() {
+    fn history_retargets_caps_and_keeps_matching_target() {
         let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
         let mut history = PlotHistory::default();
 
-        for i in 0..(PlotHistory::CAP + 50) {
-            history.record(a, i as f32, 0.0);
+        history.retarget(a, &["x", "y"]);
+        for i in 0..(PlotHistory::CAP + 20) {
+            history.push(&[i as f32, 0.0]);
         }
-        assert_eq!(history.speed.len(), PlotHistory::CAP, "capped at CAP");
         assert_eq!(history.tracked, Some(a));
+        assert_eq!(history.signals.len(), 2);
+        assert_eq!(history.signals[0].samples.len(), PlotHistory::CAP, "capped");
 
-        // Switching bodies drops the old history.
-        history.record(b, 1.0, 2.0);
+        // Retargeting to the same target with the same labels keeps the data.
+        history.retarget(a, &["x", "y"]);
+        assert_eq!(history.signals[0].samples.len(), PlotHistory::CAP);
+
+        // A different target (or signal set) resets.
+        history.retarget(b, &["len"]);
         assert_eq!(history.tracked, Some(b));
-        assert_eq!(history.speed.len(), 1, "reset then one fresh sample");
+        assert_eq!(history.signals.len(), 1);
+        assert!(history.signals[0].samples.is_empty(), "reset on change");
 
         history.clear();
         assert_eq!(history.tracked, None);
-        assert!(history.speed.is_empty());
+        assert!(history.signals.is_empty());
     }
 }

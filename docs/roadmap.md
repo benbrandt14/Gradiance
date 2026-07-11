@@ -267,12 +267,14 @@ governance").
 - Body/point **tracers**: sampled trajectories drawn as fading polylines. A
   tracer is an authored marker (one op); its samples are *derived*, never
   command-wrapped or serialized (rule #5).
-- **Live plotters** — **first cut landed** (`src/ui/plot.rs`): a backslash-
-  toggled panel time-series-plots the selected body's speed and height, sampled
-  each frame while playing from `physics::queries` (a pure read; a pause freezes
-  the plot). Hand-drawn with the egui painter, no plotting dependency. Next:
-  more signals (joint angle, contact force), pinnable multi-body probes, and a
-  script-driven `(measure …)` data-out seam.
+- **Live plotters** — **landed** (`src/ui/plot.rs`): a backslash-toggled panel
+  time-series-plots the selected **body** (speed, height) *or* selected **joint**
+  (length, and a hinge's angle), sampled each frame while playing from
+  `physics::queries` (a pure read; a pause freezes the plot). The history is a
+  generic **named-signal** store, so adding a plottable quantity is one line and
+  the model is ready to back the `(measure …)` data-out seam. Hand-drawn with
+  the egui painter, no plotting dependency. Next: contact-force signal, pinnable
+  multi-body probes, and the script-driven `(measure …)` seam.
 - **Probes**: hover or pin a body to read its live physics (velocity, forces,
   sleep state) — the read facade surfaced in the UI.
 - Discipline it enforces: each new plottable quantity is *added to the query
