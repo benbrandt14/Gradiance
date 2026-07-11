@@ -17,7 +17,9 @@ fn main() {
     //   `gradiance <scene.ron>`         opens a scene (e.g. a debug snapshot);
     //   `gradiance --script foo.scm …`  runs one or more `.scm` files at
     //                                   startup (scene setup, `register-action`,
-    //                                   helpers) — the "author from a file" path.
+    //                                   helpers) and hot-reloads them on change;
+    //   `gradiance --resume`            reopens the exit autosave
+    //                                   (`.gradiance-session.ron`).
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut scripts = Vec::new();
     let mut i = 0;
@@ -27,6 +29,13 @@ fn main() {
                 scripts.push(PathBuf::from(path));
                 i += 2;
                 continue;
+            }
+        } else if args[i] == "--resume" {
+            let autosave = PathBuf::from(gradiance::persist::AUTOSAVE_FILE);
+            if autosave.exists() {
+                app.insert_resource(gradiance::persist::StartupScene(autosave));
+            } else {
+                eprintln!("--resume: no {} to reopen", autosave.display());
             }
         } else {
             app.insert_resource(gradiance::persist::StartupScene(args[i].clone().into()));

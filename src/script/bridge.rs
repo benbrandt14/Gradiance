@@ -144,12 +144,86 @@ impl ScriptInputs {
 #[derive(Resource, Default)]
 pub struct StartupScripts(pub Vec<PathBuf>);
 
-/// Startup system: reads each configured script file and queues its source.
-fn load_startup_scripts(scripts: Res<StartupScripts>, mut inputs: ResMut<ScriptInputs>) {
+/// Startup system: reads each configured script file, queues its source, and
+/// arms the [`ScriptWatch`] hot-reload poll for it.
+fn load_startup_scripts(
+    scripts: Res<StartupScripts>,
+    mut inputs: ResMut<ScriptInputs>,
+    mut watch: ResMut<ScriptWatch>,
+) {
     for path in &scripts.0 {
         match std::fs::read_to_string(path) {
             Ok(source) => inputs.submit(source),
             Err(err) => warn!("startup script {}: {err}", path.display()),
+        }
+        watch.files.push((path.clone(), mtime(path)));
+    }
+}
+
+/// Hot-reload watcher over the `--script` files: polls mtimes on the cold
+/// authoring path and re-submits a file through the ordinary
+/// [`ScriptInputs`] doorway when it changes on disk.
+///
+/// Re-running a file converges for *definitions* (`register-action` and
+/// friends upsert by name — see [`ScriptActions::upsert`]); *edit* verbs
+/// re-apply as ordinary new undoable commands. Semantics for authors:
+/// `docs/scripting.md`.
+#[derive(Resource)]
+pub struct ScriptWatch {
+    /// Watched files, each with the mtime last seen (`None` = unreadable at
+    /// the last poll, so a file that appears later triggers a load).
+    files: Vec<(PathBuf, Option<std::time::SystemTime>)>,
+    /// Seconds between polls. The default (0.5 s) is imperceptible for
+    /// authoring; tests set `0.0` to poll every frame.
+    pub interval: f32,
+    /// Seconds accumulated since the last poll.
+    elapsed: f32,
+}
+
+impl Default for ScriptWatch {
+    fn default() -> Self {
+        Self {
+            files: Vec::new(),
+            interval: 0.5,
+            elapsed: 0.0,
+        }
+    }
+}
+
+/// A file's modification time, or `None` when unreadable.
+fn mtime(path: &std::path::Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
+}
+
+/// Update system: re-submits a watched script when its mtime changes.
+///
+/// `Time` is optional so the headless test app (which runs no time plugin)
+/// can drive the watcher with `interval = 0.0`.
+fn watch_scripts(
+    time: Option<Res<Time>>,
+    mut watch: ResMut<ScriptWatch>,
+    mut inputs: ResMut<ScriptInputs>,
+) {
+    if watch.files.is_empty() {
+        return;
+    }
+    watch.elapsed += time.map_or(0.0, |t| t.delta_secs());
+    if watch.elapsed < watch.interval {
+        return;
+    }
+    watch.elapsed = 0.0;
+    for (path, seen) in &mut watch.files {
+        let now = mtime(path);
+        if now == *seen {
+            continue;
+        }
+        *seen = now;
+        match std::fs::read_to_string(&*path) {
+            Ok(source) => {
+                info!(path = %path.display(), "script changed on disk — reloading");
+                inputs.submit(source);
+            }
+            Err(err) => warn!("script reload {}: {err}", path.display()),
         }
     }
 }
@@ -785,13 +859,17 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<OperationRegistry>();
         app.init_resource::<ScriptActions>();
         app.init_resource::<StartupScripts>();
+        app.init_resource::<ScriptWatch>();
         let mut dispatch = IntentDispatch::default();
         dispatch.register::<CutIntent>();
         dispatch.register::<SpawnBodyIntent>();
         app.insert_resource(dispatch);
         app.insert_non_send(ScriptEngine::new());
         app.add_systems(Startup, load_startup_scripts);
-        app.add_systems(Update, run_scripts.before(CommandDispatchSet));
+        app.add_systems(
+            Update,
+            (watch_scripts, run_scripts.before(CommandDispatchSet)).chain(),
+        );
     }
 }
 
@@ -997,6 +1075,34 @@ mod tests {
             .any(|a| a.label == "Boot");
         let _ = std::fs::remove_file(&path);
         assert!(registered);
+    }
+
+    #[test]
+    fn an_edited_startup_script_hot_reloads() {
+        let path = std::env::temp_dir().join(format!("gradiance_watch_{}.scm", std::process::id()));
+        std::fs::write(&path, "(register-action \"W\" \"(spawn-box 0 0 1 1)\")")
+            .expect("write temp script");
+        let mut app = bus_app();
+        app.insert_resource(StartupScripts(vec![path.clone()]));
+        app.world_mut().resource_mut::<ScriptWatch>().interval = 0.0; // poll every frame
+        app.update(); // boot: load + run
+
+        // Rewrite, forcing an mtime the poll cannot miss (same-second writes
+        // would otherwise tie on filesystems with coarse timestamps).
+        std::fs::write(&path, "(register-action \"W\" \"(spawn-circle 0 0 2)\")")
+            .expect("rewrite temp script");
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("reopen temp script");
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(10))
+            .expect("bump mtime");
+        app.update(); // watch re-submits; run_scripts applies the same frame
+
+        let table = &app.world().resource::<ScriptActions>().0;
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(table.len(), 1, "reload must upsert, not duplicate");
+        assert_eq!(table[0].source, "(spawn-circle 0 0 2)");
     }
 
     #[test]
