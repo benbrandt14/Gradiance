@@ -39,12 +39,15 @@ Algodoo-inspired 2.5D physics sandbox. Bevy 0.19 + Avian2d 0.7 + bevy_egui 0.41 
 - `src/geometry/` is pure (no ECS imports) — put all testable math there.
 - Errors: `thiserror` enums; no `unwrap`/`expect`/`panic!` outside tests (clippy denies).
 
-## Scripting & symbolic modeling (foundation forming — read `docs/script-lisp-decision.md`)
+## Scripting & symbolic modeling (foundation landed — read `docs/script-lisp-decision.md`; user/verb guide in `docs/scripting.md`)
 
 The accepted plan makes the whole tool programmable via a Lisp/DSL. It is being
 built by *accretion*, not big-bang: honor these when your work touches an
 adjacent seam, so the layer lands uniformly instead of as an unmaintained
-side-car.
+side-car. The P1 substrate is in place — the operation registry
+(`src/script/registry.rs`), edit/config/query/editor verbs + REPL console +
+`--script` loader (`src/script/bridge.rs`, `src/ui/console.rs`); adding a verb
+follows the recipe in `docs/scripting.md`.
 
 - **No new mutation path.** Scripting reuses the *same* intent seam as tools/UI
   (invariants 1–2). A future operation registry may only dispatch through
