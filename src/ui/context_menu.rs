@@ -2,22 +2,27 @@
 //! layer operations.
 
 use crate::command::intent::{
-    CommitTransformIntent, GroupIntent, MergeIntent, PropertyEditIntent, UngroupIntent,
+    CommitTransformIntent, DeleteJointIntent, GroupIntent, MergeIntent, PropertyEditIntent,
+    UngroupIntent,
 };
 use crate::command::property::{PropertyChange, PropertyValue};
 use crate::core::ids::{IdIndex, StableId};
+use crate::core::units::PosRot;
 use crate::domain::Body;
 use crate::domain::appearance::{Appearance, Rgba};
+use crate::domain::joint::JointDef;
 use crate::domain::layers::LayerMask32;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::PointerOverUi;
 use crate::interaction::align::{AlignItem, AlignOp, align_changes};
 use crate::interaction::cursor::CursorWorldPos;
+use crate::interaction::joint_edit::ANCHOR_PICK_PX;
 use crate::interaction::pointer::PointerButtons;
-use crate::interaction::selection::Selection;
+use crate::interaction::selection::{SelectTransition, SelectedJoint, Selection};
 use crate::interaction::tools::bodies_at_sorted;
 use crate::physics::queries::PhysicsQueries;
 use crate::script::bridge::{ScriptActions, ScriptInputs};
+use crate::ui::joint_inspector::kind_name;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -32,6 +37,15 @@ pub struct ScriptMenu<'w> {
     inputs: ResMut<'w, ScriptInputs>,
 }
 
+/// The body-scoped intent writers, bundled into one `SystemParam` to keep
+/// `context_menu` under Bevy's system-parameter count limit.
+#[derive(SystemParam)]
+pub struct GroupWriters<'w> {
+    group: MessageWriter<'w, GroupIntent>,
+    ungroup: MessageWriter<'w, UngroupIntent>,
+    merge: MessageWriter<'w, MergeIntent>,
+}
+
 /// Open context menu state.
 #[derive(Resource, Default, Debug)]
 pub struct ContextMenu {
@@ -41,12 +55,31 @@ pub struct ContextMenu {
     pub screen: Vec2,
     /// Bodies under the click, topmost first.
     pub under: Vec<StableId>,
+    /// Joint whose anchor is under the click, if any.
+    pub joint: Option<StableId>,
+}
+
+/// Nearest joint id whose anchor is within `radius` of `point`. Pure so the
+/// pick can be unit-tested without a World.
+fn nearest_joint(
+    point: Vec2,
+    radius: f32,
+    candidates: impl Iterator<Item = (StableId, Vec2)>,
+) -> Option<StableId> {
+    candidates
+        .filter_map(|(id, anchor)| {
+            let d = anchor.distance(point);
+            (d <= radius).then_some((d, id))
+        })
+        .min_by(|(a, _), (b, _)| a.total_cmp(b))
+        .map(|(_, id)| id)
 }
 
 /// Opens the menu on a right *click* — a release within a small screen
 /// deadzone of the press. Gestures that need right-drag (selection
 /// rotate, camera pan) use the same deadzone, so a click reaches the
 /// menu and a drag never does; no cross-system ordering is involved.
+#[expect(clippy::too_many_arguments)] // one click handler, grouped reads
 pub fn open_context_menu(
     buttons: Res<PointerButtons>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -55,6 +88,10 @@ pub fn open_context_menu(
     physics: PhysicsQueries,
     bodies: Query<(&ShapeDef, &LayerMask32), With<Body>>,
     ids: Query<&StableId>,
+    joints: Query<(&StableId, &JointDef)>,
+    transforms: Query<&Transform, With<Body>>,
+    index: Res<IdIndex>,
+    projections: Query<&Projection, With<Camera3d>>,
     mut press_pos: Local<Option<Vec2>>,
     mut menu: ResMut<ContextMenu>,
 ) {
@@ -67,14 +104,23 @@ pub fn open_context_menu(
         && start.distance(now) < 4.0
         && let Some(world) = cursor.0
     {
-        {
-            menu.under = bodies_at_sorted(world, &physics, &bodies)
-                .into_iter()
-                .filter_map(|e| ids.get(e).ok().copied())
-                .collect();
-            menu.screen = now;
-            menu.open = true;
-        }
+        menu.under = bodies_at_sorted(world, &physics, &bodies)
+            .into_iter()
+            .filter_map(|e| ids.get(e).ok().copied())
+            .collect();
+        // A joint anchor within the pick radius is offered for configuration.
+        let radius = ANCHOR_PICK_PX * crate::interaction::camera::camera_scale(&projections);
+        menu.joint = nearest_joint(
+            world,
+            radius,
+            joints.iter().filter_map(|(id, def)| {
+                let entity = index.entity(def.body_a)?;
+                let pose = PosRot::from_transform(transforms.get(entity).ok()?);
+                Some((*id, def.anchor_world(pose.pos, pose.rot)))
+            }),
+        );
+        menu.screen = now;
+        menu.open = true;
     }
 }
 
@@ -84,18 +130,18 @@ pub fn context_menu(
     mut contexts: EguiContexts,
     mut menu: ResMut<ContextMenu>,
     mut selection: ResMut<Selection>,
-    mut selected_joint: ResMut<crate::interaction::selection::SelectedJoint>,
+    mut selected_joint: ResMut<SelectedJoint>,
     index: Res<IdIndex>,
     ids: Query<&StableId>,
     layers_q: Query<&LayerMask32, With<Body>>,
     all_layers: Query<&LayerMask32, With<Body>>,
     groups: Query<(Entity, &crate::domain::group::SelectionGroup), With<Body>>,
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
-    mut group: MessageWriter<GroupIntent>,
-    mut ungroup: MessageWriter<UngroupIntent>,
+    joints: Query<&JointDef>,
+    mut writers: GroupWriters,
     mut edits: MessageWriter<PropertyEditIntent>,
-    mut merge: MessageWriter<MergeIntent>,
     mut moves: MessageWriter<CommitTransformIntent>,
+    mut deletes: MessageWriter<DeleteJointIntent>,
     mut script: ScriptMenu,
 ) -> Result {
     if !menu.open {
@@ -114,11 +160,49 @@ pub fn context_menu(
             egui::Frame::menu(ui.style()).show(ui, |ui| {
                 ui.set_min_width(180.0);
 
+                // Joint under the click: configuration, reachable via right-click
+                // (not only the select-and-inspect flow).
+                if let Some(joint_id) = menu.joint
+                    && let Some(entity) = index.entity(joint_id)
+                    && let Ok(def) = joints.get(entity)
+                {
+                    ui.label(egui::RichText::new(kind_name(&def.kind)).strong());
+                    if ui.button("Configure joint…").clicked() {
+                        SelectTransition::SelectJoint(entity).apply(
+                            &mut selection,
+                            &mut selected_joint,
+                            &groups,
+                        );
+                        close = true;
+                    }
+                    let mut collide = def.common.collide_connected;
+                    if ui
+                        .checkbox(&mut collide, "connected bodies collide")
+                        .changed()
+                    {
+                        let mut new = def.clone();
+                        new.common.collide_connected = collide;
+                        edits.write(PropertyEditIntent {
+                            changes: vec![PropertyChange {
+                                id: joint_id,
+                                old: PropertyValue::Joint(def.clone()),
+                                new: PropertyValue::Joint(new),
+                            }],
+                        });
+                        close = true;
+                    }
+                    if ui.button("Delete joint").clicked() {
+                        deletes.write(DeleteJointIntent { id: joint_id });
+                        close = true;
+                    }
+                    ui.separator();
+                }
+
                 if ui
                     .add_enabled(selected_ids.len() >= 2, egui::Button::new("Group"))
                     .clicked()
                 {
-                    group.write(GroupIntent {
+                    writers.group.write(GroupIntent {
                         targets: selected_ids.clone(),
                     });
                     close = true;
@@ -127,7 +211,7 @@ pub fn context_menu(
                     .add_enabled(!selected_ids.is_empty(), egui::Button::new("Ungroup"))
                     .clicked()
                 {
-                    ungroup.write(UngroupIntent {
+                    writers.ungroup.write(UngroupIntent {
                         targets: selected_ids.clone(),
                     });
                     close = true;
@@ -139,7 +223,7 @@ pub fn context_menu(
                     )
                     .clicked()
                 {
-                    merge.write(MergeIntent {
+                    writers.merge.write(MergeIntent {
                         targets: selected_ids.clone(),
                     });
                     close = true;
@@ -373,4 +457,34 @@ fn world_bounds(shape: &ShapeDef, transform: &Transform) -> (Vec2, Vec2) {
         wmax = wmax.max(w);
     }
     (wmin, wmax)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nearest_joint_picks_closest_within_radius() {
+        let cands = [
+            (StableId::new(), Vec2::new(10.0, 0.0)),
+            (StableId::new(), Vec2::new(3.0, 0.0)),
+            (StableId::new(), Vec2::new(100.0, 0.0)),
+        ];
+        // Radius 5 from the origin: only the (3, 0) anchor qualifies.
+        assert_eq!(
+            nearest_joint(Vec2::ZERO, 5.0, cands.iter().copied()),
+            Some(cands[1].0),
+        );
+    }
+
+    #[test]
+    fn nearest_joint_none_outside_radius() {
+        let cands = [(StableId::new(), Vec2::new(50.0, 0.0))];
+        assert_eq!(nearest_joint(Vec2::ZERO, 5.0, cands.iter().copied()), None);
+    }
+
+    #[test]
+    fn nearest_joint_empty_is_none() {
+        assert_eq!(nearest_joint(Vec2::ZERO, 5.0, std::iter::empty()), None);
+    }
 }

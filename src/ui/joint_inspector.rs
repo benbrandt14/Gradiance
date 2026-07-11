@@ -124,7 +124,8 @@ pub fn joint_inspector(
     Ok(())
 }
 
-fn kind_name(kind: &JointKind) -> &'static str {
+/// A human label for a joint kind, shared with the context menu.
+pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "Hinge (revolute)",
         JointKind::Weld => "Weld (fixed)",

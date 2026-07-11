@@ -29,8 +29,9 @@ use crate::interaction::snap::SnappedCursor;
 use crate::interaction::tools::ActiveGesture;
 use bevy::prelude::*;
 
-/// Screen-space radius (logical px) for clicking a joint anchor.
-const ANCHOR_PICK_PX: f32 = 12.0;
+/// Screen-space radius (logical px) for clicking a joint anchor. Shared with
+/// the context menu so left-click picking and right-click config agree.
+pub const ANCHOR_PICK_PX: f32 = 12.0;
 /// World-space deadzone before an anchor drag engages.
 const DRAG_DEADZONE: f32 = 4.0;
 
