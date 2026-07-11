@@ -1,10 +1,11 @@
 //! The World-facing scripting seam (Tier-A authoring path).
 //!
 //! This is the **only ECS-touching part** of `src/script/`. It embeds the
-//! steel engine, registers scene-verb builtins (authored-world edits *and*
-//! read-total geometric queries), and runs the exclusive [`run_scripts`] system
-//! that dispatches script-emitted operation records through the *existing*
-//! intent bus.
+//! steel engine, registers scene-verb builtins across all three governance
+//! categories (authored-world **edits** → intents, **config** → settings
+//! resources, read-total **queries**), and runs the exclusive [`run_scripts`]
+//! system that dispatches script-emitted operation records through the
+//! *existing* seams.
 //!
 //! # The World-integration constraint (spike #1)
 //!
@@ -44,9 +45,10 @@ use crate::domain::Body;
 use crate::domain::appearance::Appearance;
 use crate::domain::layers::LayerMask32;
 use crate::domain::props::BodyPhysics;
+use crate::domain::settings::SimSettings;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::sdf;
-use crate::script::reflect_bridge::steel_to_f64;
+use crate::script::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::script::registry::{OperationCatalog, name};
 use bevy::prelude::*;
 use bevy::reflect::Reflect;
@@ -65,6 +67,47 @@ type OpQueue = Arc<Mutex<Vec<Box<dyn Reflect>>>>;
 /// A read snapshot of the committed scene, shared between [`run_scripts`]
 /// (producer) and the query builtins (consumers).
 type SharedView = Arc<Mutex<SceneView>>;
+
+/// One pending config write (a reflect-path + scalar) emitted by a config verb;
+/// applied to the settings resource after the run — the invariant-#4 seam, not
+/// the command stack.
+struct ConfigWrite {
+    path: String,
+    value: f64,
+}
+
+/// A queue of config writes, shared between the config builtins (producers) and
+/// [`run_scripts`] (consumer).
+type ConfigQueue = Arc<Mutex<Vec<ConfigWrite>>>;
+
+/// The buffers the steel builtins capture, cloned into each closure. A producer
+/// / consumer split between the builtins and [`run_scripts`]: query/`sim-get`
+/// verbs read the snapshots [`run_scripts`] fills; edit/`sim-set` verbs push to
+/// the queues [`run_scripts`] drains.
+struct Shared {
+    /// Reflected edit intents emitted by edit verbs → the intent bus.
+    ops: OpQueue,
+    /// Read snapshot of the committed scene → query verbs.
+    view: SharedView,
+    /// Read mirror of `SimSettings` → `sim-get`.
+    sim: Arc<Mutex<SimSettings>>,
+    /// Config writes emitted by `sim-set` → the settings resource.
+    config: ConfigQueue,
+    /// The operation catalog → the `ops`/`describe` meta verbs.
+    catalog: Arc<OperationCatalog>,
+}
+
+impl Shared {
+    fn new() -> Self {
+        Self {
+            ops: Arc::new(Mutex::new(Vec::new())),
+            view: Arc::new(Mutex::new(SceneView::default())),
+            sim: Arc::new(Mutex::new(SimSettings::default())),
+            config: Arc::new(Mutex::new(Vec::new())),
+            catalog: Arc::new(OperationCatalog::builtin()),
+        }
+    }
+}
 
 /// Why a script could not run.
 #[derive(Debug, thiserror::Error)]
@@ -241,23 +284,20 @@ impl IntentDispatch {
     }
 }
 
-/// The steel engine plus the shared op queue and read snapshot. A `NonSend`
+/// The steel engine plus the shared buffers it reads/writes. A `NonSend`
 /// resource: the VM is the cold authoring path and lives on the main thread, so
 /// it never needs to be `Send`.
 pub struct ScriptEngine {
     engine: Engine,
-    ops: OpQueue,
-    view: SharedView,
+    shared: Shared,
 }
 
 impl ScriptEngine {
     fn new() -> Self {
-        let ops: OpQueue = Arc::new(Mutex::new(Vec::new()));
-        let view: SharedView = Arc::new(Mutex::new(SceneView::default()));
-        let catalog = Arc::new(OperationCatalog::builtin());
+        let shared = Shared::new();
         let mut engine = Engine::new();
-        register_builtins(&mut engine, &ops, &view, &catalog);
-        Self { engine, ops, view }
+        register_builtins(&mut engine, &shared);
+        Self { engine, shared }
     }
 
     /// Runs one script source, converting steel errors to [`ScriptError`].
@@ -315,20 +355,17 @@ fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
     }
 }
 
-/// Registers the scene-verb builtins on `engine`. Edit verbs capture the shared
-/// op queue; query verbs capture the read snapshot; meta verbs capture the
-/// catalog. Adding an authored verb = one builtin here (under a [`name`]
-/// constant) + one entry in [`OperationCatalog::builtin`] + one
-/// [`IntentDispatch::register`] call in [`ScriptPlugin`].
-fn register_builtins(
-    engine: &mut Engine,
-    ops: &OpQueue,
-    view: &SharedView,
-    catalog: &Arc<OperationCatalog>,
-) {
-    register_edit_verbs(engine, ops);
-    register_query_verbs(engine, view);
-    register_meta_verbs(engine, catalog);
+/// Registers the scene-verb builtins on `engine`. Edit verbs capture the op
+/// queue; query verbs capture the read snapshot; config verbs capture the sim
+/// mirror + config queue; meta verbs capture the catalog. Adding an authored
+/// verb = one builtin here (under a [`name`] constant) + one entry in
+/// [`OperationCatalog::builtin`] + (for edits) one [`IntentDispatch::register`]
+/// call in [`ScriptPlugin`].
+fn register_builtins(engine: &mut Engine, shared: &Shared) {
+    register_edit_verbs(engine, &shared.ops);
+    register_query_verbs(engine, &shared.view);
+    register_config_verbs(engine, &shared.config, &shared.sim);
+    register_meta_verbs(engine, &shared.catalog);
 }
 
 /// Authored-world edits — each emits a reflected intent onto the op queue.
@@ -438,6 +475,30 @@ fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
     });
 }
 
+/// Editor configuration — `sim-get` reads the settings mirror (a total read),
+/// `sim-set` queues a reflect-path write applied to the settings resource (the
+/// invariant-#4 seam, never the command stack). Both name fields only by
+/// reflect-path, so any `SimSettings` scalar is reachable with no per-field
+/// builtin.
+fn register_config_verbs(engine: &mut Engine, config: &ConfigQueue, sim: &Arc<Mutex<SimSettings>>) {
+    // `(sim-get path)` — read a simulation setting by reflect-path.
+    let s = Arc::clone(sim);
+    engine.register_fn(name::SIM_GET, move |path: String| -> f64 {
+        s.lock()
+            .ok()
+            .and_then(|settings| read_path(&*settings, &path))
+            .unwrap_or(f64::NAN)
+    });
+
+    // `(sim-set path value)` — queue a config write to a simulation setting.
+    let c = Arc::clone(config);
+    engine.register_fn(name::SIM_SET, move |path: String, value: SteelVal| {
+        if let (Ok(mut queue), Some(value)) = (c.lock(), steel_to_f64(&value)) {
+            queue.push(ConfigWrite { path, value });
+        }
+    });
+}
+
 /// Homoiconic introspection — the catalog reading itself.
 fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<OperationCatalog>) {
     // `(ops)` — a list of every registered operation name.
@@ -469,16 +530,25 @@ pub fn run_scripts(world: &mut World) {
         return;
     }
 
-    // Refresh the read-total snapshot from the committed scene (releasing the
-    // engine borrow before querying the world).
+    // Refresh the read-total snapshots (scene + settings mirror) from committed
+    // state, releasing each engine borrow before touching the world.
     if let Some(view) = world
         .get_non_send::<ScriptEngine>()
-        .map(|e| Arc::clone(&e.view))
+        .map(|e| Arc::clone(&e.shared.view))
     {
         let snapshot = snapshot_scene(world);
         if let Ok(mut guard) = view.lock() {
             *guard = snapshot;
         }
+    }
+    if let (Some(sim), Some(settings)) = (
+        world
+            .get_non_send::<ScriptEngine>()
+            .map(|e| Arc::clone(&e.shared.sim)),
+        world.get_resource::<SimSettings>().cloned(),
+    ) && let Ok(mut guard) = sim.lock()
+    {
+        *guard = settings;
     }
 
     for source in sources {
@@ -505,19 +575,47 @@ pub fn run_scripts(world: &mut World) {
     }
 
     // Drain the op queue (releasing the engine borrow first), then dispatch
-    // each record through its intent bus.
+    // each edit record through its intent bus.
     let ops: Vec<Box<dyn Reflect>> = world
         .get_non_send::<ScriptEngine>()
-        .and_then(|engine| engine.ops.lock().ok().map(|mut q| std::mem::take(&mut *q)))
+        .and_then(|engine| {
+            engine
+                .shared
+                .ops
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
         .unwrap_or_default();
-    if ops.is_empty() {
-        return;
+    if !ops.is_empty() {
+        world.resource_scope(|world, dispatch: Mut<IntentDispatch>| {
+            for op in ops {
+                dispatch.apply(world, op);
+            }
+        });
     }
-    world.resource_scope(|world, dispatch: Mut<IntentDispatch>| {
-        for op in ops {
-            dispatch.apply(world, op);
+
+    // Drain the config queue and apply each write to the settings resource (the
+    // invariant-#4 seam). Only touch the resource when a write is pending, so a
+    // script that never calls `sim-set` leaves change detection alone.
+    let writes: Vec<ConfigWrite> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .config
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if !writes.is_empty()
+        && let Some(mut settings) = world.get_resource_mut::<SimSettings>()
+    {
+        for write in writes {
+            let _ = write_path(&mut *settings, &write.path, write.value);
         }
-    });
+    }
 }
 
 /// Installs the scripting seam: embeds steel, registers the scene verbs and
@@ -649,6 +747,34 @@ mod tests {
         run(&mut app, "(this-is-not-a-builtin 1 2)");
         assert!(app.world().resource::<Cuts>().0.is_empty());
         assert!(app.world().resource::<Spawns>().0.is_empty());
+    }
+
+    #[test]
+    fn config_verbs_write_the_settings_resource() {
+        let mut app = bus_app();
+        app.insert_resource(SimSettings::default());
+        run(
+            &mut app,
+            "(begin (sim-set \"gravity.y\" -250) (sim-set \"speed\" 2))",
+        );
+        let settings = app.world().resource::<SimSettings>();
+        assert_eq!(settings.gravity.y, -250.0);
+        assert_eq!(settings.speed, 2.0);
+        // A config write is not an authored edit — nothing reached the intent bus.
+        assert!(app.world().resource::<Spawns>().0.is_empty());
+    }
+
+    #[test]
+    fn sim_get_reads_the_settings_mirror() {
+        let mut app = bus_app();
+        app.insert_resource(SimSettings::default()); // gravity.y = -1000
+        // `sim-get` reads the mirror refreshed before the run; here it drives a
+        // conditional edit so the read is observable.
+        run(
+            &mut app,
+            "(when (< (sim-get \"gravity.y\") 0) (spawn-box 0 0 10 10))",
+        );
+        assert_eq!(app.world().resource::<Spawns>().0.len(), 1);
     }
 
     #[test]
