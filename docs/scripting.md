@@ -148,11 +148,15 @@ constant, so a new verb touches three (edits: four) places:
    - a **config** verb reads the settings mirror / queues a reflect-path write;
    - a **query** verb reads the `SceneView` snapshot and returns a number;
    - an **editor** verb queues an editor-state change.
-3. **Edits only:** register the intent type in `ScriptPlugin` via
-   `IntentDispatch::register::<MyIntent>()` so the emitted value reaches its bus.
-4. Add a test (a bridge-level bus check and/or an end-to-end `tests/scripting.rs`
+3. **Edits only:** add a row to `edit_bindings()` in `src/script/bridge.rs`
+   (op name + the intent type it emits). `ScriptPlugin` registers the bus
+   writer from that table, and `tests/it/registry_validation.rs` fails if a
+   catalog Edit op has no binding, an unregistered intent, or an intent
+   missing from the reflection registry.
+4. Add a test (a bridge-level bus check and/or an end-to-end `tests/it/scripting.rs`
    case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
-   `cargo test` green.
+   `cargo test` green — the validation test above already covers the
+   catalog↔builtin drift cases.
 
 `steel` may be imported only in `src/script/{bridge,reflect_bridge}` and `egui`
 only in `src/ui/` — `tests/boundaries.rs` enforces both.

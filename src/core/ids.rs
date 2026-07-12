@@ -24,7 +24,7 @@ use uuid::Uuid;
 /// `docs/script-spike-findings.md` (spike #1 resolution). Opacity also keeps
 /// the reflect graph free of `bevy_reflect`'s optional `uuid` feature.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
-#[reflect(opaque)]
+#[reflect(opaque, Serialize, Deserialize)]
 #[component(
     immutable,
     on_insert = on_insert_stable_id,

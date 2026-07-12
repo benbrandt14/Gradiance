@@ -31,10 +31,14 @@
 //!
 //! # Adding a command (the extension recipe)
 //!
-//! 1. Add an intent struct in [`intent`] (`#[derive(Message)]`).
-//! 2. Register it in [`CommandPlugin::build`] with `add_message`.
+//! 1. Add an intent struct in [`intent`] (`#[derive(Message, Reflect)]`),
+//!    a kebab-case constant in [`intent::name`], and a `// Trace:` line
+//!    naming the command and the sync systems it triggers.
+//! 2. Register it in [`CommandPlugin::build`] with `add_message` **and**
+//!    `register_type` (the scripting registry binds by reflection).
 //! 3. Add a `struct MyCommand` implementing [`GameCommand`] (stage on
-//!    first `apply`, replay on redo — see [`spawn`] for the pattern).
+//!    first `apply`, replay on redo — see [`spawn`] for the pattern);
+//!    its `name()` returns the shared [`intent::name`] constant.
 //! 4. Drain the intent → push the command in [`dispatch`].
 //!
 //! Undo/redo, history depth, and persistence then work for free; the
@@ -44,6 +48,8 @@
 pub mod array_cmd;
 pub mod cut_cmd;
 pub mod dispatch;
+#[cfg(feature = "dev")]
+pub mod flight_recorder;
 pub mod group_cmd;
 pub mod intent;
 pub mod joint_cmd;
@@ -119,34 +125,40 @@ impl CommandStack {
         }
     }
 
-    /// Undoes the most recent command, if any.
-    pub fn undo(&mut self, world: &mut World) {
-        if let Some(mut command) = self.undo.pop() {
-            match command.undo(world) {
-                Ok(()) => {
-                    debug!(name = command.name(), "command undone");
-                    self.redo.push(command);
-                }
-                Err(e) => {
-                    // An un-undoable command is a bug; drop it rather than
-                    // corrupt the history with a half-reversed entry.
-                    error!(name = command.name(), error = %e, "undo failed; dropping entry");
-                }
+    /// Undoes the most recent command, if any; returns the undone command's
+    /// name on success.
+    pub fn undo(&mut self, world: &mut World) -> Option<&'static str> {
+        let mut command = self.undo.pop()?;
+        match command.undo(world) {
+            Ok(()) => {
+                debug!(name = command.name(), "command undone");
+                let name = command.name();
+                self.redo.push(command);
+                Some(name)
+            }
+            Err(e) => {
+                // An un-undoable command is a bug; drop it rather than
+                // corrupt the history with a half-reversed entry.
+                error!(name = command.name(), error = %e, "undo failed; dropping entry");
+                None
             }
         }
     }
 
-    /// Re-applies the most recently undone command, if any.
-    pub fn redo(&mut self, world: &mut World) {
-        if let Some(mut command) = self.redo.pop() {
-            match command.apply(world) {
-                Ok(()) => {
-                    debug!(name = command.name(), "command redone");
-                    self.undo.push(command);
-                }
-                Err(e) => {
-                    error!(name = command.name(), error = %e, "redo failed; dropping entry");
-                }
+    /// Re-applies the most recently undone command, if any; returns the
+    /// redone command's name on success.
+    pub fn redo(&mut self, world: &mut World) -> Option<&'static str> {
+        let mut command = self.redo.pop()?;
+        match command.apply(world) {
+            Ok(()) => {
+                debug!(name = command.name(), "command redone");
+                let name = command.name();
+                self.undo.push(command);
+                Some(name)
+            }
+            Err(e) => {
+                error!(name = command.name(), error = %e, "redo failed; dropping entry");
+                None
             }
         }
     }
@@ -232,5 +244,9 @@ impl Plugin for CommandPlugin {
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),
         );
+        // Dev-only observability: the flight recorder ring buffer
+        // (`docs/architecture.md` § debugging the deferred pipeline).
+        #[cfg(feature = "dev")]
+        flight_recorder::install(app);
     }
 }

@@ -286,7 +286,7 @@ impl GameCommand for CutCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Cut"
+        crate::command::intent::name::CUT
     }
 }
 

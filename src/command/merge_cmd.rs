@@ -191,6 +191,6 @@ impl GameCommand for MergeCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Merge"
+        crate::command::intent::name::MERGE
     }
 }

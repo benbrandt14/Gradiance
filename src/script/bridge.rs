@@ -417,6 +417,12 @@ impl IntentDispatch {
         });
     }
 
+    /// Whether an intent type is registered (the registry-validation test
+    /// checks every Edit op's intent against this).
+    pub fn is_registered(&self, intent: TypeId) -> bool {
+        self.writers.contains_key(&intent)
+    }
+
     /// Dispatches one operation record to its intent bus (dropped if the type
     /// was never registered).
     fn apply(&self, world: &mut World, op: Box<dyn Reflect>) {
@@ -424,6 +430,47 @@ impl IntentDispatch {
             writer(world, op);
         }
     }
+}
+
+/// One Edit-category operation's binding to the intent type it emits.
+///
+/// [`edit_bindings`] is the **single table** [`ScriptPlugin`] registers
+/// [`IntentDispatch`] from and the registry-validation test
+/// (`tests/it/registry_validation.rs`) checks the catalog against — an Edit
+/// verb whose intent is unregistered, or whose intent type is missing from
+/// the reflection registry, fails CI instead of silently dropping ops.
+pub struct EditBinding {
+    /// The operation's [`name`] constant.
+    pub op: &'static str,
+    /// `TypeId` of the intent the verb emits.
+    pub intent: TypeId,
+    /// The intent's reflected type path (must resolve in the type registry).
+    pub intent_path: &'static str,
+    /// Registers the intent's bus writer on an [`IntentDispatch`].
+    pub register: fn(&mut IntentDispatch),
+}
+
+impl EditBinding {
+    fn new<T: Message + Reflect + bevy::reflect::TypePath>(op: &'static str) -> Self {
+        Self {
+            op,
+            intent: TypeId::of::<T>(),
+            intent_path: T::type_path(),
+            register: IntentDispatch::register::<T>,
+        }
+    }
+}
+
+/// Every Edit-category operation and the intent it emits. Adding an edit verb
+/// means adding a row here (the compiler checks the intent type; the
+/// validation test checks the catalog).
+pub fn edit_bindings() -> Vec<EditBinding> {
+    vec![
+        EditBinding::new::<CutIntent>(name::CUT),
+        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX),
+        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_CIRCLE),
+        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_GROUND),
+    ]
 }
 
 /// The steel engine plus the shared buffers it reads/writes. A `NonSend`
@@ -860,8 +907,9 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<StartupScripts>();
         app.init_resource::<ScriptWatch>();
         let mut dispatch = IntentDispatch::default();
-        dispatch.register::<CutIntent>();
-        dispatch.register::<SpawnBodyIntent>();
+        for binding in edit_bindings() {
+            (binding.register)(&mut dispatch);
+        }
         app.insert_resource(dispatch);
         app.insert_non_send(ScriptEngine::new());
         app.add_systems(Startup, load_startup_scripts);

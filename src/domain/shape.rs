@@ -10,6 +10,7 @@
 
 use bevy::math::Vec2;
 use bevy::prelude::Component;
+use bevy::reflect::{ReflectDeserialize, ReflectSerialize};
 use serde::{Deserialize, Serialize};
 
 /// Minimum linear dimension accepted for authored shapes, in world pixels.
@@ -51,7 +52,7 @@ pub enum CsgOp {
 /// `ShapeDef` (`BodyRecord`, `PropertyValue::Shape`) derive `Reflect`. Script
 /// tree-walking, if ever wanted, is additive later via accessor builtins.
 #[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
-#[reflect(opaque)]
+#[reflect(opaque, Serialize, Deserialize)]
 pub enum ShapeDef {
     /// An axis-aligned rectangle (before body rotation).
     Box {

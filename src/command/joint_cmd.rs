@@ -55,7 +55,7 @@ impl GameCommand for SpawnJointCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Spawn joint"
+        crate::command::intent::name::SPAWN_JOINT
     }
 }
 
@@ -97,6 +97,6 @@ impl GameCommand for DeleteJointCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Delete joint"
+        crate::command::intent::name::DELETE_JOINT
     }
 }
