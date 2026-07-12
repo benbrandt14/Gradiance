@@ -35,6 +35,7 @@ impl Plugin for GradianceUiPlugin {
         }
         app.add_plugins(EguiPlugin::default());
         app.init_resource::<settings::SettingsWindow>();
+        app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
         app.init_resource::<console::ScriptConsole>();
         app.init_resource::<plot::PlotHistory>();
