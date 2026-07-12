@@ -68,6 +68,7 @@ bottom — no unclassified state.
 | `Mesh3d`, `MeshMaterial3d`, `ToonMaterial` | `extrude_sync`, `material_sync` |
 | `IdIndex` | `StableId` component hooks |
 | `HistoryInfo` | dispatcher (read-only mirror of stack depths) |
+| `SubstepTrace` | `record_substep_trace` in avian's `SubstepSchedule` (debug view; rebuilt every physics step while enabled) |
 
 ### Doesn't fit cleanly (explicit rationale)
 
