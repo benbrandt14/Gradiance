@@ -52,13 +52,17 @@ pub fn joint_inspector(
             );
             ui.separator();
 
-            let mut collide = def.common.collide_connected;
-            if ui
-                .checkbox(&mut collide, "connected bodies collide")
-                .changed()
-            {
-                next.common.collide_connected = collide;
-                changed = true;
+            // Struts collide by default and are governed by the collision-layer
+            // menu, so they don't carry a per-joint collide toggle.
+            if !matches!(def.kind, JointKind::Spring { .. }) {
+                let mut collide = def.common.collide_connected;
+                if ui
+                    .checkbox(&mut collide, "connected bodies collide")
+                    .changed()
+                {
+                    next.common.collide_connected = collide;
+                    changed = true;
+                }
             }
 
             changed |= configure_kind(ui, &def.kind, &mut next);
@@ -128,11 +132,12 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
             }
         }
         JointKind::Spring {
-            bounds,
+            rest_length,
             stiffness,
             damping,
+            range,
         } => {
-            if let Some(new_kind) = spring_section(ui, *bounds, *stiffness, *damping) {
+            if let Some(new_kind) = spring_section(ui, *rest_length, *stiffness, *damping, *range) {
                 next.kind = new_kind;
                 changed = true;
             }
@@ -253,28 +258,32 @@ fn motor_section(
     result
 }
 
-/// Strut config: the length band, spring constant, and damping — the three
-/// values a future curve editor would let vary nonlinearly. Returns the new
-/// `Spring` kind only on the frame something committed.
+/// Strut config: rest length, spring constant, damping, and an optional hard
+/// range clamp (off by default = unbounded). The scalars a future curve editor
+/// would let vary nonlinearly. Returns the new `Spring` kind only on the frame
+/// something committed.
 fn spring_section(
     ui: &mut egui::Ui,
-    bounds: [f32; 2],
+    rest_length: f32,
     stiffness: f32,
     damping: f32,
+    range: Option<[f32; 2]>,
 ) -> Option<JointKind> {
-    let mut b = bounds;
+    let mut rest = rest_length;
     let mut k = stiffness;
     let mut c = damping;
+    let mut new_range = range;
     let mut edited = false;
+
     ui.horizontal(|ui| {
-        ui.label("length min");
-        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("spring-min"), &mut b[0], 0.0, 1.0)
-        {
-            edited = true;
-        }
-        ui.label("max");
-        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("spring-max"), &mut b[1], 0.0, 1.0)
-        {
+        ui.label("rest length");
+        if let Commit::Done(..) = precise_drag(
+            ui,
+            egui::Id::new("spring-rest"),
+            &mut rest,
+            rest_length,
+            1.0,
+        ) {
             edited = true;
         }
     });
@@ -285,7 +294,7 @@ fn spring_section(
             egui::Id::new("spring-k"),
             &mut k,
             DEFAULT_SPRING_STIFFNESS,
-            10.0,
+            50.0,
         ) {
             edited = true;
         }
@@ -302,15 +311,44 @@ fn spring_section(
             edited = true;
         }
     });
+
+    // Optional hard length clamp; off by default (unbounded travel).
+    let mut clamped = new_range.is_some();
+    if ui.checkbox(&mut clamped, "clamp length range").changed() {
+        new_range = clamped.then(|| [0.0, (rest_length * 2.0).max(10.0)]);
+        edited = true;
+    }
+    if let Some(bounds) = new_range.as_mut() {
+        ui.horizontal(|ui| {
+            ui.label("min");
+            if let Commit::Done(..) =
+                precise_drag(ui, egui::Id::new("spring-lo"), &mut bounds[0], 0.0, 1.0)
+            {
+                edited = true;
+            }
+            ui.label("max");
+            if let Commit::Done(..) = precise_drag(
+                ui,
+                egui::Id::new("spring-hi"),
+                &mut bounds[1],
+                rest_length,
+                1.0,
+            ) {
+                edited = true;
+            }
+        });
+        if bounds[0] > bounds[1] {
+            bounds.swap(0, 1);
+        }
+    }
+
     if !edited {
         return None;
     }
-    if b[0] > b[1] {
-        b.swap(0, 1);
-    }
     Some(JointKind::Spring {
-        bounds: b,
+        rest_length: rest.max(0.0),
         stiffness: k.max(0.0),
         damping: c.max(0.0),
+        range: new_range,
     })
 }

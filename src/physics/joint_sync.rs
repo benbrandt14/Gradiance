@@ -156,21 +156,27 @@ fn insert_derived_joint(
             entity_commands.insert(joint);
         }
         JointKind::Spring {
-            bounds,
+            rest_length,
             stiffness,
             damping,
+            range,
         } => {
-            // compliance = 1 / stiffness (0 = rigid); the band [min, max] is
-            // the strut's travel, damping is a separate joint component.
+            // compliance = 1 / stiffness (0 = rigid); an unbounded strut pins
+            // the distance limit to rest_length (a pure spring), a ranged one
+            // uses the [min, max] band. Damping is a separate joint component.
             let compliance = if *stiffness > 0.0 {
                 1.0 / stiffness
             } else {
                 0.0
             };
+            let (min, max) = match range {
+                Some([lo, hi]) => (*lo, *hi),
+                None => (*rest_length, *rest_length),
+            };
             let joint = DistanceJoint::new(body_a, body_b)
                 .with_local_anchor1(Vector::from(def.anchor_a))
                 .with_local_anchor2(Vector::from(anchor_b))
-                .with_limits(bounds[0], bounds[1])
+                .with_limits(min, max)
                 .with_compliance(compliance);
             entity_commands.insert((
                 joint,

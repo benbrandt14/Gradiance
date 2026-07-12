@@ -31,7 +31,11 @@ use std::path::PathBuf;
 /// v3: the weld rework (M20) — `JointKind::Weld` no longer exists (the weld
 /// tool merges bodies or makes them static), so v2 files carrying weld
 /// joints do not load.
-pub const FORMAT_VERSION: u32 = 3;
+///
+/// v4: the strut rework — `JointKind::Spring` is authored as `rest_length`
+/// with an optional `range` clamp (was `bounds`), so v3 files carrying
+/// struts do not load.
+pub const FORMAT_VERSION: u32 = 4;
 
 /// What went wrong while persisting.
 #[derive(Debug, thiserror::Error)]

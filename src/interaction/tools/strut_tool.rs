@@ -12,9 +12,8 @@
 use crate::command::snapshot::JointRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
-use crate::domain::joint::{
-    DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointCommon, JointDef, JointKind,
-};
+use crate::domain::joint::{DEFAULT_SPRING_DAMPING, JointCommon, JointDef, JointKind};
+use crate::domain::shape::ShapeDef;
 use crate::interaction::selection::Selection;
 use crate::interaction::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
@@ -24,6 +23,12 @@ use bevy::prelude::*;
 
 /// Shortest strut that will commit (world px); a near-zero drag is a no-op.
 const MIN_STRUT_LENGTH: f32 = 5.0;
+/// Spring stiffness per unit mass proxy (AABB area, px²). Tuned so a typical
+/// body sags ~10 px under the default gravity (|g| ≈ 1000): `k ≈ m·g / sag`, so
+/// heavier bodies get proportionally stiffer struts instead of drooping.
+const SPRING_STIFFNESS_PER_MASS: f32 = 100.0;
+/// Floor for the mass-based stiffness so tiny bodies still get a firm strut.
+const MIN_SPRING_STIFFNESS: f32 = 100.0;
 
 /// In-progress strut gesture (the first anchor).
 #[derive(Resource, Default, Debug)]
@@ -80,17 +85,33 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
 
     // The first anchor must land on a body (the strut's fixed end).
     let &hit_a = world.bodies_at(anchor_a).first()?;
-    let pose_a = world.pose_of(hit_a)?;
+    let (shape_a, pose_a) = world.shape_pose(hit_a)?;
     let id_a = world.id_of(hit_a)?;
     let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
 
+    // The far end: the first *different* body under it, else a world pin.
+    let far = world
+        .bodies_at(anchor_b)
+        .into_iter()
+        .find(|&e| e != hit_a)
+        .and_then(|e| Some((world.shape_pose(e)?, world.id_of(e)?)));
+
+    // Stiffness scales with the heavier connected body's mass so the strut
+    // isn't too soft under gravity.
+    let mass = mass_proxy(&shape_a).max(far.as_ref().map_or(0.0, |((s, _), _)| mass_proxy(s)));
+    let stiffness = (SPRING_STIFFNESS_PER_MASS * mass).max(MIN_SPRING_STIFFNESS);
+
     let mut def = JointDef {
         kind: JointKind::Spring {
-            bounds: [rest, rest],
-            stiffness: DEFAULT_SPRING_STIFFNESS,
+            rest_length: rest,
+            stiffness,
             damping: DEFAULT_SPRING_DAMPING,
+            range: None,
         },
-        common: JointCommon::default(),
+        // Strut bodies collide by default; adjust via the collision-layer menu.
+        common: JointCommon {
+            collide_connected: true,
+        },
         body_a: id_a,
         body_b: None,
         anchor_a: to_local(pose_a, anchor_a),
@@ -99,11 +120,7 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
         rest_rot_b: 0.0,
     };
 
-    // The far end connects to the first *different* body under it, else a world
-    // pin at the released point.
-    if let Some(hit_b) = world.bodies_at(anchor_b).into_iter().find(|&e| e != hit_a) {
-        let id_b = world.id_of(hit_b)?;
-        let pose_b = world.pose_of(hit_b)?;
+    if let Some(((_, pose_b), id_b)) = far {
         def.body_b = Some(id_b);
         def.anchor_b = to_local(pose_b, anchor_b);
         def.rest_rot_b = pose_b.rot;
@@ -113,4 +130,44 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
         id: StableId::new(),
         def,
     })))
+}
+
+/// A body's mass proxy for the default strut stiffness: its AABB area (× unit
+/// density), or 0 for a ground half-plane (statics don't sag, so they never set
+/// the stiffness).
+fn mass_proxy(shape: &ShapeDef) -> f32 {
+    if shape.contains_half_plane() {
+        return 0.0;
+    }
+    let (min, max) = crate::geometry::sdf::aabb(shape);
+    ((max.x - min.x) * (max.y - min.y)).max(1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mass_proxy_scales_with_area_and_ignores_ground() {
+        let small = ShapeDef::Box {
+            width: 10.0,
+            height: 10.0,
+        };
+        let big = ShapeDef::Box {
+            width: 40.0,
+            height: 20.0,
+        };
+        assert!(
+            mass_proxy(&big) > mass_proxy(&small),
+            "bigger body = more mass"
+        );
+        assert!(
+            mass_proxy(&small) >= 1.0,
+            "a floor keeps struts from being zero-stiffness"
+        );
+        assert!(
+            mass_proxy(&ShapeDef::HalfPlane).abs() < f32::EPSILON,
+            "ground doesn't sag"
+        );
+    }
 }
