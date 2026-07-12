@@ -1,10 +1,11 @@
 //! Tool-layer tests: gestures drive exactly one command; scale and array
 //! commands behave exactly and undo cleanly.
 
-use crate::harness::{body_count, box_record, entity_of, paused_app, undo};
-use avian2d::prelude::RigidBody;
+use crate::harness::{body_count, box_record, entity_of, paused_app, step, undo};
+use avian2d::prelude::{AngularVelocity, RigidBody};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
+use gradiance::physics::grab::MouseTwist;
 use gradiance::prelude::*;
 
 fn stack_undo_len(app: &App) -> usize {
@@ -537,6 +538,54 @@ fn shift_drag_from_a_body_becomes_an_additive_band() {
         .translation
         .truncate();
     assert!(pos.length() < 1e-3, "A did not move ({pos})");
+}
+
+// ---------- Play-mode rotate (physical twist, feedback 2.6) ----------
+
+#[test]
+fn play_mode_right_drag_spins_physically_without_a_command() {
+    let mut app = paused_app();
+    let id = spawn_box_at(&mut app, Vec2::ZERO, 100.0, 100.0);
+    app.update();
+    let entity = entity_of(&app, id).unwrap();
+
+    // Select it with a plain click, then enter play mode.
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+    app.world_mut()
+        .resource_mut::<NextState<GameState>>()
+        .set(GameState::Playing);
+    app.update();
+
+    let before = stack_undo_len(&app);
+    // Right-press on the selection and swing ~90 deg about its center.
+    set_cursor(&mut app, Vec2::new(30.0, 0.0));
+    mouse(&mut app, MouseButton::Right, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(0.0, 30.0));
+    step(&mut app, 3);
+
+    let spin = app.world().get::<AngularVelocity>(entity).unwrap().0;
+    assert!(spin > 0.1, "twist servo spins the body ({spin})");
+    assert!(
+        !app.world().resource::<MouseTwist>().0.is_empty(),
+        "twist active during the drag"
+    );
+
+    mouse(&mut app, MouseButton::Right, false);
+    app.update();
+    assert!(
+        app.world().resource::<MouseTwist>().0.is_empty(),
+        "release clears the twist"
+    );
+    assert_eq!(
+        stack_undo_len(&app),
+        before,
+        "physical rotate is not undoable"
+    );
 }
 
 // ---------- Right-click contract (context menu path) ----------
