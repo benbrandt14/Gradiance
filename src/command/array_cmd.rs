@@ -155,6 +155,6 @@ impl GameCommand for ArrayCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Array"
+        crate::command::intent::name::ARRAY
     }
 }

@@ -45,6 +45,6 @@ impl GameCommand for LoadSceneCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Load scene"
+        crate::command::intent::name::LOAD_SCENE
     }
 }

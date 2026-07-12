@@ -98,7 +98,7 @@ impl GameCommand for GroupCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Group"
+        crate::command::intent::name::GROUP
     }
 }
 
@@ -153,6 +153,6 @@ impl GameCommand for UngroupCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Ungroup"
+        crate::command::intent::name::UNGROUP
     }
 }

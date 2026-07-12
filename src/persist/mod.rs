@@ -14,6 +14,9 @@
 //! - Files carry `version` (format migration gate) and `app_version`
 //!   (which build wrote it).
 
+#[cfg(feature = "dev")]
+pub mod flight;
+
 use crate::command::intent::LoadSceneIntent;
 use crate::command::snapshot::SceneRecord;
 use bevy::prelude::*;
@@ -124,6 +127,9 @@ impl Plugin for PersistPlugin {
             handle_persist_requests.before(crate::command::CommandDispatchSet),
         );
         app.add_systems(Last, autosave_on_exit);
+        // Dev-only: F9 dumps the flight recorder ring buffer to RON.
+        #[cfg(feature = "dev")]
+        app.add_systems(Update, flight::dump_flight_recorder);
     }
 }
 

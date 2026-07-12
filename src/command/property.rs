@@ -106,12 +106,12 @@ pub struct PropertyChange {
 /// Applies a batch of property changes as one undo step (multi-select
 /// edits are one gesture, one command).
 #[derive(Debug)]
-pub struct SetPropertyCommand {
+pub struct PropertyEditCommand {
     /// The changes to apply.
     pub changes: Vec<PropertyChange>,
 }
 
-impl SetPropertyCommand {
+impl PropertyEditCommand {
     fn write_all(&self, world: &mut World, use_new: bool) -> Result<(), CommandError> {
         for change in &self.changes {
             let entity = world
@@ -125,7 +125,7 @@ impl SetPropertyCommand {
     }
 }
 
-impl GameCommand for SetPropertyCommand {
+impl GameCommand for PropertyEditCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         if self.changes.is_empty() {
             return Err(CommandError::NoEffect);
@@ -138,6 +138,6 @@ impl GameCommand for SetPropertyCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Edit properties"
+        crate::command::intent::name::PROPERTY_EDIT
     }
 }

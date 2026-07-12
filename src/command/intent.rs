@@ -4,13 +4,61 @@
 //! resolved, old/new values captured) and write them with a
 //! `MessageWriter`. The dispatcher turns each into a
 //! [`GameCommand`](crate::command::GameCommand) (one intent, one undo step).
+//!
+//! Each intent carries a `Trace:` line naming its dispatch site, the command
+//! it becomes, and the `Changed<>` sync systems that ultimately fire — grep
+//! the [`name`] constant to walk the whole chain (intent → command → script
+//! verb) in one search.
 
 use crate::command::snapshot::BodyRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use bevy::prelude::*;
 
+/// Canonical kebab-case names, one per intent/command pair.
+///
+/// The same constant is the command's [`GameCommand::name`]
+/// (`crate::command::GameCommand::name`) and — where a script verb maps 1:1,
+/// like [`CUT`](name::CUT) — the operation-registry name
+/// (`crate::script::registry::name`). One grep for the constant therefore
+/// walks intent, command, log lines, and script surface together.
+pub mod name {
+    /// [`SpawnBodyIntent`](super::SpawnBodyIntent) → `SpawnBodyCommand`.
+    pub const SPAWN_BODY: &str = "spawn-body";
+    /// [`DeleteIntent`](super::DeleteIntent) → `DeleteCommand`.
+    pub const DELETE: &str = "delete";
+    /// [`DuplicateIntent`](super::DuplicateIntent) → `DuplicateCommand`.
+    pub const DUPLICATE: &str = "duplicate";
+    /// [`CommitTransformIntent`](super::CommitTransformIntent) → `CommitTransformCommand`.
+    pub const COMMIT_TRANSFORM: &str = "commit-transform";
+    /// [`ScaleIntent`](super::ScaleIntent) → `ScaleCommand`.
+    pub const SCALE: &str = "scale";
+    /// [`ArrayIntent`](super::ArrayIntent) → `ArrayCommand`.
+    pub const ARRAY: &str = "array";
+    /// [`SpawnJointIntent`](super::SpawnJointIntent) → `SpawnJointCommand`.
+    pub const SPAWN_JOINT: &str = "spawn-joint";
+    /// [`PropertyEditIntent`](super::PropertyEditIntent) → `PropertyEditCommand`.
+    pub const PROPERTY_EDIT: &str = "property-edit";
+    /// [`GroupIntent`](super::GroupIntent) → `GroupCommand`.
+    pub const GROUP: &str = "group";
+    /// [`UngroupIntent`](super::UngroupIntent) → `UngroupCommand`.
+    pub const UNGROUP: &str = "ungroup";
+    /// [`CutIntent`](super::CutIntent) → `CutCommand` → script verb `(cut …)`.
+    pub const CUT: &str = "cut";
+    /// [`DeleteJointIntent`](super::DeleteJointIntent) → `DeleteJointCommand`.
+    pub const DELETE_JOINT: &str = "delete-joint";
+    /// [`MergeIntent`](super::MergeIntent) → `MergeCommand`.
+    pub const MERGE: &str = "merge";
+    /// [`LoadSceneIntent`](super::LoadSceneIntent) → `LoadSceneCommand`.
+    pub const LOAD_SCENE: &str = "load-scene";
+    /// [`UndoIntent`](super::UndoIntent) → `CommandStack::undo`.
+    pub const UNDO: &str = "undo";
+    /// [`RedoIntent`](super::RedoIntent) → `CommandStack::redo`.
+    pub const REDO: &str = "redo";
+}
+
 /// Request to spawn one fully-specified body.
+// Trace: dispatch.rs → SpawnBodyCommand (spawn.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_body_materials.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct SpawnBodyIntent {
     /// The complete authored state to create.
@@ -18,6 +66,7 @@ pub struct SpawnBodyIntent {
 }
 
 /// Request to delete a set of bodies.
+// Trace: dispatch.rs → DeleteCommand (spawn.rs) → despawn (avian/render derived state despawns with the entity); dangling joints → guard_dangling_joints.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct DeleteIntent {
     /// Bodies to delete.
@@ -25,6 +74,7 @@ pub struct DeleteIntent {
 }
 
 /// Request to duplicate a set of bodies at an offset.
+// Trace: dispatch.rs → DuplicateCommand (spawn.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_body_materials.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct DuplicateIntent {
     /// Bodies to clone.
@@ -46,6 +96,7 @@ pub struct TransformChange {
 
 /// Commit of a completed move/rotate gesture (one undo step for the whole
 /// gesture, however many bodies it touched).
+// Trace: dispatch.rs → CommitTransformCommand (transform_cmd.rs) → writes Transform directly (avian teleports; no Changed<> sync involved).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct CommitTransformIntent {
     /// Every body's old and new pose.
@@ -53,6 +104,7 @@ pub struct CommitTransformIntent {
 }
 
 /// Commit of a completed scale gesture (or a numeric scale edit).
+// Trace: dispatch.rs → ScaleCommand (scale_cmd.rs) → sync_colliders, sync_body_meshes (ShapeDef) + Transform writes.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct ScaleIntent {
     /// Bodies to scale.
@@ -66,6 +118,7 @@ pub struct ScaleIntent {
 }
 
 /// Request to pattern-copy bodies (linear or radial array).
+// Trace: dispatch.rs → ArrayCommand (array_cmd.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_body_materials.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct ArrayIntent {
     /// Bodies to pattern.
@@ -77,6 +130,7 @@ pub struct ArrayIntent {
 }
 
 /// Request to create one fully-specified joint.
+// Trace: dispatch.rs → SpawnJointCommand (joint_cmd.rs) → sync_joints.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct SpawnJointIntent {
     /// The complete authored joint (id minted by the tool, stable across
@@ -85,6 +139,7 @@ pub struct SpawnJointIntent {
 }
 
 /// Batched property edit (one gesture across N targets = one undo step).
+// Trace: dispatch.rs → PropertyEditCommand (property.rs) → whichever sync matches the edited component (sync_colliders/sync_body_meshes for Shape, sync_collision_layers/sync_body_meshes for Layers, sync_body_materials for Appearance, sync_joints for Joint; avian components apply directly).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct PropertyEditIntent {
     /// Old → new value per target.
@@ -92,6 +147,7 @@ pub struct PropertyEditIntent {
 }
 
 /// Request to group bodies together.
+// Trace: dispatch.rs → GroupCommand (group_cmd.rs) → writes SelectionGroup only (editor grouping; no derived sync).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct GroupIntent {
     /// Bodies to group.
@@ -99,6 +155,7 @@ pub struct GroupIntent {
 }
 
 /// Request to remove bodies from their groups.
+// Trace: dispatch.rs → UngroupCommand (group_cmd.rs) → removes SelectionGroup only (no derived sync).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct UngroupIntent {
     /// Bodies to ungroup.
@@ -106,6 +163,7 @@ pub struct UngroupIntent {
 }
 
 /// Request to replace the whole world with a scene (undoable).
+// Trace: dispatch.rs → LoadSceneCommand (scene_cmd.rs) → full respawn → every sync system (colliders, layers, meshes, materials, joints).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct LoadSceneIntent {
     /// The parsed scene to load.
@@ -113,6 +171,7 @@ pub struct LoadSceneIntent {
 }
 
 /// Request to delete one joint (undoable, restores the same id).
+// Trace: dispatch.rs → DeleteJointCommand (joint_cmd.rs) → despawn (derived avian joint despawns with the entity).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct DeleteJointIntent {
     /// The joint to delete.
@@ -127,6 +186,7 @@ pub struct DeleteJointIntent {
 /// (`SpawnBodyIntent`, `SpawnJointIntent`, …) now derives `Reflect` too, once
 /// spike #1 settled `StableId`/`ShapeDef` reflect-opacity — see
 /// `docs/script-spike-findings.md`.
+// Trace: dispatch.rs → CutCommand (cut_cmd.rs) → sync_colliders, sync_body_meshes (rewritten ShapeDefs + spawned pieces).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct CutIntent {
     /// Stroke start, world space.
@@ -138,6 +198,7 @@ pub struct CutIntent {
 }
 
 /// Request to merge bodies into one (SDF union; first target hosts).
+// Trace: dispatch.rs → MergeCommand (merge_cmd.rs) → sync_colliders, sync_body_meshes (host ShapeDef union; other targets despawn).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct MergeIntent {
     /// Bodies to merge; the first survives with the union of all shapes.
@@ -145,9 +206,11 @@ pub struct MergeIntent {
 }
 
 /// Request to undo the last command.
+// Trace: dispatch.rs → CommandStack::undo (mod.rs).
 #[derive(Message, Debug, Clone, Copy, Default, Reflect)]
 pub struct UndoIntent;
 
 /// Request to redo the last undone command.
+// Trace: dispatch.rs → CommandStack::redo (mod.rs).
 #[derive(Message, Debug, Clone, Copy, Default, Reflect)]
 pub struct RedoIntent;

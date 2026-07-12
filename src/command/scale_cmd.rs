@@ -111,6 +111,6 @@ impl GameCommand for ScaleCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Scale"
+        crate::command::intent::name::SCALE
     }
 }

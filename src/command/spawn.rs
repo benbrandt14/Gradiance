@@ -34,7 +34,7 @@ impl GameCommand for SpawnBodyCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Spawn body"
+        crate::command::intent::name::SPAWN_BODY
     }
 }
 
@@ -99,7 +99,7 @@ impl GameCommand for DeleteCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Delete"
+        crate::command::intent::name::DELETE
     }
 }
 
@@ -250,6 +250,6 @@ impl GameCommand for DuplicateCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Duplicate"
+        crate::command::intent::name::DUPLICATE
     }
 }

@@ -19,6 +19,7 @@ mod joints;
 mod persistence;
 mod physics_sync;
 mod reflect_intents;
+mod registry_validation;
 mod scripting;
 mod tools;
 mod unit_commands;
