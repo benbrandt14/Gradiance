@@ -98,6 +98,37 @@ fn property_edit_batches_multi_target_into_one_undo_step() {
 }
 
 #[test]
+fn layer_filter_edit_round_trips_and_undoes() {
+    // The layers UI's "hits" row commits filter changes through the same
+    // PropertyEditIntent seam as memberships (feedback 5.4).
+    let mut app = paused_app();
+    let a = spawn_box(&mut app, Vec2::ZERO);
+    let entity = entity_of(&app, a).unwrap();
+    let old_mask = *app.world().get::<LayerMask32>(entity).unwrap();
+    let new_mask = LayerMask32 {
+        memberships: old_mask.memberships,
+        filters: old_mask.filters & !0b10, // stop colliding with layer 1
+    };
+
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![PropertyChange {
+            id: a,
+            old: PropertyValue::Layers(old_mask),
+            new: PropertyValue::Layers(new_mask),
+        }],
+    });
+    app.update();
+    assert_eq!(*app.world().get::<LayerMask32>(entity).unwrap(), new_mask);
+
+    undo(&mut app);
+    assert_eq!(
+        *app.world().get::<LayerMask32>(entity).unwrap(),
+        old_mask,
+        "undo restores the collision set"
+    );
+}
+
+#[test]
 fn invalid_shape_in_a_property_batch_refuses_the_whole_command() {
     let mut app = paused_app();
     let a = spawn_box(&mut app, Vec2::ZERO);

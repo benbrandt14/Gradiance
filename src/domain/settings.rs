@@ -188,6 +188,9 @@ pub struct DebugSettings {
     pub show_joint_anchors: bool,
     /// Draw velocity vectors (and mark sleeping bodies).
     pub show_velocities: bool,
+    /// Color every body's outline by its front-most collision-layer bit
+    /// (the collision-set visualization, feedback 5.4).
+    pub show_layers: bool,
     /// Draw contact points and their impulse-scaled normals.
     pub show_contacts: bool,
 }
@@ -200,6 +203,7 @@ impl Default for DebugSettings {
             show_origins: false,
             show_joint_anchors: true,
             show_velocities: false,
+            show_layers: false,
             show_contacts: false,
         }
     }
