@@ -6,6 +6,7 @@ use crate::domain::appearance::Appearance;
 use crate::domain::layers::LayerMask32;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
+use crate::render::overlay::OverlayGizmos;
 use bevy::prelude::*;
 
 /// Depth just in front of a body's front cap.
@@ -16,7 +17,7 @@ fn front_z(layers: LayerMask32) -> f32 {
 /// Draws each body's authored border outline (alpha 0 hides it).
 pub fn draw_body_borders(
     bodies: Query<(&ShapeDef, &Appearance, &LayerMask32, &Transform), With<Body>>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     for (shape, appearance, layers, transform) in &bodies {
         let border = appearance.border;
@@ -46,7 +47,7 @@ pub fn draw_body_borders(
 /// rotation indicator — without it a spinning circle looks static).
 pub fn draw_circle_radius_lines(
     bodies: Query<(&ShapeDef, &LayerMask32, &Transform), With<Body>>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     for (shape, layers, transform) in &bodies {
         let ShapeDef::Circle { radius } = shape else {

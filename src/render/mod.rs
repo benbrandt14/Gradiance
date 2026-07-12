@@ -9,12 +9,13 @@ pub mod debug_viz;
 pub mod decorations;
 pub mod extrude_sync;
 pub mod grid;
+pub mod ground;
 pub mod joint_viz;
 pub mod material_sync;
+pub mod overlay;
+pub mod scenery;
 pub mod toon;
 
-use bevy::gizmos::AppGizmoBuilder;
-use bevy::gizmos::config::GizmoConfig;
 use bevy::light::GlobalAmbientLight;
 use bevy::prelude::*;
 
@@ -29,32 +30,36 @@ pub struct GradianceRenderPlugin;
 impl Plugin for GradianceRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<crate::domain::settings::RenderSettings>();
+        app.init_resource::<crate::domain::settings::LightingSettings>();
+        app.init_resource::<crate::domain::settings::ScenerySettings>();
         // Reflected config seam for scripting (see script-lisp-decision.md).
         app.register_type::<crate::domain::settings::RenderSettings>();
+        app.register_type::<crate::domain::settings::LightingSettings>();
+        app.register_type::<crate::domain::settings::ScenerySettings>();
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }
         toon::install(app);
-        // Joint gizmos draw in front of the extruded body prisms (never
-        // occluded), unlike the default gizmo group.
-        app.insert_gizmo_config(
-            joint_viz::JointGizmos,
-            GizmoConfig {
-                depth_bias: -1.0,
-                ..default()
-            },
+        ground::install(app);
+        overlay::install(app);
+        app.init_resource::<GlobalAmbientLight>();
+        app.add_systems(Startup, (setup_scene, scenery::setup));
+        app.add_systems(
+            Update,
+            (
+                scenery::apply_lighting
+                    .run_if(resource_changed::<crate::domain::settings::LightingSettings>),
+                scenery::apply_scenery
+                    .run_if(resource_changed::<crate::domain::settings::ScenerySettings>),
+                scenery::track_scene_depth,
+            ),
         );
-        app.insert_resource(GlobalAmbientLight {
-            color: Color::WHITE,
-            brightness: 300.0,
-            ..default()
-        });
-        app.add_systems(Startup, setup_scene);
         app.add_systems(
             PostUpdate,
             (
                 extrude_sync::sync_body_meshes,
                 material_sync::sync_body_materials,
+                ground::sync_ground_materials,
             ),
         );
         app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default());
@@ -76,17 +81,13 @@ impl Plugin for GradianceRenderPlugin {
     }
 }
 
-/// Spawns the editor camera, the shadow-casting key light, and the
-/// backdrop.
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+/// Spawns the editor camera (the light and back plane are settings-driven —
+/// see [`scenery`]).
+fn setup_scene(mut commands: Commands) {
     // Orthographic 3D camera looking down −Z at the XY sandbox plane;
     // extruded bodies span z ∈ [-320, 0]. The depth slab is made very
     // wide (near/far ±50k) so orbiting the view never pushes the scene —
-    // or the huge backdrop — outside the frustum (the "background clips
+    // or the huge back plane — outside the frustum (the "background clips
     // when the view tilts" bug); orthographic near/far only define a
     // depth range, so a large slab costs nothing.
     commands.spawn((
@@ -97,32 +98,5 @@ fn setup_scene(
             ..OrthographicProjection::default_3d()
         }),
         Transform::from_xyz(0.0, 0.0, 600.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-    // Angled key light so extrusion depth reads through cast shadows.
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 12_000.0,
-            shadow_maps_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(-400.0, 700.0, 500.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-    // Backdrop: a huge matte wall behind the deepest layer. This is what
-    // *catches cast shadows* — without it every drop shadow falls into the
-    // void and the whole scene reads as flat, unlit 2D. Render-only:
-    // no collider, no StableId, never saved.
-    commands.spawn((
-        Mesh3d(meshes.add(Mesh::from(Rectangle::new(200_000.0, 200_000.0)))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.82, 0.83, 0.85),
-            perceptual_roughness: 1.0,
-            metallic: 0.0,
-            ..default()
-        })),
-        Transform::from_xyz(
-            0.0,
-            0.0,
-            -(32.0 * crate::core::constants::LAYER_HEIGHT) - 20.0,
-        ),
     ));
 }

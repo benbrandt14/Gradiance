@@ -238,6 +238,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                         rim_strength: render.2,
                         ..RenderSettings::default()
                     },
+                    ..EnvironmentRecord::default()
                 },
             };
             scene.bodies.sort_by_key(|r| r.id.0);
@@ -321,12 +322,7 @@ fn loading_a_scene_is_one_undoable_command() {
         app_version: String::new(),
         bodies: vec![incoming_body],
         joints: vec![],
-        environment: EnvironmentRecord {
-            sim: SimSettings::default(),
-            grid: GridSettings::default(),
-            snap: SnapConfig::default(),
-            render: RenderSettings::default(),
-        },
+        environment: EnvironmentRecord::default(),
     };
 
     app.world_mut().write_message(LoadSceneIntent { scene });
@@ -484,12 +480,7 @@ fn pre_magnet_files_still_parse() {
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
-        environment: EnvironmentRecord {
-            sim: SimSettings::default(),
-            grid: GridSettings::default(),
-            snap: SnapConfig::default(),
-            render: RenderSettings::default(),
-        },
+        environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();
     let cut = text.replace("magnet: None,", "");
@@ -505,12 +496,7 @@ fn version_mismatch_is_rejected() {
         app_version: String::new(),
         bodies: vec![],
         joints: vec![],
-        environment: EnvironmentRecord {
-            sim: SimSettings::default(),
-            grid: GridSettings::default(),
-            snap: SnapConfig::default(),
-            render: RenderSettings::default(),
-        },
+        environment: EnvironmentRecord::default(),
     })
     .unwrap();
     assert!(from_ron(&text).is_err(), "future versions must not load");
@@ -525,12 +511,7 @@ fn pre_render_settings_files_still_parse() {
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
-        environment: EnvironmentRecord {
-            sim: SimSettings::default(),
-            grid: GridSettings::default(),
-            snap: SnapConfig::default(),
-            render: RenderSettings::default(),
-        },
+        environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();
     let cut_at = text.find("render:").expect("render field serialized");

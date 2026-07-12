@@ -11,6 +11,7 @@ use crate::domain::Body;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
 use crate::interaction::selection::Selection;
+use crate::render::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -158,7 +159,7 @@ pub fn draw_handles(
     frame: Res<ScaleFrame>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
     projections: Query<&Projection, With<Camera3d>>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let Some(sbox) = selection_box(&selection, *frame, &bodies) else {
         return;

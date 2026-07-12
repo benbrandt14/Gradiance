@@ -46,9 +46,16 @@ pub fn sync_body_materials(
     mut commands: Commands,
     mut materials: ResMut<Assets<ToonMaterial>>,
     settings: Res<RenderSettings>,
-    changed: Query<(Entity, &Appearance), (With<Body>, Changed<Appearance>)>,
+    changed: Query<
+        (Entity, &Appearance, &crate::domain::shape::ShapeDef),
+        (With<Body>, Changed<Appearance>),
+    >,
 ) {
-    for (entity, appearance) in &changed {
+    for (entity, appearance, shape) in &changed {
+        // Half-plane grounds render through `render::ground`'s material.
+        if matches!(shape, crate::domain::shape::ShapeDef::HalfPlane) {
+            continue;
+        }
         let handle = materials.add(body_material(appearance, &settings));
         commands.entity(entity).insert(MeshMaterial3d(handle));
     }

@@ -121,7 +121,7 @@ impl JointRecord {
 }
 
 /// Persisted editor environment (settings that travel with the scene).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct EnvironmentRecord {
     /// Simulation tuning.
     pub sim: crate::domain::settings::SimSettings,
@@ -132,6 +132,12 @@ pub struct EnvironmentRecord {
     /// Rendering style (defaulted when absent — pre-M10 files).
     #[serde(default)]
     pub render: crate::domain::settings::RenderSettings,
+    /// Scene lighting (defaulted when absent — pre-V1 files).
+    #[serde(default)]
+    pub lighting: crate::domain::settings::LightingSettings,
+    /// Back plane / ground scenery (defaulted when absent — pre-V1 files).
+    #[serde(default)]
+    pub scenery: crate::domain::settings::ScenerySettings,
 }
 
 /// A complete scene: the save file, and the unit of whole-world undo.
@@ -197,6 +203,14 @@ impl SceneRecord {
                     .get_resource::<crate::domain::settings::RenderSettings>()
                     .cloned()
                     .unwrap_or_default(),
+                lighting: world
+                    .get_resource::<crate::domain::settings::LightingSettings>()
+                    .cloned()
+                    .unwrap_or_default(),
+                scenery: world
+                    .get_resource::<crate::domain::settings::ScenerySettings>()
+                    .cloned()
+                    .unwrap_or_default(),
             },
         }
     }
@@ -225,5 +239,7 @@ impl SceneRecord {
         world.insert_resource(self.environment.grid.clone());
         world.insert_resource(self.environment.snap.clone());
         world.insert_resource(self.environment.render.clone());
+        world.insert_resource(self.environment.lighting.clone());
+        world.insert_resource(self.environment.scenery.clone());
     }
 }

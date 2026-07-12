@@ -10,10 +10,29 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 /// Builds the 2.5D prism mesh for a body (pure; unit-tested headless).
+///
+/// Half-planes extrude a slab far larger than any navigable view (their
+/// *collision* is truly infinite; see `render::ground` for the material
+/// that completes the infinite reading).
 pub fn build_body_mesh(shape: &ShapeDef, layers: &LayerMask32) -> Mesh {
     let (min_bit, max_bit) = layers.occupied_range().unwrap_or((0, 0));
     let (z_front, depth) = layer_z_range(min_bit, max_bit);
-    let buffers = extrude_contours(&polygonize(shape), z_front, depth);
+    let contours = if matches!(shape, ShapeDef::HalfPlane) {
+        use crate::render::ground::{GROUND_RENDER_DROP, GROUND_RENDER_WIDTH};
+        let (w, h) = (GROUND_RENDER_WIDTH / 2.0, GROUND_RENDER_DROP);
+        crate::geometry::contours::Contours {
+            outline: vec![
+                Vec2::new(-w, -h),
+                Vec2::new(w, -h),
+                Vec2::new(w, 0.0),
+                Vec2::new(-w, 0.0),
+            ],
+            holes: Vec::new(),
+        }
+    } else {
+        polygonize(shape)
+    };
+    let buffers = extrude_contours(&contours, z_front, depth);
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,

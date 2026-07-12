@@ -33,6 +33,7 @@ bottom — no unclassified state.
 | `GridSettings`, `SnapConfig` | scene file | no | yes | grid/snap setup travels with the scene |
 | `SimSettings` | scene file | no | yes | applied by `apply_sim_settings` on change; `sim-set` writes it |
 | `RenderSettings` | scene file | no | yes | consumed by `toon::apply_render_settings` |
+| `LightingSettings`, `ScenerySettings` | scene file | no | yes | applied by `render::scenery` (key light, ambient, SSAO, back plane) and `render::ground` (ground visibility) |
 | `DebugSettings` | **no** | no | yes | workstation overlays, not scene state |
 | `ToolDefaults` | **no** | no | yes | tool-creation defaults (slider travel limits); consulted at gesture commit time |
 

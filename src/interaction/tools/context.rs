@@ -62,6 +62,7 @@ use crate::interaction::tools::handles::{ScaleFrame, SelectionBox, selection_box
 use crate::physics::grab::{Grab, MouseSpring, MouseTwist, Twist};
 use crate::physics::hold::KinematicHold;
 use crate::physics::queries::PhysicsQueries;
+use crate::render::overlay::OverlayGizmos;
 use avian2d::prelude::RigidBody;
 use bevy::ecs::component::Mutable;
 use bevy::ecs::system::SystemParam;
@@ -250,7 +251,7 @@ impl ToolPreview {
     }
 
     /// Emits every primitive to the gizmo buffer.
-    pub fn draw(&self, gizmos: &mut Gizmos) {
+    pub fn draw(&self, gizmos: &mut Gizmos<OverlayGizmos>) {
         for prim in &self.prims {
             match prim {
                 PreviewPrim::Line { a, b, color } => {
@@ -426,7 +427,7 @@ pub fn draw_draft_preview<T: DraftTool>(
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
     tool: Res<T>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     if !tool.drafting() {
         return;
@@ -830,7 +831,11 @@ pub fn run_manip_tool<T: ManipTool>(
 
 /// Generic preview: draws manipulation tool `T`'s in-progress gizmo. Runs only
 /// with the render plugin present.
-pub fn draw_manip_preview<T: ManipTool>(inputs: ManipInputs, tool: Res<T>, mut gizmos: Gizmos) {
+pub fn draw_manip_preview<T: ManipTool>(
+    inputs: ManipInputs,
+    tool: Res<T>,
+    mut gizmos: Gizmos<OverlayGizmos>,
+) {
     if !tool.drafting() {
         return;
     }

@@ -1,7 +1,9 @@
 //! Settings-driven reference grid: Cartesian, isometric, or polar, with
 //! zoom-adaptive spacing (line density stays comfortable on screen).
 
+use crate::core::constants::INTERACTION_PLANE_Z;
 use crate::domain::settings::{GridSettings, GridSystem};
+use crate::render::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -14,7 +16,7 @@ const MAX_SCREEN_SPACING: f32 = 96.0;
 pub fn draw_grid(
     grid: Res<GridSettings>,
     cameras: Query<(&Transform, &Projection), With<Camera3d>>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     if !grid.visible {
         return;
@@ -67,7 +69,7 @@ pub fn draw_grid(
             let mut r = spacing;
             while r <= max_radius {
                 gizmos.circle(
-                    Isometry3d::from_translation(grid.origin.extend(GRID_Z)),
+                    Isometry3d::from_translation(grid.origin.extend(INTERACTION_PLANE_Z)),
                     r,
                     minor,
                 );
@@ -77,19 +79,14 @@ pub fn draw_grid(
             for i in 0..angular_divisions.max(1) {
                 let dir = Vec2::from_angle(grid.rotation + step * i as f32);
                 gizmos.line(
-                    grid.origin.extend(GRID_Z),
-                    (grid.origin + dir * max_radius).extend(GRID_Z),
+                    grid.origin.extend(INTERACTION_PLANE_Z),
+                    (grid.origin + dir * max_radius).extend(INTERACTION_PLANE_Z),
                     minor,
                 );
             }
         }
     }
 }
-
-/// Depth of grid lines: behind every body layer (deepest back face is
-/// −320), in front of the backdrop (−340) — the grid never draws over
-/// bodies or tool ghosts.
-const GRID_Z: f32 = -330.0;
 
 /// Scales base spacing by powers of two until on-screen spacing falls in
 /// the preferred band.
@@ -112,7 +109,7 @@ fn adaptive_spacing(base: f32, camera_scale: f32) -> f32 {
 /// through the grid origin draws in the `axis` color.
 #[expect(clippy::too_many_arguments)]
 fn line_family(
-    gizmos: &mut Gizmos,
+    gizmos: &mut Gizmos<OverlayGizmos>,
     origin: Vec2,
     angle: f32,
     spacing: f32,
@@ -140,8 +137,8 @@ fn line_family(
             minor.into()
         };
         gizmos.line(
-            (base - dir * reach).extend(GRID_Z),
-            (base + dir * reach).extend(GRID_Z),
+            (base - dir * reach).extend(INTERACTION_PLANE_Z),
+            (base + dir * reach).extend(INTERACTION_PLANE_Z),
             color,
         );
     }

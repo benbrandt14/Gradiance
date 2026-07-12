@@ -9,7 +9,8 @@ use crate::core::states::ToolState;
 use crate::domain::Body;
 use crate::domain::joint::{JointDef, JointKind};
 use crate::domain::settings::{
-    DebugSettings, GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig, ToolDefaults,
+    DebugSettings, GridSettings, GridSystem, LightingSettings, RenderSettings, ScenerySettings,
+    SimSettings, SnapConfig, ToolDefaults,
 };
 use crate::domain::shape::ShapeDef;
 use crate::ui::reflect_grid::reflect_grid;
@@ -27,6 +28,8 @@ pub enum SettingsTab {
     GridSnap,
     /// Rendering style.
     Rendering,
+    /// Key light, ambient, and backdrop planes.
+    Lighting,
     /// Debug overlays and internals readouts.
     Debug,
 }
@@ -62,6 +65,8 @@ pub fn settings_window(
     mut snap: ResMut<SnapConfig>,
     mut tool_defaults: ResMut<ToolDefaults>,
     mut render: ResMut<RenderSettings>,
+    mut lighting: ResMut<LightingSettings>,
+    mut scenery: ResMut<ScenerySettings>,
     mut debug: ResMut<DebugSettings>,
     readouts: DebugReadouts,
 ) -> Result {
@@ -79,6 +84,7 @@ pub fn settings_window(
                 ui.selectable_value(&mut window.tab, SettingsTab::Simulation, "Simulation");
                 ui.selectable_value(&mut window.tab, SettingsTab::GridSnap, "Grid & Snap");
                 ui.selectable_value(&mut window.tab, SettingsTab::Rendering, "Rendering");
+                ui.selectable_value(&mut window.tab, SettingsTab::Lighting, "Lighting");
                 ui.selectable_value(&mut window.tab, SettingsTab::Debug, "Debug");
             });
             ui.separator();
@@ -140,6 +146,9 @@ pub fn settings_window(
                     );
                     render.set_changed();
                 }
+                SettingsTab::Lighting => {
+                    lighting_tab(ui, &mut lighting, &mut scenery);
+                }
                 SettingsTab::Debug => {
                     reflect_grid(ui, egui::Id::new("debug"), debug.bypass_change_detection());
                     debug.set_changed();
@@ -156,6 +165,95 @@ pub fn settings_window(
         });
     window.open = open;
     Ok(())
+}
+
+/// The Lighting tab: a draggable sun gadget for the key light's angle,
+/// color pickers for light and back plane, and the reflect grid for the
+/// scalar fields.
+fn lighting_tab(
+    ui: &mut egui::Ui,
+    lighting: &mut ResMut<LightingSettings>,
+    scenery: &mut ResMut<ScenerySettings>,
+) {
+    ui.label(egui::RichText::new("Key light").strong());
+    ui.horizontal(|ui| {
+        sun_gadget(ui, lighting);
+        ui.vertical(|ui| {
+            color_row(ui, "color", &mut lighting.bypass_change_detection().color);
+            reflect_grid(
+                ui,
+                egui::Id::new("lighting"),
+                lighting.bypass_change_detection(),
+            );
+        });
+    });
+    lighting.set_changed();
+    ui.separator();
+    ui.label(egui::RichText::new("Backdrop").strong());
+    color_row(
+        ui,
+        "back plane color",
+        &mut scenery.bypass_change_detection().back_color,
+    );
+    reflect_grid(
+        ui,
+        egui::Id::new("scenery"),
+        scenery.bypass_change_detection(),
+    );
+    scenery.set_changed();
+}
+
+/// One labelled RGBA color-picker row over a domain [`Rgba`]
+/// (`reflect_grid` renders color structs as four bare floats — this is the
+/// sanctioned escape hatch, like the grid-system picker).
+fn color_row(ui: &mut egui::Ui, label: &str, color: &mut crate::domain::appearance::Rgba) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        let mut rgba = [color.r, color.g, color.b, color.a];
+        if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+            [color.r, color.g, color.b, color.a] = rgba;
+        }
+    });
+}
+
+/// A draggable sun-position gadget: the handle's angle around the circle is
+/// the light's azimuth; its distance from the rim toward the center is the
+/// elevation (center = head-on, rim = grazing).
+fn sun_gadget(ui: &mut egui::Ui, lighting: &mut ResMut<LightingSettings>) {
+    const RADIUS: f32 = 44.0;
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(RADIUS * 2.2, RADIUS * 2.2),
+        egui::Sense::click_and_drag(),
+    );
+    let center = rect.center();
+
+    if (response.dragged() || response.clicked())
+        && let Some(pos) = response.interact_pointer_pos()
+    {
+        let v = pos - center;
+        let r = (v.length() / RADIUS).clamp(0.0, 1.0);
+        // Screen y is down; azimuth is measured in world (y-up) terms.
+        lighting.azimuth_deg = f32::atan2(-v.y, v.x).to_degrees();
+        lighting.elevation_deg = (1.0 - r) * 90.0;
+    }
+    let settings = lighting.bypass_change_detection();
+
+    let painter = ui.painter_at(rect);
+    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, egui::Color32::GRAY));
+    painter.circle_stroke(
+        center,
+        RADIUS * 0.5,
+        egui::Stroke::new(0.5, egui::Color32::from_gray(90)),
+    );
+    let azimuth = settings.azimuth_deg.to_radians();
+    let r = (1.0 - (settings.elevation_deg / 90.0).clamp(0.0, 1.0)) * RADIUS;
+    let handle = center + egui::vec2(azimuth.cos(), -azimuth.sin()) * r;
+    painter.line_segment(
+        [center, handle],
+        egui::Stroke::new(1.0, egui::Color32::from_gray(120)),
+    );
+    painter.circle_filled(handle, 6.0, egui::Color32::GOLD);
+    response.on_hover_text("drag the sun: angle = light direction, center = head-on");
 }
 
 /// One line per internals fact — the "what is the editor actually doing"

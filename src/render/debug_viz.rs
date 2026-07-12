@@ -15,6 +15,7 @@ use crate::geometry::polygonize::polygonize;
 use crate::geometry::sdf;
 use crate::physics::SubstepTrace;
 use crate::physics::queries::PhysicsQueries;
+use crate::render::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -35,7 +36,7 @@ pub fn draw_debug_overlays(
     index: Res<IdIndex>,
     poses: Query<&Transform, With<Body>>,
     physics: PhysicsQueries,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     for (entity, shape, transform, layers) in &bodies {
         let infinite = shape.contains_half_plane();
@@ -160,7 +161,7 @@ fn draw_joint_anchors(
     joints: &Query<&JointDef>,
     index: &IdIndex,
     poses: &Query<&Transform, With<Body>>,
-    gizmos: &mut Gizmos,
+    gizmos: &mut Gizmos<OverlayGizmos>,
 ) {
     for def in joints {
         let color = match def.kind {
@@ -196,7 +197,7 @@ fn draw_joint_anchors(
 }
 
 /// Draws every touching contact point and its impulse-scaled normal.
-fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos) {
+fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>) {
     for contact in physics.contact_points() {
         gizmos.circle_2d(
             Isometry2d::from_translation(contact.point),

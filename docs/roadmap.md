@@ -247,6 +247,35 @@ missing foundation:**
   edges curve in polar grids) (3.3)
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4)
 
+## V — Visuals & simulation (active branch: claude/visuals-roadmap)
+
+The visuals/sim track, sequenced as one PR per slice. Absorbs the AO/contact
+shadow items from M19. Design decisions in the slice PRs.
+
+- **V1 — Interaction plane, back plane, lighting** *(this PR)*: one
+  `OverlayGizmos` group with the grid moved to the picking plane (kills the
+  grid parallax, 3 gizmo groups → 1); back plane + key light driven by new
+  persisted `ScenerySettings`/`LightingSettings` (Lighting tab with a
+  draggable sun gadget, SSAO + contact-shadow toggles); half-plane grounds
+  render effectively infinite with an inside-view fade material.
+- **V2 — View cube + top-down mode**: CAD orientation cube (face/corner/edge
+  snaps, animated glide), `CameraRig` roll, and a top-down preset — gravity
+  (0,0) plus a per-scene back-plane friction force (`physics/forces.rs`
+  sibling system), set from a right-click "Background" menu section.
+- **V3 — Continuous-depth collision** (save v5): authored `DepthBand
+  {near, far}` replaces `LayerMask32`; contiguous collision layers and the
+  exact extrusion both derive from the band (visual depth ≡ collision layer
+  by construction; non-integer depths allowed, UI snapping avoids slivers).
+  Right-dock depth panel: selected bodies as draggable colored bars
+  (scale-tool feel), auto-growing bounds; deletes the checkbox grids.
+- **V4 — Script dock & workspace**: console becomes a right dock with
+  MATLAB REPL behavior (Enter runs, Shift+Enter newline, Up/Down history);
+  spawn verbs return body handles, `ans` bound each run, script-defined
+  names become visible labels on scene objects (StableId underneath).
+- Deferred within this track: local-frame grids, ground dot-grid, gradient
+  pickers, color-by-signal (pairs with P2 dataflow), MPM/fluids/fracture
+  (split a `gradiance-sim` crate when that work starts).
+
 ## M19 — Rendering & camera polish
 
 - Emissive material option; ambient occlusion / contact shadows for the

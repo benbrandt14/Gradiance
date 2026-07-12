@@ -239,3 +239,73 @@ impl Default for DebugSettings {
         }
     }
 }
+
+/// Scene lighting (the "Lighting" settings tab).
+///
+/// Persisted with the scene like the other environment settings; the render
+/// seam applies changes to the directional light / ambient / camera AO via
+/// change detection — UI never touches light entities directly.
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct LightingSettings {
+    /// Where the key light shines *from*, as a screen-plane angle in degrees
+    /// (0° = from the right, 90° = from above).
+    pub azimuth_deg: f32,
+    /// Out-of-plane tilt toward the viewer, degrees (0° = grazing the
+    /// sandbox plane, 90° = head-on).
+    pub elevation_deg: f32,
+    /// Key light color.
+    pub color: crate::domain::appearance::Rgba,
+    /// Key light strength, lux.
+    pub illuminance: f32,
+    /// Flat ambient brightness.
+    pub ambient: f32,
+    /// Screen-space ambient occlusion (forces MSAA off while enabled).
+    pub ssao: bool,
+    /// Screen-space contact shadows on the key light.
+    pub contact_shadows: bool,
+}
+
+impl Default for LightingSettings {
+    fn default() -> Self {
+        // Matches the pre-configurable hard-coded light: from (-400, 700)
+        // in-plane, lifted 500 toward the viewer, 12 000 lux, ambient 300.
+        Self {
+            azimuth_deg: 120.0,
+            elevation_deg: 32.0,
+            color: crate::domain::appearance::Rgba::rgb(1.0, 1.0, 1.0),
+            illuminance: 12_000.0,
+            ambient: 300.0,
+            ssao: false,
+            contact_shadows: true,
+        }
+    }
+}
+
+/// The scene's fixed backdrop planes (the "Lighting" tab's scenery half).
+///
+/// The **back plane** catches cast shadows behind the deepest occupied
+/// layer; the **ground** is any half-plane body's infinite render. Colors
+/// and visibility here; the ground's color is the body's own `Appearance`.
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct ScenerySettings {
+    /// Gap between the deepest occupied layer's back face and the back
+    /// plane, world pixels (0 = touching).
+    pub back_offset: f32,
+    /// Back plane color.
+    pub back_color: crate::domain::appearance::Rgba,
+    /// Draw the back plane (shadows need it to land somewhere).
+    pub back_visible: bool,
+    /// Draw half-plane grounds (colliders stay active regardless).
+    pub ground_visible: bool,
+}
+
+impl Default for ScenerySettings {
+    fn default() -> Self {
+        Self {
+            back_offset: 20.0,
+            back_color: crate::domain::appearance::Rgba::rgb(0.82, 0.83, 0.85),
+            back_visible: true,
+            ground_visible: true,
+        }
+    }
+}

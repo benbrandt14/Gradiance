@@ -242,5 +242,30 @@
             rim_strength: 0.25,
             white_point: 1.3,
         ),
+        lighting: (
+            azimuth_deg: 120.0,
+            elevation_deg: 32.0,
+            color: (
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+                a: 1.0,
+            ),
+            illuminance: 12000.0,
+            ambient: 300.0,
+            ssao: false,
+            contact_shadows: true,
+        ),
+        scenery: (
+            back_offset: 20.0,
+            back_color: (
+                r: 0.82,
+                g: 0.83,
+                b: 0.85,
+                a: 1.0,
+            ),
+            back_visible: true,
+            ground_visible: true,
+        ),
     ),
 )

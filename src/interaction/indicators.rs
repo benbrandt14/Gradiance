@@ -10,8 +10,8 @@ use crate::geometry::polygonize::polygonize;
 use crate::interaction::gesture::{AxisConstraint, GestureConstraints};
 use crate::interaction::selection::Selection;
 use crate::interaction::snap::{SnapKind, SnappedCursor};
+use crate::render::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
-use bevy::gizmos::config::GizmoConfigGroup;
 use bevy::prelude::*;
 
 /// Screen-constant glyph half-size in world units.
@@ -23,7 +23,7 @@ fn glyph_size(projections: &Query<&Projection, With<Camera3d>>) -> f32 {
 pub fn draw_snap_indicator(
     snapped: Res<SnappedCursor>,
     projections: Query<&Projection, With<Camera3d>>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let (Some(pos), Some(kind)) = (snapped.position, snapped.kind) else {
         return;
@@ -65,7 +65,7 @@ pub fn draw_snap_indicator(
 pub fn draw_constraint_guides(
     constraints: Res<GestureConstraints>,
     snapped: Res<SnappedCursor>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     const LEN: f32 = 100_000.0;
     let Some(pos) = snapped.effective() else {
@@ -87,18 +87,11 @@ pub fn draw_constraint_guides(
     }
 }
 
-/// Gizmo group for the selection outline, configured with a negative
-/// `depth_bias` (see the interaction plugin) so the outline draws in front
-/// of every extruded body prism and the grid — a fixed `z` cannot beat the
-/// front layer's own prism (feedback 2.2).
-#[derive(Default, Reflect, GizmoConfigGroup)]
-pub struct SelectionGizmos;
-
 /// Outlines selected bodies with their world-space contours.
 pub fn draw_selection_outlines(
     selection: Res<Selection>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
-    mut gizmos: Gizmos<SelectionGizmos>,
+    mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     for entity in selection.iter() {
         let Ok((shape, transform)) = bodies.get(entity) else {

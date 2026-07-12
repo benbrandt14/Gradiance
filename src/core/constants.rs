@@ -10,6 +10,12 @@ pub const PIXELS_PER_METER: f32 = 100.0;
 /// Default gravity in world units (pixels) per second squared.
 pub const GRAVITY: bevy::math::Vec2 = bevy::math::Vec2::new(0.0, -1000.0);
 
+/// The interaction plane: where the cursor picks, where gizmos/grid/snap
+/// indicators draw, and where the front-most body face sits. The **single**
+/// authority for plane geometry — future multi-plane 3D work parameterizes
+/// this, so no other file may hard-code an overlay z.
+pub const INTERACTION_PLANE_Z: f32 = 0.0;
+
 /// Extrusion depth contributed by each active collision-layer bit.
 ///
 /// A body occupying layer bits `min..=max` extrudes from
