@@ -199,7 +199,6 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 if limits.is_some() { " +limits" } else { "" },
                 if motor.is_some() { " +motor" } else { "" },
             ),
-            JointKind::Weld => "Weld".to_owned(),
             JointKind::Slider { limits, motor, .. } => format!(
                 "Slider{}{}",
                 if limits.is_some() { " +limits" } else { "" },

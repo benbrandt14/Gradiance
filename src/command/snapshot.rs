@@ -180,7 +180,7 @@ impl SceneRecord {
         Self {
             // Keep in sync with persist::FORMAT_VERSION (v2: avian-component
             // physics — see docs/physics-deadapter-decision.md).
-            version: 2,
+            version: crate::persist::FORMAT_VERSION,
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
             bodies,
             joints,

@@ -62,13 +62,7 @@ pub fn sync_joints(
     for (entity, def, old_pin) in &changed {
         // Drop any previously derived state (kind may have changed).
         let mut entity_commands = commands.entity(entity);
-        entity_commands.remove::<(
-            RevoluteJoint,
-            FixedJoint,
-            PrismaticJoint,
-            DistanceJoint,
-            JointDamping,
-        )>();
+        entity_commands.remove::<(RevoluteJoint, PrismaticJoint, DistanceJoint, JointDamping)>();
         if let Some(pin) = old_pin {
             entity_commands.remove::<PinAnchor>();
             commands.entity(pin.0).despawn();
@@ -144,13 +138,6 @@ fn insert_derived_joint(
             }
             entity_commands.insert(joint);
         }
-        JointKind::Weld => {
-            let joint = FixedJoint::new(body_a, body_b)
-                .with_local_anchor1(Vector::from(def.anchor_a))
-                .with_local_anchor2(Vector::from(anchor_b))
-                .with_local_basis2(basis_b);
-            entity_commands.insert(joint);
-        }
         JointKind::Slider {
             axis,
             limits,
@@ -213,13 +200,7 @@ pub fn guard_dangling_joints(
             warn!(?entity, "joint lost a referenced body; disabling");
             commands
                 .entity(entity)
-                .remove::<(
-                    RevoluteJoint,
-                    FixedJoint,
-                    PrismaticJoint,
-                    DistanceJoint,
-                    JointDamping,
-                )>()
+                .remove::<(RevoluteJoint, PrismaticJoint, DistanceJoint, JointDamping)>()
                 .insert(JointUnresolved);
         }
     }

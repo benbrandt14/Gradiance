@@ -24,7 +24,11 @@ use std::path::PathBuf;
 /// v2: the de-adapter collapse — authored physics is now avian components
 /// serialized directly (`docs/physics-deadapter-decision.md`). v1 files do
 /// not load (save-format stability across the collapse is not a goal).
-pub const FORMAT_VERSION: u32 = 2;
+///
+/// v3: the weld rework (M20) — `JointKind::Weld` no longer exists (the weld
+/// tool merges bodies or makes them static), so v2 files carrying weld
+/// joints do not load.
+pub const FORMAT_VERSION: u32 = 3;
 
 /// What went wrong while persisting.
 #[derive(Debug, thiserror::Error)]

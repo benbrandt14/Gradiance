@@ -204,7 +204,10 @@ fn joints_whose_anchor_material_is_destroyed_are_deleted() {
         record: JointRecord {
             id: StableId::new(),
             def: JointDef {
-                kind: JointKind::Weld,
+                kind: JointKind::Hinge {
+                    limits: None,
+                    motor: None,
+                },
                 common: JointCommon::default(),
                 body_a: id,
                 body_b: None,
@@ -499,12 +502,15 @@ fn merge_rewires_external_joints_and_deletes_internal_ones() {
             },
         },
     });
-    // Internal: a weld between the two merged bodies.
+    // Internal: a joint between the two merged bodies.
     app.world_mut().write_message(SpawnJointIntent {
         record: JointRecord {
             id: StableId::new(),
             def: JointDef {
-                kind: JointKind::Weld,
+                kind: JointKind::Hinge {
+                    limits: None,
+                    motor: None,
+                },
                 common: JointCommon::default(),
                 body_a: host,
                 body_b: Some(absorbed),

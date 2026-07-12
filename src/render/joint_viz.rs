@@ -52,13 +52,6 @@ pub fn draw_joints(
                     draw_angular_motor(&mut gizmos, anchor, *m, s);
                 }
             }
-            JointKind::Weld => {
-                gizmos.rect_2d(
-                    Isometry2d::new(anchor, Rot2::radians(pose_a.rot)),
-                    Vec2::splat(9.0 * s),
-                    color,
-                );
-            }
             JointKind::Slider { axis, motor, .. } => {
                 let dir = Vec2::from_angle(pose_a.rot).rotate(*axis);
                 gizmos.line_2d(anchor - dir * 40.0 * s, anchor + dir * 40.0 * s, color);

@@ -261,7 +261,12 @@ missing foundation:**
 ## M20 — Constraints II
 
 - Weld rework: merge bodies into one (SDF `Union` — the tree makes this
-  natural) or make-static, replacing the weld-as-joint model (4.2)
+  natural) or make-static, replacing the weld-as-joint model (4.2) —
+  **landed**: the weld tool merges the two topmost bodies at the click
+  (`MergeIntent`) or pins a lone body by making it static (a
+  `PropertyEditIntent`); `JointKind::Weld` is removed everywhere
+  (`FORMAT_VERSION` → 3; the infinite ground is never a weld target —
+  welding onto it *is* the make-static case).
 - Slider default limits option; sprite-based joint glyphs with outlines
   (4.7); motor state (direction/torque) visualization (4.1)
 - Springs/dampers — **landed** as the **strut** tool (`JointKind::Spring`

@@ -540,6 +540,96 @@ fn shift_drag_from_a_body_becomes_an_additive_band() {
     assert!(pos.length() < 1e-3, "A did not move ({pos})");
 }
 
+// ---------- Weld tool: merge or make-static, never a joint (M20, 4.2) ----------
+
+#[test]
+fn weld_tool_merges_two_overlapping_bodies() {
+    let mut app = paused_app();
+    let a = spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
+    spawn_box_at(&mut app, Vec2::new(40.0, 0.0), 60.0, 40.0);
+    app.update(); // colliders
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Weld);
+    app.update();
+
+    let before = stack_undo_len(&app);
+    // Click in the overlap: both bodies are under the cursor.
+    set_cursor(&mut app, Vec2::new(25.0, 5.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    assert_eq!(body_count(&mut app), 1, "the two bodies merged into one");
+    assert_eq!(stack_undo_len(&app), before + 1, "one undoable command");
+    let entity = entity_of(&app, a).expect("first target survives");
+    assert!(
+        matches!(
+            app.world().get::<ShapeDef>(entity).unwrap(),
+            ShapeDef::Csg { .. }
+        ),
+        "merged shape is a union tree"
+    );
+
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 2, "undo splits the merge back");
+}
+
+#[test]
+fn weld_tool_pins_a_single_body_by_making_it_static() {
+    let mut app = paused_app();
+    let id = spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
+    app.update();
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Weld);
+    app.update();
+
+    let before = stack_undo_len(&app);
+    set_cursor(&mut app, Vec2::new(5.0, 5.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    let entity = entity_of(&app, id).unwrap();
+    assert_eq!(
+        *app.world().get::<RigidBody>(entity).unwrap(),
+        RigidBody::Static,
+        "welding a lone body pins it to the world"
+    );
+    assert_eq!(stack_undo_len(&app), before + 1);
+
+    undo(&mut app);
+    assert_eq!(
+        *app.world().get::<RigidBody>(entity).unwrap(),
+        RigidBody::Dynamic,
+        "undo restores the dynamic body"
+    );
+
+    // Welding an already-static body is a no-op (no dead undo entry).
+    let before = stack_undo_len(&app);
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![PropertyChange {
+            id,
+            old: PropertyValue::RigidBody(RigidBody::Dynamic),
+            new: PropertyValue::RigidBody(RigidBody::Static),
+        }],
+    });
+    app.update();
+    set_cursor(&mut app, Vec2::new(5.0, 5.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+    assert_eq!(
+        stack_undo_len(&app),
+        before + 1,
+        "only the explicit edit committed; the redundant weld did not"
+    );
+}
+
 // ---------- Play-mode rotate (physical twist, feedback 2.6) ----------
 
 #[test]

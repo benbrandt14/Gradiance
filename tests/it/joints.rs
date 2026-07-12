@@ -158,51 +158,6 @@ fn world_pinned_body_swings_about_a_fixed_anchor() {
     assert!(pose.pos.length() < 100.0, "no pin explosion ({})", pose.pos);
 }
 
-// ---------- Weld: rigid kinematic chains ----------
-
-#[test]
-fn welded_chain_stays_rigid_through_a_fall() {
-    let mut app = headless_app();
-    let mut ids = Vec::new();
-    for i in 0..3 {
-        let record = box_record(Vec2::new(i as f32 * 40.0, 200.0), 40.0, 20.0);
-        ids.push(spawn_body(&mut app, record));
-    }
-    let mut floor = box_record(Vec2::new(40.0, -50.0), 2000.0, 20.0);
-    floor.physics.rigid_body = RigidBody::Static;
-    spawn_body(&mut app, floor);
-
-    for pair in ids.windows(2) {
-        spawn_joint(
-            &mut app,
-            JointDef {
-                kind: JointKind::Weld,
-                common: JointCommon::default(),
-                body_a: pair[0],
-                body_b: Some(pair[1]),
-                anchor_a: Vec2::new(20.0, 0.0),
-                anchor_b: Vec2::new(-20.0, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
-            },
-        );
-    }
-
-    step(&mut app, 300); // fall and settle
-
-    let poses: Vec<PosRot> = ids.iter().map(|id| pose_of(&app, *id)).collect();
-    for pair in poses.windows(2) {
-        let gap = (pair[1].pos - pair[0].pos).length();
-        assert!((gap - 40.0).abs() < 2.0, "links stay 40 apart ({gap})");
-        let twist = (pair[1].rot - pair[0].rot).abs();
-        assert!(
-            twist < 0.05,
-            "welds transmit no relative rotation ({twist})"
-        );
-    }
-    assert!(poses[0].pos.y < 150.0, "the chain actually fell");
-}
-
 // ---------- Slider ----------
 
 #[test]
@@ -556,43 +511,34 @@ fn random_command_sequences_never_leave_dangling_joints() {
         .unwrap();
 }
 
-// ---------- Hinge vs weld: the behavioral distinction ----------
+// ---------- Hinge freedom (the weld tool no longer makes joints) ----------
 
-/// A dynamic arm hanging off a static block: hinged it swings down under
-/// gravity (relative rotation), welded it holds its pose rigidly. This is
-/// the contract the two tools differ by.
+/// A dynamic arm hanging off a static block swings down under gravity —
+/// the hinge grants relative rotation. (Rigid links are the weld tool's
+/// *merge* now, covered by the CSG merge tests and the weld-tool tests.)
 #[test]
-fn hinges_rotate_freely_where_welds_stay_rigid() {
-    for weld in [false, true] {
-        let mut app = headless_app();
-        let mut anchor_block = box_record(Vec2::ZERO, 20.0, 20.0);
-        anchor_block.physics.rigid_body = RigidBody::Static;
-        let block = spawn_body(&mut app, anchor_block);
-        // Horizontal arm extending to the right of the block.
-        let arm = spawn_body(&mut app, box_record(Vec2::new(40.0, 0.0), 60.0, 8.0));
+fn hinged_arm_swings_down_under_gravity() {
+    let mut app = headless_app();
+    let mut anchor_block = box_record(Vec2::ZERO, 20.0, 20.0);
+    anchor_block.physics.rigid_body = RigidBody::Static;
+    let block = spawn_body(&mut app, anchor_block);
+    // Horizontal arm extending to the right of the block.
+    let arm = spawn_body(&mut app, box_record(Vec2::new(40.0, 0.0), 60.0, 8.0));
 
-        let mut def = hinge(
-            block,
-            Some(arm),
-            Vec2::new(10.0, 0.0),
-            Vec2::new(-30.0, 0.0),
-        );
-        if weld {
-            def.kind = JointKind::Weld;
-        }
-        spawn_joint(&mut app, def);
-        step(&mut app, 240);
+    let def = hinge(
+        block,
+        Some(arm),
+        Vec2::new(10.0, 0.0),
+        Vec2::new(-30.0, 0.0),
+    );
+    spawn_joint(&mut app, def);
+    step(&mut app, 240);
 
-        let rot = pose_of(&app, arm).rot.abs();
-        if weld {
-            assert!(rot < 0.05, "welded arm must stay rigid (rot {rot})");
-        } else {
-            assert!(
-                rot > 0.4,
-                "hinged arm must swing down under gravity (rot {rot})"
-            );
-        }
-    }
+    let rot = pose_of(&app, arm).rot.abs();
+    assert!(
+        rot > 0.4,
+        "hinged arm must swing down under gravity (rot {rot})"
+    );
 }
 
 // ---------- Rest-orientation frames (user snapshot regressions) ----------
@@ -652,48 +598,6 @@ fn rotated_world_pin_slider_stays_stable_and_rotation_locked() {
             "displacement {disp} leaves the slider axis"
         );
     }
-}
-
-/// Welding two *rotated* bodies must freeze their creation-time relative
-/// angle — not snap them into alignment.
-#[test]
-fn welding_rotated_bodies_preserves_their_relative_angle() {
-    let mut app = headless_app();
-    let mut anchor_block = box_record(Vec2::ZERO, 40.0, 40.0);
-    anchor_block.pose.rot = 0.7;
-    anchor_block.physics.rigid_body = RigidBody::Static;
-    let a = spawn_body(&mut app, anchor_block);
-    let mut arm = box_record(Vec2::new(50.0, 0.0), 40.0, 20.0);
-    arm.pose.rot = -0.4;
-    let b = spawn_body(&mut app, arm.clone());
-
-    let world_anchor = Vec2::new(25.0, 0.0);
-    spawn_joint(
-        &mut app,
-        JointDef {
-            kind: JointKind::Weld,
-            common: JointCommon::default(),
-            body_a: a,
-            body_b: Some(b),
-            anchor_a: Vec2::from_angle(-0.7).rotate(world_anchor),
-            anchor_b: Vec2::from_angle(0.4).rotate(world_anchor - Vec2::new(50.0, 0.0)),
-            rest_rot_a: 0.7,
-            rest_rot_b: -0.4,
-        },
-    );
-    step(&mut app, 240);
-
-    let pose = pose_of(&app, b);
-    assert!(
-        (pose.rot + 0.4).abs() < 0.05,
-        "welded arm keeps its authored angle (rot {}, expected -0.4)",
-        pose.rot
-    );
-    assert!(
-        (pose.pos - Vec2::new(50.0, 0.0)).length() < 5.0,
-        "welded arm stays put (at {})",
-        pose.pos
-    );
 }
 
 fn strut(body_a: StableId, body_b: Option<StableId>, bounds: [f32; 2], stiffness: f32) -> JointDef {

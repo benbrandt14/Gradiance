@@ -134,7 +134,6 @@ fn draw_joint_anchors(
     for def in joints {
         let color = match def.kind {
             JointKind::Hinge { .. } => css::ORANGE,
-            JointKind::Weld => css::CRIMSON,
             JointKind::Slider { .. } => css::DEEP_SKY_BLUE,
             JointKind::Spring { .. } => css::SPRING_GREEN,
         };
