@@ -743,6 +743,66 @@ fn play_mode_right_drag_spins_physically_without_a_command() {
     );
 }
 
+#[test]
+fn play_mode_rotate_cannot_twist_through_a_prismatic() {
+    let mut app = paused_app();
+    let mut base = box_record(Vec2::ZERO, 40.0, 40.0);
+    base.physics.rigid_body = RigidBody::Static;
+    let base_id = base.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: base });
+    app.update();
+    let arm = spawn_box_at(&mut app, Vec2::new(120.0, 0.0), 100.0, 20.0);
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def: JointDef {
+                kind: JointKind::Slider {
+                    axis: Vec2::X,
+                    limits: Some([0.0, 100.0]),
+                    motor: None,
+                },
+                common: JointCommon::default(),
+                body_a: base_id,
+                body_b: Some(arm),
+                anchor_a: Vec2::new(20.0, 0.0),
+                anchor_b: Vec2::new(-50.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
+            },
+        },
+    });
+    app.update();
+
+    // Select the arm, play, and right-drag rotate hard for a while: the
+    // torque-based twist must not punch through the prismatic's angular
+    // constraint (feedback: "if I wanted it to rotate I'd attach a hinge").
+    set_cursor(&mut app, Vec2::new(120.0, 0.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+    app.world_mut()
+        .resource_mut::<NextState<GameState>>()
+        .set(GameState::Playing);
+    app.update();
+
+    set_cursor(&mut app, Vec2::new(150.0, 0.0));
+    mouse(&mut app, MouseButton::Right, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(120.0, 90.0)); // demand ~+70 deg
+    step(&mut app, 120);
+    mouse(&mut app, MouseButton::Right, false);
+    app.update();
+
+    let entity = entity_of(&app, arm).unwrap();
+    let rot = PosRot::from_transform(app.world().get::<Transform>(entity).unwrap()).rot;
+    assert!(
+        rot.abs() < 0.08,
+        "the prismatic held against the rotate gesture (rot {rot})"
+    );
+}
+
 // ---------- Right-click contract (context menu path) ----------
 
 /// A right *click* (no drag) on a selected body must not move anything
