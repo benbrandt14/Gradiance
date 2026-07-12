@@ -7,8 +7,13 @@
 //! |---|---|
 //! | hold `X` | horizontal-only translation |
 //! | hold `Y` | vertical-only translation |
-//! | hold `Shift` | dominant-axis lock (larger delta component wins) |
+//! | hold `X`+`Y` | dominant-axis lock (larger delta component wins) |
 //! | hold `Ctrl` while rotating | quantize to `SnapConfig::rotation_step_deg` |
+//!
+//! `Shift` is deliberately *not* an axis modifier: it belongs to selection
+//! (toggle / additive band) and uniform scale. It used to double as the
+//! dominant-axis lock, which silently warped move deltas and draft corners
+//! whenever the user held it for selection (feedback 1.1, 2.2).
 
 use crate::domain::settings::SnapConfig;
 use crate::geometry::snapping::{constrain_axis, quantize_angle};
@@ -64,14 +69,11 @@ pub fn update_gesture_constraints(
     keys: Res<ButtonInput<KeyCode>>,
     mut constraints: ResMut<GestureConstraints>,
 ) {
-    constraints.axis = if keys.pressed(KeyCode::KeyX) {
-        AxisConstraint::Horizontal
-    } else if keys.pressed(KeyCode::KeyY) {
-        AxisConstraint::Vertical
-    } else if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
-        AxisConstraint::Dominant
-    } else {
-        AxisConstraint::Free
+    constraints.axis = match (keys.pressed(KeyCode::KeyX), keys.pressed(KeyCode::KeyY)) {
+        (true, true) => AxisConstraint::Dominant,
+        (true, false) => AxisConstraint::Horizontal,
+        (false, true) => AxisConstraint::Vertical,
+        (false, false) => AxisConstraint::Free,
     };
     constraints.quantize_rotation =
         keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);

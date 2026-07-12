@@ -389,6 +389,156 @@ fn ground_tool_spawns_static_half_plane_with_drag_tilt() {
     assert!((rot - expected).abs() < 1e-3, "tilt follows drag ({rot})");
 }
 
+// ---------- Click-through selection (any tool selects on a plain click) ----------
+
+#[test]
+fn click_with_box_tool_selects_instead_of_spawning() {
+    let mut app = paused_app();
+    let id = spawn_box_at(&mut app, Vec2::ZERO, 40.0, 20.0);
+    app.update(); // colliders
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Box);
+    app.update();
+
+    // A plain click (no drag) on the body: the box tool commits nothing
+    // (sub-minimum size) and the click falls through to selection.
+    set_cursor(&mut app, Vec2::new(5.0, 0.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    assert_eq!(body_count(&mut app), 1, "no body spawned by the click");
+    assert!(
+        app.world()
+            .resource::<Selection>()
+            .contains(entity_of(&app, id).unwrap()),
+        "click fell through to select the hit body"
+    );
+
+    // A plain click on empty canvas clears the selection, still in Box mode.
+    set_cursor(&mut app, Vec2::new(500.0, 500.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+    assert!(app.world().resource::<Selection>().is_empty());
+    assert_eq!(body_count(&mut app), 1, "empty click spawned nothing");
+}
+
+#[test]
+fn box_tool_drag_still_spawns_and_does_not_reselect() {
+    let mut app = paused_app();
+    spawn_box_at(&mut app, Vec2::new(300.0, 300.0), 40.0, 20.0);
+    app.update();
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Box);
+    app.update();
+
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(60.0, 40.0));
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    assert_eq!(body_count(&mut app), 2, "the drag authored a box");
+    assert!(
+        app.world().resource::<Selection>().is_empty(),
+        "a committed draft never doubles as a selection click"
+    );
+}
+
+// ---------- Shift semantics (toggle click / additive band, never a move) ----------
+
+#[test]
+fn shift_click_toggles_selection_without_moving() {
+    let mut app = paused_app();
+    let id = spawn_box_at(&mut app, Vec2::ZERO, 40.0, 20.0);
+    app.update();
+    let entity = entity_of(&app, id).unwrap();
+    let before = stack_undo_len(&app);
+
+    let shift_click = |app: &mut App| {
+        set_cursor(app, Vec2::new(5.0, 0.0));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::ShiftLeft);
+        mouse(app, MouseButton::Left, true);
+        app.update();
+        mouse(app, MouseButton::Left, false);
+        app.update();
+    };
+    shift_click(&mut app);
+    assert!(
+        app.world().resource::<Selection>().contains(entity),
+        "shift-click toggles the body in"
+    );
+    shift_click(&mut app);
+    assert!(
+        !app.world().resource::<Selection>().contains(entity),
+        "second shift-click toggles it back out"
+    );
+
+    assert_eq!(stack_undo_len(&app), before, "no command committed");
+    let pos = app
+        .world()
+        .get::<Transform>(entity)
+        .unwrap()
+        .translation
+        .truncate();
+    assert!(pos.length() < 1e-3, "shift never moves the body ({pos})");
+}
+
+#[test]
+fn shift_drag_from_a_body_becomes_an_additive_band() {
+    let mut app = paused_app();
+    // A is large so the press point (10,10) is beyond the 12px snap capture
+    // of any of its vertices/edges/center — the press lands where aimed.
+    let a = spawn_box_at(&mut app, Vec2::ZERO, 100.0, 100.0);
+    let b = spawn_box_at(&mut app, Vec2::new(200.0, 0.0), 40.0, 20.0);
+    app.update();
+    let (ea, eb) = (entity_of(&app, a).unwrap(), entity_of(&app, b).unwrap());
+
+    // Select A with a plain click.
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+    assert!(app.world().resource::<Selection>().contains(ea));
+
+    // Shift-press on A, then drag a band that fully encloses B: the gesture
+    // converts to an additive rubber band instead of dead-ending (and never
+    // moves A).
+    let before = stack_undo_len(&app);
+    set_cursor(&mut app, Vec2::new(10.0, 10.0));
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::ShiftLeft);
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(300.0, -40.0));
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    let selection = app.world().resource::<Selection>();
+    assert!(selection.contains(eb), "band added B");
+    assert!(selection.contains(ea), "additive: A stayed selected");
+    assert_eq!(stack_undo_len(&app), before, "no move was committed");
+    let pos = app
+        .world()
+        .get::<Transform>(ea)
+        .unwrap()
+        .translation
+        .truncate();
+    assert!(pos.length() < 1e-3, "A did not move ({pos})");
+}
+
 // ---------- Right-click contract (context menu path) ----------
 
 /// A right *click* (no drag) on a selected body must not move anything

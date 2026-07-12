@@ -196,8 +196,15 @@ missing foundation:**
 
 ## M16 residual / deferred (Algodoo parity, queued)
 
-- Selection works from every tool (click falls through to select) (2.1)
-- Shift-drag / modifier semantics rework; no gesture dead-ends (1.1, 2.2)
+- Selection works from every tool (click falls through to select) (2.1) —
+  **landed**: `tools/click_select.rs` applies a sub-deadzone click no tool
+  consumed (no commit intent, no live draft) through the same
+  `SelectTransition` seam, in every tool state.
+- Shift-drag / modifier semantics rework; no gesture dead-ends (1.1, 2.2) —
+  **landed**: `Shift` is selection-only (click = toggle, drag from a body =
+  additive rubber band via the `ShiftPick` state — never a move, never an
+  axis warp); the dominant-axis lock moved to `X`+`Y`. The selection outline
+  now draws front-biased (own gizmo group), visible above prisms and grid.
 - Play-mode right-drag applies torque (dynamic rotate, non-fixed pivot) (2.6)
 - Inspector re-architecture: context-menu-first, inspector as pop-out (2.8)
 - Collision-layer set visualization UI (5.4)
