@@ -51,6 +51,9 @@ pub struct GroupWriters<'w> {
 pub struct ContextMenu {
     /// Whether the menu is showing.
     pub open: bool,
+    /// Set on open, cleared after the first render pass (drives the
+    /// right-click-selects reconciliation).
+    pub fresh: bool,
     /// Screen position (logical px) to anchor at.
     pub screen: Vec2,
     /// Bodies under the click, topmost first.
@@ -121,6 +124,7 @@ pub fn open_context_menu(
         );
         menu.screen = now;
         menu.open = true;
+        menu.fresh = true;
     }
 }
 
@@ -132,14 +136,13 @@ pub fn context_menu(
     mut selection: ResMut<Selection>,
     mut selected_joint: ResMut<SelectedJoint>,
     index: Res<IdIndex>,
-    ids: Query<&StableId>,
-    layers_q: Query<&LayerMask32, With<Body>>,
+    mut props: crate::ui::inspector::BodyProps,
+    mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
     all_layers: Query<&LayerMask32, With<Body>>,
     groups: Query<(Entity, &crate::domain::group::SelectionGroup), With<Body>>,
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     joints: Query<&JointDef>,
     mut writers: GroupWriters,
-    mut edits: MessageWriter<PropertyEditIntent>,
     mut moves: MessageWriter<CommitTransformIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
     mut script: ScriptMenu,
@@ -148,9 +151,30 @@ pub fn context_menu(
         return Ok(());
     }
     let ctx = contexts.ctx_mut()?;
+    // Right-click selects what it acts on (Algodoo): when the menu opens
+    // over a body that is not part of the selection, the topmost body under
+    // the click becomes the selection, so every entry below binds to what
+    // the user actually clicked.
+    if menu.fresh {
+        menu.fresh = false;
+        let clicked_selected = selection
+            .iter()
+            .filter_map(|e| props.ids.get(e).ok())
+            .any(|id| menu.under.contains(id));
+        if !clicked_selected
+            && let Some(top) = menu.under.first()
+            && let Some(entity) = index.entity(*top)
+        {
+            SelectTransition::SetBodies(vec![entity]).apply(
+                &mut selection,
+                &mut selected_joint,
+                &groups,
+            );
+        }
+    }
     let selected_ids: Vec<StableId> = selection
         .iter()
-        .filter_map(|e| ids.get(e).ok().copied())
+        .filter_map(|e| props.ids.get(e).ok().copied())
         .collect();
 
     let mut close = false;
@@ -182,7 +206,7 @@ pub fn context_menu(
                     {
                         let mut new = def.clone();
                         new.common.collide_connected = collide;
-                        edits.write(PropertyEditIntent {
+                        props.edits.write(PropertyEditIntent {
                             changes: vec![PropertyChange {
                                 id: joint_id,
                                 old: PropertyValue::Joint(def.clone()),
@@ -195,6 +219,28 @@ pub fn context_menu(
                         deletes.write(DeleteJointIntent { id: joint_id });
                         close = true;
                     }
+                    ui.separator();
+                }
+
+                // Context-menu-first property editing (feedback 2.8):
+                // the everyday sections live here; the full pop-out is a
+                // command away.
+                if !selected_ids.is_empty() {
+                    if ui.button("Properties…").clicked() {
+                        inspector.open = true;
+                        close = true;
+                    }
+                    egui::CollapsingHeader::new("Material")
+                        .id_salt(ui.id().with("menu-material"))
+                        .show(ui, |ui| {
+                            crate::ui::inspector::physics_section(ui, &selection, &mut props);
+                        });
+                    egui::CollapsingHeader::new("Appearance")
+                        .id_salt(ui.id().with("menu-appearance"))
+                        .show(ui, |ui| {
+                            crate::ui::inspector::appearance_section(ui, &selection, &mut props);
+                            crate::ui::inspector::shape_section(ui, &selection, &mut props);
+                        });
                     ui.separator();
                 }
 
@@ -236,7 +282,7 @@ pub fn context_menu(
                     let items: Vec<AlignItem> = selection
                         .iter()
                         .filter_map(|e| {
-                            let id = ids.get(e).ok().copied()?;
+                            let id = props.ids.get(e).ok().copied()?;
                             let (shape, transform, _) = bodies_q.get(e).ok()?;
                             if shape.contains_half_plane() {
                                 return None;
@@ -300,12 +346,16 @@ pub fn context_menu(
                 ui.horizontal_wrapped(|ui| {
                     for bit in 0..8u32 {
                         if ui.small_button(format!("{bit}")).clicked() {
-                            layer_edit(&selection, &ids, &layers_q, &mut edits, |old| {
-                                LayerMask32 {
+                            layer_edit(
+                                &selection,
+                                &props.ids,
+                                &props.layers,
+                                &mut props.edits,
+                                |old| LayerMask32 {
                                     memberships: 1 << bit,
                                     filters: old.filters,
-                                }
-                            });
+                                },
+                            );
                             close = true;
                         }
                     }
@@ -319,16 +369,26 @@ pub fn context_menu(
                         .map(|l| l.memberships)
                         .fold(0, |a, b| a | b);
                     let free = (0..32u32).find(|b| used & (1 << b) == 0).unwrap_or(31);
-                    layer_edit(&selection, &ids, &layers_q, &mut edits, |_| LayerMask32 {
-                        memberships: 1 << free,
-                        filters: !(1 << free),
-                    });
+                    layer_edit(
+                        &selection,
+                        &props.ids,
+                        &props.layers,
+                        &mut props.edits,
+                        |_| LayerMask32 {
+                            memberships: 1 << free,
+                            filters: !(1 << free),
+                        },
+                    );
                     close = true;
                 }
                 if ui.button("Reset collision layers").clicked() {
-                    layer_edit(&selection, &ids, &layers_q, &mut edits, |_| {
-                        LayerMask32::default()
-                    });
+                    layer_edit(
+                        &selection,
+                        &props.ids,
+                        &props.layers,
+                        &mut props.edits,
+                        |_| LayerMask32::default(),
+                    );
                     close = true;
                 }
                 ui.label(egui::RichText::new("Depth").weak());
@@ -336,21 +396,23 @@ pub fn context_menu(
                     // Depth = layer bits (bit 0 front … bit 31 back).
                     let shift = |edits: &mut MessageWriter<PropertyEditIntent>,
                                  f: &dyn Fn(&LayerMask32) -> u32| {
-                        layer_edit(&selection, &ids, &layers_q, edits, |old| LayerMask32 {
-                            memberships: f(old).max(1),
-                            filters: old.filters,
+                        layer_edit(&selection, &props.ids, &props.layers, edits, |old| {
+                            LayerMask32 {
+                                memberships: f(old).max(1),
+                                filters: old.filters,
+                            }
                         });
                     };
                     if ui.small_button("to front").clicked() {
-                        shift(&mut edits, &|_| 1);
+                        shift(&mut props.edits, &|_| 1);
                         close = true;
                     }
                     if ui.small_button("forward").clicked() {
-                        shift(&mut edits, &|old| old.memberships >> 1);
+                        shift(&mut props.edits, &|old| old.memberships >> 1);
                         close = true;
                     }
                     if ui.small_button("backward").clicked() {
-                        shift(&mut edits, &|old| {
+                        shift(&mut props.edits, &|old| {
                             if old.memberships & (1 << 31) == 0 {
                                 old.memberships << 1
                             } else {
@@ -360,7 +422,7 @@ pub fn context_menu(
                         close = true;
                     }
                     if ui.small_button("to back").clicked() {
-                        shift(&mut edits, &|_| 1 << 7);
+                        shift(&mut props.edits, &|_| 1 << 7);
                         close = true;
                     }
                 });
@@ -370,7 +432,7 @@ pub fn context_menu(
                         .iter()
                         .enumerate()
                         .filter_map(|(index, e)| {
-                            let id = ids.get(e).ok().copied()?;
+                            let id = props.ids.get(e).ok().copied()?;
                             let (_, _, old) = bodies_q.get(e).ok()?;
                             // Golden-angle hue walk from each body's id.
                             let base = (id.0.as_u128() % 360) as f32;
@@ -387,7 +449,7 @@ pub fn context_menu(
                         })
                         .collect();
                     if !changes.is_empty() {
-                        edits.write(PropertyEditIntent { changes });
+                        props.edits.write(PropertyEditIntent { changes });
                     }
                     close = true;
                 }

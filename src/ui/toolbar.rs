@@ -32,6 +32,7 @@ pub fn toolbar(
     mut redo: MessageWriter<RedoIntent>,
     mut settings: ResMut<crate::ui::settings::SettingsWindow>,
     mut plot: ResMut<crate::ui::plot::PlotPanel>,
+    mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
     mut console: ResMut<crate::ui::console::ScriptConsole>,
     mut rig: ResMut<crate::interaction::camera::CameraRig>,
 ) -> Result {
@@ -86,6 +87,13 @@ pub fn toolbar(
                 // Toggles for the hotkey-only panels, so they're discoverable
                 // without knowing the `\` / backquote shortcuts. The buttons
                 // reflect each panel's open state.
+                if ui
+                    .selectable_label(inspector.open, "Properties")
+                    .on_hover_text("properties pop-out (also in the right-click menu)")
+                    .clicked()
+                {
+                    inspector.open = !inspector.open;
+                }
                 if ui
                     .selectable_label(plot.is_open(), "Plot")
                     .on_hover_text("live plot of the selected body/joint (\\)")

@@ -212,6 +212,12 @@ missing foundation:**
   translation stays with the solver so a resting body lifts its opposing
   edge. Physical interaction — no command, not undoable, like the drag grab.
 - Inspector re-architecture: context-menu-first, inspector as pop-out (2.8)
+  — **landed**: the property sections are host-agnostic renderers
+  (`ui/inspector.rs`) shared by the right-click menu (Material/Appearance
+  collapsing sections + "Properties…" command) and the *Properties* pop-out,
+  which is closed by default and opened from the menu or the transport
+  toggle. Right-click now selects the clicked body when it isn't already in
+  the selection, so the menu always binds to what was clicked.
 - Collision-layer set visualization UI (5.4)
 - Joint config also reachable via right-click context menu (not only the
   select-and-inspect flow landed in M15) (2.8)
