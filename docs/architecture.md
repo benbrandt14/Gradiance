@@ -6,12 +6,10 @@ mechanically enforced by `tests/boundaries.rs` and CI — see `CLAUDE.md`.
 
 ## State classification
 
-Every resource and component in `src/` classified by which seam governs its
-writes. The governance model in one line: **reads are total, writes are
-seam-mediated** — Edit (intents → commands), Config (settings resources),
-EditorState (non-sim editor tables), or derived (rebuilt by `Changed<>` sync).
-New state must land in exactly one row-kind; anything that doesn't fit gets an
-explicit row with its rationale (bottom section). No unclassified state.
+Every resource/component in `src/`, by the seam governing its writes (reads
+are total, writes are seam-mediated). New state must land in exactly one
+section; anything that doesn't fit gets an explicit rationale row at the
+bottom — no unclassified state.
 
 ### Authored (Edit seam → persisted, undoable, reflect-registered)
 

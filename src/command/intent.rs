@@ -5,24 +5,18 @@
 //! `MessageWriter`. The dispatcher turns each into a
 //! [`GameCommand`](crate::command::GameCommand) (one intent, one undo step).
 //!
-//! Each intent carries a `Trace:` line naming its dispatch site, the command
-//! it becomes, and the `Changed<>` sync systems that ultimately fire — grep
-//! the [`name`] constant to walk the whole chain (intent → command → script
-//! verb) in one search.
+//! Each intent carries a `Trace:` line (dispatch site → command → sync
+//! systems); grep its [`name`] constant to walk the whole chain.
 
 use crate::command::snapshot::BodyRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use bevy::prelude::*;
 
-/// Canonical kebab-case names, one per intent/command pair.
-///
-/// The same constant is the command's
-/// [`GameCommand::name`](crate::command::GameCommand::name) and — where a
-/// script verb maps 1:1,
-/// like [`CUT`](name::CUT) — the operation-registry name
-/// (`crate::script::registry::name`). One grep for the constant therefore
-/// walks intent, command, log lines, and script surface together.
+/// Canonical kebab-case names, one per intent/command pair — shared by
+/// [`GameCommand::name`](crate::command::GameCommand::name) and (where a
+/// script verb maps 1:1, like [`CUT`](name::CUT)) the operation registry,
+/// so one grep walks the whole chain.
 pub mod name {
     /// [`SpawnBodyIntent`](super::SpawnBodyIntent) → `SpawnBodyCommand`.
     pub const SPAWN_BODY: &str = "spawn-body";

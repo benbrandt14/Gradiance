@@ -433,12 +433,9 @@ impl IntentDispatch {
 }
 
 /// One Edit-category operation's binding to the intent type it emits.
-///
-/// [`edit_bindings`] is the **single table** [`ScriptPlugin`] registers
-/// [`IntentDispatch`] from and the registry-validation test
-/// (`tests/it/registry_validation.rs`) checks the catalog against — an Edit
-/// verb whose intent is unregistered, or whose intent type is missing from
-/// the reflection registry, fails CI instead of silently dropping ops.
+/// [`edit_bindings`] is the single table [`ScriptPlugin`] registers
+/// [`IntentDispatch`] from and `tests/it/registry_validation.rs` checks the
+/// catalog against.
 pub struct EditBinding {
     /// The operation's [`name`] constant.
     pub op: &'static str,
@@ -461,9 +458,7 @@ impl EditBinding {
     }
 }
 
-/// Every Edit-category operation and the intent it emits. Adding an edit verb
-/// means adding a row here (the compiler checks the intent type; the
-/// validation test checks the catalog).
+/// Every Edit-category operation and the intent it emits — one row per verb.
 pub fn edit_bindings() -> Vec<EditBinding> {
     vec![
         EditBinding::new::<CutIntent>(name::CUT),
