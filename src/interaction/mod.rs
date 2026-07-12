@@ -102,6 +102,15 @@ impl Plugin for InteractionPlugin {
         );
         // Indicator gizmos need the gizmo plugin (present with rendering).
         if app.is_plugin_added::<bevy::render::RenderPlugin>() {
+            // The selection outline draws in front of the extruded prisms
+            // and the grid (same treatment as joint glyphs).
+            app.insert_gizmo_config(
+                indicators::SelectionGizmos,
+                GizmoConfig {
+                    depth_bias: -1.0,
+                    ..default()
+                },
+            );
             app.add_systems(
                 Update,
                 (

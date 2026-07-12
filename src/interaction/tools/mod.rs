@@ -13,6 +13,7 @@
 
 pub mod box_tool;
 pub mod circle_tool;
+pub mod click_select;
 pub mod connector_tool;
 pub mod context;
 pub mod cut_tool;
@@ -37,6 +38,12 @@ use bevy::prelude::*;
 /// right-drag panning while set (rotation gestures own the right button).
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct ActiveGesture(pub bool);
+
+/// All tool gesture drivers run in this set. Click-through selection runs
+/// after it, so it observes this frame's [`ActiveGesture`] and commit
+/// intents when deciding whether a click fell through.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ToolDriverSet;
 
 /// Installs every tool.
 pub struct ToolsPlugin;
@@ -78,6 +85,15 @@ impl Plugin for ToolsPlugin {
                     .run_if(connector_tool::connector_active),
                 run_manip_tool::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
             )
+                .in_set(ToolDriverSet)
+                .in_set(InteractionSet)
+                .before(crate::command::CommandDispatchSet),
+        );
+        app.init_resource::<click_select::ClickThrough>();
+        app.add_systems(
+            Update,
+            click_select::click_through_select
+                .after(ToolDriverSet)
                 .in_set(InteractionSet)
                 .before(crate::command::CommandDispatchSet),
         );

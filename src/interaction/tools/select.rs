@@ -29,6 +29,9 @@ const MOVE_EPSILON: f32 = 0.5;
 const HANDLE_RADIUS_PX: f32 = 10.0;
 /// Right-drag deadzone (logical px) before rotation engages.
 const ROTATE_DEADZONE_PX: f32 = 8.0;
+/// Shift-press deadzone (logical px): inside = a toggle click, past it the
+/// gesture becomes an additive rubber band.
+const CLICK_DEADZONE_PX: f32 = 4.0;
 
 /// The select tool's active gesture.
 #[derive(Resource, Default, Debug)]
@@ -59,6 +62,16 @@ pub enum SelectGesture {
         engaged: bool,
         /// `(entity, id, original pose)` per rotated body.
         bodies: Vec<(Entity, StableId, PosRot)>,
+    },
+    /// Shift-press on a body: a release inside the click deadzone toggles the
+    /// hit (and its group) in the selection; dragging past it becomes an
+    /// **additive rubber band** instead — shift never moves bodies and never
+    /// dead-ends (feedback 2.2).
+    ShiftPick {
+        /// Cursor position at press.
+        press: Vec2,
+        /// The bodies a click would toggle (group-expanded).
+        members: Vec<Entity>,
     },
     /// Rubber-band selection on empty canvas.
     BoxSelect {
@@ -215,8 +228,11 @@ impl SelectGesture {
         selection: &Selection,
         p: Vec2,
     ) -> ManipOutput {
-        // 1. Scale handle?
-        if let Some(sbox) = world.selection_box(selection, ctx.scale_frame)
+        // 1. Scale handle? (Skipped while shift is held: shift-at-press means
+        // selection — toggle or additive band. Uniform corner scaling still
+        // works by pressing shift *during* the scale drag.)
+        if !ctx.shift
+            && let Some(sbox) = world.selection_box(selection, ctx.scale_frame)
             && let Some(handle) = hit_handle(&sbox, p, HANDLE_RADIUS_PX * ctx.cam_scale)
         {
             let pivot = sbox.point(handle.anchor_unit());
@@ -304,10 +320,9 @@ impl SelectGesture {
         }
 
         if ctx.shift {
-            return ManipOutput {
-                selection: Some(SelectTransition::ToggleBodies(members)),
-                ..Default::default()
-            };
+            // Decided on release/drag: click = toggle, drag = additive band.
+            *self = SelectGesture::ShiftPick { press: p, members };
+            return ManipOutput::default();
         }
 
         // Set (or keep) the selection, then start moving it. The move bodies
@@ -391,33 +406,7 @@ impl SelectGesture {
                 engaged,
                 bodies,
             } => {
-                if let Some(p) = ctx.raw_cursor {
-                    if !*engaged && press.distance(p) > ROTATE_DEADZONE_PX * ctx.cam_scale {
-                        *engaged = true;
-                    }
-                    if *engaged {
-                        let angle = ctx
-                            .constraints
-                            .apply_rotation((p - *pivot).to_angle() - *start_angle, ctx.snap);
-                        let rot = Vec2::from_angle(angle);
-                        let poses = bodies
-                            .iter()
-                            .map(|(e, _, original)| {
-                                (
-                                    *e,
-                                    PosRot {
-                                        pos: *pivot + rot.rotate(original.pos - *pivot),
-                                        rot: original.rot + angle,
-                                    },
-                                )
-                            })
-                            .collect();
-                        return ManipOutput {
-                            hold: HoldState::Set(poses),
-                            ..Default::default()
-                        };
-                    }
-                }
+                return rotate_drag(ctx, *pivot, *start_angle, *press, engaged, bodies);
             }
             SelectGesture::Scale {
                 handle,
@@ -450,6 +439,16 @@ impl SelectGesture {
                     && points.last().is_none_or(|last| last.distance(p) > 4.0)
                 {
                     points.push(p);
+                }
+            }
+            SelectGesture::ShiftPick { press, .. } => {
+                if let Some(p) = ctx.raw_cursor
+                    && press.distance(p) > CLICK_DEADZONE_PX * ctx.cam_scale
+                {
+                    *self = SelectGesture::BoxSelect {
+                        start: *press,
+                        additive: true,
+                    };
                 }
             }
             SelectGesture::Idle
@@ -503,6 +502,10 @@ impl SelectGesture {
                     ..Default::default()
                 }
             }
+            SelectGesture::ShiftPick { members, .. } if left_up => ManipOutput {
+                selection: Some(SelectTransition::ToggleBodies(members)),
+                ..Default::default()
+            },
             SelectGesture::BoxSelect { start, additive } if left_up => ManipOutput {
                 selection: ctx.cursor.map(|p| {
                     let hits = world.bodies_in_box(start.min(p), start.max(p));
@@ -544,6 +547,47 @@ impl SelectGesture {
                 ManipOutput::default()
             }
         }
+    }
+}
+
+/// Advances a rotation drag: engages once the cursor leaves the right-click
+/// deadzone, then holds every body at its rotated pose about the pivot.
+fn rotate_drag(
+    ctx: &ManipContext,
+    pivot: Vec2,
+    start_angle: f32,
+    press: Vec2,
+    engaged: &mut bool,
+    bodies: &[(Entity, StableId, PosRot)],
+) -> ManipOutput {
+    let Some(p) = ctx.raw_cursor else {
+        return ManipOutput::default();
+    };
+    if !*engaged && press.distance(p) > ROTATE_DEADZONE_PX * ctx.cam_scale {
+        *engaged = true;
+    }
+    if !*engaged {
+        return ManipOutput::default();
+    }
+    let angle = ctx
+        .constraints
+        .apply_rotation((p - pivot).to_angle() - start_angle, ctx.snap);
+    let rot = Vec2::from_angle(angle);
+    let poses = bodies
+        .iter()
+        .map(|(e, _, original)| {
+            (
+                *e,
+                PosRot {
+                    pos: pivot + rot.rotate(original.pos - pivot),
+                    rot: original.rot + angle,
+                },
+            )
+        })
+        .collect();
+    ManipOutput {
+        hold: HoldState::Set(poses),
+        ..Default::default()
     }
 }
 

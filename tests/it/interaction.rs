@@ -225,13 +225,25 @@ fn gesture_constraints_follow_modifier_keys() {
         .constrain(Vec2::new(5.0, 9.0));
     assert_eq!(constrained, Vec2::new(5.0, 0.0));
 
+    // X+Y together = dominant-axis lock; Shift is a selection modifier and
+    // must NOT constrain gestures (it used to inject axis-warped offsets —
+    // feedback 1.1, 2.2).
     let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
-    input.release(KeyCode::KeyX);
-    input.press(KeyCode::ShiftLeft);
+    input.press(KeyCode::KeyY);
     app.update();
     assert_eq!(
         app.world().resource::<GestureConstraints>().axis,
         AxisConstraint::Dominant
+    );
+    let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+    input.release(KeyCode::KeyX);
+    input.release(KeyCode::KeyY);
+    input.press(KeyCode::ShiftLeft);
+    app.update();
+    assert_eq!(
+        app.world().resource::<GestureConstraints>().axis,
+        AxisConstraint::Free,
+        "shift is not an axis modifier"
     );
 
     let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
