@@ -51,15 +51,19 @@ pub fn apply_mouse_spring(
     angular.0 *= ANGULAR_DAMP;
 }
 
-/// Spin gain toward the target angle (per second).
-const TWIST_GAIN: f32 = 12.0;
-/// Maximum induced spin (rad/s).
-const MAX_SPIN: f32 = 40.0;
+/// Twist proportional gain (angular acceleration per radian of error).
+const TWIST_KP: f32 = 150.0;
+/// Twist damping gain (≈ 2·√KP, near-critical damping).
+const TWIST_KD: f32 = 24.0;
+/// Angular-acceleration clamp (rad/s²).
+const MAX_TWIST_ACCEL: f32 = 600.0;
 
 /// An active physical twist: drive one body's rotation toward a target
-/// angle by angular velocity, leaving translation to the solver — the
-/// pivot is *not* fixed, so a resting body lifts its opposing edge
-/// instead of teleport-rotating (feedback 2.6).
+/// angle by *torque*, leaving everything else to the solver — the pivot is
+/// not fixed (a resting body lifts its opposing edge instead of
+/// teleport-rotating, feedback 2.6), and constraints always win: a body
+/// held by a prismatic joint or a rotation lock does not rotate, no matter
+/// how hard the gesture pulls (a velocity write would punch through).
 #[derive(Debug, Clone, Copy)]
 pub struct Twist {
     /// Twisted body.
@@ -73,17 +77,22 @@ pub struct Twist {
 #[derive(Resource, Default, Debug)]
 pub struct MouseTwist(pub Vec<Twist>);
 
-/// Servos each twisted body's angular velocity toward its target angle.
+/// PD-servos each twisted body toward its target angle with a one-shot
+/// torque (cleared by avian after the step), so joints and rotation locks
+/// are respected — the solver, not the gesture, has the last word.
 pub fn apply_mouse_twist(
     twist: Res<MouseTwist>,
-    mut bodies: Query<(&Transform, &mut AngularVelocity)>,
+    mut bodies: Query<(&ComputedAngularInertia, Forces)>,
 ) {
     for t in &twist.0 {
-        let Ok((transform, mut angular)) = bodies.get_mut(t.entity) else {
+        let Ok((inertia, mut forces)) = bodies.get_mut(t.entity) else {
             continue;
         };
-        let rot = crate::core::units::PosRot::from_transform(transform).rot;
-        let err = crate::geometry::wrap_angle(t.target_rot - rot);
-        angular.0 = (err * TWIST_GAIN).clamp(-MAX_SPIN, MAX_SPIN);
+        // Pose/velocity read through `Forces` itself — it holds write access
+        // to the velocity components, so separate query terms would conflict.
+        let err = crate::geometry::wrap_angle(t.target_rot - forces.rotation().as_radians());
+        let accel = (err * TWIST_KP - forces.angular_velocity() * TWIST_KD)
+            .clamp(-MAX_TWIST_ACCEL, MAX_TWIST_ACCEL);
+        forces.apply_torque(inertia.value() * accel);
     }
 }
