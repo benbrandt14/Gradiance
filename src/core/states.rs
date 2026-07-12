@@ -20,7 +20,7 @@ pub enum GameState {
 ///
 /// Each tool is its own plugin whose systems/observers are gated on
 /// `in_state(ToolState::X)`. Exactly one tool is active at a time.
-#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
 pub enum ToolState {
     /// Select, move, rotate, and duplicate bodies.
     #[default]

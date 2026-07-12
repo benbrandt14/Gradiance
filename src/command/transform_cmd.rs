@@ -1,8 +1,7 @@
 //! Committing completed move/rotate gestures.
 
 use crate::command::intent::TransformChange;
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::IdIndex;
+use crate::command::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
 
 /// Applies the final poses of a completed gesture (and restores the
@@ -17,10 +16,7 @@ pub struct CommitTransformCommand {
 impl CommitTransformCommand {
     fn set_poses(&self, world: &mut World, use_new: bool) -> Result<(), CommandError> {
         for change in &self.changes {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(change.id)
-                .ok_or(CommandError::MissingEntity(change.id))?;
+            let entity = resolve(world, change.id)?;
             let mut transform = world
                 .get_mut::<Transform>(entity)
                 .ok_or(CommandError::MissingEntity(change.id))?;

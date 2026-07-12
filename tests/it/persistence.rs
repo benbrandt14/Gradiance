@@ -125,7 +125,6 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                         filters,
                     },
                     groups,
-                    group: None,
                 }
             },
         )

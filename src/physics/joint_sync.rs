@@ -7,7 +7,7 @@
 //! unrepresentable, and recursive despawn cleans it up for free.
 
 use crate::core::ids::{IdIndex, StableId};
-use crate::domain::joint::{JointCommon, JointDef, JointKind, MotorDef};
+use crate::domain::joint::{JointDef, JointKind, MotorDef};
 use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::ecs::system::EntityCommands;
@@ -109,7 +109,6 @@ pub fn sync_joints(
         } else {
             entity_commands.insert(JointCollisionDisabled);
         }
-        let _ = JointCommon::default(); // referenced for doc-link stability
     }
 }
 

@@ -1,17 +1,9 @@
 //! Spawn, delete, and duplicate commands.
 
 use crate::command::snapshot::BodyRecord;
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use bevy::prelude::*;
-
-/// Resolves a stable id to its live entity.
-fn resolve(world: &World, id: StableId) -> Result<Entity, CommandError> {
-    world
-        .resource::<IdIndex>()
-        .entity(id)
-        .ok_or(CommandError::MissingEntity(id))
-}
 
 /// Spawns one body from a record.
 #[derive(Debug)]

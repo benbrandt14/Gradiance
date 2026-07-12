@@ -34,10 +34,6 @@ pub struct BodyRecord {
     /// Group stack, innermost first (empty = ungrouped).
     #[serde(default)]
     pub groups: Vec<u32>,
-    /// Legacy single group id from pre-hierarchy saves — folded into
-    /// `groups` on spawn, never written back.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub group: Option<u32>,
 }
 
 impl BodyRecord {
@@ -56,7 +52,6 @@ impl BodyRecord {
                 .get::<SelectionGroup>()
                 .map(|g| g.0.clone())
                 .unwrap_or_default(),
-            group: None,
         })
     }
 
@@ -73,14 +68,8 @@ impl BodyRecord {
             self.layers,
         ));
         self.physics.insert_into(&mut entity);
-        let mut groups = self.groups.clone();
-        if groups.is_empty()
-            && let Some(legacy) = self.group
-        {
-            groups.push(legacy);
-        }
-        if !groups.is_empty() {
-            entity.insert(SelectionGroup(groups));
+        if !self.groups.is_empty() {
+            entity.insert(SelectionGroup(self.groups.clone()));
         }
         entity.id()
     }

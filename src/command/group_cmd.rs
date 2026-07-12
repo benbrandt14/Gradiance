@@ -4,7 +4,7 @@
 //! each target's **outermost** id, so `ungroup(group(group(A,B,C), D))`
 //! leaves `group(A,B,C)` intact.
 
-use crate::command::{CommandError, GameCommand};
+use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::{IdIndex, StableId};
 use crate::domain::group::SelectionGroup;
 use bevy::prelude::*;
@@ -16,10 +16,7 @@ fn prior_groups(
     targets
         .iter()
         .map(|&id| {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(id)
-                .ok_or(CommandError::MissingEntity(id))?;
+            let entity = resolve(world, id)?;
             Ok((id, world.get::<SelectionGroup>(entity).cloned()))
         })
         .collect()
