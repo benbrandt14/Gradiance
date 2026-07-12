@@ -8,6 +8,9 @@
 use crate::core::ids::IdIndex;
 use crate::core::units::PosRot;
 use crate::domain::joint::{JointDef, JointKind, MotorDef};
+use crate::interaction::joint_edit::{
+    HINGE_LIMIT_RADIUS_PX, HINGE_RING_PX, JointLimitDrag, slider_span,
+};
 use crate::interaction::selection::SelectedJoint;
 use bevy::color::palettes::css;
 use bevy::gizmos::config::GizmoConfigGroup;
@@ -24,6 +27,7 @@ pub struct JointGizmos;
 pub fn draw_joints(
     joints: Query<(Entity, &JointDef)>,
     selected: Res<SelectedJoint>,
+    limit_drag: Res<JointLimitDrag>,
     index: Res<IdIndex>,
     transforms: Query<&Transform>,
     projections: Query<&Projection, With<Camera3d>>,
@@ -47,12 +51,33 @@ pub fn draw_joints(
             css::LIGHT_GRAY
         };
         match &def.kind {
-            JointKind::Hinge { motor, .. } => {
+            JointKind::Hinge { motor, limits } => {
                 // Under-stroke: a slightly offset dark ring reads as an
                 // outline at every zoom (gizmo lines have no width knob).
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.6 * s, OUTLINE);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.0 * s, color);
+                let r = HINGE_RING_PX * s;
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), r * 1.1, OUTLINE);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), r, color);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 1.5 * s, color);
+                // Exact allowed-rotation range (relative to body A), with
+                // grab handles at the ends when the joint is selected. A
+                // live handle drag previews its tentative range instead.
+                let (limits, live) = tentative_or(&limit_drag, entity, *limits);
+                if let Some([min, max]) = limits {
+                    let arc_color = if live {
+                        css::AQUAMARINE
+                    } else {
+                        css::CORNFLOWER_BLUE
+                    };
+                    draw_limit_arc(
+                        &mut gizmos,
+                        anchor,
+                        pose_a.rot,
+                        [min, max],
+                        s,
+                        arc_color,
+                        selected.0 == Some(entity),
+                    );
+                }
                 if let Some(m) = motor {
                     draw_angular_motor(&mut gizmos, anchor, *m, s);
                 }
@@ -63,18 +88,23 @@ pub fn draw_joints(
                 limits,
             } => {
                 let dir = Vec2::from_angle(pose_a.rot).rotate(*axis);
-                // With travel limits the axis line shows the actual allowed
-                // travel (plus end caps); unlimited sliders keep the long
-                // reference line.
-                let (from, to) = match limits {
-                    Some([min, max]) => (anchor + dir * *min, anchor + dir * *max),
-                    None => (anchor - dir * 40.0 * s, anchor + dir * 40.0 * s),
-                };
+                // With travel limits the axis line shows the exact allowed
+                // travel (plus end caps); unlimited prismatics keep the
+                // long reference line. A live handle drag previews its
+                // tentative travel instead.
+                let (limits, live) = tentative_or(&limit_drag, entity, *limits);
+                let span_color = if live { css::AQUAMARINE } else { color };
+                let (from, to) = slider_span(anchor, dir, limits, s);
                 let perp = Vec2::new(-dir.y, dir.x) * 4.0 * s;
-                gizmos.line_2d(from, to, color);
+                gizmos.line_2d(from, to, span_color);
                 if limits.is_some() {
-                    gizmos.line_2d(from - perp, from + perp, color);
-                    gizmos.line_2d(to - perp, to + perp, color);
+                    gizmos.line_2d(from - perp, from + perp, span_color);
+                    gizmos.line_2d(to - perp, to + perp, span_color);
+                    if selected.0 == Some(entity) {
+                        // Grab handles on the travel caps.
+                        gizmos.circle_2d(Isometry2d::from_translation(from), 3.0 * s, css::GOLD);
+                        gizmos.circle_2d(Isometry2d::from_translation(to), 3.0 * s, css::GOLD);
+                    }
                 }
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.4 * s, OUTLINE);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.0 * s, color);
@@ -110,6 +140,55 @@ pub fn draw_joints(
 
 /// Dark under-stroke color for glyph outlines.
 const OUTLINE: bevy::color::Srgba = css::DARK_SLATE_GRAY;
+
+/// The limits to draw for `entity`: the live drag's tentative range when
+/// this joint's handle is being dragged (flagged `true`), else the
+/// authored limits.
+fn tentative_or(
+    drag: &JointLimitDrag,
+    entity: Entity,
+    authored: Option<[f32; 2]>,
+) -> (Option<[f32; 2]>, bool) {
+    match (drag.dragging() == Some(entity), drag.tentative) {
+        (true, Some(t)) => (Some(t), true),
+        _ => (authored, false),
+    }
+}
+
+/// The hinge's allowed-rotation arc (world angles `rot_a + min..max`), with
+/// end ticks, and grab-handle dots when `with_handles`.
+fn draw_limit_arc(
+    gizmos: &mut Gizmos<JointGizmos>,
+    anchor: Vec2,
+    rot_a: f32,
+    [min, max]: [f32; 2],
+    s: f32,
+    color: bevy::color::Srgba,
+    with_handles: bool,
+) {
+    let r = HINGE_LIMIT_RADIUS_PX * s;
+    let span = (max - min).max(1e-3);
+    let steps = (span.abs() * 8.0).ceil().max(2.0) as usize;
+    let at = |a: f32| anchor + Vec2::from_angle(rot_a + a) * r;
+    let mut prev = at(min);
+    for i in 1..=steps {
+        let next = at(min + span * (i as f32 / steps as f32));
+        gizmos.line_2d(prev, next, color);
+        prev = next;
+    }
+    // End ticks crossing the arc, plus handle dots when selected.
+    for a in [min, max] {
+        let dir = Vec2::from_angle(rot_a + a);
+        gizmos.line_2d(
+            anchor + dir * (r - 3.0 * s),
+            anchor + dir * (r + 3.0 * s),
+            color,
+        );
+        if with_handles {
+            gizmos.circle_2d(Isometry2d::from_translation(at(a)), 3.0 * s, css::GOLD);
+        }
+    }
+}
 
 /// A curved arrow around the hinge showing spin direction & strength.
 fn draw_angular_motor(gizmos: &mut Gizmos<JointGizmos>, anchor: Vec2, motor: MotorDef, s: f32) {

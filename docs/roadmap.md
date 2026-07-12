@@ -260,6 +260,14 @@ missing foundation:**
 
 ## M20 — Constraints II
 
+- Joint limit handles (user request, 2026-07-12) — **landed**: hinge and
+  prismatic limits are draggable handles on the glyph itself (hinge: an
+  exact allowed-rotation arc with end handles; prismatic: the travel caps),
+  with a live tentative preview and one undoable `PropertyEditIntent` per
+  drag. Joints are selectable **anywhere on their glyph** (ring / travel
+  line / spring coil — shared `glyph_distance` drives both left-click and
+  right-click picking). The slider is labeled *Prismatic* in the UI.
+
 - Weld rework: merge bodies into one (SDF `Union` — the tree makes this
   natural) or make-static, replacing the weld-as-joint model (4.2) —
   **landed**: the weld tool merges the two topmost bodies at the click

@@ -209,7 +209,7 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 if motor.is_some() { " +motor" } else { "" },
             ),
             JointKind::Slider { limits, motor, .. } => format!(
-                "Slider{}{}",
+                "Prismatic{}{}",
                 if limits.is_some() { " +limits" } else { "" },
                 if motor.is_some() { " +motor" } else { "" },
             ),

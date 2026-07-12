@@ -72,6 +72,8 @@ impl Plugin for ToolsPlugin {
                     .before(run_manip_tool::<select::SelectGesture>),
                 crate::interaction::joint_edit::drag_joint_anchor
                     .run_if(in_state(ToolState::Select)),
+                crate::interaction::joint_edit::drag_joint_limit
+                    .run_if(in_state(ToolState::Select)),
                 run_manip_tool::<select::SelectGesture>.run_if(in_state(ToolState::Select)),
                 run_manip_tool::<drag_tool::DragTool>.run_if(in_state(ToolState::Drag)),
                 // Pure creation tools share one generic driver over the

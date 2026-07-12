@@ -38,7 +38,7 @@ fn toolbar_palette_lists_all_tools_and_reports_clicks() {
         "Polygon (P)",
         "Hinge (H)",
         "Weld (W)",
-        "Slider (R)",
+        "Prismatic (R)",
         "Strut (T)",
         "Ground (G)",
         "Cut (K)",

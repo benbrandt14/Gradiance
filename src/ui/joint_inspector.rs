@@ -145,7 +145,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
 pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "Hinge (revolute)",
-        JointKind::Slider { .. } => "Slider (prismatic)",
+        JointKind::Slider { .. } => "Prismatic (slider)",
         JointKind::Spring { .. } => "Strut (spring-damper)",
     }
 }
