@@ -55,6 +55,11 @@ impl Plugin for GradiancePhysicsPlugin {
         app.init_resource::<hold::KinematicHold>();
         app.init_resource::<grab::MouseSpring>();
         app.init_resource::<grab::MouseTwist>();
+        app.init_resource::<SubstepTrace>();
+        app.add_systems(
+            SubstepSchedule,
+            record_substep_trace.run_if(substep_trace_enabled),
+        );
         app.add_systems(OnEnter(GameState::Paused), pause_physics_clock);
         app.add_systems(OnExit(GameState::Paused), resume_physics_clock);
         app.add_systems(
@@ -90,11 +95,46 @@ fn apply_sim_settings(
     settings: Res<crate::domain::settings::SimSettings>,
     mut gravity: ResMut<Gravity>,
     mut time: ResMut<Time<Physics>>,
+    mut fixed: ResMut<Time<Fixed>>,
     mut substeps: ResMut<SubstepCount>,
 ) {
     gravity.0 = settings.gravity;
     time.set_relative_speed(settings.speed.clamp(0.0, 10.0));
     substeps.0 = settings.substeps.clamp(1, 64);
+    // The physics schedule runs on the fixed clock; this is the timestep.
+    fixed.set_timestep_hz(f64::from(settings.timestep_hz.clamp(15.0, 240.0)));
+}
+
+/// Per-substep positions of dynamic bodies from the most recent physics
+/// step — the substep debug view's data (feedback 8.3). Derived diagnostic:
+/// rebuilt every step while `DebugSettings::show_substeps` is on, never
+/// persisted (a stale trace is simply not drawn once the toggle is off).
+#[derive(Resource, Default, Debug)]
+pub struct SubstepTrace(pub Vec<Vec<Vec2>>);
+
+/// Records dynamic-body positions inside avian's [`SubstepSchedule`]. The
+/// trace holds exactly the last step's substeps: once it reaches
+/// [`SubstepCount`] entries, the next substep starts a fresh step.
+fn record_substep_trace(
+    mut trace: ResMut<SubstepTrace>,
+    substeps: Res<SubstepCount>,
+    bodies: Query<(&Position, &RigidBody), With<crate::domain::Body>>,
+) {
+    if trace.0.len() >= substeps.0 as usize {
+        trace.0.clear();
+    }
+    trace.0.push(
+        bodies
+            .iter()
+            .filter(|(_, kind)| **kind == RigidBody::Dynamic)
+            .map(|(pos, _)| Vec2::new(pos.x, pos.y))
+            .collect(),
+    );
+}
+
+/// Run condition: the substep debug view is enabled.
+fn substep_trace_enabled(debug: Res<crate::domain::settings::DebugSettings>) -> bool {
+    debug.show_substeps
 }
 
 fn pause_physics_clock(mut time: ResMut<Time<Physics>>) {

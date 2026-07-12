@@ -1,7 +1,7 @@
 //! Physics seam tests: authored components drive engine components, and
 //! the simulation behaves qualitatively (falls, rests, pauses).
 
-use crate::harness::{body_count, box_record, entity_of, headless_app, step};
+use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step};
 use avian2d::prelude::{CollisionLayers, LockedAxes, RigidBody, Sensor};
 use bevy::prelude::*;
 use gradiance::prelude::*;
@@ -188,5 +188,46 @@ fn pausing_freezes_the_simulation() {
     assert!(
         y_resumed < y_after - 1.0,
         "resumed body falls again ({y_after} → {y_resumed})"
+    );
+}
+
+#[test]
+fn timestep_setting_applies_to_the_fixed_clock() {
+    let mut app = paused_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .timestep_hz = 120.0;
+    app.update();
+
+    let dt = app
+        .world()
+        .resource::<Time<Fixed>>()
+        .timestep()
+        .as_secs_f64();
+    assert!((dt - 1.0 / 120.0).abs() < 1e-9, "fixed dt followed ({dt})");
+}
+
+#[test]
+fn substep_trace_records_one_entry_per_substep() {
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::DebugSettings>()
+        .show_substeps = true;
+    let record = box_record(Vec2::new(0.0, 200.0), 40.0, 20.0);
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+
+    step(&mut app, 3); // a few physics steps while falling
+
+    let substeps = app.world().resource::<avian2d::prelude::SubstepCount>().0 as usize;
+    let trace = app.world().resource::<gradiance::physics::SubstepTrace>();
+    assert_eq!(
+        trace.0.len(),
+        substeps,
+        "the trace holds exactly the last step's substeps"
+    );
+    assert!(
+        trace.0.iter().all(|frame| frame.len() == 1),
+        "every substep recorded the one dynamic body"
     );
 }

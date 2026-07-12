@@ -142,10 +142,17 @@ pub struct SimSettings {
     /// Solver substeps per physics step (stiffness/accuracy knob).
     #[serde(default = "default_substeps")]
     pub substeps: u32,
+    /// Physics steps per second (the fixed timestep).
+    #[serde(default = "default_timestep_hz")]
+    pub timestep_hz: f32,
 }
 
 fn default_substeps() -> u32 {
     SimSettings::default().substeps
+}
+
+fn default_timestep_hz() -> f32 {
+    SimSettings::default().timestep_hz
 }
 
 impl Default for SimSettings {
@@ -154,6 +161,7 @@ impl Default for SimSettings {
             gravity: Vec2::new(0.0, -1000.0),
             speed: 1.0,
             substeps: 6,
+            timestep_hz: 60.0,
         }
     }
 }
@@ -210,6 +218,9 @@ pub struct DebugSettings {
     /// Color every body's outline by its front-most collision-layer bit
     /// (the collision-set visualization, feedback 5.4).
     pub show_layers: bool,
+    /// Trace each dynamic body's position at every solver substep of the
+    /// most recent physics step (the substep debug view, feedback 8.3).
+    pub show_substeps: bool,
     /// Draw contact points and their impulse-scaled normals.
     pub show_contacts: bool,
 }
@@ -223,6 +234,7 @@ impl Default for DebugSettings {
             show_joint_anchors: true,
             show_velocities: false,
             show_layers: false,
+            show_substeps: false,
             show_contacts: false,
         }
     }

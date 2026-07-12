@@ -12,6 +12,7 @@ use crate::domain::settings::DebugSettings;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
 use crate::geometry::sdf;
+use crate::physics::SubstepTrace;
 use crate::physics::queries::PhysicsQueries;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
@@ -27,6 +28,7 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
     bodies: Query<(Entity, &ShapeDef, &Transform, &LayerMask32), With<Body>>,
+    substeps: Res<SubstepTrace>,
     joints: Query<&JointDef>,
     index: Res<IdIndex>,
     poses: Query<&Transform, With<Body>>,
@@ -117,6 +119,19 @@ pub fn draw_debug_overlays(
 
     if debug.show_joint_anchors {
         draw_joint_anchors(&joints, &index, &poses, &mut gizmos);
+    }
+
+    if debug.show_substeps {
+        // Ghost dots at each substep position of the last physics step,
+        // brightening toward the final substep.
+        let n = substeps.0.len().max(1) as f32;
+        for (i, frame) in substeps.0.iter().enumerate() {
+            let alpha = 0.25 + 0.75 * ((i + 1) as f32 / n);
+            let color = css::MEDIUM_ORCHID.with_alpha(alpha);
+            for pos in frame {
+                gizmos.circle_2d(Isometry2d::from_translation(*pos), 2.5, color);
+            }
+        }
     }
 
     if debug.show_contacts {
