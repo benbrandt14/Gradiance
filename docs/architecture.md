@@ -33,6 +33,7 @@ bottom — no unclassified state.
 | `SimSettings` | scene file | no | yes | applied by `apply_sim_settings` on change; `sim-set` writes it |
 | `RenderSettings` | scene file | no | yes | consumed by `toon::apply_render_settings` |
 | `DebugSettings` | **no** | no | yes | workstation overlays, not scene state |
+| `ToolDefaults` | **no** | no | yes | tool-creation defaults (slider travel limits); consulted at gesture commit time |
 
 ### EditorState (non-authored editor tables; not persisted, not undoable)
 
