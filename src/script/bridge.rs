@@ -535,6 +535,7 @@ fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
         appearance: Appearance::default(),
         layers: LayerMask32::default(),
         groups: Vec::new(),
+        magnet: None,
     }
 }
 

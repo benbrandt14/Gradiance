@@ -210,6 +210,7 @@ mod tests {
                     filters: u32::MAX,
                 },
                 groups: Vec::new(),
+                magnet: None,
             },
         };
 

@@ -29,6 +29,8 @@ pub enum PropertyValue {
     GravityScale(GravityScale),
     /// Overlap-sensor flag (marker presence).
     Sensor(bool),
+    /// Magnetic field source (`None` = not magnetized).
+    Magnet(Option<crate::domain::magnet::Magnet>),
     /// Rotation-lock flag (`LockedAxes::ROTATION_LOCKED` presence).
     RotationLock(bool),
     /// Visual appearance.
@@ -64,6 +66,14 @@ impl PropertyValue {
             Self::GravityScale(v) => {
                 entity_mut.insert(*v);
             }
+            Self::Magnet(magnet) => match magnet {
+                Some(m) => {
+                    entity_mut.insert(*m);
+                }
+                None => {
+                    entity_mut.remove::<crate::domain::magnet::Magnet>();
+                }
+            },
             Self::Sensor(on) => {
                 if *on {
                     entity_mut.insert(Sensor);

@@ -8,6 +8,7 @@ use crate::core::ids::IdIndex;
 use crate::domain::Body;
 use crate::domain::joint::{JointDef, JointKind};
 use crate::domain::layers::{LayerMask32, layer_hue};
+use crate::domain::magnet::Magnet;
 use crate::domain::settings::DebugSettings;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
@@ -28,6 +29,7 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
     bodies: Query<(Entity, &ShapeDef, &Transform, &LayerMask32), With<Body>>,
+    magnets: Query<(&Transform, &Magnet), With<Body>>,
     substeps: Res<SubstepTrace>,
     joints: Query<&JointDef>,
     index: Res<IdIndex>,
@@ -119,6 +121,20 @@ pub fn draw_debug_overlays(
 
     if debug.show_joint_anchors {
         draw_joint_anchors(&joints, &index, &poses, &mut gizmos);
+    }
+
+    // Magnet markers are authored-state feedback, not a debug toggle: a
+    // magnetized body always shows its field glyph (double ring at the
+    // origin, red = positive polarity, blue = negative).
+    for (transform, magnet) in &magnets {
+        let p = transform.translation.truncate();
+        let color = if magnet.strength >= 0.0 {
+            css::INDIAN_RED
+        } else {
+            css::CORNFLOWER_BLUE
+        };
+        gizmos.circle_2d(Isometry2d::from_translation(p), 5.0, color);
+        gizmos.circle_2d(Isometry2d::from_translation(p), 8.0, color.with_alpha(0.5));
     }
 
     if debug.show_substeps {

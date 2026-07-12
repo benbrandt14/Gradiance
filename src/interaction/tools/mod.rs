@@ -181,5 +181,6 @@ pub fn new_body_record(
         appearance: appearance_for_id(id),
         layers: LayerMask32::default(),
         groups: Vec::new(),
+        magnet: None,
     }
 }

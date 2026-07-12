@@ -24,6 +24,7 @@ bottom — no unclassified state.
 | `SelectionGroup` | component | group membership (persisted, undoable via commands) |
 | `Transform` (x, y, θ) | component | authored pose, captured as `PosRot`; z/scale derived |
 | avian `RigidBody`, `Friction`, `Restitution`, `ColliderDensity`, `GravityScale`, `Sensor`, `LockedAxes` | components | authored physics **is** avian components (de-adapter) |
+| `Magnet` | component | field-force source (strength/falloff); consumed by `physics::forces` |
 
 ### Config (settings resources — UI writes directly; invariant-4 exception)
 

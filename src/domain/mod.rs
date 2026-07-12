@@ -9,6 +9,7 @@ pub mod appearance;
 pub mod group;
 pub mod joint;
 pub mod layers;
+pub mod magnet;
 pub mod props;
 pub mod settings;
 pub mod shape;
