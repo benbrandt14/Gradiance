@@ -41,7 +41,7 @@ pub enum EditorAction {
     Group,
     /// Ungroup the selection (Ctrl+Shift+G).
     Ungroup,
-    /// Switch to the given tool (see [`default_input_map`] for the keys).
+    /// Switch to the given tool (see `default_input_map` for the keys).
     /// Carrying the [`ToolState`] directly means a new tool adds one key
     /// binding — no parallel variant, match arm, or tool list to update.
     Tool(ToolState),

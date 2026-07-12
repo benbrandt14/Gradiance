@@ -51,6 +51,9 @@ dev = ["bevy/dynamic_linking", "bevy/file_watcher"]
 [dev-dependencies]
 proptest = "1.9"
 rstest = "0.26"
+# UI layout tests for the top panels' leaf renderers (shares egui 0.35 with
+# bevy_egui). Accessibility-tree queries only — no GPU, no screenshot farm.
+egui_kittest = "=0.35.0"
 
 [lints.rust]
 missing_docs = "deny"

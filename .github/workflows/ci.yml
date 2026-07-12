@@ -8,6 +8,16 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Lint policy: clippy::pedantic runs at *warn* (Cargo.toml) — an output linter
+# to triage, never a gate; only lints that prove consistently right get
+# promoted to deny there. `-D warnings` below gates on rustc + the explicitly
+# denied clippy lints (unwrap/expect/panic/etc.).
+#
+# Unused-dependency sweep: `cargo udeps` is deliberately NOT run — it needs a
+# nightly toolchain plus a full extra build of a Bevy-sized graph per run,
+# for a dependency list that is exact-pinned and reviewed by hand (the
+# boundaries test asserts the pins). `-D warnings` already denies dead_code.
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -24,6 +34,16 @@ jobs:
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        id: rust-cache
+
+      - name: Report cache hit
+        # Surfaces cache behavior in the job log; a miss on an unchanged
+        # Cargo.lock means the cache key rotated and build times will spike.
+        run: |
+          echo "rust-cache hit: ${{ steps.rust-cache.outputs.cache-hit }}"
+          if [ "${{ steps.rust-cache.outputs.cache-hit }}" != "true" ]; then
+            echo "::warning::rust-cache miss — cold build (expected only after a Cargo.lock or toolchain change)"
+          fi
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -33,6 +53,12 @@ jobs:
 
       - name: Architecture boundaries
         run: cargo test --test boundaries
+
+      - name: Dependency duplicates (informational)
+        # Holds the pinned-dep line: the boundaries test fails on unpinned
+        # engine deps; this log shows any accidental duplicate-major drift
+        # in the resolved graph for review.
+        run: cargo tree --duplicates --depth 1 -e normal || true
 
       - name: Docs (no broken links)
         run: cargo doc --no-deps --lib
