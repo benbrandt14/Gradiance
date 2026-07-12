@@ -119,15 +119,26 @@ pub fn toolbar(
         .resizable(false)
         .anchor(egui::Align2::LEFT_CENTER, [8.0, 0.0])
         .show(ctx, |ui| {
-            for (state, name, key) in TOOLS {
-                let selected = *tool.get() == state;
-                if ui
-                    .selectable_label(selected, format!("{name} ({key})"))
-                    .clicked()
-                {
-                    next_tool.set(state);
-                }
+            if let Some(state) = tools_palette_ui(ui, *tool.get()) {
+                next_tool.set(state);
             }
         });
     Ok(())
+}
+
+/// The tool-palette buttons: highlights `current`, returns a clicked tool.
+/// Host-agnostic (pure `Ui` in, choice out) so `tests/it/ui_panels.rs` can
+/// exercise it under `egui_kittest`.
+pub fn tools_palette_ui(ui: &mut egui::Ui, current: ToolState) -> Option<ToolState> {
+    let mut clicked = None;
+    for (state, name, key) in TOOLS {
+        let selected = current == state;
+        if ui
+            .selectable_label(selected, format!("{name} ({key})"))
+            .clicked()
+        {
+            clicked = Some(state);
+        }
+    }
+    clicked
 }

@@ -20,6 +20,8 @@ mod persistence;
 mod physics_sync;
 mod reflect_intents;
 mod registry_validation;
+mod replay;
 mod scripting;
 mod tools;
+mod ui_panels;
 mod unit_commands;

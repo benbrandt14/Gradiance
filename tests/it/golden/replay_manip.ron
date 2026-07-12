@@ -1,0 +1,227 @@
+(
+    version: 3,
+    app_version: "golden",
+    bodies: [
+        (
+            id: ("00000000-0000-0000-0000-000000000001"),
+            pose: (
+                pos: (-60.0, 25.0),
+                rot: 0.5,
+            ),
+            shape: Box(
+                width: 40.0,
+                height: 20.0,
+            ),
+            physics: (
+                rigid_body: Dynamic,
+                friction: (
+                    dynamic_coefficient: 0.5,
+                    static_coefficient: 0.5,
+                    combine_rule: Average,
+                ),
+                restitution: (
+                    coefficient: 0.3,
+                    combine_rule: Average,
+                ),
+                density: (1.0),
+                gravity_scale: (1.0),
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.6,
+                    g: 0.6,
+                    b: 0.65,
+                    a: 1.0,
+                ),
+                border: (
+                    r: 0.13,
+                    g: 0.13,
+                    b: 0.15,
+                    a: 1.0,
+                ),
+                emissive: 0.0,
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            groups: [],
+        ),
+        (
+            id: ("00000000-0000-0000-0000-000000000002"),
+            pose: (
+                pos: (-60.0, 325.0),
+                rot: 0.5,
+            ),
+            shape: Box(
+                width: 40.0,
+                height: 20.0,
+            ),
+            physics: (
+                rigid_body: Dynamic,
+                friction: (
+                    dynamic_coefficient: 0.5,
+                    static_coefficient: 0.5,
+                    combine_rule: Average,
+                ),
+                restitution: (
+                    coefficient: 0.3,
+                    combine_rule: Average,
+                ),
+                density: (1.0),
+                gravity_scale: (1.0),
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.6,
+                    g: 0.6,
+                    b: 0.65,
+                    a: 1.0,
+                ),
+                border: (
+                    r: 0.13,
+                    g: 0.13,
+                    b: 0.15,
+                    a: 1.0,
+                ),
+                emissive: 0.0,
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            groups: [],
+        ),
+        (
+            id: ("00000000-0000-0000-0000-000000000003"),
+            pose: (
+                pos: (150.0, 0.0),
+                rot: 0.0,
+            ),
+            shape: Box(
+                width: 60.0,
+                height: 15.0,
+            ),
+            physics: (
+                rigid_body: Dynamic,
+                friction: (
+                    dynamic_coefficient: 0.5,
+                    static_coefficient: 0.5,
+                    combine_rule: Average,
+                ),
+                restitution: (
+                    coefficient: 0.3,
+                    combine_rule: Average,
+                ),
+                density: (1.0),
+                gravity_scale: (1.0),
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.6,
+                    g: 0.6,
+                    b: 0.65,
+                    a: 1.0,
+                ),
+                border: (
+                    r: 0.13,
+                    g: 0.13,
+                    b: 0.15,
+                    a: 1.0,
+                ),
+                emissive: 0.0,
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            groups: [],
+        ),
+        (
+            id: ("00000000-0000-0000-0000-000000000004"),
+            pose: (
+                pos: (150.0, 300.0),
+                rot: 0.0,
+            ),
+            shape: Box(
+                width: 60.0,
+                height: 15.0,
+            ),
+            physics: (
+                rigid_body: Dynamic,
+                friction: (
+                    dynamic_coefficient: 0.5,
+                    static_coefficient: 0.5,
+                    combine_rule: Average,
+                ),
+                restitution: (
+                    coefficient: 0.3,
+                    combine_rule: Average,
+                ),
+                density: (1.0),
+                gravity_scale: (1.0),
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.6,
+                    g: 0.6,
+                    b: 0.65,
+                    a: 1.0,
+                ),
+                border: (
+                    r: 0.13,
+                    g: 0.13,
+                    b: 0.15,
+                    a: 1.0,
+                ),
+                emissive: 0.0,
+            ),
+            layers: (
+                memberships: 1,
+                filters: 4294967295,
+            ),
+            groups: [],
+        ),
+    ],
+    joints: [],
+    environment: (
+        sim: (
+            gravity: (0.0, -1000.0),
+            speed: 1.0,
+            substeps: 6,
+        ),
+        grid: (
+            visible: true,
+            snap_enabled: false,
+            system: Cartesian,
+            spacing: 100.0,
+            origin: (0.0, 0.0),
+            rotation: 0.0,
+        ),
+        snap: (
+            objects_enabled: true,
+            max_screen_distance: 12.0,
+            sources: (
+                vertices: true,
+                midpoints: true,
+                centers: true,
+                edges: true,
+            ),
+            rotation_step_deg: 15.0,
+        ),
+        render: (
+            toon_enabled: true,
+            bands: 4,
+            rim_strength: 0.25,
+            white_point: 1.3,
+        ),
+    ),
+)

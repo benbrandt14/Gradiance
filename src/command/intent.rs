@@ -17,8 +17,9 @@ use bevy::prelude::*;
 
 /// Canonical kebab-case names, one per intent/command pair.
 ///
-/// The same constant is the command's [`GameCommand::name`]
-/// (`crate::command::GameCommand::name`) and — where a script verb maps 1:1,
+/// The same constant is the command's
+/// [`GameCommand::name`](crate::command::GameCommand::name) and — where a
+/// script verb maps 1:1,
 /// like [`CUT`](name::CUT) — the operation-registry name
 /// (`crate::script::registry::name`). One grep for the constant therefore
 /// walks intent, command, log lines, and script surface together.

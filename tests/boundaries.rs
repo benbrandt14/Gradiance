@@ -95,6 +95,38 @@ fn command_stack_is_only_driven_by_the_command_module() {
 }
 
 #[test]
+fn engine_facing_dependencies_stay_exact_pinned() {
+    // Agent sessions must not drift engine APIs: bevy-adjacent crates are
+    // exact-pinned in Cargo.toml (`=x.y.z`). This holds the line the CI
+    // `cargo tree --duplicates` log only reports on.
+    let manifest = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
+    )
+    .expect("read Cargo.toml");
+    let pinned = [
+        "bevy",
+        "avian2d",
+        "bevy_egui",
+        "egui_code_editor",
+        "leafwing-input-manager",
+        "steel-core",
+    ];
+    for name in pinned {
+        let line = manifest
+            .lines()
+            .find(|l| {
+                let l = l.trim_start();
+                l.starts_with(&format!("{name} ")) || l.starts_with(&format!("{name}="))
+            })
+            .unwrap_or_else(|| panic!("{name} not found in Cargo.toml"));
+        assert!(
+            line.contains("\"="),
+            "{name} must stay exact-pinned (`=x.y.z`), found: {line}"
+        );
+    }
+}
+
+#[test]
 fn serialization_is_confined_to_authored_data() {
     let allowed = [
         "src/domain/",

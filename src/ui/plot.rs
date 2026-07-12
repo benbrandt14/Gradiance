@@ -221,7 +221,9 @@ pub fn plot_panel(
 }
 
 /// Hand-draws one signal as a line plot auto-scaled to its own min/max.
-fn draw_series(ui: &mut egui::Ui, label: &str, data: &VecDeque<f32>, color: egui::Color32) {
+/// Host-agnostic (pure `Ui` + data in) so `tests/it/ui_panels.rs` can
+/// exercise it under `egui_kittest`.
+pub fn draw_series(ui: &mut egui::Ui, label: &str, data: &VecDeque<f32>, color: egui::Color32) {
     ui.label(label);
     let (rect, _) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 70.0), egui::Sense::hover());
