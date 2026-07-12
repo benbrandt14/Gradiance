@@ -4,6 +4,80 @@ A visual companion to the crate-level rustdoc (`cargo doc --open`). Every
 diagram here renders on GitHub. The invariants these diagrams describe are
 mechanically enforced by `tests/boundaries.rs` and CI — see `CLAUDE.md`.
 
+## State classification
+
+Every resource and component in `src/` classified by which seam governs its
+writes. The governance model in one line: **reads are total, writes are
+seam-mediated** — Edit (intents → commands), Config (settings resources),
+EditorState (non-sim editor tables), or derived (rebuilt by `Changed<>` sync).
+New state must land in exactly one row-kind; anything that doesn't fit gets an
+explicit row with its rationale (bottom section). No unclassified state.
+
+### Authored (Edit seam → persisted, undoable, reflect-registered)
+
+| State | Kind | Example / notes |
+|---|---|---|
+| `StableId` | identity component | on every authored entity; the cross-reference key |
+| `Body`, `Joint` | marker components | classify an authored entity |
+| `ShapeDef` | component | SDF tree; reflect-opaque leaf |
+| `LayerMask32` | component | collision filter *and* render depth |
+| `Appearance` | component | fill / emissive |
+| `JointDef` | component | kind + anchors + rest rotations, bodies by `StableId` |
+| `SelectionGroup` | component | group membership (persisted, undoable via commands) |
+| `Transform` (x, y, θ) | component | authored pose, captured as `PosRot`; z/scale derived |
+| avian `RigidBody`, `Friction`, `Restitution`, `ColliderDensity`, `GravityScale`, `Sensor`, `LockedAxes` | components | authored physics **is** avian components (de-adapter) |
+
+### Config (settings resources — UI writes directly; invariant-4 exception)
+
+| State | Persisted? | Undoable? | Reflect? | Notes |
+|---|---|---|---|---|
+| `GridSettings`, `SnapConfig` | scene file | no | yes | grid/snap setup travels with the scene |
+| `SimSettings` | scene file | no | yes | applied by `apply_sim_settings` on change; `sim-set` writes it |
+| `RenderSettings` | scene file | no | yes | consumed by `toon::apply_render_settings` |
+| `DebugSettings` | **no** | no | yes | workstation overlays, not scene state |
+
+### EditorState (non-authored editor tables; not persisted, not undoable)
+
+| State | Notes |
+|---|---|
+| `ScriptActions` | `register-action` table the context menu surfaces |
+| `ScriptInputs`, `StartupScripts`, `ScriptWatch`, `ScriptLog` | script doorway queues + console log |
+| `OperationRegistry`, `IntentDispatch` | runtime catalog + intent-bus wiring (static after startup) |
+| `LastScenePath`, `AutosavePath`, `StartupScene` | persistence bookkeeping |
+| `Selection`, `SelectedJoint` | current selection (entities, never saved) |
+| `GameState`, `ToolState` | bevy states: play/pause, active tool |
+| `ScaleFrame` | global/local handle axes toggle (F) |
+| UI panel state: `SettingsWindow`/`SettingsTab`, `InspectorPanel`, `ContextMenu`, `PlotPanel`, `ScriptConsole` | open/closed + per-panel scratch; egui-side only |
+
+### Transient gesture/preview state (tool-local; invariant 2 — dies with the gesture)
+
+| State | Notes |
+|---|---|
+| draft tools: `BoxTool`, `CircleTool`, `CutTool`, `GroundTool`, `PolygonTool`, `ConnectorDraft`, `StrutDraft` | anchor points while drawing; commit one intent on release |
+| `DragTool`, `SelectGesture`, `ActiveGesture`, `ClickThrough`, `GestureConstraints`, `JointAnchorDrag`, `SuppressSelectPress` | manipulation gesture state |
+| `KinematicHold` | kinematic-held pose during a drag (the sanctioned preview write) |
+| `MouseSpring`, `MouseTwist` | play-mode grab forces (physics-frame transient) |
+| `CursorWorldPos`, `SnappedCursor`, `SnapExclusions`, `PointerButtons`, `PointerOverUi`, `KeyboardCaptured` | per-frame input/picking snapshots |
+| `CameraRig` | editor camera pan/zoom (workstation state) |
+
+### Derived (rebuilt by `Changed<>` sync; never serialized, never in undo)
+
+| State | Rebuilt by |
+|---|---|
+| `Collider`, `CollisionLayers`, `Mass`, contacts | `body_sync` (+ avian internals) |
+| live avian joints (`RevoluteJoint`, `PrismaticJoint`, `DistanceJoint`, `JointDamping`), `JointUnresolved`, `PinAnchor` | `joint_sync` |
+| `Mesh3d`, `MeshMaterial3d`, `ToonMaterial` | `extrude_sync`, `material_sync` |
+| `IdIndex` | `StableId` component hooks |
+| `HistoryInfo` | dispatcher (read-only mirror of stack depths) |
+
+### Doesn't fit cleanly (explicit rationale)
+
+| State | Classification | Rationale |
+|---|---|---|
+| `CommandStack` | the undo history itself | neither authored nor derived: it *produces* authored state. Private to `command/`; lost on exit by design (history is session state) |
+| `PlotHistory` | derived-but-accumulating | a pure read of physics state, but it accumulates samples over time, so it can't be rebuilt from the current frame. Still never persisted/undone; cleared on retarget |
+| `FlightRecorder` (dev) | diagnostic accumulator | pure reader of the dispatch/sync pipeline; ring-bounded, dev-feature-gated, dumped on F9 |
+
 ## The one-way dataflow
 
 Nothing mutates authored state except commands, and commands only run
