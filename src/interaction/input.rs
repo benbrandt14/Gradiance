@@ -41,61 +41,10 @@ pub enum EditorAction {
     Group,
     /// Ungroup the selection (Ctrl+Shift+G).
     Ungroup,
-    /// Switch to the select tool (S).
-    ToolSelect,
-    /// Switch to the drag tool (D).
-    ToolDrag,
-    /// Switch to the box tool (B).
-    ToolBox,
-    /// Switch to the circle tool (C).
-    ToolCircle,
-    /// Switch to the polygon tool (P).
-    ToolPolygon,
-    /// Switch to the hinge tool (H).
-    ToolHinge,
-    /// Switch to the weld tool (W).
-    ToolWeld,
-    /// Switch to the slider ("rail") tool (R).
-    ToolSlider,
-    /// Switch to the strut (spring-damper) tool (T).
-    ToolStrut,
-    /// Switch to the ground tool (G).
-    ToolGround,
-    /// Switch to the cut tool (K).
-    ToolCut,
-}
-
-impl EditorAction {
-    fn tool(self) -> Option<ToolState> {
-        match self {
-            Self::ToolSelect => Some(ToolState::Select),
-            Self::ToolDrag => Some(ToolState::Drag),
-            Self::ToolBox => Some(ToolState::Box),
-            Self::ToolCircle => Some(ToolState::Circle),
-            Self::ToolPolygon => Some(ToolState::Polygon),
-            Self::ToolHinge => Some(ToolState::Hinge),
-            Self::ToolWeld => Some(ToolState::Weld),
-            Self::ToolSlider => Some(ToolState::Slider),
-            Self::ToolStrut => Some(ToolState::Strut),
-            Self::ToolGround => Some(ToolState::Ground),
-            Self::ToolCut => Some(ToolState::Cut),
-            _ => None,
-        }
-    }
-
-    const TOOLS: [Self; 11] = [
-        Self::ToolSelect,
-        Self::ToolDrag,
-        Self::ToolBox,
-        Self::ToolCircle,
-        Self::ToolPolygon,
-        Self::ToolHinge,
-        Self::ToolWeld,
-        Self::ToolSlider,
-        Self::ToolStrut,
-        Self::ToolGround,
-        Self::ToolCut,
-    ];
+    /// Switch to the given tool (see [`default_input_map`] for the keys).
+    /// Carrying the [`ToolState`] directly means a new tool adds one key
+    /// binding — no parallel variant, match arm, or tool list to update.
+    Tool(ToolState),
 }
 
 /// Default key bindings.
@@ -132,17 +81,17 @@ fn default_input_map() -> InputMap<EditorAction> {
             .with(ModifierKey::Shift)
             .with(KeyCode::KeyG),
     );
-    map.insert(A::ToolSelect, KeyCode::KeyS);
-    map.insert(A::ToolDrag, KeyCode::KeyD);
-    map.insert(A::ToolBox, KeyCode::KeyB);
-    map.insert(A::ToolCircle, KeyCode::KeyC);
-    map.insert(A::ToolPolygon, KeyCode::KeyP);
-    map.insert(A::ToolHinge, KeyCode::KeyH);
-    map.insert(A::ToolWeld, KeyCode::KeyW);
-    map.insert(A::ToolSlider, KeyCode::KeyR);
-    map.insert(A::ToolStrut, KeyCode::KeyT);
-    map.insert(A::ToolGround, KeyCode::KeyG);
-    map.insert(A::ToolCut, KeyCode::KeyK);
+    map.insert(A::Tool(ToolState::Select), KeyCode::KeyS);
+    map.insert(A::Tool(ToolState::Drag), KeyCode::KeyD);
+    map.insert(A::Tool(ToolState::Box), KeyCode::KeyB);
+    map.insert(A::Tool(ToolState::Circle), KeyCode::KeyC);
+    map.insert(A::Tool(ToolState::Polygon), KeyCode::KeyP);
+    map.insert(A::Tool(ToolState::Hinge), KeyCode::KeyH);
+    map.insert(A::Tool(ToolState::Weld), KeyCode::KeyW);
+    map.insert(A::Tool(ToolState::Slider), KeyCode::KeyR);
+    map.insert(A::Tool(ToolState::Strut), KeyCode::KeyT);
+    map.insert(A::Tool(ToolState::Ground), KeyCode::KeyG);
+    map.insert(A::Tool(ToolState::Cut), KeyCode::KeyK);
     map
 }
 
@@ -286,10 +235,8 @@ pub fn apply_shortcuts(
     if ctrl {
         return;
     }
-    for tool_action in EditorAction::TOOLS {
-        if actions.just_pressed(&tool_action)
-            && let Some(tool) = tool_action.tool()
-        {
+    for action in actions.get_just_pressed() {
+        if let EditorAction::Tool(tool) = action {
             next_tool.set(tool);
         }
     }

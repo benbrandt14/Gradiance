@@ -1,7 +1,7 @@
 //! Property edits: typed authored-component changes, batched and undoable.
 
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use crate::domain::appearance::Appearance;
 use crate::domain::joint::JointDef;
 use crate::domain::layers::LayerMask32;
@@ -114,10 +114,7 @@ pub struct PropertyEditCommand {
 impl PropertyEditCommand {
     fn write_all(&self, world: &mut World, use_new: bool) -> Result<(), CommandError> {
         for change in &self.changes {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(change.id)
-                .ok_or(CommandError::MissingEntity(change.id))?;
+            let entity = resolve(world, change.id)?;
             let value = if use_new { &change.new } else { &change.old };
             value.write(world, entity)?;
         }

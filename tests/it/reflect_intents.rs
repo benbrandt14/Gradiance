@@ -140,7 +140,6 @@ fn spawn_body_intent_round_trips_through_reflection() {
         appearance: Appearance::default(),
         layers: LayerMask32::default(),
         groups: vec![7],
-        group: None,
     };
     let intent = SpawnBodyIntent {
         record: record.clone(),

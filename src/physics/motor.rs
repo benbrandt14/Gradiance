@@ -14,15 +14,6 @@ use bevy::prelude::*;
 const ANGLE_BUFFER: f32 = 0.05;
 const TRANSLATION_BUFFER: f32 = 2.0;
 
-fn wrap_angle(a: f32) -> f32 {
-    let two_pi = std::f32::consts::TAU;
-    let mut a = (a + std::f32::consts::PI).rem_euclid(two_pi) - std::f32::consts::PI;
-    if a < -std::f32::consts::PI {
-        a += two_pi;
-    }
-    a
-}
-
 /// Reverses oscillating motors at their limits.
 pub fn drive_oscillating_motors(
     index: Res<IdIndex>,
@@ -59,7 +50,7 @@ pub fn drive_oscillating_motors(
                     continue;
                 };
                 let rot_b = def.body_b.and_then(|id| index.entity(id)).map_or(0.0, rot);
-                let rel = wrap_angle(rot_b - rot(a));
+                let rel = crate::geometry::wrap_angle(rot_b - rot(a));
                 let speed = m.target_velocity.abs();
                 if rel >= max - ANGLE_BUFFER {
                     joint.motor.target_velocity = -speed;

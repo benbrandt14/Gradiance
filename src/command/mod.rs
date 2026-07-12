@@ -61,9 +61,19 @@ pub mod snapshot;
 pub mod spawn;
 pub mod transform_cmd;
 
-use crate::core::ids::StableId;
+use crate::core::ids::{IdIndex, StableId};
 use crate::domain::shape::ShapeError;
 use bevy::prelude::*;
+
+/// Resolves a stable id to its live entity — the standard first step of
+/// every command's `apply`/`undo` (shared so the `MissingEntity` mapping
+/// exists once).
+pub(crate) fn resolve(world: &World, id: StableId) -> Result<Entity, CommandError> {
+    world
+        .resource::<IdIndex>()
+        .entity(id)
+        .ok_or(CommandError::MissingEntity(id))
+}
 
 /// Why a command could not be applied.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]

@@ -83,18 +83,7 @@ pub fn apply_mouse_twist(
             continue;
         };
         let rot = crate::core::units::PosRot::from_transform(transform).rot;
-        let err = wrap_pi(t.target_rot - rot);
+        let err = crate::geometry::wrap_angle(t.target_rot - rot);
         angular.0 = (err * TWIST_GAIN).clamp(-MAX_SPIN, MAX_SPIN);
-    }
-}
-
-/// Wraps an angle difference into `(-π, π]` so the servo always takes the
-/// short way around.
-fn wrap_pi(angle: f32) -> f32 {
-    let wrapped = angle.rem_euclid(std::f32::consts::TAU);
-    if wrapped > std::f32::consts::PI {
-        wrapped - std::f32::consts::TAU
-    } else {
-        wrapped
     }
 }

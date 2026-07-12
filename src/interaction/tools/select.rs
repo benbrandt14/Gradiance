@@ -14,7 +14,7 @@ use crate::core::units::PosRot;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
 use crate::geometry::scale::scale_point;
-use crate::interaction::selection::{SelectTransition, Selection};
+use crate::interaction::selection::{SelectTransition, Selection, dedup_preserving_order};
 use crate::interaction::tools::context::{
     GesturePhase, HoldState, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview,
     ToolWorld, TwistState,
@@ -335,7 +335,7 @@ impl SelectGesture {
             } else {
                 (
                     SelectTransition::SetBodies(members.clone()),
-                    dedup_entities(members),
+                    dedup_preserving_order(members),
                 )
             };
         let bodies: Vec<(Entity, StableId, PosRot)> = move_entities
@@ -642,18 +642,6 @@ fn box_transition(hits: Vec<Entity>, additive: bool) -> SelectTransition {
     } else {
         SelectTransition::SetBodies(hits)
     }
-}
-
-/// Deduplicates entities, preserving first-seen order (matches
-/// `SelectTransition::SetBodies`).
-fn dedup_entities(entities: Vec<Entity>) -> Vec<Entity> {
-    let mut out = Vec::with_capacity(entities.len());
-    for e in entities {
-        if !out.contains(&e) {
-            out.push(e);
-        }
-    }
-    out
 }
 
 /// Pushes a shape's world-space outline rings into the preview.

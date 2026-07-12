@@ -13,8 +13,8 @@
 //! when no piece contains it.
 
 use crate::command::snapshot::{BodyRecord, JointRecord};
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use crate::domain::Body;
 use crate::domain::joint::JointDef;
 use crate::domain::shape::{CsgOp, ShapeDef};
@@ -22,13 +22,6 @@ use crate::geometry::contours::point_in_ring;
 use crate::geometry::polygonize::polygonize_components;
 use crate::geometry::sdf;
 use bevy::prelude::*;
-
-fn resolve(world: &World, id: StableId) -> Result<Entity, CommandError> {
-    world
-        .resource::<IdIndex>()
-        .entity(id)
-        .ok_or(CommandError::MissingEntity(id))
-}
 
 /// What happened to one cut body.
 #[derive(Debug)]
@@ -150,7 +143,6 @@ impl CutCommand {
                             appearance: original.appearance,
                             layers: original.layers,
                             groups: original.groups.clone(),
-                            group: None,
                         }
                     })
                     .collect();

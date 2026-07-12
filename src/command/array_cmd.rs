@@ -1,8 +1,8 @@
 //! Array repeats: linear and radial patterns of the selection.
 
 use crate::command::snapshot::BodyRecord;
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use bevy::prelude::*;
 
 /// How array copies are placed.
@@ -77,10 +77,7 @@ impl GameCommand for ArrayCommand {
                 let copy_start = clones.len();
                 let mut id_map = Vec::with_capacity(self.sources.len());
                 for &id in &self.sources {
-                    let entity = world
-                        .resource::<IdIndex>()
-                        .entity(id)
-                        .ok_or(CommandError::MissingEntity(id))?;
+                    let entity = resolve(world, id)?;
                     let mut clone = BodyRecord::capture(world, entity)
                         .ok_or(CommandError::MissingEntity(id))?;
                     clone.id = StableId::new();
@@ -138,17 +135,11 @@ impl GameCommand for ArrayCommand {
 
     fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
         for record in &self.joint_clones {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(record.id)
-                .ok_or(CommandError::MissingEntity(record.id))?;
+            let entity = resolve(world, record.id)?;
             world.despawn(entity);
         }
         for record in &self.clones {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(record.id)
-                .ok_or(CommandError::MissingEntity(record.id))?;
+            let entity = resolve(world, record.id)?;
             world.despawn(entity);
         }
         Ok(())
