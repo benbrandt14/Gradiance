@@ -206,6 +206,11 @@ missing foundation:**
   axis warp); the dominant-axis lock moved to `X`+`Y`. The selection outline
   now draws front-biased (own gizmo group), visible above prisms and grid.
 - Play-mode right-drag applies torque (dynamic rotate, non-fixed pivot) (2.6)
+  — **landed**: while playing, the rotate gesture servos each selected body's
+  angular velocity toward the gesture angle (`physics::grab::MouseTwist`,
+  the angular sibling of the drag spring) instead of kinematic-holding poses;
+  translation stays with the solver so a resting body lifts its opposing
+  edge. Physical interaction — no command, not undoable, like the drag grab.
 - Inspector re-architecture: context-menu-first, inspector as pop-out (2.8)
 - Collision-layer set visualization UI (5.4)
 - Joint config also reachable via right-click context menu (not only the

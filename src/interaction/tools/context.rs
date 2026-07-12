@@ -58,7 +58,7 @@ use crate::interaction::selection::{SelectTransition, SelectedJoint, Selection, 
 use crate::interaction::snap::{SnapExclusions, SnappedCursor};
 use crate::interaction::tools::ActiveGesture;
 use crate::interaction::tools::handles::{ScaleFrame, SelectionBox, selection_box};
-use crate::physics::grab::{Grab, MouseSpring};
+use crate::physics::grab::{Grab, MouseSpring, MouseTwist, Twist};
 use crate::physics::hold::KinematicHold;
 use crate::physics::queries::PhysicsQueries;
 use bevy::ecs::component::Mutable;
@@ -573,6 +573,20 @@ pub enum GrabState {
     Clear,
 }
 
+/// A transient angular-servo (physical twist) request for one frame — the
+/// play-mode rotate interaction. Like [`GrabState`], it is physical and not
+/// undoable, so it never touches the command seam.
+#[derive(Debug, Clone, Default)]
+pub enum TwistState {
+    /// Leave any existing twist untouched.
+    #[default]
+    Keep,
+    /// Twist exactly these bodies toward these angles this frame.
+    Set(Vec<Twist>),
+    /// Release the twist.
+    Clear,
+}
+
 /// What a [`ManipTool`] asks the driver to apply this frame.
 ///
 /// Every field routes through an existing seam: `commit` → intents (undoable),
@@ -587,6 +601,8 @@ pub struct ManipOutput {
     pub hold: HoldState,
     /// Transient mouse-spring grab for this frame (play-mode drag).
     pub grab: GrabState,
+    /// Transient angular servo for this frame (play-mode rotate).
+    pub twist: TwistState,
     /// Editor selection change (applied via [`SelectTransition`]).
     pub selection: Option<SelectTransition>,
 }
@@ -709,6 +725,7 @@ pub struct ManipEditor<'w, 's> {
     hold: ResMut<'w, KinematicHold>,
     exclusions: ResMut<'w, SnapExclusions>,
     spring: ResMut<'w, MouseSpring>,
+    twist: ResMut<'w, MouseTwist>,
     selection: ResMut<'w, Selection>,
     joint: ResMut<'w, SelectedJoint>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
@@ -738,6 +755,11 @@ pub fn run_manip_tool<T: ManipTool>(
         GrabState::Keep => {}
         GrabState::Set(grab) => editor.spring.0 = Some(grab),
         GrabState::Clear => editor.spring.0 = None,
+    }
+    match out.twist {
+        TwistState::Keep => {}
+        TwistState::Set(twists) => editor.twist.0 = twists,
+        TwistState::Clear => editor.twist.0.clear(),
     }
     match out.hold {
         HoldState::Keep => {}

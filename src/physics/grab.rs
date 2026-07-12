@@ -1,4 +1,8 @@
-//! Mouse spring: engine-agnostic API for the drag tool's physical grab.
+//! Mouse spring & twist: the transient *physical* manipulation state.
+//!
+//! The drag tool's grab (a velocity spring toward the cursor) and the
+//! play-mode rotate's twist (a velocity servo toward a target angle) are
+//! physical interactions — never commands, never undoable, matching Algodoo.
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -45,4 +49,52 @@ pub fn apply_mouse_spring(
     let pull = (grab.target - world_grip) * SPRING_GAIN;
     linear.0 = pull.clamp_length_max(MAX_SPEED);
     angular.0 *= ANGULAR_DAMP;
+}
+
+/// Spin gain toward the target angle (per second).
+const TWIST_GAIN: f32 = 12.0;
+/// Maximum induced spin (rad/s).
+const MAX_SPIN: f32 = 40.0;
+
+/// An active physical twist: drive one body's rotation toward a target
+/// angle by angular velocity, leaving translation to the solver — the
+/// pivot is *not* fixed, so a resting body lifts its opposing edge
+/// instead of teleport-rotating (feedback 2.6).
+#[derive(Debug, Clone, Copy)]
+pub struct Twist {
+    /// Twisted body.
+    pub entity: Entity,
+    /// Desired world rotation, radians.
+    pub target_rot: f32,
+}
+
+/// The play-mode rotate gesture's current twists (one per selected body),
+/// empty when no twist is active.
+#[derive(Resource, Default, Debug)]
+pub struct MouseTwist(pub Vec<Twist>);
+
+/// Servos each twisted body's angular velocity toward its target angle.
+pub fn apply_mouse_twist(
+    twist: Res<MouseTwist>,
+    mut bodies: Query<(&Transform, &mut AngularVelocity)>,
+) {
+    for t in &twist.0 {
+        let Ok((transform, mut angular)) = bodies.get_mut(t.entity) else {
+            continue;
+        };
+        let rot = crate::core::units::PosRot::from_transform(transform).rot;
+        let err = wrap_pi(t.target_rot - rot);
+        angular.0 = (err * TWIST_GAIN).clamp(-MAX_SPIN, MAX_SPIN);
+    }
+}
+
+/// Wraps an angle difference into `(-π, π]` so the servo always takes the
+/// short way around.
+fn wrap_pi(angle: f32) -> f32 {
+    let wrapped = angle.rem_euclid(std::f32::consts::TAU);
+    if wrapped > std::f32::consts::PI {
+        wrapped - std::f32::consts::TAU
+    } else {
+        wrapped
+    }
 }

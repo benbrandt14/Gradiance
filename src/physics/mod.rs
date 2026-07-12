@@ -54,11 +54,16 @@ impl Plugin for GradiancePhysicsPlugin {
         );
         app.init_resource::<hold::KinematicHold>();
         app.init_resource::<grab::MouseSpring>();
+        app.init_resource::<grab::MouseTwist>();
         app.add_systems(OnEnter(GameState::Paused), pause_physics_clock);
         app.add_systems(OnExit(GameState::Paused), resume_physics_clock);
         app.add_systems(
             Update,
-            (hold::apply_kinematic_hold, grab::apply_mouse_spring),
+            (
+                hold::apply_kinematic_hold,
+                grab::apply_mouse_spring,
+                grab::apply_mouse_twist,
+            ),
         );
         app.add_systems(
             PostUpdate,

@@ -17,9 +17,10 @@ use crate::geometry::scale::scale_point;
 use crate::interaction::selection::{SelectTransition, Selection};
 use crate::interaction::tools::context::{
     GesturePhase, HoldState, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview,
-    ToolWorld,
+    ToolWorld, TwistState,
 };
 use crate::interaction::tools::handles::{HandleKind, SelectionBox, hit_handle};
+use crate::physics::grab::Twist;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -477,6 +478,12 @@ impl SelectGesture {
                     ..Default::default()
                 }
             }
+            SelectGesture::Rotate { .. } if right_up && ctx.playing => ManipOutput {
+                // Physical interaction (like the drag tool's spring): the
+                // twist just stops; nothing is committed or undoable.
+                twist: TwistState::Clear,
+                ..Default::default()
+            },
             SelectGesture::Rotate {
                 pivot,
                 start_angle,
@@ -572,6 +579,22 @@ fn rotate_drag(
     let angle = ctx
         .constraints
         .apply_rotation((p - pivot).to_angle() - start_angle, ctx.snap);
+    // Playing: rotate *physically* — servo each body's angular velocity
+    // toward its target angle and let the solver own translation (the pivot
+    // is not fixed; a resting body lifts its opposing edge). Feedback 2.6.
+    if ctx.playing {
+        let twists = bodies
+            .iter()
+            .map(|(e, _, original)| Twist {
+                entity: *e,
+                target_rot: original.rot + angle,
+            })
+            .collect();
+        return ManipOutput {
+            twist: TwistState::Set(twists),
+            ..Default::default()
+        };
+    }
     let rot = Vec2::from_angle(angle);
     let poses = bodies
         .iter()
