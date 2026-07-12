@@ -14,7 +14,7 @@ const TOOLS: [(ToolState, &str, &str); 11] = [
     (ToolState::Polygon, "Polygon", "P"),
     (ToolState::Hinge, "Hinge", "H"),
     (ToolState::Weld, "Weld", "W"),
-    (ToolState::Slider, "Slider", "R"),
+    (ToolState::Slider, "Prismatic", "R"),
     (ToolState::Strut, "Strut", "T"),
     (ToolState::Ground, "Ground", "G"),
     (ToolState::Cut, "Cut", "K"),

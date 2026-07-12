@@ -62,20 +62,18 @@ pub struct ContextMenu {
     pub joint: Option<StableId>,
 }
 
-/// Nearest joint id whose anchor is within `radius` of `point`. Pure so the
-/// pick can be unit-tested without a World.
+/// Nearest joint id whose glyph distance is within `radius`. Pure so the
+/// pick can be unit-tested without a World; the caller supplies each
+/// joint's distance via `joint_edit::glyph_distance` (whole ring / travel
+/// line / coil, matching left-click picking).
 fn nearest_joint(
-    point: Vec2,
     radius: f32,
-    candidates: impl Iterator<Item = (StableId, Vec2)>,
+    candidates: impl Iterator<Item = (StableId, f32)>,
 ) -> Option<StableId> {
     candidates
-        .filter_map(|(id, anchor)| {
-            let d = anchor.distance(point);
-            (d <= radius).then_some((d, id))
-        })
-        .min_by(|(a, _), (b, _)| a.total_cmp(b))
-        .map(|(_, id)| id)
+        .filter(|(_, d)| *d <= radius)
+        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map(|(id, _)| id)
 }
 
 /// Opens the menu on a right *click* — a release within a small screen
@@ -111,15 +109,29 @@ pub fn open_context_menu(
             .into_iter()
             .filter_map(|e| ids.get(e).ok().copied())
             .collect();
-        // A joint anchor within the pick radius is offered for configuration.
-        let radius = ANCHOR_PICK_PX * crate::interaction::camera::camera_scale(&projections);
+        // A joint glyph within the pick radius is offered for configuration
+        // (whole glyph, matching left-click picking).
+        let scale = crate::interaction::camera::camera_scale(&projections);
         menu.joint = nearest_joint(
-            world,
-            radius,
+            ANCHOR_PICK_PX * scale,
             joints.iter().filter_map(|(id, def)| {
                 let entity = index.entity(def.body_a)?;
                 let pose = PosRot::from_transform(transforms.get(entity).ok()?);
-                Some((*id, def.anchor_world(pose.pos, pose.rot)))
+                let anchor = def.anchor_world(pose.pos, pose.rot);
+                let world_b = match def.body_b {
+                    Some(idb) => {
+                        let pose_b =
+                            PosRot::from_transform(transforms.get(index.entity(idb)?).ok()?);
+                        Some(pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b))
+                    }
+                    None => Some(def.anchor_b),
+                };
+                Some((
+                    *id,
+                    crate::interaction::joint_edit::glyph_distance(
+                        def, anchor, pose.rot, world_b, world, scale,
+                    ),
+                ))
             }),
         );
         menu.screen = now;
@@ -528,25 +540,22 @@ mod tests {
     #[test]
     fn nearest_joint_picks_closest_within_radius() {
         let cands = [
-            (StableId::new(), Vec2::new(10.0, 0.0)),
-            (StableId::new(), Vec2::new(3.0, 0.0)),
-            (StableId::new(), Vec2::new(100.0, 0.0)),
+            (StableId::new(), 10.0),
+            (StableId::new(), 3.0),
+            (StableId::new(), 100.0),
         ];
-        // Radius 5 from the origin: only the (3, 0) anchor qualifies.
-        assert_eq!(
-            nearest_joint(Vec2::ZERO, 5.0, cands.iter().copied()),
-            Some(cands[1].0),
-        );
+        // Radius 5: only the distance-3 glyph qualifies.
+        assert_eq!(nearest_joint(5.0, cands.iter().copied()), Some(cands[1].0));
     }
 
     #[test]
     fn nearest_joint_none_outside_radius() {
-        let cands = [(StableId::new(), Vec2::new(50.0, 0.0))];
-        assert_eq!(nearest_joint(Vec2::ZERO, 5.0, cands.iter().copied()), None);
+        let cands = [(StableId::new(), 50.0)];
+        assert_eq!(nearest_joint(5.0, cands.iter().copied()), None);
     }
 
     #[test]
     fn nearest_joint_empty_is_none() {
-        assert_eq!(nearest_joint(Vec2::ZERO, 5.0, std::iter::empty()), None);
+        assert_eq!(nearest_joint(5.0, std::iter::empty()), None);
     }
 }

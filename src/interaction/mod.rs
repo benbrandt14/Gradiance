@@ -61,6 +61,7 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<selection::SelectedJoint>();
         app.init_resource::<joint_edit::SuppressSelectPress>();
         app.init_resource::<joint_edit::JointAnchorDrag>();
+        app.init_resource::<joint_edit::JointLimitDrag>();
         app.init_resource::<snap::SnappedCursor>();
         app.init_resource::<snap::SnapExclusions>();
         app.init_resource::<gesture::GestureConstraints>();

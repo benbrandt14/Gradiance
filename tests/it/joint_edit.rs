@@ -4,7 +4,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use crate::harness::{box_record, entity_of, paused_app};
+use crate::harness::{box_record, entity_of, paused_app, undo};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::domain::joint::MotorDef;
@@ -172,6 +172,120 @@ fn deleting_a_selected_joint_removes_it_and_undoes() {
     let restored = entity_of(&app, joint).expect("undo restores the joint");
     let def = app.world().get::<JointDef>(restored).unwrap();
     assert_eq!(def.body_a, body, "restored with its endpoints");
+}
+
+fn prismatic_pin(body_a: StableId, limits: Option<[f32; 2]>) -> JointDef {
+    JointDef {
+        kind: JointKind::Slider {
+            axis: Vec2::X,
+            limits,
+            motor: None,
+        },
+        common: JointCommon::default(),
+        body_a,
+        body_b: None,
+        anchor_a: Vec2::ZERO,
+        anchor_b: Vec2::ZERO,
+        rest_rot_a: 0.0,
+        rest_rot_b: 0.0,
+    }
+}
+
+#[test]
+fn joints_are_selectable_anywhere_on_their_glyph() {
+    let mut app = paused_app();
+    let body = spawn_box_at(&mut app, Vec2::ZERO, 20.0, 20.0);
+    let joint = spawn_joint(&mut app, prismatic_pin(body, Some([0.0, 120.0])));
+    let entity = entity_of(&app, joint).unwrap();
+
+    // Click far from the anchor but on the drawn travel line: the whole
+    // glyph is selectable, not just the anchor point.
+    click_at(&mut app, Vec2::new(90.0, 3.0));
+    assert_eq!(
+        selected_joint(&app),
+        Some(entity),
+        "glyph-wide pick selects the joint"
+    );
+}
+
+#[test]
+fn dragging_a_travel_cap_resizes_prismatic_limits() {
+    let mut app = paused_app();
+    let body = spawn_box_at(&mut app, Vec2::ZERO, 20.0, 20.0);
+    let joint = spawn_joint(&mut app, prismatic_pin(body, Some([0.0, 120.0])));
+    let entity = entity_of(&app, joint).unwrap();
+
+    // Select it, then grab the max travel cap and drag it out.
+    click_at(&mut app, Vec2::new(90.0, 3.0));
+    let depth = app.world().resource::<CommandStack>().undo_len();
+    set_cursor(&mut app, Vec2::new(120.0, 0.0));
+    mouse(&mut app, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(200.0, 0.0));
+    app.update();
+    mouse(&mut app, false);
+    app.update();
+
+    let def = app.world().get::<JointDef>(entity).unwrap();
+    let JointKind::Slider { limits, .. } = def.kind else {
+        panic!("kind changed: {:?}", def.kind);
+    };
+    let [min, max] = limits.expect("limits kept");
+    assert!(min.abs() < 1.0, "min untouched ({min})");
+    assert!(
+        (max - 200.0).abs() < 10.0,
+        "max followed the cursor ({max})"
+    );
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        depth + 1,
+        "one undoable limit edit"
+    );
+
+    undo(&mut app);
+    let def = app.world().get::<JointDef>(entity).unwrap();
+    let JointKind::Slider { limits, .. } = def.kind else {
+        panic!("kind changed: {:?}", def.kind);
+    };
+    assert_eq!(limits, Some([0.0, 120.0]), "undo restores the old travel");
+}
+
+#[test]
+fn dragging_a_hinge_arc_handle_changes_angle_limits() {
+    let mut app = paused_app();
+    let body = spawn_box_at(&mut app, Vec2::ZERO, 20.0, 20.0);
+    let mut def = hinge_pin(body, Vec2::ZERO, Vec2::ZERO);
+    def.kind = JointKind::Hinge {
+        limits: Some([-0.5, 0.5]),
+        motor: None,
+    };
+    let joint = spawn_joint(&mut app, def);
+    let entity = entity_of(&app, joint).unwrap();
+
+    // Select (click on the ring), then grab the max-angle handle (on the
+    // limit arc at radius 14) and swing it out to ~1.2 rad.
+    click_at(&mut app, Vec2::ZERO);
+    let depth = app.world().resource::<CommandStack>().undo_len();
+    set_cursor(&mut app, Vec2::from_angle(0.5) * 14.0);
+    mouse(&mut app, true);
+    app.update();
+    set_cursor(&mut app, Vec2::from_angle(1.2) * 60.0);
+    app.update();
+    mouse(&mut app, false);
+    app.update();
+
+    let def = app.world().get::<JointDef>(entity).unwrap();
+    let JointKind::Hinge { limits, .. } = def.kind else {
+        panic!("kind changed: {:?}", def.kind);
+    };
+    let [min, max] = limits.expect("limits kept");
+    assert!((min + 0.5).abs() < 1e-3, "min untouched ({min})");
+    assert!((max - 1.2).abs() < 0.15, "max followed the cursor ({max})");
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        depth + 1,
+        "one undoable limit edit"
+    );
 }
 
 #[test]
