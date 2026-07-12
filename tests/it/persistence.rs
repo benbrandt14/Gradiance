@@ -188,7 +188,11 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                     };
                     let kind = match kind {
                         0 => JointKind::Hinge { limits, motor },
-                        1 => JointKind::Weld,
+                        1 => JointKind::Slider {
+                            axis: Vec2::Y,
+                            limits,
+                            motor,
+                        },
                         _ => JointKind::Slider {
                             axis: Vec2::X,
                             limits,
@@ -211,7 +215,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                 })
                 .collect();
             let mut scene = SceneRecord {
-                version: 2,
+                version: gradiance::persist::FORMAT_VERSION,
                 app_version: String::new(),
                 bodies,
                 joints,
@@ -311,7 +315,7 @@ fn loading_a_scene_is_one_undoable_command() {
     let incoming_body = box_record(Vec2::new(50.0, 0.0), 30.0, 30.0);
     let incoming_id = incoming_body.id;
     let scene = SceneRecord {
-        version: 2,
+        version: gradiance::persist::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![incoming_body],
         joints: vec![],
@@ -492,7 +496,7 @@ fn pre_render_settings_files_still_parse() {
     // Simulate a pre-M10 save: serialize a current scene, then strip the
     // trailing `render` field from its environment block.
     let scene = SceneRecord {
-        version: 2,
+        version: gradiance::persist::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],

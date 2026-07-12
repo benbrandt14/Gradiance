@@ -37,9 +37,10 @@
 //! contract holds — reads are total, writes are seam-mediated.
 
 use crate::command::intent::{
-    CommitTransformIntent, CutIntent, DuplicateIntent, ScaleIntent, SpawnBodyIntent,
-    SpawnJointIntent, TransformChange,
+    CommitTransformIntent, CutIntent, DuplicateIntent, MergeIntent, PropertyEditIntent,
+    ScaleIntent, SpawnBodyIntent, SpawnJointIntent, TransformChange,
 };
+use crate::command::property::{PropertyChange, PropertyValue};
 use crate::command::snapshot::{BodyRecord, JointRecord};
 use crate::core::ids::StableId;
 use crate::core::states::{GameState, ToolState};
@@ -61,6 +62,7 @@ use crate::interaction::tools::handles::{ScaleFrame, SelectionBox, selection_box
 use crate::physics::grab::{Grab, MouseSpring, MouseTwist, Twist};
 use crate::physics::hold::KinematicHold;
 use crate::physics::queries::PhysicsQueries;
+use avian2d::prelude::RigidBody;
 use bevy::ecs::component::Mutable;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -149,6 +151,19 @@ pub enum ToolCommit {
         sources: Vec<StableId>,
         /// World-space offset applied to each clone.
         offset: Vec2,
+    },
+    /// Merge bodies into one (the weld tool over two bodies — SDF union).
+    Merge {
+        /// Bodies to merge; the first survives with the union of all shapes.
+        targets: Vec<StableId>,
+    },
+    /// Pin a body to the world by making it static (the weld tool over a
+    /// single body).
+    MakeStatic {
+        /// Target body.
+        id: StableId,
+        /// Its current kind, captured for undo.
+        old: RigidBody,
     },
 }
 
@@ -291,6 +306,8 @@ pub struct ToolCommitWriters<'w> {
     moves: MessageWriter<'w, CommitTransformIntent>,
     scales: MessageWriter<'w, ScaleIntent>,
     dups: MessageWriter<'w, DuplicateIntent>,
+    merges: MessageWriter<'w, MergeIntent>,
+    props: MessageWriter<'w, PropertyEditIntent>,
 }
 
 impl ToolCommitWriters<'_> {
@@ -325,6 +342,18 @@ impl ToolCommitWriters<'_> {
             }
             ToolCommit::Duplicate { sources, offset } => {
                 self.dups.write(DuplicateIntent { sources, offset });
+            }
+            ToolCommit::Merge { targets } => {
+                self.merges.write(MergeIntent { targets });
+            }
+            ToolCommit::MakeStatic { id, old } => {
+                self.props.write(PropertyEditIntent {
+                    changes: vec![PropertyChange {
+                        id,
+                        old: PropertyValue::RigidBody(old),
+                        new: PropertyValue::RigidBody(RigidBody::Static),
+                    }],
+                });
             }
         }
     }
@@ -445,6 +474,7 @@ pub struct ToolWorld<'w, 's> {
     centers: Query<'w, 's, (Entity, &'static Transform), With<Body>>,
     ids: Query<'w, 's, &'static StableId>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
+    kinds: Query<'w, 's, &'static RigidBody, With<Body>>,
 }
 
 impl ToolWorld<'_, '_> {
@@ -470,6 +500,11 @@ impl ToolWorld<'_, '_> {
     /// A body entity's stable id.
     pub fn id_of(&self, entity: Entity) -> Option<StableId> {
         self.ids.get(entity).ok().copied()
+    }
+
+    /// A body entity's authored rigid-body kind.
+    pub fn body_kind(&self, entity: Entity) -> Option<RigidBody> {
+        self.kinds.get(entity).ok().copied()
     }
 
     /// A body entity's authored shape + pose (for ghost previews).
