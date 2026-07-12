@@ -630,6 +630,71 @@ fn weld_tool_pins_a_single_body_by_making_it_static() {
     );
 }
 
+// ---------- Slider default limits (M20: the drag draws the travel) ----------
+
+#[test]
+fn slider_drag_defaults_travel_limits_to_the_drag_length() {
+    let mut app = paused_app();
+    spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
+    app.update();
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Slider);
+    app.update();
+
+    // Press on the body, drag 120px along +X, release.
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(120.0, 0.0));
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    let mut q = app.world_mut().query::<&JointDef>();
+    let def = q.iter(app.world()).next().expect("slider authored");
+    let JointKind::Slider { limits, .. } = &def.kind else {
+        panic!("expected a slider, got {:?}", def.kind);
+    };
+    let [min, max] = limits.expect("drag length becomes the default travel");
+    assert!(min.abs() < 1e-3, "travel starts at the anchor ({min})");
+    assert!(
+        (max - 120.0).abs() < 15.0,
+        "travel ends at the release ({max})"
+    );
+}
+
+#[test]
+fn slider_limits_default_can_be_turned_off() {
+    let mut app = paused_app();
+    spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
+    app.update();
+    app.world_mut()
+        .insert_resource(gradiance::domain::settings::ToolDefaults {
+            slider_limits: false,
+        });
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Slider);
+    app.update();
+
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(120.0, 0.0));
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    let mut q = app.world_mut().query::<&JointDef>();
+    let def = q.iter(app.world()).next().expect("slider authored");
+    assert!(
+        matches!(def.kind, JointKind::Slider { limits: None, .. }),
+        "option off restores unlimited sliders ({:?})",
+        def.kind
+    );
+}
+
 // ---------- Play-mode rotate (physical twist, feedback 2.6) ----------
 
 #[test]

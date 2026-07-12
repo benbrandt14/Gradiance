@@ -48,7 +48,7 @@ use crate::core::units::PosRot;
 use crate::domain::Body;
 use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
-use crate::domain::settings::SnapConfig;
+use crate::domain::settings::{SnapConfig, ToolDefaults};
 use crate::domain::shape::ShapeDef;
 use crate::geometry::contours::point_in_ring;
 use crate::interaction::PointerOverUi;
@@ -683,6 +683,8 @@ pub struct ManipContext<'a> {
     pub constraints: &'a GestureConstraints,
     /// Snapping configuration.
     pub snap: &'a SnapConfig,
+    /// Tool-creation defaults (slider limits etc.).
+    pub defaults: ToolDefaults,
     /// World units per logical screen pixel.
     pub cam_scale: f32,
 }
@@ -723,6 +725,7 @@ pub struct ManipInputs<'w, 's> {
     constraints: Res<'w, GestureConstraints>,
     snap: Res<'w, SnapConfig>,
     frame: Res<'w, ScaleFrame>,
+    defaults: Res<'w, ToolDefaults>,
     tool_state: Res<'w, State<ToolState>>,
     game_state: Res<'w, State<GameState>>,
     projections: Query<'w, 's, &'static Projection, With<Camera3d>>,
@@ -747,6 +750,7 @@ impl ManipInputs<'_, '_> {
             scale_frame: *self.frame,
             constraints: &self.constraints,
             snap: &self.snap,
+            defaults: *self.defaults,
             cam_scale: crate::interaction::camera::camera_scale(&self.projections),
         }
     }

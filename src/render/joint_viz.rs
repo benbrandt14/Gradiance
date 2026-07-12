@@ -39,22 +39,44 @@ pub fn draw_joints(
             continue;
         };
         let anchor = def.anchor_world(pose_a.pos, pose_a.rot);
+        // Grey glyphs with a dark under-stroke for contrast on any body
+        // color (feedback 4.7); world pins keep their warning hue.
         let color = if def.body_b.is_none() {
             css::ORANGE_RED // world pin
         } else {
-            css::VIOLET
+            css::LIGHT_GRAY
         };
         match &def.kind {
             JointKind::Hinge { motor, .. } => {
+                // Under-stroke: a slightly offset dark ring reads as an
+                // outline at every zoom (gizmo lines have no width knob).
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.6 * s, OUTLINE);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.0 * s, color);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 1.5 * s, color);
                 if let Some(m) = motor {
                     draw_angular_motor(&mut gizmos, anchor, *m, s);
                 }
             }
-            JointKind::Slider { axis, motor, .. } => {
+            JointKind::Slider {
+                axis,
+                motor,
+                limits,
+            } => {
                 let dir = Vec2::from_angle(pose_a.rot).rotate(*axis);
-                gizmos.line_2d(anchor - dir * 40.0 * s, anchor + dir * 40.0 * s, color);
+                // With travel limits the axis line shows the actual allowed
+                // travel (plus end caps); unlimited sliders keep the long
+                // reference line.
+                let (from, to) = match limits {
+                    Some([min, max]) => (anchor + dir * *min, anchor + dir * *max),
+                    None => (anchor - dir * 40.0 * s, anchor + dir * 40.0 * s),
+                };
+                let perp = Vec2::new(-dir.y, dir.x) * 4.0 * s;
+                gizmos.line_2d(from, to, color);
+                if limits.is_some() {
+                    gizmos.line_2d(from - perp, from + perp, color);
+                    gizmos.line_2d(to - perp, to + perp, color);
+                }
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.4 * s, OUTLINE);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.0 * s, color);
                 if let Some(m) = motor {
                     draw_linear_motor(&mut gizmos, anchor, dir, *m, s);
@@ -86,13 +108,19 @@ pub fn draw_joints(
     }
 }
 
+/// Dark under-stroke color for glyph outlines.
+const OUTLINE: bevy::color::Srgba = css::DARK_SLATE_GRAY;
+
 /// A curved arrow around the hinge showing spin direction & strength.
 fn draw_angular_motor(gizmos: &mut Gizmos<JointGizmos>, anchor: Vec2, motor: MotorDef, s: f32) {
     if !motor.enabled || motor.target_velocity.abs() < 1e-3 {
         return;
     }
     let radius = 14.0 * s;
-    let sweep = (motor.target_velocity.signum()) * 2.2; // radians of arc
+    // Sweep grows with drive speed: direction *and* magnitude at a glance
+    // (feedback 4.1 "visually indicate motor state").
+    let sweep =
+        motor.target_velocity.signum() * (1.2 + motor.target_velocity.abs().min(10.0) * 0.16); // 1.2..2.8 rad
     let steps = 10;
     let mut prev = anchor + Vec2::from_angle(0.0) * radius;
     for i in 1..=steps {
@@ -162,7 +190,8 @@ fn draw_linear_motor(
         return;
     }
     let d = dir * motor.target_velocity.signum();
-    let tip = anchor + d * 26.0 * s;
+    // Arrow length grows with drive speed (16..34 px at screen scale).
+    let tip = anchor + d * (16.0 + motor.target_velocity.abs().min(600.0) * 0.03) * s;
     gizmos.line_2d(anchor, tip, css::GOLD);
     let back = -d;
     let perp = Vec2::new(-d.y, d.x);

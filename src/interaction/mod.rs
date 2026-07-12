@@ -6,8 +6,9 @@
 //!   wins) and every tool consumes the same [`snap::SnappedCursor`], so new
 //!   tools and gestures inherit snapping for free.
 //! - **Constrained motion**: hold `X`/`Y` for horizontal/vertical-only,
-//!   `Shift` for dominant-axis lock; hold `Ctrl` while rotating for
+//!   `X`+`Y` for dominant-axis lock; hold `Ctrl` while rotating for
 //!   quantized angle steps ([`gesture::GestureConstraints`]).
+//!   `Shift` is selection-only (toggle / additive band).
 //! - **Grids are coordinate systems**, not wallpaper: movable origin,
 //!   rotatable basis, and pluggable geometry (Cartesian / Isometric /
 //!   Polar) via `GridSystem`.
@@ -66,12 +67,14 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<crate::domain::settings::GridSettings>();
         app.init_resource::<crate::domain::settings::SnapConfig>();
         app.init_resource::<crate::domain::settings::DebugSettings>();
+        app.init_resource::<crate::domain::settings::ToolDefaults>();
         // Register the config-seam settings for reflection: the scripting
         // registry addresses these resources by reflected type name
         // (see `docs/script-lisp-decision.md`).
         app.register_type::<crate::domain::settings::GridSettings>();
         app.register_type::<crate::domain::settings::SnapConfig>();
         app.register_type::<crate::domain::settings::DebugSettings>();
+        app.register_type::<crate::domain::settings::ToolDefaults>();
         app.init_resource::<camera::CameraRig>();
 
         app.add_plugins(input::EditorInputPlugin);
