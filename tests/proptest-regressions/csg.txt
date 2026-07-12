@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c55e99a742cd541f860590de60e227b00d391057ee861428e691962d3a471714 # shrinks to bodies = [(Vec2(0.0, 0.0), 10.0, 10.0, 0.0)], cuts = [(Vec2(0.0, 0.0), Vec2(0.0, 0.0), 2.0)]

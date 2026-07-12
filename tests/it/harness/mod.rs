@@ -65,7 +65,7 @@ pub fn box_record(pos: Vec2, width: f32, height: f32) -> BodyRecord {
         appearance: Appearance::default(),
         layers: LayerMask32::default(),
         groups: Vec::new(),
-        magnet: None,
+        field: None,
     }
 }
 

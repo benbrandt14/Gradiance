@@ -34,9 +34,9 @@ pub struct BodyRecord {
     /// Group stack, innermost first (empty = ungrouped).
     #[serde(default)]
     pub groups: Vec<u32>,
-    /// Magnetic field source, if the body is magnetized.
+    /// Field source (attraction/repulsion), if the body carries one.
     #[serde(default)]
-    pub magnet: Option<crate::domain::magnet::Magnet>,
+    pub field: Option<crate::domain::field::FieldSource>,
 }
 
 impl BodyRecord {
@@ -55,7 +55,9 @@ impl BodyRecord {
                 .get::<SelectionGroup>()
                 .map(|g| g.0.clone())
                 .unwrap_or_default(),
-            magnet: entity_ref.get::<crate::domain::magnet::Magnet>().copied(),
+            field: entity_ref
+                .get::<crate::domain::field::FieldSource>()
+                .copied(),
         })
     }
 
@@ -75,8 +77,8 @@ impl BodyRecord {
         if !self.groups.is_empty() {
             entity.insert(SelectionGroup(self.groups.clone()));
         }
-        if let Some(magnet) = self.magnet {
-            entity.insert(magnet);
+        if let Some(field) = self.field {
+            entity.insert(field);
         }
         entity.id()
     }

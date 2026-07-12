@@ -129,31 +129,31 @@ fn layer_filter_edit_round_trips_and_undoes() {
 }
 
 #[test]
-fn magnet_property_edit_round_trips_and_undoes() {
-    use gradiance::domain::magnet::Magnet;
+fn field_property_edit_round_trips_and_undoes() {
+    use gradiance::domain::field::{FieldFalloff, FieldSource};
     let mut app = paused_app();
     let a = spawn_box(&mut app, Vec2::ZERO);
     let entity = entity_of(&app, a).unwrap();
-    assert!(app.world().get::<Magnet>(entity).is_none());
+    assert!(app.world().get::<FieldSource>(entity).is_none());
 
-    let magnet = Magnet {
-        strength: -75.0,
-        falloff: 3.0,
+    let field = FieldSource {
+        strength: -750.0,
+        falloff: FieldFalloff::Linear,
     };
     app.world_mut().write_message(PropertyEditIntent {
         changes: vec![PropertyChange {
             id: a,
-            old: PropertyValue::Magnet(None),
-            new: PropertyValue::Magnet(Some(magnet)),
+            old: PropertyValue::Field(None),
+            new: PropertyValue::Field(Some(field)),
         }],
     });
     app.update();
-    assert_eq!(app.world().get::<Magnet>(entity).copied(), Some(magnet));
+    assert_eq!(app.world().get::<FieldSource>(entity).copied(), Some(field));
 
     undo(&mut app);
     assert!(
-        app.world().get::<Magnet>(entity).is_none(),
-        "undo demagnetizes"
+        app.world().get::<FieldSource>(entity).is_none(),
+        "undo removes the field"
     );
 }
 
