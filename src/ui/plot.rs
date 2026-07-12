@@ -86,6 +86,20 @@ pub struct PlotPanel {
     open: bool,
 }
 
+impl PlotPanel {
+    /// Whether the panel is currently shown (read by the transport button so it
+    /// can reflect the open state).
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    /// Flips the panel's visibility. Both the `\` shortcut and the transport
+    /// button toggle through here.
+    pub fn toggle(&mut self) {
+        self.open = !self.open;
+    }
+}
+
 /// Colours cycled across a source's signals.
 const SIGNAL_COLORS: [egui::Color32; 4] = [
     egui::Color32::from_rgb(120, 200, 255),
@@ -173,7 +187,7 @@ pub fn plot_panel(
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if keys.just_pressed(KeyCode::Backslash) && !ctx.egui_wants_keyboard_input() {
-        panel.open = !panel.open;
+        panel.toggle();
     }
     if !panel.open {
         return Ok(());
@@ -207,7 +221,9 @@ pub fn plot_panel(
 }
 
 /// Hand-draws one signal as a line plot auto-scaled to its own min/max.
-fn draw_series(ui: &mut egui::Ui, label: &str, data: &VecDeque<f32>, color: egui::Color32) {
+/// Host-agnostic (pure `Ui` + data in) so `tests/it/ui_panels.rs` can
+/// exercise it under `egui_kittest`.
+pub fn draw_series(ui: &mut egui::Ui, label: &str, data: &VecDeque<f32>, color: egui::Color32) {
     ui.label(label);
     let (rect, _) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 70.0), egui::Sense::hover());

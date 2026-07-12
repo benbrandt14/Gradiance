@@ -4,13 +4,11 @@
 // Test-only file: unwraps are the failure mechanism.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, paused_app, redo, undo};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::geometry::polygonize::polygonize_components;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, paused_app, redo, undo};
 
 fn spawn_box_at(app: &mut App, pos: Vec2, w: f32, h: f32) -> StableId {
     let record = box_record(pos, w, h);
@@ -206,7 +204,10 @@ fn joints_whose_anchor_material_is_destroyed_are_deleted() {
         record: JointRecord {
             id: StableId::new(),
             def: JointDef {
-                kind: JointKind::Weld,
+                kind: JointKind::Hinge {
+                    limits: None,
+                    motor: None,
+                },
                 common: JointCommon::default(),
                 body_a: id,
                 body_b: None,
@@ -501,12 +502,15 @@ fn merge_rewires_external_joints_and_deletes_internal_ones() {
             },
         },
     });
-    // Internal: a weld between the two merged bodies.
+    // Internal: a joint between the two merged bodies.
     app.world_mut().write_message(SpawnJointIntent {
         record: JointRecord {
             id: StableId::new(),
             def: JointDef {
-                kind: JointKind::Weld,
+                kind: JointKind::Hinge {
+                    limits: None,
+                    motor: None,
+                },
                 common: JointCommon::default(),
                 body_a: host,
                 body_b: Some(absorbed),

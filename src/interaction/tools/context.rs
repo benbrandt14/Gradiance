@@ -37,9 +37,10 @@
 //! contract holds — reads are total, writes are seam-mediated.
 
 use crate::command::intent::{
-    CommitTransformIntent, CutIntent, DuplicateIntent, ScaleIntent, SpawnBodyIntent,
-    SpawnJointIntent, TransformChange,
+    CommitTransformIntent, CutIntent, DuplicateIntent, MergeIntent, PropertyEditIntent,
+    ScaleIntent, SpawnBodyIntent, SpawnJointIntent, TransformChange,
 };
+use crate::command::property::{PropertyChange, PropertyValue};
 use crate::command::snapshot::{BodyRecord, JointRecord};
 use crate::core::ids::StableId;
 use crate::core::states::{GameState, ToolState};
@@ -47,7 +48,7 @@ use crate::core::units::PosRot;
 use crate::domain::Body;
 use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
-use crate::domain::settings::SnapConfig;
+use crate::domain::settings::{SnapConfig, ToolDefaults};
 use crate::domain::shape::ShapeDef;
 use crate::geometry::contours::point_in_ring;
 use crate::interaction::PointerOverUi;
@@ -58,9 +59,10 @@ use crate::interaction::selection::{SelectTransition, SelectedJoint, Selection, 
 use crate::interaction::snap::{SnapExclusions, SnappedCursor};
 use crate::interaction::tools::ActiveGesture;
 use crate::interaction::tools::handles::{ScaleFrame, SelectionBox, selection_box};
-use crate::physics::grab::{Grab, MouseSpring};
+use crate::physics::grab::{Grab, MouseSpring, MouseTwist, Twist};
 use crate::physics::hold::KinematicHold;
 use crate::physics::queries::PhysicsQueries;
+use avian2d::prelude::RigidBody;
 use bevy::ecs::component::Mutable;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -149,6 +151,19 @@ pub enum ToolCommit {
         sources: Vec<StableId>,
         /// World-space offset applied to each clone.
         offset: Vec2,
+    },
+    /// Merge bodies into one (the weld tool over two bodies — SDF union).
+    Merge {
+        /// Bodies to merge; the first survives with the union of all shapes.
+        targets: Vec<StableId>,
+    },
+    /// Pin a body to the world by making it static (the weld tool over a
+    /// single body).
+    MakeStatic {
+        /// Target body.
+        id: StableId,
+        /// Its current kind, captured for undo.
+        old: RigidBody,
     },
 }
 
@@ -291,6 +306,8 @@ pub struct ToolCommitWriters<'w> {
     moves: MessageWriter<'w, CommitTransformIntent>,
     scales: MessageWriter<'w, ScaleIntent>,
     dups: MessageWriter<'w, DuplicateIntent>,
+    merges: MessageWriter<'w, MergeIntent>,
+    props: MessageWriter<'w, PropertyEditIntent>,
 }
 
 impl ToolCommitWriters<'_> {
@@ -325,6 +342,18 @@ impl ToolCommitWriters<'_> {
             }
             ToolCommit::Duplicate { sources, offset } => {
                 self.dups.write(DuplicateIntent { sources, offset });
+            }
+            ToolCommit::Merge { targets } => {
+                self.merges.write(MergeIntent { targets });
+            }
+            ToolCommit::MakeStatic { id, old } => {
+                self.props.write(PropertyEditIntent {
+                    changes: vec![PropertyChange {
+                        id,
+                        old: PropertyValue::RigidBody(old),
+                        new: PropertyValue::RigidBody(RigidBody::Static),
+                    }],
+                });
             }
         }
     }
@@ -445,6 +474,7 @@ pub struct ToolWorld<'w, 's> {
     centers: Query<'w, 's, (Entity, &'static Transform), With<Body>>,
     ids: Query<'w, 's, &'static StableId>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
+    kinds: Query<'w, 's, &'static RigidBody, With<Body>>,
 }
 
 impl ToolWorld<'_, '_> {
@@ -470,6 +500,11 @@ impl ToolWorld<'_, '_> {
     /// A body entity's stable id.
     pub fn id_of(&self, entity: Entity) -> Option<StableId> {
         self.ids.get(entity).ok().copied()
+    }
+
+    /// A body entity's authored rigid-body kind.
+    pub fn body_kind(&self, entity: Entity) -> Option<RigidBody> {
+        self.kinds.get(entity).ok().copied()
     }
 
     /// A body entity's authored shape + pose (for ghost previews).
@@ -573,6 +608,20 @@ pub enum GrabState {
     Clear,
 }
 
+/// A transient angular-servo (physical twist) request for one frame — the
+/// play-mode rotate interaction. Like [`GrabState`], it is physical and not
+/// undoable, so it never touches the command seam.
+#[derive(Debug, Clone, Default)]
+pub enum TwistState {
+    /// Leave any existing twist untouched.
+    #[default]
+    Keep,
+    /// Twist exactly these bodies toward these angles this frame.
+    Set(Vec<Twist>),
+    /// Release the twist.
+    Clear,
+}
+
 /// What a [`ManipTool`] asks the driver to apply this frame.
 ///
 /// Every field routes through an existing seam: `commit` → intents (undoable),
@@ -587,6 +636,8 @@ pub struct ManipOutput {
     pub hold: HoldState,
     /// Transient mouse-spring grab for this frame (play-mode drag).
     pub grab: GrabState,
+    /// Transient angular servo for this frame (play-mode rotate).
+    pub twist: TwistState,
     /// Editor selection change (applied via [`SelectTransition`]).
     pub selection: Option<SelectTransition>,
 }
@@ -632,6 +683,8 @@ pub struct ManipContext<'a> {
     pub constraints: &'a GestureConstraints,
     /// Snapping configuration.
     pub snap: &'a SnapConfig,
+    /// Tool-creation defaults (slider limits etc.).
+    pub defaults: ToolDefaults,
     /// World units per logical screen pixel.
     pub cam_scale: f32,
 }
@@ -672,6 +725,7 @@ pub struct ManipInputs<'w, 's> {
     constraints: Res<'w, GestureConstraints>,
     snap: Res<'w, SnapConfig>,
     frame: Res<'w, ScaleFrame>,
+    defaults: Res<'w, ToolDefaults>,
     tool_state: Res<'w, State<ToolState>>,
     game_state: Res<'w, State<GameState>>,
     projections: Query<'w, 's, &'static Projection, With<Camera3d>>,
@@ -696,6 +750,7 @@ impl ManipInputs<'_, '_> {
             scale_frame: *self.frame,
             constraints: &self.constraints,
             snap: &self.snap,
+            defaults: *self.defaults,
             cam_scale: crate::interaction::camera::camera_scale(&self.projections),
         }
     }
@@ -709,6 +764,7 @@ pub struct ManipEditor<'w, 's> {
     hold: ResMut<'w, KinematicHold>,
     exclusions: ResMut<'w, SnapExclusions>,
     spring: ResMut<'w, MouseSpring>,
+    twist: ResMut<'w, MouseTwist>,
     selection: ResMut<'w, Selection>,
     joint: ResMut<'w, SelectedJoint>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
@@ -738,6 +794,11 @@ pub fn run_manip_tool<T: ManipTool>(
         GrabState::Keep => {}
         GrabState::Set(grab) => editor.spring.0 = Some(grab),
         GrabState::Clear => editor.spring.0 = None,
+    }
+    match out.twist {
+        TwistState::Keep => {}
+        TwistState::Set(twists) => editor.twist.0 = twists,
+        TwistState::Clear => editor.twist.0.clear(),
     }
     match out.hold {
         HoldState::Keep => {}

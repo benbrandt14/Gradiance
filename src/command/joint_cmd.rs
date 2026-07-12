@@ -1,8 +1,8 @@
 //! Joint commands and the body↔joint cascade helper.
 
 use crate::command::snapshot::JointRecord;
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use crate::domain::joint::JointDef;
 use bevy::prelude::*;
 
@@ -36,26 +36,20 @@ impl GameCommand for SpawnJointCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         // Both endpoints must exist right now.
         for id in self.record.def.referenced_bodies() {
-            world
-                .resource::<IdIndex>()
-                .entity(id)
-                .ok_or(CommandError::MissingEntity(id))?;
+            resolve(world, id)?;
         }
         self.record.spawn(world);
         Ok(())
     }
 
     fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let entity = world
-            .resource::<IdIndex>()
-            .entity(self.record.id)
-            .ok_or(CommandError::MissingEntity(self.record.id))?;
+        let entity = resolve(world, self.record.id)?;
         world.despawn(entity);
         Ok(())
     }
 
     fn name(&self) -> &'static str {
-        "Spawn joint"
+        crate::command::intent::name::SPAWN_JOINT
     }
 }
 
@@ -77,10 +71,7 @@ impl DeleteJointCommand {
 
 impl GameCommand for DeleteJointCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let entity = world
-            .resource::<IdIndex>()
-            .entity(self.id)
-            .ok_or(CommandError::MissingEntity(self.id))?;
+        let entity = resolve(world, self.id)?;
         self.record = JointRecord::capture(world, entity);
         if self.record.is_none() {
             return Err(CommandError::NoEffect);
@@ -97,6 +88,6 @@ impl GameCommand for DeleteJointCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Delete joint"
+        crate::command::intent::name::DELETE_JOINT
     }
 }

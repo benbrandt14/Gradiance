@@ -41,9 +41,19 @@ mimalloc = "0.1"
 # docs/script-lisp-decision.md. Confined to `src/script/` (tests/boundaries.rs).
 steel-core = "=0.8.2"
 
+[features]
+# Dev-only inner loop: `cargo run --features dev`.
+# - dynamic_linking: links Bevy as a dylib, cutting incremental link time.
+# - file_watcher: asset hot-reload (and the hook for future .scm hot-reload).
+# Never enable for release/CI builds; the default build stays fully static.
+dev = ["bevy/dynamic_linking", "bevy/file_watcher"]
+
 [dev-dependencies]
 proptest = "1.9"
 rstest = "0.26"
+# UI layout tests for the top panels' leaf renderers (shares egui 0.35 with
+# bevy_egui). Accessibility-tree queries only — no GPU, no screenshot farm.
+egui_kittest = "=0.35.0"
 
 [lints.rust]
 missing_docs = "deny"

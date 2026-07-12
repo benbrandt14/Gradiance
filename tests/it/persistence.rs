@@ -1,14 +1,12 @@
 //! Persistence tests: arbitrary-scene round trips (proptest), file I/O,
 //! undoable loads, and debug snapshots.
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, paused_app, undo};
 use avian2d::prelude::{ColliderDensity, Friction, GravityScale, Restitution, RigidBody};
 use bevy::prelude::*;
 use gradiance::domain::settings::{GridSettings, GridSystem, SimSettings, SnapConfig};
 use gradiance::persist::{from_ron, to_ron};
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, paused_app, undo};
 use proptest::prelude::*;
 
 // ---------- Arbitrary scene generation ----------
@@ -127,7 +125,6 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                         filters,
                     },
                     groups,
-                    group: None,
                 }
             },
         )
@@ -190,7 +187,11 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                     };
                     let kind = match kind {
                         0 => JointKind::Hinge { limits, motor },
-                        1 => JointKind::Weld,
+                        1 => JointKind::Slider {
+                            axis: Vec2::Y,
+                            limits,
+                            motor,
+                        },
                         _ => JointKind::Slider {
                             axis: Vec2::X,
                             limits,
@@ -213,7 +214,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                 })
                 .collect();
             let mut scene = SceneRecord {
-                version: 2,
+                version: gradiance::persist::FORMAT_VERSION,
                 app_version: String::new(),
                 bodies,
                 joints,
@@ -313,7 +314,7 @@ fn loading_a_scene_is_one_undoable_command() {
     let incoming_body = box_record(Vec2::new(50.0, 0.0), 30.0, 30.0);
     let incoming_id = incoming_body.id;
     let scene = SceneRecord {
-        version: 2,
+        version: gradiance::persist::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![incoming_body],
         joints: vec![],
@@ -343,6 +344,44 @@ fn spawn_via_intent(app: &mut App, pos: Vec2) -> StableId {
     app.world_mut().write_message(SpawnBodyIntent { record });
     app.update();
     id
+}
+
+#[test]
+fn exit_autosave_writes_a_resumable_scene() {
+    let dir = std::env::temp_dir().join(format!("gradiance-autosave-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("session.ron");
+
+    let mut app = paused_app();
+    app.insert_resource(gradiance::persist::AutosavePath(path.clone()));
+    spawn_via_intent(&mut app, Vec2::new(3.0, 4.0));
+    app.world_mut().write_message(AppExit::Success);
+    app.update(); // Last-schedule autosave observes the exit message
+
+    let text = std::fs::read_to_string(&path).expect("autosave written on exit");
+    let scene = from_ron(&text).expect("autosave parses as a scene");
+    assert_eq!(scene.bodies.len(), 1);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_empty_scene_is_not_autosaved_over_the_last_session() {
+    let dir = std::env::temp_dir().join(format!("gradiance-autosave-empty-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("session.ron");
+    std::fs::write(&path, "previous session").unwrap();
+
+    let mut app = paused_app();
+    app.insert_resource(gradiance::persist::AutosavePath(path.clone()));
+    app.world_mut().write_message(AppExit::Success);
+    app.update();
+
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "previous session",
+        "an empty scene must not clobber the previous autosave"
+    );
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -456,7 +495,7 @@ fn pre_render_settings_files_still_parse() {
     // Simulate a pre-M10 save: serialize a current scene, then strip the
     // trailing `render` field from its environment block.
     let scene = SceneRecord {
-        version: 2,
+        version: gradiance::persist::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],

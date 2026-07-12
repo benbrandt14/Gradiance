@@ -90,9 +90,6 @@ pub fn joint_inspector(
 fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> bool {
     let mut changed = false;
     match kind {
-        JointKind::Weld => {
-            ui.label(egui::RichText::new("rigid — no configurable freedom").weak());
-        }
         JointKind::Hinge { limits, motor } => {
             if let Some(k) = limit_section(ui, *limits, "angle limits (deg)", true) {
                 next.kind = JointKind::Hinge {
@@ -153,8 +150,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
 pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "Hinge (revolute)",
-        JointKind::Weld => "Weld (fixed)",
-        JointKind::Slider { .. } => "Slider (prismatic)",
+        JointKind::Slider { .. } => "Prismatic (slider)",
         JointKind::Spring { .. } => "Strut (spring-damper)",
     }
 }
@@ -162,7 +158,7 @@ pub fn kind_name(kind: &JointKind) -> &'static str {
 fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
     match kind {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => *limits,
-        JointKind::Weld | JointKind::Spring { .. } => None,
+        JointKind::Spring { .. } => None,
     }
 }
 

@@ -9,7 +9,7 @@ use crate::core::states::ToolState;
 use crate::domain::Body;
 use crate::domain::joint::{JointDef, JointKind};
 use crate::domain::settings::{
-    DebugSettings, GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
+    DebugSettings, GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig, ToolDefaults,
 };
 use crate::domain::shape::ShapeDef;
 use crate::ui::reflect_grid::reflect_grid;
@@ -60,6 +60,7 @@ pub fn settings_window(
     mut sim: ResMut<SimSettings>,
     mut grid: ResMut<GridSettings>,
     mut snap: ResMut<SnapConfig>,
+    mut tool_defaults: ResMut<ToolDefaults>,
     mut render: ResMut<RenderSettings>,
     mut debug: ResMut<DebugSettings>,
     readouts: DebugReadouts,
@@ -122,6 +123,14 @@ pub fn settings_window(
                     ui.label(egui::RichText::new("Snapping").strong());
                     reflect_grid(ui, egui::Id::new("snap"), snap.bypass_change_detection());
                     snap.set_changed();
+                    ui.separator();
+                    ui.label(egui::RichText::new("Tools").strong());
+                    reflect_grid(
+                        ui,
+                        egui::Id::new("tool-defaults"),
+                        tool_defaults.bypass_change_detection(),
+                    );
+                    tool_defaults.set_changed();
                 }
                 SettingsTab::Rendering => {
                     reflect_grid(
@@ -199,9 +208,8 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 if limits.is_some() { " +limits" } else { "" },
                 if motor.is_some() { " +motor" } else { "" },
             ),
-            JointKind::Weld => "Weld".to_owned(),
             JointKind::Slider { limits, motor, .. } => format!(
-                "Slider{}{}",
+                "Prismatic{}{}",
                 if limits.is_some() { " +limits" } else { "" },
                 if motor.is_some() { " +motor" } else { "" },
             ),

@@ -11,6 +11,7 @@ use crate::interaction::gesture::{AxisConstraint, GestureConstraints};
 use crate::interaction::selection::Selection;
 use crate::interaction::snap::{SnapKind, SnappedCursor};
 use bevy::color::palettes::css;
+use bevy::gizmos::config::GizmoConfigGroup;
 use bevy::prelude::*;
 
 /// Screen-constant glyph half-size in world units.
@@ -86,11 +87,18 @@ pub fn draw_constraint_guides(
     }
 }
 
+/// Gizmo group for the selection outline, configured with a negative
+/// `depth_bias` (see the interaction plugin) so the outline draws in front
+/// of every extruded body prism and the grid — a fixed `z` cannot beat the
+/// front layer's own prism (feedback 2.2).
+#[derive(Default, Reflect, GizmoConfigGroup)]
+pub struct SelectionGizmos;
+
 /// Outlines selected bodies with their world-space contours.
 pub fn draw_selection_outlines(
     selection: Res<Selection>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
-    mut gizmos: Gizmos,
+    mut gizmos: Gizmos<SelectionGizmos>,
 ) {
     for entity in selection.iter() {
         let Ok((shape, transform)) = bodies.get(entity) else {
@@ -106,9 +114,7 @@ pub fn draw_selection_outlines(
             if let Some(first) = points.first().copied() {
                 points.push(first);
             }
-            // Drawn in front of every body layer so the selection is
-            // always visible above outlines and grids.
-            gizmos.linestrip(points.into_iter().map(|p| p.extend(6.0)), css::ORANGE);
+            gizmos.linestrip_2d(points, css::ORANGE);
         }
     }
 }

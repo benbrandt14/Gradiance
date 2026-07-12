@@ -7,6 +7,7 @@
 use crate::core::ids::IdIndex;
 use crate::domain::Body;
 use crate::domain::joint::{JointDef, JointKind};
+use crate::domain::layers::{LayerMask32, layer_hue};
 use crate::domain::settings::DebugSettings;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
@@ -25,15 +26,31 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 /// Draws the enabled debug overlays.
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
-    bodies: Query<(Entity, &ShapeDef, &Transform), With<Body>>,
+    bodies: Query<(Entity, &ShapeDef, &Transform, &LayerMask32), With<Body>>,
     joints: Query<&JointDef>,
     index: Res<IdIndex>,
     poses: Query<&Transform, With<Body>>,
     physics: PhysicsQueries,
     mut gizmos: Gizmos,
 ) {
-    for (entity, shape, transform) in &bodies {
+    for (entity, shape, transform, layers) in &bodies {
         let infinite = shape.contains_half_plane();
+
+        // Collision-set visualization: outline in the front-most bit's hue,
+        // matching the swatches in the layers UI (feedback 5.4).
+        if debug.show_layers
+            && !infinite
+            && let Some((front, _)) = layers.occupied_range()
+        {
+            let color = Color::hsl(layer_hue(front), 0.75, 0.55);
+            for ring in polygonize(shape).rings() {
+                let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
+                if let Some(first) = pts.first().copied() {
+                    pts.push(first);
+                }
+                gizmos.linestrip_2d(pts, color);
+            }
+        }
 
         if debug.show_colliders && !infinite {
             let contours = polygonize(shape);
@@ -117,7 +134,6 @@ fn draw_joint_anchors(
     for def in joints {
         let color = match def.kind {
             JointKind::Hinge { .. } => css::ORANGE,
-            JointKind::Weld => css::CRIMSON,
             JointKind::Slider { .. } => css::DEEP_SKY_BLUE,
             JointKind::Spring { .. } => css::SPRING_GREEN,
         };

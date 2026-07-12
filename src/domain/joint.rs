@@ -81,9 +81,6 @@ pub enum JointKind {
         /// Optional angular motor.
         motor: Option<MotorDef>,
     },
-    /// Fixed: bodies are rigidly welded (rigid kinematic chains compose
-    /// from welds).
-    Weld,
     /// Prismatic: bodies slide along `axis` through the anchor.
     Slider {
         /// Slide axis in body-A local space (unit length).

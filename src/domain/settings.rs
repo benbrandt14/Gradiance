@@ -110,6 +110,25 @@ impl Default for SnapConfig {
     }
 }
 
+/// Tool-creation defaults (editor configuration, the Config seam).
+///
+/// Non-authored, non-persisted workstation preferences the tools consult at
+/// commit time — like [`DebugSettings`], these are not scene state.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, bevy::reflect::Reflect)]
+pub struct ToolDefaults {
+    /// New sliders get travel limits `[0, drag length]` — the drag *draws*
+    /// the allowed travel. Off = unlimited sliders (the old behavior).
+    pub slider_limits: bool,
+}
+
+impl Default for ToolDefaults {
+    fn default() -> Self {
+        Self {
+            slider_limits: true,
+        }
+    }
+}
+
 /// Simulation tuning (the Algodoo-style "Simulation" settings tab).
 ///
 /// Authored/persisted like the grid; the physics seam applies changes to
@@ -188,6 +207,9 @@ pub struct DebugSettings {
     pub show_joint_anchors: bool,
     /// Draw velocity vectors (and mark sleeping bodies).
     pub show_velocities: bool,
+    /// Color every body's outline by its front-most collision-layer bit
+    /// (the collision-set visualization, feedback 5.4).
+    pub show_layers: bool,
     /// Draw contact points and their impulse-scaled normals.
     pub show_contacts: bool,
 }
@@ -200,6 +222,7 @@ impl Default for DebugSettings {
             show_origins: false,
             show_joint_anchors: true,
             show_velocities: false,
+            show_layers: false,
             show_contacts: false,
         }
     }

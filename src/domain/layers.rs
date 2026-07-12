@@ -74,6 +74,20 @@ impl LayerMask32 {
     }
 }
 
+/// A distinguishable hue (degrees) for layer `bit`, shared by the viewport
+/// layer overlay and the layers UI so the same layer always shows the same
+/// color. Golden-angle walk: neighboring bits get far-apart hues.
+///
+/// ```
+/// # use gradiance::domain::layers::layer_hue;
+/// assert_eq!(layer_hue(0), 0.0);
+/// assert!((layer_hue(1) - 137.508).abs() < 1e-3);
+/// assert!(layer_hue(7) < 360.0);
+/// ```
+pub fn layer_hue(bit: u32) -> f32 {
+    (bit as f32 * 137.508) % 360.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

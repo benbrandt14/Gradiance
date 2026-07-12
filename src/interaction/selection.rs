@@ -176,7 +176,9 @@ impl SelectTransition {
     }
 }
 
-fn dedup_preserving_order(entities: Vec<Entity>) -> Vec<Entity> {
+/// Deduplicates entities, preserving first-seen order (the order
+/// `SetBodies` keeps).
+pub(crate) fn dedup_preserving_order(entities: Vec<Entity>) -> Vec<Entity> {
     let mut out = Vec::with_capacity(entities.len());
     for e in entities {
         if !out.contains(&e) {

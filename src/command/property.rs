@@ -1,7 +1,7 @@
 //! Property edits: typed authored-component changes, batched and undoable.
 
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use crate::domain::appearance::Appearance;
 use crate::domain::joint::JointDef;
 use crate::domain::layers::LayerMask32;
@@ -106,18 +106,15 @@ pub struct PropertyChange {
 /// Applies a batch of property changes as one undo step (multi-select
 /// edits are one gesture, one command).
 #[derive(Debug)]
-pub struct SetPropertyCommand {
+pub struct PropertyEditCommand {
     /// The changes to apply.
     pub changes: Vec<PropertyChange>,
 }
 
-impl SetPropertyCommand {
+impl PropertyEditCommand {
     fn write_all(&self, world: &mut World, use_new: bool) -> Result<(), CommandError> {
         for change in &self.changes {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(change.id)
-                .ok_or(CommandError::MissingEntity(change.id))?;
+            let entity = resolve(world, change.id)?;
             let value = if use_new { &change.new } else { &change.old };
             value.write(world, entity)?;
         }
@@ -125,7 +122,7 @@ impl SetPropertyCommand {
     }
 }
 
-impl GameCommand for SetPropertyCommand {
+impl GameCommand for PropertyEditCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         if self.changes.is_empty() {
             return Err(CommandError::NoEffect);
@@ -138,6 +135,6 @@ impl GameCommand for SetPropertyCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Edit properties"
+        crate::command::intent::name::PROPERTY_EDIT
     }
 }

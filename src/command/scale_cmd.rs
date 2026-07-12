@@ -1,7 +1,7 @@
 //! Scaling bodies about a pivot in a chosen frame.
 
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::scale::{body_scale_matrix, scale_point, scale_shape};
@@ -52,10 +52,7 @@ impl GameCommand for ScaleCommand {
         // Resolve and validate everything before mutating anything.
         let mut staged = Vec::with_capacity(self.targets.len());
         for &id in &self.targets {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(id)
-                .ok_or(CommandError::MissingEntity(id))?;
+            let entity = resolve(world, id)?;
             let shape = world
                 .get::<ShapeDef>(entity)
                 .ok_or(CommandError::MissingEntity(id))?
@@ -95,10 +92,7 @@ impl GameCommand for ScaleCommand {
 
     fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
         for (id, shape, pose) in &self.old {
-            let entity = world
-                .resource::<IdIndex>()
-                .entity(*id)
-                .ok_or(CommandError::MissingEntity(*id))?;
+            let entity = resolve(world, *id)?;
             let mut entity_mut = world.entity_mut(entity);
             if let Some(mut s) = entity_mut.get_mut::<ShapeDef>() {
                 *s = shape.clone();
@@ -111,6 +105,6 @@ impl GameCommand for ScaleCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Scale"
+        crate::command::intent::name::SCALE
     }
 }

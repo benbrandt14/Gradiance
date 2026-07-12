@@ -29,7 +29,25 @@ exclusive doorway (`run_scripts`, which dispatches before the command stack, so
   Missing files warn and are skipped.
 - **Tests.** Submit source to `ScriptInputs` and step a frame. A scene fixture
   becomes a few lines of lisp asserted against the real authored world (see
-  `tests/scripting.rs`).
+  `tests/it/scripting.rs`).
+
+### Hot reload
+
+Every `--script` file is watched while the app runs: **save the file and it
+re-runs** (~0.5 s poll), no restart. Write files to converge under re-runs:
+
+- **Definitions converge.** `register-action` (and future `register-*` verbs)
+  *replace by name*, so a reloaded file updates your actions in place instead
+  of duplicating them. Prefer registrations and helper `define`s in watched
+  files.
+- **Edits re-apply.** Spawn/cut/`sim-set` calls run again as ordinary new
+  undoable commands — a reloaded scene-builder script will spawn a second
+  copy of its scene. Either keep world-building out of watched files after the
+  first run, or make it self-cleaning. Undo (`Ctrl+Z`) reverts a reload's
+  batch like any other edit.
+
+A file that is missing at launch (warned and skipped) starts running as soon
+as it appears on disk.
 
 ## The governance model (why scripts can't break the rules)
 
@@ -130,11 +148,15 @@ constant, so a new verb touches three (edits: four) places:
    - a **config** verb reads the settings mirror / queues a reflect-path write;
    - a **query** verb reads the `SceneView` snapshot and returns a number;
    - an **editor** verb queues an editor-state change.
-3. **Edits only:** register the intent type in `ScriptPlugin` via
-   `IntentDispatch::register::<MyIntent>()` so the emitted value reaches its bus.
-4. Add a test (a bridge-level bus check and/or an end-to-end `tests/scripting.rs`
+3. **Edits only:** add a row to `edit_bindings()` in `src/script/bridge.rs`
+   (op name + the intent type it emits). `ScriptPlugin` registers the bus
+   writer from that table, and `tests/it/registry_validation.rs` fails if a
+   catalog Edit op has no binding, an unregistered intent, or an intent
+   missing from the reflection registry.
+4. Add a test (a bridge-level bus check and/or an end-to-end `tests/it/scripting.rs`
    case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
-   `cargo test` green.
+   `cargo test` green — the validation test above already covers the
+   catalog↔builtin drift cases.
 
 `steel` may be imported only in `src/script/{bridge,reflect_bridge}` and `egui`
 only in `src/ui/` — `tests/boundaries.rs` enforces both.

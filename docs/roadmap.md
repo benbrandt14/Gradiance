@@ -196,11 +196,34 @@ missing foundation:**
 
 ## M16 residual / deferred (Algodoo parity, queued)
 
-- Selection works from every tool (click falls through to select) (2.1)
-- Shift-drag / modifier semantics rework; no gesture dead-ends (1.1, 2.2)
+- Selection works from every tool (click falls through to select) (2.1) —
+  **landed**: `tools/click_select.rs` applies a sub-deadzone click no tool
+  consumed (no commit intent, no live draft) through the same
+  `SelectTransition` seam, in every tool state.
+- Shift-drag / modifier semantics rework; no gesture dead-ends (1.1, 2.2) —
+  **landed**: `Shift` is selection-only (click = toggle, drag from a body =
+  additive rubber band via the `ShiftPick` state — never a move, never an
+  axis warp); the dominant-axis lock moved to `X`+`Y`. The selection outline
+  now draws front-biased (own gizmo group), visible above prisms and grid.
 - Play-mode right-drag applies torque (dynamic rotate, non-fixed pivot) (2.6)
+  — **landed**: while playing, the rotate gesture servos each selected body's
+  angular velocity toward the gesture angle (`physics::grab::MouseTwist`,
+  the angular sibling of the drag spring) instead of kinematic-holding poses;
+  translation stays with the solver so a resting body lifts its opposing
+  edge. Physical interaction — no command, not undoable, like the drag grab.
 - Inspector re-architecture: context-menu-first, inspector as pop-out (2.8)
-- Collision-layer set visualization UI (5.4)
+  — **landed**: the property sections are host-agnostic renderers
+  (`ui/inspector.rs`) shared by the right-click menu (Material/Appearance
+  collapsing sections + "Properties…" command) and the *Properties* pop-out,
+  which is closed by default and opened from the menu or the transport
+  toggle. Right-click now selects the clicked body when it isn't already in
+  the selection, so the menu always binds to what was clicked.
+- Collision-layer set visualization UI (5.4) — **landed**: the shared
+  layers section is now one grid — color-swatch + scene-occupancy header,
+  a **member** row (occupancy = render depth) and a **hits** row (collision
+  filters) — plus a `DebugSettings.show_layers` viewport overlay that
+  outlines every body in its front-most layer's hue (`layer_hue` is shared
+  by the UI swatches and the overlay, so colors always match).
 - Joint config also reachable via right-click context menu (not only the
   select-and-inspect flow landed in M15) (2.8)
 - **Deferred (Bevy audit):** migrate tool gestures from polling
@@ -237,10 +260,29 @@ missing foundation:**
 
 ## M20 — Constraints II
 
+- Joint limit handles (user request, 2026-07-12) — **landed**: hinge and
+  prismatic limits are draggable handles on the glyph itself (hinge: an
+  exact allowed-rotation arc with end handles; prismatic: the travel caps),
+  with a live tentative preview and one undoable `PropertyEditIntent` per
+  drag. Joints are selectable **anywhere on their glyph** (ring / travel
+  line / spring coil — shared `glyph_distance` drives both left-click and
+  right-click picking). The slider is labeled *Prismatic* in the UI.
+
 - Weld rework: merge bodies into one (SDF `Union` — the tree makes this
-  natural) or make-static, replacing the weld-as-joint model (4.2)
+  natural) or make-static, replacing the weld-as-joint model (4.2) —
+  **landed**: the weld tool merges the two topmost bodies at the click
+  (`MergeIntent`) or pins a lone body by making it static (a
+  `PropertyEditIntent`); `JointKind::Weld` is removed everywhere
+  (`FORMAT_VERSION` → 3; the infinite ground is never a weld target —
+  welding onto it *is* the make-static case).
 - Slider default limits option; sprite-based joint glyphs with outlines
-  (4.7); motor state (direction/torque) visualization (4.1)
+  (4.7); motor state (direction/torque) visualization (4.1) — **landed**
+  (sans sprites): new sliders default their travel to `[0, drag length]`
+  (the drag *draws* the travel; `ToolDefaults.slider_limits` toggle in
+  Grid & Snap → Tools), the slider glyph renders the actual travel span
+  with end caps, glyphs are grey with a dark under-stroke, and motor
+  arrows scale with drive speed (direction *and* magnitude). Sprite-based
+  glyphs remain open.
 - Springs/dampers — **landed** as the **strut** tool (`JointKind::Spring`
   over avian's `DistanceJoint` + `JointDamping`): drag from one anchor to the
   other (drag length = rest length), configurable length bounds, spring

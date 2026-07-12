@@ -2,13 +2,11 @@
 //! selection semantics (with and without constraints), and settings
 //! application — everything below the egui skin, tested headless.
 
-mod harness;
-
+use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::Friction;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
-use harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 
 fn spawn_box(app: &mut App, pos: Vec2) -> StableId {
     let record = box_record(pos, 40.0, 20.0);
@@ -97,6 +95,37 @@ fn property_edit_batches_multi_target_into_one_undo_step() {
             "undo restored both targets"
         );
     }
+}
+
+#[test]
+fn layer_filter_edit_round_trips_and_undoes() {
+    // The layers UI's "hits" row commits filter changes through the same
+    // PropertyEditIntent seam as memberships (feedback 5.4).
+    let mut app = paused_app();
+    let a = spawn_box(&mut app, Vec2::ZERO);
+    let entity = entity_of(&app, a).unwrap();
+    let old_mask = *app.world().get::<LayerMask32>(entity).unwrap();
+    let new_mask = LayerMask32 {
+        memberships: old_mask.memberships,
+        filters: old_mask.filters & !0b10, // stop colliding with layer 1
+    };
+
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![PropertyChange {
+            id: a,
+            old: PropertyValue::Layers(old_mask),
+            new: PropertyValue::Layers(new_mask),
+        }],
+    });
+    app.update();
+    assert_eq!(*app.world().get::<LayerMask32>(entity).unwrap(), new_mask);
+
+    undo(&mut app);
+    assert_eq!(
+        *app.world().get::<LayerMask32>(entity).unwrap(),
+        old_mask,
+        "undo restores the collision set"
+    );
 }
 
 #[test]

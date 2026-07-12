@@ -49,14 +49,24 @@ accept scientific notation.
 ## Building
 
 ```sh
-# Linux build dependencies
-sudo apt-get install libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev
+# Linux build dependencies (clang+lld: fast linking, see .cargo/config.toml)
+sudo apt-get install libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
 
 cargo run --release
+
+# Development inner loop: dynamic linking (fast relinks) + asset hot-reload
+cargo run --features dev
+
+# Reopen where you left off: the scene is autosaved on exit
+cargo run --features dev -- --resume
+
+# Author from a file: runs at startup and hot-reloads on every save
+cargo run --features dev -- --script my-scene.scm
 ```
 
 Requires Rust ≥ 1.95. Releases are single self-contained binaries (shaders
-are embedded).
+are embedded). If your machine lacks `lld`, comment out the `rustflags` line
+in `.cargo/config.toml`.
 
 ## Architecture
 

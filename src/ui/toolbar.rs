@@ -14,7 +14,7 @@ const TOOLS: [(ToolState, &str, &str); 11] = [
     (ToolState::Polygon, "Polygon", "P"),
     (ToolState::Hinge, "Hinge", "H"),
     (ToolState::Weld, "Weld", "W"),
-    (ToolState::Slider, "Slider", "R"),
+    (ToolState::Slider, "Prismatic", "R"),
     (ToolState::Strut, "Strut", "T"),
     (ToolState::Ground, "Ground", "G"),
     (ToolState::Cut, "Cut", "K"),
@@ -31,6 +31,9 @@ pub fn toolbar(
     mut undo: MessageWriter<UndoIntent>,
     mut redo: MessageWriter<RedoIntent>,
     mut settings: ResMut<crate::ui::settings::SettingsWindow>,
+    mut plot: ResMut<crate::ui::plot::PlotPanel>,
+    mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
+    mut console: ResMut<crate::ui::console::ScriptConsole>,
     mut rig: ResMut<crate::interaction::camera::CameraRig>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -81,6 +84,31 @@ pub fn toolbar(
                     rig.homing = true;
                 }
                 ui.separator();
+                // Toggles for the hotkey-only panels, so they're discoverable
+                // without knowing the `\` / backquote shortcuts. The buttons
+                // reflect each panel's open state.
+                if ui
+                    .selectable_label(inspector.open, "Properties")
+                    .on_hover_text("properties pop-out (also in the right-click menu)")
+                    .clicked()
+                {
+                    inspector.open = !inspector.open;
+                }
+                if ui
+                    .selectable_label(plot.is_open(), "Plot")
+                    .on_hover_text("live plot of the selected body/joint (\\)")
+                    .clicked()
+                {
+                    plot.toggle();
+                }
+                if ui
+                    .selectable_label(console.is_open(), "λ Script")
+                    .on_hover_text("scripting console / REPL (`)")
+                    .clicked()
+                {
+                    console.toggle();
+                }
+                ui.separator();
                 if ui.button("⚙ Settings").clicked() {
                     settings.open = !settings.open;
                 }
@@ -91,15 +119,26 @@ pub fn toolbar(
         .resizable(false)
         .anchor(egui::Align2::LEFT_CENTER, [8.0, 0.0])
         .show(ctx, |ui| {
-            for (state, name, key) in TOOLS {
-                let selected = *tool.get() == state;
-                if ui
-                    .selectable_label(selected, format!("{name} ({key})"))
-                    .clicked()
-                {
-                    next_tool.set(state);
-                }
+            if let Some(state) = tools_palette_ui(ui, *tool.get()) {
+                next_tool.set(state);
             }
         });
     Ok(())
+}
+
+/// The tool-palette buttons: highlights `current`, returns a clicked tool.
+/// Host-agnostic (pure `Ui` in, choice out) so `tests/it/ui_panels.rs` can
+/// exercise it under `egui_kittest`.
+pub fn tools_palette_ui(ui: &mut egui::Ui, current: ToolState) -> Option<ToolState> {
+    let mut clicked = None;
+    for (state, name, key) in TOOLS {
+        let selected = current == state;
+        if ui
+            .selectable_label(selected, format!("{name} ({key})"))
+            .clicked()
+        {
+            clicked = Some(state);
+        }
+    }
+    clicked
 }

@@ -1,5 +1,5 @@
 //! Precision widgets: commit-on-release drags with scientific notation
-//! and middle-click default reset; range selectors for `[min, max]` pairs.
+//! and middle-click default reset.
 //!
 //! Curve-picker widgets (Lightroom-style response curves) and symbolic /
 //! equation input are planned extensions of this module: both slot in as
@@ -58,34 +58,4 @@ pub fn precise_drag(
         }
     }
     Commit::None
-}
-
-/// A `[min, max]` range editor (two committing drags that keep order).
-pub fn range_selector(
-    ui: &mut Ui,
-    id: egui::Id,
-    range: &mut [f32; 2],
-    default: [f32; 2],
-    speed: f32,
-) -> Commit<[f32; 2]> {
-    let mut committed: Option<[f32; 2]> = None;
-    let before = *range;
-    ui.horizontal(|ui| {
-        if let Commit::Done(old, _) = precise_drag(ui, id.with(0), &mut range[0], default[0], speed)
-        {
-            committed = Some([old, before[1]]);
-        }
-        ui.label("..");
-        if let Commit::Done(old, _) = precise_drag(ui, id.with(1), &mut range[1], default[1], speed)
-        {
-            committed = Some([before[0], old]);
-        }
-    });
-    if range[0] > range[1] {
-        range.swap(0, 1);
-    }
-    match committed {
-        Some(old) => Commit::Done(old, *range),
-        None => Commit::None,
-    }
 }

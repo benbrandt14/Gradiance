@@ -1,17 +1,9 @@
 //! Spawn, delete, and duplicate commands.
 
 use crate::command::snapshot::BodyRecord;
-use crate::command::{CommandError, GameCommand};
-use crate::core::ids::{IdIndex, StableId};
+use crate::command::{CommandError, GameCommand, resolve};
+use crate::core::ids::StableId;
 use bevy::prelude::*;
-
-/// Resolves a stable id to its live entity.
-fn resolve(world: &World, id: StableId) -> Result<Entity, CommandError> {
-    world
-        .resource::<IdIndex>()
-        .entity(id)
-        .ok_or(CommandError::MissingEntity(id))
-}
 
 /// Spawns one body from a record.
 #[derive(Debug)]
@@ -34,7 +26,7 @@ impl GameCommand for SpawnBodyCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Spawn body"
+        crate::command::intent::name::SPAWN_BODY
     }
 }
 
@@ -99,7 +91,7 @@ impl GameCommand for DeleteCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Delete"
+        crate::command::intent::name::DELETE
     }
 }
 
@@ -250,6 +242,6 @@ impl GameCommand for DuplicateCommand {
     }
 
     fn name(&self) -> &'static str {
-        "Duplicate"
+        crate::command::intent::name::DUPLICATE
     }
 }

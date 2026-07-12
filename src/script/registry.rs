@@ -18,8 +18,10 @@
 /// so the two cannot drift. Referencing one `const` in both places makes a
 /// mismatch a compile-time impossibility rather than a runtime bug.
 pub mod name {
-    /// `(cut ax ay bx by width)` — sever bodies along a stroke.
-    pub const CUT: &str = "cut";
+    /// `(cut ax ay bx by width)` — re-exported from
+    /// [`intent::name`](crate::command::intent::name) so verb, intent, and
+    /// command share one greppable constant.
+    pub use crate::command::intent::name::CUT;
     /// `(spawn-box x y w h)` — author a box body.
     pub const SPAWN_BOX: &str = "spawn-box";
     /// `(spawn-circle x y r)` — author a circle body.
@@ -53,6 +55,10 @@ pub mod name {
     /// `(describe name)` — the signature and doc of one operation.
     pub const DESCRIBE: &str = "describe";
 }
+
+/// The `SimSettings` reflect paths `sim-get`/`sim-set` advertise; the
+/// validation test resolves each, so a field rename cannot strand one.
+pub const SIM_SETTING_PATHS: &[&str] = &["gravity.x", "gravity.y", "speed", "substeps"];
 
 /// Which sanctioned seam an operation routes through — the governance category
 /// from `docs/script-lisp-decision.md` (reads total, writes seam-mediated).
