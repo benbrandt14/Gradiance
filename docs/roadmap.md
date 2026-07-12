@@ -218,7 +218,12 @@ missing foundation:**
   which is closed by default and opened from the menu or the transport
   toggle. Right-click now selects the clicked body when it isn't already in
   the selection, so the menu always binds to what was clicked.
-- Collision-layer set visualization UI (5.4)
+- Collision-layer set visualization UI (5.4) — **landed**: the shared
+  layers section is now one grid — color-swatch + scene-occupancy header,
+  a **member** row (occupancy = render depth) and a **hits** row (collision
+  filters) — plus a `DebugSettings.show_layers` viewport overlay that
+  outlines every body in its front-most layer's hue (`layer_hue` is shared
+  by the UI swatches and the overlay, so colors always match).
 - Joint config also reachable via right-click context menu (not only the
   select-and-inspect flow landed in M15) (2.8)
 - **Deferred (Bevy audit):** migrate tool gestures from polling
