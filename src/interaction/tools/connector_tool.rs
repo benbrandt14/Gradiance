@@ -65,7 +65,13 @@ impl ManipTool for ConnectorDraft {
             let commit = if ctx.tool == ToolState::Weld {
                 build_weld(anchor, world)
             } else {
-                build_joint(ctx.tool, anchor, ctx.cursor.unwrap_or(anchor), world)
+                build_joint(
+                    ctx.tool,
+                    anchor,
+                    ctx.cursor.unwrap_or(anchor),
+                    ctx.defaults,
+                    world,
+                )
             };
             if let Some(commit) = commit {
                 return ManipOutput::commit(commit);
@@ -127,6 +133,7 @@ fn build_joint(
     tool: ToolState,
     anchor: Vec2,
     release: Vec2,
+    defaults: crate::domain::settings::ToolDefaults,
     world: &ToolWorld,
 ) -> Option<ToolCommit> {
     // The two topmost bodies at the anchor; one body → world pin.
@@ -144,10 +151,15 @@ fn build_joint(
             } else {
                 drag.normalize()
             };
+            // Default travel limits (ToolDefaults option): the drag *draws*
+            // the allowed travel, `[0, drag length]` along the axis. A short
+            // drag never carried travel intent, so it stays unlimited.
+            let limits = (defaults.slider_limits && drag.length() >= AXIS_THRESHOLD)
+                .then_some([0.0, drag.length()]);
             JointKind::Slider {
                 // Authored in body-A local space.
                 axis: Vec2::from_angle(-pose_a.rot).rotate(world_axis),
-                limits: None,
+                limits,
                 motor: None,
             }
         }

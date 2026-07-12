@@ -268,7 +268,13 @@ missing foundation:**
   (`FORMAT_VERSION` → 3; the infinite ground is never a weld target —
   welding onto it *is* the make-static case).
 - Slider default limits option; sprite-based joint glyphs with outlines
-  (4.7); motor state (direction/torque) visualization (4.1)
+  (4.7); motor state (direction/torque) visualization (4.1) — **landed**
+  (sans sprites): new sliders default their travel to `[0, drag length]`
+  (the drag *draws* the travel; `ToolDefaults.slider_limits` toggle in
+  Grid & Snap → Tools), the slider glyph renders the actual travel span
+  with end caps, glyphs are grey with a dark under-stroke, and motor
+  arrows scale with drive speed (direction *and* magnitude). Sprite-based
+  glyphs remain open.
 - Springs/dampers — **landed** as the **strut** tool (`JointKind::Spring`
   over avian's `DistanceJoint` + `JointDamping`): drag from one anchor to the
   other (drag length = rest length), configurable length bounds, spring
