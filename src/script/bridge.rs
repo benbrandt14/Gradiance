@@ -165,9 +165,8 @@ fn load_startup_scripts(
 /// [`ScriptInputs`] doorway when it changes on disk.
 ///
 /// Re-running a file converges for *definitions* (`register-action` and
-/// friends upsert by name — see [`ScriptActions::upsert`]); *edit* verbs
-/// re-apply as ordinary new undoable commands. Semantics for authors:
-/// `docs/scripting.md`.
+/// friends upsert by name — see [`ScriptActions`]); *edit* verbs re-apply as
+/// ordinary new undoable commands. Semantics for authors: `docs/scripting.md`.
 #[derive(Resource)]
 pub struct ScriptWatch {
     /// Watched files, each with the mtime last seen (`None` = unreadable at
