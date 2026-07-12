@@ -129,6 +129,35 @@ fn layer_filter_edit_round_trips_and_undoes() {
 }
 
 #[test]
+fn magnet_property_edit_round_trips_and_undoes() {
+    use gradiance::domain::magnet::Magnet;
+    let mut app = paused_app();
+    let a = spawn_box(&mut app, Vec2::ZERO);
+    let entity = entity_of(&app, a).unwrap();
+    assert!(app.world().get::<Magnet>(entity).is_none());
+
+    let magnet = Magnet {
+        strength: -75.0,
+        falloff: 3.0,
+    };
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![PropertyChange {
+            id: a,
+            old: PropertyValue::Magnet(None),
+            new: PropertyValue::Magnet(Some(magnet)),
+        }],
+    });
+    app.update();
+    assert_eq!(app.world().get::<Magnet>(entity).copied(), Some(magnet));
+
+    undo(&mut app);
+    assert!(
+        app.world().get::<Magnet>(entity).is_none(),
+        "undo demagnetizes"
+    );
+}
+
+#[test]
 fn invalid_shape_in_a_property_batch_refuses_the_whole_command() {
     let mut app = paused_app();
     let a = spawn_box(&mut app, Vec2::ZERO);

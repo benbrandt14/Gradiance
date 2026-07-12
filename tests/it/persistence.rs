@@ -4,7 +4,9 @@
 use crate::harness::{body_count, box_record, entity_of, paused_app, undo};
 use avian2d::prelude::{ColliderDensity, Friction, GravityScale, Restitution, RigidBody};
 use bevy::prelude::*;
-use gradiance::domain::settings::{GridSettings, GridSystem, SimSettings, SnapConfig};
+use gradiance::domain::settings::{
+    GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
+};
 use gradiance::persist::{from_ron, to_ron};
 use gradiance::prelude::*;
 use proptest::prelude::*;
@@ -125,6 +127,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                         filters,
                     },
                     groups,
+                    magnet: None,
                 }
             },
         )
@@ -470,6 +473,29 @@ fn joints_survive_files_and_resolve_after_load() {
     assert!(entity_of(&app2, a).is_some() && entity_of(&app2, b).is_some());
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn pre_magnet_files_still_parse() {
+    // `magnet` is serde-defaulted: files written before magnetism load with
+    // no magnetized bodies (no format bump needed).
+    let scene = SceneRecord {
+        version: gradiance::persist::FORMAT_VERSION,
+        app_version: String::new(),
+        bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
+        joints: vec![],
+        environment: EnvironmentRecord {
+            sim: SimSettings::default(),
+            grid: GridSettings::default(),
+            snap: SnapConfig::default(),
+            render: RenderSettings::default(),
+        },
+    };
+    let text = to_ron(&scene).unwrap();
+    let cut = text.replace("magnet: None,", "");
+    assert_ne!(text, cut, "fixture actually removed the field");
+    let parsed = from_ron(&cut).expect("pre-magnet file parses");
+    assert_eq!(parsed.bodies[0].magnet, None);
 }
 
 #[test]

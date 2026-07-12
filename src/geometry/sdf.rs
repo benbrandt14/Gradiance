@@ -39,6 +39,25 @@ use crate::core::constants::{GROUND_SLAB_DEPTH, GROUND_SLAB_WIDTH};
 use crate::domain::shape::{CsgOp, ShapeDef};
 use bevy::math::Vec2;
 
+/// The field gradient of `shape`'s SDF at `p` (central differences).
+/// Points away from the surface outside the shape; unit-ish length near
+/// smooth boundaries. Used by field forces (magnetism) to aim along the
+/// actual surface normal instead of at the body center.
+///
+/// ```
+/// # use gradiance::geometry::sdf::gradient;
+/// # use gradiance::domain::shape::ShapeDef;
+/// # use bevy::math::Vec2;
+/// let circle = ShapeDef::Circle { radius: 10.0 };
+/// let g = gradient(&circle, Vec2::new(20.0, 0.0), 0.1);
+/// assert!((g - Vec2::X).length() < 1e-2);
+/// ```
+pub fn gradient(shape: &ShapeDef, p: Vec2, eps: f32) -> Vec2 {
+    let dx = eval(shape, p + Vec2::X * eps) - eval(shape, p - Vec2::X * eps);
+    let dy = eval(shape, p + Vec2::Y * eps) - eval(shape, p - Vec2::Y * eps);
+    Vec2::new(dx, dy) / (2.0 * eps)
+}
+
 /// Evaluates the signed distance field at `p` (shape-local space).
 pub fn eval(shape: &ShapeDef, p: Vec2) -> f32 {
     match shape {

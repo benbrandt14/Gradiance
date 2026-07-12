@@ -235,6 +235,7 @@ impl Plugin for CommandPlugin {
         // types, avian components), giving the read-total path a complete
         // registry without naming those types individually.
         app.register_type::<intent::SpawnBodyIntent>();
+        app.register_type::<crate::domain::magnet::Magnet>();
         app.register_type::<intent::DeleteIntent>();
         app.register_type::<intent::DuplicateIntent>();
         app.register_type::<intent::CommitTransformIntent>();

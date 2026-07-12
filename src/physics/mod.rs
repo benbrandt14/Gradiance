@@ -10,6 +10,7 @@
 //! ordinary `Static` body with a large box shape.
 
 pub mod body_sync;
+pub mod forces;
 pub mod grab;
 pub mod hold;
 pub mod joint_sync;
@@ -68,6 +69,7 @@ impl Plugin for GradiancePhysicsPlugin {
                 hold::apply_kinematic_hold,
                 grab::apply_mouse_spring,
                 grab::apply_mouse_twist,
+                forces::apply_magnet_forces.run_if(in_state(GameState::Playing)),
             ),
         );
         app.add_systems(

@@ -50,6 +50,7 @@ pub struct BodyProps<'w, 's> {
     /// viewport layer visualization).
     debug: ResMut<'w, crate::domain::settings::DebugSettings>,
     body_q: Query<'w, 's, &'static RigidBody, With<Body>>,
+    magnet_q: Query<'w, 's, &'static crate::domain::magnet::Magnet, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -256,6 +257,82 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
             locked,
             &mut props.edits,
         );
+    }
+    magnet_block(ui, selection, props, primary);
+}
+
+/// The magnet field editor: enable toggle + strength (sign = polarity) and
+/// falloff. Commits `PropertyValue::Magnet` through the shared intent seam.
+fn magnet_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use crate::domain::magnet::Magnet;
+    let current = props.magnet_q.get(primary).ok().copied();
+    let mut on = current.is_some();
+    if ui
+        .checkbox(&mut on, "magnet")
+        .on_hover_text("SDF field force: like signs attract, flip one sign to repel")
+        .changed()
+    {
+        let new = on.then(|| current.unwrap_or_default());
+        commit_magnets(selection, props, new);
+    }
+    let Some(magnet) = current else {
+        return;
+    };
+    let mut strength = magnet.strength;
+    ui.horizontal(|ui| {
+        ui.label("strength");
+        if let Commit::Done(_, new) =
+            precise_drag(ui, ui.id().with("mag-strength"), &mut strength, 50.0, 0.5)
+        {
+            commit_magnets(
+                selection,
+                props,
+                Some(Magnet {
+                    strength: new,
+                    ..magnet
+                }),
+            );
+        }
+    });
+    let mut falloff = magnet.falloff;
+    ui.horizontal(|ui| {
+        ui.label("falloff");
+        if let Commit::Done(_, new) =
+            precise_drag(ui, ui.id().with("mag-falloff"), &mut falloff, 2.0, 0.02)
+        {
+            commit_magnets(
+                selection,
+                props,
+                Some(Magnet {
+                    falloff: new.max(0.1),
+                    ..magnet
+                }),
+            );
+        }
+    });
+}
+
+/// Commits one batched magnet edit across the selection (each target's own
+/// prior value captured for undo).
+fn commit_magnets(
+    selection: &Selection,
+    props: &mut BodyProps,
+    new: Option<crate::domain::magnet::Magnet>,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = props.ids.get(e).ok().copied()?;
+            let old = props.magnet_q.get(e).ok().copied();
+            Some(PropertyChange {
+                id,
+                old: PropertyValue::Magnet(old),
+                new: PropertyValue::Magnet(new),
+            })
+        })
+        .collect();
+    if !changes.is_empty() {
+        props.edits.write(PropertyEditIntent { changes });
     }
 }
 

@@ -231,3 +231,68 @@ fn substep_trace_records_one_entry_per_substep() {
         "every substep recorded the one dynamic body"
     );
 }
+
+#[test]
+fn magnets_attract_and_repel_over_the_sdf_field() {
+    use gradiance::domain::magnet::Magnet;
+    let mut app = headless_app();
+    // No gravity: only the field acts.
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+
+    let spawn_magnet = |app: &mut App, x: f32, strength: f32| {
+        let mut record = box_record(Vec2::new(x, 0.0), 30.0, 30.0);
+        record.magnet = Some(Magnet {
+            strength,
+            falloff: 2.0,
+        });
+        let id = record.id;
+        app.world_mut().write_message(SpawnBodyIntent { record });
+        app.update();
+        id
+    };
+
+    // Like-signed coupling attracts.
+    let a = spawn_magnet(&mut app, -80.0, 200.0);
+    let b = spawn_magnet(&mut app, 80.0, 200.0);
+    let gap = |app: &mut App, a: StableId, b: StableId| {
+        let pa = app
+            .world()
+            .get::<Transform>(entity_of(app, a).unwrap())
+            .unwrap()
+            .translation
+            .truncate();
+        let pb = app
+            .world()
+            .get::<Transform>(entity_of(app, b).unwrap())
+            .unwrap()
+            .translation
+            .truncate();
+        pa.distance(pb)
+    };
+    let before = gap(&mut app, a, b);
+    step(&mut app, 60);
+    let after = gap(&mut app, a, b);
+    assert!(
+        after < before - 5.0,
+        "positive coupling pulls the magnets together ({before} -> {after})"
+    );
+
+    // Opposite-signed coupling repels.
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+    let a = spawn_magnet(&mut app, -40.0, 200.0);
+    let b = spawn_magnet(&mut app, 40.0, -200.0);
+    let before = gap(&mut app, a, b);
+    step(&mut app, 60);
+    let after = gap(&mut app, a, b);
+    assert!(
+        after > before + 5.0,
+        "negative coupling pushes the magnets apart ({before} -> {after})"
+    );
+}

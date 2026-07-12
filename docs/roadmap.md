@@ -289,7 +289,13 @@ missing foundation:**
   constant, and damping; drawn as a non-colliding spring-coil gizmo. The three
   scalar knobs are the ones a future curve editor would let vary nonlinearly.
 - Cams, planar contact, magnetism (SDF force fields), breaking limits,
-  backlash (12)
+  backlash (12) — **magnetism landed** (first cut): authored `Magnet`
+  component (strength with sign-as-polarity, falloff), pairwise forces in
+  the new `physics::forces` seam computed over the **SDF substrate**
+  (surface distance + gradient of the other body's `ShapeDef`, so fields
+  follow faces, not centers), applied as one-shot solver forces
+  (constraints win). Editable in the shared Material section; polarity
+  ring marker in the viewport. Cams/planar contact/breaking/backlash open.
 - Contact point & force debug overlays (2.6, 8.3) — **first cut landed**:
   `PhysicsQueries::contact_points()` reads avian's `ContactGraph` (read-only, so
   the facade stays complete for plotters/scripts), and `DebugSettings.show_contacts`
