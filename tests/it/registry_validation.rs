@@ -1,12 +1,6 @@
-//! Registry validation — "the compiler the DSL doesn't have".
-//!
-//! The operation catalog (`script/registry.rs`) is data; nothing forces it to
-//! stay consistent with the steel builtins, the intent bus, or the reflection
-//! registry. These tests do: every advertised op must be a bound VM symbol,
-//! every Edit op must map to a registered + reflected intent type, and every
-//! documented reflect path must resolve on the real settings type. They run in
-//! plain `cargo test`, so the catalog cannot drift once the script surface
-//! grows.
+//! Registry validation — the compiler the DSL doesn't have: every advertised
+//! op must be a bound VM symbol, every Edit op must map to a registered +
+//! reflected intent type, and every documented reflect path must resolve.
 
 use crate::harness::headless_app;
 use bevy::prelude::*;

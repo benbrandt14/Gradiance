@@ -1,20 +1,9 @@
-//! Intent-replay golden scenarios — the regression net for tool code.
-//!
-//! Each scenario replays a recorded intent stream through a headless app
-//! (physics paused, so authored state is exactly what the commands wrote)
-//! and compares the final authored world — as normalized scene RON — against
-//! a golden file in `tests/it/golden/`. Because *every* mutation path funnels
-//! through the same intents, these catch regressions in any tool, command,
-//! or sync refactor without simulating input.
-//!
-//! Commands mint some ids at apply time (cut pieces, duplicate clones), so
-//! snapshots are **normalized**: every `StableId` is re-keyed
-//! deterministically from a content sort (quantized pose + shape summary)
-//! before serializing. `app_version` is pinned to `"golden"`.
-//!
-//! To regenerate after an intended behavior change:
-//! `UPDATE_GOLDEN=1 cargo test --test it replay::` — then review the diff
-//! like any other code change.
+//! Intent-replay golden scenarios: replay an intent stream through a paused
+//! headless app and compare the final authored world (normalized scene RON)
+//! against `tests/it/golden/`. Snapshots re-key apply-time-minted ids
+//! (cut pieces, clones) from a content sort so they stay deterministic.
+//! Regenerate intended changes with `UPDATE_GOLDEN=1 cargo test --test it
+//! replay::` and review the diff.
 
 // Test-binary helpers: panics are the failure mechanism (clippy's
 // allow-*-in-tests config covers #[test] fns, not their helpers).

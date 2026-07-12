@@ -18,12 +18,9 @@
 /// so the two cannot drift. Referencing one `const` in both places makes a
 /// mismatch a compile-time impossibility rather than a runtime bug.
 pub mod name {
-    /// `(cut ax ay bx by width)` — sever bodies along a stroke.
-    ///
-    /// Re-exported from the command layer's
-    /// [`intent::name`](crate::command::intent::name): the script verb, the
-    /// intent, and the command share one constant, so a single grep walks the
-    /// whole chain (naming-lockstep rule).
+    /// `(cut ax ay bx by width)` — re-exported from
+    /// [`intent::name`](crate::command::intent::name) so verb, intent, and
+    /// command share one greppable constant.
     pub use crate::command::intent::name::CUT;
     /// `(spawn-box x y w h)` — author a box body.
     pub const SPAWN_BOX: &str = "spawn-box";
@@ -59,10 +56,8 @@ pub mod name {
     pub const DESCRIBE: &str = "describe";
 }
 
-/// The canonical `SimSettings` reflect paths `sim-get`/`sim-set` advertise
-/// (docs, console reference). The registry-validation test resolves each
-/// against the real `SimSettings` type, so a settings-field rename cannot
-/// silently strand a documented path.
+/// The `SimSettings` reflect paths `sim-get`/`sim-set` advertise; the
+/// validation test resolves each, so a field rename cannot strand one.
 pub const SIM_SETTING_PATHS: &[&str] = &["gravity.x", "gravity.y", "speed", "substeps"];
 
 /// Which sanctioned seam an operation routes through — the governance category

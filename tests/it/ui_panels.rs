@@ -1,13 +1,8 @@
-//! `egui_kittest` layout tests for the top panels' host-agnostic renderers
-//! (toolbar palette, inspector's committing drag widget, plot series,
-//! settings' reflect grid).
-//!
-//! These run the real egui layout pass headless (accessibility-tree queries,
-//! no GPU, no screenshot farm) — enough to catch a panel that stops
-//! rendering its widgets or a widget that stops responding, which is the
-//! reflow class of regression. Full panels are Bevy systems over
-//! `EguiContexts`; their *logic* is already covered by the intent-level
-//! tests, so only the leaf renderers need pixel-independent UI coverage.
+//! `egui_kittest` layout tests for the top panels' host-agnostic leaf
+//! renderers (toolbar palette, `precise_drag`, plot series, reflect grid) —
+//! headless accessibility-tree checks that catch reflow/interaction
+//! regressions. Full panels are Bevy systems whose logic the intent-level
+//! tests already cover.
 
 // Asserting exact typed-in values (7.25 is exactly representable).
 #![allow(clippy::float_cmp)]

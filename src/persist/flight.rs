@@ -1,10 +1,7 @@
-//! Dev-only RON dump of the flight recorder (`command::flight_recorder`).
-//!
-//! Lives here because serialization is persistence's job (the boundary test
-//! confines `Serialize` to authored/persisted data plus this module's layer).
-//! **F9** writes the recorder's ring buffer to
-//! `snapshots/flight-<timestamp>.ron` — attach it to a bug report alongside an
-//! F12 scene snapshot to show *how* the scene got there.
+//! Dev-only RON dump of the flight recorder — **F9** writes the ring buffer
+//! to `snapshots/flight-<timestamp>.ron` (pair with an F12 scene snapshot in
+//! bug reports). Lives here because the boundary test confines `Serialize`
+//! to persistence.
 
 use crate::command::flight_recorder::FlightRecorder;
 use bevy::prelude::*;
@@ -32,9 +29,7 @@ struct Dump {
     frames: Vec<DumpFrame>,
 }
 
-/// Serializes one reflected intent value: proper reflection-RON where the
-/// type registry supports it, reflect-`Debug` otherwise. Either way there is
-/// no per-intent code.
+/// One reflected intent as RON (reflect-`Debug` fallback); no per-intent code.
 fn intent_ron(value: &dyn bevy::reflect::PartialReflect, registry: &TypeRegistry) -> String {
     ron::ser::to_string(&ReflectSerializer::new(value, registry))
         .unwrap_or_else(|_| format!("{value:?}"))

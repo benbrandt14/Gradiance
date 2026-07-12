@@ -1,21 +1,9 @@
-//! Dev-only flight recorder: a per-frame ring buffer of what the deferred
-//! pipeline actually did.
-//!
-//! The architecture defers everything (intent → dispatch → `Changed<>` sync),
-//! so a bug's symptom often lands frames after its cause. The recorder is the
-//! compensating instrument: for each of the last [`FlightRecorder::CAP`]
-//! frames it captures
-//!
-//! - every **intent** the dispatcher drained (cloned via reflection — no
-//!   per-type code; see [`record_intent`]),
-//! - every **command** the stack executed, with its `Debug` detail (which
-//!   includes the `StableId` targets) and outcome,
-//! - which **sync systems** fired, as the entity count each `Changed<>`
-//!   query matched (read-only mirror queries — see [`record_sync_counts`]).
-//!
-//! It is a **pure reader**: nothing routes through it, it writes no authored
-//! state, and it exists only under the `dev` feature. Dump the buffer to RON
-//! with **F9** (handled in `persist::flight`, where serialization lives).
+//! Dev-only flight recorder: because the pipeline defers everything
+//! (intent → dispatch → `Changed<>` sync), a bug's symptom lands frames after
+//! its cause. Per frame this records the drained intents (via reflection, no
+//! per-type code), executed commands (+`Debug` detail and outcome), and the
+//! entity count each sync's `Changed<>` query matched (read-only mirrors).
+//! A pure reader, `dev`-feature only; **F9** dumps to RON (`persist::flight`).
 
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
@@ -37,8 +25,7 @@ pub struct IntentRecord {
 
 /// One executed command: its canonical name, `Debug` detail, and outcome.
 pub struct CommandRecord {
-    /// The command's [`name`](crate::command::intent::name) constant
-    /// (e.g. `cut`, `commit-transform`).
+    /// The command's [`name`](crate::command::intent::name) constant.
     pub name: &'static str,
     /// `Debug` of the command — includes its `StableId` targets.
     pub detail: String,
@@ -165,12 +152,10 @@ fn log_active_frames(recorder: Res<FlightRecorder>) {
     );
 }
 
-/// Read-only mirrors of the real sync systems' `Changed<>` queries.
-///
-/// Change detection is tracked **per system**, so a mirror query with the
-/// same filter, running once per frame like the real one, matches exactly the
-/// entities the real system will process this frame — without touching the
-/// sync systems themselves. Names below are the real systems'.
+/// Read-only mirrors of the real sync systems' `Changed<>` queries. Change
+/// detection is per-system, so a mirror with the same filter, run once per
+/// frame, matches exactly what the real system processes — without touching
+/// the sync systems. Names below are the real systems' (keep in lockstep).
 #[allow(clippy::type_complexity)]
 fn record_sync_counts(
     mut recorder: ResMut<FlightRecorder>,
