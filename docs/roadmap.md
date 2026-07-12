@@ -295,7 +295,12 @@ missing foundation:**
   the facade stays complete for plotters/scripts), and `DebugSettings.show_contacts`
   draws each contact point and its impulse-scaled normal.
 - Engine tuning: timestep/substeps in Simulation settings, substep debug
-  view (8.3)
+  view (8.3) — **landed**: `SimSettings.timestep_hz` (15–240 Hz, applied to
+  the fixed clock alongside the existing substeps knob; both appear in the
+  Simulation tab via the reflect grid) and `DebugSettings.show_substeps`, a
+  debug overlay tracing every dynamic body's position at each solver
+  substep of the last step (`SubstepTrace`, recorded inside avian's
+  `SubstepSchedule`).
 
 ## Tracers, plotters & live probes (read-facade visualization)
 

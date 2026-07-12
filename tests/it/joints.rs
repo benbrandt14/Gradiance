@@ -683,3 +683,50 @@ fn a_strut_is_undoable_and_persists_its_kind() {
         "a scripted strut is one undoable command"
     );
 }
+
+/// A prismatic joint must never grant relative rotation — under a hard
+/// torque load the connected body keeps its rest angle (feedback: "if I
+/// wanted it to rotate I'd attach it with a hinge").
+#[test]
+fn prismatic_locks_rotation_under_torque_load() {
+    let mut app = headless_app();
+    let mut base = box_record(Vec2::ZERO, 40.0, 40.0);
+    base.physics.rigid_body = RigidBody::Static;
+    let a = spawn_body(&mut app, base);
+    // A long arm on a horizontal slider: gravity on the off-axis mass is a
+    // steady torque about the anchor.
+    let arm = spawn_body(&mut app, box_record(Vec2::new(120.0, 0.0), 200.0, 10.0));
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Slider {
+                axis: Vec2::X,
+                limits: Some([0.0, 100.0]),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: a,
+            body_b: Some(arm),
+            anchor_a: Vec2::new(20.0, 0.0),
+            anchor_b: Vec2::new(-100.0, 0.0),
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    // Kick it with spin as well: the constraint must absorb it.
+    {
+        let entity = entity_of(&app, arm).unwrap();
+        let mut angular = app
+            .world_mut()
+            .get_mut::<avian2d::prelude::AngularVelocity>(entity)
+            .unwrap();
+        angular.0 = 5.0;
+    }
+    step(&mut app, 300);
+
+    let rot = pose_of(&app, arm).rot;
+    assert!(
+        rot.abs() < 0.05,
+        "prismatic-jointed arm must not rotate (rot {rot})"
+    );
+}
