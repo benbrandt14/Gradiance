@@ -6,14 +6,15 @@
 
 use crate::core::ids::IdIndex;
 use crate::domain::Body;
+use crate::domain::field::FieldSource;
 use crate::domain::joint::{JointDef, JointKind};
 use crate::domain::layers::{LayerMask32, layer_hue};
-use crate::domain::magnet::Magnet;
 use crate::domain::settings::DebugSettings;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
 use crate::geometry::sdf;
 use crate::physics::SubstepTrace;
+use crate::physics::fields::Fields;
 use crate::physics::queries::PhysicsQueries;
 use crate::render::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
@@ -30,7 +31,9 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
     bodies: Query<(Entity, &ShapeDef, &Transform, &LayerMask32), With<Body>>,
-    magnets: Query<(&Transform, &Magnet), With<Body>>,
+    field_sources: Query<(&Transform, &FieldSource), With<Body>>,
+    fields: Fields,
+    cameras: Query<(&Transform, &Projection), (With<Camera3d>, Without<Body>)>,
     substeps: Res<SubstepTrace>,
     joints: Query<&JointDef>,
     index: Res<IdIndex>,
@@ -124,18 +127,14 @@ pub fn draw_debug_overlays(
         draw_joint_anchors(&joints, &index, &poses, &mut gizmos);
     }
 
-    // Magnet markers are authored-state feedback, not a debug toggle: a
-    // magnetized body always shows its field glyph (double ring at the
-    // origin, red = positive polarity, blue = negative).
-    for (transform, magnet) in &magnets {
-        let p = transform.translation.truncate();
-        let color = if magnet.strength >= 0.0 {
-            css::INDIAN_RED
-        } else {
-            css::CORNFLOWER_BLUE
-        };
-        gizmos.circle_2d(Isometry2d::from_translation(p), 5.0, color);
-        gizmos.circle_2d(Isometry2d::from_translation(p), 8.0, color.with_alpha(0.5));
+    for (transform, source) in &field_sources {
+        draw_field_marker(transform, *source, &mut gizmos);
+    }
+
+    if debug.show_fields
+        && let Ok((cam, projection)) = cameras.single()
+    {
+        draw_field_overlay(&fields, cam, projection, &mut gizmos);
     }
 
     if debug.show_substeps {
@@ -213,4 +212,59 @@ fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>) {
             css::MAGENTA,
         );
     }
+}
+
+/// Vector plot of the superposed field, sampled on a screen-space grid
+/// around the camera — reads the SAME `Fields::accel_at` cut-point the
+/// solver forces and set-in-orbit use, so what you see is what acts.
+fn draw_field_overlay(
+    fields: &Fields,
+    cam: &Transform,
+    projection: &Projection,
+    gizmos: &mut Gizmos<OverlayGizmos>,
+) {
+    let s = match projection {
+        Projection::Orthographic(o) => o.scale,
+        _ => 1.0,
+    };
+    let center = cam.translation.truncate();
+    let spacing = 56.0 * s;
+    for gy in -8..=8 {
+        for gx in -12..=12 {
+            let p = center + Vec2::new(gx as f32, gy as f32) * spacing;
+            let a = fields.accel_at(p, None);
+            let mag = a.length();
+            if mag < 1.0 {
+                continue;
+            }
+            // Saturating arrow length; warmth ramps with magnitude.
+            let len = spacing * 0.42 * (mag / (mag + 800.0));
+            let dir = a / mag;
+            let tip = p + dir * len;
+            let heat = (mag / (mag + 2000.0)).clamp(0.0, 1.0);
+            let color = css::STEEL_BLUE.mix(&css::ORANGE_RED, heat);
+            gizmos.line_2d(p, tip, color);
+            let perp = Vec2::new(-dir.y, dir.x);
+            gizmos.line_2d(tip, tip - dir * len * 0.35 + perp * len * 0.2, color);
+            gizmos.line_2d(tip, tip - dir * len * 0.35 - perp * len * 0.2, color);
+        }
+    }
+}
+
+/// A field-bearing body's glyph (authored-state feedback, not a debug
+/// toggle): double ring at the origin, blue = attraction (negative
+/// strength), red = repulsion.
+fn draw_field_marker(
+    transform: &Transform,
+    source: FieldSource,
+    gizmos: &mut Gizmos<OverlayGizmos>,
+) {
+    let p = transform.translation.truncate();
+    let color = if source.strength < 0.0 {
+        css::CORNFLOWER_BLUE
+    } else {
+        css::INDIAN_RED
+    };
+    gizmos.circle_2d(Isometry2d::from_translation(p), 5.0, color);
+    gizmos.circle_2d(Isometry2d::from_translation(p), 8.0, color.with_alpha(0.5));
 }

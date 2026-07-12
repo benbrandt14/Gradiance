@@ -140,9 +140,9 @@ fn spawn_body_intent_round_trips_through_reflection() {
         appearance: Appearance::default(),
         layers: LayerMask32::default(),
         groups: vec![7],
-        magnet: Some(gradiance::domain::magnet::Magnet {
+        field: Some(gradiance::domain::field::FieldSource {
             strength: -12.5,
-            falloff: 2.0,
+            falloff: gradiance::domain::field::FieldFalloff::Linear,
         }),
     };
     let intent = SpawnBodyIntent {

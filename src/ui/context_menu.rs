@@ -155,6 +155,7 @@ pub fn context_menu(
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     joints: Query<&JointDef>,
     mut writers: GroupWriters,
+    mut orbits: MessageWriter<crate::physics::fields::SetOrbitRequest>,
     mut moves: MessageWriter<CommitTransformIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
     mut script: ScriptMenu,
@@ -256,6 +257,19 @@ pub fn context_menu(
                     ui.separator();
                 }
 
+                if ui
+                    .add_enabled(!selected_ids.is_empty(), egui::Button::new("Set in orbit"))
+                    .on_hover_text(
+                        "give each body the circular-orbit velocity around the \
+                         dominant attractive field at its position (Algodoo)",
+                    )
+                    .clicked()
+                {
+                    orbits.write(crate::physics::fields::SetOrbitRequest {
+                        targets: selected_ids.clone(),
+                    });
+                    close = true;
+                }
                 if ui
                     .add_enabled(selected_ids.len() >= 2, egui::Button::new("Group"))
                     .clicked()

@@ -144,7 +144,7 @@ impl CutCommand {
                             layers: original.layers,
                             groups: original.groups.clone(),
                             // Cut pieces inherit the parent's field source.
-                            magnet: original.magnet,
+                            field: original.field,
                         }
                     })
                     .collect();

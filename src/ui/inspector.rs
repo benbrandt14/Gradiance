@@ -50,7 +50,7 @@ pub struct BodyProps<'w, 's> {
     /// viewport layer visualization).
     debug: ResMut<'w, crate::domain::settings::DebugSettings>,
     body_q: Query<'w, 's, &'static RigidBody, With<Body>>,
-    magnet_q: Query<'w, 's, &'static crate::domain::magnet::Magnet, With<Body>>,
+    field_q: Query<'w, 's, &'static crate::domain::field::FieldSource, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -258,76 +258,89 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
             &mut props.edits,
         );
     }
-    magnet_block(ui, selection, props, primary);
+    field_block(ui, selection, props, primary);
 }
 
-/// The magnet field editor: enable toggle + strength (sign = polarity) and
-/// falloff. Commits `PropertyValue::Magnet` through the shared intent seam.
-fn magnet_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
-    use crate::domain::magnet::Magnet;
-    let current = props.magnet_q.get(primary).ok().copied();
+/// The field editor (Algodoo's attraction): enable toggle, signed
+/// repulsion strength (negative attracts), and linear/quadratic falloff.
+/// Commits `PropertyValue::Field` through the shared intent seam.
+fn field_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use crate::domain::field::{FieldFalloff, FieldSource};
+    let current = props.field_q.get(primary).ok().copied();
     let mut on = current.is_some();
     if ui
-        .checkbox(&mut on, "magnet")
-        .on_hover_text("SDF field force: like signs attract, flip one sign to repel")
+        .checkbox(&mut on, "field (attraction)")
+        .on_hover_text("SDF force field: negative strength attracts, positive repels")
         .changed()
     {
         let new = on.then(|| current.unwrap_or_default());
-        commit_magnets(selection, props, new);
+        commit_fields(selection, props, new);
     }
-    let Some(magnet) = current else {
+    let Some(field) = current else {
         return;
     };
-    let mut strength = magnet.strength;
+    let mut strength = field.strength;
     ui.horizontal(|ui| {
-        ui.label("strength");
-        if let Commit::Done(_, new) =
-            precise_drag(ui, ui.id().with("mag-strength"), &mut strength, 50.0, 0.5)
-        {
-            commit_magnets(
+        ui.label("repulsion")
+            .on_hover_text("negative = attraction (Algodoo convention)");
+        if let Commit::Done(_, new) = precise_drag(
+            ui,
+            ui.id().with("field-strength"),
+            &mut strength,
+            -2000.0,
+            5.0,
+        ) {
+            commit_fields(
                 selection,
                 props,
-                Some(Magnet {
+                Some(FieldSource {
                     strength: new,
-                    ..magnet
+                    ..field
                 }),
             );
         }
     });
-    let mut falloff = magnet.falloff;
     ui.horizontal(|ui| {
         ui.label("falloff");
-        if let Commit::Done(_, new) =
-            precise_drag(ui, ui.id().with("mag-falloff"), &mut falloff, 2.0, 0.02)
-        {
-            commit_magnets(
-                selection,
-                props,
-                Some(Magnet {
-                    falloff: new.max(0.1),
-                    ..magnet
-                }),
-            );
-        }
+        let mut falloff = field.falloff;
+        egui::ComboBox::from_id_salt(ui.id().with("field-falloff"))
+            .selected_text(format!("{falloff:?}"))
+            .show_ui(ui, |ui| {
+                for option in [FieldFalloff::Linear, FieldFalloff::Quadratic] {
+                    if ui
+                        .selectable_value(&mut falloff, option, format!("{option:?}"))
+                        .clicked()
+                    {
+                        commit_fields(
+                            selection,
+                            props,
+                            Some(FieldSource {
+                                falloff: option,
+                                ..field
+                            }),
+                        );
+                    }
+                }
+            });
     });
 }
 
-/// Commits one batched magnet edit across the selection (each target's own
+/// Commits one batched field edit across the selection (each target's own
 /// prior value captured for undo).
-fn commit_magnets(
+fn commit_fields(
     selection: &Selection,
     props: &mut BodyProps,
-    new: Option<crate::domain::magnet::Magnet>,
+    new: Option<crate::domain::field::FieldSource>,
 ) {
     let changes: Vec<PropertyChange> = selection
         .iter()
         .filter_map(|e| {
             let id = props.ids.get(e).ok().copied()?;
-            let old = props.magnet_q.get(e).ok().copied();
+            let old = props.field_q.get(e).ok().copied();
             Some(PropertyChange {
                 id,
-                old: PropertyValue::Magnet(old),
-                new: PropertyValue::Magnet(new),
+                old: PropertyValue::Field(old),
+                new: PropertyValue::Field(new),
             })
         })
         .collect();

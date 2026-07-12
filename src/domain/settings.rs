@@ -221,6 +221,9 @@ pub struct DebugSettings {
     /// Trace each dynamic body's position at every solver substep of the
     /// most recent physics step (the substep debug view, feedback 8.3).
     pub show_substeps: bool,
+    /// Vector-plot overlay of the superposed force field (arrows sampled
+    /// on a screen-space grid through `physics::fields::Fields`).
+    pub show_fields: bool,
     /// Draw contact points and their impulse-scaled normals.
     pub show_contacts: bool,
 }
@@ -235,6 +238,7 @@ impl Default for DebugSettings {
             show_velocities: false,
             show_layers: false,
             show_substeps: false,
+            show_fields: false,
             show_contacts: false,
         }
     }

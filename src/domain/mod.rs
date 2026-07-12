@@ -6,10 +6,10 @@
 //! components by `Changed<>`-driven sync systems and are never serialized.
 
 pub mod appearance;
+pub mod field;
 pub mod group;
 pub mod joint;
 pub mod layers;
-pub mod magnet;
 pub mod props;
 pub mod settings;
 pub mod shape;

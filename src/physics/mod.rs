@@ -10,7 +10,7 @@
 //! ordinary `Static` body with a large box shape.
 
 pub mod body_sync;
-pub mod forces;
+pub mod fields;
 pub mod grab;
 pub mod hold;
 pub mod joint_sync;
@@ -56,6 +56,8 @@ impl Plugin for GradiancePhysicsPlugin {
         app.init_resource::<hold::KinematicHold>();
         app.init_resource::<grab::MouseSpring>();
         app.init_resource::<grab::MouseTwist>();
+        app.add_message::<fields::SetOrbitRequest>();
+        app.register_type::<fields::SetOrbitRequest>();
         app.init_resource::<SubstepTrace>();
         app.add_systems(
             SubstepSchedule,
@@ -69,7 +71,8 @@ impl Plugin for GradiancePhysicsPlugin {
                 hold::apply_kinematic_hold,
                 grab::apply_mouse_spring,
                 grab::apply_mouse_twist,
-                forces::apply_magnet_forces.run_if(in_state(GameState::Playing)),
+                fields::apply_field_forces.run_if(in_state(GameState::Playing)),
+                fields::set_in_orbit,
             ),
         );
         app.add_systems(
