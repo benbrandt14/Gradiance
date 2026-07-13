@@ -49,7 +49,7 @@ pub fn setup(
             PLANE_EXTENT * 2.0,
             PLANE_EXTENT * 2.0,
         )))),
-        MeshMaterial3d(materials.add(plane_material(Color::WHITE, Vec3::Z, 0.0, clear.0))),
+        MeshMaterial3d(materials.add(plane_material(Color::WHITE, Vec3::Z, 0.0, clear.0, 0.0))),
         Transform::default(),
     ));
 }

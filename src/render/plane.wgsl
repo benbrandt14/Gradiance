@@ -19,8 +19,8 @@ struct PlaneData {
     data: vec4<f32>,
 }
 struct FadeData {
-    // x = unused (was the alpha floor), y/z = horizon fade start/end
-    // distance from the eye.
+    // x = dot-grid spacing in world px (0 = no dots), y/z = horizon fade
+    // start/end distance from the eye.
     data: vec4<f32>,
 }
 struct HorizonData {
@@ -67,6 +67,31 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
+
+    // Dot grid (ground planes only; spacing 0 disables it on the back
+    // plane): faint lattice dots in the plane's own tangent frame give the
+    // infinite floor a sense of scale and motion instead of reading as a
+    // flat void. Dots fade out with distance so they never shimmer at the
+    // horizon.
+    let spacing = fade.data.x;
+    if spacing > 0.0 {
+        // Tangent frame of the plane normal.
+        let n = normalize(plane.data.xyz);
+        let helper = select(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), abs(n.y) < 0.99);
+        let t1 = normalize(cross(helper, n));
+        let t2 = cross(n, t1);
+        let uv = vec2(dot(in.world_position.xyz, t1), dot(in.world_position.xyz, t2));
+        // World distance to the nearest lattice point.
+        let g = (fract(uv / spacing + 0.5) - 0.5) * spacing;
+        let d = length(g);
+        let aa = fwidth(uv.x) + fwidth(uv.y) + 1e-3;
+        let dot_mask = 1.0 - smoothstep(2.0, 2.0 + aa, d);
+        let near = 1.0 - smoothstep(spacing * 8.0, spacing * 40.0, length(in.world_position.xyz - eye));
+        let lit = dot(out.color.rgb, vec3(0.2126, 0.7152, 0.0722));
+        // Dots read as a subtle punch toward the opposite value.
+        let dot_col = select(out.color.rgb * 1.5 + 0.04, out.color.rgb * 0.55, lit > 0.4);
+        out.color = vec4(mix(out.color.rgb, dot_col, dot_mask * near * 0.6), out.color.a);
+    }
 
     // Authoring-plane trace: a faint screen-width line where this plane
     // crosses the interaction plane (world z = 0) — the authored surface

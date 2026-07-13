@@ -296,9 +296,18 @@ shadow items from M19. Design decisions in the slice PRs.
   value echoed and bound to `ans`. Spawn verbs return body handles; the
   `label` verb gives bodies workspace names rendered as viewport tags and
   in the context-menu pick list (StableId underneath).
-- Deferred within this track: local-frame grids, ground dot-grid, gradient
-  pickers, color-by-signal (pairs with P2 dataflow), MPM/fluids/fracture
-  (split a `gradiance-sim` crate when that work starts).
+- **V5 — Spatial polish** *(landed)*: local-frame grids (right-click a
+  body → "Align grid to body" adopts its pose as the grid's user
+  coordinate system; "Reset grid to world" in the background menu) and a
+  ground dot-grid (procedural lattice dots in the plane's tangent frame,
+  1 m pitch, distance-faded — the infinite floor reads with scale). Both
+  reuse existing seams: grid alignment is a `GridSettings` config write,
+  the dots are a `plane.wgsl` term keyed off the (previously unused) fade
+  uniform, so the back plane stays plain.
+- Deferred within this track: gradient color pickers, color-by-signal
+  (pairs with P2 dataflow — a "modulator" driving Appearance is the right
+  seam; do not pre-plumb), MPM/fluids/fracture/particles (own branch/
+  spike; split a `gradiance-sim` crate when that work matures).
 
 ## M19 — Rendering & camera polish
 

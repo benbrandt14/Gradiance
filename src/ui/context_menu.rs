@@ -38,18 +38,20 @@ pub struct ScriptMenu<'w> {
     labels: Res<'w, crate::script::bridge::WorkspaceLabels>,
 }
 
-/// Background (empty-canvas) actions: per-scene settings writes (the
-/// Config seam) — friction against the back plane, the top-down toggle,
-/// and scenery-plane visibility.
+/// Background / scene actions: per-scene settings writes (the Config
+/// seam) — friction against the back plane, the top-down toggle,
+/// scenery-plane visibility, and the grid's user coordinate frame.
 #[derive(SystemParam)]
 pub struct BackgroundMenu<'w> {
     sim: ResMut<'w, crate::domain::settings::SimSettings>,
     scenery: ResMut<'w, crate::domain::settings::ScenerySettings>,
+    grid: ResMut<'w, crate::domain::settings::GridSettings>,
     settings_window: ResMut<'w, crate::ui::settings::SettingsWindow>,
 }
 
 impl BackgroundMenu<'_> {
-    /// Renders the section; returns true when the menu should close.
+    /// Renders the empty-canvas section; returns true when the menu should
+    /// close.
     fn section(&mut self, ui: &mut egui::Ui) -> bool {
         let mut close = false;
         ui.label(egui::RichText::new("Background").weak());
@@ -91,12 +93,33 @@ impl BackgroundMenu<'_> {
         if touched {
             self.scenery.set_changed();
         }
+        // Reset the grid's user coordinate system to world axes (undoes an
+        // "align grid to body").
+        if (self.grid.origin != Vec2::ZERO || self.grid.rotation != 0.0)
+            && ui
+                .button("Reset grid to world")
+                .on_hover_text("clear a local-frame alignment")
+                .clicked()
+        {
+            self.grid.origin = Vec2::ZERO;
+            self.grid.rotation = 0.0;
+            close = true;
+        }
         if ui.button("Scene & lighting settings…").clicked() {
             self.settings_window.open = true;
             self.settings_window.tab = crate::ui::settings::SettingsTab::Lighting;
             close = true;
         }
         close
+    }
+
+    /// Adopts `pose` as the grid's user coordinate frame — a **local-frame
+    /// grid**: the grid origin moves to the body and its lines align to the
+    /// body's rotation, so sketching against a tilted structure snaps in
+    /// that structure's axes (CAD "align UCS to face").
+    fn align_grid_to(&mut self, pose: PosRot) {
+        self.grid.origin = pose.pos;
+        self.grid.rotation = pose.rot;
     }
 }
 
@@ -479,6 +502,18 @@ pub fn context_menu(
                 });
                 if ui.button("Depth panel…").clicked() {
                     depth_panel.open = true;
+                    close = true;
+                }
+                // Local-frame grid: adopt the primary body's pose as the
+                // grid's user coordinate system (sketch in its axes).
+                if let Some(primary) = selection.primary()
+                    && let Ok((_, transform, _)) = bodies_q.get(primary)
+                    && ui
+                        .button("Align grid to body")
+                        .on_hover_text("move & rotate the grid into this body's frame")
+                        .clicked()
+                {
+                    background.align_grid_to(PosRot::from_transform(transform));
                     close = true;
                 }
                 ui.separator();

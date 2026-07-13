@@ -56,11 +56,13 @@ pub struct PlaneExtension {
 
 impl PlaneExtension {
     /// Standard fade parameters for a plane with the given world equation.
-    pub fn for_plane(normal: Vec3, offset: f32, horizon: Color) -> Self {
+    /// `dot_spacing` is the ground dot-grid pitch in world px (0 = no dots,
+    /// e.g. the vertical back plane).
+    pub fn for_plane(normal: Vec3, offset: f32, horizon: Color, dot_spacing: f32) -> Self {
         let h = horizon.to_linear();
         Self {
             plane: normal.extend(offset),
-            fade: Vec4::new(0.0, HORIZON_FADE.0, HORIZON_FADE.1, 0.0),
+            fade: Vec4::new(dot_spacing, HORIZON_FADE.0, HORIZON_FADE.1, 0.0),
             horizon: Vec4::new(h.red, h.green, h.blue, 1.0),
         }
     }
@@ -73,11 +75,13 @@ impl MaterialExtension for PlaneExtension {
 }
 
 /// A matte plane material in the given color, fogging toward `horizon`.
+/// `dot_spacing` sets the ground dot-grid pitch in world px (0 = no dots).
 pub fn plane_material(
     color: Color,
     normal: Vec3,
     offset: f32,
     horizon: Color,
+    dot_spacing: f32,
 ) -> InfinitePlaneMaterial {
     InfinitePlaneMaterial {
         base: StandardMaterial {
@@ -89,7 +93,7 @@ pub fn plane_material(
             cull_mode: None,
             ..default()
         },
-        extension: PlaneExtension::for_plane(normal, offset, horizon),
+        extension: PlaneExtension::for_plane(normal, offset, horizon, dot_spacing),
     }
 }
 
@@ -148,6 +152,7 @@ pub fn sync_ground_planes(
             normal.extend(0.0),
             normal.dot(pose.pos),
             clear.0,
+            crate::core::constants::PIXELS_PER_METER,
         ));
         // Grounds render through this material, not the body toon material.
         commands
