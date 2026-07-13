@@ -35,6 +35,7 @@ use bevy_egui::{EguiContexts, egui};
 pub struct ScriptMenu<'w> {
     actions: Res<'w, ScriptActions>,
     inputs: ResMut<'w, ScriptInputs>,
+    labels: Res<'w, crate::script::bridge::WorkspaceLabels>,
 }
 
 /// Background (empty-canvas) actions: per-scene settings writes (the
@@ -421,7 +422,12 @@ pub fn context_menu(
                 if !menu.under.is_empty() {
                     ui.label(egui::RichText::new("Select from").weak());
                     for (i, id) in menu.under.clone().into_iter().enumerate() {
-                        if ui.button(format!("· body {i} ({id:.8})")).clicked() {
+                        // Workspace-labelled bodies show their script name.
+                        let title = script.labels.name_of(id).map_or_else(
+                            || format!("· body {i} ({id:.8})"),
+                            |name| format!("· {name} ({id:.8})"),
+                        );
+                        if ui.button(title).clicked() {
                             if let Some(entity) = index.entity(id) {
                                 crate::interaction::selection::SelectTransition::SetBodies(vec![
                                     entity,

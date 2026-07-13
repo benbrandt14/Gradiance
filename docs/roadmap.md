@@ -290,10 +290,12 @@ shadow items from M19. Design decisions in the slice PRs.
   are deleted. Deferred: a "no self-collisions within selection" escape
   (was filter art; would return as an authored flag + collision hook if
   needed).
-- **V4 — Script dock & workspace**: console becomes a right dock with
-  MATLAB REPL behavior (Enter runs, Shift+Enter newline, Up/Down history);
-  spawn verbs return body handles, `ans` bound each run, script-defined
-  names become visible labels on scene objects (StableId underneath).
+- **V4 — Script dock & workspace** *(landed)*: console became the right
+  dock (shared host with the Depth panel) with MATLAB REPL behavior —
+  Enter runs, Shift+Enter newline, ↑/↓ prefix-filtered history, each run's
+  value echoed and bound to `ans`. Spawn verbs return body handles; the
+  `label` verb gives bodies workspace names rendered as viewport tags and
+  in the context-menu pick list (StableId underneath).
 - Deferred within this track: local-frame grids, ground dot-grid, gradient
   pickers, color-by-signal (pairs with P2 dataflow), MPM/fluids/fracture
   (split a `gradiance-sim` crate when that work starts).

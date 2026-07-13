@@ -1,4 +1,5 @@
-//! The Depth panel: a right-dock editor for authored [`DepthBand`]s.
+//! The Depth section of the right dock: an editor for authored
+//! [`DepthBand`]s (hosted by `ui::dock` alongside the script console).
 //!
 //! Selected bodies appear as colored bars (their fill color) on a
 //! vertical depth axis — front (the interaction plane) at the top,
@@ -12,13 +13,10 @@ use crate::command::intent::PropertyEditIntent;
 use crate::command::property::{PropertyChange, PropertyValue};
 use crate::core::constants::LAYER_HEIGHT;
 use crate::core::ids::StableId;
-use crate::domain::Body;
-use crate::domain::appearance::Appearance;
 use crate::domain::depth::DepthBand;
 use crate::domain::layers::layer_hue;
-use crate::interaction::selection::Selection;
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, egui};
+use bevy_egui::egui;
 
 /// Pixels of grab slop around a bar edge before it counts as the middle.
 const EDGE_GRAB_PX: f32 = 6.0;
@@ -90,50 +88,18 @@ fn dragged_band(drag: &BandDrag, depth: f32) -> DepthBand {
     band.snapped()
 }
 
-/// Renders the dock and turns completed bar drags into property intents.
+/// Renders the depth section and turns completed bar drags into property
+/// intents. `rows` is the selection projected to (id, band, fill color);
+/// `max_height` bounds the axis so the dock can share space with the
+/// console below.
 #[expect(clippy::too_many_lines)] // one panel, drawn top to bottom
-pub fn depth_panel(
-    mut contexts: EguiContexts,
-    mut panel: ResMut<DepthPanel>,
-    selection: Res<Selection>,
-    ids: Query<&StableId, With<Body>>,
-    bands: Query<&DepthBand, With<Body>>,
-    appearances: Query<&Appearance, With<Body>>,
-    mut edits: MessageWriter<PropertyEditIntent>,
-) -> Result {
-    let ctx = contexts.ctx_mut()?;
-    if !panel.open {
-        return Ok(());
-    }
-    // egui 0.35 panels dock inside a `Ui`; build the screen-root one.
-    let mut root = egui::Ui::new(
-        ctx.clone(),
-        "depth-dock".into(),
-        egui::UiBuilder::new()
-            .layer_id(egui::LayerId::background())
-            .max_rect(ctx.viewport_rect()),
-    );
-
-    // Rows: (id, authored band, color); selection order.
-    let rows: Vec<(StableId, DepthBand, egui::Color32)> = selection
-        .iter()
-        .filter_map(|e| {
-            let id = *ids.get(e).ok()?;
-            let band = bands.get(e).ok()?.sanitized();
-            let c = appearances
-                .get(e)
-                .map_or(crate::domain::appearance::Rgba::rgb(1.0, 1.0, 1.0), |a| {
-                    a.fill
-                });
-            let color = egui::Color32::from_rgb(
-                (c.r * 255.0) as u8,
-                (c.g * 255.0) as u8,
-                (c.b * 255.0) as u8,
-            );
-            Some((id, band, color))
-        })
-        .collect();
-
+pub fn depth_section(
+    ui: &mut egui::Ui,
+    panel: &mut DepthPanel,
+    rows: &[(StableId, DepthBand, egui::Color32)],
+    edits: &mut MessageWriter<PropertyEditIntent>,
+    max_height: f32,
+) {
     // The axis grows to fit the content (and stays grown while dragging).
     let content_deepest = rows
         .iter()
@@ -144,152 +110,141 @@ pub fn depth_panel(
         .view_depth
         .max((content_deepest / LAYER_HEIGHT).ceil() * LAYER_HEIGHT);
 
-    let mut open = panel.open;
-    egui::Panel::right("depth-panel")
-        .resizable(true)
-        .default_size(180.0)
-        .show(&mut root, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Depth").strong())
-                    .on_hover_text(
-                        "front ↑ · back ↓ — a body collides with what its band overlaps",
-                    );
-                if ui.button("✕").clicked() {
-                    open = false;
-                }
-            });
-            if rows.is_empty() {
-                ui.weak("select bodies to edit their depth bands");
-                return;
-            }
-
-            let (rect, response) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), ui.available_height().max(120.0)),
-                egui::Sense::click_and_drag(),
-            );
-            let painter = ui.painter_at(rect);
-            let view = panel.view_depth.max(LAYER_HEIGHT);
-            let scale = rect.height() / view;
-            let y_of = |depth: f32| rect.top() + depth * scale;
-            let depth_of = |y: f32| (y - rect.top()) / scale;
-
-            // Layer gridlines + indices in the shared layer hues.
-            let mut layer = 0u32;
-            loop {
-                let d = layer as f32 * LAYER_HEIGHT;
-                if d > view {
-                    break;
-                }
-                let y = y_of(d);
-                let hue = layer_hue(layer.min(31));
-                let c = crate::domain::appearance::Rgba::from_hsl(hue, 0.6, 0.5);
-                let color = egui::Color32::from_rgba_unmultiplied(
-                    (c.r * 255.0) as u8,
-                    (c.g * 255.0) as u8,
-                    (c.b * 255.0) as u8,
-                    90,
-                );
-                painter.line_segment(
-                    [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
-                    egui::Stroke::new(1.0, color),
-                );
-                if layer < 32 {
-                    painter.text(
-                        egui::pos2(rect.left() + 2.0, y + 1.0),
-                        egui::Align2::LEFT_TOP,
-                        format!("{layer}"),
-                        egui::FontId::proportional(9.0),
-                        color,
-                    );
-                }
-                layer += 1;
-            }
-
-            // Band bars, one column per selected body.
-            let cols = rows.len() as f32;
-            let left_gutter = 16.0;
-            let col_w = ((rect.width() - left_gutter) / cols).clamp(10.0, 48.0);
-            let pointer = response.hover_pos().or(response.interact_pointer_pos());
-            for (i, (id, band, color)) in rows.iter().enumerate() {
-                // The dragged bar previews its in-flight band.
-                let shown = match panel.drag {
-                    Some(d) if d.id == *id => d.current,
-                    _ => *band,
-                };
-                let x0 = rect.left() + left_gutter + i as f32 * col_w + 2.0;
-                let bar = egui::Rect::from_min_max(
-                    egui::pos2(x0, y_of(shown.near)),
-                    egui::pos2(x0 + col_w - 4.0, y_of(shown.far)),
-                );
-                let hovered = pointer.is_some_and(|p| bar.expand(EDGE_GRAB_PX).contains(p));
-                painter.rect_filled(
-                    bar,
-                    3.0,
-                    color.gamma_multiply(if hovered { 1.0 } else { 0.85 }),
-                );
-                painter.rect_stroke(
-                    bar,
-                    3.0,
-                    egui::Stroke::new(
-                        if hovered { 2.0 } else { 1.0 },
-                        egui::Color32::from_gray(if hovered { 230 } else { 140 }),
-                    ),
-                    egui::StrokeKind::Outside,
-                );
-
-                // Drag start: classify the grab (edge wins near the edge).
-                if response.drag_started()
-                    && panel.drag.is_none()
-                    && let Some(p) = response.interact_pointer_pos()
-                    && bar.expand(EDGE_GRAB_PX).contains(p)
-                {
-                    let grab = if (p.y - bar.top()).abs() <= EDGE_GRAB_PX {
-                        Grab::Near
-                    } else if (p.y - bar.bottom()).abs() <= EDGE_GRAB_PX {
-                        Grab::Far
-                    } else {
-                        Grab::Whole
-                    };
-                    panel.drag = Some(BandDrag {
-                        id: *id,
-                        grab,
-                        start: *band,
-                        current: *band,
-                        offset: depth_of(p.y) - band.near,
-                    });
-                }
-            }
-
-            // Drag update / commit.
-            if let Some(mut drag) = panel.drag {
-                if let Some(p) = response.interact_pointer_pos() {
-                    drag.current = dragged_band(&drag, depth_of(p.y));
-                    // Auto-grow while dragging past the bottom edge.
-                    if p.y > rect.bottom() - 4.0 {
-                        panel.view_depth += LAYER_HEIGHT;
-                    }
-                }
-                if response.drag_stopped() {
-                    if drag.current != drag.start {
-                        edits.write(PropertyEditIntent {
-                            changes: vec![PropertyChange {
-                                id: drag.id,
-                                old: PropertyValue::Depth(drag.start),
-                                new: PropertyValue::Depth(drag.current),
-                            }],
-                        });
-                    }
-                    panel.drag = None;
-                } else {
-                    panel.drag = Some(drag);
-                }
-            }
-        });
-    panel.open = open;
-    if !panel.open {
-        panel.drag = None;
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Depth").strong())
+            .on_hover_text("front ↑ · back ↓ — a body collides with what its band overlaps");
+        if ui.button("✕").clicked() {
+            panel.open = false;
+            panel.drag = None;
+        }
+    });
+    if rows.is_empty() {
+        ui.weak("select bodies to edit their depth bands");
+        return;
     }
-    Ok(())
+
+    let height = ui.available_height().min(max_height).max(120.0);
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height),
+        egui::Sense::click_and_drag(),
+    );
+    let painter = ui.painter_at(rect);
+    let view = panel.view_depth.max(LAYER_HEIGHT);
+    let scale = rect.height() / view;
+    let y_of = |depth: f32| rect.top() + depth * scale;
+    let depth_of = |y: f32| (y - rect.top()) / scale;
+
+    // Layer gridlines + indices in the shared layer hues.
+    let mut layer = 0u32;
+    loop {
+        let d = layer as f32 * LAYER_HEIGHT;
+        if d > view {
+            break;
+        }
+        let y = y_of(d);
+        let hue = layer_hue(layer.min(31));
+        let c = crate::domain::appearance::Rgba::from_hsl(hue, 0.6, 0.5);
+        let color = egui::Color32::from_rgba_unmultiplied(
+            (c.r * 255.0) as u8,
+            (c.g * 255.0) as u8,
+            (c.b * 255.0) as u8,
+            90,
+        );
+        painter.line_segment(
+            [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+            egui::Stroke::new(1.0, color),
+        );
+        if layer < 32 {
+            painter.text(
+                egui::pos2(rect.left() + 2.0, y + 1.0),
+                egui::Align2::LEFT_TOP,
+                format!("{layer}"),
+                egui::FontId::proportional(9.0),
+                color,
+            );
+        }
+        layer += 1;
+    }
+
+    // Band bars, one column per selected body.
+    let cols = rows.len() as f32;
+    let left_gutter = 16.0;
+    let col_w = ((rect.width() - left_gutter) / cols).clamp(10.0, 48.0);
+    let pointer = response.hover_pos().or(response.interact_pointer_pos());
+    for (i, (id, band, color)) in rows.iter().enumerate() {
+        // The dragged bar previews its in-flight band.
+        let shown = match panel.drag {
+            Some(d) if d.id == *id => d.current,
+            _ => *band,
+        };
+        let x0 = rect.left() + left_gutter + i as f32 * col_w + 2.0;
+        let bar = egui::Rect::from_min_max(
+            egui::pos2(x0, y_of(shown.near)),
+            egui::pos2(x0 + col_w - 4.0, y_of(shown.far)),
+        );
+        let hovered = pointer.is_some_and(|p| bar.expand(EDGE_GRAB_PX).contains(p));
+        painter.rect_filled(
+            bar,
+            3.0,
+            color.gamma_multiply(if hovered { 1.0 } else { 0.85 }),
+        );
+        painter.rect_stroke(
+            bar,
+            3.0,
+            egui::Stroke::new(
+                if hovered { 2.0 } else { 1.0 },
+                egui::Color32::from_gray(if hovered { 230 } else { 140 }),
+            ),
+            egui::StrokeKind::Outside,
+        );
+
+        // Drag start: classify the grab (edge wins near the edge).
+        if response.drag_started()
+            && panel.drag.is_none()
+            && let Some(p) = response.interact_pointer_pos()
+            && bar.expand(EDGE_GRAB_PX).contains(p)
+        {
+            let grab = if (p.y - bar.top()).abs() <= EDGE_GRAB_PX {
+                Grab::Near
+            } else if (p.y - bar.bottom()).abs() <= EDGE_GRAB_PX {
+                Grab::Far
+            } else {
+                Grab::Whole
+            };
+            panel.drag = Some(BandDrag {
+                id: *id,
+                grab,
+                start: *band,
+                current: *band,
+                offset: depth_of(p.y) - band.near,
+            });
+        }
+    }
+
+    // Drag update / commit.
+    if let Some(mut drag) = panel.drag {
+        if let Some(p) = response.interact_pointer_pos() {
+            drag.current = dragged_band(&drag, depth_of(p.y));
+            // Auto-grow while dragging past the bottom edge.
+            if p.y > rect.bottom() - 4.0 {
+                panel.view_depth += LAYER_HEIGHT;
+            }
+        }
+        if response.drag_stopped() {
+            if drag.current != drag.start {
+                edits.write(PropertyEditIntent {
+                    changes: vec![PropertyChange {
+                        id: drag.id,
+                        old: PropertyValue::Depth(drag.start),
+                        new: PropertyValue::Depth(drag.current),
+                    }],
+                });
+            }
+            panel.drag = None;
+        } else {
+            panel.drag = Some(drag);
+        }
+    }
 }
 
 #[cfg(test)]

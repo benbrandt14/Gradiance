@@ -96,6 +96,9 @@ struct Shared {
     config: ConfigQueue,
     /// Named actions emitted by `register-action` → the `ScriptActions` table.
     actions: Arc<Mutex<Vec<ScriptAction>>>,
+    /// Workspace labels emitted by `label` → the [`WorkspaceLabels`] table
+    /// (body-handle uuid string + display name).
+    labels: Arc<Mutex<Vec<(String, String)>>>,
     /// The operation catalog → the `ops`/`describe` meta verbs.
     catalog: Arc<OperationCatalog>,
 }
@@ -108,6 +111,7 @@ impl Shared {
             sim: Arc::new(Mutex::new(SimSettings::default())),
             config: Arc::new(Mutex::new(Vec::new())),
             actions: Arc::new(Mutex::new(Vec::new())),
+            labels: Arc::new(Mutex::new(Vec::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
         }
     }
@@ -275,6 +279,34 @@ pub struct ScriptAction {
     pub label: String,
     /// The lisp source the action runs when invoked.
     pub source: String,
+}
+
+/// Script-given names on scene bodies — the **workspace** (MATLAB cue):
+/// `(define b (spawn-box …))` + `(label b "crate")` makes the body wear a
+/// name tag in the viewport and in pick lists. `EditorState`: never
+/// persisted, never undoable; the `StableId` underneath is the durable
+/// identity.
+#[derive(Resource, Default, Debug)]
+pub struct WorkspaceLabels(pub Vec<(String, StableId)>);
+
+impl WorkspaceLabels {
+    /// Adds or replaces the binding for `name` (labels are unique by name,
+    /// like variables).
+    pub fn upsert(&mut self, name: String, id: StableId) {
+        if let Some(slot) = self.0.iter_mut().find(|(n, _)| *n == name) {
+            slot.1 = id;
+        } else {
+            self.0.push((name, id));
+        }
+    }
+
+    /// The label on `id`, if any.
+    pub fn name_of(&self, id: StableId) -> Option<&str> {
+        self.0
+            .iter()
+            .find(|(_, i)| *i == id)
+            .map(|(n, _)| n.as_str())
+    }
 }
 
 /// The table of user-registered actions, surfaced by the UI (e.g. the context
@@ -485,16 +517,24 @@ impl ScriptEngine {
     }
 
     /// Runs one script source, converting steel errors to [`ScriptError`].
-    /// Wrapped in `catch_unwind` so a panicking script never takes down the app.
-    fn run(&mut self, source: &str) -> Result<(), ScriptError> {
+    /// Wrapped in `catch_unwind` so a panicking script never takes down the
+    /// app. Returns the run's last value, which is also bound to the global
+    /// `ans` (MATLAB-style) so the next REPL line can reuse it.
+    fn run(&mut self, source: &str) -> Result<Option<SteelVal>, ScriptError> {
         let engine = &mut self.engine;
         // `Engine::run` wants an owned/`'static` source (`Into<Cow<'static,
         // str>>`), so hand it an owned copy.
         let owned = source.to_owned();
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| engine.run(owned)))
+        let values = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| engine.run(owned)))
             .map_err(|_| ScriptError::Panicked)?
-            .map(|_| ())
-            .map_err(|e| ScriptError::Eval(e.to_string()))
+            .map_err(|e| ScriptError::Eval(e.to_string()))?;
+        let last = values.into_iter().next_back();
+        if let Some(value) = &last
+            && !matches!(value, SteelVal::Void)
+        {
+            engine.register_value("ans", value.clone());
+        }
+        Ok(last)
     }
 }
 
@@ -560,7 +600,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_edit_verbs(engine, &shared.ops);
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
-    register_editor_verbs(engine, &shared.actions);
+    register_editor_verbs(engine, &shared.actions, &shared.labels);
     register_meta_verbs(engine, &shared.catalog);
 }
 
@@ -584,56 +624,59 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
         },
     );
 
-    // `(spawn-box x y w h)` — author a box body centered at (x, y).
+    // `(spawn-box x y w h)` — author a box body centered at (x, y). Returns
+    // the new body's handle (its stable id), so `(define b (spawn-box …))`
+    // gives the script a name for it.
     let box_ops = Arc::clone(ops);
     engine.register_fn(
         name::SPAWN_BOX,
-        move |x: SteelVal, y: SteelVal, w: SteelVal, h: SteelVal| {
+        move |x: SteelVal, y: SteelVal, w: SteelVal, h: SteelVal| -> String {
             if let Some([x, y, w, h]) = nums([&x, &y, &w, &h]) {
                 let shape = ShapeDef::Box {
                     width: w as f32,
                     height: h as f32,
                 };
-                emit(
-                    &box_ops,
-                    Box::new(SpawnBodyIntent {
-                        record: body_record(shape, x, y),
-                    }),
-                );
+                let record = body_record(shape, x, y);
+                let handle = record.id.0.to_string();
+                emit(&box_ops, Box::new(SpawnBodyIntent { record }));
+                handle
+            } else {
+                String::new()
             }
         },
     );
 
     // `(spawn-circle x y r)` — author a circle body centered at (x, y).
+    // Returns the new body's handle.
     let circle_ops = Arc::clone(ops);
     engine.register_fn(
         name::SPAWN_CIRCLE,
-        move |x: SteelVal, y: SteelVal, r: SteelVal| {
+        move |x: SteelVal, y: SteelVal, r: SteelVal| -> String {
             if let Some([x, y, r]) = nums([&x, &y, &r]) {
                 let shape = ShapeDef::Circle { radius: r as f32 };
-                emit(
-                    &circle_ops,
-                    Box::new(SpawnBodyIntent {
-                        record: body_record(shape, x, y),
-                    }),
-                );
+                let record = body_record(shape, x, y);
+                let handle = record.id.0.to_string();
+                emit(&circle_ops, Box::new(SpawnBodyIntent { record }));
+                handle
+            } else {
+                String::new()
             }
         },
     );
 
     // `(spawn-ground x y angle)` — author a fixed ground half-plane through
-    // (x, y), tilted by `angle` radians.
+    // (x, y), tilted by `angle` radians. Returns the new body's handle.
     let ground_ops = Arc::clone(ops);
     engine.register_fn(
         name::SPAWN_GROUND,
-        move |x: SteelVal, y: SteelVal, angle: SteelVal| {
+        move |x: SteelVal, y: SteelVal, angle: SteelVal| -> String {
             if let Some([x, y, angle]) = nums([&x, &y, &angle]) {
-                emit(
-                    &ground_ops,
-                    Box::new(SpawnBodyIntent {
-                        record: ground_record(x, y, angle),
-                    }),
-                );
+                let record = ground_record(x, y, angle);
+                let handle = record.id.0.to_string();
+                emit(&ground_ops, Box::new(SpawnBodyIntent { record }));
+                handle
+            } else {
+                String::new()
             }
         },
     );
@@ -734,7 +777,11 @@ fn register_config_verbs(engine: &mut Engine, config: &ConfigQueue, sim: &Arc<Mu
 /// Editor-state verbs — writes to non-authored editor resources. `register-action`
 /// appends to the action table the UI surfaces; it queues the entry (the exclusive
 /// system moves it into the `ScriptActions` resource), never touching the World.
-fn register_editor_verbs(engine: &mut Engine, actions: &Arc<Mutex<Vec<ScriptAction>>>) {
+fn register_editor_verbs(
+    engine: &mut Engine,
+    actions: &Arc<Mutex<Vec<ScriptAction>>>,
+    labels: &Arc<Mutex<Vec<(String, String)>>>,
+) {
     // `(register-action label source)` — surface a named action in the editor.
     let a = Arc::clone(actions);
     engine.register_fn(
@@ -745,6 +792,15 @@ fn register_editor_verbs(engine: &mut Engine, actions: &Arc<Mutex<Vec<ScriptActi
             }
         },
     );
+
+    // `(label body name)` — give a body a visible workspace name. `body` is
+    // the handle a spawn verb returned (`ans` right after spawning).
+    let l = Arc::clone(labels);
+    engine.register_fn(name::LABEL, move |body: String, label_name: String| {
+        if let Ok(mut queue) = l.lock() {
+            queue.push((body, label_name));
+        }
+    });
 }
 
 /// Homoiconic introspection — the catalog reading itself.
@@ -769,6 +825,7 @@ fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<OperationCatalog>) {
 /// dispatches the operation records it emitted through the intent bus. Ordered
 /// before [`CommandDispatchSet`] so a script's edits become commands in the same
 /// frame — one script run therefore collapses to one batch of undoable edits.
+#[expect(clippy::too_many_lines)] // one doorway: run, then drain each queue
 pub fn run_scripts(world: &mut World) {
     let sources: Vec<String> = world
         .get_resource_mut::<ScriptInputs>()
@@ -807,7 +864,9 @@ pub fn run_scripts(world: &mut World) {
             None => continue,
         };
         let output = match &result {
-            Ok(()) => "ok".to_string(),
+            // MATLAB-style echo: the run's last value (bound to `ans`).
+            Ok(Some(value)) if !matches!(value, SteelVal::Void) => value.to_string(),
+            Ok(_) => "ok".to_string(),
             Err(err) => {
                 warn!("{err}");
                 err.to_string()
@@ -865,6 +924,31 @@ pub fn run_scripts(world: &mut World) {
         }
     }
 
+    // Drain the label queue into the `WorkspaceLabels` table (upsert by
+    // name, so re-running a labelling script is idempotent).
+    let labels: Vec<(String, String)> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .labels
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if !labels.is_empty()
+        && let Some(mut table) = world.get_resource_mut::<WorkspaceLabels>()
+    {
+        for (handle, label_name) in labels {
+            if let Ok(uuid) = uuid::Uuid::parse_str(handle.trim()) {
+                table.upsert(label_name, StableId(uuid));
+            } else {
+                warn!("(label …): `{handle}` is not a body handle");
+            }
+        }
+    }
+
     // Drain the action queue into the `ScriptActions` table (upsert by label, so
     // re-running a registration script is idempotent).
     let actions: Vec<ScriptAction> = world
@@ -900,6 +984,7 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptLog>();
         app.init_resource::<OperationRegistry>();
         app.init_resource::<ScriptActions>();
+        app.init_resource::<WorkspaceLabels>();
         app.init_resource::<StartupScripts>();
         app.init_resource::<ScriptWatch>();
         let mut dispatch = IntentDispatch::default();

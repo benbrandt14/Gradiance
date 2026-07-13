@@ -42,6 +42,7 @@ bottom — no unclassified state.
 | State | Notes |
 |---|---|
 | `ScriptActions` | `register-action` table the context menu surfaces |
+| `WorkspaceLabels` | script-given body names (`label`); viewport tags + pick-list names |
 | `ScriptInputs`, `StartupScripts`, `ScriptWatch`, `ScriptLog` | script doorway queues + console log |
 | `OperationRegistry`, `IntentDispatch` | runtime catalog + intent-bus wiring (static after startup) |
 | `LastScenePath`, `AutosavePath`, `StartupScene` | persistence bookkeeping |

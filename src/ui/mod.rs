@@ -12,8 +12,10 @@
 pub mod console;
 pub mod context_menu;
 pub mod depth_panel;
+pub mod dock;
 pub mod inspector;
 pub mod joint_inspector;
+pub mod labels;
 pub mod plot;
 pub mod reflect_grid;
 pub mod settings;
@@ -48,11 +50,11 @@ impl Plugin for GradianceUiPlugin {
             (
                 toolbar::toolbar,
                 view_cube::view_cube,
-                depth_panel::depth_panel,
+                dock::right_dock,
+                labels::draw_workspace_labels,
                 inspector::inspector_window,
                 joint_inspector::joint_inspector,
                 settings::settings_window,
-                console::script_console,
                 plot::plot_panel,
                 context_menu::context_menu,
                 capture_pointer_over_ui,

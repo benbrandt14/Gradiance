@@ -50,6 +50,8 @@ pub mod name {
     pub const SIM_SET: &str = "sim-set";
     /// `(register-action label source)` — surface a named action in the editor.
     pub const REGISTER_ACTION: &str = "register-action";
+    /// `(label body name)` — name a body in the workspace (visible tag).
+    pub const LABEL: &str = "label";
     /// `(ops)` — list of every registered operation name.
     pub const OPS: &str = "ops";
     /// `(describe name)` — the signature and doc of one operation.
@@ -158,14 +160,14 @@ fn edit_specs() -> Vec<OpSpec> {
         OpSpec {
             name: name::SPAWN_BOX,
             signature: "(spawn-box x y w h)",
-            doc: "Author a box body of size w×h centred at (x, y).",
+            doc: "Author a box body of size w×h centred at (x, y); returns its handle.",
             category: Edit,
             args: 4,
         },
         OpSpec {
             name: name::SPAWN_CIRCLE,
             signature: "(spawn-circle x y r)",
-            doc: "Author a circle body of radius r centred at (x, y).",
+            doc: "Author a circle body of radius r centred at (x, y); returns its handle.",
             category: Edit,
             args: 3,
         },
@@ -273,13 +275,22 @@ fn config_specs() -> Vec<OpSpec> {
 
 /// Editor-state verbs (write non-authored editor resources).
 fn editor_specs() -> Vec<OpSpec> {
-    vec![OpSpec {
-        name: name::REGISTER_ACTION,
-        signature: "(register-action label source)",
-        doc: "Surface a named action (label + lisp source) in the editor's menus.",
-        category: OpCategory::EditorState,
-        args: 2,
-    }]
+    vec![
+        OpSpec {
+            name: name::REGISTER_ACTION,
+            signature: "(register-action label source)",
+            doc: "Surface a named action (label + lisp source) in the editor's menus.",
+            category: OpCategory::EditorState,
+            args: 2,
+        },
+        OpSpec {
+            name: name::LABEL,
+            signature: "(label body name)",
+            doc: "Name a body in the workspace (a viewport tag); body is a spawn's return value.",
+            category: OpCategory::EditorState,
+            args: 2,
+        },
+    ]
 }
 
 /// Homoiconic introspection verbs (the catalog reading itself).
