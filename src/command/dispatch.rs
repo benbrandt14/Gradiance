@@ -74,6 +74,7 @@ pub fn dispatch_intents(world: &mut World) {
     for intent in drain::<SpawnJointIntent>(world) {
         commands.push(Box::new(SpawnJointCommand {
             record: intent.record,
+            locked_before: None,
         }));
     }
     for intent in drain::<LoadSceneIntent>(world) {

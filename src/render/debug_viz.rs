@@ -35,6 +35,7 @@ pub fn draw_debug_overlays(
     field_sources: Query<(&Transform, &FieldSource), With<Body>>,
     fields: Fields,
     cameras: Query<(&Transform, &Projection), (With<Camera3d>, Without<Body>)>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     substeps: Res<SubstepTrace>,
     joints: Query<&JointDef>,
     index: Res<IdIndex>,
@@ -132,7 +133,7 @@ pub fn draw_debug_overlays(
     if debug.show_fields
         && let Ok((cam, projection)) = cameras.single()
     {
-        draw_field_overlay(&fields, cam, projection, &mut gizmos);
+        draw_field_overlay(&fields, cam, projection, &windows, &mut gizmos);
     }
 
     if debug.show_substeps {
@@ -215,20 +216,30 @@ fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>) {
 /// Vector plot of the superposed field, sampled on a screen-space grid
 /// around the camera — reads the SAME `Fields::accel_at` cut-point the
 /// solver forces and set-in-orbit use, so what you see is what acts.
+///
+/// The grid tracks the viewport: sample spacing is fixed in *screen* pixels
+/// (so zooming re-samples the field at the new scale) and the extent covers
+/// the whole window at any zoom (arrow count bounded by the clamps).
 fn draw_field_overlay(
     fields: &Fields,
     cam: &Transform,
     projection: &Projection,
+    windows: &Query<&Window, With<bevy::window::PrimaryWindow>>,
     gizmos: &mut Gizmos<OverlayGizmos>,
 ) {
     let s = match projection {
         Projection::Orthographic(o) => o.scale,
         _ => 1.0,
     };
+    let viewport = windows.single().map_or(Vec2::new(1280.0, 720.0), |w| {
+        Vec2::new(w.width(), w.height())
+    });
     let center = cam.translation.truncate();
     let spacing = 56.0 * s;
-    for gy in -8..=8 {
-        for gx in -12..=12 {
+    let nx = ((viewport.x / 112.0).ceil() as i32 + 1).clamp(4, 40);
+    let ny = ((viewport.y / 112.0).ceil() as i32 + 1).clamp(4, 30);
+    for gy in -ny..=ny {
+        for gx in -nx..=nx {
             let p = center + Vec2::new(gx as f32, gy as f32) * spacing;
             let a = fields.accel_at(p, None);
             let mag = a.length();

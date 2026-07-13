@@ -15,6 +15,7 @@ pub mod overlay;
 pub mod plane;
 pub mod scenery;
 pub mod toon;
+pub mod tracer;
 
 use bevy::light::GlobalAmbientLight;
 use bevy::prelude::*;
@@ -36,6 +37,9 @@ impl Plugin for GradianceRenderPlugin {
         app.register_type::<crate::domain::settings::RenderSettings>();
         app.register_type::<crate::domain::settings::LightingSettings>();
         app.register_type::<crate::domain::settings::ScenerySettings>();
+        // Trail sampling is derived-state upkeep, not drawing — it runs
+        // headless too (tests assert on trails).
+        tracer::install_sampling(app);
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }
@@ -71,6 +75,7 @@ impl Plugin for GradianceRenderPlugin {
                 decorations::draw_circle_radius_lines,
                 decorations::draw_body_borders,
                 debug_viz::draw_debug_overlays,
+                tracer::draw_traces,
             ),
         );
         app.add_systems(

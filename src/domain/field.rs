@@ -34,10 +34,13 @@ pub enum FieldFalloff {
 )]
 pub struct FieldSource {
     /// Repulsion strength as acceleration at zero surface distance
-    /// (px/s²). **Negative attracts** (the Algodoo convention: one signed
-    /// repulsion knob). The field acts on *every* dynamic body, scaled by
-    /// the target's mass, so acceleration is mass-independent
-    /// (gravity-like — orbits work).
+    /// (px/s²), for a source of reference mass (1 m² at density 1).
+    /// **Negative attracts** (the Algodoo convention: one signed repulsion
+    /// knob). The field acts on *every* dynamic body, scaled by the
+    /// target's mass (acceleration is mass-independent — gravity-like,
+    /// orbits work), couples through the source's own mass (cutting a
+    /// source conserves its field), and reacts equally and oppositely on
+    /// the source (momentum conserves). See `docs/field-architecture.md`.
     pub strength: f32,
     /// Falloff over surface distance.
     pub falloff: FieldFalloff,

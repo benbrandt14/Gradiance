@@ -51,6 +51,7 @@ pub struct BodyProps<'w, 's> {
     debug: ResMut<'w, crate::domain::settings::DebugSettings>,
     body_q: Query<'w, 's, &'static RigidBody, With<Body>>,
     field_q: Query<'w, 's, &'static crate::domain::field::FieldSource, With<Body>>,
+    tracer_q: Query<'w, 's, &'static crate::domain::tracer::Tracer, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -259,6 +260,65 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
         );
     }
     field_block(ui, selection, props, primary);
+    tracer_block(ui, selection, props, primary);
+}
+
+/// The tracer editor: enable toggle + fade window. Commits
+/// `PropertyValue::Tracer` through the shared intent seam.
+fn tracer_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use crate::domain::tracer::Tracer;
+    let current = props.tracer_q.get(primary).ok().copied();
+    let mut on = current.is_some();
+    if ui
+        .checkbox(&mut on, "trace trajectory")
+        .on_hover_text("draw the body's recent path as a fading trail")
+        .changed()
+    {
+        let new = on.then(|| current.unwrap_or_default());
+        commit_tracers(selection, props, new);
+    }
+    let Some(tracer) = current else {
+        return;
+    };
+    let mut fade = tracer.fade_secs;
+    ui.horizontal(|ui| {
+        ui.label("fade (s)");
+        if let Commit::Done(_, new) =
+            precise_drag(ui, ui.id().with("tracer-fade"), &mut fade, 3.0, 0.05)
+        {
+            commit_tracers(
+                selection,
+                props,
+                Some(Tracer {
+                    fade_secs: new.max(0.05),
+                }),
+            );
+        }
+    });
+}
+
+/// Commits one batched tracer edit across the selection (each target's own
+/// prior value captured for undo).
+fn commit_tracers(
+    selection: &Selection,
+    props: &mut BodyProps,
+    new: Option<crate::domain::tracer::Tracer>,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = props.ids.get(e).ok().copied()?;
+            let old = props.tracer_q.get(e).ok().copied();
+            Some(PropertyChange {
+                id,
+                old: PropertyValue::Tracer(old),
+                new: PropertyValue::Tracer(new),
+            })
+        })
+        .collect();
+    if !changes.is_empty() {
+        props.edits.write(PropertyEditIntent { changes });
+    }
 }
 
 /// The field editor (Algodoo's attraction): enable toggle, signed

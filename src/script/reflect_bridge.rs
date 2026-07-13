@@ -209,6 +209,7 @@ mod tests {
                 layers: None,
                 groups: Vec::new(),
                 field: None,
+                tracer: None,
             },
         };
 

@@ -21,6 +21,7 @@ use crate::domain::shape::{CsgOp, ShapeDef};
 use crate::geometry::contours::point_in_ring;
 use crate::geometry::polygonize::polygonize_components;
 use crate::geometry::sdf;
+use avian2d::prelude::{AngularVelocity, LinearVelocity};
 use bevy::prelude::*;
 
 /// What happened to one cut body.
@@ -144,8 +145,10 @@ impl CutCommand {
                             depth: original.depth,
                             layers: None,
                             groups: original.groups.clone(),
-                            // Cut pieces inherit the parent's field source.
+                            // Cut pieces inherit the parent's field source
+                            // and tracer.
                             field: original.field,
+                            tracer: original.tracer,
                         }
                     })
                     .collect();
@@ -244,9 +247,28 @@ impl GameCommand for CutCommand {
             match &outcome.replacement {
                 Replacement::Split { pieces } => {
                     let entity = resolve(world, outcome.original.id)?;
+                    // Physics continuity (Algodoo 7.5): pieces of a severed
+                    // moving body keep flying — each inherits `v + ω × r`
+                    // (r = its centroid offset) and the shared spin. Read
+                    // live at apply time and never recorded: velocities are
+                    // simulation state, not authored state, exactly like
+                    // the grab spring's writes.
+                    let motion = world.get::<LinearVelocity>(entity).copied().map(|lv| {
+                        (
+                            lv.0,
+                            world.get::<AngularVelocity>(entity).map_or(0.0, |a| a.0),
+                        )
+                    });
                     world.despawn(entity);
                     for piece in pieces {
-                        piece.spawn(world);
+                        let spawned = piece.spawn(world);
+                        if let Some((v, omega)) = motion {
+                            let r = piece.pose.pos - outcome.original.pose.pos;
+                            world.entity_mut(spawned).insert((
+                                LinearVelocity(v + omega * r.perp()),
+                                AngularVelocity(omega),
+                            ));
+                        }
                     }
                     apply_joint_changes(world, &outcome.joint_changes)?;
                 }

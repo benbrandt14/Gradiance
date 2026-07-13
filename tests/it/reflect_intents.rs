@@ -145,6 +145,7 @@ fn spawn_body_intent_round_trips_through_reflection() {
             strength: -12.5,
             falloff: gradiance::domain::field::FieldFalloff::Linear,
         }),
+        tracer: Some(gradiance::domain::tracer::Tracer { fade_secs: 1.5 }),
     };
     let intent = SpawnBodyIntent {
         record: record.clone(),

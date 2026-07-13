@@ -81,6 +81,46 @@ fn severing_a_box_splits_it_into_two_recentered_pieces() {
 }
 
 #[test]
+fn cut_pieces_inherit_velocity_and_spin() {
+    use avian2d::prelude::{AngularVelocity, LinearVelocity};
+    // Physics continuity (Algodoo 7.5): severing a moving, spinning body
+    // hands each piece `v + ω × r` and the shared spin, so pieces keep
+    // flying instead of freezing mid-air.
+    let mut app = paused_app();
+    let id = spawn_box_at(&mut app, Vec2::ZERO, 100.0, 20.0);
+    let entity = entity_of(&app, id).unwrap();
+    let (v, omega) = (Vec2::new(30.0, 0.0), 2.0);
+    app.world_mut()
+        .entity_mut(entity)
+        .insert((LinearVelocity(v), AngularVelocity(omega)));
+
+    cut(&mut app, Vec2::new(0.0, -30.0), Vec2::new(0.0, 30.0), 4.0);
+    assert_eq!(body_count(&mut app), 2);
+
+    let mut pieces: Vec<(Vec2, Vec2, f32)> = app
+        .world_mut()
+        .query_filtered::<(&Transform, &LinearVelocity, &AngularVelocity), With<Body>>()
+        .iter(app.world())
+        .map(|(t, lv, av)| (t.translation.truncate(), lv.0, av.0))
+        .collect();
+    pieces.sort_by(|a, b| a.0.x.total_cmp(&b.0.x));
+    for (pos, piece_v, piece_omega) in &pieces {
+        let expected = v + omega * pos.perp();
+        assert!(
+            (*piece_v - expected).length() < 1.0,
+            "piece at {pos:?} inherits v + ω×r ({piece_v:?} vs {expected:?})"
+        );
+        assert!(
+            (piece_omega - omega).abs() < 1e-3,
+            "piece keeps the spin ({piece_omega} vs {omega})"
+        );
+    }
+    // The two halves shear oppositely: the spin flings the left piece down
+    // and the right piece up.
+    assert!(pieces[0].1.y < -20.0 && pieces[1].1.y > 20.0, "{pieces:?}");
+}
+
+#[test]
 fn partial_cuts_are_rejected_entirely() {
     // User contract: a cut only applies when it severs — no notches, no
     // microscopic thin features, and no undo entry for a failed stroke.

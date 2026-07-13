@@ -187,5 +187,6 @@ pub fn new_body_record(
         layers: None,
         groups: Vec::new(),
         field: None,
+        tracer: None,
     }
 }

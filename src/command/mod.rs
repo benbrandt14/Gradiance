@@ -236,6 +236,7 @@ impl Plugin for CommandPlugin {
         // registry without naming those types individually.
         app.register_type::<intent::SpawnBodyIntent>();
         app.register_type::<crate::domain::field::FieldSource>();
+        app.register_type::<crate::domain::tracer::Tracer>();
         app.register_type::<intent::DeleteIntent>();
         app.register_type::<intent::DuplicateIntent>();
         app.register_type::<intent::CommitTransformIntent>();

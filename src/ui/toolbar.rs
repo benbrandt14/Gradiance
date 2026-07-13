@@ -34,6 +34,7 @@ pub fn toolbar(
     mut plot: ResMut<crate::ui::plot::PlotPanel>,
     mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
     mut console: ResMut<crate::ui::console::ScriptConsole>,
+    mut debug: ResMut<crate::domain::settings::DebugSettings>,
     mut rig: ResMut<crate::interaction::camera::CameraRig>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -107,6 +108,15 @@ pub fn toolbar(
                     .clicked()
                 {
                     console.toggle();
+                }
+                // Field overlay lives with the debug toggles, but it's the
+                // main way to *see* attraction/repulsion — surface it here.
+                if ui
+                    .selectable_label(debug.show_fields, "⇢ Fields")
+                    .on_hover_text("vector plot of the superposed field (also in Settings ▸ Debug)")
+                    .clicked()
+                {
+                    debug.show_fields = !debug.show_fields;
                 }
                 ui.separator();
                 if ui.button("⚙ Settings").clicked() {
