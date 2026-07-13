@@ -147,6 +147,9 @@ pub struct EnvironmentRecord {
     /// Back plane / ground scenery (defaulted when absent — pre-V1 files).
     #[serde(default)]
     pub scenery: crate::domain::settings::ScenerySettings,
+    /// Signal-dataflow bindings (defaulted when absent — pre-signal files).
+    #[serde(default)]
+    pub signals: crate::signal::SignalBindings,
 }
 
 /// A complete scene: the save file, and the unit of whole-world undo.
@@ -220,6 +223,10 @@ impl SceneRecord {
                     .get_resource::<crate::domain::settings::ScenerySettings>()
                     .cloned()
                     .unwrap_or_default(),
+                signals: world
+                    .get_resource::<crate::signal::SignalBindings>()
+                    .cloned()
+                    .unwrap_or_default(),
             },
         }
     }
@@ -250,5 +257,6 @@ impl SceneRecord {
         world.insert_resource(self.environment.render.clone());
         world.insert_resource(self.environment.lighting.clone());
         world.insert_resource(self.environment.scenery.clone());
+        world.insert_resource(self.environment.signals.clone());
     }
 }

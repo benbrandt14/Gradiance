@@ -250,3 +250,86 @@ fn the_op_catalog_is_introspectable_from_a_script() {
     );
     assert_eq!(body_count(&mut app), 1);
 }
+
+#[test]
+fn signal_verbs_publish_and_read_the_bus() {
+    use gradiance::signal::SignalBus;
+    let mut app = paused_app();
+    run(&mut app, "(signal-set \"excitement\" 7)");
+    assert_eq!(
+        app.world().resource::<SignalBus>().get("excitement"),
+        Some(7.0),
+        "signal-set lands on the bus"
+    );
+    // signal-get reads the per-run mirror: derive a second signal from it.
+    run(
+        &mut app,
+        "(signal-set \"doubled\" (* 2 (signal-get \"excitement\")))",
+    );
+    assert_eq!(
+        app.world().resource::<SignalBus>().get("doubled"),
+        Some(14.0)
+    );
+}
+
+#[test]
+fn a_script_drives_color_from_touch_count() {
+    // The user story: a script computes how many bodies a body touches and
+    // publishes it; a Named binding turns that into the body's color.
+    use gradiance::signal::{
+        SignalBinding, SignalBindings, SignalBus, SignalColorOverride, SignalMap, SignalSink,
+        SignalSource,
+    };
+    let mut app = crate::harness::headless_app();
+    run(
+        &mut app,
+        "(begin
+            (spawn-box 0 120 20 20)
+            (spawn-ground 0 -100 0))",
+    );
+    let boxes: Vec<gradiance::core::ids::StableId> = app
+        .world_mut()
+        .query_filtered::<(
+            &gradiance::core::ids::StableId,
+            &gradiance::domain::shape::ShapeDef,
+        ), bevy::prelude::With<gradiance::domain::Body>>()
+        .iter(app.world())
+        .filter(|(_, shape)| !shape.contains_half_plane())
+        .map(|(id, _)| *id)
+        .collect();
+    let box_id = boxes[0];
+    app.world_mut()
+        .resource_mut::<SignalBindings>()
+        .0
+        .push(SignalBinding {
+            name: "touch-fill".into(),
+            source: SignalSource::Named("touches".into()),
+            map: SignalMap {
+                in_min: 0.0,
+                in_max: 4.0,
+            },
+            gradient: gradiance::signal::GradientSpec::default(),
+            sink: SignalSink::Fill(box_id),
+        });
+
+    crate::harness::step(&mut app, 180); // fall and rest on the ground
+    // The box is the body with the smaller id-ordered index of the two; find
+    // its index via touch-count over both and take the max.
+    run(
+        &mut app,
+        "(signal-set \"touches\" (max (touch-count 0) (touch-count 1)))",
+    );
+    crate::harness::step(&mut app, 2);
+
+    assert!(
+        app.world().resource::<SignalBus>().get("touches").unwrap() >= 1.0,
+        "the script read a real touch count"
+    );
+    let entity = crate::harness::entity_of(&app, box_id).unwrap();
+    assert!(
+        app.world()
+            .get::<SignalColorOverride>(entity)
+            .is_some_and(|o| o.fill.is_some()),
+        "the script-published count drives the body's color"
+    );
+}

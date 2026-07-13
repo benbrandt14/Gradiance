@@ -90,9 +90,13 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (nearest-at x y)             ; index of the nearest body centre (-1 if none)
 (nearest-dist x y)           ; distance to the nearest body centre (-1 if none)
 (body-index-at x y)          ; index of a body containing the point (-1 if none)
+(touch-count i)              ; how many bodies the i-th body is touching
+(signal-get name)            ; current value of a named bus signal (NaN if unset)
 
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
+(signal-set name value)      ; publish a named value on the signal bus
+                             ; (drives color/plot bindings — docs/signal-dataflow.md)
 
 ;; meta — introspection
 (ops)                        ; list every registered op name
@@ -123,6 +127,13 @@ Extend the right-click menu from an init script (`--script init.scm`):
 (register-action "Heavy gravity"    "(sim-set \"gravity.y\" -2500)")
 (register-action "Fill a shelf"
   "(let loop ((i 0)) (when (< i 8) (spawn-box (* i 30) 0 24 24) (loop (+ i 1))))")
+```
+
+A script-computed value driving a body's color (bind *named* `touches` to
+the body's fill in the **Signals** window — `docs/signal-dataflow.md`):
+
+```scheme
+(signal-set "touches" (touch-count 0))
 ```
 
 Reads driving edits (a marker under every existing body):

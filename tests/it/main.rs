@@ -22,6 +22,7 @@ mod reflect_intents;
 mod registry_validation;
 mod replay;
 mod scripting;
+mod signals;
 mod tools;
 mod ui_panels;
 mod unit_commands;

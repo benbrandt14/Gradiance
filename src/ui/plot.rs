@@ -186,6 +186,7 @@ pub fn plot_panel(
     mut contexts: EguiContexts,
     mut panel: ResMut<PlotPanel>,
     history: Res<PlotHistory>,
+    bus: Res<crate::signal::SignalBus>,
     keys: Res<ButtonInput<KeyCode>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -201,7 +202,12 @@ pub fn plot_panel(
         .open(&mut open)
         .default_width(320.0)
         .show(ctx, |ui| {
-            if history.signals.is_empty() {
+            let bound: Vec<(&str, &std::collections::VecDeque<f32>)> = bus
+                .entries()
+                .filter(|(_, e)| e.history().len() >= 2)
+                .map(|(name, e)| (name, e.history()))
+                .collect();
+            if history.signals.is_empty() && bound.is_empty() {
                 ui.label(
                     "Select one body (speed, height) or a joint (length, angle) and press Play.",
                 );
@@ -217,6 +223,23 @@ pub fn plot_panel(
                     &signal.samples,
                     SIGNAL_COLORS[i % SIGNAL_COLORS.len()],
                 );
+            }
+            // Signal-dataflow bus histories (the Signals window's bindings).
+            if !bound.is_empty() {
+                if !history.signals.is_empty() {
+                    ui.separator();
+                }
+                for (i, (name, samples)) in bound.iter().enumerate() {
+                    if i > 0 {
+                        ui.add_space(4.0);
+                    }
+                    draw_series(
+                        ui,
+                        name,
+                        samples,
+                        SIGNAL_COLORS[(i + 2) % SIGNAL_COLORS.len()],
+                    );
+                }
             }
         });
     panel.open = open;

@@ -33,6 +33,7 @@ pub fn toolbar(
     mut settings: ResMut<crate::ui::settings::SettingsWindow>,
     mut plot: ResMut<crate::ui::plot::PlotPanel>,
     mut probe: ResMut<crate::ui::probe::ProbePanel>,
+    mut signals: ResMut<crate::ui::signals::SignalsPanel>,
     mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
     mut console: ResMut<crate::ui::console::ScriptConsole>,
     mut debug: ResMut<crate::domain::settings::DebugSettings>,
@@ -86,46 +87,15 @@ pub fn toolbar(
                     rig.homing = true;
                 }
                 ui.separator();
-                // Toggles for the hotkey-only panels, so they're discoverable
-                // without knowing the `\` / backquote shortcuts. The buttons
-                // reflect each panel's open state.
-                if ui
-                    .selectable_label(inspector.open, "Properties")
-                    .on_hover_text("properties pop-out (also in the right-click menu)")
-                    .clicked()
-                {
-                    inspector.open = !inspector.open;
-                }
-                if ui
-                    .selectable_label(plot.is_open(), "Plot")
-                    .on_hover_text("live plot of the selected body/joint (\\)")
-                    .clicked()
-                {
-                    plot.toggle();
-                }
-                if ui
-                    .selectable_label(probe.is_open(), "Probe")
-                    .on_hover_text("live physics readouts: pinned bodies + hover")
-                    .clicked()
-                {
-                    probe.toggle();
-                }
-                if ui
-                    .selectable_label(console.is_open(), "λ Script")
-                    .on_hover_text("scripting console / REPL (`)")
-                    .clicked()
-                {
-                    console.toggle();
-                }
-                // Field overlay lives with the debug toggles, but it's the
-                // main way to *see* attraction/repulsion — surface it here.
-                if ui
-                    .selectable_label(debug.show_fields, "⇢ Fields")
-                    .on_hover_text("vector plot of the superposed field (also in Settings ▸ Debug)")
-                    .clicked()
-                {
-                    debug.show_fields = !debug.show_fields;
-                }
+                panel_toggles(
+                    ui,
+                    &mut inspector,
+                    &mut plot,
+                    &mut probe,
+                    &mut signals,
+                    &mut console,
+                    &mut debug,
+                );
                 ui.separator();
                 if ui.button("⚙ Settings").clicked() {
                     settings.open = !settings.open;
@@ -142,6 +112,63 @@ pub fn toolbar(
             }
         });
     Ok(())
+}
+
+/// Toggles for the hotkey-only panels, so they're discoverable without
+/// knowing the `\` / backquote shortcuts. Each button reflects its panel's
+/// open state. (The field overlay lives with the debug toggles, but it's
+/// the main way to *see* attraction/repulsion — surfaced here too.)
+fn panel_toggles(
+    ui: &mut egui::Ui,
+    inspector: &mut crate::ui::inspector::InspectorPanel,
+    plot: &mut crate::ui::plot::PlotPanel,
+    probe: &mut crate::ui::probe::ProbePanel,
+    signals: &mut crate::ui::signals::SignalsPanel,
+    console: &mut crate::ui::console::ScriptConsole,
+    debug: &mut crate::domain::settings::DebugSettings,
+) {
+    if ui
+        .selectable_label(inspector.open, "Properties")
+        .on_hover_text("properties pop-out (also in the right-click menu)")
+        .clicked()
+    {
+        inspector.open = !inspector.open;
+    }
+    if ui
+        .selectable_label(plot.is_open(), "Plot")
+        .on_hover_text("live plot of the selected body/joint (\\)")
+        .clicked()
+    {
+        plot.toggle();
+    }
+    if ui
+        .selectable_label(probe.is_open(), "Probe")
+        .on_hover_text("live physics readouts: pinned bodies + hover")
+        .clicked()
+    {
+        probe.toggle();
+    }
+    if ui
+        .selectable_label(signals.is_open(), "Signals")
+        .on_hover_text("wire scene attributes to colors and plots (signal dataflow)")
+        .clicked()
+    {
+        signals.toggle();
+    }
+    if ui
+        .selectable_label(console.is_open(), "λ Script")
+        .on_hover_text("scripting console / REPL (`)")
+        .clicked()
+    {
+        console.toggle();
+    }
+    if ui
+        .selectable_label(debug.show_fields, "⇢ Fields")
+        .on_hover_text("vector plot of the superposed field (also in Settings ▸ Debug)")
+        .clicked()
+    {
+        debug.show_fields = !debug.show_fields;
+    }
 }
 
 /// The tool-palette buttons: highlights `current`, returns a clicked tool.

@@ -1,9 +1,14 @@
 //! Authored appearance → derived body material (toon-banded matte).
+//!
+//! A [`SignalColorOverride`] (the signal dataflow's derived tint) is
+//! preferred over the authored fill while present; removing it restores
+//! the authored appearance.
 
 use crate::domain::Body;
 use crate::domain::appearance::{Appearance, Rgba};
 use crate::domain::settings::RenderSettings;
 use crate::render::toon::{ToonExtension, ToonMaterial, params_of};
+use crate::signal::SignalColorOverride;
 use bevy::prelude::*;
 
 /// Converts a domain color into a Bevy color (sRGB).
@@ -12,8 +17,23 @@ pub fn color_of(rgba: Rgba) -> Color {
 }
 
 /// The standard body material: matte base, toon banding per settings.
-fn body_material(appearance: &Appearance, settings: &RenderSettings) -> ToonMaterial {
-    let fill = appearance.fill;
+fn body_material(
+    appearance: &Appearance,
+    tint: Option<Color>,
+    settings: &RenderSettings,
+) -> ToonMaterial {
+    let fill = match tint {
+        Some(color) => {
+            let c = color.to_srgba();
+            Rgba {
+                r: c.red,
+                g: c.green,
+                b: c.blue,
+                a: c.alpha,
+            }
+        }
+        None => appearance.fill,
+    };
     ToonMaterial {
         base: StandardMaterial {
             base_color: color_of(fill),
@@ -41,22 +61,49 @@ fn body_material(appearance: &Appearance, settings: &RenderSettings) -> ToonMate
     }
 }
 
-/// (Re)builds a body's material when its appearance changes.
+/// (Re)builds a body's material when its appearance or signal tint
+/// changes (or the tint is removed — the authored fill returns).
 pub fn sync_body_materials(
     mut commands: Commands,
     mut materials: ResMut<Assets<ToonMaterial>>,
     settings: Res<RenderSettings>,
     changed: Query<
-        (Entity, &Appearance, &crate::domain::shape::ShapeDef),
-        (With<Body>, Changed<Appearance>),
+        (
+            Entity,
+            &Appearance,
+            Option<&SignalColorOverride>,
+            &crate::domain::shape::ShapeDef,
+        ),
+        (
+            With<Body>,
+            Or<(Changed<Appearance>, Changed<SignalColorOverride>)>,
+        ),
     >,
+    bodies: Query<
+        (
+            Entity,
+            &Appearance,
+            Option<&SignalColorOverride>,
+            &crate::domain::shape::ShapeDef,
+        ),
+        With<Body>,
+    >,
+    mut untinted: RemovedComponents<SignalColorOverride>,
 ) {
-    for (entity, appearance, shape) in &changed {
+    let removed: Vec<Entity> = untinted.read().collect();
+    for (entity, appearance, tint, shape) in changed
+        .iter()
+        .chain(removed.iter().filter_map(|e| bodies.get(*e).ok()))
+    {
         // Half-plane grounds render through `render::ground`'s material.
         if matches!(shape, crate::domain::shape::ShapeDef::HalfPlane) {
             continue;
         }
-        let handle = materials.add(body_material(appearance, &settings));
+        let handle = materials.add(body_material(
+            appearance,
+            tint.and_then(|t| t.fill),
+            &settings,
+        ));
         commands.entity(entity).insert(MeshMaterial3d(handle));
     }
 }

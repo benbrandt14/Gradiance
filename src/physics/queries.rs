@@ -88,6 +88,22 @@ impl PhysicsQueries<'_, '_> {
         self.masses.get(entity).ok().map(|m| m.value())
     }
 
+    /// How many distinct bodies `entity` is currently touching (contact
+    /// pairs, active + sleeping). Probe/signal read — e.g. "color a body
+    /// by how many things it rests on".
+    pub fn touching_count(&self, entity: Entity) -> usize {
+        self.contacts
+            .iter_active_touching()
+            .chain(self.contacts.iter_sleeping_touching())
+            .filter(|pair| {
+                pair.collider1 == entity
+                    || pair.collider2 == entity
+                    || pair.body1 == Some(entity)
+                    || pair.body2 == Some(entity)
+            })
+            .count()
+    }
+
     /// Net normal-contact impulse on `entity` over the last physics step
     /// (world space; force ≈ impulse / fixed dt). A box resting on the
     /// floor reads its weight pointing up. Probes and the plot panel read

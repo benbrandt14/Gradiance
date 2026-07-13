@@ -50,6 +50,12 @@ pub mod name {
     pub const SIM_SET: &str = "sim-set";
     /// `(register-action label source)` — surface a named action in the editor.
     pub const REGISTER_ACTION: &str = "register-action";
+    /// `(touch-count i)` — how many bodies the i-th body is touching.
+    pub const TOUCH_COUNT: &str = "touch-count";
+    /// `(signal-set name value)` — publish a named value on the signal bus.
+    pub const SIGNAL_SET: &str = "signal-set";
+    /// `(signal-get name)` — the current value of a bus signal.
+    pub const SIGNAL_GET: &str = "signal-get";
     /// `(ops)` — list of every registered operation name.
     pub const OPS: &str = "ops";
     /// `(describe name)` — the signature and doc of one operation.
@@ -240,6 +246,20 @@ fn query_specs() -> Vec<OpSpec> {
             category: Query,
             args: 2,
         },
+        OpSpec {
+            name: name::TOUCH_COUNT,
+            signature: "(touch-count i)",
+            doc: "How many bodies the i-th body is currently touching; NaN if out of range.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::SIGNAL_GET,
+            signature: "(signal-get name)",
+            doc: "Current value of a named signal on the bus; NaN if unset.",
+            category: Query,
+            args: 1,
+        },
     ]
 }
 
@@ -267,13 +287,22 @@ fn config_specs() -> Vec<OpSpec> {
 
 /// Editor-state verbs (write non-authored editor resources).
 fn editor_specs() -> Vec<OpSpec> {
-    vec![OpSpec {
-        name: name::REGISTER_ACTION,
-        signature: "(register-action label source)",
-        doc: "Surface a named action (label + lisp source) in the editor's menus.",
-        category: OpCategory::EditorState,
-        args: 2,
-    }]
+    vec![
+        OpSpec {
+            name: name::REGISTER_ACTION,
+            signature: "(register-action label source)",
+            doc: "Surface a named action (label + lisp source) in the editor's menus.",
+            category: OpCategory::EditorState,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SIGNAL_SET,
+            signature: "(signal-set name value)",
+            doc: "Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md).",
+            category: OpCategory::EditorState,
+            args: 2,
+        },
+    ]
 }
 
 /// Homoiconic introspection verbs (the catalog reading itself).

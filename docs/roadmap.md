@@ -362,6 +362,16 @@ governance").
   the model is ready to back the `(measure …)` data-out seam. Hand-drawn with
   the egui painter, no plotting dependency. Next: contact-force signal, pinnable
   multi-body probes, and the script-driven `(measure …)` seam.
+- **Signal dataflow scaffolding** — **landed** (`docs/signal-dataflow.md`):
+  the substrate for the time-series node editor. `SignalBindings` (config
+  seam, persisted with the scene) wire **sources** (speed, spin, height,
+  distance, contact force/count, script-published `Named` values) through
+  a domain map + `colorgrad` gradient into **sinks** (body fill tint,
+  tracer-trail tint — both a derived `SignalColorOverride`, authored
+  appearance untouched — or plot). The `SignalBus` carries named values +
+  histories (plotted in the plot panel); scripts join via
+  `signal-set`/`signal-get`/`touch-count`. Simple functional *Signals*
+  window; the node-editor canvas replaces it later.
 - **Probes** — **landed**: the *Probes* window (transport toggle) shows live
   readouts — position, speed, spin, mass, net contact force, sleep state —
   for bodies pinned from the right-click menu ("Pin probe", tracked by

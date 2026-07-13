@@ -271,5 +271,6 @@
             back_visible: true,
             ground_visible: true,
         ),
+        signals: ([]),
     ),
 )

@@ -17,6 +17,7 @@ pub mod plot;
 pub mod probe;
 pub mod reflect_grid;
 pub mod settings;
+pub mod signals;
 pub mod toolbar;
 pub mod widgets;
 
@@ -42,6 +43,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<plot::PlotHistory>();
         app.init_resource::<plot::PlotPanel>();
         app.init_resource::<probe::ProbePanel>();
+        app.init_resource::<signals::SignalsPanel>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
@@ -52,6 +54,7 @@ impl Plugin for GradianceUiPlugin {
                 console::script_console,
                 plot::plot_panel,
                 probe::probe_panel,
+                signals::signals_panel,
                 context_menu::context_menu,
                 capture_pointer_over_ui,
             )

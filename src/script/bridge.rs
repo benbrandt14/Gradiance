@@ -96,6 +96,10 @@ struct Shared {
     config: ConfigQueue,
     /// Named actions emitted by `register-action` → the `ScriptActions` table.
     actions: Arc<Mutex<Vec<ScriptAction>>>,
+    /// Named-signal publishes emitted by `signal-set` → the `SignalBus`.
+    signal_writes: Arc<Mutex<Vec<(String, f64)>>>,
+    /// Read mirror of the `SignalBus` values → `signal-get`.
+    signal_values: Arc<Mutex<HashMap<String, f64>>>,
     /// The operation catalog → the `ops`/`describe` meta verbs.
     catalog: Arc<OperationCatalog>,
 }
@@ -108,6 +112,8 @@ impl Shared {
             sim: Arc::new(Mutex::new(SimSettings::default())),
             config: Arc::new(Mutex::new(Vec::new())),
             actions: Arc::new(Mutex::new(Vec::new())),
+            signal_writes: Arc::new(Mutex::new(Vec::new())),
+            signal_values: Arc::new(Mutex::new(HashMap::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
         }
     }
@@ -299,6 +305,7 @@ struct BodyView {
     pos: Vec2,
     rot: f32,
     shape: ShapeDef,
+    touching: usize,
 }
 
 impl BodyView {
@@ -376,23 +383,46 @@ impl SceneView {
             .position(|b| b.contains(p))
             .map_or(-1.0, |i| i as f64)
     }
+
+    /// How many bodies the `i`-th body is touching, or NaN if out of range.
+    fn touch_count(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| b.touching as f64)
+    }
 }
 
 /// Snapshots the committed scene (bodies ordered by id) for the read builtins.
 fn snapshot_scene(world: &mut World) -> SceneView {
-    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef)> = world
-        .query_filtered::<(&StableId, &Transform, &ShapeDef), With<Body>>()
+    // Touching counts per body entity (one pass over the contact graph).
+    let mut touch: HashMap<Entity, usize> = HashMap::new();
+    if let Some(contacts) = world.get_resource::<avian2d::prelude::ContactGraph>() {
+        for pair in contacts
+            .iter_active_touching()
+            .chain(contacts.iter_sleeping_touching())
+        {
+            for entity in [pair.collider1, pair.collider2] {
+                *touch.entry(entity).or_default() += 1;
+            }
+        }
+    }
+    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize)> = world
+        .query_filtered::<(Entity, &StableId, &Transform, &ShapeDef), With<Body>>()
         .iter(world)
-        .map(|(id, transform, shape)| {
+        .map(|(entity, id, transform, shape)| {
             let pose = PosRot::from_transform(transform);
-            (*id, pose.pos, pose.rot, shape.clone())
+            let touching = touch.get(&entity).copied().unwrap_or(0);
+            (*id, pose.pos, pose.rot, shape.clone(), touching)
         })
         .collect();
     rows.sort_by_key(|(id, ..)| id.0);
     SceneView {
         bodies: rows
             .into_iter()
-            .map(|(_, pos, rot, shape)| BodyView { pos, rot, shape })
+            .map(|(_, pos, rot, shape, touching)| BodyView {
+                pos,
+                rot,
+                shape,
+                touching,
+            })
             .collect(),
     }
 }
@@ -561,6 +591,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions);
+    register_signal_verbs(engine, &shared.signal_writes, &shared.signal_values);
     register_meta_verbs(engine, &shared.catalog);
 }
 
@@ -705,6 +736,15 @@ fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
             }
         },
     );
+
+    // `(touch-count i)` — how many bodies the i-th body is touching.
+    let v = Arc::clone(view);
+    engine.register_fn(name::TOUCH_COUNT, move |i: SteelVal| -> f64 {
+        match (steel_to_f64(&i), v.lock()) {
+            (Some(i), Ok(view)) if i >= 0.0 => view.touch_count(i as usize),
+            _ => f64::NAN,
+        }
+    });
 }
 
 /// Editor configuration — `sim-get` reads the settings mirror (a total read),
@@ -745,6 +785,34 @@ fn register_editor_verbs(engine: &mut Engine, actions: &Arc<Mutex<Vec<ScriptActi
             }
         },
     );
+}
+
+/// Signal-dataflow verbs — the script side of the signal bus
+/// (`docs/signal-dataflow.md`). `signal-set` queues a named publish (the
+/// exclusive system moves it onto the `SignalBus`); `signal-get` reads the
+/// per-run value mirror. Scripts thereby *feed* the dataflow on their own
+/// cold runs — the per-frame evaluator never enters the VM.
+fn register_signal_verbs(
+    engine: &mut Engine,
+    writes: &Arc<Mutex<Vec<(String, f64)>>>,
+    values: &Arc<Mutex<HashMap<String, f64>>>,
+) {
+    // `(signal-set name value)` — publish a named value on the signal bus.
+    let w = Arc::clone(writes);
+    engine.register_fn(name::SIGNAL_SET, move |name: String, value: SteelVal| {
+        if let (Ok(mut queue), Some(value)) = (w.lock(), steel_to_f64(&value)) {
+            queue.push((name, value));
+        }
+    });
+
+    // `(signal-get name)` — the current value of a bus signal (NaN if unset).
+    let v = Arc::clone(values);
+    engine.register_fn(name::SIGNAL_GET, move |name: String| -> f64 {
+        v.lock()
+            .ok()
+            .and_then(|values| values.get(&name).copied())
+            .unwrap_or(f64::NAN)
+    });
 }
 
 /// Homoiconic introspection — the catalog reading itself.
@@ -798,6 +866,7 @@ pub fn run_scripts(world: &mut World) {
     {
         *guard = settings;
     }
+    refresh_signal_mirror(world);
 
     for source in sources {
         // NonSend: the VM lives on the main thread (this exclusive system is
@@ -865,8 +934,13 @@ pub fn run_scripts(world: &mut World) {
         }
     }
 
-    // Drain the action queue into the `ScriptActions` table (upsert by label, so
-    // re-running a registration script is idempotent).
+    drain_actions(world);
+    drain_signal_publishes(world);
+}
+
+/// Drains the action queue into the `ScriptActions` table (upsert by
+/// label, so re-running a registration script is idempotent).
+fn drain_actions(world: &mut World) {
     let actions: Vec<ScriptAction> = world
         .get_non_send::<ScriptEngine>()
         .and_then(|engine| {
@@ -883,6 +957,55 @@ pub fn run_scripts(world: &mut World) {
     {
         for action in actions {
             table.upsert(action);
+        }
+    }
+}
+
+/// Mirrors the current [`SignalBus`](crate::signal::SignalBus) values into
+/// the `signal-get` read snapshot (part of the per-run read refresh).
+fn refresh_signal_mirror(world: &mut World) {
+    if let (Some(values), Some(bus)) = (
+        world
+            .get_non_send::<ScriptEngine>()
+            .map(|e| Arc::clone(&e.shared.signal_values)),
+        world.get_resource::<crate::signal::SignalBus>(),
+    ) && let Ok(mut guard) = values.lock()
+    {
+        guard.clear();
+        guard.extend(
+            bus.entries()
+                .map(|(name, entry)| (name.to_owned(), f64::from(entry.value()))),
+        );
+    }
+}
+
+/// Drains `signal-set` publishes onto the signal bus (remembering the
+/// names, so bus hygiene keeps script signals alive between runs).
+fn drain_signal_publishes(world: &mut World) {
+    let publishes: Vec<(String, f64)> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .signal_writes
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if publishes.is_empty() {
+        return;
+    }
+    if let Some(mut names) = world.get_resource_mut::<crate::signal::ScriptSignals>() {
+        for (name, _) in &publishes {
+            if !names.0.contains(name) {
+                names.0.push(name.clone());
+            }
+        }
+    }
+    if let Some(mut bus) = world.get_resource_mut::<crate::signal::SignalBus>() {
+        for (name, value) in publishes {
+            bus.publish(&name, value as f32, false);
         }
     }
 }

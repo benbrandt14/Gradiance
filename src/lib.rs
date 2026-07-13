@@ -84,6 +84,7 @@ pub mod physics;
 pub mod prelude;
 pub mod render;
 pub mod script;
+pub mod signal;
 pub mod ui;
 
 use bevy::app::plugin_group;
@@ -96,6 +97,7 @@ plugin_group! {
         crate::command:::CommandPlugin,
         crate::persist:::PersistPlugin,
         crate::physics:::GradiancePhysicsPlugin,
+        crate::signal:::SignalPlugin,
         crate::interaction:::InteractionPlugin,
         crate::render:::GradianceRenderPlugin,
         crate::ui:::GradianceUiPlugin,

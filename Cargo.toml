@@ -40,6 +40,7 @@ mimalloc = "0.1"
 # per-frame loop (continuous drivers lower to `src/script/kernel.rs`); see
 # docs/script-lisp-decision.md. Confined to `src/script/` (tests/boundaries.rs).
 steel-core = "=0.8.2"
+colorgrad = { version = "0.8.0", features = ["preset"] }
 
 [features]
 # Dev-only inner loop: `cargo run --features dev`.

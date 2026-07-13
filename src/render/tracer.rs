@@ -74,16 +74,36 @@ pub fn cleanup_traces(mut commands: Commands, mut removed: RemovedComponents<Tra
     }
 }
 
-/// Draws each trail as a fading polyline in the body's own fill color.
+/// Draws each trail as a fading polyline in the body's own fill color —
+/// or the signal dataflow's trail tint when one is bound.
 pub fn draw_traces(
     time: Res<Time<Physics>>,
-    trails: Query<(&Tracer, &TraceTrail, &Appearance), With<Body>>,
+    trails: Query<
+        (
+            &Tracer,
+            &TraceTrail,
+            &Appearance,
+            Option<&crate::signal::SignalColorOverride>,
+        ),
+        With<Body>,
+    >,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let now = time.elapsed_secs();
-    for (tracer, trail, appearance) in &trails {
+    for (tracer, trail, appearance, tint) in &trails {
         let fade = tracer.fade_secs.max(0.05);
-        let fill = appearance.fill;
+        let fill = match tint.and_then(|t| t.trail) {
+            Some(color) => {
+                let c = color.to_srgba();
+                crate::domain::appearance::Rgba {
+                    r: c.red,
+                    g: c.green,
+                    b: c.blue,
+                    a: c.alpha,
+                }
+            }
+            None => appearance.fill,
+        };
         for pair in trail.0.iter().collect::<Vec<_>>().windows(2) {
             let (t, a) = *pair[0];
             let (_, b) = *pair[1];

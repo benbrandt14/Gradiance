@@ -37,6 +37,7 @@ bottom — no unclassified state.
 | `LightingSettings`, `ScenerySettings` | scene file | no | yes | applied by `render::scenery` (key light, ambient, SSAO, back plane) and `render::ground` (ground visibility) |
 | `DebugSettings` | **no** | no | yes | workstation overlays, not scene state |
 | `ToolDefaults` | **no** | no | yes | tool-creation defaults (slider travel limits); consulted at gesture commit time |
+| `SignalBindings` | scene file | no | yes | the signal-dataflow graph (`docs/signal-dataflow.md`); evaluated per frame by `signal::evaluate_signals` |
 
 ### EditorState (non-authored editor tables; not persisted, not undoable)
 
@@ -49,7 +50,7 @@ bottom — no unclassified state.
 | `Selection`, `SelectedJoint` | current selection (entities, never saved) |
 | `GameState`, `ToolState` | bevy states: play/pause, active tool |
 | `ScaleFrame` | global/local handle axes toggle (F) |
-| UI panel state: `SettingsWindow`/`SettingsTab`, `InspectorPanel`, `ContextMenu`, `PlotPanel`, `ProbePanel`, `ScriptConsole` | open/closed + per-panel scratch; egui-side only (`ProbePanel` pins bodies by `StableId`, so undo/redo keep pins valid) |
+| UI panel state: `SettingsWindow`/`SettingsTab`, `InspectorPanel`, `ContextMenu`, `PlotPanel`, `ProbePanel`, `SignalsPanel`, `ScriptConsole` | open/closed + per-panel scratch; egui-side only (`ProbePanel` pins bodies by `StableId`, so undo/redo keep pins valid) |
 
 ### Transient gesture/preview state (tool-local; invariant 2 — dies with the gesture)
 
@@ -71,6 +72,8 @@ bottom — no unclassified state.
 | `Mesh3d`, `MeshMaterial3d`, `ToonMaterial` | `extrude_sync`, `material_sync` |
 | `FieldMass` | `fields::sync_field_mass` (shape area × density — the field-coupling mass, `docs/field-architecture.md`) |
 | `TraceTrail` | `render::tracer::sample_traces` (physics-clock position window behind the authored `Tracer`; removed with its marker) |
+| `SignalBus`, `ScriptSignals` | `signal::evaluate_signals` + script `signal-set` (named values + rolling histories; bus hygiene drops unbound names) |
+| `SignalColorOverride` | `signal::evaluate_signals` (derived tint preferred by `material_sync`/`tracer` over authored `Appearance`; removed with its binding) |
 | `IdIndex` | `StableId` component hooks |
 | `HistoryInfo` | dispatcher (read-only mirror of stack depths) |
 | `SubstepTrace` | `record_substep_trace` in avian's `SubstepSchedule` (debug view; rebuilt every physics step while enabled) |
