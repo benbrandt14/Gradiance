@@ -127,7 +127,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                         filters,
                     },
                     groups,
-                    magnet: None,
+                    field: None,
                 }
             },
         )
@@ -472,9 +472,9 @@ fn joints_survive_files_and_resolve_after_load() {
 }
 
 #[test]
-fn pre_magnet_files_still_parse() {
-    // `magnet` is serde-defaulted: files written before magnetism load with
-    // no magnetized bodies (no format bump needed).
+fn pre_field_files_still_parse() {
+    // `field` is serde-defaulted: files written before field sources load
+    // with none (no format bump needed).
     let scene = SceneRecord {
         version: gradiance::persist::FORMAT_VERSION,
         app_version: String::new(),
@@ -483,10 +483,10 @@ fn pre_magnet_files_still_parse() {
         environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();
-    let cut = text.replace("magnet: None,", "");
+    let cut = text.replace("field: None,", "");
     assert_ne!(text, cut, "fixture actually removed the field");
     let parsed = from_ron(&cut).expect("pre-magnet file parses");
-    assert_eq!(parsed.bodies[0].magnet, None);
+    assert_eq!(parsed.bodies[0].field, None);
 }
 
 #[test]

@@ -334,13 +334,15 @@ shadow items from M19. Design decisions in the slice PRs.
   constant, and damping; drawn as a non-colliding spring-coil gizmo. The three
   scalar knobs are the ones a future curve editor would let vary nonlinearly.
 - Cams, planar contact, magnetism (SDF force fields), breaking limits,
-  backlash (12) — **magnetism landed** (first cut): authored `Magnet`
-  component (strength with sign-as-polarity, falloff), pairwise forces in
-  the new `physics::forces` seam computed over the **SDF substrate**
-  (surface distance + gradient of the other body's `ShapeDef`, so fields
-  follow faces, not centers), applied as one-shot solver forces
-  (constraints win). Editable in the shared Material section; polarity
-  ring marker in the viewport. Cams/planar contact/breaking/backlash open.
+  backlash (12) — **fields landed** (Algodoo attraction): authored
+  `FieldSource` (signed repulsion, negative attracts; Linear/Quadratic
+  falloff — Algodoo's exact menu) acting on *every* dynamic body,
+  mass-scaled. One sampling cut-point (`physics::fields::Fields::accel_at`,
+  see `docs/field-architecture.md`) serves the solver forces, the
+  vector-plot overlay (`show_fields`), and **"Set in orbit"** (context
+  menu: `v = √(a·r)` about the dominant attractor). SDF-shaped by default
+  (surface distance + gradient). Cams/planar contact/breaking/backlash
+  open.
 - Contact point & force debug overlays (2.6, 8.3) — **first cut landed**:
   `PhysicsQueries::contact_points()` reads avian's `ContactGraph` (read-only, so
   the facade stays complete for plotters/scripts), and `DebugSettings.show_contacts`

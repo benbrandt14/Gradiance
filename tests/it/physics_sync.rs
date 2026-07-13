@@ -233,30 +233,20 @@ fn substep_trace_records_one_entry_per_substep() {
 }
 
 #[test]
-fn magnets_attract_and_repel_over_the_sdf_field() {
-    use gradiance::domain::magnet::Magnet;
-    let mut app = headless_app();
-    // No gravity: only the field acts.
-    app.world_mut()
-        .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
-    app.update();
-
-    let spawn_magnet = |app: &mut App, x: f32, strength: f32| {
+fn attraction_clusters_and_repulsion_scatters() {
+    use gradiance::domain::field::{FieldFalloff, FieldSource};
+    let spawn_field_circle = |app: &mut App, x: f32, strength: f32| {
         let mut record = box_record(Vec2::new(x, 0.0), 30.0, 30.0);
-        record.magnet = Some(Magnet {
+        record.shape = ShapeDef::Circle { radius: 15.0 };
+        record.field = Some(FieldSource {
             strength,
-            falloff: 2.0,
+            falloff: FieldFalloff::Quadratic,
         });
         let id = record.id;
         app.world_mut().write_message(SpawnBodyIntent { record });
         app.update();
         id
     };
-
-    // Like-signed coupling attracts.
-    let a = spawn_magnet(&mut app, -80.0, 200.0);
-    let b = spawn_magnet(&mut app, 80.0, 200.0);
     let gap = |app: &mut App, a: StableId, b: StableId| {
         let pa = app
             .world()
@@ -272,27 +262,124 @@ fn magnets_attract_and_repel_over_the_sdf_field() {
             .truncate();
         pa.distance(pb)
     };
-    let before = gap(&mut app, a, b);
-    step(&mut app, 60);
-    let after = gap(&mut app, a, b);
-    assert!(
-        after < before - 5.0,
-        "positive coupling pulls the magnets together ({before} -> {after})"
-    );
 
-    // Opposite-signed coupling repels.
+    // "Select a bunch of circles and have them cluster": negative strength
+    // (attraction, Algodoo convention) pulls them together.
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
         .gravity = Vec2::ZERO;
     app.update();
-    let a = spawn_magnet(&mut app, -40.0, 200.0);
-    let b = spawn_magnet(&mut app, 40.0, -200.0);
+    let a = spawn_field_circle(&mut app, -80.0, -2000.0);
+    let b = spawn_field_circle(&mut app, 80.0, -2000.0);
+    let before = gap(&mut app, a, b);
+    step(&mut app, 60);
+    let after = gap(&mut app, a, b);
+    assert!(
+        after < before - 5.0,
+        "attraction clusters the circles ({before} -> {after})"
+    );
+
+    // Positive strength repels.
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+    let a = spawn_field_circle(&mut app, -40.0, 2000.0);
+    let b = spawn_field_circle(&mut app, 40.0, 2000.0);
     let before = gap(&mut app, a, b);
     step(&mut app, 60);
     let after = gap(&mut app, a, b);
     assert!(
         after > before + 5.0,
-        "negative coupling pushes the magnets apart ({before} -> {after})"
+        "repulsion scatters the circles ({before} -> {after})"
+    );
+}
+
+#[test]
+fn a_field_acts_on_plain_bodies_too() {
+    use gradiance::domain::field::{FieldFalloff, FieldSource};
+    // Algodoo attraction affects every body, not only other field sources.
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+
+    let mut attractor = box_record(Vec2::ZERO, 40.0, 40.0);
+    attractor.physics.rigid_body = RigidBody::Static;
+    attractor.field = Some(FieldSource {
+        strength: -2000.0,
+        falloff: FieldFalloff::Quadratic,
+    });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: attractor });
+    let plain = box_record(Vec2::new(200.0, 0.0), 20.0, 20.0);
+    let plain_id = plain.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: plain });
+    app.update();
+
+    step(&mut app, 60);
+    let x = app
+        .world()
+        .get::<Transform>(entity_of(&app, plain_id).unwrap())
+        .unwrap()
+        .translation
+        .x;
+    assert!(x < 190.0, "the plain body fell toward the attractor ({x})");
+}
+
+#[test]
+fn set_in_orbit_produces_a_limit_cycle() {
+    use gradiance::domain::field::{FieldFalloff, FieldSource};
+    use gradiance::physics::fields::SetOrbitRequest;
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+
+    let mut sun = box_record(Vec2::ZERO, 60.0, 60.0);
+    sun.shape = ShapeDef::Circle { radius: 30.0 };
+    sun.physics.rigid_body = RigidBody::Static;
+    sun.field = Some(FieldSource {
+        strength: -4000.0,
+        falloff: FieldFalloff::Quadratic,
+    });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: sun });
+    let mut moon = box_record(Vec2::new(220.0, 0.0), 16.0, 16.0);
+    moon.shape = ShapeDef::Circle { radius: 8.0 };
+    let moon_id = moon.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: moon });
+    app.update();
+
+    app.world_mut().write_message(SetOrbitRequest {
+        targets: vec![moon_id],
+    });
+    app.update();
+
+    // The orbit is a limit cycle: over several revolutions the radius stays
+    // in a band instead of crashing in or escaping.
+    let mut min_r = f32::MAX;
+    let mut max_r = 0.0f32;
+    for _ in 0..12 {
+        step(&mut app, 30);
+        let r = app
+            .world()
+            .get::<Transform>(entity_of(&app, moon_id).unwrap())
+            .unwrap()
+            .translation
+            .truncate()
+            .length();
+        min_r = min_r.min(r);
+        max_r = max_r.max(r);
+    }
+    assert!(
+        min_r > 120.0 && max_r < 400.0,
+        "orbit stayed in a band (r in [{min_r}, {max_r}])"
     );
 }

@@ -106,6 +106,7 @@ pub struct GroupWriters<'w> {
     group: MessageWriter<'w, GroupIntent>,
     ungroup: MessageWriter<'w, UngroupIntent>,
     merge: MessageWriter<'w, MergeIntent>,
+    orbits: MessageWriter<'w, crate::physics::fields::SetOrbitRequest>,
 }
 
 /// Open context menu state.
@@ -319,6 +320,21 @@ pub fn context_menu(
                     ui.separator();
                 }
 
+                if ui
+                    .add_enabled(!selected_ids.is_empty(), egui::Button::new("Set in orbit"))
+                    .on_hover_text(
+                        "give each body the circular-orbit velocity around the \
+                         dominant attractive field at its position (Algodoo)",
+                    )
+                    .clicked()
+                {
+                    writers
+                        .orbits
+                        .write(crate::physics::fields::SetOrbitRequest {
+                            targets: selected_ids.clone(),
+                        });
+                    close = true;
+                }
                 if ui
                     .add_enabled(selected_ids.len() >= 2, egui::Button::new("Group"))
                     .clicked()

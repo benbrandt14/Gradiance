@@ -48,7 +48,7 @@
                 filters: 4294967295,
             ),
             groups: [],
-            magnet: None,
+            field: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000002"),
@@ -96,7 +96,7 @@
                 filters: 4294967295,
             ),
             groups: [],
-            magnet: None,
+            field: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000003"),
@@ -144,7 +144,7 @@
                 filters: 4294967295,
             ),
             groups: [],
-            magnet: None,
+            field: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000004"),
@@ -192,7 +192,7 @@
                 filters: 4294967295,
             ),
             groups: [],
-            magnet: None,
+            field: None,
         ),
     ],
     joints: [],
