@@ -18,7 +18,7 @@ bottom — no unclassified state.
 | `StableId` | identity component | on every authored entity; the cross-reference key |
 | `Body`, `Joint` | marker components | classify an authored entity |
 | `ShapeDef` | component | SDF tree; reflect-opaque leaf |
-| `LayerMask32` | component | collision filter *and* render depth |
+| `DepthBand` | component | continuous depth band = collision volume *and* render depth |
 | `Appearance` | component | fill / emissive |
 | `JointDef` | component | kind + anchors + rest rotations, bodies by `StableId` |
 | `SelectionGroup` | component | group membership (persisted, undoable via commands) |
@@ -48,7 +48,7 @@ bottom — no unclassified state.
 | `Selection`, `SelectedJoint` | current selection (entities, never saved) |
 | `GameState`, `ToolState` | bevy states: play/pause, active tool |
 | `ScaleFrame` | global/local handle axes toggle (F) |
-| UI panel state: `SettingsWindow`/`SettingsTab`, `InspectorPanel`, `ContextMenu`, `PlotPanel`, `ScriptConsole` | open/closed + per-panel scratch; egui-side only |
+| UI panel state: `SettingsWindow`/`SettingsTab`, `InspectorPanel`, `ContextMenu`, `PlotPanel`, `ScriptConsole`, `DepthPanel` | open/closed + per-panel scratch (incl. the depth dock's in-flight bar drag); egui-side only |
 
 ### Transient gesture/preview state (tool-local; invariant 2 — dies with the gesture)
 
@@ -195,18 +195,22 @@ and its trade-offs.
 
 ## The 2.5D depth mapping
 
-Collision-layer bits double as render depth: bit 0 is front-most, bit 31
-back-most, and a body extrudes across exactly the layers it occupies.
+A body authors one continuous `DepthBand { near, far }` (world units into
+the screen). The extrusion uses the floats directly; the collision filter
+derives contiguous layer bits from the same band — so depth and collision
+set are one authored value and non-integer depths are first-class.
 
 ```mermaid
 flowchart LR
-    mask["LayerMask32<br/>memberships = 0b0110"] --> range["occupied_range()<br/>(1, 3)"]
-    range --> z["layer_z_range(1,3)<br/>z_front = -10, depth = 30"]
-    z --> prism["extruded prism<br/>z ∈ [-40, -10]"]
+    band["DepthBand<br/>near = 5, far = 23"] --> prism["extruded prism<br/>z ∈ [-23, -5]"]
+    band --> bits["bits() → 0b0111<br/>(layers 0..=2 overlapped)"]
+    bits --> cl["CollisionLayers<br/>memberships = filters = bits"]
 ```
 
-The same mask is the physics collision filter, so a body's depth and its
-collision set are one authored value.
+Two bodies collide exactly when their bands overlap (at layer
+granularity); ground half-planes collide with everything. There is no
+separate filter mask — checkbox filter art was retired with save v5
+(v4 masks migrate to the equivalent band on load).
 
 ## Where to start reading
 

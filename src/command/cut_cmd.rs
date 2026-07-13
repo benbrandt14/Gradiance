@@ -141,7 +141,8 @@ impl CutCommand {
                             },
                             physics: original.physics,
                             appearance: original.appearance,
-                            layers: original.layers,
+                            depth: original.depth,
+                            layers: None,
                             groups: original.groups.clone(),
                             // Cut pieces inherit the parent's field source.
                             field: original.field,

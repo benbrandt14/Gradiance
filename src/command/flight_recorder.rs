@@ -7,8 +7,8 @@
 
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
+use crate::domain::depth::DepthBand;
 use crate::domain::joint::JointDef;
-use crate::domain::layers::LayerMask32;
 use crate::domain::settings::{RenderSettings, SimSettings};
 use crate::domain::shape::ShapeDef;
 use bevy::prelude::*;
@@ -160,8 +160,8 @@ fn log_active_frames(recorder: Res<FlightRecorder>) {
 fn record_sync_counts(
     mut recorder: ResMut<FlightRecorder>,
     changed_shapes: Query<(), (With<Body>, Changed<ShapeDef>)>,
-    changed_layers: Query<(), (With<Body>, Changed<LayerMask32>)>,
-    changed_meshes: Query<(), (With<Body>, Or<(Changed<ShapeDef>, Changed<LayerMask32>)>)>,
+    changed_layers: Query<(), (With<Body>, Changed<DepthBand>)>,
+    changed_meshes: Query<(), (With<Body>, Or<(Changed<ShapeDef>, Changed<DepthBand>)>)>,
     changed_materials: Query<(), (With<Body>, Changed<Appearance>)>,
     changed_joints: Query<(), Changed<JointDef>>,
     sim_settings: Option<Res<SimSettings>>,

@@ -6,6 +6,7 @@
 //! components by `Changed<>`-driven sync systems and are never serialized.
 
 pub mod appearance;
+pub mod depth;
 pub mod field;
 pub mod group;
 pub mod joint;

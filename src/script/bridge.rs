@@ -43,7 +43,7 @@ use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
-use crate::domain::layers::LayerMask32;
+use crate::domain::depth::DepthBand;
 use crate::domain::props::BodyPhysics;
 use crate::domain::settings::SimSettings;
 use crate::domain::shape::ShapeDef;
@@ -533,7 +533,8 @@ fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
         shape,
         physics: BodyPhysics::default(),
         appearance: Appearance::default(),
-        layers: LayerMask32::default(),
+        depth: DepthBand::default(),
+        layers: None,
         groups: Vec::new(),
         field: None,
     }

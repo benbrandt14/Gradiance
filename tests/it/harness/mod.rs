@@ -63,7 +63,8 @@ pub fn box_record(pos: Vec2, width: f32, height: f32) -> BodyRecord {
         shape: ShapeDef::Box { width, height },
         physics: BodyPhysics::default(),
         appearance: Appearance::default(),
-        layers: LayerMask32::default(),
+        depth: DepthBand::default(),
+        layers: None,
         groups: Vec::new(),
         field: None,
     }

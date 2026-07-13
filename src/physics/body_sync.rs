@@ -1,7 +1,7 @@
 //! Authored components → engine components, `Changed<>`-driven and idempotent.
 
 use crate::domain::Body;
-use crate::domain::layers::LayerMask32;
+use crate::domain::depth::DepthBand;
 use crate::domain::shape::ShapeDef;
 use avian2d::math::Vector;
 use avian2d::prelude::*;
@@ -73,15 +73,26 @@ pub fn sync_colliders(
     }
 }
 
-/// Applies collision layers for bodies whose layer mask changed.
+/// Applies collision layers for bodies whose depth band (or shape)
+/// changed: memberships *and* filters are the band's derived layer bits,
+/// so two bodies collide exactly when their depth bands overlap (at
+/// layer granularity) — collision layer ≡ visual depth. Ground
+/// half-planes are the base everything rests on and collide with all.
 pub fn sync_collision_layers(
     mut commands: Commands,
-    changed: Query<(Entity, &LayerMask32), (With<Body>, Changed<LayerMask32>)>,
+    changed: Query<
+        (Entity, &DepthBand, &ShapeDef),
+        (With<Body>, Or<(Changed<DepthBand>, Changed<ShapeDef>)>),
+    >,
 ) {
-    for (entity, layers) in &changed {
-        commands.entity(entity).insert(CollisionLayers::from_bits(
-            layers.memberships,
-            layers.filters,
-        ));
+    for (entity, band, shape) in &changed {
+        let bits = if shape.contains_half_plane() {
+            u32::MAX
+        } else {
+            band.bits()
+        };
+        commands
+            .entity(entity)
+            .insert(CollisionLayers::from_bits(bits, bits));
     }
 }

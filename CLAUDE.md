@@ -34,8 +34,10 @@ Algodoo-inspired 2.5D physics sandbox. Bevy 0.19 + Avian2d 0.7 + bevy_egui 0.41 
   cross-reference raw `Entity`. Joints reference bodies by `StableId`.
 - Units: `PIXELS_PER_METER = 100.0`; gravity `(0, -1000)`; polygon vertices are
   centroid-relative at authoring time (CSG reshapes may leave the origin
-  off-centroid); extrusion depth = collision layer bits × `LAYER_HEIGHT = 10.0`
-  (bit 0 front … bit 31 back).
+  off-centroid); depth is a continuous authored `DepthBand {near, far}`
+  (world units into the screen, body spans z ∈ [−far, −near]); collision
+  layer bits (`LAYER_HEIGHT = 10.0` slabs, bit 0 front) are *derived* from
+  the band — collision layer ≡ visual depth.
 - Geometry: `ShapeDef` is an SDF tree (analytic leaves + `Csg`/`Placed` nodes;
   see `docs/sdf-geometry-decision.md`). `geometry::polygonize` is the single
   discretization point — every derived consumer (colliders, meshes, snapping)

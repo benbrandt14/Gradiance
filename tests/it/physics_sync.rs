@@ -10,9 +10,9 @@ use gradiance::prelude::*;
 fn spawned_body_gains_engine_components() {
     let mut app = headless_app();
     let mut record = box_record(Vec2::ZERO, 40.0, 20.0);
-    record.layers = LayerMask32 {
-        memberships: 0b0110,
-        filters: 0xFF,
+    record.depth = DepthBand {
+        near: 10.0,
+        far: 30.0, // layers 1..=2
     };
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
@@ -27,7 +27,8 @@ fn spawned_body_gains_engine_components() {
     );
     assert_eq!(
         world.get::<CollisionLayers>(entity),
-        Some(&CollisionLayers::from_bits(0b0110, 0xFF))
+        Some(&CollisionLayers::from_bits(0b0110, 0b0110)),
+        "band bits are both memberships and filters (depth = collision)"
     );
 }
 

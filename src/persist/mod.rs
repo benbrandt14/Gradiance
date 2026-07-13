@@ -35,7 +35,13 @@ use std::path::PathBuf;
 /// v4: the strut rework — `JointKind::Spring` is authored as `rest_length`
 /// with an optional `range` clamp (was `bounds`), so v3 files carrying
 /// struts do not load.
-pub const FORMAT_VERSION: u32 = 4;
+///
+/// v5: continuous depth (V3) — bodies author a `DepthBand` instead of a
+/// `LayerMask32`. v4 files migrate on load: each mask's occupied bit range
+/// maps to the equivalent band; non-default *filters* are dropped with a
+/// warning (checkbox filter art is unrepresentable by design — collision
+/// is depth overlap).
+pub const FORMAT_VERSION: u32 = 5;
 
 /// What went wrong while persisting.
 #[derive(Debug, thiserror::Error)]
@@ -62,13 +68,41 @@ pub fn to_ron(scene: &SceneRecord) -> Result<String, PersistError> {
     )?)
 }
 
-/// Parses and version-checks a scene.
+/// Parses and version-checks a scene, migrating supported old versions.
 pub fn from_ron(text: &str) -> Result<SceneRecord, PersistError> {
-    let scene: SceneRecord = ron::from_str(text)?;
-    if scene.version != FORMAT_VERSION {
-        return Err(PersistError::Version(scene.version));
+    let mut scene: SceneRecord = ron::from_str(text)?;
+    match scene.version {
+        FORMAT_VERSION => Ok(scene),
+        4 => {
+            migrate_v4_layers(&mut scene);
+            Ok(scene)
+        }
+        v => Err(PersistError::Version(v)),
     }
-    Ok(scene)
+}
+
+/// v4 → v5: each body's legacy layer mask becomes the equivalent depth
+/// band. Custom filter masks cannot be represented (collision is depth
+/// overlap now) and are dropped with a warning.
+fn migrate_v4_layers(scene: &mut SceneRecord) {
+    use crate::domain::depth::DepthBand;
+    for body in &mut scene.bodies {
+        if let Some(mask) = body.layers.take() {
+            body.depth = mask
+                .occupied_range()
+                .map_or_else(DepthBand::default, |(min, max)| {
+                    DepthBand::from_bit_range(min, max)
+                });
+            if mask.filters != u32::MAX {
+                warn!(
+                    id = %body.id.0,
+                    "v4 custom collision filters dropped on migration \
+                     (collision is depth overlap in v5)"
+                );
+            }
+        }
+    }
+    scene.version = FORMAT_VERSION;
 }
 
 /// Request to save the scene (`path: None` → remembered path, then dialog).

@@ -28,7 +28,7 @@ use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_
 
 use crate::core::states::ToolState;
 use crate::domain::Body;
-use crate::domain::layers::LayerMask32;
+use crate::domain::depth::DepthBand;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::InteractionSet;
 use crate::physics::queries::PhysicsQueries;
@@ -125,24 +125,28 @@ impl Plugin for ToolsPlugin {
 
 /// All authored bodies at `p`, topmost first.
 ///
-/// Front-most layer bit wins; ground half-planes always sort last
-/// (Algodoo behavior: you never accidentally grab the floor).
+/// The shallowest band (front face nearest the viewer) wins; ground
+/// half-planes always sort last (Algodoo behavior: you never
+/// accidentally grab the floor).
 pub fn bodies_at_sorted(
     p: Vec2,
     physics: &PhysicsQueries,
-    bodies: &Query<(&ShapeDef, &LayerMask32), With<Body>>,
+    bodies: &Query<(&ShapeDef, &DepthBand), With<Body>>,
 ) -> Vec<Entity> {
-    let mut hits: Vec<(bool, u32, Entity)> = physics
+    let mut hits: Vec<(bool, f32, Entity)> = physics
         .bodies_at_point(p)
         .into_iter()
         .filter_map(|entity| {
-            let (shape, layers) = bodies.get(entity).ok()?;
+            let (shape, band) = bodies.get(entity).ok()?;
             let is_ground = shape.contains_half_plane();
-            let front_bit = layers.occupied_range().map_or(32, |(min, _)| min);
-            Some((is_ground, front_bit, entity))
+            Some((is_ground, band.sanitized().near, entity))
         })
         .collect();
-    hits.sort_by_key(|(ground, bit, entity)| (*ground, *bit, entity.index()));
+    hits.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then(a.1.total_cmp(&b.1))
+            .then(a.2.index().cmp(&b.2.index()))
+    });
     hits.into_iter().map(|(_, _, e)| e).collect()
 }
 
@@ -150,7 +154,7 @@ pub fn bodies_at_sorted(
 pub fn topmost_body_at(
     p: Vec2,
     physics: &PhysicsQueries,
-    bodies: &Query<(&ShapeDef, &LayerMask32), With<Body>>,
+    bodies: &Query<(&ShapeDef, &DepthBand), With<Body>>,
 ) -> Option<Entity> {
     bodies_at_sorted(p, physics, bodies).first().copied()
 }
@@ -179,7 +183,8 @@ pub fn new_body_record(
         shape,
         physics: crate::domain::props::BodyPhysics::default(),
         appearance: appearance_for_id(id),
-        layers: LayerMask32::default(),
+        depth: DepthBand::default(),
+        layers: None,
         groups: Vec::new(),
         field: None,
     }

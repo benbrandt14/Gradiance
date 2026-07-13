@@ -3,7 +3,7 @@
 //! Post de-adapter (`docs/physics-deadapter-decision.md`) authored physics
 //! state *is* avian components on the entity; this module no longer translates
 //! a mirror. It still owns the genuine derivations — `ShapeDef` → `Collider`
-//! and `LayerMask32` → `CollisionLayers` ([`body_sync`]) — and the
+//! and `DepthBand` → `CollisionLayers` ([`body_sync`]) — and the
 //! [`queries`] read facade. avian is used directly here and elsewhere.
 //!
 //! Ground planes need no special support here: the ground tool authors an

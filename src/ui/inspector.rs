@@ -17,7 +17,7 @@ use crate::command::property::{PropertyChange, PropertyValue};
 use crate::core::ids::StableId;
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
-use crate::domain::layers::LayerMask32;
+use crate::domain::depth::DepthBand;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::selection::Selection;
 use crate::ui::widgets::{Commit, precise_drag};
@@ -42,8 +42,8 @@ pub struct BodyProps<'w, 's> {
     /// `StableId` lookup for intent targets (shared with the menu's own
     /// actions).
     pub ids: Query<'w, 's, &'static StableId>,
-    /// Layer memberships (also read by the menu's layer/depth editor).
-    pub layers: Query<'w, 's, &'static LayerMask32, With<Body>>,
+    /// Depth bands (also read by the menu's depth actions and the dock).
+    pub depths: Query<'w, 's, &'static DepthBand, With<Body>>,
     /// The shared property-edit intent writer.
     pub edits: MessageWriter<'w, PropertyEditIntent>,
     /// Debug-overlay settings (config seam: the layers UI toggles the
@@ -469,118 +469,51 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
     }
 }
 
-/// The collision-layer set editor & visualization (feedback 5.4): one grid
-/// with a color-swatch + scene-occupancy header (matching the viewport
-/// overlay's hues), a **member** row (which layers the selection occupies —
-/// also its render depth) and a **hits** row (which layers it collides
-/// with), plus the viewport-overlay toggle.
-pub fn layers_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps) {
+/// The depth editor: numeric front/back faces of the authored band
+/// (collision volume ≡ render depth — one value, no filter art). The
+/// draggable band bars live in the Depth panel dock; this is the exact
+/// numeric view.
+pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps) {
     let Some(primary) = selection.primary() else {
         return;
     };
-    let Ok(layers) = props.layers.get(primary).copied() else {
+    let Ok(band) = props.depths.get(primary).copied() else {
         return;
     };
-    // Scene occupancy per bit — the "set visualization" half.
-    let mut counts = [0usize; 8];
-    for mask in props.layers.iter() {
-        for (bit, count) in counts.iter_mut().enumerate() {
-            if mask.memberships & (1 << bit) != 0 {
-                *count += 1;
-            }
-        }
-    }
-    let swatch = |bit: u32| {
-        let c = crate::domain::appearance::Rgba::from_hsl(
-            crate::domain::layers::layer_hue(bit),
-            0.75,
-            0.55,
+    let mut near = band.near;
+    let mut far = band.far;
+    ui.horizontal(|ui| {
+        ui.label("front")
+            .on_hover_text("depth of the front face (0 = the interaction plane)");
+        let cn = precise_drag(ui, ui.id().with("depth-near"), &mut near, 0.0, 0.5);
+        ui.label("back")
+            .on_hover_text("depth of the back face (thicker = spans more layers)");
+        let cf = precise_drag(
+            ui,
+            ui.id().with("depth-far"),
+            &mut far,
+            crate::core::constants::LAYER_HEIGHT,
+            0.5,
         );
-        egui::Color32::from_rgb(
-            (c.r * 255.0) as u8,
-            (c.g * 255.0) as u8,
-            (c.b * 255.0) as u8,
-        )
-    };
-    egui::Grid::new(ui.id().with("layer-grid"))
-        .min_col_width(18.0)
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new("front→back").weak().small());
-            for bit in 0..8u32 {
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new(format!("{bit}"))
-                            .color(swatch(bit))
-                            .strong(),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!("×{}", counts[bit as usize]))
-                            .weak()
-                            .small(),
-                    );
-                });
-            }
-            ui.end_row();
-
-            ui.label("member")
-                .on_hover_text("layers this body occupies — also its render depth (bit 0 front)");
-            layer_bits_row(ui, selection, props, layers.memberships, |old, bit, on| {
-                let mut n = *old;
-                if on {
-                    n.memberships |= 1 << bit;
-                } else if n.memberships != 1 << bit {
-                    // A body always keeps at least one layer.
-                    n.memberships &= !(1 << bit);
-                }
-                n
-            });
-            ui.end_row();
-
-            ui.label("hits")
-                .on_hover_text("layers this body collides with (two-way test)");
-            layer_bits_row(ui, selection, props, layers.filters, |old, bit, on| {
-                let mut n = *old;
-                if on {
-                    n.filters |= 1 << bit;
-                } else {
-                    n.filters &= !(1 << bit);
-                }
-                n
-            });
-            ui.end_row();
-        });
-    // Config seam: only written on an actual toggle (change detection).
-    let mut show = props.debug.show_layers;
-    if ui
-        .checkbox(&mut show, "color bodies by layer")
-        .on_hover_text("outline every body in its front-most layer's hue")
-        .changed()
-    {
-        props.debug.show_layers = show;
-    }
-}
-
-/// One grid row of per-bit checkboxes committing a `LayerMask32` edit
-/// (`update` maps old mask + toggled bit + new state → new mask).
-fn layer_bits_row(
-    ui: &mut egui::Ui,
-    selection: &Selection,
-    props: &mut BodyProps,
-    current: u32,
-    update: impl Fn(&LayerMask32, u32, bool) -> LayerMask32 + Copy,
-) {
-    for bit in 0..8u32 {
-        let mut on = current & (1 << bit) != 0;
-        if ui.checkbox(&mut on, "").changed() {
+        if matches!(cn, Commit::Done(..)) || matches!(cf, Commit::Done(..)) {
             commit_to_selection(
                 selection,
                 &props.ids,
-                &props.layers,
-                PropertyValue::Layers,
-                move |old| update(old, bit, on),
+                &props.depths,
+                PropertyValue::Depth,
+                move |_| DepthBand { near, far }.sanitized(),
                 &mut props.edits,
             );
         }
+    });
+    // Config seam: only written on an actual toggle (change detection).
+    let mut show = props.debug.show_layers;
+    if ui
+        .checkbox(&mut show, "color bodies by depth layer")
+        .on_hover_text("outline every body in its front-most derived layer's hue")
+        .changed()
+    {
+        props.debug.show_layers = show;
     }
 }
 
@@ -612,8 +545,8 @@ pub fn inspector_window(
             ui.label(egui::RichText::new("Appearance").strong());
             appearance_section(ui, &selection, &mut props);
             ui.separator();
-            ui.label(egui::RichText::new("Layers (front → back)").strong());
-            layers_section(ui, &selection, &mut props);
+            ui.label(egui::RichText::new("Depth").strong());
+            depth_section(ui, &selection, &mut props);
         });
     panel.open = open;
     Ok(())

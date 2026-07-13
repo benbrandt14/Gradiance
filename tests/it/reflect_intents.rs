@@ -138,7 +138,8 @@ fn spawn_body_intent_round_trips_through_reflection() {
         },
         physics: BodyPhysics::default(),
         appearance: Appearance::default(),
-        layers: LayerMask32::default(),
+        depth: DepthBand::default(),
+        layers: None,
         groups: vec![7],
         field: Some(gradiance::domain::field::FieldSource {
             strength: -12.5,

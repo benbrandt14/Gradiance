@@ -190,7 +190,7 @@ mod tests {
         use crate::core::ids::StableId;
         use crate::core::units::PosRot;
         use crate::domain::appearance::Appearance;
-        use crate::domain::layers::LayerMask32;
+        use crate::domain::depth::DepthBand;
         use crate::domain::props::BodyPhysics;
         use crate::domain::shape::ShapeDef;
         use bevy::math::Vec2;
@@ -205,10 +205,8 @@ mod tests {
                 shape: ShapeDef::Circle { radius: 9.0 },
                 physics: BodyPhysics::default(),
                 appearance: Appearance::default(),
-                layers: LayerMask32 {
-                    memberships: 1,
-                    filters: u32::MAX,
-                },
+                depth: DepthBand::default(),
+                layers: None,
                 groups: Vec::new(),
                 field: None,
             },
@@ -217,7 +215,7 @@ mod tests {
         // Reflect-path reads reach the numeric leaves of a real intent,
         // never naming a field on the Rust side.
         assert_eq!(read_path(&intent, "record.pose.pos.x"), Some(12.0));
-        assert_eq!(read_path(&intent, "record.layers.memberships"), Some(1.0));
+        assert_eq!(read_path(&intent, "record.depth.far"), Some(10.0));
 
         // The whole value converts to steel struct data. Opaque handles
         // (`StableId`, `ShapeDef`) degrade to `Void` by design — they are

@@ -10,8 +10,8 @@ use crate::core::ids::{IdIndex, StableId};
 use crate::core::units::PosRot;
 use crate::domain::Body;
 use crate::domain::appearance::{Appearance, Rgba};
+use crate::domain::depth::DepthBand;
 use crate::domain::joint::JointDef;
-use crate::domain::layers::LayerMask32;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::PointerOverUi;
 use crate::interaction::align::{AlignItem, AlignOp, align_changes};
@@ -150,7 +150,7 @@ pub fn open_context_menu(
     cursor: Res<CursorWorldPos>,
     over_ui: Res<PointerOverUi>,
     physics: PhysicsQueries,
-    bodies: Query<(&ShapeDef, &LayerMask32), With<Body>>,
+    bodies: Query<(&ShapeDef, &DepthBand), With<Body>>,
     ids: Query<&StableId>,
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform, With<Body>>,
@@ -213,7 +213,6 @@ pub fn context_menu(
     index: Res<IdIndex>,
     mut props: crate::ui::inspector::BodyProps,
     mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
-    all_layers: Query<&LayerMask32, With<Body>>,
     groups: Query<(Entity, &crate::domain::group::SelectionGroup), With<Body>>,
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     joints: Query<&JointDef>,
@@ -222,6 +221,7 @@ pub fn context_menu(
     mut deletes: MessageWriter<DeleteJointIntent>,
     mut script: ScriptMenu,
     mut background: BackgroundMenu,
+    mut depth_panel: ResMut<crate::ui::depth_panel::DepthPanel>,
 ) -> Result {
     if !menu.open {
         return Ok(());
@@ -438,91 +438,43 @@ pub fn context_menu(
                     ui.separator();
                 }
 
-                // Layer operations on the selection.
-                ui.label(egui::RichText::new("Layers").weak());
-                ui.horizontal_wrapped(|ui| {
-                    for bit in 0..8u32 {
-                        if ui.small_button(format!("{bit}")).clicked() {
-                            layer_edit(
-                                &selection,
-                                &props.ids,
-                                &props.layers,
-                                &mut props.edits,
-                                |old| LayerMask32 {
-                                    memberships: 1 << bit,
-                                    filters: old.filters,
-                                },
-                            );
-                            close = true;
-                        }
-                    }
-                });
-                if ui.button("No self-collisions (within selection)").clicked() {
-                    // Move the selection to a free layer bit that ignores
-                    // itself: members stop colliding with each other but
-                    // still collide with everything else.
-                    let used: u32 = all_layers
-                        .iter()
-                        .map(|l| l.memberships)
-                        .fold(0, |a, b| a | b);
-                    let free = (0..32u32).find(|b| used & (1 << b) == 0).unwrap_or(31);
-                    layer_edit(
-                        &selection,
-                        &props.ids,
-                        &props.layers,
-                        &mut props.edits,
-                        |_| LayerMask32 {
-                            memberships: 1 << free,
-                            filters: !(1 << free),
-                        },
-                    );
-                    close = true;
-                }
-                if ui.button("Reset collision layers").clicked() {
-                    layer_edit(
-                        &selection,
-                        &props.ids,
-                        &props.layers,
-                        &mut props.edits,
-                        |_| LayerMask32::default(),
-                    );
-                    close = true;
-                }
+                // Depth actions on the selection (the draggable band
+                // editor is the Depth panel dock; these are the one-click
+                // moves). Collision volume ≡ render depth — one band.
                 ui.label(egui::RichText::new("Depth").weak());
                 ui.horizontal_wrapped(|ui| {
-                    // Depth = layer bits (bit 0 front … bit 31 back).
-                    let shift = |edits: &mut MessageWriter<PropertyEditIntent>,
-                                 f: &dyn Fn(&LayerMask32) -> u32| {
-                        layer_edit(&selection, &props.ids, &props.layers, edits, |old| {
-                            LayerMask32 {
-                                memberships: f(old).max(1),
-                                filters: old.filters,
-                            }
-                        });
-                    };
+                    let step = crate::core::constants::LAYER_HEIGHT;
+                    let shift =
+                        |edits: &mut MessageWriter<PropertyEditIntent>,
+                         f: &dyn Fn(&DepthBand) -> DepthBand| {
+                            depth_edit(&selection, &props.ids, &props.depths, edits, f);
+                        };
                     if ui.small_button("to front").clicked() {
-                        shift(&mut props.edits, &|_| 1);
+                        shift(&mut props.edits, &|old| DepthBand {
+                            near: 0.0,
+                            far: old.thickness().max(DepthBand::MIN_THICKNESS),
+                        });
                         close = true;
                     }
                     if ui.small_button("forward").clicked() {
-                        shift(&mut props.edits, &|old| old.memberships >> 1);
-                        close = true;
-                    }
-                    if ui.small_button("backward").clicked() {
-                        shift(&mut props.edits, &|old| {
-                            if old.memberships & (1 << 31) == 0 {
-                                old.memberships << 1
-                            } else {
-                                old.memberships
-                            }
+                        shift(&mut props.edits, &|old| DepthBand {
+                            near: old.near - step,
+                            far: old.far - step,
                         });
                         close = true;
                     }
-                    if ui.small_button("to back").clicked() {
-                        shift(&mut props.edits, &|_| 1 << 7);
+                    if ui.small_button("backward").clicked() {
+                        shift(&mut props.edits, &|old| DepthBand {
+                            near: old.near + step,
+                            far: old.far + step,
+                        });
                         close = true;
                     }
                 });
+                if ui.button("Depth panel…").clicked() {
+                    depth_panel.open = true;
+                    close = true;
+                }
                 ui.separator();
                 if ui.button("Random colors (per body)").clicked() {
                     let changes: Vec<PropertyChange> = selection
@@ -574,22 +526,22 @@ pub fn context_menu(
     Ok(())
 }
 
-fn layer_edit(
+fn depth_edit(
     selection: &Selection,
     ids: &Query<&StableId>,
-    layers: &Query<&LayerMask32, With<Body>>,
+    depths: &Query<&DepthBand, With<Body>>,
     edits: &mut MessageWriter<PropertyEditIntent>,
-    make_new: impl Fn(&LayerMask32) -> LayerMask32,
+    make_new: impl Fn(&DepthBand) -> DepthBand,
 ) {
     let changes: Vec<PropertyChange> = selection
         .iter()
         .filter_map(|e| {
             let id = ids.get(e).ok().copied()?;
-            let old = *layers.get(e).ok()?;
+            let old = *depths.get(e).ok()?;
             Some(PropertyChange {
                 id,
-                old: PropertyValue::Layers(old),
-                new: PropertyValue::Layers(make_new(&old)),
+                old: PropertyValue::Depth(old),
+                new: PropertyValue::Depth(make_new(&old).sanitized()),
             })
         })
         .collect();

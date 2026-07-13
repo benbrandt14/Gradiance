@@ -46,8 +46,8 @@ use crate::core::ids::StableId;
 use crate::core::states::{GameState, ToolState};
 use crate::core::units::PosRot;
 use crate::domain::Body;
+use crate::domain::depth::DepthBand;
 use crate::domain::group::SelectionGroup;
-use crate::domain::layers::LayerMask32;
 use crate::domain::settings::{SnapConfig, ToolDefaults};
 use crate::domain::shape::ShapeDef;
 use crate::geometry::contours::point_in_ring;
@@ -470,7 +470,7 @@ pub fn draw_draft_preview<T: DraftTool>(
 #[derive(SystemParam)]
 pub struct ToolWorld<'w, 's> {
     physics: PhysicsQueries<'w, 's>,
-    hit: Query<'w, 's, (&'static ShapeDef, &'static LayerMask32), With<Body>>,
+    hit: Query<'w, 's, (&'static ShapeDef, &'static DepthBand), With<Body>>,
     shapes: Query<'w, 's, (&'static ShapeDef, &'static Transform), With<Body>>,
     centers: Query<'w, 's, (Entity, &'static Transform), With<Body>>,
     ids: Query<'w, 's, &'static StableId>,

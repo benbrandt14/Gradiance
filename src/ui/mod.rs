@@ -11,6 +11,7 @@
 
 pub mod console;
 pub mod context_menu;
+pub mod depth_panel;
 pub mod inspector;
 pub mod joint_inspector;
 pub mod plot;
@@ -38,6 +39,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
+        app.init_resource::<depth_panel::DepthPanel>();
         app.init_resource::<console::ScriptConsole>();
         app.init_resource::<plot::PlotHistory>();
         app.init_resource::<plot::PlotPanel>();
@@ -46,6 +48,7 @@ impl Plugin for GradianceUiPlugin {
             (
                 toolbar::toolbar,
                 view_cube::view_cube,
+                depth_panel::depth_panel,
                 inspector::inspector_window,
                 joint_inspector::joint_inspector,
                 settings::settings_window,

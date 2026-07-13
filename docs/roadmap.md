@@ -278,12 +278,18 @@ shadow items from M19. Design decisions in the slice PRs.
   force (`physics/forces.rs` sibling system, Coulomb μ·m·g with a
   gyration-radius spin term), set from a right-click "Background" menu
   section.
-- **V3 — Continuous-depth collision** (save v5): authored `DepthBand
-  {near, far}` replaces `LayerMask32`; contiguous collision layers and the
-  exact extrusion both derive from the band (visual depth ≡ collision layer
-  by construction; non-integer depths allowed, UI snapping avoids slivers).
-  Right-dock depth panel: selected bodies as draggable colored bars
-  (scale-tool feel), auto-growing bounds; deletes the checkbox grids.
+- **V3 — Continuous-depth collision** *(landed, save v5)*: authored
+  `DepthBand {near, far}` replaces `LayerMask32`; contiguous collision
+  layers and the exact extrusion both derive from the band (visual depth ≡
+  collision layer by construction; non-integer depths allowed, quarter-layer
+  UI snapping avoids slivers; ground half-planes collide with all). v4
+  files migrate on load (masks → bands; custom filters dropped with a
+  warning). Right-dock Depth panel: selected bodies as draggable colored
+  bars (edges resize, middle moves, auto-growing bounds, one intent per
+  drag); the checkbox grids, layer buttons, and depth-shift-by-bit menu
+  are deleted. Deferred: a "no self-collisions within selection" escape
+  (was filter art; would return as an authored flag + collision hook if
+  needed).
 - **V4 — Script dock & workspace**: console becomes a right dock with
   MATLAB REPL behavior (Enter runs, Shift+Enter newline, Up/Down history);
   spawn verbs return body handles, `ans` bound each run, script-defined

@@ -10,9 +10,8 @@
 
 use crate::domain::Body;
 use crate::domain::appearance::Rgba;
-use crate::domain::layers::LayerMask32;
+use crate::domain::depth::DepthBand;
 use crate::domain::settings::{LightingSettings, ScenerySettings};
-use crate::geometry::extrusion::layer_z_range;
 use crate::render::plane::{InfinitePlaneMaterial, PLANE_EXTENT, plane_material};
 use bevy::core_pipeline::prepass::{DepthPrepass, NormalPrepass};
 use bevy::light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, GlobalAmbientLight};
@@ -157,17 +156,13 @@ pub fn apply_scenery(
 /// moves.
 pub fn track_scene_depth(
     settings: Res<ScenerySettings>,
-    bodies: Query<&LayerMask32, With<Body>>,
+    bodies: Query<&DepthBand, With<Body>>,
     mut materials: ResMut<Assets<InfinitePlaneMaterial>>,
     mut planes: Query<(&MeshMaterial3d<InfinitePlaneMaterial>, &mut Transform), With<BackPlane>>,
 ) {
     let deepest_back = bodies
         .iter()
-        .filter_map(LayerMask32::occupied_range)
-        .map(|(min, max)| {
-            let (z_front, depth) = layer_z_range(min, max);
-            z_front - depth
-        })
+        .map(|band| -band.sanitized().far)
         .fold(-crate::core::constants::LAYER_HEIGHT, f32::min);
     let target = deepest_back - settings.back_offset.max(0.0);
     for (material, mut transform) in &mut planes {

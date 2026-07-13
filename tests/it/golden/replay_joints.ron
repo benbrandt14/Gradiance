@@ -1,5 +1,5 @@
 (
-    version: 4,
+    version: 5,
     app_version: "golden",
     bodies: [
         (
@@ -43,9 +43,9 @@
                 ),
                 emissive: 0.0,
             ),
-            layers: (
-                memberships: 1,
-                filters: 4294967295,
+            depth: (
+                near: 0.0,
+                far: 10.0,
             ),
             groups: [],
             field: None,
@@ -91,9 +91,9 @@
                 ),
                 emissive: 0.0,
             ),
-            layers: (
-                memberships: 1,
-                filters: 4294967295,
+            depth: (
+                near: 0.0,
+                far: 10.0,
             ),
             groups: [],
             field: None,
