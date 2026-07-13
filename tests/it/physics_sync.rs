@@ -1,7 +1,7 @@
 //! Physics seam tests: authored components drive engine components, and
 //! the simulation behaves qualitatively (falls, rests, pauses).
 
-use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step};
+use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::{CollisionLayers, LockedAxes, RigidBody, Sensor};
 use bevy::prelude::*;
 use gradiance::prelude::*;
@@ -356,6 +356,9 @@ fn set_in_orbit_produces_a_limit_cycle() {
     app.world_mut()
         .write_message(SpawnBodyIntent { record: moon });
     app.update();
+    // One more frame so `sync_field_mass`'s deferred insert lands before
+    // the orbit request samples the field.
+    app.update();
 
     app.world_mut().write_message(SetOrbitRequest {
         targets: vec![moon_id],
@@ -381,5 +384,172 @@ fn set_in_orbit_produces_a_limit_cycle() {
     assert!(
         min_r > 120.0 && max_r < 400.0,
         "orbit stayed in a band (r in [{min_r}, {max_r}])"
+    );
+}
+
+#[test]
+fn world_pin_prismatic_locks_rotation_by_default() {
+    // A prismatic pinned to the background is a *guide*: the pinned body is
+    // rotation-locked by default, so even a badly off-axis pin (gravity
+    // torquing a long plank from its far end) never twists it.
+    let mut app = headless_app();
+    let mut plank = box_record(Vec2::new(0.0, 0.0), 200.0, 12.0);
+    plank.pose.pos = Vec2::new(0.0, 100.0);
+    let plank_id = plank.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: plank });
+    app.update();
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def: JointDef {
+                kind: JointKind::Slider {
+                    axis: Vec2::Y,
+                    limits: Some([-80.0, 80.0]),
+                    motor: None,
+                },
+                common: JointCommon::default(),
+                body_a: plank_id,
+                // World pin at the plank's LEFT END: gravity torques it.
+                body_b: None,
+                anchor_a: Vec2::new(-90.0, 0.0),
+                anchor_b: Vec2::new(-90.0, 100.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
+            },
+        },
+    });
+    app.update();
+
+    let plank_entity = entity_of(&app, plank_id).unwrap();
+    assert!(
+        app.world()
+            .get::<LockedAxes>(plank_entity)
+            .is_some_and(avian2d::prelude::LockedAxes::is_rotation_locked),
+        "spawning a world-pin prismatic rotation-locks the pinned body"
+    );
+
+    step(&mut app, 300);
+    let rot = PosRot::from_transform(
+        app.world()
+            .get::<Transform>(entity_of(&app, plank_id).unwrap())
+            .unwrap(),
+    )
+    .rot;
+    assert!(
+        rot.abs() < 1e-3,
+        "the guided plank never twists (rot after 5s = {rot})"
+    );
+
+    // Undoing the joint spawn removes the lock it added.
+    undo(&mut app);
+    let plank_entity = entity_of(&app, plank_id).unwrap();
+    assert!(
+        app.world().get::<LockedAxes>(plank_entity).is_none(),
+        "undo removes the default rotation lock"
+    );
+}
+
+#[test]
+fn field_forces_are_equal_and_opposite() {
+    use gradiance::domain::field::{FieldFalloff, FieldSource};
+    // One-sided setup on purpose: only the big circle carries a field, and
+    // the bodies have different masses. Newton's third law says the system's
+    // momentum still stays zero — the attractor is pulled toward what it
+    // attracts.
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+
+    let mut attractor = box_record(Vec2::new(-60.0, 0.0), 60.0, 60.0);
+    attractor.shape = ShapeDef::Circle { radius: 30.0 };
+    attractor.field = Some(FieldSource {
+        strength: -20_000.0,
+        falloff: FieldFalloff::Quadratic,
+    });
+    let attractor_id = attractor.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: attractor });
+    let plain = box_record(Vec2::new(120.0, 0.0), 24.0, 24.0);
+    let plain_id = plain.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: plain });
+    app.update();
+
+    // Sample while the bodies are still in flight (before they collide and
+    // contact forces complicate the picture).
+    step(&mut app, 8);
+
+    let momentum = |app: &App, id: StableId| -> Vec2 {
+        let entity = entity_of(app, id).unwrap();
+        let mass = app
+            .world()
+            .get::<avian2d::prelude::ComputedMass>(entity)
+            .unwrap()
+            .value();
+        app.world()
+            .get::<avian2d::prelude::LinearVelocity>(entity)
+            .unwrap()
+            .0
+            * mass
+    };
+    let pa = momentum(&app, attractor_id);
+    let pb = momentum(&app, plain_id);
+    assert!(
+        pb.length() > 1.0,
+        "the field actually moved the plain body (|p| = {})",
+        pb.length()
+    );
+    assert!(
+        (pa + pb).length() < 0.05 * pb.length(),
+        "momentum conserves: {pa:?} + {pb:?} ≈ 0"
+    );
+}
+
+#[test]
+fn cutting_a_field_source_conserves_its_field() {
+    use bevy::ecs::system::SystemState;
+    use gradiance::domain::field::{FieldFalloff, FieldSource};
+    use gradiance::physics::fields::Fields;
+    // The field couples through the source's mass (area × density), so
+    // slicing an attractor redistributes its pull across the pieces instead
+    // of doubling it: a distant probe sees (almost) the same acceleration.
+    let mut app = paused_app();
+    let mut source = box_record(Vec2::ZERO, 80.0, 40.0);
+    source.field = Some(FieldSource {
+        strength: -10_000.0,
+        falloff: FieldFalloff::Quadratic,
+    });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: source });
+    step(&mut app, 2); // let sync_field_mass derive the coupling mass
+
+    let probe = Vec2::new(400.0, 0.0);
+    let sample = |app: &mut App| -> Vec2 {
+        let mut state: SystemState<Fields> = SystemState::new(app.world_mut());
+        state
+            .get(app.world())
+            .expect("Fields param is always valid")
+            .accel_at(probe, None)
+    };
+    let before = sample(&mut app);
+    assert!(before.length() > 0.1, "the probe feels the field");
+
+    app.world_mut().write_message(CutIntent {
+        a: Vec2::new(0.0, -40.0),
+        b: Vec2::new(0.0, 40.0),
+        width: 2.0,
+    });
+    step(&mut app, 2); // pieces spawn + their FieldMass derives
+
+    let after = sample(&mut app);
+    // The coupling mass is conserved exactly; the residual comes from the
+    // falloff being measured over *surface* distance (the far piece's near
+    // face moves to the cut plane). "Roughly the same" is the contract.
+    assert!(
+        (after - before).length() < 0.15 * before.length(),
+        "cutting the source leaves the far field intact ({before:?} -> {after:?})"
     );
 }

@@ -68,6 +68,7 @@ bottom — no unclassified state.
 | `Collider`, `CollisionLayers`, `Mass`, contacts | `body_sync` (+ avian internals) |
 | live avian joints (`RevoluteJoint`, `PrismaticJoint`, `DistanceJoint`, `JointDamping`), `JointUnresolved`, `PinAnchor` | `joint_sync` |
 | `Mesh3d`, `MeshMaterial3d`, `ToonMaterial` | `extrude_sync`, `material_sync` |
+| `FieldMass` | `fields::sync_field_mass` (shape area × density — the field-coupling mass, `docs/field-architecture.md`) |
 | `IdIndex` | `StableId` component hooks |
 | `HistoryInfo` | dispatcher (read-only mirror of stack depths) |
 | `SubstepTrace` | `record_substep_trace` in avian's `SubstepSchedule` (debug view; rebuilt every physics step while enabled) |

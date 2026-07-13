@@ -30,6 +30,28 @@ repulsion* (negative attracts), falloff is exactly `Linear | Quadratic`.
 The field acts on **every** dynamic body (not only other sources), scaled
 by target mass, so field acceleration is mass-independent and orbits work.
 
+## Newtonian: equal-and-opposite, mass-coupled
+
+Fields behave like a realistic force, which pins down two rules:
+
+- **Every force has a reaction.** `apply_field_forces` mirrors each
+  contribution back onto its source (`−force`), so an attractor is pulled
+  toward what it attracts and total momentum is conserved. A static source
+  simply ignores its reaction (infinite mass), matching gravity intuition.
+- **Sources couple through their mass.** A source's contribution scales by
+  `FieldMass / REFERENCE_FIELD_MASS`, where `FieldMass` is a *derived*
+  component (shape area × `ColliderDensity`, rebuilt by `sync_field_mass`
+  on shape/density edits) and the reference is a 1 m² body at density 1.
+  Consequence — **cut invariance**: slicing a source hands each piece the
+  same `FieldSource` but a proportional slice of the coupling mass, so the
+  far field (and the trajectories it drives) is unchanged by the cut.
+  `FieldMass` is deliberately separate from avian's `ComputedMass` so
+  static/pinned sources still couple.
+
+Different *kinds* of fields (SDF-sampling media, field-modifying-fields)
+may relax these rules per-kind later; they land opportunistically behind
+the same contribution contract.
+
 ## SDF by default, not exclusively
 
 A source's field is shaped by its SDF: magnitude decays over *surface*

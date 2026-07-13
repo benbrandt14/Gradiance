@@ -71,6 +71,7 @@ impl Plugin for GradiancePhysicsPlugin {
                 hold::apply_kinematic_hold,
                 grab::apply_mouse_spring,
                 grab::apply_mouse_twist,
+                fields::sync_field_mass,
                 fields::apply_field_forces.run_if(in_state(GameState::Playing)),
                 fields::set_in_orbit,
             ),
