@@ -77,6 +77,7 @@ bottom — no unclassified state.
 | `CameraScale` | `apply_camera_rig` (world-per-pixel under either projection) |
 | `KeyLight` / `BackPlane` entities | `render::scenery` from `LightingSettings`/`ScenerySettings` |
 | `SubstepTrace` | `record_substep_trace` in avian's `SubstepSchedule` (debug view; rebuilt every physics step while enabled) |
+| `Particles` (SoA buffer, `sim` feature) | `sim::bridge` emit/step from `Emitter`s on the fixed clock; never serialized, never undoable |
 
 ### Doesn't fit cleanly (explicit rationale)
 

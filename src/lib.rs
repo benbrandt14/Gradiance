@@ -84,6 +84,8 @@ pub mod physics;
 pub mod prelude;
 pub mod render;
 pub mod script;
+#[cfg(feature = "sim")]
+pub mod sim;
 pub mod ui;
 
 use bevy::app::plugin_group;
@@ -100,5 +102,7 @@ plugin_group! {
         crate::render:::GradianceRenderPlugin,
         crate::ui:::GradianceUiPlugin,
         crate::script:::ScriptPlugin,
+        #[cfg(feature = "sim")]
+        crate::sim:::SimPlugin,
     }
 }

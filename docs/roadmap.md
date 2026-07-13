@@ -304,10 +304,18 @@ shadow items from M19. Design decisions in the slice PRs.
   reuse existing seams: grid alignment is a `GridSettings` config write,
   the dots are a `plane.wgsl` term keyed off the (previously unused) fade
   uniform, so the back plane stays plain.
+- **V6 — Simulation spike** *(branch `claude/sim-spike`, `sim` feature)*:
+  a trade study for continuum simulation (`docs/mpm-trade-study.md`,
+  recommends staged MLS-MPM) plus a working particle substrate that proves
+  the seam end-to-end — an authored `Emitter`, a derived SoA `Particles`
+  buffer, a pure Tier-B `sim::kernel` (integrator + N-body force via the
+  `particular` crate), and a fixed-clock `sim::bridge` that samples the one
+  field cut-point. Feature-gated so the default build stays lean; promotes
+  to a `gradiance-sim` crate at the stage-2→3 boundary.
 - Deferred within this track: gradient color pickers, color-by-signal
   (pairs with P2 dataflow — a "modulator" driving Appearance is the right
-  seam; do not pre-plumb), MPM/fluids/fracture/particles (own branch/
-  spike; split a `gradiance-sim` crate when that work matures).
+  seam; do not pre-plumb); the continuum solver stages (APIC fluid →
+  MLS-MPM multi-material) build on the V6 substrate.
 
 ## M19 — Rendering & camera polish
 

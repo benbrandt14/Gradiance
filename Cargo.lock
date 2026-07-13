@@ -3604,6 +3604,7 @@ dependencies = [
  "leafwing-input-manager",
  "lyon",
  "mimalloc",
+ "particular",
  "proptest",
  "rand 0.9.4",
  "rfd",
@@ -5365,6 +5366,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "particular"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7098301559a60939f208a1fd7de3b1d32d67b5cc750b1231ed0f6c5245c0bade"
+dependencies = [
+ "particular_derive",
+ "ultraviolet",
+ "wide",
+]
+
+[[package]]
+name = "particular_derive"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9327be08a0470a35e6067586af5c67ce2b2497c75832497f44b7c81b0dc5d1f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "partition"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7000,6 +7023,16 @@ name = "typewit"
 version = "1.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "214ca0b2191785cbc06209b9ca1861e048e39b5ba33574b3cedd58363d5bb5f6"
+
+[[package]]
+name = "ultraviolet"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a28554d13eb5daba527cc1b91b6c341372a0ae45ed277ffb2c6fbc04f319d7e"
+dependencies = [
+ "bytemuck",
+ "wide",
+]
 
 [[package]]
 name = "unarray"
