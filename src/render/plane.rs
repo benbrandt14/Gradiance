@@ -1,15 +1,19 @@
 //! Infinite-plane rendering, shared by half-plane grounds and the back
 //! plane.
 //!
-//! Both are drawn as one enormous quad with a material that (a) fades
-//! toward the horizon so the surface reads as infinite under perspective,
-//! and (b) fades out when the camera crosses *inside* the solid half-space
-//! so orbiting through never blinds the view. They differ **only in
-//! orientation**: a ground's plane contains its surface line and sweeps
-//! along ±Z (the scene rests *on* it, like pieces standing on a floor);
-//! the back plane is parallel to the sim plane behind the deepest layer.
-//! Physics is untouched — the ground collider is avian's genuinely
-//! infinite `half_space`; this module only completes the visual.
+//! Both are drawn as one enormous **opaque** quad with a material that
+//! (a) fogs toward the backdrop color at the horizon so the surface reads
+//! as infinite, (b) dissolves when the camera crosses *inside* the solid
+//! half-space so orbiting through never blinds the view, and (c) traces a
+//! faint line where the plane crosses the authoring plane (z = 0).
+//! Opacity (with depth writes) matters: plane/plane and plane/body
+//! intersections resolve as crisp seams, and there is no transparent-sort
+//! order to flip as the view rotates. They differ **only in orientation**: a ground's plane
+//! contains its surface line and sweeps along ±Z (the scene rests *on*
+//! it, like pieces standing on a floor); the back plane is parallel to
+//! the sim plane behind the deepest layer. Physics is untouched — the
+//! ground collider is avian's genuinely infinite `half_space`; this
+//! module only completes the visual.
 
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
@@ -22,8 +26,10 @@ use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 
 /// Half-extent of the plane quads — far beyond any navigable range; the
-/// shader's horizon fade ends the surface long before geometry does.
-pub const PLANE_EXTENT: f32 = 1_000_000.0;
+/// shader's horizon fog ends the surface long before geometry does, and
+/// the camera's depth slab ([`DEPTH_SLAB`](crate::interaction::camera))
+/// is sized past the quad corners so the frustum never cuts them.
+pub const PLANE_EXTENT: f32 = 500_000.0;
 
 /// Horizon fade band, world pixels (distance from the eye).
 pub const HORIZON_FADE: (f32, f32) = (60_000.0, 400_000.0);
@@ -38,18 +44,24 @@ pub struct PlaneExtension {
     /// (`dot(n, p) == w` on the surface).
     #[uniform(100)]
     pub plane: Vec4,
-    /// `x` = alpha floor when the camera is inside the solid,
-    /// `y`/`z` = horizon fade start/end distance from the eye.
+    /// `y`/`z` = horizon fog start/end distance from the eye (`x`/`w`
+    /// spare).
     #[uniform(101)]
     pub fade: Vec4,
+    /// Linear-space backdrop color the horizon fog fades toward (matches
+    /// the camera clear color).
+    #[uniform(102)]
+    pub horizon: Vec4,
 }
 
 impl PlaneExtension {
     /// Standard fade parameters for a plane with the given world equation.
-    pub fn for_plane(normal: Vec3, offset: f32) -> Self {
+    pub fn for_plane(normal: Vec3, offset: f32, horizon: Color) -> Self {
+        let h = horizon.to_linear();
         Self {
             plane: normal.extend(offset),
-            fade: Vec4::new(0.12, HORIZON_FADE.0, HORIZON_FADE.1, 0.0),
+            fade: Vec4::new(0.0, HORIZON_FADE.0, HORIZON_FADE.1, 0.0),
+            horizon: Vec4::new(h.red, h.green, h.blue, 1.0),
         }
     }
 }
@@ -60,19 +72,24 @@ impl MaterialExtension for PlaneExtension {
     }
 }
 
-/// A matte plane material in the given color.
-pub fn plane_material(color: Color, normal: Vec3, offset: f32) -> InfinitePlaneMaterial {
+/// A matte plane material in the given color, fogging toward `horizon`.
+pub fn plane_material(
+    color: Color,
+    normal: Vec3,
+    offset: f32,
+    horizon: Color,
+) -> InfinitePlaneMaterial {
     InfinitePlaneMaterial {
         base: StandardMaterial {
             base_color: color,
             perceptual_roughness: 1.0,
+            reflectance: 0.0,
             metallic: 0.0,
             double_sided: true,
             cull_mode: None,
-            alpha_mode: AlphaMode::Blend,
             ..default()
         },
-        extension: PlaneExtension::for_plane(normal, offset),
+        extension: PlaneExtension::for_plane(normal, offset, horizon),
     }
 }
 
@@ -110,6 +127,7 @@ pub fn sync_ground_planes(
     mut commands: Commands,
     mut materials: ResMut<Assets<InfinitePlaneMaterial>>,
     scenery: Res<ScenerySettings>,
+    clear: Res<ClearColor>,
     grounds: Query<
         (Entity, &ShapeDef, &Appearance, &Transform),
         (
@@ -129,6 +147,7 @@ pub fn sync_ground_planes(
             Color::srgba(fill.r, fill.g, fill.b, fill.a),
             normal.extend(0.0),
             normal.dot(pose.pos),
+            clear.0,
         ));
         // Grounds render through this material, not the body toon material.
         commands

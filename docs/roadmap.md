@@ -265,6 +265,13 @@ shadow items from M19. Design decisions in the slice PRs.
   (orientation is the only visual difference), configurable perspective
   projection (`ScenerySettings::perspective_deg`) for depth parallax, and
   a `CameraScale` resource as the single screen↔world sizing authority.
+  Second pass (scene readability): planes render opaque with a horizon
+  fog + dithered inside-reveal (no transparent-sort flips, crisp plane
+  seams), a faint authoring-plane trace line on every tilted plane, an
+  orthographic depth slab sized past the plane quads (no frustum cuts),
+  fully matte bodies + quantized specular glint (view-stable banding),
+  free orbit (yaw wraps, pitch to the poles) with view-plane panning,
+  and back/ground plane visibility in the background context menu.
 - **V2 — View cube + top-down mode** *(landed)*: CAD orientation cube
   (face/corner/edge snaps, animated glide), `CameraRig` roll, and a
   top-down preset — gravity (0,0) plus a per-scene back-plane friction

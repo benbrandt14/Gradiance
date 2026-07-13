@@ -85,16 +85,15 @@ impl Plugin for GradianceRenderPlugin {
 /// see [`scenery`]).
 fn setup_scene(mut commands: Commands) {
     // Orthographic 3D camera looking down −Z at the XY sandbox plane;
-    // extruded bodies span z ∈ [-320, 0]. The depth slab is made very
-    // wide (near/far ±50k) so orbiting the view never pushes the scene —
-    // or the huge back plane — outside the frustum (the "background clips
-    // when the view tilts" bug); orthographic near/far only define a
-    // depth range, so a large slab costs nothing.
+    // extruded bodies span z ∈ [-320, 0]. The depth slab is sized past
+    // the infinite-plane quad corners so orbiting the view never pushes
+    // the scene — or the megaquads — outside the frustum (the "background
+    // clips when the view tilts" bug); see `camera::DEPTH_SLAB`.
     commands.spawn((
         Camera3d::default(),
         Projection::Orthographic(OrthographicProjection {
-            near: -50_000.0,
-            far: 50_000.0,
+            near: -crate::interaction::camera::DEPTH_SLAB,
+            far: crate::interaction::camera::DEPTH_SLAB,
             ..OrthographicProjection::default_3d()
         }),
         Transform::from_xyz(0.0, 0.0, 600.0).looking_at(Vec3::ZERO, Vec3::Y),

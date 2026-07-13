@@ -188,10 +188,18 @@ pub struct RenderSettings {
     /// saturates into one flat band; lower it if the scene looks dark.
     #[serde(default = "default_white_point")]
     pub white_point: f32,
+    /// Quantized specular glint strength (0 = none) — a hard toon
+    /// highlight in the key lights' hues; reads best on curved walls.
+    #[serde(default = "default_specular")]
+    pub specular: f32,
 }
 
 fn default_white_point() -> f32 {
     RenderSettings::default().white_point
+}
+
+fn default_specular() -> f32 {
+    RenderSettings::default().specular
 }
 
 impl Default for RenderSettings {
@@ -201,6 +209,7 @@ impl Default for RenderSettings {
             bands: 4,
             rim_strength: 0.25,
             white_point: 1.3,
+            specular: 0.3,
         }
     }
 }

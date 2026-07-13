@@ -38,10 +38,12 @@ pub struct ScriptMenu<'w> {
 }
 
 /// Background (empty-canvas) actions: per-scene settings writes (the
-/// Config seam) — friction against the back plane and the top-down toggle.
+/// Config seam) — friction against the back plane, the top-down toggle,
+/// and scenery-plane visibility.
 #[derive(SystemParam)]
 pub struct BackgroundMenu<'w> {
     sim: ResMut<'w, crate::domain::settings::SimSettings>,
+    scenery: ResMut<'w, crate::domain::settings::ScenerySettings>,
     settings_window: ResMut<'w, crate::ui::settings::SettingsWindow>,
 }
 
@@ -75,6 +77,18 @@ impl BackgroundMenu<'_> {
                 self.sim.plane_friction = 0.3;
             }
             close = true;
+        }
+        let scenery = self.scenery.bypass_change_detection();
+        let mut touched = ui
+            .checkbox(&mut scenery.back_visible, "Back plane")
+            .on_hover_text("the shadow catcher behind the deepest layer")
+            .changed();
+        touched |= ui
+            .checkbox(&mut scenery.ground_visible, "Ground planes")
+            .on_hover_text("the infinite floors under half-plane bodies")
+            .changed();
+        if touched {
+            self.scenery.set_changed();
         }
         if ui.button("Scene & lighting settings…").clicked() {
             self.settings_window.open = true;

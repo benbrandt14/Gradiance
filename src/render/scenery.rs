@@ -37,6 +37,7 @@ pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<InfinitePlaneMaterial>>,
+    clear: Res<ClearColor>,
 ) {
     // Key lights are spawned by `apply_lighting` from the settings list.
     // The back plane is what *catches cast shadows* — without it every drop
@@ -49,7 +50,7 @@ pub fn setup(
             PLANE_EXTENT * 2.0,
             PLANE_EXTENT * 2.0,
         )))),
-        MeshMaterial3d(materials.add(plane_material(Color::WHITE, Vec3::Z, 0.0))),
+        MeshMaterial3d(materials.add(plane_material(Color::WHITE, Vec3::Z, 0.0, clear.0))),
         Transform::default(),
     ));
 }

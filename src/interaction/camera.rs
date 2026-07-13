@@ -1,10 +1,12 @@
 //! Editor camera: a CAD-style rig.
 //!
-//! The camera is *derived* from [`CameraRig`] every frame: a focus point
-//! on the sandbox plane, an orbit (yaw/pitch/roll), and a distance.
-//! Editing normally happens in the straight-on 2D view; middle-drag
-//! orbits to inspect the 2.5D extrusion, and the view cube / `Home`
-//! glide fluidly to canonical orientations. Picking is **ray/plane**
+//! The camera is *derived* from [`CameraRig`] every frame: a 3D focus
+//! point, an orbit (yaw/pitch/roll), and a distance. The orbit is
+//! unrestricted (yaw wraps, pitch reaches the poles) and panning moves
+//! the focus in the **view plane**, so the rig is a full 3D camera.
+//! Editing normally happens in the straight-on 2D view; the view cube /
+//! `Home` glide fluidly back to canonical orientations (re-centering the
+//! focus depth onto the sandbox plane). Picking is **ray/plane**
 //! (`cursor.rs`), so pointing stays exact at any tilt — the tilted view
 //! is a first-class editing view.
 //!
@@ -31,18 +33,21 @@ const MIN_SCALE: f32 = 0.05;
 const MAX_SCALE: f32 = 20.0;
 /// Orbit sensitivity, radians per screen pixel.
 const ORBIT_SPEED: f32 = 0.005;
-/// Manual-orbit pitch/yaw limit: just short of the face-on side/top views
-/// so ray-plane picking never degenerates mid-gesture (the view cube may
-/// target the exact faces).
-const MAX_TILT: f32 = 1.53;
 /// Exponential rate of the glide toward a view target (per second).
 const GLIDE_RATE: f32 = 8.0;
+
+/// Half-range of the orthographic near/far slab: sized past the
+/// infinite-plane quad corners (`PLANE_EXTENT`·√2 ≈ 707k) so the frustum
+/// never cuts the megaquads as the view orbits — orthographic near/far
+/// only define a depth range, so the large slab costs nothing.
+pub const DEPTH_SLAB: f32 = 800_000.0;
 
 /// The authoritative camera state; the `Transform` is derived from it.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct CameraRig {
-    /// Look-at point on the sandbox plane.
-    pub focus: Vec2,
+    /// Look-at point (free in 3D; canonical-view glides pull `z` back
+    /// onto the sandbox plane).
+    pub focus: Vec3,
     /// Distance from the focus (perspective: the dolly axis; ortho: only
     /// affects clipping comfort).
     pub distance: f32,
@@ -60,7 +65,7 @@ pub struct CameraRig {
 impl Default for CameraRig {
     fn default() -> Self {
         Self {
-            focus: Vec2::ZERO,
+            focus: Vec3::ZERO,
             distance: 600.0,
             yaw: 0.0,
             pitch: 0.0,
@@ -131,8 +136,8 @@ pub fn apply_projection(
     if fov_deg < 1.0 {
         if !matches!(*projection, Projection::Orthographic(_)) {
             *projection = Projection::Orthographic(OrthographicProjection {
-                near: -50_000.0,
-                far: 50_000.0,
+                near: -DEPTH_SLAB,
+                far: DEPTH_SLAB,
                 scale: wpp,
                 ..OrthographicProjection::default_3d()
             });
@@ -144,7 +149,7 @@ pub fn apply_projection(
         *projection = Projection::Perspective(PerspectiveProjection {
             fov,
             near: 1.0,
-            far: 4_000_000.0,
+            far: 4.0 * DEPTH_SLAB,
             ..default()
         });
     }
@@ -194,36 +199,54 @@ pub fn pan_and_zoom_camera(
     // Right-drag pans only when no tool gesture owns the pointer (the
     // select tool uses right-drag for rotation).
     if !over_ui.0 && !gesture.0 && panning {
-        // Screen-space motion: X right, Y down → world X right, Y up.
+        // Screen-space motion: X right, Y down → view X right, Y up.
         let m = motion.delta;
         delta += Vec2::new(-m.x, m.y) * wpp;
     }
-    rig.focus += delta;
+    if delta != Vec2::ZERO {
+        // Pan in the view plane: under the straight-on view this is the
+        // sandbox XY; tilted, the camera strafes like any 3D editor.
+        let pan3 = rig.rotation() * delta.extend(0.0);
+        rig.focus += pan3;
+    }
 
     // Middle-drag orbits (CAD inspect view); any orbit input cancels an
-    // in-flight glide.
+    // in-flight glide. The orbit is free: yaw wraps all the way around
+    // and pitch reaches the poles (ray-plane picking is undefined only in
+    // the measure-zero edge-on view, where tools simply don't pick).
     if !over_ui.0 && orbiting {
         let m = motion.delta;
         if m != Vec2::ZERO {
+            use std::f32::consts::{FRAC_PI_2, PI, TAU};
             rig.target = None;
-            rig.yaw = (rig.yaw + m.x * ORBIT_SPEED).clamp(-MAX_TILT, MAX_TILT);
-            rig.pitch = (rig.pitch - m.y * ORBIT_SPEED).clamp(-MAX_TILT, MAX_TILT);
+            rig.yaw = (rig.yaw + m.x * ORBIT_SPEED + PI).rem_euclid(TAU) - PI;
+            rig.pitch = (rig.pitch - m.y * ORBIT_SPEED).clamp(-FRAC_PI_2, FRAC_PI_2);
         }
     }
     if keys.just_pressed(KeyCode::Home) && !keyboard_captured.0 {
         rig.glide_home();
     }
     if let Some(target) = rig.target {
+        use std::f32::consts::{PI, TAU};
         let k = (-GLIDE_RATE * time.delta_secs()).exp();
-        let current = Vec3::new(rig.yaw, rig.pitch, rig.roll);
+        let mut current = Vec3::new(rig.yaw, rig.pitch, rig.roll);
+        // Take the short way around the yaw circle (yaw wraps freely).
+        if target.x - current.x > PI {
+            current.x += TAU;
+        } else if target.x - current.x < -PI {
+            current.x -= TAU;
+        }
         let next = target + (current - target) * k;
         rig.yaw = next.x;
         rig.pitch = next.y;
         rig.roll = next.z;
-        if (next - target).length() < 1e-3 {
+        // Canonical views re-center the focus depth onto the sandbox plane.
+        rig.focus.z *= k;
+        if (next - target).length() < 1e-3 && rig.focus.z.abs() < 1e-3 {
             rig.yaw = target.x;
             rig.pitch = target.y;
             rig.roll = target.z;
+            rig.focus.z = 0.0;
             rig.target = None;
         }
     }
@@ -242,7 +265,8 @@ pub fn pan_and_zoom_camera(
                 .and_then(|cursor| plane_point(camera, global, cursor));
             if let Some(anchor) = anchor {
                 let ratio = new_wpp / wpp;
-                rig.focus = anchor + (rig.focus - anchor) * ratio;
+                let a = anchor.extend(rig.focus.z);
+                rig.focus = a + (rig.focus - a) * ratio;
             }
             match &mut *projection {
                 Projection::Orthographic(o) => o.scale = new_wpp,
@@ -267,7 +291,7 @@ pub fn apply_camera_rig(
         return;
     };
     let q = rig.rotation();
-    let focus = rig.focus.extend(0.0);
+    let focus = rig.focus;
     *transform =
         Transform::from_translation(focus + q * Vec3::new(0.0, 0.0, rig.distance)).with_rotation(q);
     let viewport_height = windows.iter().next().map_or(900.0, Window::height);
