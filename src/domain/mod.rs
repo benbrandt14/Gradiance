@@ -13,6 +13,7 @@ pub mod layers;
 pub mod props;
 pub mod settings;
 pub mod shape;
+pub mod tracer;
 
 use bevy::prelude::*;
 

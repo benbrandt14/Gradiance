@@ -37,6 +37,9 @@ pub struct BodyRecord {
     /// Field source (attraction/repulsion), if the body carries one.
     #[serde(default)]
     pub field: Option<crate::domain::field::FieldSource>,
+    /// Trajectory-trail marker, if the body carries one.
+    #[serde(default)]
+    pub tracer: Option<crate::domain::tracer::Tracer>,
 }
 
 impl BodyRecord {
@@ -58,6 +61,7 @@ impl BodyRecord {
             field: entity_ref
                 .get::<crate::domain::field::FieldSource>()
                 .copied(),
+            tracer: entity_ref.get::<crate::domain::tracer::Tracer>().copied(),
         })
     }
 
@@ -79,6 +83,9 @@ impl BodyRecord {
         }
         if let Some(field) = self.field {
             entity.insert(field);
+        }
+        if let Some(tracer) = self.tracer {
+            entity.insert(tracer);
         }
         entity.id()
     }

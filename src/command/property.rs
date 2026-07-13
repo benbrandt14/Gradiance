@@ -31,6 +31,8 @@ pub enum PropertyValue {
     Sensor(bool),
     /// Field source (`None` = no field).
     Field(Option<crate::domain::field::FieldSource>),
+    /// Trajectory-trail marker (`None` = no tracer).
+    Tracer(Option<crate::domain::tracer::Tracer>),
     /// Rotation-lock flag (`LockedAxes::ROTATION_LOCKED` presence).
     RotationLock(bool),
     /// Visual appearance.
@@ -72,6 +74,14 @@ impl PropertyValue {
                 }
                 None => {
                     entity_mut.remove::<crate::domain::field::FieldSource>();
+                }
+            },
+            Self::Tracer(tracer) => match tracer {
+                Some(t) => {
+                    entity_mut.insert(*t);
+                }
+                None => {
+                    entity_mut.remove::<crate::domain::tracer::Tracer>();
                 }
             },
             Self::Sensor(on) => {

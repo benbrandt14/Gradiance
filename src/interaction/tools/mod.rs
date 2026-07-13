@@ -182,5 +182,6 @@ pub fn new_body_record(
         layers: LayerMask32::default(),
         groups: Vec::new(),
         field: None,
+        tracer: None,
     }
 }
