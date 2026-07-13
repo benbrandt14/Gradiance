@@ -81,7 +81,7 @@ pub fn toolbar(
                     .on_hover_text("return the camera to the flat 2D view (Home)")
                     .clicked()
                 {
-                    rig.homing = true;
+                    rig.glide_home();
                 }
                 ui.separator();
                 // Toggles for the hotkey-only panels, so they're discoverable

@@ -252,16 +252,25 @@ missing foundation:**
 The visuals/sim track, sequenced as one PR per slice. Absorbs the AO/contact
 shadow items from M19. Design decisions in the slice PRs.
 
-- **V1 — Interaction plane, back plane, lighting** *(this PR)*: one
+- **V1 — Interaction plane, back plane, lighting** *(landed)*: one
   `OverlayGizmos` group with the grid moved to the picking plane (kills the
   grid parallax, 3 gizmo groups → 1); back plane + key light driven by new
   persisted `ScenerySettings`/`LightingSettings` (Lighting tab with a
   draggable sun gadget, SSAO + contact-shadow toggles); half-plane grounds
   render effectively infinite with an inside-view fade material.
-- **V2 — View cube + top-down mode**: CAD orientation cube (face/corner/edge
-  snaps, animated glide), `CameraRig` roll, and a top-down preset — gravity
-  (0,0) plus a per-scene back-plane friction force (`physics/forces.rs`
-  sibling system), set from a right-click "Background" menu section.
+- **V1.5 — Visual-feedback pass** *(landed)*: hard shadows (single tight
+  cascade + configurable shadow-map size/reach), up to 4 key lights for
+  colored shadows, grid demoted to its own transparent gizmo stratum below
+  overlays, ground/back plane unified as one infinite-plane material
+  (orientation is the only visual difference), configurable perspective
+  projection (`ScenerySettings::perspective_deg`) for depth parallax, and
+  a `CameraScale` resource as the single screen↔world sizing authority.
+- **V2 — View cube + top-down mode** *(landed)*: CAD orientation cube
+  (face/corner/edge snaps, animated glide), `CameraRig` roll, and a
+  top-down preset — gravity (0,0) plus a per-scene back-plane friction
+  force (`physics/forces.rs` sibling system, Coulomb μ·m·g with a
+  gyration-radius spin term), set from a right-click "Background" menu
+  section.
 - **V3 — Continuous-depth collision** (save v5): authored `DepthBand
   {near, far}` replaces `LayerMask32`; contiguous collision layers and the
   exact extrusion both derive from the band (visual depth ≡ collision layer

@@ -70,6 +70,7 @@ impl Plugin for GradiancePhysicsPlugin {
                 grab::apply_mouse_spring,
                 grab::apply_mouse_twist,
                 forces::apply_magnet_forces.run_if(in_state(GameState::Playing)),
+                forces::apply_plane_friction.run_if(in_state(GameState::Playing)),
             ),
         );
         app.add_systems(

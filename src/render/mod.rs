@@ -9,10 +9,10 @@ pub mod debug_viz;
 pub mod decorations;
 pub mod extrude_sync;
 pub mod grid;
-pub mod ground;
 pub mod joint_viz;
 pub mod material_sync;
 pub mod overlay;
+pub mod plane;
 pub mod scenery;
 pub mod toon;
 
@@ -40,7 +40,7 @@ impl Plugin for GradianceRenderPlugin {
             return;
         }
         toon::install(app);
-        ground::install(app);
+        plane::install(app);
         overlay::install(app);
         app.init_resource::<GlobalAmbientLight>();
         app.add_systems(Startup, (setup_scene, scenery::setup));
@@ -59,7 +59,7 @@ impl Plugin for GradianceRenderPlugin {
             (
                 extrude_sync::sync_body_meshes,
                 material_sync::sync_body_materials,
-                ground::sync_ground_materials,
+                plane::sync_ground_planes,
             ),
         );
         app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default());

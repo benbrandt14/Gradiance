@@ -64,7 +64,7 @@ pub fn update_snapped_cursor(
     exclusions: Res<SnapExclusions>,
     physics: PhysicsQueries,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     mut out: ResMut<SnappedCursor>,
 ) {
     let raw = cursor.0;
@@ -77,7 +77,7 @@ pub fn update_snapped_cursor(
         return;
     };
 
-    let scale = crate::interaction::camera::camera_scale(&projections);
+    let scale = cam_scale.0;
     let radius = config.max_screen_distance * scale;
 
     // --- Object snaps (CAD priority). ---

@@ -234,7 +234,7 @@ pub fn pick_joint(
     bodies: Query<&Transform, With<Body>>,
     groups: Query<(Entity, &SelectionGroup), With<Body>>,
     index: Res<IdIndex>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     mut selected_joint: ResMut<SelectedJoint>,
     mut body_selection: ResMut<Selection>,
     mut suppress: ResMut<SuppressSelectPress>,
@@ -253,7 +253,7 @@ pub fn pick_joint(
         return;
     }
 
-    let s = crate::interaction::camera::camera_scale(&projections);
+    let s = cam_scale.0;
     let radius = ANCHOR_PICK_PX * s;
     let frame_of = |def: &JointDef| -> Option<(Vec2, f32)> {
         let entity = index.entity(def.body_a)?;

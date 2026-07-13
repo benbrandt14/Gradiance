@@ -3,8 +3,7 @@
 
 use crate::core::constants::INTERACTION_PLANE_Z;
 use crate::domain::settings::{GridSettings, GridSystem};
-use crate::render::overlay::OverlayGizmos;
-use bevy::color::palettes::css;
+use crate::render::overlay::GridGizmos;
 use bevy::prelude::*;
 
 /// Preferred on-screen line spacing band, in logical pixels.
@@ -16,7 +15,7 @@ const MAX_SCREEN_SPACING: f32 = 96.0;
 pub fn draw_grid(
     grid: Res<GridSettings>,
     cameras: Query<(&Transform, &Projection), With<Camera3d>>,
-    mut gizmos: Gizmos<OverlayGizmos>,
+    mut gizmos: Gizmos<GridGizmos>,
 ) {
     if !grid.visible {
         return;
@@ -30,8 +29,10 @@ pub fn draw_grid(
     let half = 800.0 * scale;
 
     let spacing = adaptive_spacing(grid.spacing, scale);
-    let minor = css::DIM_GRAY.with_alpha(0.18);
-    let axis = css::DIM_GRAY.with_alpha(0.55);
+    // Mid-value tint + low alpha: visible over the light backdrop without
+    // clashing on dark bodies (the grid is an overlay, not a surface).
+    let minor = Color::srgba(0.55, 0.57, 0.62, 0.14);
+    let axis = Color::srgba(0.55, 0.57, 0.62, 0.4);
 
     match grid.system {
         GridSystem::Cartesian => {
@@ -109,7 +110,7 @@ fn adaptive_spacing(base: f32, camera_scale: f32) -> f32 {
 /// through the grid origin draws in the `axis` color.
 #[expect(clippy::too_many_arguments)]
 fn line_family(
-    gizmos: &mut Gizmos<OverlayGizmos>,
+    gizmos: &mut Gizmos<GridGizmos>,
     origin: Vec2,
     angle: f32,
     spacing: f32,

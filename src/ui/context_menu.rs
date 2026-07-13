@@ -37,6 +37,54 @@ pub struct ScriptMenu<'w> {
     inputs: ResMut<'w, ScriptInputs>,
 }
 
+/// Background (empty-canvas) actions: per-scene settings writes (the
+/// Config seam) — friction against the back plane and the top-down toggle.
+#[derive(SystemParam)]
+pub struct BackgroundMenu<'w> {
+    sim: ResMut<'w, crate::domain::settings::SimSettings>,
+    settings_window: ResMut<'w, crate::ui::settings::SettingsWindow>,
+}
+
+impl BackgroundMenu<'_> {
+    /// Renders the section; returns true when the menu should close.
+    fn section(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut close = false;
+        ui.label(egui::RichText::new("Background").weak());
+        ui.horizontal(|ui| {
+            ui.label("plane friction");
+            ui.add(
+                egui::DragValue::new(&mut self.sim.plane_friction)
+                    .speed(0.01)
+                    .range(0.0..=5.0),
+            )
+            .on_hover_text("top-down mode: bodies rub on the back plane (0 = off)");
+        });
+        let top_down = self.sim.gravity.length() < 1e-3;
+        if top_down {
+            if ui.button("Restore gravity (side view)").clicked() {
+                self.sim.gravity = crate::core::constants::GRAVITY;
+                close = true;
+            }
+        } else if ui
+            .button("Top-down mode (gravity into screen)")
+            .on_hover_text("zeroes in-plane gravity; give the plane some friction")
+            .clicked()
+        {
+            self.sim.gravity = Vec2::ZERO;
+            if self.sim.plane_friction <= 0.0 {
+                self.sim.plane_friction = 0.3;
+            }
+            close = true;
+        }
+        if ui.button("Scene & lighting settings…").clicked() {
+            self.settings_window.open = true;
+            self.settings_window.tab = crate::ui::settings::SettingsTab::Lighting;
+            close = true;
+        }
+        close
+    }
+}
+
 /// The body-scoped intent writers, bundled into one `SystemParam` to keep
 /// `context_menu` under Bevy's system-parameter count limit.
 #[derive(SystemParam)]
@@ -92,7 +140,7 @@ pub fn open_context_menu(
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform, With<Body>>,
     index: Res<IdIndex>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     mut press_pos: Local<Option<Vec2>>,
     mut menu: ResMut<ContextMenu>,
 ) {
@@ -111,7 +159,7 @@ pub fn open_context_menu(
             .collect();
         // A joint glyph within the pick radius is offered for configuration
         // (whole glyph, matching left-click picking).
-        let scale = crate::interaction::camera::camera_scale(&projections);
+        let scale = cam_scale.0;
         menu.joint = nearest_joint(
             ANCHOR_PICK_PX * scale,
             joints.iter().filter_map(|(id, def)| {
@@ -158,6 +206,7 @@ pub fn context_menu(
     mut moves: MessageWriter<CommitTransformIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
     mut script: ScriptMenu,
+    mut background: BackgroundMenu,
 ) -> Result {
     if !menu.open {
         return Ok(());
@@ -329,6 +378,12 @@ pub fn context_menu(
                             }
                         }
                     });
+                    ui.separator();
+                }
+
+                // Empty-canvas click: the scene/background actions.
+                if menu.under.is_empty() && menu.joint.is_none() {
+                    close |= background.section(ui);
                     ui.separator();
                 }
 

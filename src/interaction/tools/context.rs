@@ -394,7 +394,7 @@ pub fn run_draft_tool<T: DraftTool>(
     over_ui: Res<PointerOverUi>,
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     mut tool: ResMut<T>,
     mut active: ResMut<ActiveGesture>,
     mut writers: ToolCommitWriters,
@@ -408,7 +408,7 @@ pub fn run_draft_tool<T: DraftTool>(
         cancel: keys.just_pressed(KeyCode::Escape),
         constraints: &constraints,
         snap: &snap,
-        cam_scale: crate::interaction::camera::camera_scale(&projections),
+        cam_scale: cam_scale.0,
     };
     if let Some(commit) = tool.update(&ctx) {
         writers.emit(commit);
@@ -717,7 +717,7 @@ pub trait ManipTool: Resource<Mutability = Mutable> {
 /// Pointer/tool-state inputs for the manipulation drivers, bundled to stay
 /// under the system-parameter limit.
 #[derive(SystemParam)]
-pub struct ManipInputs<'w, 's> {
+pub struct ManipInputs<'w> {
     buttons: Res<'w, PointerButtons>,
     keys: Res<'w, ButtonInput<KeyCode>>,
     snapped: Res<'w, SnappedCursor>,
@@ -729,10 +729,10 @@ pub struct ManipInputs<'w, 's> {
     defaults: Res<'w, ToolDefaults>,
     tool_state: Res<'w, State<ToolState>>,
     game_state: Res<'w, State<GameState>>,
-    projections: Query<'w, 's, &'static Projection, With<Camera3d>>,
+    cam_scale: Res<'w, crate::interaction::camera::CameraScale>,
 }
 
-impl ManipInputs<'_, '_> {
+impl ManipInputs<'_> {
     /// Builds this frame's read-only manipulation context.
     fn manip_context(&self) -> ManipContext<'_> {
         let held = |a, b| self.keys.pressed(a) || self.keys.pressed(b);
@@ -752,7 +752,7 @@ impl ManipInputs<'_, '_> {
             constraints: &self.constraints,
             snap: &self.snap,
             defaults: *self.defaults,
-            cam_scale: crate::interaction::camera::camera_scale(&self.projections),
+            cam_scale: self.cam_scale.0,
         }
     }
 }

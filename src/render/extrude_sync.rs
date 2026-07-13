@@ -11,28 +11,17 @@ use bevy::prelude::*;
 
 /// Builds the 2.5D prism mesh for a body (pure; unit-tested headless).
 ///
-/// Half-planes extrude a slab far larger than any navigable view (their
-/// *collision* is truly infinite; see `render::ground` for the material
-/// that completes the infinite reading).
+/// Half-planes are the exception: they render as an infinite flat *floor*
+/// (a plane containing the surface line, sweeping along ±Z) rather than a
+/// prism — the scene reads as pieces standing on a 3D surface. See
+/// `render::plane` for the material that completes the impression.
 pub fn build_body_mesh(shape: &ShapeDef, layers: &LayerMask32) -> Mesh {
+    if matches!(shape, ShapeDef::HalfPlane) {
+        return crate::render::plane::ground_plane_mesh();
+    }
     let (min_bit, max_bit) = layers.occupied_range().unwrap_or((0, 0));
     let (z_front, depth) = layer_z_range(min_bit, max_bit);
-    let contours = if matches!(shape, ShapeDef::HalfPlane) {
-        use crate::render::ground::{GROUND_RENDER_DROP, GROUND_RENDER_WIDTH};
-        let (w, h) = (GROUND_RENDER_WIDTH / 2.0, GROUND_RENDER_DROP);
-        crate::geometry::contours::Contours {
-            outline: vec![
-                Vec2::new(-w, -h),
-                Vec2::new(w, -h),
-                Vec2::new(w, 0.0),
-                Vec2::new(-w, 0.0),
-            ],
-            holes: Vec::new(),
-        }
-    } else {
-        polygonize(shape)
-    };
-    let buffers = extrude_contours(&contours, z_front, depth);
+    let buffers = extrude_contours(&polygonize(shape), z_front, depth);
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,

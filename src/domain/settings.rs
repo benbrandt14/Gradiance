@@ -142,6 +142,11 @@ pub struct SimSettings {
     /// Solver substeps per physics step (stiffness/accuracy knob).
     #[serde(default = "default_substeps")]
     pub substeps: u32,
+    /// Coulomb friction against the back plane (top-down mode: gravity
+    /// points "into the screen", so bodies rub on the surface behind
+    /// them). `0` = off. Set from the background right-click menu.
+    #[serde(default)]
+    pub plane_friction: f32,
     /// Physics steps per second (the fixed timestep).
     #[serde(default = "default_timestep_hz")]
     pub timestep_hz: f32,
@@ -160,6 +165,7 @@ impl Default for SimSettings {
         Self {
             gravity: Vec2::new(0.0, -1000.0),
             speed: 1.0,
+            plane_friction: 0.0,
             substeps: 6,
             timestep_hz: 60.0,
         }
@@ -240,43 +246,71 @@ impl Default for DebugSettings {
     }
 }
 
-/// Scene lighting (the "Lighting" settings tab).
-///
-/// Persisted with the scene like the other environment settings; the render
-/// seam applies changes to the directional light / ambient / camera AO via
-/// change detection — UI never touches light entities directly.
-#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
-pub struct LightingSettings {
-    /// Where the key light shines *from*, as a screen-plane angle in degrees
+/// One configurable key light (multiple lights give colored, layered
+/// shadows — depth cues on a flat scene).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct KeyLightSettings {
+    /// Where the light shines *from*, as a screen-plane angle in degrees
     /// (0° = from the right, 90° = from above).
     pub azimuth_deg: f32,
     /// Out-of-plane tilt toward the viewer, degrees (0° = grazing the
     /// sandbox plane, 90° = head-on).
     pub elevation_deg: f32,
-    /// Key light color.
+    /// Light color.
     pub color: crate::domain::appearance::Rgba,
-    /// Key light strength, lux.
+    /// Strength, lux.
     pub illuminance: f32,
-    /// Flat ambient brightness.
-    pub ambient: f32,
-    /// Screen-space ambient occlusion (forces MSAA off while enabled).
-    pub ssao: bool,
-    /// Screen-space contact shadows on the key light.
-    pub contact_shadows: bool,
+    /// Whether this light casts shadows.
+    pub shadows: bool,
 }
 
-impl Default for LightingSettings {
+impl Default for KeyLightSettings {
     fn default() -> Self {
-        // Matches the pre-configurable hard-coded light: from (-400, 700)
-        // in-plane, lifted 500 toward the viewer, 12 000 lux, ambient 300.
         Self {
             azimuth_deg: 120.0,
             elevation_deg: 32.0,
             color: crate::domain::appearance::Rgba::rgb(1.0, 1.0, 1.0),
             illuminance: 12_000.0,
+            shadows: true,
+        }
+    }
+}
+
+/// Scene lighting (the "Lighting" settings tab).
+///
+/// Persisted with the scene like the other environment settings; the render
+/// seam applies changes to the light entities / ambient / camera AO via
+/// change detection — UI never touches light entities directly.
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct LightingSettings {
+    /// The key lights (at least one; the Lighting tab adds/removes).
+    pub lights: Vec<KeyLightSettings>,
+    /// Flat ambient brightness.
+    pub ambient: f32,
+    /// Screen-space ambient occlusion (forces MSAA off while enabled).
+    pub ssao: bool,
+    /// Screen-space contact shadows (crisp object-on-object darkening).
+    pub contact_shadows: bool,
+    /// Shadow-map resolution per cascade (power of two; higher = harder,
+    /// crisper shadow edges — the scene is simple prisms, so go high).
+    pub shadow_map_size: u32,
+    /// How far from the camera shadows stay valid, world pixels. Smaller =
+    /// denser shadow texels (crisper); too small clips shadows when the
+    /// view orbits.
+    pub shadow_distance: f32,
+}
+
+impl Default for LightingSettings {
+    fn default() -> Self {
+        // The single-light default matches the original hard-coded key
+        // light: from (-400, 700) in-plane, lifted toward the viewer.
+        Self {
+            lights: vec![KeyLightSettings::default()],
             ambient: 300.0,
             ssao: false,
             contact_shadows: true,
+            shadow_map_size: 4096,
+            shadow_distance: 8_000.0,
         }
     }
 }
@@ -297,6 +331,10 @@ pub struct ScenerySettings {
     pub back_visible: bool,
     /// Draw half-plane grounds (colliders stay active regardless).
     pub ground_visible: bool,
+    /// Vertical field of view in degrees; `0` = orthographic (exact 2D
+    /// work), larger = perspective depth parallax across the layers.
+    #[serde(default)]
+    pub perspective_deg: f32,
 }
 
 impl Default for ScenerySettings {
@@ -306,6 +344,7 @@ impl Default for ScenerySettings {
             back_color: crate::domain::appearance::Rgba::rgb(0.82, 0.83, 0.85),
             back_visible: true,
             ground_visible: true,
+            perspective_deg: 0.0,
         }
     }
 }

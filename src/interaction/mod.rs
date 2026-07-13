@@ -77,6 +77,7 @@ impl Plugin for InteractionPlugin {
         app.register_type::<crate::domain::settings::DebugSettings>();
         app.register_type::<crate::domain::settings::ToolDefaults>();
         app.init_resource::<camera::CameraRig>();
+        app.init_resource::<camera::CameraScale>();
 
         app.add_plugins(input::EditorInputPlugin);
         app.add_plugins(tools::ToolsPlugin);
@@ -94,6 +95,8 @@ impl Plugin for InteractionPlugin {
         app.add_systems(
             Update,
             (
+                camera::apply_projection
+                    .run_if(resource_changed::<crate::domain::settings::ScenerySettings>),
                 camera::pan_and_zoom_camera,
                 camera::apply_camera_rig,
                 input::apply_shortcuts,

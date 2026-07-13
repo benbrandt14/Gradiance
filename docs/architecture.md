@@ -70,6 +70,8 @@ bottom — no unclassified state.
 | `Mesh3d`, `MeshMaterial3d`, `ToonMaterial` | `extrude_sync`, `material_sync` |
 | `IdIndex` | `StableId` component hooks |
 | `HistoryInfo` | dispatcher (read-only mirror of stack depths) |
+| `CameraScale` | `apply_camera_rig` (world-per-pixel under either projection) |
+| `KeyLight` / `BackPlane` entities | `render::scenery` from `LightingSettings`/`ScenerySettings` |
 | `SubstepTrace` | `record_substep_trace` in avian's `SubstepSchedule` (debug view; rebuilt every physics step while enabled) |
 
 ### Doesn't fit cleanly (explicit rationale)

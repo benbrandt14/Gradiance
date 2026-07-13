@@ -17,6 +17,7 @@ pub mod plot;
 pub mod reflect_grid;
 pub mod settings;
 pub mod toolbar;
+pub mod view_cube;
 pub mod widgets;
 
 use crate::core::states::GameState;
@@ -44,6 +45,7 @@ impl Plugin for GradianceUiPlugin {
             EguiPrimaryContextPass,
             (
                 toolbar::toolbar,
+                view_cube::view_cube,
                 inspector::inspector_window,
                 joint_inspector::joint_inspector,
                 settings::settings_window,

@@ -158,13 +158,13 @@ pub fn draw_handles(
     selection: Res<Selection>,
     frame: Res<ScaleFrame>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let Some(sbox) = selection_box(&selection, *frame, &bodies) else {
         return;
     };
-    let scale = crate::interaction::camera::camera_scale(&projections);
+    let scale = cam_scale.0;
     let size = 5.0 * scale;
     let color = if *frame == ScaleFrame::Local {
         css::MEDIUM_PURPLE

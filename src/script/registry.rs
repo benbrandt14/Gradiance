@@ -58,7 +58,13 @@ pub mod name {
 
 /// The `SimSettings` reflect paths `sim-get`/`sim-set` advertise; the
 /// validation test resolves each, so a field rename cannot strand one.
-pub const SIM_SETTING_PATHS: &[&str] = &["gravity.x", "gravity.y", "speed", "substeps"];
+pub const SIM_SETTING_PATHS: &[&str] = &[
+    "gravity.x",
+    "gravity.y",
+    "speed",
+    "substeps",
+    "plane_friction",
+];
 
 /// Which sanctioned seam an operation routes through — the governance category
 /// from `docs/script-lisp-decision.md` (reads total, writes seam-mediated).
