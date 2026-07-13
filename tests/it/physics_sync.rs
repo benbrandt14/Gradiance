@@ -609,3 +609,48 @@ fn tracers_sample_fading_trails_and_toggle_undoably() {
     let entity = entity_of(&app, id).unwrap();
     assert_eq!(app.world().get::<Tracer>(entity), Some(&tracer));
 }
+
+#[derive(Resource)]
+struct ProbeTarget(StableId);
+
+#[derive(Resource, Default)]
+struct CapturedImpulse(Vec2);
+
+fn capture_impulse(
+    target: Option<Res<ProbeTarget>>,
+    index: Res<gradiance::core::ids::IdIndex>,
+    physics: gradiance::physics::queries::PhysicsQueries,
+    mut out: ResMut<CapturedImpulse>,
+) {
+    if let Some(entity) = target.and_then(|t| index.entity(t.0)) {
+        out.0 = physics.net_contact_impulse(entity);
+    }
+}
+
+#[test]
+fn net_contact_impulse_reads_a_resting_bodys_weight() {
+    // The probe/plot read: a box resting on the floor feels an upward
+    // normal impulse of about m*g*dt per step.
+    let mut app = headless_app();
+    app.init_resource::<CapturedImpulse>();
+    app.add_systems(Update, capture_impulse);
+    let (falling_id, _floor) = falling_box_scene(&mut app);
+    app.insert_resource(ProbeTarget(falling_id));
+
+    step(&mut app, 240); // land and settle
+
+    let impulse = app.world().resource::<CapturedImpulse>().0;
+    assert!(impulse.y > 0.0, "support pushes up ({impulse:?})");
+    let dt = app
+        .world()
+        .resource::<Time<Fixed>>()
+        .timestep()
+        .as_secs_f32();
+    let force = impulse.y / dt;
+    // Weight = area x density x |g| = 20*20*1 * 1000.
+    let weight = 400.0 * 1000.0;
+    assert!(
+        (force - weight).abs() < 0.3 * weight,
+        "contact force approximates the weight ({force} vs {weight})"
+    );
+}

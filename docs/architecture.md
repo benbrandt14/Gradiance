@@ -49,7 +49,7 @@ bottom — no unclassified state.
 | `Selection`, `SelectedJoint` | current selection (entities, never saved) |
 | `GameState`, `ToolState` | bevy states: play/pause, active tool |
 | `ScaleFrame` | global/local handle axes toggle (F) |
-| UI panel state: `SettingsWindow`/`SettingsTab`, `InspectorPanel`, `ContextMenu`, `PlotPanel`, `ScriptConsole` | open/closed + per-panel scratch; egui-side only |
+| UI panel state: `SettingsWindow`/`SettingsTab`, `InspectorPanel`, `ContextMenu`, `PlotPanel`, `ProbePanel`, `ScriptConsole` | open/closed + per-panel scratch; egui-side only (`ProbePanel` pins bodies by `StableId`, so undo/redo keep pins valid) |
 
 ### Transient gesture/preview state (tool-local; invariant 2 — dies with the gesture)
 

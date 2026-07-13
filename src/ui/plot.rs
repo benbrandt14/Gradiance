@@ -117,6 +117,7 @@ pub fn sample_plot(
     transforms: Query<&Transform>,
     index: Res<IdIndex>,
     physics: PhysicsQueries,
+    fixed: Res<Time<Fixed>>,
     mut history: ResMut<PlotHistory>,
 ) {
     // A selected joint takes precedence (body/joint selection are exclusive):
@@ -138,7 +139,7 @@ pub fn sample_plot(
         return;
     }
 
-    // Otherwise, a single selected body: speed + height.
+    // Otherwise, a single selected body: speed + height + contact force.
     let mut selected = selection.iter();
     let (Some(entity), None) = (selected.next(), selected.next()) else {
         history.clear();
@@ -146,8 +147,10 @@ pub fn sample_plot(
     };
     let height = transforms.get(entity).map_or(0.0, |t| t.translation.y);
     let speed = physics.velocity_of(entity).map_or(0.0, |(v, _)| v.length());
-    history.retarget(entity, &["speed (px/s)", "height (px)"]);
-    history.push(&[speed, height]);
+    let dt = fixed.timestep().as_secs_f32().max(1e-6);
+    let contact_force = physics.net_contact_impulse(entity).length() / dt;
+    history.retarget(entity, &["speed (px/s)", "height (px)", "contact force"]);
+    history.push(&[speed, height, contact_force]);
 }
 
 /// A joint's live geometry: current anchor-to-anchor length and the relative

@@ -32,6 +32,7 @@ pub fn toolbar(
     mut redo: MessageWriter<RedoIntent>,
     mut settings: ResMut<crate::ui::settings::SettingsWindow>,
     mut plot: ResMut<crate::ui::plot::PlotPanel>,
+    mut probe: ResMut<crate::ui::probe::ProbePanel>,
     mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
     mut console: ResMut<crate::ui::console::ScriptConsole>,
     mut debug: ResMut<crate::domain::settings::DebugSettings>,
@@ -101,6 +102,13 @@ pub fn toolbar(
                     .clicked()
                 {
                     plot.toggle();
+                }
+                if ui
+                    .selectable_label(probe.is_open(), "Probe")
+                    .on_hover_text("live physics readouts: pinned bodies + hover")
+                    .clicked()
+                {
+                    probe.toggle();
                 }
                 if ui
                     .selectable_label(console.is_open(), "λ Script")

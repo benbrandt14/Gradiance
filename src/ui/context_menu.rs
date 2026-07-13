@@ -46,6 +46,14 @@ pub struct GroupWriters<'w> {
     merge: MessageWriter<'w, MergeIntent>,
 }
 
+/// Physical quick actions (non-undoable one-shots + probe pins), bundled
+/// for the same parameter-count reason as [`GroupWriters`].
+#[derive(SystemParam)]
+pub struct QuickActions<'w> {
+    orbits: MessageWriter<'w, crate::physics::fields::SetOrbitRequest>,
+    probes: ResMut<'w, crate::ui::probe::ProbePanel>,
+}
+
 /// Open context menu state.
 #[derive(Resource, Default, Debug)]
 pub struct ContextMenu {
@@ -155,7 +163,7 @@ pub fn context_menu(
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     joints: Query<&JointDef>,
     mut writers: GroupWriters,
-    mut orbits: MessageWriter<crate::physics::fields::SetOrbitRequest>,
+    mut quick: QuickActions,
     mut moves: MessageWriter<CommitTransformIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
     mut script: ScriptMenu,
@@ -265,9 +273,19 @@ pub fn context_menu(
                     )
                     .clicked()
                 {
-                    orbits.write(crate::physics::fields::SetOrbitRequest {
+                    quick.orbits.write(crate::physics::fields::SetOrbitRequest {
                         targets: selected_ids.clone(),
                     });
+                    close = true;
+                }
+                if ui
+                    .add_enabled(!selected_ids.is_empty(), egui::Button::new("Pin probe"))
+                    .on_hover_text("pin a live physics readout in the Probes window")
+                    .clicked()
+                {
+                    for id in &selected_ids {
+                        quick.probes.pin(*id);
+                    }
                     close = true;
                 }
                 if ui
