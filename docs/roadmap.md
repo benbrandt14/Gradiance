@@ -348,9 +348,12 @@ tracer is *just another reader* of `physics::queries` / the scripting
 `docs/script-lisp-decision.md` §"Live plotters are enabled by read-total
 governance").
 
-- Body/point **tracers**: sampled trajectories drawn as fading polylines. A
-  tracer is an authored marker (one op); its samples are *derived*, never
-  command-wrapped or serialized (rule #5).
+- Body/point **tracers** — **landed** (body tracers): an authored `Tracer`
+  marker (fade window; toggled in the Material section, undoable via
+  `PropertyValue::Tracer`, serde-defaulted in saves) drives a derived
+  `TraceTrail` sampled on the physics clock (pause freezes it) and drawn
+  as a fading polyline in the body's own color. Samples are never
+  command-wrapped or serialized (rule #5). Point/local-anchor tracers open.
 - **Live plotters** — **landed** (`src/ui/plot.rs`): a backslash-toggled panel
   time-series-plots the selected **body** (speed, height) *or* selected **joint**
   (length, and a hinge's angle), sampled each frame while playing from
@@ -368,7 +371,10 @@ governance").
 
 - Boolean operations between bodies via context menu (join / subtract /
   intersect / xor) producing analytic trees (7.3)
-- Piece velocity inheritance `v + ω × r` on severing cuts (7.5)
+- Piece velocity inheritance `v + ω × r` on severing cuts (7.5) — **landed**:
+  `CutCommand` reads the severed body's live velocity at apply time and each
+  piece inherits `v + ω × r` plus the shared spin (physics continuity, like
+  the grab spring's writes — nothing velocity-shaped enters the undo record)
 - Smooth-union (fillet) modeling tools (12)
 
 ## Scripting & symbolic modeling (design accepted)

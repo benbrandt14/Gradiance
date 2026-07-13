@@ -49,6 +49,7 @@
             ),
             groups: [],
             field: None,
+            tracer: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000002"),
@@ -97,6 +98,7 @@
             ),
             groups: [],
             field: None,
+            tracer: None,
         ),
     ],
     joints: [

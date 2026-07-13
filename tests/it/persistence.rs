@@ -128,6 +128,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                     },
                     groups,
                     field: None,
+                    tracer: None,
                 }
             },
         )
@@ -487,6 +488,24 @@ fn pre_field_files_still_parse() {
     assert_ne!(text, cut, "fixture actually removed the field");
     let parsed = from_ron(&cut).expect("pre-magnet file parses");
     assert_eq!(parsed.bodies[0].field, None);
+}
+
+#[test]
+fn pre_tracer_files_still_parse() {
+    // `tracer` is serde-defaulted, so scenes saved before tracers existed
+    // load unchanged.
+    let scene = SceneRecord {
+        version: gradiance::persist::FORMAT_VERSION,
+        app_version: String::new(),
+        bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
+        joints: vec![],
+        environment: EnvironmentRecord::default(),
+    };
+    let text = to_ron(&scene).unwrap();
+    let cut = text.replace("tracer: None,", "");
+    assert_ne!(text, cut, "fixture actually removed the tracer");
+    let parsed = from_ron(&cut).expect("pre-tracer file parses");
+    assert_eq!(parsed.bodies[0].tracer, None);
 }
 
 #[test]

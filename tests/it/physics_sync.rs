@@ -553,3 +553,59 @@ fn cutting_a_field_source_conserves_its_field() {
         "cutting the source leaves the far field intact ({before:?} -> {after:?})"
     );
 }
+
+#[test]
+fn tracers_sample_fading_trails_and_toggle_undoably() {
+    use gradiance::domain::tracer::Tracer;
+    use gradiance::render::tracer::TraceTrail;
+    let mut app = headless_app();
+    let mut record = box_record(Vec2::new(0.0, 300.0), 20.0, 20.0);
+    record.tracer = Some(Tracer { fade_secs: 0.5 });
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+
+    // Falling under gravity: the trail accumulates samples.
+    step(&mut app, 30);
+    let entity = entity_of(&app, id).unwrap();
+    let len = app.world().get::<TraceTrail>(entity).unwrap().0.len();
+    assert!(len >= 5, "a moving traced body accumulates samples ({len})");
+
+    // Samples older than the fade window expire (the trail is a window,
+    // not an unbounded history).
+    step(&mut app, 90);
+    let now = app
+        .world()
+        .resource::<Time<avian2d::prelude::Physics>>()
+        .elapsed_secs();
+    let trail = app.world().get::<TraceTrail>(entity).unwrap();
+    let (oldest, _) = trail.0.front().copied().unwrap();
+    assert!(
+        now - oldest < 0.6,
+        "old samples expired (oldest is {}s old)",
+        now - oldest
+    );
+
+    // Turning the tracer off is one undoable property edit; the derived
+    // trail dies with the marker and undo restores the marker (a fresh
+    // trail regrows -- the samples themselves are never authored).
+    let tracer = *app.world().get::<Tracer>(entity).unwrap();
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![PropertyChange {
+            id,
+            old: PropertyValue::Tracer(Some(tracer)),
+            new: PropertyValue::Tracer(None),
+        }],
+    });
+    step(&mut app, 2);
+    let entity = entity_of(&app, id).unwrap();
+    assert!(app.world().get::<Tracer>(entity).is_none());
+    assert!(
+        app.world().get::<TraceTrail>(entity).is_none(),
+        "the derived trail is removed with its marker"
+    );
+
+    undo(&mut app);
+    let entity = entity_of(&app, id).unwrap();
+    assert_eq!(app.world().get::<Tracer>(entity), Some(&tracer));
+}
