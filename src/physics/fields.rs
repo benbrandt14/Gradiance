@@ -14,6 +14,10 @@
 //!   authored edit, or a P2 signal driver) — the sampler stays pure.
 //! - Forces are one-shot through avian's `Forces` (constraints always win);
 //!   nothing here is authored, undoable, or persisted.
+//! - Fields are **Newtonian**: every force gets an equal-and-opposite
+//!   reaction on its source (momentum conserves), and a source's strength
+//!   couples through its [`FieldMass`] (area × density), so cutting a source
+//!   redistributes — never changes — its total field.
 
 use crate::core::constants::PIXELS_PER_METER;
 use crate::core::ids::{IdIndex, StableId};
@@ -23,6 +27,7 @@ use crate::domain::shape::ShapeDef;
 use crate::geometry::sdf;
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
 /// Acceleration magnitude clamp (keeps zero-distance fields sane).
@@ -31,6 +36,41 @@ const MAX_FIELD_ACCEL: f32 = 5.0e4;
 const MIN_FIELD_ACCEL: f32 = 0.01;
 /// Finite-difference step for the SDF gradient (world px).
 const GRADIENT_EPS: f32 = 0.5;
+/// The field mass at which a source's strength knob applies verbatim:
+/// a 1 m² body at density 1. Bigger/denser sources couple proportionally
+/// harder, smaller ones softer — so cutting a source splits its pull
+/// instead of doubling it.
+pub const REFERENCE_FIELD_MASS: f32 = PIXELS_PER_METER * PIXELS_PER_METER;
+
+/// Derived field-coupling mass of a source: shape area × density. Rebuilt
+/// by [`sync_field_mass`] on shape/density edits; never serialized, never
+/// undo-recorded (`docs/architecture.md`). Kept separate from avian's
+/// `ComputedMass` so static sources (a pinned "sun") still couple.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct FieldMass(pub f32);
+
+/// Derives [`FieldMass`] for every field source whose shape or density
+/// changed (cut pieces, resizes, density edits all land here).
+pub fn sync_field_mass(
+    mut commands: Commands,
+    changed: Query<
+        (Entity, &ShapeDef, &ColliderDensity),
+        (
+            With<FieldSource>,
+            Or<(
+                Added<FieldSource>,
+                Changed<FieldSource>,
+                Changed<ShapeDef>,
+                Changed<ColliderDensity>,
+            )>,
+        ),
+    >,
+) {
+    for (entity, shape, density) in &changed {
+        let area = crate::geometry::polygonize::polygonize(shape).area();
+        commands.entity(entity).insert(FieldMass(area * density.0));
+    }
+}
 
 /// Falloff factor over surface distance `d` (px) — pure, unit-testable.
 pub fn falloff_factor(falloff: FieldFalloff, d: f32) -> f32 {
@@ -57,6 +97,7 @@ pub struct Fields<'w, 's> {
         (
             Entity,
             &'static FieldSource,
+            &'static FieldMass,
             &'static ShapeDef,
             &'static Transform,
         ),
@@ -78,8 +119,10 @@ impl Fields<'_, '_> {
             .max_by(|(_, a), (_, b)| a.length_squared().total_cmp(&b.length_squared()))
     }
 
-    /// Per-source contributions at `p` (skips negligible ones).
-    fn contributions(
+    /// Per-source contributions at `p` (skips negligible ones). Public so
+    /// the force applicator can mirror each contribution back onto its
+    /// source (Newton's third law); other consumers want [`Self::accel_at`].
+    pub fn contributions(
         &self,
         p: Vec2,
         exclude: Option<Entity>,
@@ -87,7 +130,7 @@ impl Fields<'_, '_> {
         self.sources
             .iter()
             .filter(move |(e, ..)| Some(*e) != exclude)
-            .filter_map(move |(entity, source, shape, transform)| {
+            .filter_map(move |(entity, source, field_mass, shape, transform)| {
                 let pose = crate::core::units::PosRot::from_transform(transform);
                 let local = Vec2::from_angle(-pose.rot).rotate(p - pose.pos);
                 let d = sdf::eval(shape, local).max(0.0);
@@ -98,9 +141,12 @@ impl Fields<'_, '_> {
                     return None;
                 }
                 // Positive strength repels: acceleration along the outward
-                // gradient. Negative attracts.
+                // gradient. Negative attracts. Coupling scales with the
+                // source's field mass, so a cut redistributes the field
+                // across the pieces instead of duplicating it.
+                let coupling = source.strength * (field_mass.0 / REFERENCE_FIELD_MASS);
                 let accel = away
-                    * (source.strength * falloff_factor(source.falloff, d))
+                    * (coupling * falloff_factor(source.falloff, d))
                         .clamp(-MAX_FIELD_ACCEL, MAX_FIELD_ACCEL);
                 (accel.length() >= MIN_FIELD_ACCEL).then_some((entity, accel))
             })
@@ -108,16 +154,32 @@ impl Fields<'_, '_> {
 }
 
 /// Applies field forces to every dynamic body (mass-scaled, so field
-/// acceleration is mass-independent — gravity-like, and orbits work).
+/// acceleration is mass-independent — gravity-like, and orbits work), and
+/// mirrors every force back onto its source (equal and opposite, so an
+/// attractor is pulled toward what it attracts and momentum conserves).
 pub fn apply_field_forces(
     fields: Fields,
-    mut bodies: Query<(Entity, &ComputedMass, Forces), With<Body>>,
+    targets: Query<(Entity, &RigidBody, &ComputedMass, &Transform), With<Body>>,
+    mut forces: Query<Forces, With<Body>>,
 ) {
-    for (entity, mass, mut forces) in &mut bodies {
-        let p = forces.position().0;
-        let accel = fields.accel_at(Vec2::new(p.x, p.y), Some(entity));
-        if accel != Vec2::ZERO {
-            forces.apply_force(accel * mass.value());
+    let mut net: HashMap<Entity, Vec2> = HashMap::new();
+    for (entity, rigid_body, mass, transform) in &targets {
+        if !rigid_body.is_dynamic() {
+            continue;
+        }
+        let p = transform.translation.truncate();
+        for (source, accel) in fields.contributions(p, Some(entity)) {
+            let force = accel * mass.value();
+            if force == Vec2::ZERO {
+                continue;
+            }
+            *net.entry(entity).or_default() += force;
+            *net.entry(source).or_default() -= force;
+        }
+    }
+    for (entity, force) in net {
+        if let Ok(mut item) = forces.get_mut(entity) {
+            item.apply_force(force);
         }
     }
 }
