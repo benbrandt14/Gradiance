@@ -82,6 +82,10 @@ pub struct SimConfig {
     pub feel_gravity: bool,
     /// Bounciness of particle↔body collisions (0 = stick/slide, 1 = elastic).
     pub restitution: f32,
+    /// Two-way coupling strength — scales the reaction impulse particles
+    /// push back onto bodies (0 = one-way, particles feel bodies but not
+    /// vice versa).
+    pub coupling: f32,
 }
 
 impl Default for SimConfig {
@@ -92,6 +96,7 @@ impl Default for SimConfig {
             softening: 8.0,
             feel_gravity: true,
             restitution: 0.2,
+            coupling: 1.0,
         }
     }
 }

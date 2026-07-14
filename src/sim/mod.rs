@@ -36,6 +36,7 @@ impl Plugin for SimPlugin {
         app.init_resource::<Particles>();
         app.init_resource::<SimConfig>();
         app.init_resource::<groups::ParticleGroups>();
+        app.init_resource::<interactions::ParticleImpulses>();
         // The fill queue lives in the UI crate (the button writes it) but
         // its drain lives here, so the sim owns the init — the resource
         // exists whenever the drain runs (incl. headless tests).
@@ -52,6 +53,7 @@ impl Plugin for SimPlugin {
                 bridge::emit_particles,
                 bridge::step_particles,
                 interactions::collide_with_bodies,
+                interactions::apply_particle_impulses,
             )
                 .chain()
                 .run_if(in_state(GameState::Playing)),

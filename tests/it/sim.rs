@@ -131,6 +131,47 @@ fn particles_rest_on_a_body_of_the_same_layer() {
 }
 
 #[test]
+fn a_particle_stream_nudges_a_light_dynamic_body() {
+    let mut app = headless_app(); // Playing → gravity + collision + coupling
+    // A light dynamic box hanging in space (default group/band 0..10;
+    // `box_record` bodies are dynamic by default).
+    let record = box_record(Vec2::new(0.0, 0.0), 40.0, 40.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    step(&mut app, 2);
+    let body = entity_of(&app, id).expect("body spawned");
+
+    // Turn off scene gravity on particles so the momentum exchange is the
+    // only horizontal driver, and disable it on the body's fall by reading
+    // only the x-drift (the reaction is a sideways stream from the left).
+    // Fire a dense fast stream from the left, moving +x, at the body's height.
+    {
+        let mut particles = app.world_mut().resource_mut::<Particles>();
+        for i in 0..200 {
+            let y = (i % 20) as f32 - 10.0; // spread across the body's face
+            particles
+                .0
+                .push(Vec2::new(-60.0, y), Vec2::new(400.0, 0.0), 1.0, 0);
+        }
+    }
+    let x0 = app
+        .world()
+        .entity(body)
+        .get::<Transform>()
+        .map_or(0.0, |t| t.translation.x);
+    step(&mut app, 30);
+    let x1 = app
+        .world()
+        .entity(body)
+        .get::<Transform>()
+        .map_or(0.0, |t| t.translation.x);
+    assert!(
+        x1 > x0 + 0.5,
+        "the leftward stream pushed the body to the right (Newton's third law): x {x0} → {x1}"
+    );
+}
+
+#[test]
 fn particles_on_a_disjoint_layer_pass_through() {
     let mut app = headless_app();
     platform(&mut app, Vec2::new(0.0, -100.0), 400.0, 40.0);

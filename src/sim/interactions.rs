@@ -17,11 +17,21 @@ use crate::domain::depth::DepthBand;
 use crate::physics::queries::PhysicsQueries;
 use crate::sim::bridge::{Particles, SimConfig};
 use crate::sim::groups::ParticleGroups;
+use avian2d::prelude::*;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
 /// Small outward offset so a resolved particle sits *just* outside the
 /// surface, not exactly on it (avoids immediate re-penetration).
 const SKIN: f32 = 0.5;
+
+/// The reaction impulses particles imparted on bodies this step, keyed by
+/// body: `(total impulse, impulse-weighted world point)`. Recorded by
+/// [`collide_with_bodies`] (read-only w.r.t. bodies) and applied by
+/// [`apply_particle_impulses`] through the `Forces` seam — the split
+/// avoids reading and writing body velocity in one system.
+#[derive(Resource, Default)]
+pub struct ParticleImpulses(pub HashMap<Entity, (Vec2, Vec2)>);
 
 /// Reflects a velocity about an outward unit normal with restitution,
 /// but only when it is moving *into* the surface. Pure — unit-tested.
@@ -43,8 +53,11 @@ pub fn collide_with_bodies(
     groups: Res<ParticleGroups>,
     config: Res<SimConfig>,
     mut particles: ResMut<Particles>,
+    mut impulses: ResMut<ParticleImpulses>,
 ) {
     let restitution = config.restitution;
+    let coupling = config.coupling.max(0.0);
+    impulses.0.clear();
     let state = &mut particles.0;
     for i in 0..state.len() {
         let p = state.pos[i];
@@ -67,8 +80,39 @@ pub fn collide_with_bodies(
         if normal == Vec2::ZERO {
             continue;
         }
+        let before = state.vel[i];
+        let after = reflect_velocity(before, normal, restitution);
         state.pos[i] = hit.point + normal * SKIN;
-        state.vel[i] = reflect_velocity(state.vel[i], normal, restitution);
+        state.vel[i] = after;
+        // Reaction (Newton's third law): the body receives −m·Δv at the
+        // contact point, impulse-weighted so a lopsided stream spins it.
+        let reaction = -state.mass[i] * (after - before) * coupling;
+        let mag = reaction.length();
+        if mag > 0.0 {
+            let entry = impulses
+                .0
+                .entry(hit.entity)
+                .or_insert((Vec2::ZERO, Vec2::ZERO));
+            entry.0 += reaction;
+            entry.1 += hit.point * mag; // accumulate weighted point (÷ later)
+        }
+    }
+}
+
+/// Applies the accumulated particle reaction impulses to their bodies
+/// through the `Forces` seam (template: `apply_plane_friction`). Runs after
+/// [`collide_with_bodies`] so reading vs writing body velocity never
+/// coincide in one system. Static bodies ignore impulses (infinite mass).
+pub fn apply_particle_impulses(
+    impulses: Res<ParticleImpulses>,
+    mut bodies: Query<Forces, With<Body>>,
+) {
+    for (&entity, &(impulse, weighted_point)) in &impulses.0 {
+        let Ok(mut forces) = bodies.get_mut(entity) else {
+            continue;
+        };
+        let point = weighted_point / impulse.length().max(1e-6);
+        forces.apply_linear_impulse_at_point(impulse, point);
     }
 }
 
