@@ -14,6 +14,7 @@
 
 use crate::domain::Body;
 use crate::domain::depth::DepthBand;
+use crate::physics::fields::{Fields, orbit_speed};
 use crate::physics::queries::PhysicsQueries;
 use crate::sim::bridge::{Particles, SimConfig};
 use crate::sim::groups::ParticleGroups;
@@ -113,6 +114,56 @@ pub fn apply_particle_impulses(
         };
         let point = weighted_point / impulse.length().max(1e-6);
         forces.apply_linear_impulse_at_point(impulse, point);
+    }
+}
+
+/// Request to set particles in orbit around the dominant field source at
+/// each particle's position — the particle analogue of `SetOrbitRequest`
+/// (the user asked for "set in orbit works on particles"). A one-shot
+/// velocity assignment over the derived buffer (never authored/undone),
+/// reusing the *same* field cut-point (`Fields::dominant_at`) and
+/// `orbit_speed` as the body version — no new physics, just applied to the
+/// `SoA` population.
+#[derive(Message, Debug, Clone)]
+pub struct SetParticleOrbitRequest {
+    /// The group to place in orbit, or `None` for every live particle.
+    pub group: Option<u32>,
+}
+
+/// Handles [`SetParticleOrbitRequest`]: for each targeted particle, sets its
+/// velocity to the circular-orbit speed `v = √(a·r)` perpendicular to the
+/// local field about the dominant attractor, inheriting the attractor's
+/// drift — exactly the body `set_in_orbit` rule, per particle.
+pub fn set_particles_in_orbit(
+    mut requests: MessageReader<SetParticleOrbitRequest>,
+    fields: Fields,
+    transforms: Query<&Transform, With<Body>>,
+    velocities: Query<&LinearVelocity, With<Body>>,
+    mut particles: ResMut<Particles>,
+) {
+    let state = &mut particles.0;
+    for request in requests.read() {
+        for i in 0..state.len() {
+            if request.group.is_some_and(|g| state.group[i] != g) {
+                continue;
+            }
+            let p = state.pos[i];
+            let Some((source, accel)) = fields.dominant_at(p, None) else {
+                continue;
+            };
+            let Ok(center) = transforms.get(source).map(|t| t.translation.truncate()) else {
+                continue;
+            };
+            let toward = (center - p).normalize_or_zero();
+            // Only an attractive net pull supports an orbit.
+            if toward == Vec2::ZERO || accel.dot(toward) <= 0.0 {
+                continue;
+            }
+            let r = p.distance(center);
+            let v = orbit_speed(accel.length(), r);
+            let drift = velocities.get(source).map(|lv| lv.0).unwrap_or_default();
+            state.vel[i] = drift + toward.perp() * v;
+        }
     }
 }
 

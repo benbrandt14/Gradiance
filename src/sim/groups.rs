@@ -25,6 +25,13 @@ pub struct GroupAttrs {
     pub tint: Rgba,
     /// Self-gravity strength among this group's particles (N-body driver).
     pub self_gravity: f32,
+    /// How strongly this group responds to the superposed force field
+    /// (`Fields::accel_at`): a per-group multiplier on the sampled
+    /// acceleration. `1.0` = full response (default); `0.0` = the group
+    /// ignores fields (inert dust); `<0` repels. This is the extensible
+    /// field↔particle handle — new field *kinds* land at the single
+    /// cut-point, and each group tunes its response with one coefficient.
+    pub field_response: f32,
     /// Seconds a particle lives before culling. `INFINITY` = persists
     /// (placed/filled material); fountains set a finite lifetime.
     pub max_age: f32,
@@ -36,6 +43,7 @@ impl Default for GroupAttrs {
             depth: DepthBand::default(),
             tint: Rgba::rgb(0.45, 0.6, 1.0),
             self_gravity: 0.0,
+            field_response: 1.0,
             // Placed material persists; emitters override this per group.
             max_age: f32::INFINITY,
         }

@@ -185,10 +185,13 @@ pub fn step_particles(
     } else {
         Vec2::ZERO
     };
-    // External acceleration per particle: scene gravity + the superposed
-    // field (read through the single sanctioned cut-point).
+    // External acceleration per particle: scene gravity (uniform) + the
+    // superposed field (read through the single sanctioned cut-point),
+    // scaled by the particle's group field-response coefficient. New field
+    // *kinds* land at the cut-point; each group tunes response with one knob.
     for (i, a) in accel.iter_mut().enumerate() {
-        *a += gravity + fields.accel_at(state.pos[i], None);
+        let response = groups.get(state.group[i]).field_response;
+        *a += gravity + response * fields.accel_at(state.pos[i], None);
     }
     state.integrate(dt, &accel, config.damping);
     // Cull by each particle's group lifetime (fountains age out; placed
@@ -238,6 +241,7 @@ pub fn fill_from_shape(
             depth: *depth,
             tint: appearance.fill,
             self_gravity: 0.0,
+            field_response: 1.0,
             // Filled material persists (no lifetime).
             max_age: f32::INFINITY,
         });

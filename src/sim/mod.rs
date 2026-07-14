@@ -42,9 +42,17 @@ impl Plugin for SimPlugin {
         // exists whenever the drain runs (incl. headless tests).
         app.init_resource::<crate::ui::context_menu::ParticleFillQueue>();
         app.register_type::<Emitter>();
-        // Fill-shape requests are authoring (drained any time, not just
-        // while playing, so a filled cloud appears immediately when paused).
-        app.add_systems(Update, bridge::fill_from_shape);
+        app.add_message::<interactions::SetParticleOrbitRequest>();
+        // Fill-shape requests and set-in-orbit are authoring/one-shot ops
+        // (handled any time, not just while playing, so a filled cloud
+        // appears immediately when paused and orbit can be set while paused).
+        app.add_systems(
+            Update,
+            (
+                bridge::fill_from_shape,
+                interactions::set_particles_in_orbit,
+            ),
+        );
         // Emit + step run on the fixed clock (determinism + coupling), and
         // only while playing — pausing freezes the population.
         app.add_systems(

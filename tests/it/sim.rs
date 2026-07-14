@@ -3,10 +3,28 @@
 
 use crate::harness::{box_record, entity_of, headless_app, paused_app, step};
 use bevy::prelude::*;
+use gradiance::domain::settings::SimSettings;
 use gradiance::prelude::*;
-use gradiance::sim::bridge::Particles;
+use gradiance::sim::bridge::{Particles, SimConfig};
 use gradiance::sim::groups::{GroupAttrs, ParticleGroups};
+use gradiance::sim::interactions::SetParticleOrbitRequest;
 use gradiance::ui::context_menu::ParticleFillQueue;
+
+/// Spawns a circular attractor body (negative strength = attraction) at `x`.
+fn attractor(app: &mut App, x: f32, strength: f32) -> StableId {
+    use gradiance::domain::field::{FieldFalloff, FieldSource};
+    let mut record = box_record(Vec2::new(x, 0.0), 30.0, 30.0);
+    record.shape = ShapeDef::Circle { radius: 15.0 };
+    record.physics = BodyPhysics::fixed();
+    record.field = Some(FieldSource {
+        strength,
+        falloff: FieldFalloff::Quadratic,
+    });
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    step(app, 2);
+    id
+}
 
 /// Spawns a body and returns its id.
 fn spawn_body(app: &mut App, record: BodyRecord) -> StableId {
@@ -168,6 +186,75 @@ fn a_particle_stream_nudges_a_light_dynamic_body() {
     assert!(
         x1 > x0 + 0.5,
         "the leftward stream pushed the body to the right (Newton's third law): x {x0} → {x1}"
+    );
+}
+
+#[test]
+fn a_group_field_response_scales_how_it_feels_a_field() {
+    let mut app = headless_app();
+    // Isolate the field: no scene gravity on particles, no self-gravity.
+    app.world_mut().resource_mut::<SimSettings>().gravity = Vec2::ZERO;
+    app.world_mut().resource_mut::<SimConfig>().feel_gravity = false;
+    // A strong attractor to the right of the origin.
+    attractor(&mut app, 200.0, -4000.0);
+    // Group 0 (default) responds fully; a second group ignores fields.
+    let inert = app
+        .world_mut()
+        .resource_mut::<ParticleGroups>()
+        .add(GroupAttrs {
+            field_response: 0.0,
+            ..GroupAttrs::default()
+        });
+    // One responsive particle (group 0) and one inert (group `inert`), both
+    // at the origin, both at rest.
+    {
+        let mut particles = app.world_mut().resource_mut::<Particles>();
+        particles.0.push(Vec2::ZERO, Vec2::ZERO, 1.0, 0);
+        particles.0.push(Vec2::ZERO, Vec2::ZERO, 1.0, inert);
+    }
+    step(&mut app, 20);
+
+    let particles = app.world().resource::<Particles>();
+    // The responsive particle drifted toward the attractor (+x); the inert
+    // one stayed put (field_response 0 → no field acceleration).
+    let responsive = particles.0.pos[0];
+    let ignored = particles.0.pos[1];
+    assert!(
+        responsive.x > 1.0,
+        "field_response 1.0 pulls the particle toward the attractor: {responsive:?}"
+    );
+    assert!(
+        ignored.length() < 1e-2,
+        "field_response 0.0 leaves the particle inert: {ignored:?}"
+    );
+}
+
+#[test]
+fn particles_can_be_set_in_orbit_around_an_attractor() {
+    let mut app = headless_app();
+    app.world_mut().resource_mut::<SimSettings>().gravity = Vec2::ZERO;
+    app.world_mut().resource_mut::<SimConfig>().feel_gravity = false;
+    // Attractor at the origin; a particle sitting out on +x at rest.
+    attractor(&mut app, 0.0, -4000.0);
+    app.world_mut()
+        .resource_mut::<Particles>()
+        .0
+        .push(Vec2::new(150.0, 0.0), Vec2::ZERO, 1.0, 0);
+    // Set every particle in orbit (one-shot velocity assignment).
+    app.world_mut()
+        .write_message(SetParticleOrbitRequest { group: None });
+    app.update();
+
+    let v = app.world().resource::<Particles>().0.vel[0];
+    // The orbit velocity is tangential (perpendicular to the radius, which is
+    // along ±x here) and non-trivial.
+    assert!(
+        v.length() > 10.0,
+        "set-in-orbit gives the particle orbital speed: {v:?}"
+    );
+    assert!(
+        v.x.abs() < v.y.abs(),
+        "orbit velocity is tangential (mostly ±y for a radius along x): {v:?}"
     );
 }
 
