@@ -23,12 +23,27 @@ pub struct ContactSample {
     pub normal_impulse: f32,
 }
 
+/// The nearest point on some collider's surface to a query point — the
+/// primitive for point-vs-body resolution (e.g. a particle bouncing off a
+/// rigid body). Wraps avian's `project_point`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SurfaceHit {
+    /// The collider owning the surface.
+    pub entity: Entity,
+    /// Nearest point on that collider's surface (world space).
+    pub point: Vec2,
+    /// Whether the query point was *inside* the collider (so a particle
+    /// there is penetrating and must be pushed out).
+    pub is_inside: bool,
+}
+
 /// Read-only spatial queries against the physics world.
 #[derive(SystemParam)]
 pub struct PhysicsQueries<'w, 's> {
     spatial: SpatialQuery<'w, 's>,
     velocities: Query<'w, 's, (&'static LinearVelocity, &'static AngularVelocity)>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
+    masses: Query<'w, 's, &'static ComputedMass>,
     contacts: Res<'w, ContactGraph>,
 }
 
@@ -80,5 +95,26 @@ impl PhysicsQueries<'_, '_> {
     /// Whether the body is asleep (solver has parked it).
     pub fn is_sleeping(&self, entity: Entity) -> bool {
         self.sleeping.get(entity).unwrap_or(false)
+    }
+
+    /// The nearest surface point to `point` across all colliders — the
+    /// point-vs-body primitive. Projects to the boundary even when `point`
+    /// is inside (the returned `is_inside` says which). `None` when the
+    /// world has no colliders.
+    pub fn project_point(&self, point: Vec2) -> Option<SurfaceHit> {
+        let projection =
+            self.spatial
+                .project_point(point, false, &SpatialQueryFilter::default())?;
+        Some(SurfaceHit {
+            entity: projection.entity,
+            point: projection.point,
+            is_inside: projection.is_inside,
+        })
+    }
+
+    /// The body's computed mass (kg-equiv), if it has one. Needed to
+    /// mass-weight the impulse a particle exchanges with a body.
+    pub fn mass_of(&self, entity: Entity) -> Option<f32> {
+        self.masses.get(entity).ok().map(|m| m.value())
     }
 }

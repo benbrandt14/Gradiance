@@ -162,6 +162,47 @@ fn resting_bodies_report_contacts_through_the_facade() {
     );
 }
 
+#[derive(Resource, Default)]
+struct CapturedProjection {
+    hit: Option<gradiance::physics::queries::SurfaceHit>,
+    mass: Option<f32>,
+}
+
+fn capture_projection(
+    physics: gradiance::physics::queries::PhysicsQueries,
+    bodies: Query<Entity, With<Body>>,
+    mut out: ResMut<CapturedProjection>,
+) {
+    // Project a point 200px to the right of the origin onto the scene, and
+    // read the (single) body's mass.
+    out.hit = physics.project_point(Vec2::new(200.0, 0.0));
+    if let Some(entity) = bodies.iter().next() {
+        out.mass = physics.mass_of(entity);
+    }
+}
+
+#[test]
+fn facade_projects_points_and_reads_mass() {
+    let mut app = headless_app();
+    app.init_resource::<CapturedProjection>();
+    app.add_systems(Update, capture_projection);
+    // A single 100×100 box at the origin.
+    let record = box_record(Vec2::ZERO, 100.0, 100.0);
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    step(&mut app, 2);
+
+    let out = app.world().resource::<CapturedProjection>();
+    let hit = out.hit.expect("project_point finds the box surface");
+    assert!(!hit.is_inside, "the query point (200,0) is outside the box");
+    // Nearest surface point is the box's right face at x = 50.
+    assert!(
+        (hit.point.x - 50.0).abs() < 1e-2 && hit.point.y.abs() < 50.0,
+        "projected onto the right face: {:?}",
+        hit.point
+    );
+    assert!(out.mass.is_some_and(|m| m > 0.0), "box has positive mass");
+}
+
 #[test]
 fn pausing_freezes_the_simulation() {
     let mut app = headless_app();
