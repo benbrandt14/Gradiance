@@ -131,6 +131,34 @@ pub struct GroupWriters<'w> {
     ungroup: MessageWriter<'w, UngroupIntent>,
     merge: MessageWriter<'w, MergeIntent>,
     orbits: MessageWriter<'w, crate::physics::fields::SetOrbitRequest>,
+    /// Pending "fill a body with particles" requests (the `sim` feature's
+    /// drain consumes them). Bundled here so `context_menu` stays under the
+    /// system-parameter limit. Feature-gated: the whole fill path — this
+    /// field, the resource, and the button — vanishes in the default build.
+    #[cfg(feature = "sim")]
+    fill: ResMut<'w, ParticleFillQueue>,
+}
+
+/// Editor-state queue of "turn this body's shape into N particles"
+/// requests, written by the context menu and drained by the `sim` fill
+/// system. Feature-gated with the rest of the particle authoring.
+#[cfg(feature = "sim")]
+#[derive(Resource)]
+pub struct ParticleFillQueue {
+    /// Pending `(body, particle count)` requests.
+    pub requests: Vec<(StableId, usize)>,
+    /// The count the fill button currently proposes (a UI scratch value).
+    pub count: usize,
+}
+
+#[cfg(feature = "sim")]
+impl Default for ParticleFillQueue {
+    fn default() -> Self {
+        Self {
+            requests: Vec::new(),
+            count: 500,
+        }
+    }
 }
 
 /// Open context menu state.
@@ -503,6 +531,28 @@ pub fn context_menu(
                 if ui.button("Depth panel…").clicked() {
                     depth_panel.open = true;
                     close = true;
+                }
+                // Fill a body's shape with N uniformly-distributed particles
+                // (the `sim` feature drains the request). Feature-gated so
+                // the default build shows nothing.
+                #[cfg(feature = "sim")]
+                if let Some(primary) = selection.primary()
+                    && let Ok(id) = props.ids.get(primary).copied()
+                {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label("particles");
+                        ui.add(
+                            egui::DragValue::new(&mut writers.fill.count)
+                                .speed(25.0)
+                                .range(1..=200_000),
+                        );
+                        if ui.button("Fill shape").clicked() {
+                            let count = writers.fill.count;
+                            writers.fill.requests.push((id, count));
+                            close = true;
+                        }
+                    });
                 }
                 // Local-frame grid: adopt the primary body's pose as the
                 // grid's user coordinate system (sketch in its axes).

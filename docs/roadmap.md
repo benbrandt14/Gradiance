@@ -304,10 +304,35 @@ shadow items from M19. Design decisions in the slice PRs.
   reuse existing seams: grid alignment is a `GridSettings` config write,
   the dots are a `plane.wgsl` term keyed off the (previously unused) fade
   uniform, so the back plane stays plain.
+- **V6 — Simulation spike** *(branch `claude/sim-spike`, `sim` feature)*:
+  a trade study for continuum simulation (`docs/mpm-trade-study.md`,
+  recommends staged MLS-MPM) plus a working particle substrate that proves
+  the seam end-to-end — an authored `Emitter`, a derived SoA `Particles`
+  buffer, a pure Tier-B `sim::kernel` (integrator + N-body force via the
+  `particular` crate), and a fixed-clock `sim::bridge` that samples the one
+  field cut-point. Feature-gated so the default build stays lean; promotes
+  to a `gradiance-sim` crate at the stage-2→3 boundary. Full staged plan in
+  the sim-roadmap plan file: **S2** scalable rendering → **S3** particle
+  groups + emitter authoring/persistence → **S4** extensible field/entity
+  interactions (+ set-in-orbit for particles) → **S5** subset select/move +
+  aggregate plotters → **S6** grid/APIC fluid → **S7** MLS-MPM multi-material
+  + crate split → **S8** scale (rayon/GPU).
+  - **S2 — scalable particle rendering** *(landed)*: the population draws as
+    one rebuilt `ParticleCloud` mesh (camera-facing quads, group+speed tint,
+    opaque depth-write) instead of per-particle gizmos; a `group` column
+    lands on `ParticleState` as the selection/tint handle. True GPU
+    instancing is the endgame (S9).
+  - **S3 — particle groups + shape→particles** *(in progress)*: pure
+    `kernel::fill_shape` (uniform jittered-lattice sampling of any shape via
+    the SDF) plus a live `ParticleGroups` table (each group locks a shared
+    `DepthBand` so the cloud obeys collision layers as one entity) and a
+    context-menu **"Fill shape"** action that turns a body into N
+    uniformly-distributed particles inheriting its depth + color. (Still to
+    come in S3: emitter authoring/persistence, group selection.)
 - Deferred within this track: gradient color pickers, color-by-signal
   (pairs with P2 dataflow — a "modulator" driving Appearance is the right
-  seam; do not pre-plumb), MPM/fluids/fracture/particles (own branch/
-  spike; split a `gradiance-sim` crate when that work matures).
+  seam; do not pre-plumb); the continuum solver stages (APIC fluid →
+  MLS-MPM multi-material) build on the V6 substrate.
 
 ## M19 — Rendering & camera polish
 

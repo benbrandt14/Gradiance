@@ -40,12 +40,22 @@ mimalloc = "0.1"
 # docs/script-lisp-decision.md. Confined to `src/script/` (tests/boundaries.rs).
 steel-core = "=0.8.2"
 
+# Simulation spike (Tier-B, `sim` feature only — see docs/mpm-trade-study.md).
+# `particular` is an N-body accelerations library (pure numeric, no ECS); it
+# drives the particle spike's forces. Optional so the default build/CI loop
+# stays lean until the `gradiance-sim` crate split (roadmap V-deferred). CPU
+# only: the crate's wgpu/rayon paths are opt-in features we don't enable.
+particular = { version = "0.7", default-features = false, optional = true }
+
 [features]
 # Dev-only inner loop: `cargo run --features dev`.
 # - dynamic_linking: links Bevy as a dylib, cutting incremental link time.
 # - file_watcher: asset hot-reload (and the hook for future .scm hot-reload).
 # Never enable for release/CI builds; the default build stays fully static.
 dev = ["bevy/dynamic_linking", "bevy/file_watcher"]
+# Bulk-matter simulation spike (particles now, MPM later). Off by default;
+# `cargo run --features sim`. Gates the `src/sim/` module and its deps.
+sim = ["dep:particular"]
 
 [dev-dependencies]
 proptest = "1.9"
