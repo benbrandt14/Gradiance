@@ -80,6 +80,8 @@ pub struct SimConfig {
     pub softening: f32,
     /// Whether scene gravity (`SimSettings::gravity`) acts on particles.
     pub feel_gravity: bool,
+    /// Bounciness of particle↔body collisions (0 = stick/slide, 1 = elastic).
+    pub restitution: f32,
 }
 
 impl Default for SimConfig {
@@ -89,6 +91,7 @@ impl Default for SimConfig {
             damping: 0.1,
             softening: 8.0,
             feel_gravity: true,
+            restitution: 0.2,
         }
     }
 }
@@ -153,6 +156,7 @@ pub fn step_particles(
     config: Res<SimConfig>,
     sim: Res<SimSettings>,
     fields: Fields,
+    groups: Res<ParticleGroups>,
     mut particles: ResMut<Particles>,
     emitters: Query<&Emitter>,
 ) {
@@ -182,13 +186,10 @@ pub fn step_particles(
         *a += gravity + fields.accel_at(state.pos[i], None);
     }
     state.integrate(dt, &accel, config.damping);
-    // Cull aged particles (the budget is enforced at emit time).
-    let max_age = emitters
-        .iter()
-        .map(|e| e.max_age)
-        .fold(0.0_f32, f32::max)
-        .max(0.5);
-    state.cull_older_than(max_age);
+    // Cull by each particle's group lifetime (fountains age out; placed
+    // material persists — `INFINITY`). Budget is enforced at emit time.
+    let max_age: Vec<f32> = groups.0.iter().map(|g| g.max_age).collect();
+    state.cull_by_group_age(&max_age);
 }
 
 /// Drains "fill this body's shape with N particles" requests (the
@@ -232,6 +233,8 @@ pub fn fill_from_shape(
             depth: *depth,
             tint: appearance.fill,
             self_gravity: 0.0,
+            // Filled material persists (no lifetime).
+            max_age: f32::INFINITY,
         });
         let pose = crate::core::units::PosRot::from_transform(transform);
         let rot = Vec2::from_angle(pose.rot);

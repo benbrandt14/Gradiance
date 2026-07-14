@@ -1,11 +1,11 @@
 //! Particle-sim integration tests (`--features sim`): the shape→particles
 //! authoring seam, end to end through the headless stack.
 
-use crate::harness::{box_record, entity_of, paused_app};
+use crate::harness::{box_record, entity_of, headless_app, paused_app, step};
 use bevy::prelude::*;
 use gradiance::prelude::*;
 use gradiance::sim::bridge::Particles;
-use gradiance::sim::groups::ParticleGroups;
+use gradiance::sim::groups::{GroupAttrs, ParticleGroups};
 use gradiance::ui::context_menu::ParticleFillQueue;
 
 /// Spawns a body and returns its id.
@@ -84,4 +84,81 @@ fn fill_respects_the_particle_budget() {
         .push((id, budget * 4));
     app.update();
     assert!(app.world().resource::<Particles>().0.len() <= budget);
+}
+
+/// Spawns a static platform box and returns its id.
+fn platform(app: &mut App, pos: Vec2, w: f32, h: f32) -> StableId {
+    let mut record = box_record(pos, w, h);
+    record.physics = BodyPhysics::fixed();
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    step(app, 2);
+    id
+}
+
+/// Drops `n` particles from `y` above the origin into group `group`.
+fn drop_particles(app: &mut App, n: usize, y: f32, group: u32) {
+    let mut particles = app.world_mut().resource_mut::<Particles>();
+    for i in 0..n {
+        let x = (i as f32 - n as f32 / 2.0) * 2.0;
+        particles.0.push(Vec2::new(x, y), Vec2::ZERO, 1.0, group);
+    }
+}
+
+#[test]
+fn particles_rest_on_a_body_of_the_same_layer() {
+    let mut app = headless_app(); // Playing → gravity + collision run
+    // A wide static platform; top face at y = -80.
+    platform(&mut app, Vec2::new(0.0, -100.0), 400.0, 40.0);
+    // Particles in the default group (band 0..10) overlap the platform's
+    // default band, so they collide.
+    drop_particles(&mut app, 60, 0.0, 0);
+    step(&mut app, 240);
+
+    let ys: Vec<f32> = app
+        .world()
+        .resource::<Particles>()
+        .0
+        .pos
+        .iter()
+        .map(|p| p.y)
+        .collect();
+    let min_y = ys.iter().copied().fold(f32::MAX, f32::min);
+    assert!(
+        min_y > -85.0,
+        "particles rest on the platform (top ≈ -80), none sank through: min y = {min_y}"
+    );
+}
+
+#[test]
+fn particles_on_a_disjoint_layer_pass_through() {
+    let mut app = headless_app();
+    platform(&mut app, Vec2::new(0.0, -100.0), 400.0, 40.0);
+    // A group on a deep, non-overlapping band (layers ~10) — collision is
+    // gated on depth overlap, so these fall straight through the platform.
+    let group = app
+        .world_mut()
+        .resource_mut::<ParticleGroups>()
+        .add(GroupAttrs {
+            depth: DepthBand {
+                near: 100.0,
+                far: 110.0,
+            },
+            ..GroupAttrs::default()
+        });
+    drop_particles(&mut app, 40, 0.0, group);
+    step(&mut app, 240);
+
+    let min_y = app
+        .world()
+        .resource::<Particles>()
+        .0
+        .pos
+        .iter()
+        .map(|p| p.y)
+        .fold(f32::MAX, f32::min);
+    assert!(
+        min_y < -120.0,
+        "a disjoint-layer cloud passes through the platform: min y = {min_y}"
+    );
 }

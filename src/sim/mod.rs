@@ -17,6 +17,7 @@
 
 pub mod bridge;
 pub mod groups;
+pub mod interactions;
 pub mod kernel;
 pub mod render;
 
@@ -47,7 +48,11 @@ impl Plugin for SimPlugin {
         // only while playing — pausing freezes the population.
         app.add_systems(
             FixedUpdate,
-            (bridge::emit_particles, bridge::step_particles)
+            (
+                bridge::emit_particles,
+                bridge::step_particles,
+                interactions::collide_with_bodies,
+            )
                 .chain()
                 .run_if(in_state(GameState::Playing)),
         );
@@ -60,13 +65,20 @@ impl Plugin for SimPlugin {
 }
 
 /// A demo emitter so the spike is visible on launch: an [`Emitter`] below
-/// the origin throwing particles upward.
+/// the origin throwing particles upward. It gets its own group with a
+/// finite lifetime so the fountain recycles (placed material persists).
 ///
 /// Not authored/persisted (spike scope) — it is scene furniture for the
 /// `--features sim` demo, spawned without a `StableId`.
-fn spawn_demo_emitter(mut commands: Commands) {
+fn spawn_demo_emitter(mut commands: Commands, mut groups: ResMut<groups::ParticleGroups>) {
+    let template = Emitter::default();
+    let group = groups.add(groups::GroupAttrs {
+        tint: crate::domain::appearance::Rgba::rgb(0.35, 0.6, 1.0),
+        max_age: template.max_age,
+        ..default()
+    });
     commands.spawn((
-        Emitter::default(),
+        Emitter { group, ..template },
         bridge::EmitAccum::default(),
         Transform::from_xyz(0.0, -200.0, 0.0),
     ));

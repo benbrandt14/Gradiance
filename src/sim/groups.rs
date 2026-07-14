@@ -25,6 +25,9 @@ pub struct GroupAttrs {
     pub tint: Rgba,
     /// Self-gravity strength among this group's particles (N-body driver).
     pub self_gravity: f32,
+    /// Seconds a particle lives before culling. `INFINITY` = persists
+    /// (placed/filled material); fountains set a finite lifetime.
+    pub max_age: f32,
 }
 
 impl Default for GroupAttrs {
@@ -33,6 +36,8 @@ impl Default for GroupAttrs {
             depth: DepthBand::default(),
             tint: Rgba::rgb(0.45, 0.6, 1.0),
             self_gravity: 0.0,
+            // Placed material persists; emitters override this per group.
+            max_age: f32::INFINITY,
         }
     }
 }

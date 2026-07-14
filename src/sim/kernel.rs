@@ -60,9 +60,25 @@ impl ParticleState {
     /// Removes every particle older than `max_age` (swap-remove, so order
     /// is not preserved — particles are anonymous).
     pub fn cull_older_than(&mut self, max_age: f32) {
+        self.cull(|_, age| age > max_age);
+    }
+
+    /// Removes every particle older than its group's lifetime.
+    /// `group_max_age[g]` is group `g`'s limit (`INFINITY` = never); a
+    /// particle whose group index is out of range is kept.
+    pub fn cull_by_group_age(&mut self, group_max_age: &[f32]) {
+        self.cull(|group, age| {
+            group_max_age
+                .get(group as usize)
+                .is_some_and(|&limit| age > limit)
+        });
+    }
+
+    /// Swap-removes every particle for which `drop(group, age)` is true.
+    fn cull(&mut self, drop: impl Fn(u32, f32) -> bool) {
         let mut i = 0;
         while i < self.pos.len() {
-            if self.age[i] > max_age {
+            if drop(self.group[i], self.age[i]) {
                 self.pos.swap_remove(i);
                 self.vel.swap_remove(i);
                 self.mass.swap_remove(i);
@@ -230,6 +246,22 @@ mod tests {
         assert_eq!(s.vel.len(), s.mass.len());
         assert_eq!(s.mass.len(), s.age.len());
         assert_eq!(s.age.len(), s.group.len());
+    }
+
+    #[test]
+    fn cull_by_group_age_uses_each_group_lifetime() {
+        let mut s = ParticleState::default();
+        s.push(Vec2::ZERO, Vec2::ZERO, 1.0, 0); // group 0: short-lived
+        s.push(Vec2::ZERO, Vec2::ZERO, 1.0, 1); // group 1: persists
+        s.push(Vec2::ZERO, Vec2::ZERO, 1.0, 0);
+        s.age = vec![5.0, 5.0, 0.1];
+        // Group 0 lifetime 1.0, group 1 infinite.
+        s.cull_by_group_age(&[1.0, f32::INFINITY]);
+        assert_eq!(s.len(), 2, "the aged group-0 particle is culled");
+        assert!(
+            s.group.contains(&1),
+            "the persistent group-1 particle stays"
+        );
     }
 
     #[test]
