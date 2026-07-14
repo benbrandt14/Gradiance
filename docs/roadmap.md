@@ -322,13 +322,30 @@ shadow items from M19. Design decisions in the slice PRs.
     opaque depth-write) instead of per-particle gizmos; a `group` column
     lands on `ParticleState` as the selection/tint handle. True GPU
     instancing is the endgame (S9).
-  - **S3 — particle groups + shape→particles** *(in progress)*: pure
-    `kernel::fill_shape` (uniform jittered-lattice sampling of any shape via
-    the SDF) plus a live `ParticleGroups` table (each group locks a shared
-    `DepthBand` so the cloud obeys collision layers as one entity) and a
-    context-menu **"Fill shape"** action that turns a body into N
-    uniformly-distributed particles inheriting its depth + color. (Still to
-    come in S3: emitter authoring/persistence, group selection.)
+  - **S3 — particle groups + shape→particles** *(landed, less
+    emitter persistence)*: pure `kernel::fill_shape` (uniform jittered-lattice
+    sampling of any shape via the SDF) plus a live `ParticleGroups` table
+    (each group locks a shared `DepthBand` so the cloud obeys collision layers
+    as one entity, a tint, a self-gravity, a field-response coefficient, and a
+    lifetime) and a context-menu **"Fill shape"** action that turns a body
+    into N uniformly-distributed particles inheriting its depth + color.
+    (Still to come: emitter authoring/persistence, group selection.)
+  - **S4 — extensible field/entity interactions** *(landed)*: an additive
+    `sim::interactions` seam (each interaction an independent system over the
+    SoA buffer + read facades, no new mutation path). `physics::queries` gains
+    `project_point` + `mass_of`; **rigid collision** pushes particles out and
+    reflects them, gated on `DepthBand::overlaps` (a disjoint-layer cloud
+    passes through); **two-way coupling** records the reaction impulse and
+    applies it back through the `Forces` seam (a lopsided stream torques a
+    light body); **per-group field response** scales the single field
+    cut-point per group (0 = inert, <0 repels); and **set-in-orbit** works on
+    particles (`SetParticleOrbitRequest` reuses `dominant_at` + `orbit_speed`,
+    reachable from the background context menu).
+  - **S5 — aggregate plotters** *(partial)*: pure `ParticleState::aggregate`
+    (mass-weighted centroid & mean velocity, count, KE); the live plot panel
+    falls back to the most-populous group's aggregates when nothing is
+    selected ("average position/velocity"). Still to come: subset
+    select/move/delete.
 - Deferred within this track: gradient color pickers, color-by-signal
   (pairs with P2 dataflow — a "modulator" driving Appearance is the right
   seam; do not pre-plumb); the continuum solver stages (APIC fluid →

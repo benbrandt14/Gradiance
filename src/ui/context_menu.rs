@@ -47,6 +47,12 @@ pub struct BackgroundMenu<'w> {
     scenery: ResMut<'w, crate::domain::settings::ScenerySettings>,
     grid: ResMut<'w, crate::domain::settings::GridSettings>,
     settings_window: ResMut<'w, crate::ui::settings::SettingsWindow>,
+    /// Live particles (so the orbit action only appears when there are any)
+    /// and the one-shot orbit request writer. Feature-gated with the sim.
+    #[cfg(feature = "sim")]
+    particles: Option<Res<'w, crate::sim::bridge::Particles>>,
+    #[cfg(feature = "sim")]
+    particle_orbits: MessageWriter<'w, crate::sim::interactions::SetParticleOrbitRequest>,
 }
 
 impl BackgroundMenu<'_> {
@@ -103,6 +109,22 @@ impl BackgroundMenu<'_> {
         {
             self.grid.origin = Vec2::ZERO;
             self.grid.rotation = 0.0;
+            close = true;
+        }
+        // Set every live particle in orbit around the dominant attractor at
+        // its position (the particle analogue of a body's "Set in orbit").
+        #[cfg(feature = "sim")]
+        if self.particles.as_ref().is_some_and(|p| !p.0.is_empty())
+            && ui
+                .button("Set particles in orbit")
+                .on_hover_text(
+                    "give every particle the circular-orbit velocity around the \
+                     dominant attractive field at its position",
+                )
+                .clicked()
+        {
+            self.particle_orbits
+                .write(crate::sim::interactions::SetParticleOrbitRequest { group: None });
             close = true;
         }
         if ui.button("Scene & lighting settings…").clicked() {
