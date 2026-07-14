@@ -23,6 +23,7 @@ use crate::domain::appearance::Rgba;
 use crate::sim::bridge::Particles;
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::math::Vec2;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -95,19 +96,44 @@ pub fn build_particle_mesh(
     data
 }
 
-/// Spawns the single particle-cloud entity (empty mesh; the sync system
-/// fills it). An unlit, double-sided, vertex-colored material — particles
-/// glow their own tint rather than being shaded. `NoFrustumCulling` because
-/// the mesh AABB changes every frame with the population.
+/// A zero-area (invisible, transparent) triangle. The cloud mesh is never
+/// left empty: a 0-vertex mesh trips bevy's mesh slab allocator
+/// ("use-after-free: unallocated key") on the frames before any particle
+/// exists. This placeholder keeps the buffers validly allocated.
+fn placeholder_data() -> ParticleMeshData {
+    ParticleMeshData {
+        positions: vec![[0.0, 0.0, PARTICLE_Z]; 3],
+        colors: vec![[0.0; 4]; 3],
+        indices: vec![0, 1, 2],
+    }
+}
+
+/// Writes `data` (or the placeholder if empty) into `mesh`.
+fn write_mesh(mesh: &mut Mesh, mut data: ParticleMeshData) {
+    if data.positions.is_empty() {
+        data = placeholder_data();
+    }
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, data.colors);
+    mesh.insert_indices(Indices::U32(data.indices));
+}
+
+/// Spawns the single particle-cloud entity. An unlit, double-sided,
+/// vertex-colored material — particles glow their own tint rather than
+/// being shaded. `NoShadowCaster`/`NoShadowReceiver` because glowing
+/// billboards must not cast or catch shadows; `NoFrustumCulling` because
+/// the mesh AABB changes every frame with the population. The mesh starts
+/// with a valid placeholder (never empty — see `placeholder_data`).
 pub fn setup_particle_cloud(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let mesh = meshes.add(Mesh::new(
+    let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
-    ));
+    );
+    write_mesh(&mut mesh, ParticleMeshData::default());
     let material = materials.add(StandardMaterial {
         base_color: Color::WHITE,
         unlit: true,
@@ -117,10 +143,12 @@ pub fn setup_particle_cloud(
     });
     commands.spawn((
         ParticleCloud,
-        Mesh3d(mesh),
+        Mesh3d(meshes.add(mesh)),
         MeshMaterial3d(material),
         Transform::default(),
         NoFrustumCulling,
+        NotShadowCaster,
+        NotShadowReceiver,
     ));
 }
 
@@ -151,9 +179,7 @@ pub fn sync_particle_mesh(
         PARTICLE_HALF_PX,
         PARTICLE_Z,
     );
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, data.colors);
-    mesh.insert_indices(Indices::U32(data.indices));
+    write_mesh(&mut mesh, data);
 }
 
 #[cfg(test)]

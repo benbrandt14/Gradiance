@@ -235,7 +235,9 @@ pub fn fill_from_shape(
         });
         let pose = crate::core::units::PosRot::from_transform(transform);
         let rot = Vec2::from_angle(pose.rot);
-        for p in local {
+        // `fill_shape` may slightly overshoot its target, so cap the push to
+        // the budget to keep the population under `max_particles`.
+        for p in local.into_iter().take(budget) {
             let world = pose.pos + rot.rotate(p);
             particles.0.push(world, Vec2::ZERO, 1.0, group);
         }
