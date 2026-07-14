@@ -1,5 +1,5 @@
 (
-    version: 4,
+    version: 5,
     app_version: "golden",
     bodies: [
         (
@@ -43,9 +43,9 @@
                 ),
                 emissive: 0.0,
             ),
-            layers: (
-                memberships: 1,
-                filters: 4294967295,
+            depth: (
+                near: 0.0,
+                far: 10.0,
             ),
             groups: [],
             field: None,
@@ -92,9 +92,9 @@
                 ),
                 emissive: 0.0,
             ),
-            layers: (
-                memberships: 1,
-                filters: 4294967295,
+            depth: (
+                near: 0.0,
+                far: 10.0,
             ),
             groups: [],
             field: None,
@@ -141,9 +141,9 @@
                 ),
                 emissive: 0.0,
             ),
-            layers: (
-                memberships: 1,
-                filters: 4294967295,
+            depth: (
+                near: 0.0,
+                far: 10.0,
             ),
             groups: [],
             field: None,
@@ -190,9 +190,9 @@
                 ),
                 emissive: 0.0,
             ),
-            layers: (
-                memberships: 1,
-                filters: 4294967295,
+            depth: (
+                near: 0.0,
+                far: 10.0,
             ),
             groups: [],
             field: None,
@@ -205,6 +205,7 @@
             gravity: (0.0, -1000.0),
             speed: 1.0,
             substeps: 6,
+            plane_friction: 0.0,
             timestep_hz: 60.0,
         ),
         grid: (
@@ -231,20 +232,28 @@
             bands: 4,
             rim_strength: 0.25,
             white_point: 1.3,
+            specular: 0.3,
         ),
         lighting: (
-            azimuth_deg: 120.0,
-            elevation_deg: 32.0,
-            color: (
-                r: 1.0,
-                g: 1.0,
-                b: 1.0,
-                a: 1.0,
-            ),
-            illuminance: 12000.0,
+            lights: [
+                (
+                    azimuth_deg: 120.0,
+                    elevation_deg: 32.0,
+                    color: (
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
+                        a: 1.0,
+                    ),
+                    illuminance: 12000.0,
+                    shadows: true,
+                ),
+            ],
             ambient: 300.0,
             ssao: false,
             contact_shadows: true,
+            shadow_map_size: 4096,
+            shadow_distance: 8000.0,
         ),
         scenery: (
             back_offset: 20.0,
@@ -256,6 +265,7 @@
             ),
             back_visible: true,
             ground_visible: true,
+            perspective_deg: 0.0,
         ),
         signals: ([]),
     ),

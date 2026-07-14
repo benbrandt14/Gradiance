@@ -18,11 +18,13 @@ Three ways in, all funnelling through one queue (`ScriptInputs`) and one
 exclusive doorway (`run_scripts`, which dispatches before the command stack, so
 **one run = one batch of undoable commands**):
 
-- **The console.** Press `` ` `` (backquote) to toggle the *Script Console*: a
-  lisp editor with syntax highlighting, completion, an output log, and a
-  **Reference** panel — all driven by the live operation catalog, so what it
-  advertises is exactly what the VM understands. Type an expression and hit
-  **▶ Run**.
+- **The console.** Press `` ` `` (backquote) to toggle the script dock — a
+  lisp REPL with MATLAB-style keys: **Enter runs**, **Shift+Enter** inserts a
+  newline, **↑/↓** walk the history filtered by the prefix you've typed. Each
+  run's last value is echoed in the log and bound to **`ans`** for the next
+  line. Highlighting and the **Reference** panel are driven by the live
+  operation catalog, so what the dock advertises is exactly what the VM
+  understands.
 - **A file at startup.** `gradiance --script scene.scm` reads a `.scm` file and
   runs it on the first frame — the natural place for scene setup, helper
   definitions, or `register-action` calls. Repeat `--script` for several files.
@@ -59,7 +61,7 @@ exactly one sanctioned seam:
 | **edit**      | `spawn-box`, `spawn-circle`, `spawn-ground`, `cut` | emits an undoable **intent** (the command choke point) |
 | **config**    | `sim-set`                              | writes a **settings resource** (the invariant-#4 seam) |
 | **query**     | `body-count`, `body-x`, `count-at`, `sim-get`, … | **reads** a per-run snapshot — mutates nothing |
-| **editor**    | `register-action`                      | writes a **non-authored editor resource**      |
+| **editor**    | `register-action`, `label`             | writes a **non-authored editor resource**      |
 
 **Reads are total; writes are seam-mediated.** A builtin physically cannot hold
 `&mut World` (a `steel` constraint that happens to *be* the architecture), so an
@@ -74,9 +76,9 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 
 ```scheme
 ;; edit — author the scene (undoable)
-(spawn-box x y w h)          ; a box centred at (x, y)
-(spawn-circle x y r)         ; a circle centred at (x, y)
-(spawn-ground x y angle)     ; a fixed ground half-plane through (x, y), tilted
+(spawn-box x y w h)          ; a box centred at (x, y) → its handle
+(spawn-circle x y r)         ; a circle centred at (x, y) → its handle
+(spawn-ground x y angle)     ; a fixed ground half-plane → its handle
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
 
 ;; config — tune the simulation (not undoable; the settings seam)
@@ -97,6 +99,8 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (register-action label src)  ; add a labelled action to the context menu
 (signal-set name value)      ; publish a named value on the signal bus
                              ; (drives color/plot bindings — docs/signal-dataflow.md)
+(label body name)            ; name a body in the workspace (viewport tag);
+                             ; body is a spawn's return value (or ans)
 
 ;; meta — introspection
 (ops)                        ; list every registered op name
@@ -107,6 +111,21 @@ Reads observe **last-committed** state: a script's own `spawn-*` calls are
 pending intents that land *after* the run, so `(body-count)` within the same run
 does not yet see them. This is deliberate — it is the last-frame-read discipline
 the future driver dataflow uses.
+
+### The workspace
+
+Spawn verbs return an opaque **handle** (the body's stable id), so a scene
+built from the REPL stays addressable, MATLAB-workspace style:
+
+```scheme
+(define ball (spawn-circle 0 200 12))
+(label ball "ball")          ; the body now wears a "ball" tag in the viewport
+(label ans "latest")         ; ans = the last run's value, handles included
+```
+
+Labels are unique by name (re-labelling rebinds), never persisted, and show
+up in the context menu's pick list. The `StableId` underneath remains the
+durable identity.
 
 ## Examples
 

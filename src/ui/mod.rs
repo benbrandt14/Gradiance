@@ -11,14 +11,18 @@
 
 pub mod console;
 pub mod context_menu;
+pub mod depth_panel;
+pub mod dock;
 pub mod inspector;
 pub mod joint_inspector;
+pub mod labels;
 pub mod plot;
 pub mod probe;
 pub mod reflect_grid;
 pub mod settings;
 pub mod signals;
 pub mod toolbar;
+pub mod view_cube;
 pub mod widgets;
 
 use crate::core::states::GameState;
@@ -39,6 +43,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
+        app.init_resource::<depth_panel::DepthPanel>();
         app.init_resource::<console::ScriptConsole>();
         app.init_resource::<plot::PlotHistory>();
         app.init_resource::<plot::PlotPanel>();
@@ -48,10 +53,12 @@ impl Plugin for GradianceUiPlugin {
             EguiPrimaryContextPass,
             (
                 toolbar::toolbar,
+                view_cube::view_cube,
+                dock::right_dock,
+                labels::draw_workspace_labels,
                 inspector::inspector_window,
                 joint_inspector::joint_inspector,
                 settings::settings_window,
-                console::script_console,
                 plot::plot_panel,
                 probe::probe_panel,
                 signals::signals_panel,

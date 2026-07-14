@@ -234,6 +234,47 @@ pub fn set_in_orbit(
     }
 }
 
+/// Below this speed the plane friction lets the solver's sleeping take
+/// over instead of jittering around zero.
+const FRICTION_REST_SPEED: f32 = 2.0;
+
+/// Coulomb friction against the back plane (top-down mode).
+///
+/// With in-plane gravity zeroed, gravity implicitly points "into the
+/// screen": every dynamic body presses on the back plane with `m·g` and
+/// rubs as it slides/spins. Force `μ·m·g` opposes the velocity; torque
+/// `μ·m·g·k` (k = gyration radius) opposes the spin. One-shot forces like
+/// the fields above — never authored, undoable, or persisted.
+pub fn apply_plane_friction(
+    settings: Res<crate::domain::settings::SimSettings>,
+    mut bodies: Query<(Forces, &ComputedMass, &ComputedAngularInertia), With<Body>>,
+) {
+    let mu = settings.plane_friction;
+    if mu <= 0.0 {
+        return;
+    }
+    // The implicit into-screen gravity uses the standard magnitude even
+    // when in-plane gravity is zeroed (that's what top-down *means*).
+    let g = crate::core::constants::GRAVITY.length();
+    for (mut forces, mass, inertia) in &mut bodies {
+        let m = mass.value();
+        if m <= 0.0 {
+            continue;
+        }
+        let velocity = forces.linear_velocity();
+        let speed = velocity.length();
+        if speed > FRICTION_REST_SPEED {
+            forces.apply_force(-velocity / speed * mu * m * g);
+        }
+        let spin = forces.angular_velocity();
+        if spin.abs() > FRICTION_REST_SPEED / PIXELS_PER_METER {
+            // Gyration radius: the lever arm the surface rubs at.
+            let k = (inertia.value() / m).max(0.0).sqrt();
+            forces.apply_torque(-spin.signum() * mu * m * g * k);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

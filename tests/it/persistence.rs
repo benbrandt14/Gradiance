@@ -103,33 +103,32 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
         physics_strategy(),
         (-1000.0f32..1000.0, -1000.0f32..1000.0),
         -3.0f32..3.0,
-        1u32..256,
-        1u32..=u32::MAX,
+        0.0f32..300.0,
+        2.5f32..100.0,
         (0.0f32..1.0, 0.0f32..1.0, 0.0f32..1.0, 0.1f32..1.0),
         proptest::collection::vec(1u32..6, 0..3),
     )
         .prop_map(
-            |(shape, physics, (x, y), rot, memberships, filters, (r, g, b, a), groups)| {
-                BodyRecord {
-                    id: StableId::new(),
-                    pose: PosRot {
-                        pos: Vec2::new(x, y),
-                        rot,
-                    },
-                    shape,
-                    physics,
-                    appearance: Appearance {
-                        fill: Rgba { r, g, b, a },
-                        ..Appearance::default()
-                    },
-                    layers: LayerMask32 {
-                        memberships,
-                        filters,
-                    },
-                    groups,
-                    field: None,
-                    tracer: None,
-                }
+            |(shape, physics, (x, y), rot, near, thickness, (r, g, b, a), groups)| BodyRecord {
+                id: StableId::new(),
+                pose: PosRot {
+                    pos: Vec2::new(x, y),
+                    rot,
+                },
+                shape,
+                physics,
+                appearance: Appearance {
+                    fill: Rgba { r, g, b, a },
+                    ..Appearance::default()
+                },
+                depth: DepthBand {
+                    near,
+                    far: near + thickness,
+                },
+                layers: None,
+                groups,
+                field: None,
+                tracer: None,
             },
         )
 }
@@ -488,6 +487,39 @@ fn pre_field_files_still_parse() {
     assert_ne!(text, cut, "fixture actually removed the field");
     let parsed = from_ron(&cut).expect("pre-magnet file parses");
     assert_eq!(parsed.bodies[0].field, None);
+}
+
+#[test]
+fn v4_layer_masks_migrate_to_depth_bands() {
+    // A v4 file authors `layers: LayerMask32`; loading maps each mask's
+    // occupied bit range to the equivalent band (bits 1..=2 → 10..30) and
+    // drops custom filters (collision is depth overlap in v5). The fixture
+    // serializes the legacy carrier field directly, so it is immune to
+    // RON formatting drift.
+    let mut record = box_record(Vec2::ZERO, 10.0, 10.0);
+    record.layers = Some(gradiance::domain::layers::LayerMask32 {
+        memberships: 0b0110,
+        filters: 0xFF,
+    });
+    let scene = SceneRecord {
+        version: 4,
+        app_version: String::new(),
+        bodies: vec![record],
+        joints: vec![],
+        environment: EnvironmentRecord::default(),
+    };
+    let text = to_ron(&scene).unwrap();
+    let parsed = from_ron(&text).expect("v4 file migrates");
+    assert_eq!(parsed.version, gradiance::persist::FORMAT_VERSION);
+    assert_eq!(
+        parsed.bodies[0].depth,
+        DepthBand {
+            near: 10.0,
+            far: 30.0
+        },
+        "mask bits 1..=2 become the 10..30 band"
+    );
+    assert_eq!(parsed.bodies[0].layers, None, "carrier cleared");
 }
 
 #[test]

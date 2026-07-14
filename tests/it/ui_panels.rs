@@ -124,27 +124,22 @@ fn reflect_grid_renders_settings_fields() {
     harness.get_by_label("substeps");
 }
 
-/// The Lighting tab's reflect halves render every field row (the sun
-/// gadget and color pickers are hand-drawn on top of these).
+/// The Lighting tab's reflect half (the Backdrop grid over
+/// `ScenerySettings`) renders every field row; the light list, sun
+/// gadgets, and color pickers are hand-drawn and covered by the pure
+/// view-cube/settings unit tests.
 #[test]
 fn lighting_and_scenery_settings_render_rows() {
-    let mut lighting = gradiance::domain::settings::LightingSettings::default();
     let mut scenery = gradiance::domain::settings::ScenerySettings::default();
     let mut harness = Harness::new_ui(move |ui| {
-        reflect_grid(ui, egui::Id::new("lighting"), &mut lighting);
         reflect_grid(ui, egui::Id::new("scenery"), &mut scenery);
     });
     harness.run();
     for label in [
-        "azimuth deg",
-        "elevation deg",
-        "illuminance",
-        "ambient",
-        "ssao",
-        "contact shadows",
         "back offset",
         "back visible",
         "ground visible",
+        "perspective deg",
     ] {
         harness.get_by_label(label);
     }

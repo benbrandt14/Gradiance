@@ -10,8 +10,8 @@ use crate::core::ids::{IdIndex, StableId};
 use crate::core::units::PosRot;
 use crate::domain::Body;
 use crate::domain::appearance::{Appearance, Rgba};
+use crate::domain::depth::DepthBand;
 use crate::domain::joint::JointDef;
-use crate::domain::layers::LayerMask32;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::PointerOverUi;
 use crate::interaction::align::{AlignItem, AlignOp, align_changes};
@@ -35,6 +35,92 @@ use bevy_egui::{EguiContexts, egui};
 pub struct ScriptMenu<'w> {
     actions: Res<'w, ScriptActions>,
     inputs: ResMut<'w, ScriptInputs>,
+    labels: Res<'w, crate::script::bridge::WorkspaceLabels>,
+}
+
+/// Background / scene actions: per-scene settings writes (the Config
+/// seam) — friction against the back plane, the top-down toggle,
+/// scenery-plane visibility, and the grid's user coordinate frame.
+#[derive(SystemParam)]
+pub struct BackgroundMenu<'w> {
+    sim: ResMut<'w, crate::domain::settings::SimSettings>,
+    scenery: ResMut<'w, crate::domain::settings::ScenerySettings>,
+    grid: ResMut<'w, crate::domain::settings::GridSettings>,
+    settings_window: ResMut<'w, crate::ui::settings::SettingsWindow>,
+}
+
+impl BackgroundMenu<'_> {
+    /// Renders the empty-canvas section; returns true when the menu should
+    /// close.
+    fn section(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut close = false;
+        ui.label(egui::RichText::new("Background").weak());
+        ui.horizontal(|ui| {
+            ui.label("plane friction");
+            ui.add(
+                egui::DragValue::new(&mut self.sim.plane_friction)
+                    .speed(0.01)
+                    .range(0.0..=5.0),
+            )
+            .on_hover_text("top-down mode: bodies rub on the back plane (0 = off)");
+        });
+        let top_down = self.sim.gravity.length() < 1e-3;
+        if top_down {
+            if ui.button("Restore gravity (side view)").clicked() {
+                self.sim.gravity = crate::core::constants::GRAVITY;
+                close = true;
+            }
+        } else if ui
+            .button("Top-down mode (gravity into screen)")
+            .on_hover_text("zeroes in-plane gravity; give the plane some friction")
+            .clicked()
+        {
+            self.sim.gravity = Vec2::ZERO;
+            if self.sim.plane_friction <= 0.0 {
+                self.sim.plane_friction = 0.3;
+            }
+            close = true;
+        }
+        let scenery = self.scenery.bypass_change_detection();
+        let mut touched = ui
+            .checkbox(&mut scenery.back_visible, "Back plane")
+            .on_hover_text("the shadow catcher behind the deepest layer")
+            .changed();
+        touched |= ui
+            .checkbox(&mut scenery.ground_visible, "Ground planes")
+            .on_hover_text("the infinite floors under half-plane bodies")
+            .changed();
+        if touched {
+            self.scenery.set_changed();
+        }
+        // Reset the grid's user coordinate system to world axes (undoes an
+        // "align grid to body").
+        if (self.grid.origin != Vec2::ZERO || self.grid.rotation != 0.0)
+            && ui
+                .button("Reset grid to world")
+                .on_hover_text("clear a local-frame alignment")
+                .clicked()
+        {
+            self.grid.origin = Vec2::ZERO;
+            self.grid.rotation = 0.0;
+            close = true;
+        }
+        if ui.button("Scene & lighting settings…").clicked() {
+            self.settings_window.open = true;
+            self.settings_window.tab = crate::ui::settings::SettingsTab::Lighting;
+            close = true;
+        }
+        close
+    }
+
+    /// Adopts `pose` as the grid's user coordinate frame — a **local-frame
+    /// grid**: the grid origin moves to the body and its lines align to the
+    /// body's rotation, so sketching against a tilted structure snaps in
+    /// that structure's axes (CAD "align UCS to face").
+    fn align_grid_to(&mut self, pose: PosRot) {
+        self.grid.origin = pose.pos;
+        self.grid.rotation = pose.rot;
+    }
 }
 
 /// The body-scoped intent writers, bundled into one `SystemParam` to keep
@@ -44,13 +130,9 @@ pub struct GroupWriters<'w> {
     group: MessageWriter<'w, GroupIntent>,
     ungroup: MessageWriter<'w, UngroupIntent>,
     merge: MessageWriter<'w, MergeIntent>,
-}
-
-/// Physical quick actions (non-undoable one-shots + probe pins), bundled
-/// for the same parameter-count reason as [`GroupWriters`].
-#[derive(SystemParam)]
-pub struct QuickActions<'w> {
     orbits: MessageWriter<'w, crate::physics::fields::SetOrbitRequest>,
+    /// Probe-pin target (the "Pin probe" menu action); bundled here to
+    /// keep `context_menu` under Bevy's system-parameter count limit.
     probes: ResMut<'w, crate::ui::probe::ProbePanel>,
 }
 
@@ -95,12 +177,12 @@ pub fn open_context_menu(
     cursor: Res<CursorWorldPos>,
     over_ui: Res<PointerOverUi>,
     physics: PhysicsQueries,
-    bodies: Query<(&ShapeDef, &LayerMask32), With<Body>>,
+    bodies: Query<(&ShapeDef, &DepthBand), With<Body>>,
     ids: Query<&StableId>,
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform, With<Body>>,
     index: Res<IdIndex>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     mut press_pos: Local<Option<Vec2>>,
     mut menu: ResMut<ContextMenu>,
 ) {
@@ -119,7 +201,7 @@ pub fn open_context_menu(
             .collect();
         // A joint glyph within the pick radius is offered for configuration
         // (whole glyph, matching left-click picking).
-        let scale = crate::interaction::camera::camera_scale(&projections);
+        let scale = cam_scale.0;
         menu.joint = nearest_joint(
             ANCHOR_PICK_PX * scale,
             joints.iter().filter_map(|(id, def)| {
@@ -158,15 +240,15 @@ pub fn context_menu(
     index: Res<IdIndex>,
     mut props: crate::ui::inspector::BodyProps,
     mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
-    all_layers: Query<&LayerMask32, With<Body>>,
     groups: Query<(Entity, &crate::domain::group::SelectionGroup), With<Body>>,
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     joints: Query<&JointDef>,
     mut writers: GroupWriters,
-    mut quick: QuickActions,
     mut moves: MessageWriter<CommitTransformIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
     mut script: ScriptMenu,
+    mut background: BackgroundMenu,
+    mut depth_panel: ResMut<crate::ui::depth_panel::DepthPanel>,
 ) -> Result {
     if !menu.open {
         return Ok(());
@@ -273,9 +355,11 @@ pub fn context_menu(
                     )
                     .clicked()
                 {
-                    quick.orbits.write(crate::physics::fields::SetOrbitRequest {
-                        targets: selected_ids.clone(),
-                    });
+                    writers
+                        .orbits
+                        .write(crate::physics::fields::SetOrbitRequest {
+                            targets: selected_ids.clone(),
+                        });
                     close = true;
                 }
                 if ui
@@ -284,7 +368,7 @@ pub fn context_menu(
                     .clicked()
                 {
                     for id in &selected_ids {
-                        quick.probes.pin(*id);
+                        writers.probes.pin(*id);
                     }
                     close = true;
                 }
@@ -364,11 +448,22 @@ pub fn context_menu(
                     ui.separator();
                 }
 
+                // Empty-canvas click: the scene/background actions.
+                if menu.under.is_empty() && menu.joint.is_none() {
+                    close |= background.section(ui);
+                    ui.separator();
+                }
+
                 // Pick from overlapping bodies under the click.
                 if !menu.under.is_empty() {
                     ui.label(egui::RichText::new("Select from").weak());
                     for (i, id) in menu.under.clone().into_iter().enumerate() {
-                        if ui.button(format!("· body {i} ({id:.8})")).clicked() {
+                        // Workspace-labelled bodies show their script name.
+                        let title = script.labels.name_of(id).map_or_else(
+                            || format!("· body {i} ({id:.8})"),
+                            |name| format!("· {name} ({id:.8})"),
+                        );
+                        if ui.button(title).clicked() {
                             if let Some(entity) = index.entity(id) {
                                 crate::interaction::selection::SelectTransition::SetBodies(vec![
                                     entity,
@@ -385,91 +480,55 @@ pub fn context_menu(
                     ui.separator();
                 }
 
-                // Layer operations on the selection.
-                ui.label(egui::RichText::new("Layers").weak());
-                ui.horizontal_wrapped(|ui| {
-                    for bit in 0..8u32 {
-                        if ui.small_button(format!("{bit}")).clicked() {
-                            layer_edit(
-                                &selection,
-                                &props.ids,
-                                &props.layers,
-                                &mut props.edits,
-                                |old| LayerMask32 {
-                                    memberships: 1 << bit,
-                                    filters: old.filters,
-                                },
-                            );
-                            close = true;
-                        }
-                    }
-                });
-                if ui.button("No self-collisions (within selection)").clicked() {
-                    // Move the selection to a free layer bit that ignores
-                    // itself: members stop colliding with each other but
-                    // still collide with everything else.
-                    let used: u32 = all_layers
-                        .iter()
-                        .map(|l| l.memberships)
-                        .fold(0, |a, b| a | b);
-                    let free = (0..32u32).find(|b| used & (1 << b) == 0).unwrap_or(31);
-                    layer_edit(
-                        &selection,
-                        &props.ids,
-                        &props.layers,
-                        &mut props.edits,
-                        |_| LayerMask32 {
-                            memberships: 1 << free,
-                            filters: !(1 << free),
-                        },
-                    );
-                    close = true;
-                }
-                if ui.button("Reset collision layers").clicked() {
-                    layer_edit(
-                        &selection,
-                        &props.ids,
-                        &props.layers,
-                        &mut props.edits,
-                        |_| LayerMask32::default(),
-                    );
-                    close = true;
-                }
+                // Depth actions on the selection (the draggable band
+                // editor is the Depth panel dock; these are the one-click
+                // moves). Collision volume ≡ render depth — one band.
                 ui.label(egui::RichText::new("Depth").weak());
                 ui.horizontal_wrapped(|ui| {
-                    // Depth = layer bits (bit 0 front … bit 31 back).
-                    let shift = |edits: &mut MessageWriter<PropertyEditIntent>,
-                                 f: &dyn Fn(&LayerMask32) -> u32| {
-                        layer_edit(&selection, &props.ids, &props.layers, edits, |old| {
-                            LayerMask32 {
-                                memberships: f(old).max(1),
-                                filters: old.filters,
-                            }
-                        });
-                    };
+                    let step = crate::core::constants::LAYER_HEIGHT;
+                    let shift =
+                        |edits: &mut MessageWriter<PropertyEditIntent>,
+                         f: &dyn Fn(&DepthBand) -> DepthBand| {
+                            depth_edit(&selection, &props.ids, &props.depths, edits, f);
+                        };
                     if ui.small_button("to front").clicked() {
-                        shift(&mut props.edits, &|_| 1);
+                        shift(&mut props.edits, &|old| DepthBand {
+                            near: 0.0,
+                            far: old.thickness().max(DepthBand::MIN_THICKNESS),
+                        });
                         close = true;
                     }
                     if ui.small_button("forward").clicked() {
-                        shift(&mut props.edits, &|old| old.memberships >> 1);
-                        close = true;
-                    }
-                    if ui.small_button("backward").clicked() {
-                        shift(&mut props.edits, &|old| {
-                            if old.memberships & (1 << 31) == 0 {
-                                old.memberships << 1
-                            } else {
-                                old.memberships
-                            }
+                        shift(&mut props.edits, &|old| DepthBand {
+                            near: old.near - step,
+                            far: old.far - step,
                         });
                         close = true;
                     }
-                    if ui.small_button("to back").clicked() {
-                        shift(&mut props.edits, &|_| 1 << 7);
+                    if ui.small_button("backward").clicked() {
+                        shift(&mut props.edits, &|old| DepthBand {
+                            near: old.near + step,
+                            far: old.far + step,
+                        });
                         close = true;
                     }
                 });
+                if ui.button("Depth panel…").clicked() {
+                    depth_panel.open = true;
+                    close = true;
+                }
+                // Local-frame grid: adopt the primary body's pose as the
+                // grid's user coordinate system (sketch in its axes).
+                if let Some(primary) = selection.primary()
+                    && let Ok((_, transform, _)) = bodies_q.get(primary)
+                    && ui
+                        .button("Align grid to body")
+                        .on_hover_text("move & rotate the grid into this body's frame")
+                        .clicked()
+                {
+                    background.align_grid_to(PosRot::from_transform(transform));
+                    close = true;
+                }
                 ui.separator();
                 if ui.button("Random colors (per body)").clicked() {
                     let changes: Vec<PropertyChange> = selection
@@ -521,22 +580,22 @@ pub fn context_menu(
     Ok(())
 }
 
-fn layer_edit(
+fn depth_edit(
     selection: &Selection,
     ids: &Query<&StableId>,
-    layers: &Query<&LayerMask32, With<Body>>,
+    depths: &Query<&DepthBand, With<Body>>,
     edits: &mut MessageWriter<PropertyEditIntent>,
-    make_new: impl Fn(&LayerMask32) -> LayerMask32,
+    make_new: impl Fn(&DepthBand) -> DepthBand,
 ) {
     let changes: Vec<PropertyChange> = selection
         .iter()
         .filter_map(|e| {
             let id = ids.get(e).ok().copied()?;
-            let old = *layers.get(e).ok()?;
+            let old = *depths.get(e).ok()?;
             Some(PropertyChange {
                 id,
-                old: PropertyValue::Layers(old),
-                new: PropertyValue::Layers(make_new(&old)),
+                old: PropertyValue::Depth(old),
+                new: PropertyValue::Depth(make_new(&old).sanitized()),
             })
         })
         .collect();

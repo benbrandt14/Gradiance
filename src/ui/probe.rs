@@ -8,7 +8,7 @@
 
 use crate::core::ids::{IdIndex, StableId};
 use crate::domain::Body;
-use crate::domain::layers::LayerMask32;
+use crate::domain::depth::DepthBand;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::PointerOverUi;
 use crate::interaction::cursor::CursorWorldPos;
@@ -77,7 +77,7 @@ pub fn probe_panel(
     mut panel: ResMut<ProbePanel>,
     index: Res<IdIndex>,
     transforms: Query<&Transform, With<Body>>,
-    bodies: Query<(&ShapeDef, &LayerMask32), With<Body>>,
+    bodies: Query<(&ShapeDef, &DepthBand), With<Body>>,
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
     cursor: Res<CursorWorldPos>,

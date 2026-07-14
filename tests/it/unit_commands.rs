@@ -26,7 +26,7 @@ fn spawn_intent_creates_a_complete_body() {
     assert!(world.get::<ShapeDef>(entity).is_some());
     assert!(world.get::<RigidBody>(entity).is_some());
     assert!(world.get::<Appearance>(entity).is_some());
-    assert!(world.get::<LayerMask32>(entity).is_some());
+    assert!(world.get::<DepthBand>(entity).is_some());
     let transform = world.get::<Transform>(entity).unwrap();
     assert_eq!(transform.translation.truncate(), Vec2::new(10.0, 20.0));
     assert_eq!(stack_lens(&app), (1, 0));

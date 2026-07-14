@@ -1,9 +1,9 @@
 //! Authored shape + layers → derived extruded `Mesh3d`.
 
 use crate::domain::Body;
-use crate::domain::layers::LayerMask32;
+use crate::domain::depth::DepthBand;
 use crate::domain::shape::ShapeDef;
-use crate::geometry::extrusion::{extrude_contours, layer_z_range};
+use crate::geometry::extrusion::extrude_contours;
 use crate::geometry::polygonize::polygonize;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -11,28 +11,16 @@ use bevy::prelude::*;
 
 /// Builds the 2.5D prism mesh for a body (pure; unit-tested headless).
 ///
-/// Half-planes extrude a slab far larger than any navigable view (their
-/// *collision* is truly infinite; see `render::ground` for the material
-/// that completes the infinite reading).
-pub fn build_body_mesh(shape: &ShapeDef, layers: &LayerMask32) -> Mesh {
-    let (min_bit, max_bit) = layers.occupied_range().unwrap_or((0, 0));
-    let (z_front, depth) = layer_z_range(min_bit, max_bit);
-    let contours = if matches!(shape, ShapeDef::HalfPlane) {
-        use crate::render::ground::{GROUND_RENDER_DROP, GROUND_RENDER_WIDTH};
-        let (w, h) = (GROUND_RENDER_WIDTH / 2.0, GROUND_RENDER_DROP);
-        crate::geometry::contours::Contours {
-            outline: vec![
-                Vec2::new(-w, -h),
-                Vec2::new(w, -h),
-                Vec2::new(w, 0.0),
-                Vec2::new(-w, 0.0),
-            ],
-            holes: Vec::new(),
-        }
-    } else {
-        polygonize(shape)
-    };
-    let buffers = extrude_contours(&contours, z_front, depth);
+/// Half-planes are the exception: they render as an infinite flat *floor*
+/// (a plane containing the surface line, sweeping along ±Z) rather than a
+/// prism — the scene reads as pieces standing on a 3D surface. See
+/// `render::plane` for the material that completes the impression.
+pub fn build_body_mesh(shape: &ShapeDef, band: &DepthBand) -> Mesh {
+    if matches!(shape, ShapeDef::HalfPlane) {
+        return crate::render::plane::ground_plane_mesh();
+    }
+    let band = band.sanitized();
+    let buffers = extrude_contours(&polygonize(shape), band.z_front(), band.thickness());
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -49,12 +37,12 @@ pub fn sync_body_meshes(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     changed: Query<
-        (Entity, &ShapeDef, &LayerMask32),
-        (With<Body>, Or<(Changed<ShapeDef>, Changed<LayerMask32>)>),
+        (Entity, &ShapeDef, &DepthBand),
+        (With<Body>, Or<(Changed<ShapeDef>, Changed<DepthBand>)>),
     >,
 ) {
-    for (entity, shape, layers) in &changed {
-        let mesh = build_body_mesh(shape, layers);
+    for (entity, shape, band) in &changed {
+        let mesh = build_body_mesh(shape, band);
         commands.entity(entity).insert(Mesh3d(meshes.add(mesh)));
     }
 }
@@ -69,11 +57,11 @@ mod tests {
             width: 20.0,
             height: 10.0,
         };
-        let layers = LayerMask32 {
-            memberships: 0b0110, // bits 1..=2 → z ∈ [-30, -10]
-            filters: u32::MAX,
+        let band = DepthBand {
+            near: 10.0,
+            far: 30.0, // z ∈ [-30, -10]
         };
-        let mesh = build_body_mesh(&shape, &layers);
+        let mesh = build_body_mesh(&shape, &band);
         let positions = mesh
             .attribute(Mesh::ATTRIBUTE_POSITION)
             .and_then(|a| a.as_float3())

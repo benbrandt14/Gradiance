@@ -4,6 +4,7 @@ use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
+use crate::domain::depth::DepthBand;
 use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
 use crate::domain::props::BodyPhysics;
@@ -29,8 +30,13 @@ pub struct BodyRecord {
     pub physics: BodyPhysics,
     /// Authored appearance.
     pub appearance: Appearance,
-    /// Collision layers / depth mapping.
-    pub layers: LayerMask32,
+    /// Authored depth band (extrusion *and* collision volume, v5+).
+    #[serde(default)]
+    pub depth: DepthBand,
+    /// Legacy v4 layer mask — parsed only so `persist` can migrate old
+    /// files; never written (`None` after capture and after migration).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layers: Option<LayerMask32>,
     /// Group stack, innermost first (empty = ungrouped).
     #[serde(default)]
     pub groups: Vec<u32>,
@@ -53,7 +59,8 @@ impl BodyRecord {
             shape: entity_ref.get::<ShapeDef>()?.clone(),
             physics: BodyPhysics::capture(&entity_ref),
             appearance: *entity_ref.get::<Appearance>()?,
-            layers: *entity_ref.get::<LayerMask32>()?,
+            depth: *entity_ref.get::<DepthBand>()?,
+            layers: None,
             groups: entity_ref
                 .get::<SelectionGroup>()
                 .map(|g| g.0.clone())
@@ -75,7 +82,7 @@ impl BodyRecord {
             transform,
             self.shape.clone(),
             self.appearance,
-            self.layers,
+            self.depth.sanitized(),
         ));
         self.physics.insert_into(&mut entity);
         if !self.groups.is_empty() {

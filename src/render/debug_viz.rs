@@ -6,9 +6,10 @@
 
 use crate::core::ids::IdIndex;
 use crate::domain::Body;
+use crate::domain::depth::DepthBand;
 use crate::domain::field::FieldSource;
 use crate::domain::joint::{JointDef, JointKind};
-use crate::domain::layers::{LayerMask32, layer_hue};
+use crate::domain::layers::layer_hue;
 use crate::domain::settings::DebugSettings;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
@@ -30,7 +31,7 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 /// Draws the enabled debug overlays.
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
-    bodies: Query<(Entity, &ShapeDef, &Transform, &LayerMask32), With<Body>>,
+    bodies: Query<(Entity, &ShapeDef, &Transform, &DepthBand), With<Body>>,
     field_sources: Query<(&Transform, &FieldSource), With<Body>>,
     fields: Fields,
     cameras: Query<(&Transform, &Projection), (With<Camera3d>, Without<Body>)>,
@@ -42,16 +43,13 @@ pub fn draw_debug_overlays(
     physics: PhysicsQueries,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
-    for (entity, shape, transform, layers) in &bodies {
+    for (entity, shape, transform, band) in &bodies {
         let infinite = shape.contains_half_plane();
 
-        // Collision-set visualization: outline in the front-most bit's hue,
-        // matching the swatches in the layers UI (feedback 5.4).
-        if debug.show_layers
-            && !infinite
-            && let Some((front, _)) = layers.occupied_range()
-        {
-            let color = Color::hsl(layer_hue(front), 0.75, 0.55);
+        // Collision-set visualization: outline in the front-most derived
+        // layer's hue, matching the depth panel's gridline swatches.
+        if debug.show_layers && !infinite {
+            let color = Color::hsl(layer_hue(band.bits().trailing_zeros()), 0.75, 0.55);
             for ring in polygonize(shape).rings() {
                 let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
                 if let Some(first) = pts.first().copied() {

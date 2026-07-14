@@ -333,3 +333,63 @@ fn a_script_drives_color_from_touch_count() {
         "the script-published count drives the body's color"
     );
 }
+
+#[test]
+fn spawn_verbs_return_workspace_handles() {
+    // `(define b (spawn-box …))` binds the body's handle; `(label b name)`
+    // makes it a workspace name resolving to the real StableId.
+    let mut app = paused_app();
+    run(
+        &mut app,
+        r#"(begin
+            (define b (spawn-box 0 0 40 20))
+            (label b "crate"))"#,
+    );
+    assert_eq!(body_count(&mut app), 1);
+    let labels = app
+        .world()
+        .resource::<gradiance::script::bridge::WorkspaceLabels>();
+    let (name, id) = labels.0.first().expect("one workspace label");
+    assert_eq!(name, "crate");
+    let entity = app
+        .world()
+        .resource::<gradiance::core::ids::IdIndex>()
+        .entity(*id);
+    assert!(entity.is_some(), "the label resolves to the spawned body");
+    assert_eq!(labels.name_of(*id), Some("crate"));
+}
+
+#[test]
+fn relabelling_a_name_rebinds_it() {
+    let mut app = paused_app();
+    run(&mut app, r#"(label (spawn-circle 0 0 10) "ball")"#);
+    run(&mut app, r#"(label (spawn-circle 50 0 10) "ball")"#);
+    let labels = app
+        .world()
+        .resource::<gradiance::script::bridge::WorkspaceLabels>();
+    assert_eq!(labels.0.len(), 1, "labels are unique by name");
+    assert_eq!(body_count(&mut app), 2, "both bodies still exist");
+}
+
+#[test]
+fn ans_carries_the_last_value_between_runs() {
+    // MATLAB cue: each run's last value binds to `ans`, and the log echoes
+    // it instead of a bare "ok".
+    let mut app = paused_app();
+    run(&mut app, "(+ 1 2)");
+    {
+        let log = app
+            .world()
+            .resource::<gradiance::script::bridge::ScriptLog>();
+        let entry = log.0.last().expect("logged");
+        assert!(entry.ok);
+        assert_eq!(entry.output, "3", "the value is echoed");
+    }
+    run(&mut app, "(* ans 14)");
+    let log = app
+        .world()
+        .resource::<gradiance::script::bridge::ScriptLog>();
+    let entry = log.0.last().expect("logged");
+    assert!(entry.ok, "ans resolves in the next run: {}", entry.output);
+    assert_eq!(entry.output, "42");
+}

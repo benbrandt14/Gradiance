@@ -15,20 +15,20 @@ use bevy::color::palettes::css;
 use bevy::prelude::*;
 
 /// Screen-constant glyph half-size in world units.
-fn glyph_size(projections: &Query<&Projection, With<Camera3d>>) -> f32 {
-    6.0 * crate::interaction::camera::camera_scale(projections)
+fn glyph_size(scale: crate::interaction::camera::CameraScale) -> f32 {
+    6.0 * scale.0
 }
 
 /// Draws the active snap point with a kind-specific glyph.
 pub fn draw_snap_indicator(
     snapped: Res<SnappedCursor>,
-    projections: Query<&Projection, With<Camera3d>>,
+    scale: Res<crate::interaction::camera::CameraScale>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let (Some(pos), Some(kind)) = (snapped.position, snapped.kind) else {
         return;
     };
-    let s = glyph_size(&projections);
+    let s = glyph_size(*scale);
     let color = css::GOLD;
     match kind {
         SnapKind::Grid => {

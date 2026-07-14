@@ -9,8 +9,8 @@ use crate::core::states::ToolState;
 use crate::domain::Body;
 use crate::domain::joint::{JointDef, JointKind};
 use crate::domain::settings::{
-    DebugSettings, GridSettings, GridSystem, LightingSettings, RenderSettings, ScenerySettings,
-    SimSettings, SnapConfig, ToolDefaults,
+    DebugSettings, GridSettings, GridSystem, KeyLightSettings, LightingSettings, RenderSettings,
+    ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
 };
 use crate::domain::shape::ShapeDef;
 use crate::ui::reflect_grid::reflect_grid;
@@ -167,27 +167,97 @@ pub fn settings_window(
     Ok(())
 }
 
-/// The Lighting tab: a draggable sun gadget for the key light's angle,
-/// color pickers for light and back plane, and the reflect grid for the
-/// scalar fields.
+/// The Lighting tab: per-light rows (sun gadget, color, strength,
+/// shadows), scene scalars, and the backdrop settings. Hand-written —
+/// the light list and colors are beyond the reflect grid.
 fn lighting_tab(
     ui: &mut egui::Ui,
     lighting: &mut ResMut<LightingSettings>,
     scenery: &mut ResMut<ScenerySettings>,
 ) {
-    ui.label(egui::RichText::new("Key light").strong());
-    ui.horizontal(|ui| {
-        sun_gadget(ui, lighting);
-        ui.vertical(|ui| {
-            color_row(ui, "color", &mut lighting.bypass_change_detection().color);
-            reflect_grid(
-                ui,
-                egui::Id::new("lighting"),
-                lighting.bypass_change_detection(),
-            );
+    let settings = lighting.bypass_change_detection();
+    let mut changed = false;
+    let mut remove: Option<usize> = None;
+    let count = settings.lights.len();
+    for (index, light) in settings.lights.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("Light {}", index + 1)).strong());
+            if count > 1 && ui.small_button("✕").clicked() {
+                remove = Some(index);
+            }
         });
+        ui.horizontal(|ui| {
+            changed |= sun_gadget(ui, index, light);
+            ui.vertical(|ui| {
+                changed |= color_row(ui, "color", &mut light.color);
+                ui.horizontal(|ui| {
+                    ui.label("strength");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut light.illuminance).speed(100.0))
+                        .changed();
+                });
+                changed |= ui.checkbox(&mut light.shadows, "casts shadows").changed();
+            });
+        });
+    }
+    if let Some(index) = remove {
+        settings.lights.remove(index);
+        changed = true;
+    }
+    if settings.lights.len() < 4 && ui.button("+ add light (colored shadows)").clicked() {
+        // A second light offset from the first, tinted, gives overlapping
+        // colored shadows — cheap depth on a flat scene.
+        settings.lights.push(KeyLightSettings {
+            azimuth_deg: 40.0,
+            color: crate::domain::appearance::Rgba::rgb(0.9, 0.85, 1.0),
+            illuminance: 6_000.0,
+            ..KeyLightSettings::default()
+        });
+        changed = true;
+    }
+
+    ui.separator();
+    ui.label(egui::RichText::new("Scene").strong());
+    ui.horizontal(|ui| {
+        ui.label("ambient");
+        changed |= ui
+            .add(egui::DragValue::new(&mut settings.ambient).speed(5.0))
+            .changed();
     });
-    lighting.set_changed();
+    changed |= ui
+        .checkbox(&mut settings.ssao, "ambient occlusion (SSAO)")
+        .changed();
+    changed |= ui
+        .checkbox(&mut settings.contact_shadows, "contact shadows")
+        .changed();
+    ui.horizontal(|ui| {
+        ui.label("shadow sharpness");
+        for (label, size) in [
+            ("soft", 1024_u32),
+            ("med", 2048),
+            ("hard", 4096),
+            ("max", 8192),
+        ] {
+            if ui
+                .selectable_label(settings.shadow_map_size == size, label)
+                .clicked()
+            {
+                settings.shadow_map_size = size;
+                changed = true;
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("shadow reach");
+        changed |= ui
+            .add(egui::DragValue::new(&mut settings.shadow_distance).speed(100.0))
+            .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
+            .changed();
+    });
+    if changed {
+        lighting.set_changed();
+    }
+
     ui.separator();
     ui.label(egui::RichText::new("Backdrop").strong());
     color_row(
@@ -200,32 +270,37 @@ fn lighting_tab(
         egui::Id::new("scenery"),
         scenery.bypass_change_detection(),
     );
+    // reflect_grid edits aren't reported; conservatively mark touched.
     scenery.set_changed();
 }
 
-/// One labelled RGBA color-picker row over a domain [`Rgba`]
-/// (`reflect_grid` renders color structs as four bare floats — this is the
-/// sanctioned escape hatch, like the grid-system picker).
-fn color_row(ui: &mut egui::Ui, label: &str, color: &mut crate::domain::appearance::Rgba) {
+/// One labelled RGBA color-picker row over a domain [`Rgba`]; returns
+/// whether it changed.
+fn color_row(ui: &mut egui::Ui, label: &str, color: &mut crate::domain::appearance::Rgba) -> bool {
+    let mut changed = false;
     ui.horizontal(|ui| {
         ui.label(label);
         let mut rgba = [color.r, color.g, color.b, color.a];
         if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
             [color.r, color.g, color.b, color.a] = rgba;
+            changed = true;
         }
     });
+    changed
 }
 
-/// A draggable sun-position gadget: the handle's angle around the circle is
-/// the light's azimuth; its distance from the rim toward the center is the
-/// elevation (center = head-on, rim = grazing).
-fn sun_gadget(ui: &mut egui::Ui, lighting: &mut ResMut<LightingSettings>) {
-    const RADIUS: f32 = 44.0;
+/// A draggable sun-position gadget for one light: the handle's angle around
+/// the circle is the azimuth; its distance from the rim toward the center is
+/// the elevation (center = head-on, rim = grazing). Returns whether it moved.
+fn sun_gadget(ui: &mut egui::Ui, index: usize, light: &mut KeyLightSettings) -> bool {
+    const RADIUS: f32 = 40.0;
     let (rect, response) = ui.allocate_exact_size(
         egui::vec2(RADIUS * 2.2, RADIUS * 2.2),
         egui::Sense::click_and_drag(),
     );
+    let _ = index;
     let center = rect.center();
+    let mut changed = false;
 
     if (response.dragged() || response.clicked())
         && let Some(pos) = response.interact_pointer_pos()
@@ -233,10 +308,10 @@ fn sun_gadget(ui: &mut egui::Ui, lighting: &mut ResMut<LightingSettings>) {
         let v = pos - center;
         let r = (v.length() / RADIUS).clamp(0.0, 1.0);
         // Screen y is down; azimuth is measured in world (y-up) terms.
-        lighting.azimuth_deg = f32::atan2(-v.y, v.x).to_degrees();
-        lighting.elevation_deg = (1.0 - r) * 90.0;
+        light.azimuth_deg = f32::atan2(-v.y, v.x).to_degrees();
+        light.elevation_deg = (1.0 - r) * 90.0;
+        changed = true;
     }
-    let settings = lighting.bypass_change_detection();
 
     let painter = ui.painter_at(rect);
     painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, egui::Color32::GRAY));
@@ -245,15 +320,21 @@ fn sun_gadget(ui: &mut egui::Ui, lighting: &mut ResMut<LightingSettings>) {
         RADIUS * 0.5,
         egui::Stroke::new(0.5, egui::Color32::from_gray(90)),
     );
-    let azimuth = settings.azimuth_deg.to_radians();
-    let r = (1.0 - (settings.elevation_deg / 90.0).clamp(0.0, 1.0)) * RADIUS;
+    let azimuth = light.azimuth_deg.to_radians();
+    let r = (1.0 - (light.elevation_deg / 90.0).clamp(0.0, 1.0)) * RADIUS;
     let handle = center + egui::vec2(azimuth.cos(), -azimuth.sin()) * r;
     painter.line_segment(
         [center, handle],
         egui::Stroke::new(1.0, egui::Color32::from_gray(120)),
     );
-    painter.circle_filled(handle, 6.0, egui::Color32::GOLD);
+    let tint = egui::Color32::from_rgb(
+        (light.color.r * 255.0) as u8,
+        (light.color.g * 255.0) as u8,
+        (light.color.b * 255.0) as u8,
+    );
+    painter.circle_filled(handle, 6.0, tint);
     response.on_hover_text("drag the sun: angle = light direction, center = head-on");
+    changed
 }
 
 /// One line per internals fact — the "what is the editor actually doing"

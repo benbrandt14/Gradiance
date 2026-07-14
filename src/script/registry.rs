@@ -56,6 +56,8 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
+    /// `(label body name)` — name a body in the workspace (visible tag).
+    pub const LABEL: &str = "label";
     /// `(ops)` — list of every registered operation name.
     pub const OPS: &str = "ops";
     /// `(describe name)` — the signature and doc of one operation.
@@ -64,7 +66,13 @@ pub mod name {
 
 /// The `SimSettings` reflect paths `sim-get`/`sim-set` advertise; the
 /// validation test resolves each, so a field rename cannot strand one.
-pub const SIM_SETTING_PATHS: &[&str] = &["gravity.x", "gravity.y", "speed", "substeps"];
+pub const SIM_SETTING_PATHS: &[&str] = &[
+    "gravity.x",
+    "gravity.y",
+    "speed",
+    "substeps",
+    "plane_friction",
+];
 
 /// Which sanctioned seam an operation routes through — the governance category
 /// from `docs/script-lisp-decision.md` (reads total, writes seam-mediated).
@@ -158,14 +166,14 @@ fn edit_specs() -> Vec<OpSpec> {
         OpSpec {
             name: name::SPAWN_BOX,
             signature: "(spawn-box x y w h)",
-            doc: "Author a box body of size w×h centred at (x, y).",
+            doc: "Author a box body of size w×h centred at (x, y); returns its handle.",
             category: Edit,
             args: 4,
         },
         OpSpec {
             name: name::SPAWN_CIRCLE,
             signature: "(spawn-circle x y r)",
-            doc: "Author a circle body of radius r centred at (x, y).",
+            doc: "Author a circle body of radius r centred at (x, y); returns its handle.",
             category: Edit,
             args: 3,
         },
@@ -299,6 +307,13 @@ fn editor_specs() -> Vec<OpSpec> {
             name: name::SIGNAL_SET,
             signature: "(signal-set name value)",
             doc: "Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md).",
+            category: OpCategory::EditorState,
+            args: 2,
+        },
+        OpSpec {
+            name: name::LABEL,
+            signature: "(label body name)",
+            doc: "Name a body in the workspace (a viewport tag); body is a spawn's return value.",
             category: OpCategory::EditorState,
             args: 2,
         },

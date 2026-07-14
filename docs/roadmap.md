@@ -252,29 +252,62 @@ missing foundation:**
 The visuals/sim track, sequenced as one PR per slice. Absorbs the AO/contact
 shadow items from M19. Design decisions in the slice PRs.
 
-- **V1 — Interaction plane, back plane, lighting** *(this PR)*: one
+- **V1 — Interaction plane, back plane, lighting** *(landed)*: one
   `OverlayGizmos` group with the grid moved to the picking plane (kills the
   grid parallax, 3 gizmo groups → 1); back plane + key light driven by new
   persisted `ScenerySettings`/`LightingSettings` (Lighting tab with a
   draggable sun gadget, SSAO + contact-shadow toggles); half-plane grounds
   render effectively infinite with an inside-view fade material.
-- **V2 — View cube + top-down mode**: CAD orientation cube (face/corner/edge
-  snaps, animated glide), `CameraRig` roll, and a top-down preset — gravity
-  (0,0) plus a per-scene back-plane friction force (`physics/forces.rs`
-  sibling system), set from a right-click "Background" menu section.
-- **V3 — Continuous-depth collision** (save v5): authored `DepthBand
-  {near, far}` replaces `LayerMask32`; contiguous collision layers and the
-  exact extrusion both derive from the band (visual depth ≡ collision layer
-  by construction; non-integer depths allowed, UI snapping avoids slivers).
-  Right-dock depth panel: selected bodies as draggable colored bars
-  (scale-tool feel), auto-growing bounds; deletes the checkbox grids.
-- **V4 — Script dock & workspace**: console becomes a right dock with
-  MATLAB REPL behavior (Enter runs, Shift+Enter newline, Up/Down history);
-  spawn verbs return body handles, `ans` bound each run, script-defined
-  names become visible labels on scene objects (StableId underneath).
-- Deferred within this track: local-frame grids, ground dot-grid, gradient
-  pickers, color-by-signal (pairs with P2 dataflow), MPM/fluids/fracture
-  (split a `gradiance-sim` crate when that work starts).
+- **V1.5 — Visual-feedback pass** *(landed)*: hard shadows (single tight
+  cascade + configurable shadow-map size/reach), up to 4 key lights for
+  colored shadows, grid demoted to its own transparent gizmo stratum below
+  overlays, ground/back plane unified as one infinite-plane material
+  (orientation is the only visual difference), configurable perspective
+  projection (`ScenerySettings::perspective_deg`) for depth parallax, and
+  a `CameraScale` resource as the single screen↔world sizing authority.
+  Second pass (scene readability): planes render opaque with a horizon
+  fog + dithered inside-reveal (no transparent-sort flips, crisp plane
+  seams), a faint authoring-plane trace line on every tilted plane, an
+  orthographic depth slab sized past the plane quads (no frustum cuts),
+  fully matte bodies + quantized specular glint (view-stable banding),
+  free orbit (yaw wraps, pitch to the poles) with view-plane panning,
+  and back/ground plane visibility in the background context menu.
+- **V2 — View cube + top-down mode** *(landed)*: CAD orientation cube
+  (face/corner/edge snaps, animated glide), `CameraRig` roll, and a
+  top-down preset — gravity (0,0) plus a per-scene back-plane friction
+  force (`physics/forces.rs` sibling system, Coulomb μ·m·g with a
+  gyration-radius spin term), set from a right-click "Background" menu
+  section.
+- **V3 — Continuous-depth collision** *(landed, save v5)*: authored
+  `DepthBand {near, far}` replaces `LayerMask32`; contiguous collision
+  layers and the exact extrusion both derive from the band (visual depth ≡
+  collision layer by construction; non-integer depths allowed, quarter-layer
+  UI snapping avoids slivers; ground half-planes collide with all). v4
+  files migrate on load (masks → bands; custom filters dropped with a
+  warning). Right-dock Depth panel: selected bodies as draggable colored
+  bars (edges resize, middle moves, auto-growing bounds, one intent per
+  drag); the checkbox grids, layer buttons, and depth-shift-by-bit menu
+  are deleted. Deferred: a "no self-collisions within selection" escape
+  (was filter art; would return as an authored flag + collision hook if
+  needed).
+- **V4 — Script dock & workspace** *(landed)*: console became the right
+  dock (shared host with the Depth panel) with MATLAB REPL behavior —
+  Enter runs, Shift+Enter newline, ↑/↓ prefix-filtered history, each run's
+  value echoed and bound to `ans`. Spawn verbs return body handles; the
+  `label` verb gives bodies workspace names rendered as viewport tags and
+  in the context-menu pick list (StableId underneath).
+- **V5 — Spatial polish** *(landed)*: local-frame grids (right-click a
+  body → "Align grid to body" adopts its pose as the grid's user
+  coordinate system; "Reset grid to world" in the background menu) and a
+  ground dot-grid (procedural lattice dots in the plane's tangent frame,
+  1 m pitch, distance-faded — the infinite floor reads with scale). Both
+  reuse existing seams: grid alignment is a `GridSettings` config write,
+  the dots are a `plane.wgsl` term keyed off the (previously unused) fade
+  uniform, so the back plane stays plain.
+- Deferred within this track: gradient color pickers, color-by-signal
+  (pairs with P2 dataflow — a "modulator" driving Appearance is the right
+  seam; do not pre-plumb), MPM/fluids/fracture/particles (own branch/
+  spike; split a `gradiance-sim` crate when that work matures).
 
 ## M19 — Rendering & camera polish
 

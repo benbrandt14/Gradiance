@@ -66,7 +66,7 @@ pub fn click_through_select(
     snapped: Res<SnappedCursor>,
     active: Res<ActiveGesture>,
     tool_state: Res<State<ToolState>>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     world: ToolWorld,
     mut track: ResMut<ClickThrough>,
     mut evidence: CommitEvidence,
@@ -82,7 +82,7 @@ pub fn click_through_select(
     } else if buttons.pressed(MouseButton::Left)
         && let (Some(start), Some(p)) = (track.press, snapped.raw)
     {
-        let cam_scale = crate::interaction::camera::camera_scale(&projections);
+        let cam_scale = cam_scale.0;
         if start.distance(p) > CLICK_DEADZONE_PX * cam_scale {
             track.moved = true;
         }

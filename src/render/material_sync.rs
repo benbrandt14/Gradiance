@@ -37,7 +37,14 @@ fn body_material(
     ToonMaterial {
         base: StandardMaterial {
             base_color: color_of(fill),
-            perceptual_roughness: 0.92,
+            // Fully matte: with any PBR specular (roughness < 1 or
+            // nonzero reflectance) the banded luminance is view-dependent
+            // and every front face — all sharing one normal — jumps bands
+            // *simultaneously* as the camera tilts, snapping the whole
+            // scene's color. The stylized highlight is the shader's
+            // quantized glint instead.
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
             metallic: 0.0,
             // Double-sided: the extruded front cap follows lyon's fill
             // winding, which faces away from the camera and would be

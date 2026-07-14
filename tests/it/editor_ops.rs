@@ -98,33 +98,33 @@ fn property_edit_batches_multi_target_into_one_undo_step() {
 }
 
 #[test]
-fn layer_filter_edit_round_trips_and_undoes() {
-    // The layers UI's "hits" row commits filter changes through the same
-    // PropertyEditIntent seam as memberships (feedback 5.4).
+fn depth_band_edit_round_trips_and_undoes() {
+    // The depth panel commits band changes through the same
+    // PropertyEditIntent seam as every other property.
     let mut app = paused_app();
     let a = spawn_box(&mut app, Vec2::ZERO);
     let entity = entity_of(&app, a).unwrap();
-    let old_mask = *app.world().get::<LayerMask32>(entity).unwrap();
-    let new_mask = LayerMask32 {
-        memberships: old_mask.memberships,
-        filters: old_mask.filters & !0b10, // stop colliding with layer 1
+    let old_band = *app.world().get::<DepthBand>(entity).unwrap();
+    let new_band = DepthBand {
+        near: 10.0,
+        far: 32.5, // non-integer depth is first-class
     };
 
     app.world_mut().write_message(PropertyEditIntent {
         changes: vec![PropertyChange {
             id: a,
-            old: PropertyValue::Layers(old_mask),
-            new: PropertyValue::Layers(new_mask),
+            old: PropertyValue::Depth(old_band),
+            new: PropertyValue::Depth(new_band),
         }],
     });
     app.update();
-    assert_eq!(*app.world().get::<LayerMask32>(entity).unwrap(), new_mask);
+    assert_eq!(*app.world().get::<DepthBand>(entity).unwrap(), new_band);
 
     undo(&mut app);
     assert_eq!(
-        *app.world().get::<LayerMask32>(entity).unwrap(),
-        old_mask,
-        "undo restores the collision set"
+        *app.world().get::<DepthBand>(entity).unwrap(),
+        old_band,
+        "undo restores the depth band"
     );
 }
 

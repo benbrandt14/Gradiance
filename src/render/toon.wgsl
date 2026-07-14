@@ -11,11 +11,13 @@
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     forward_io::{VertexOutput, FragmentOutput},
+    mesh_view_bindings::lights,
 }
 
 struct ToonParams {
     // x = band count (0 disables banding), y = rim strength,
-    // z = white point (lit/albedo ratio mapped to the top band), w unused.
+    // z = white point (lit/albedo ratio mapped to the top band),
+    // w = quantized-specular strength.
     data: vec4<f32>,
 }
 
@@ -41,7 +43,24 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // Rim light: brighten grazing view angles (silhouette definition).
         let n_dot_v = saturate(dot(pbr_input.N, pbr_input.V));
         let rim = smoothstep(0.55, 1.0, 1.0 - n_dot_v) * toon.data.y;
-        out.color = vec4(base * (banded + rim), out.color.a);
+        // Quantized specular: a hard Blinn-Phong glint per key light, in
+        // the light's hue (GPU light colors are premultiplied by lux, so
+        // normalize to the peak channel). The diffuse path is fully matte
+        // (roughness 1, reflectance 0), so this is the *only*
+        // view-dependent shading term — deliberate and discrete instead
+        // of a smooth sheen that drags whole bands with the camera.
+        var glint = vec3(0.0);
+        if toon.data.w > 0.001 {
+            let n = min(lights.n_directional_lights, 4u);
+            for (var i = 0u; i < n; i++) {
+                let light = lights.directional_lights[i];
+                let h = normalize(pbr_input.V + light.direction_to_light);
+                let s = pow(saturate(dot(pbr_input.N, h)), 48.0);
+                let peak = max(light.color.r, max(light.color.g, light.color.b));
+                glint += (light.color.rgb / max(peak, 1e-4)) * smoothstep(0.45, 0.55, s);
+            }
+        }
+        out.color = vec4(base * (banded + rim) + glint * toon.data.w, out.color.a);
     }
 
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);

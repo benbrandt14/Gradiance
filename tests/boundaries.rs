@@ -107,7 +107,6 @@ fn engine_facing_dependencies_stay_exact_pinned() {
         "bevy",
         "avian2d",
         "bevy_egui",
-        "egui_code_editor",
         "leafwing-input-manager",
         "steel-core",
     ];

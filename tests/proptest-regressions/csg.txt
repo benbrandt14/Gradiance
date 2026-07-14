@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc c55e99a742cd541f860590de60e227b00d391057ee861428e691962d3a471714 # shrinks to bodies = [(Vec2(0.0, 0.0), 10.0, 10.0, 0.0)], cuts = [(Vec2(0.0, 0.0), Vec2(0.0, 0.0), 2.0)]
+cc 399ec8cc50a63308d15a53ce598cbf936ce1514f3bc6206ad540cd8037b7f4a7 # shrinks to bodies = [(Vec2(0.0, 0.0), 10.0, 10.0, 0.0)], cuts = [(Vec2(0.0, 0.0), Vec2(0.0, 0.0), 2.0)]

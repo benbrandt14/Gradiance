@@ -24,11 +24,11 @@ pub fn draw_joints(
     limit_drag: Res<JointLimitDrag>,
     index: Res<IdIndex>,
     transforms: Query<&Transform>,
-    projections: Query<&Projection, With<Camera3d>>,
+    cam_scale: Res<crate::interaction::camera::CameraScale>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     // Screen-constant glyph size: readable at any zoom.
-    let s = crate::interaction::camera::camera_scale(&projections);
+    let s = cam_scale.0;
     for (entity, def) in &joints {
         let Some(entity_a) = index.entity(def.body_a) else {
             continue;

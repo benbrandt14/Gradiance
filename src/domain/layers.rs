@@ -1,38 +1,18 @@
-//! Collision layers — which double as the 2.5D depth mapping.
+//! Legacy (v4) collision-layer mask — kept only so old save files can be
+//! migrated, plus the shared layer-hue palette.
+//!
+//! The authored depth/collision truth is now
+//! [`DepthBand`](crate::domain::depth::DepthBand); nothing in the live
+//! world carries a `LayerMask32` anymore.
 
-use bevy::prelude::Component;
 use serde::{Deserialize, Serialize};
 
-/// 32-bit collision layer membership + filter mask.
-///
-/// Layers do double duty in Gradiance: they are both the physics
-/// collision filter *and* the 2.5D depth mapping. Bit 0 is the
-/// **front-most** render layer, bit 31 the back-most; a body's extrusion
-/// spans exactly the layers it occupies (depth = `occupied bits ×
-/// LAYER_HEIGHT`).
-///
-/// Two bodies collide when each one's `filters` intersects the other's
-/// `memberships` — the standard two-way mask test:
-///
-/// ```
-/// use gradiance::domain::layers::LayerMask32;
-///
-/// // `collides` is the rule the physics seam applies.
-/// let collides = |a: &LayerMask32, b: &LayerMask32| {
-///     a.filters & b.memberships != 0 && b.filters & a.memberships != 0
-/// };
-///
-/// let front = LayerMask32 { memberships: 0b0001, filters: u32::MAX };
-/// let back  = LayerMask32 { memberships: 0b0010, filters: u32::MAX };
-/// assert!(collides(&front, &back), "both filter everything");
-///
-/// // A body that only filters its own layer ignores the other.
-/// let picky = LayerMask32 { memberships: 0b0001, filters: 0b0001 };
-/// assert!(!collides(&picky, &back));
-/// ```
-#[derive(
-    Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect,
-)]
+/// The v4 save format's 32-bit layer membership + filter mask (bit 0 was
+/// the front-most render layer). Loaded only by the v4→v5 migration in
+/// `persist`, which maps [`occupied_range`](Self::occupied_range) to the
+/// equivalent [`DepthBand`](crate::domain::depth::DepthBand) and drops
+/// custom filters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct LayerMask32 {
     /// Layers this body occupies.
     pub memberships: u32,

@@ -21,7 +21,8 @@ pub type ToonMaterial = ExtendedMaterial<StandardMaterial, ToonExtension>;
 /// Banding parameters appended to the standard material's bind group.
 #[derive(Asset, AsBindGroup, TypePath, Debug, Clone, Default)]
 pub struct ToonExtension {
-    /// `x` = band count (0 disables banding), `y` = rim strength.
+    /// `x` = band count (0 disables banding), `y` = rim strength,
+    /// `z` = white point, `w` = quantized-specular strength.
     #[uniform(100)]
     pub params: Vec4,
 }
@@ -43,7 +44,7 @@ pub fn params_of(settings: &RenderSettings) -> Vec4 {
         bands,
         settings.rim_strength,
         settings.white_point.max(0.05),
-        0.0,
+        settings.specular.max(0.0),
     )
 }
 

@@ -3,8 +3,8 @@
 use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::StableId;
 use crate::domain::appearance::Appearance;
+use crate::domain::depth::DepthBand;
 use crate::domain::joint::JointDef;
-use crate::domain::layers::LayerMask32;
 use crate::domain::shape::ShapeDef;
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -37,8 +37,8 @@ pub enum PropertyValue {
     RotationLock(bool),
     /// Visual appearance.
     Appearance(Appearance),
-    /// Collision layers / depth.
-    Layers(LayerMask32),
+    /// Authored depth band (collision volume ≡ render depth).
+    Depth(DepthBand),
     /// Full joint definition (limits, motors, collide flags, anchors).
     Joint(JointDef),
 }
@@ -101,8 +101,8 @@ impl PropertyValue {
             Self::Appearance(v) => {
                 entity_mut.insert(*v);
             }
-            Self::Layers(v) => {
-                entity_mut.insert(*v);
+            Self::Depth(v) => {
+                entity_mut.insert(v.sanitized());
             }
             Self::Joint(v) => {
                 entity_mut.insert(v.clone());
