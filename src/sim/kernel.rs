@@ -127,6 +127,38 @@ impl ParticleState {
         })
     }
 
+    /// Translates a transient spatial subset by `delta` (the *kinematic* tier
+    /// of the two-tier selection model: moving a subset never touches the
+    /// group's shared attributes — those are edited at the group level). Only
+    /// positions change; out-of-range indices are ignored. Pure.
+    pub fn translate_indices(&mut self, indices: &[usize], delta: Vec2) {
+        for &i in indices {
+            if let Some(p) = self.pos.get_mut(i) {
+                *p += delta;
+            }
+        }
+    }
+
+    /// Removes a transient subset (delete-subset). Compacts every column with
+    /// the same keep-mask, so order among survivors is preserved and
+    /// duplicate/out-of-range indices are harmless. Pure.
+    pub fn remove_indices(&mut self, indices: &[usize]) {
+        if indices.is_empty() {
+            return;
+        }
+        let mut keep = vec![true; self.pos.len()];
+        for &i in indices {
+            if let Some(flag) = keep.get_mut(i) {
+                *flag = false;
+            }
+        }
+        retain_mask(&mut self.pos, &keep);
+        retain_mask(&mut self.vel, &keep);
+        retain_mask(&mut self.mass, &keep);
+        retain_mask(&mut self.age, &keep);
+        retain_mask(&mut self.group, &keep);
+    }
+
     /// Swap-removes every particle for which `drop(group, age)` is true.
     fn cull(&mut self, drop: impl Fn(u32, f32) -> bool) {
         let mut i = 0;
@@ -188,6 +220,17 @@ pub fn nbody_accelerations(state: &ParticleState, g: f32, softening: f32) -> Vec
         .accelerations(&mut cm)
         .map(|a: [f32; 2]| Vec2::new(a[0], a[1]))
         .collect()
+}
+
+/// Compacts `column` in place, keeping element `i` iff `keep[i]`. `keep`
+/// must be as long as `column`. Order among survivors is preserved.
+fn retain_mask<T>(column: &mut Vec<T>, keep: &[bool]) {
+    let mut k = 0;
+    column.retain(|_| {
+        let ok = keep[k];
+        k += 1;
+        ok
+    });
 }
 
 /// Deterministic per-cell hash → a `u32` of jitter bits (two 16-bit halves).
@@ -315,6 +358,39 @@ mod tests {
             s.group.contains(&1),
             "the persistent group-1 particle stays"
         );
+    }
+
+    #[test]
+    fn translate_and_remove_subset_keep_columns_in_lockstep() {
+        let mut s = ParticleState::default();
+        for i in 0..5 {
+            s.push(Vec2::new(i as f32, 0.0), Vec2::ONE, 1.0, i as u32);
+        }
+        // Move indices 1 and 3 by (+10, +10) — positions only, attrs untouched.
+        s.translate_indices(&[1, 3], Vec2::new(10.0, 10.0));
+        assert_eq!(s.pos[1], Vec2::new(11.0, 10.0));
+        assert_eq!(s.pos[3], Vec2::new(13.0, 10.0));
+        assert_eq!(
+            s.vel[1],
+            Vec2::ONE,
+            "velocity (a shared/physical attr) untouched"
+        );
+        assert_eq!(s.pos[0], Vec2::new(0.0, 0.0), "unselected particle stays");
+        // Out-of-range index is a no-op.
+        s.translate_indices(&[99], Vec2::new(1.0, 0.0));
+
+        // Remove indices 0 and 2 (and a duplicate/out-of-range, harmlessly).
+        s.remove_indices(&[2, 0, 2, 42]);
+        assert_eq!(s.len(), 3);
+        // Survivors keep their order: original indices 1, 3, 4 → groups 1,3,4.
+        assert_eq!(s.group, vec![1, 3, 4]);
+        // Every column compacted in lockstep.
+        assert_eq!(s.pos.len(), 3);
+        assert_eq!(s.vel.len(), 3);
+        assert_eq!(s.mass.len(), 3);
+        assert_eq!(s.age.len(), 3);
+        // The moved particle (was index 1) survived with its translation.
+        assert_eq!(s.pos[0], Vec2::new(11.0, 10.0));
     }
 
     #[test]
