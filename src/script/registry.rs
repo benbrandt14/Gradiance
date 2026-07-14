@@ -56,6 +56,10 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
+    /// `(defparam name value min max)` — declare a tunable slider param.
+    pub const DEFPARAM: &str = "defparam";
+    /// `(defsignal name expr)` — declare a computed signal (RPN expression).
+    pub const DEFSIGNAL: &str = "defsignal";
     /// `(label body name)` — name a body in the workspace (visible tag).
     pub const LABEL: &str = "label";
     /// `(ops)` — list of every registered operation name.
@@ -314,6 +318,20 @@ fn editor_specs() -> Vec<OpSpec> {
             name: name::LABEL,
             signature: "(label body name)",
             doc: "Name a body in the workspace (a viewport tag); body is a spawn's return value.",
+            category: OpCategory::EditorState,
+            args: 2,
+        },
+        OpSpec {
+            name: name::DEFPARAM,
+            signature: "(defparam name value min max)",
+            doc: "Declare a tunable signal parameter (an auto-slider) published on the bus.",
+            category: OpCategory::EditorState,
+            args: 4,
+        },
+        OpSpec {
+            name: name::DEFSIGNAL,
+            signature: "(defsignal name expr)",
+            doc: "Declare a computed signal from an RPN expression over other signals (e.g. \"t sin amp *\").",
             category: OpCategory::EditorState,
             args: 2,
         },

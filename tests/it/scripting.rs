@@ -393,3 +393,30 @@ fn ans_carries_the_last_value_between_runs() {
     assert!(entry.ok, "ans resolves in the next run: {}", entry.output);
     assert_eq!(entry.output, "42");
 }
+
+#[test]
+fn defparam_and_defsignal_build_the_dataflow() {
+    use gradiance::signal::{ComputedSignals, SignalBus, SignalParams};
+    let mut app = paused_app();
+    run(&mut app, "(defparam \"amp\" 2 0 10)");
+    run(&mut app, "(defsignal \"osc\" \"amp 3 *\")");
+
+    // The declarations landed on the config resources.
+    let params = app.world().resource::<SignalParams>();
+    assert_eq!(params.0.len(), 1);
+    assert_eq!(params.0[0].name, "amp");
+    assert!((params.0[0].value - 2.0).abs() < 1e-6);
+    assert_eq!(app.world().resource::<ComputedSignals>().0.len(), 1);
+
+    // And the evaluator computes them: amp=2 → osc = 2*3 = 6.
+    crate::harness::step(&mut app, 2);
+    let bus = app.world().resource::<SignalBus>();
+    assert_eq!(bus.get("amp"), Some(2.0));
+    assert_eq!(bus.get("osc"), Some(6.0));
+
+    // Re-running defparam upserts (updates in place, no duplicate).
+    run(&mut app, "(defparam \"amp\" 5 0 10)");
+    assert_eq!(app.world().resource::<SignalParams>().0.len(), 1);
+    crate::harness::step(&mut app, 2);
+    assert_eq!(app.world().resource::<SignalBus>().get("osc"), Some(15.0));
+}

@@ -37,7 +37,7 @@ bottom — no unclassified state.
 | `LightingSettings`, `ScenerySettings` | scene file | no | yes | applied by `render::scenery` (key light, ambient, SSAO, back plane) and `render::ground` (ground visibility) |
 | `DebugSettings` | **no** | no | yes | workstation overlays, not scene state |
 | `ToolDefaults` | **no** | no | yes | tool-creation defaults (slider travel limits); consulted at gesture commit time |
-| `SignalBindings` | scene file | no | yes | the signal-dataflow graph (`docs/signal-dataflow.md`); evaluated per frame by `signal::evaluate_signals` |
+| `SignalBindings`, `SignalParams`, `ComputedSignals` | scene file | no | yes | the signal-dataflow graph (`docs/signal-dataflow.md`): source→sink bindings, `defparam` knobs, `defsignal` modulators; evaluated per frame by `signal::evaluate_computed`/`evaluate_signals` |
 
 ### EditorState (non-authored editor tables; not persisted, not undoable)
 
@@ -74,6 +74,7 @@ bottom — no unclassified state.
 | `FieldMass` | `fields::sync_field_mass` (shape area × density — the field-coupling mass, `docs/field-architecture.md`) |
 | `TraceTrail` | `render::tracer::sample_traces` (physics-clock position window behind the authored `Tracer`; removed with its marker) |
 | `SignalBus`, `ScriptSignals` | `signal::evaluate_signals` + script `signal-set` (named values + rolling histories; bus hygiene drops unbound names) |
+| `CompiledSignals` | `signal::recompile_signals` (compiled kernels behind `ComputedSignals`, rebuilt on change — keeps the kernel *compile* off the frame loop) |
 | `SignalColorOverride` | `signal::evaluate_signals` (derived tint preferred by `material_sync`/`tracer` over authored `Appearance`; removed with its binding) |
 | `IdIndex` | `StableId` component hooks |
 | `HistoryInfo` | dispatcher (read-only mirror of stack depths) |

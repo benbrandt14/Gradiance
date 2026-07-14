@@ -220,3 +220,129 @@ fn bindings_persist_with_the_scene_and_old_files_parse() {
     let parsed = from_ron(&cut).expect("pre-signal file parses");
     assert!(parsed.environment.signals.0.is_empty());
 }
+
+#[test]
+fn a_param_publishes_and_a_computed_signal_modulates_it() {
+    use gradiance::signal::{
+        ComputedSignal, ComputedSignals, SignalExpr, SignalParam, SignalParams,
+    };
+    let mut app = paused_app();
+    // A param "amp" = 3, and a computed "scaled" = amp * 2.
+    app.world_mut()
+        .resource_mut::<SignalParams>()
+        .0
+        .push(SignalParam {
+            name: "amp".into(),
+            value: 3.0,
+            min: 0.0,
+            max: 10.0,
+        });
+    app.world_mut()
+        .resource_mut::<ComputedSignals>()
+        .0
+        .push(ComputedSignal {
+            name: "scaled".into(),
+            expr: SignalExpr::parse_rpn("amp 2 *").unwrap(),
+        });
+    step(&mut app, 2);
+
+    assert_eq!(bus_value(&app, "amp"), Some(3.0), "param published");
+    assert_eq!(bus_value(&app, "scaled"), Some(6.0), "computed = amp * 2");
+
+    // Turning the knob re-modulates next frame.
+    app.world_mut().resource_mut::<SignalParams>().0[0].value = 5.0;
+    step(&mut app, 2);
+    assert_eq!(bus_value(&app, "scaled"), Some(10.0), "tracks the param");
+}
+
+#[test]
+fn a_computed_signal_drives_a_body_color_through_a_named_binding() {
+    use gradiance::signal::{
+        ComputedSignal, ComputedSignals, SignalBinding, SignalExpr, SignalMap, SignalParam,
+        SignalParams, SignalSink, SignalSource,
+    };
+    let mut app = paused_app();
+    let record = box_record(Vec2::ZERO, 20.0, 20.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+
+    app.world_mut()
+        .resource_mut::<SignalParams>()
+        .0
+        .push(SignalParam {
+            name: "heat".into(),
+            value: 0.8,
+            min: 0.0,
+            max: 1.0,
+        });
+    // computed "warm" = heat (identity modulator, exercising the kernel).
+    app.world_mut()
+        .resource_mut::<ComputedSignals>()
+        .0
+        .push(ComputedSignal {
+            name: "warm".into(),
+            expr: SignalExpr::parse_rpn("heat").unwrap(),
+        });
+    bind(
+        &mut app,
+        SignalBinding {
+            name: "warm-fill".into(),
+            source: SignalSource::Named("warm".into()),
+            map: SignalMap {
+                in_min: 0.0,
+                in_max: 1.0,
+            },
+            gradient: default(),
+            sink: SignalSink::Fill(id),
+        },
+    );
+    step(&mut app, 2);
+
+    let entity = entity_of(&app, id).unwrap();
+    assert!(
+        app.world()
+            .get::<SignalColorOverride>(entity)
+            .is_some_and(|o| o.fill.is_some()),
+        "the computed signal drives the fill through the named binding"
+    );
+    assert_eq!(bus_value(&app, "warm"), Some(0.8));
+}
+
+#[test]
+fn params_and_computed_persist_and_old_files_parse() {
+    use gradiance::persist::{from_ron, to_ron};
+    use gradiance::signal::{ComputedSignal, SignalExpr, SignalParam};
+    let mut record = gradiance::command::snapshot::SceneRecord {
+        version: gradiance::persist::FORMAT_VERSION,
+        app_version: String::new(),
+        bodies: vec![],
+        joints: vec![],
+        environment: gradiance::command::snapshot::EnvironmentRecord::default(),
+    };
+    record.environment.params.0.push(SignalParam::unit("amp"));
+    record.environment.computed.0.push(ComputedSignal {
+        name: "osc".into(),
+        expr: SignalExpr::parse_rpn("t sin amp *").unwrap(),
+    });
+
+    let text = to_ron(&record).unwrap();
+    let parsed = from_ron(&text).expect("round-trips");
+    assert_eq!(parsed.environment.params, record.environment.params);
+    assert_eq!(parsed.environment.computed, record.environment.computed);
+
+    // A pre-P2 file (no params/computed fields) still parses. Serialize an
+    // empty-environment record and strip the two default fields out.
+    let plain = gradiance::command::snapshot::SceneRecord {
+        environment: gradiance::command::snapshot::EnvironmentRecord::default(),
+        ..record
+    };
+    let text = to_ron(&plain).unwrap();
+    let cut = text
+        .replace("params: ([]),", "")
+        .replace("computed: ([]),", "");
+    assert_ne!(text, cut, "fixture removed the fields");
+    let parsed = from_ron(&cut).expect("pre-P2 file parses");
+    assert!(parsed.environment.params.0.is_empty());
+    assert!(parsed.environment.computed.0.is_empty());
+}

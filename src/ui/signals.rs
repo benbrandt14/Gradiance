@@ -1,34 +1,178 @@
-//! The Signals window: plain, functional editing of the signal-dataflow
-//! bindings (`docs/signal-dataflow.md`).
+//! The Signals **dock section**: plain, functional editing of the
+//! signal-dataflow graph (`docs/signal-dataflow.md`) — params (auto-slider
+//! knobs), computed modulators, and source→sink bindings.
 //!
-//! Deliberately visuals-light — a row per binding with combos and drags —
-//! while the dataflow substrate matures; the node-editor canvas replaces
-//! this surface later (drag a property out of a panel → a source node).
-//! [`SignalBindings`] is a config-seam resource (invariant-#4 class), so
-//! the UI edits it directly: no intents, no undo, exactly like the grid
-//! and snap settings.
+//! Deliberately visuals-light — sliders and rows — while the dataflow
+//! substrate matures; the node-editor canvas replaces this surface later
+//! (drag a property out of a panel → a source node). The signal resources
+//! (`SignalBindings`, `SignalParams`, `ComputedSignals`) are config-seam
+//! (invariant-#4 class), so the UI edits them directly: no intents, no
+//! undo, exactly like the grid and snap settings. Lives in the right dock
+//! (`ui::dock`), the direction toward dockable inspectors.
 
 use crate::core::ids::StableId;
-use crate::interaction::selection::Selection;
-use crate::signal::{GradientSpec, SignalBinding, SignalBindings, SignalSink, SignalSource};
-use bevy::prelude::*;
-use bevy_egui::{EguiContexts, egui};
+use crate::signal::{
+    ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
+    SignalParams, SignalSink, SignalSource,
+};
+use bevy::ecs::system::SystemParam;
+use bevy_egui::egui;
 
-/// Signals window visibility.
-#[derive(Resource, Default)]
+/// Signals dock section visibility.
+#[derive(bevy::prelude::Resource, Default)]
 pub struct SignalsPanel {
     open: bool,
 }
 
 impl SignalsPanel {
-    /// Whether the window is shown (read by the transport toggle).
+    /// Whether the section is shown (read by the transport toggle + dock).
     pub fn is_open(&self) -> bool {
         self.open
     }
 
-    /// Flips the window's visibility.
+    /// Flips the section's visibility.
     pub fn toggle(&mut self) {
         self.open = !self.open;
+    }
+}
+
+/// The signal-graph config resources the dock section edits, bundled so the
+/// dock host stays under Bevy's system-parameter limit.
+#[derive(SystemParam)]
+pub struct SignalsDock<'w> {
+    /// Source→sink bindings.
+    pub bindings: bevy::prelude::ResMut<'w, SignalBindings>,
+    /// Tunable slider params.
+    pub params: bevy::prelude::ResMut<'w, SignalParams>,
+    /// Computed modulator signals.
+    pub computed: bevy::prelude::ResMut<'w, ComputedSignals>,
+    /// The live bus (read-only: current values for readouts).
+    pub bus: bevy::prelude::Res<'w, SignalBus>,
+    /// Compile errors to surface (read-only).
+    pub compiled: bevy::prelude::Res<'w, crate::signal::CompiledSignals>,
+}
+
+/// Renders the whole Signals section into a dock `ui`. `selected` is the
+/// current body selection (for the binding add-buttons).
+pub fn signals_section(ui: &mut egui::Ui, dock: &mut SignalsDock, selected: &[StableId]) {
+    egui::ScrollArea::vertical()
+        .id_salt("signals-section")
+        .show(ui, |ui| {
+            params_block(ui, &mut dock.params.0);
+            ui.separator();
+            computed_block(ui, &mut dock.computed.0, &dock.compiled, &dock.bus);
+            ui.separator();
+            bindings_block(ui, &mut dock.bindings, selected);
+        });
+}
+
+/// The param sliders (`defparam` knobs) — the P2 driver inputs.
+fn params_block(ui: &mut egui::Ui, params: &mut Vec<crate::signal::SignalParam>) {
+    ui.label(egui::RichText::new("Parameters").strong());
+    let mut remove = None;
+    for (i, param) in params.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::Slider::new(&mut param.value, param.min..=param.max)
+                    .text(&param.name)
+                    .clamping(egui::SliderClamping::Never),
+            );
+            if ui.small_button("✖").clicked() {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(i) = remove {
+        params.remove(i);
+    }
+    if ui.button("+ param").clicked() {
+        let name = fresh(params.iter().map(|p| p.name.as_str()), "param");
+        params.push(crate::signal::SignalParam::unit(name));
+    }
+}
+
+/// The computed-signal list (`defsignal` modulators): name, RPN expression,
+/// current bus value, and any compile error.
+fn computed_block(
+    ui: &mut egui::Ui,
+    computed: &mut Vec<crate::signal::ComputedSignal>,
+    compiled: &crate::signal::CompiledSignals,
+    bus: &SignalBus,
+) {
+    ui.label(egui::RichText::new("Computed").strong());
+    let mut remove = None;
+    for (i, signal) in computed.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.monospace(&signal.name);
+            if let Some(v) = bus.get(&signal.name) {
+                ui.weak(format!("= {v:.3}"));
+            }
+            if ui.small_button("✖").clicked() {
+                remove = Some(i);
+            }
+        });
+        // The expression, rendered back to RPN; editing is via the console
+        // `(defsignal …)` for now — the node canvas replaces this later.
+        ui.monospace(egui::RichText::new(expr_rpn(&signal.expr)).weak());
+        if let Some((_, err)) = compiled.errors.iter().find(|(n, _)| *n == signal.name) {
+            ui.colored_label(egui::Color32::from_rgb(220, 120, 120), err);
+        }
+    }
+    if let Some(i) = remove {
+        computed.remove(i);
+    }
+    if computed.is_empty() {
+        ui.weak("Add via console: (defsignal \"osc\" \"t sin amp *\")");
+    }
+}
+
+/// The source→sink bindings (unchanged model).
+fn bindings_block(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[StableId]) {
+    ui.label(egui::RichText::new("Bindings").strong());
+    add_buttons(ui, bindings, selected);
+    if bindings.0.is_empty() {
+        ui.weak("Select a body and add a source above; its value drives the sink.");
+    }
+    let mut remove = None;
+    for (i, binding) in bindings.0.iter_mut().enumerate() {
+        ui.separator();
+        binding_row(ui, i, binding, &mut remove);
+    }
+    if let Some(i) = remove {
+        bindings.0.remove(i);
+    }
+}
+
+/// Renders a [`SignalExpr`](crate::signal::SignalExpr) back to its RPN form
+/// (a stable, compact display; the authoring surface is the console).
+fn expr_rpn(expr: &crate::signal::SignalExpr) -> String {
+    use crate::signal::SignalExpr as E;
+    match expr {
+        E::Const(c) => format!("{c}"),
+        E::Input(name) => name.clone(),
+        E::Neg(a) => format!("{} neg", expr_rpn(a)),
+        E::Sin(a) => format!("{} sin", expr_rpn(a)),
+        E::Cos(a) => format!("{} cos", expr_rpn(a)),
+        E::Abs(a) => format!("{} abs", expr_rpn(a)),
+        E::Add(a, b) => format!("{} {} +", expr_rpn(a), expr_rpn(b)),
+        E::Sub(a, b) => format!("{} {} -", expr_rpn(a), expr_rpn(b)),
+        E::Mul(a, b) => format!("{} {} *", expr_rpn(a), expr_rpn(b)),
+        E::Div(a, b) => format!("{} {} /", expr_rpn(a), expr_rpn(b)),
+        E::Min(a, b) => format!("{} {} min", expr_rpn(a), expr_rpn(b)),
+        E::Max(a, b) => format!("{} {} max", expr_rpn(a), expr_rpn(b)),
+    }
+}
+
+/// A fresh unique name over an existing set.
+fn fresh<'a>(existing: impl Iterator<Item = &'a str>, base: &str) -> String {
+    let taken: Vec<&str> = existing.collect();
+    let mut n = 1;
+    loop {
+        let name = format!("{base}-{n}");
+        if !taken.iter().any(|t| *t == name) {
+            return name;
+        }
+        n += 1;
     }
 }
 
@@ -45,58 +189,6 @@ fn source_label(source: &SignalSource) -> &'static str {
     }
 }
 
-/// A unique bus name for a new binding.
-fn fresh_name(bindings: &SignalBindings, base: &str) -> String {
-    let mut n = 1;
-    loop {
-        let name = format!("{base}-{n}");
-        if !bindings.0.iter().any(|b| b.name == name) {
-            return name;
-        }
-        n += 1;
-    }
-}
-
-/// Renders the Signals window: add-from-selection buttons + one editable
-/// row per binding.
-pub fn signals_panel(
-    mut contexts: EguiContexts,
-    mut panel: ResMut<SignalsPanel>,
-    mut bindings: ResMut<SignalBindings>,
-    selection: Res<Selection>,
-    ids: Query<&StableId>,
-) -> Result {
-    let ctx = contexts.ctx_mut()?;
-    if !panel.open {
-        return Ok(());
-    }
-    let selected: Vec<StableId> = selection
-        .iter()
-        .filter_map(|e| ids.get(e).ok().copied())
-        .collect();
-
-    let mut open = true;
-    egui::Window::new("Signals")
-        .open(&mut open)
-        .default_width(340.0)
-        .show(ctx, |ui| {
-            add_buttons(ui, &mut bindings, &selected);
-            if bindings.0.is_empty() {
-                ui.label("Select a body and add a source above; its value drives the sink.");
-            }
-            let mut remove = None;
-            for (i, binding) in bindings.0.iter_mut().enumerate() {
-                ui.separator();
-                binding_row(ui, i, binding, &mut remove);
-            }
-            if let Some(i) = remove {
-                bindings.0.remove(i);
-            }
-        });
-    panel.open = open;
-    Ok(())
-}
-
 /// The "+ source" buttons — each wires the current selection into a new
 /// binding (source and sink default to the first selected body).
 fn add_buttons(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[StableId]) {
@@ -109,12 +201,12 @@ fn add_buttons(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[Sta
                 .clicked()
                 && let (Some(source), Some(target)) = (source, first)
             {
-                let name = fresh_name(bindings, label);
+                let name = fresh(bindings.0.iter().map(|b| b.name.as_str()), label);
                 bindings.0.push(SignalBinding {
                     name,
                     source,
-                    map: default(),
-                    gradient: default(),
+                    map: SignalMap::default(),
+                    gradient: GradientSpec::default(),
                     sink: SignalSink::Fill(target),
                 });
             }

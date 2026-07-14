@@ -157,6 +157,12 @@ pub struct EnvironmentRecord {
     /// Signal-dataflow bindings (defaulted when absent — pre-signal files).
     #[serde(default)]
     pub signals: crate::signal::SignalBindings,
+    /// Signal parameters (`defparam` knobs; defaulted for pre-P2 files).
+    #[serde(default)]
+    pub params: crate::signal::SignalParams,
+    /// Computed signals (`defsignal` modulators; defaulted for pre-P2 files).
+    #[serde(default)]
+    pub computed: crate::signal::ComputedSignals,
 }
 
 /// A complete scene: the save file, and the unit of whole-world undo.
@@ -234,6 +240,14 @@ impl SceneRecord {
                     .get_resource::<crate::signal::SignalBindings>()
                     .cloned()
                     .unwrap_or_default(),
+                params: world
+                    .get_resource::<crate::signal::SignalParams>()
+                    .cloned()
+                    .unwrap_or_default(),
+                computed: world
+                    .get_resource::<crate::signal::ComputedSignals>()
+                    .cloned()
+                    .unwrap_or_default(),
             },
         }
     }
@@ -265,5 +279,7 @@ impl SceneRecord {
         world.insert_resource(self.environment.lighting.clone());
         world.insert_resource(self.environment.scenery.clone());
         world.insert_resource(self.environment.signals.clone());
+        world.insert_resource(self.environment.params.clone());
+        world.insert_resource(self.environment.computed.clone());
     }
 }

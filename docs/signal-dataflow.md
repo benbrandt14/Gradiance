@@ -1,18 +1,42 @@
 # Signal dataflow: scaffolding for the node editor
 
-Status: **living document** (2026-07-13). This is the substrate that grows
-into the Simulink-style time-series node editor; today it ships as a flat
-list of bindings with a plain, functional UI (visuals deliberately
-deferred while the dataflow itself matures).
+Status: **living document** (2026-07-14). This is the substrate that grows
+into the Simulink-style time-series node editor; today it ships as params,
+computed signals, and a flat list of bindings with a plain, functional
+dock UI (visuals deliberately deferred while the dataflow itself matures).
 
 ## The model
 
-A **binding** is the degenerate two-node graph:
+The full **sensor → modulator → actuator** chain, all wired over one named
+bus:
+
+```
+params (defparam)  ──┐                                  ┌─▶ color sink (fill / tracer tint)
+sources (reads)  ────┼─▶ SignalBus (name → value) ──────┼─▶ plot
+computed (defsignal) ┘        ▲                          └─▶ (future actuators: sim knobs, gizmos)
+   kernel-lowered ────────────┘  reads other bus signals
+```
+
+- A **binding** is the degenerate two-node graph — one source through a
+  map + gradient into one sink:
 
 ```
 source (read) ──▶ map [in_min, in_max] → t ──▶ gradient(t) ──▶ sink (derived write)
                           └────────────────── value ─────────▶ SignalBus (name → value + history)
 ```
+
+- **Params** (`defparam name value min max`) are tunable knobs — an
+  auto-slider in the Signals dock. Each publishes its value on the bus
+  every frame; it is the simplest modulator *input*.
+- **Computed signals** (`defsignal name expr`) are the **modulator** tier:
+  a named value that is a numeric expression over other bus signals (and
+  `t`, elapsed seconds). Authored as a small serializable `SignalExpr`
+  tree (RPN in the console — `"t sin amp *"` is `amp · sin(t)`), it is
+  **lowered once to the pure Tier-B `Kernel`** (`script::kernel`) and only
+  `Kernel::eval` runs per frame — the two-tier perf rule (`CLAUDE.md`): the
+  scripting VM/compile never touches the hot path. Cyclic/forward refs read
+  last frame's value (the usual dataflow rule); params publish first, then
+  computed signals in order, then bindings read the bus.
 
 - **Sources** are *reads* of scene state, referencing bodies by `StableId`:
   speed, spin, height, distance between two bodies, net contact force,
@@ -41,8 +65,9 @@ source (read) ──▶ map [in_min, in_max] → t ──▶ gradient(t) ──�
 
 | State | Class | Rules |
 |---|---|---|
-| `SignalBindings` | **config seam** (invariant-#4, like `GridSettings`) | UI edits directly; persisted in the scene's `EnvironmentRecord` (serde-defaulted — old files load); not undoable; bodies by `StableId` only |
-| `SignalBus`, `ScriptSignals` | derived | rebuilt continuously; never persisted; bus hygiene drops entries whose binding (or script publisher) is gone |
+| `SignalBindings`, `SignalParams`, `ComputedSignals` | **config seam** (invariant-#4, like `GridSettings`) | UI edits directly; persisted in the scene's `EnvironmentRecord` (serde-defaulted — old files load); not undoable; bodies by `StableId` only |
+| `SignalBus`, `ScriptSignals` | derived | rebuilt continuously; never persisted; bus hygiene drops entries whose binding/param/computed/script producer is gone |
+| `CompiledSignals` | derived | the compiled kernels behind `ComputedSignals`, rebuilt by `recompile_signals` on change — keeps the *compile* step off the frame loop |
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)
