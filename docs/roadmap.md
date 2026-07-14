@@ -311,7 +311,17 @@ shadow items from M19. Design decisions in the slice PRs.
   buffer, a pure Tier-B `sim::kernel` (integrator + N-body force via the
   `particular` crate), and a fixed-clock `sim::bridge` that samples the one
   field cut-point. Feature-gated so the default build stays lean; promotes
-  to a `gradiance-sim` crate at the stage-2→3 boundary.
+  to a `gradiance-sim` crate at the stage-2→3 boundary. Full staged plan in
+  the sim-roadmap plan file: **S2** scalable rendering → **S3** particle
+  groups + emitter authoring/persistence → **S4** extensible field/entity
+  interactions (+ set-in-orbit for particles) → **S5** subset select/move +
+  aggregate plotters → **S6** grid/APIC fluid → **S7** MLS-MPM multi-material
+  + crate split → **S8** scale (rayon/GPU).
+  - **S2 — scalable particle rendering** *(landed)*: the population draws as
+    one rebuilt `ParticleCloud` mesh (camera-facing quads, group+speed tint,
+    opaque depth-write) instead of per-particle gizmos; a `group` column
+    lands on `ParticleState` as the selection/tint handle. True GPU
+    instancing is deferred to S8.
 - Deferred within this track: gradient color pickers, color-by-signal
   (pairs with P2 dataflow — a "modulator" driving Appearance is the right
   seam; do not pre-plumb); the continuum solver stages (APIC fluid →

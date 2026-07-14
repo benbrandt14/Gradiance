@@ -29,6 +29,10 @@ pub struct ParticleState {
     pub mass: Vec<f32>,
     /// Seconds lived — drives culling.
     pub age: Vec<f32>,
+    /// Owning group index (into the live group table). Particles inherit
+    /// their emitter's group; it locks shared attributes (material, tint,
+    /// field response) and is the handle selection/plots aggregate over.
+    pub group: Vec<u32>,
 }
 
 impl ParticleState {
@@ -42,12 +46,13 @@ impl ParticleState {
         self.pos.is_empty()
     }
 
-    /// Appends one particle (no-op columns stay in lockstep).
-    pub fn push(&mut self, pos: Vec2, vel: Vec2, mass: f32) {
+    /// Appends one particle in `group` (every column stays in lockstep).
+    pub fn push(&mut self, pos: Vec2, vel: Vec2, mass: f32, group: u32) {
         self.pos.push(pos);
         self.vel.push(vel);
         self.mass.push(mass.max(0.0));
         self.age.push(0.0);
+        self.group.push(group);
     }
 
     /// Removes every particle older than `max_age` (swap-remove, so order
@@ -60,6 +65,7 @@ impl ParticleState {
                 self.vel.swap_remove(i);
                 self.mass.swap_remove(i);
                 self.age.swap_remove(i);
+                self.group.swap_remove(i);
             } else {
                 i += 1;
             }
@@ -121,7 +127,7 @@ mod tests {
     #[test]
     fn integrate_is_symplectic_euler_with_drag() {
         let mut s = ParticleState::default();
-        s.push(Vec2::ZERO, Vec2::new(10.0, 0.0), 1.0);
+        s.push(Vec2::ZERO, Vec2::new(10.0, 0.0), 1.0, 0);
         // No accel, no drag: position advances by v·dt, velocity unchanged.
         s.integrate(0.5, &[Vec2::ZERO], 0.0);
         assert_eq!(s.vel[0], Vec2::new(10.0, 0.0));
@@ -136,7 +142,7 @@ mod tests {
     #[test]
     fn drag_bleeds_velocity() {
         let mut s = ParticleState::default();
-        s.push(Vec2::ZERO, Vec2::new(100.0, 0.0), 1.0);
+        s.push(Vec2::ZERO, Vec2::new(100.0, 0.0), 1.0, 0);
         s.integrate(0.1, &[Vec2::ZERO], 5.0); // drag factor 1 - 0.5 = 0.5
         assert!((s.vel[0].x - 50.0).abs() < 1e-3);
     }
@@ -145,7 +151,7 @@ mod tests {
     fn culling_drops_only_the_aged() {
         let mut s = ParticleState::default();
         for _ in 0..5 {
-            s.push(Vec2::ZERO, Vec2::ZERO, 1.0);
+            s.push(Vec2::ZERO, Vec2::ZERO, 1.0, 0);
         }
         s.age = vec![0.1, 9.0, 0.2, 8.0, 0.3];
         s.cull_older_than(1.0);
@@ -155,13 +161,14 @@ mod tests {
         assert_eq!(s.pos.len(), s.vel.len());
         assert_eq!(s.vel.len(), s.mass.len());
         assert_eq!(s.mass.len(), s.age.len());
+        assert_eq!(s.age.len(), s.group.len());
     }
 
     #[test]
     fn nbody_pulls_two_masses_together() {
         let mut s = ParticleState::default();
-        s.push(Vec2::new(-10.0, 0.0), Vec2::ZERO, 1.0);
-        s.push(Vec2::new(10.0, 0.0), Vec2::ZERO, 1.0);
+        s.push(Vec2::new(-10.0, 0.0), Vec2::ZERO, 1.0, 0);
+        s.push(Vec2::new(10.0, 0.0), Vec2::ZERO, 1.0, 0);
         let acc = nbody_accelerations(&s, 1000.0, 1.0);
         assert_eq!(acc.len(), 2);
         // Left particle accelerates right (toward the other), and vice versa.
@@ -173,8 +180,8 @@ mod tests {
     #[test]
     fn nbody_is_free_when_disabled() {
         let mut s = ParticleState::default();
-        s.push(Vec2::ZERO, Vec2::ZERO, 1.0);
-        s.push(Vec2::ONE, Vec2::ZERO, 1.0);
+        s.push(Vec2::ZERO, Vec2::ZERO, 1.0, 0);
+        s.push(Vec2::ONE, Vec2::ZERO, 1.0, 0);
         assert_eq!(nbody_accelerations(&s, 0.0, 1.0), vec![Vec2::ZERO; 2]);
     }
 }

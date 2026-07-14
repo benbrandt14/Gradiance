@@ -9,12 +9,15 @@
 //! - [`bridge`] is the **one** ECS seam: authored [`Emitter`] components
 //!   drive the derived [`Particles`] buffer on avian's fixed clock,
 //!   sampling forces through the field cut-point.
+//! - [`render`] draws the whole population as one rebuilt mesh (one draw
+//!   call, depth-correct) — no per-particle entities or gizmos.
 //!
 //! Everything is feature-gated (`--features sim`) so the default build,
 //! CI, and test loop stay lean until the crate split.
 
 pub mod bridge;
 pub mod kernel;
+pub mod render;
 
 use crate::core::states::GameState;
 use bevy::prelude::*;
@@ -41,8 +44,8 @@ impl Plugin for SimPlugin {
         );
         // Rendering needs the render plugin (skip headless).
         if app.is_plugin_added::<bevy::render::RenderPlugin>() {
-            app.add_systems(Startup, spawn_demo_emitter);
-            app.add_systems(Update, bridge::draw_particles);
+            app.add_systems(Startup, (spawn_demo_emitter, render::setup_particle_cloud));
+            app.add_systems(Update, render::sync_particle_mesh);
         }
     }
 }

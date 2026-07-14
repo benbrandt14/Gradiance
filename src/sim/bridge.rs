@@ -46,6 +46,10 @@ pub struct Emitter {
     /// Self-gravity strength between particles (0 = a plain fountain;
     /// >0 makes the cloud clump — the `particular` N-body driver).
     pub self_gravity: f32,
+    /// Group index its particles inherit (the locked-shared-attributes
+    /// handle; one group per emitter for now — an authored `ParticleGroup`
+    /// lands in S3). Drives render tint and future selection/aggregates.
+    pub group: u32,
 }
 
 impl Default for Emitter {
@@ -57,6 +61,7 @@ impl Default for Emitter {
             mass: 1.0,
             max_age: 3.0,
             self_gravity: 0.0,
+            group: 0,
         }
     }
 }
@@ -133,7 +138,7 @@ pub fn emit_particles(
             }
             let angle = base + next(&mut rng) * emitter.spread;
             let vel = Vec2::from_angle(angle) * emitter.speed;
-            particles.0.push(origin, vel, emitter.mass);
+            particles.0.push(origin, vel, emitter.mass, emitter.group);
         }
     }
 }
@@ -183,22 +188,4 @@ pub fn step_particles(
         .fold(0.0_f32, f32::max)
         .max(0.5);
     state.cull_older_than(max_age);
-}
-
-/// Draws the population as depth-tested points, tinted by speed (slow =
-/// cool, fast = warm) so the flow reads. Render-only; reads the buffer.
-pub fn draw_particles(particles: Res<Particles>, mut gizmos: Gizmos) {
-    let state = &particles.0;
-    for i in 0..state.len() {
-        let speed = state.vel[i].length();
-        let t = (speed / 1200.0).clamp(0.0, 1.0);
-        let color = Color::srgb(0.3 + 0.7 * t, 0.5, 1.0 - 0.6 * t);
-        // Points sit just in front of the interaction plane so they read
-        // over the grid but still occlude behind nearer bodies.
-        gizmos.circle(
-            Isometry3d::from_translation(state.pos[i].extend(1.0)),
-            1.5,
-            color,
-        );
-    }
 }
