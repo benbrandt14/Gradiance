@@ -29,11 +29,17 @@ struct Signal {
 }
 
 /// Rolling live-signal history for the plot panel. Records the currently
-/// selected body *or* joint; changing what (or which signals) is selected
-/// resets it, so a plot never mixes two sources' histories.
+/// selected body *or* joint — or, when nothing is selected and the sim is
+/// running, a particle group's aggregates; changing what (or which signals)
+/// is tracked resets it, so a plot never mixes two sources' histories.
 #[derive(Resource, Default)]
 pub struct PlotHistory {
     tracked: Option<Entity>,
+    /// The particle group being plotted (when no body/joint is selected).
+    /// Mutually exclusive with `tracked`. Only meaningful with the sim
+    /// feature (particles don't exist otherwise).
+    #[cfg(feature = "sim")]
+    tracked_group: Option<u32>,
     signals: Vec<Signal>,
 }
 
@@ -53,14 +59,41 @@ impl PlotHistory {
                 .all(|(signal, label)| signal.label == *label);
         if !unchanged {
             self.tracked = Some(entity);
-            self.signals = labels
-                .iter()
-                .map(|&label| Signal {
-                    label,
-                    samples: VecDeque::new(),
-                })
-                .collect();
+            #[cfg(feature = "sim")]
+            {
+                self.tracked_group = None;
+            }
+            self.rebuild_signals(labels);
         }
+    }
+
+    /// Points the history at particle `group` (when no body/joint is
+    /// selected), rebuilding only when the group or signal set changed.
+    #[cfg(feature = "sim")]
+    fn retarget_group(&mut self, group: u32, labels: &[&'static str]) {
+        let unchanged = self.tracked_group == Some(group)
+            && self.signals.len() == labels.len()
+            && self
+                .signals
+                .iter()
+                .zip(labels)
+                .all(|(signal, label)| signal.label == *label);
+        if !unchanged {
+            self.tracked = None;
+            self.tracked_group = Some(group);
+            self.rebuild_signals(labels);
+        }
+    }
+
+    /// (Re)creates the empty signal set for `labels`.
+    fn rebuild_signals(&mut self, labels: &[&'static str]) {
+        self.signals = labels
+            .iter()
+            .map(|&label| Signal {
+                label,
+                samples: VecDeque::new(),
+            })
+            .collect();
     }
 
     /// Appends one sample per signal (values in signal order).
@@ -76,6 +109,10 @@ impl PlotHistory {
     /// Forgets the tracked source and its signals (nothing plottable selected).
     fn clear(&mut self) {
         self.tracked = None;
+        #[cfg(feature = "sim")]
+        {
+            self.tracked_group = None;
+        }
         self.signals.clear();
     }
 }
@@ -118,6 +155,8 @@ pub fn sample_plot(
     index: Res<IdIndex>,
     physics: PhysicsQueries,
     mut history: ResMut<PlotHistory>,
+    #[cfg(feature = "sim")] particles: Option<Res<crate::sim::bridge::Particles>>,
+    #[cfg(feature = "sim")] groups: Option<Res<crate::sim::groups::ParticleGroups>>,
 ) {
     // A selected joint takes precedence (body/joint selection are exclusive):
     // plot its current length, and for a hinge its relative angle too.
@@ -140,14 +179,40 @@ pub fn sample_plot(
 
     // Otherwise, a single selected body: speed + height.
     let mut selected = selection.iter();
-    let (Some(entity), None) = (selected.next(), selected.next()) else {
-        history.clear();
+    if let (Some(entity), None) = (selected.next(), selected.next()) {
+        let height = transforms.get(entity).map_or(0.0, |t| t.translation.y);
+        let speed = physics.velocity_of(entity).map_or(0.0, |(v, _)| v.length());
+        history.retarget(entity, &["speed (px/s)", "height (px)"]);
+        history.push(&[speed, height]);
         return;
-    };
-    let height = transforms.get(entity).map_or(0.0, |t| t.translation.y);
-    let speed = physics.velocity_of(entity).map_or(0.0, |(v, _)| v.length());
-    history.retarget(entity, &["speed (px/s)", "height (px)"]);
-    history.push(&[speed, height]);
+    }
+
+    // Nothing (or a multi-selection) picked. When the sim is running, fall
+    // back to the most-populous particle group's aggregates — the "plotters
+    // show average position/velocity" ask. Same read-facade philosophy; a
+    // plotter is just another reader.
+    #[cfg(feature = "sim")]
+    if let (Some(particles), Some(groups)) = (particles, groups)
+        && let Some((group, agg)) = largest_group_aggregate(&particles.0, &groups)
+    {
+        history.retarget_group(group, &["count", "avg speed (px/s)", "centroid y (px)"]);
+        history.push(&[agg.count as f32, agg.mean_velocity.length(), agg.centroid.y]);
+        return;
+    }
+    history.clear();
+}
+
+/// The particle group with the most live members, and its aggregate — the
+/// group the plotter summarizes when nothing is selected. `None` if there
+/// are no particles.
+#[cfg(feature = "sim")]
+fn largest_group_aggregate(
+    state: &crate::sim::kernel::ParticleState,
+    groups: &crate::sim::groups::ParticleGroups,
+) -> Option<(u32, crate::sim::kernel::GroupAggregate)> {
+    (0..groups.0.len() as u32)
+        .filter_map(|g| state.aggregate(g).map(|a| (g, a)))
+        .max_by_key(|(_, a)| a.count)
 }
 
 /// A joint's live geometry: current anchor-to-anchor length and the relative
@@ -200,7 +265,8 @@ pub fn plot_panel(
         .show(ctx, |ui| {
             if history.signals.is_empty() {
                 ui.label(
-                    "Select one body (speed, height) or a joint (length, angle) and press Play.",
+                    "Select one body (speed, height) or a joint (length, angle) and press \
+                     Play. With no selection, a running particle group plots its aggregates.",
                 );
                 return;
             }
@@ -307,5 +373,39 @@ mod tests {
         history.clear();
         assert_eq!(history.tracked, None);
         assert!(history.signals.is_empty());
+    }
+
+    #[cfg(feature = "sim")]
+    #[test]
+    fn group_tracking_is_exclusive_with_body_tracking() {
+        let mut world = World::new();
+        let body = world.spawn_empty().id();
+        let mut history = PlotHistory::default();
+
+        // Track a group; accumulate a few samples.
+        history.retarget_group(2, &["count"]);
+        for _ in 0..5 {
+            history.push(&[10.0]);
+        }
+        assert_eq!(history.tracked_group, Some(2));
+        assert_eq!(
+            history.tracked, None,
+            "group and body tracking are exclusive"
+        );
+        assert_eq!(history.signals[0].samples.len(), 5);
+
+        // Same group + labels keeps the history.
+        history.retarget_group(2, &["count"]);
+        assert_eq!(
+            history.signals[0].samples.len(),
+            5,
+            "unchanged target keeps data"
+        );
+
+        // Switching to a body clears the group tracking and resets.
+        history.retarget(body, &["speed (px/s)", "height (px)"]);
+        assert_eq!(history.tracked, Some(body));
+        assert_eq!(history.tracked_group, None);
+        assert!(history.signals[0].samples.is_empty());
     }
 }
