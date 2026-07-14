@@ -14,6 +14,8 @@
 //! particle. Everything here is *derived* state — rebuilt each step,
 //! never serialized, never undoable (CLAUDE.md invariant 5).
 
+use crate::domain::shape::ShapeDef;
+use crate::geometry::sdf;
 use bevy::math::Vec2;
 use particular::prelude::*;
 
@@ -119,6 +121,72 @@ pub fn nbody_accelerations(state: &ParticleState, g: f32, softening: f32) -> Vec
         .collect()
 }
 
+/// Deterministic per-cell hash → a `u32` of jitter bits (two 16-bit halves).
+fn cell_hash(seed: u32, x: u32, y: u32) -> u32 {
+    let mut h = seed ^ x.wrapping_mul(0x9E37_79B1) ^ y.wrapping_mul(0x85EB_CA77);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2C1B_3C6D);
+    h ^= h >> 12;
+    h = h.wrapping_mul(0x297A_2D39);
+    h ^= h >> 15;
+    h
+}
+
+/// Samples approximately `target` points uniformly (an even jittered
+/// lattice) inside `shape`, in the shape's **local frame**. The MPM /
+/// "fill a body with particles" primitive: a body *becomes* a group of
+/// material points. Reuses the SDF (`sdf::eval < 0` = inside) so any shape
+/// — box, circle, polygon, CSG tree — fills correctly; half-planes (a
+/// ground, not a region) yield nothing.
+///
+/// Pure and deterministic in `seed`; the caller applies the body's pose.
+/// Returns up to ~`target` points (fewer for shapes that fill little of
+/// their bounding box). The lattice spacing is sized from a coarse
+/// inside-fraction estimate so the count lands near `target`.
+pub fn fill_shape(shape: &ShapeDef, target: usize, seed: u32) -> Vec<Vec2> {
+    // Coarse inside-fraction scan resolution — sizes the lattice to the
+    // *shape's* area (not the bounding box) so the count lands near target.
+    const SCAN: usize = 24;
+    if target == 0 || matches!(shape, ShapeDef::HalfPlane) {
+        return Vec::new();
+    }
+    let (min, max) = sdf::aabb(shape);
+    let size = max - min;
+    if size.x <= 0.0 || size.y <= 0.0 || !size.is_finite() {
+        return Vec::new();
+    }
+    let mut inside = 0usize;
+    for iy in 0..SCAN {
+        for ix in 0..SCAN {
+            let p = min
+                + Vec2::new(
+                    (ix as f32 + 0.5) / SCAN as f32 * size.x,
+                    (iy as f32 + 0.5) / SCAN as f32 * size.y,
+                );
+            if sdf::eval(shape, p) < 0.0 {
+                inside += 1;
+            }
+        }
+    }
+    let fill = (inside as f32 / (SCAN * SCAN) as f32).max(1.0 / (SCAN * SCAN) as f32);
+    let spacing = (fill * size.x * size.y / target as f32).sqrt().max(1e-3);
+    let cols = (size.x / spacing).ceil() as usize + 1;
+    let rows = (size.y / spacing).ceil() as usize + 1;
+    let mut pts = Vec::with_capacity(target);
+    for iy in 0..rows {
+        for ix in 0..cols {
+            let h = cell_hash(seed, ix as u32, iy as u32);
+            let jx = (h & 0xffff) as f32 / 65535.0;
+            let jy = ((h >> 16) & 0xffff) as f32 / 65535.0;
+            let p = min + Vec2::new((ix as f32 + jx) * spacing, (iy as f32 + jy) * spacing);
+            if p.x <= max.x && p.y <= max.y && sdf::eval(shape, p) < 0.0 {
+                pts.push(p);
+            }
+        }
+    }
+    pts
+}
+
 #[cfg(test)]
 #[allow(clippy::float_cmp)] // asserting exact integrator arithmetic
 mod tests {
@@ -183,5 +251,48 @@ mod tests {
         s.push(Vec2::ZERO, Vec2::ZERO, 1.0, 0);
         s.push(Vec2::ONE, Vec2::ZERO, 1.0, 0);
         assert_eq!(nbody_accelerations(&s, 0.0, 1.0), vec![Vec2::ZERO; 2]);
+    }
+
+    #[test]
+    fn fill_shape_fills_a_box_with_contained_points_near_target() {
+        let shape = ShapeDef::Box {
+            width: 100.0,
+            height: 100.0,
+        };
+        let pts = fill_shape(&shape, 400, 7);
+        // A box fills its whole AABB, so the count lands close to target.
+        assert!(
+            (200..=650).contains(&pts.len()),
+            "≈400 points, got {}",
+            pts.len()
+        );
+        assert!(
+            pts.iter().all(|p| p.x.abs() <= 50.0 && p.y.abs() <= 50.0),
+            "every point is inside the box"
+        );
+    }
+
+    #[test]
+    fn fill_shape_respects_a_circles_boundary() {
+        let shape = ShapeDef::Circle { radius: 50.0 };
+        let pts = fill_shape(&shape, 300, 3);
+        assert!(!pts.is_empty());
+        assert!(
+            pts.iter().all(|p| p.length() <= 50.0 + 1e-3),
+            "every point is within the radius"
+        );
+    }
+
+    #[test]
+    fn fill_shape_is_deterministic_and_guards_degenerates() {
+        let shape = ShapeDef::Circle { radius: 20.0 };
+        assert_eq!(fill_shape(&shape, 100, 42), fill_shape(&shape, 100, 42));
+        assert!(!fill_shape(&shape, 100, 1).is_empty());
+        assert!(!fill_shape(&shape, 100, 2).is_empty());
+        assert!(fill_shape(&shape, 0, 0).is_empty(), "target 0 → empty");
+        assert!(
+            fill_shape(&ShapeDef::HalfPlane, 100, 0).is_empty(),
+            "a half-plane is not a fillable region"
+        );
     }
 }
