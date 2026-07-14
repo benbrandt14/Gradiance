@@ -146,6 +146,187 @@ pub struct SignalBinding {
 #[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct SignalBindings(pub Vec<SignalBinding>);
 
+/// A tunable named parameter — the auto-slider a `defparam` produces
+/// (the "knob" of the P2 driver layer, `docs/signal-dataflow.md`). Its
+/// value is published on the bus each frame under `name`, and it is the
+/// simplest **modulator input**: a slider a computed signal reads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
+pub struct SignalParam {
+    /// Bus name this parameter publishes under.
+    pub name: String,
+    /// Current value (the slider position).
+    pub value: f32,
+    /// Slider lower bound.
+    pub min: f32,
+    /// Slider upper bound.
+    pub max: f32,
+}
+
+impl SignalParam {
+    /// A `[0, 1]` parameter at `0.5` — the default a bare `defparam` gets.
+    pub fn unit(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            value: 0.5,
+            min: 0.0,
+            max: 1.0,
+        }
+    }
+}
+
+/// A serializable numeric expression over **named** signals — the authored
+/// form of a computed signal (`defsignal`). It mirrors the pure Tier-B
+/// kernel's `Expr` (`crate::script::kernel`) but references inputs by bus
+/// name instead of a var index, so it persists and round-trips; the signal
+/// runtime lowers it to a compiled, allocation-free `Kernel` for the hot
+/// path (`crate::signal::compile`). Kept small on purpose — power comes
+/// from composition, not a big opcode set.
+///
+/// Reflects as an **opaque** value (like `ShapeDef`): it is a recursive
+/// `Box`-ed tree, addressed by scripts/persistence as a whole rather than
+/// field-walked. Serialize/Deserialize (persistence) are independent.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, Serialize, Deserialize)]
+pub enum SignalExpr {
+    /// A literal constant.
+    Const(f32),
+    /// The current value of a bus signal (a param, a binding, another
+    /// computed signal, or the special input `"t"` = elapsed seconds).
+    Input(String),
+    /// Negate.
+    Neg(Box<SignalExpr>),
+    /// Sine (radians).
+    Sin(Box<SignalExpr>),
+    /// Cosine (radians).
+    Cos(Box<SignalExpr>),
+    /// Absolute value.
+    Abs(Box<SignalExpr>),
+    /// Add.
+    Add(Box<SignalExpr>, Box<SignalExpr>),
+    /// Subtract.
+    Sub(Box<SignalExpr>, Box<SignalExpr>),
+    /// Multiply.
+    Mul(Box<SignalExpr>, Box<SignalExpr>),
+    /// Divide.
+    Div(Box<SignalExpr>, Box<SignalExpr>),
+    /// Minimum.
+    Min(Box<SignalExpr>, Box<SignalExpr>),
+    /// Maximum.
+    Max(Box<SignalExpr>, Box<SignalExpr>),
+}
+
+impl SignalExpr {
+    /// Collects the distinct bus-input names this expression references,
+    /// in first-seen order (the column order the compiled kernel expects).
+    pub fn inputs(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_inputs(&mut out);
+        out
+    }
+
+    /// Parses a whitespace-separated **reverse-Polish** expression into a
+    /// tree: numbers are constants, the operators `+ - * / min max` (binary)
+    /// and `neg sin cos abs` (unary) combine the stack, and any other token
+    /// is a named [`SignalExpr::Input`] (a bus signal, a param, or `"t"`).
+    /// RPN keeps the surface tiny and unambiguous while the node editor is
+    /// still text — e.g. `"t sin amp *"` is `amp * sin(t)`.
+    pub fn parse_rpn(source: &str) -> Result<Self, SignalExprError> {
+        let mut stack: Vec<SignalExpr> = Vec::new();
+        for token in source.split_whitespace() {
+            let mut binary = |op: fn(Box<Self>, Box<Self>) -> Self| -> Result<(), SignalExprError> {
+                let b = stack.pop().ok_or(SignalExprError::Underflow)?;
+                let a = stack.pop().ok_or(SignalExprError::Underflow)?;
+                stack.push(op(Box::new(a), Box::new(b)));
+                Ok(())
+            };
+            match token {
+                "+" => binary(Self::Add)?,
+                "-" => binary(Self::Sub)?,
+                "*" => binary(Self::Mul)?,
+                "/" => binary(Self::Div)?,
+                "min" => binary(Self::Min)?,
+                "max" => binary(Self::Max)?,
+                "neg" | "sin" | "cos" | "abs" => {
+                    let a = stack.pop().ok_or(SignalExprError::Underflow)?;
+                    let boxed = Box::new(a);
+                    stack.push(match token {
+                        "neg" => Self::Neg(boxed),
+                        "sin" => Self::Sin(boxed),
+                        "cos" => Self::Cos(boxed),
+                        _ => Self::Abs(boxed),
+                    });
+                }
+                other => stack.push(match other.parse::<f32>() {
+                    Ok(c) => Self::Const(c),
+                    Err(_) => Self::Input(other.to_owned()),
+                }),
+            }
+        }
+        match stack.pop() {
+            Some(expr) if stack.is_empty() => Ok(expr),
+            Some(_) => Err(SignalExprError::Leftover(stack.len() + 1)),
+            None => Err(SignalExprError::Empty),
+        }
+    }
+
+    fn collect_inputs(&self, out: &mut Vec<String>) {
+        match self {
+            Self::Const(_) => {}
+            Self::Input(name) => {
+                if !out.iter().any(|n| n == name) {
+                    out.push(name.clone());
+                }
+            }
+            Self::Neg(a) | Self::Sin(a) | Self::Cos(a) | Self::Abs(a) => a.collect_inputs(out),
+            Self::Add(a, b)
+            | Self::Sub(a, b)
+            | Self::Mul(a, b)
+            | Self::Div(a, b)
+            | Self::Min(a, b)
+            | Self::Max(a, b) => {
+                a.collect_inputs(out);
+                b.collect_inputs(out);
+            }
+        }
+    }
+}
+
+/// Why a reverse-Polish expression could not be parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SignalExprError {
+    /// An operator ran out of operands on the stack.
+    #[error("expression underflow: an operator had too few operands")]
+    Underflow,
+    /// The expression was empty.
+    #[error("empty expression")]
+    Empty,
+    /// More than one value was left on the stack (missing operator).
+    #[error("expression left {0} values on the stack (expected 1)")]
+    Leftover(usize),
+}
+
+/// A computed signal (`defsignal`): a named value that is a numeric
+/// **modulator** over other signals, evaluated every frame through the
+/// compiled kernel and published on the bus under `name`. This is the
+/// middle tier of the sensor→modulator→actuator model — the piece that
+/// makes the dataflow a *graph* rather than a set of direct wires.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
+pub struct ComputedSignal {
+    /// Bus name this computed value publishes under.
+    pub name: String,
+    /// The expression, over other bus signals (and `"t"`).
+    pub expr: SignalExpr,
+}
+
+/// Every tunable parameter. Config-seam resource (UI slider edits directly,
+/// persisted with the scene, not undoable).
+#[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
+pub struct SignalParams(pub Vec<SignalParam>);
+
+/// Every computed signal. Config-seam resource, persisted with the scene.
+#[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
+pub struct ComputedSignals(pub Vec<ComputedSignal>);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,6 +347,42 @@ mod tests {
             in_max: 5.0,
         };
         assert!(degenerate.normalize(9.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn signal_expr_collects_inputs_in_first_seen_order() {
+        // (speed * sin(t)) + speed  → inputs [speed, t], deduped.
+        let expr = SignalExpr::Add(
+            Box::new(SignalExpr::Mul(
+                Box::new(SignalExpr::Input("speed".into())),
+                Box::new(SignalExpr::Sin(Box::new(SignalExpr::Input("t".into())))),
+            )),
+            Box::new(SignalExpr::Input("speed".into())),
+        );
+        assert_eq!(expr.inputs(), vec!["speed".to_string(), "t".to_string()]);
+    }
+
+    #[test]
+    fn parse_rpn_builds_the_expected_tree() {
+        // "t sin amp *" = amp * sin(t).
+        let expr = SignalExpr::parse_rpn("t sin amp *").unwrap();
+        assert_eq!(
+            expr,
+            SignalExpr::Mul(
+                Box::new(SignalExpr::Sin(Box::new(SignalExpr::Input("t".into())))),
+                Box::new(SignalExpr::Input("amp".into())),
+            )
+        );
+        assert_eq!(
+            SignalExpr::parse_rpn("3.5").unwrap(),
+            SignalExpr::Const(3.5)
+        );
+        assert_eq!(SignalExpr::parse_rpn(""), Err(SignalExprError::Empty));
+        assert_eq!(SignalExpr::parse_rpn("+"), Err(SignalExprError::Underflow));
+        assert_eq!(
+            SignalExpr::parse_rpn("1 2"),
+            Err(SignalExprError::Leftover(2))
+        );
     }
 
     #[test]

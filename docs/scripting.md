@@ -99,6 +99,9 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (register-action label src)  ; add a labelled action to the context menu
 (signal-set name value)      ; publish a named value on the signal bus
                              ; (drives color/plot bindings — docs/signal-dataflow.md)
+(defparam name value min max); a tunable slider knob, published on the bus
+(defsignal name expr)        ; a computed signal from an RPN expression over
+                             ; other signals + `t`, e.g. "t sin amp *"
 (label body name)            ; name a body in the workspace (viewport tag);
                              ; body is a spawn's return value (or ans)
 

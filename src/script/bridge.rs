@@ -47,9 +47,19 @@ use crate::domain::depth::DepthBand;
 use crate::domain::props::BodyPhysics;
 use crate::domain::settings::SimSettings;
 use crate::domain::shape::ShapeDef;
+use crate::domain::signal::{ComputedSignal, SignalExpr, SignalParam};
 use crate::geometry::sdf;
 use crate::script::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::script::registry::{OperationCatalog, name};
+
+/// A `defparam` / `defsignal` declaration queued by a script builtin, drained
+/// in [`run_scripts`] into the `SignalParams` / `ComputedSignals` resources.
+enum SignalDef {
+    /// A tunable slider parameter.
+    Param(SignalParam),
+    /// A computed (modulator) signal.
+    Computed(ComputedSignal),
+}
 use bevy::prelude::*;
 use bevy::reflect::Reflect;
 use std::any::TypeId;
@@ -100,6 +110,9 @@ struct Shared {
     signal_writes: Arc<Mutex<Vec<(String, f64)>>>,
     /// Read mirror of the `SignalBus` values → `signal-get`.
     signal_values: Arc<Mutex<HashMap<String, f64>>>,
+    /// Param / computed-signal declarations emitted by `defparam` /
+    /// `defsignal` → the `SignalParams` / `ComputedSignals` resources.
+    signal_defs: Arc<Mutex<Vec<SignalDef>>>,
     /// Workspace labels emitted by `label` → the [`WorkspaceLabels`] table
     /// (body-handle uuid string + display name).
     labels: Arc<Mutex<Vec<(String, String)>>>,
@@ -117,6 +130,7 @@ impl Shared {
             actions: Arc::new(Mutex::new(Vec::new())),
             signal_writes: Arc::new(Mutex::new(Vec::new())),
             signal_values: Arc::new(Mutex::new(HashMap::new())),
+            signal_defs: Arc::new(Mutex::new(Vec::new())),
             labels: Arc::new(Mutex::new(Vec::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
         }
@@ -632,7 +646,12 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
-    register_signal_verbs(engine, &shared.signal_writes, &shared.signal_values);
+    register_signal_verbs(
+        engine,
+        &shared.signal_writes,
+        &shared.signal_values,
+        &shared.signal_defs,
+    );
     register_meta_verbs(engine, &shared.catalog);
 }
 
@@ -853,6 +872,7 @@ fn register_signal_verbs(
     engine: &mut Engine,
     writes: &Arc<Mutex<Vec<(String, f64)>>>,
     values: &Arc<Mutex<HashMap<String, f64>>>,
+    defs: &Arc<Mutex<Vec<SignalDef>>>,
 ) {
     // `(signal-set name value)` — publish a named value on the signal bus.
     let w = Arc::clone(writes);
@@ -869,6 +889,35 @@ fn register_signal_verbs(
             .ok()
             .and_then(|values| values.get(&name).copied())
             .unwrap_or(f64::NAN)
+    });
+
+    // `(defparam name value min max)` — declare a tunable slider param.
+    let d = Arc::clone(defs);
+    engine.register_fn(
+        name::DEFPARAM,
+        move |name: String, value: SteelVal, min: SteelVal, max: SteelVal| {
+            if let (Ok(mut queue), Some(value), Some(min), Some(max)) = (
+                d.lock(),
+                steel_to_f64(&value),
+                steel_to_f64(&min),
+                steel_to_f64(&max),
+            ) {
+                queue.push(SignalDef::Param(SignalParam {
+                    name,
+                    value: value as f32,
+                    min: min as f32,
+                    max: max as f32,
+                }));
+            }
+        },
+    );
+
+    // `(defsignal name expr)` — declare a computed signal from RPN source.
+    let d = Arc::clone(defs);
+    engine.register_fn(name::DEFSIGNAL, move |name: String, expr: String| {
+        if let (Ok(mut queue), Ok(parsed)) = (d.lock(), SignalExpr::parse_rpn(&expr)) {
+            queue.push(SignalDef::Computed(ComputedSignal { name, expr: parsed }));
+        }
     });
 }
 
@@ -996,6 +1045,7 @@ pub fn run_scripts(world: &mut World) {
     drain_labels(world);
     drain_actions(world);
     drain_signal_publishes(world);
+    drain_signal_defs(world);
 }
 
 /// Drains the label queue into the `WorkspaceLabels` table (upsert by
@@ -1093,6 +1143,48 @@ fn drain_signal_publishes(world: &mut World) {
     if let Some(mut bus) = world.get_resource_mut::<crate::signal::SignalBus>() {
         for (name, value) in publishes {
             bus.publish(&name, value as f32, false);
+        }
+    }
+}
+
+/// Drains `defparam` / `defsignal` declarations into the `SignalParams` /
+/// `ComputedSignals` config resources (upsert by name, so a re-run of a
+/// definitions script updates in place instead of duplicating).
+fn drain_signal_defs(world: &mut World) {
+    let defs: Vec<SignalDef> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .signal_defs
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if defs.is_empty() {
+        return;
+    }
+    for def in defs {
+        match def {
+            SignalDef::Param(param) => {
+                if let Some(mut params) = world.get_resource_mut::<crate::signal::SignalParams>() {
+                    match params.0.iter_mut().find(|p| p.name == param.name) {
+                        Some(existing) => *existing = param,
+                        None => params.0.push(param),
+                    }
+                }
+            }
+            SignalDef::Computed(signal) => {
+                if let Some(mut computed) =
+                    world.get_resource_mut::<crate::signal::ComputedSignals>()
+                {
+                    match computed.0.iter_mut().find(|c| c.name == signal.name) {
+                        Some(existing) => *existing = signal,
+                        None => computed.0.push(signal),
+                    }
+                }
+            }
         }
     }
 }

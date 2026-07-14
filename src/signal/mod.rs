@@ -26,17 +26,25 @@
 //!
 //! [`Appearance`]: crate::domain::appearance::Appearance
 
+pub mod compile;
+
 use crate::core::ids::{IdIndex, StableId};
 use crate::core::states::GameState;
 use crate::domain::Body;
 use crate::physics::queries::PhysicsQueries;
+use avian2d::prelude::Physics;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use std::collections::VecDeque;
 
 pub use crate::domain::signal::{
-    GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource,
+    ComputedSignal, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalExpr,
+    SignalMap, SignalParam, SignalParams, SignalSink, SignalSource,
 };
+
+/// The reserved input name for elapsed simulated seconds (the "clock" every
+/// oscillator reads). Frozen while paused (it rides the physics clock).
+pub const TIME_INPUT: &str = "t";
 
 /// Samples of history kept per signal (~10 s at 60 fps), matching the
 /// plot panel's window.
@@ -131,12 +139,73 @@ pub struct SignalColorOverride {
 #[derive(Resource, Debug, Default)]
 pub struct ScriptSignals(pub Vec<String>);
 
+/// The compiled kernels behind [`ComputedSignals`], rebuilt by
+/// [`recompile_signals`] whenever the authored set changes. Derived
+/// (never persisted): a `(name → compiled)` cache plus the names that
+/// failed to compile, surfaced to the UI. Keeps the scripting/kernel
+/// **compile** step off the per-frame path — only [`Kernel::eval`] runs
+/// each frame (`docs/signal-dataflow.md`).
+///
+/// [`Kernel::eval`]: crate::script::kernel::Kernel::eval
+#[derive(Resource, Debug, Default)]
+pub struct CompiledSignals {
+    /// One compiled tape per computed signal, in authored order.
+    compiled: Vec<(String, compile::CompiledSignal)>,
+    /// Names whose expression failed to compile (with the reason).
+    pub errors: Vec<(String, String)>,
+}
+
+/// Recompiles [`ComputedSignals`] into [`CompiledSignals`] on change (and
+/// once at startup). Cold path: compilation is the VM/allocation step the
+/// two-tier rule keeps out of the frame loop.
+pub fn recompile_signals(computed: Res<ComputedSignals>, mut cache: ResMut<CompiledSignals>) {
+    cache.compiled.clear();
+    cache.errors.clear();
+    for signal in &computed.0 {
+        match compile::compile(&signal.expr) {
+            Ok(compiled) => cache.compiled.push((signal.name.clone(), compiled)),
+            Err(err) => cache.errors.push((signal.name.clone(), err.to_string())),
+        }
+    }
+}
+
+/// Publishes every parameter's value, then evaluates each computed signal
+/// through its compiled kernel — the modulator layer — before the bindings
+/// read the bus. Params first, so a computed signal reading a param sees
+/// this frame's value; computed signals in authored order, so a chain
+/// resolves within one frame (a cycle reads last frame's value, the usual
+/// dataflow rule).
+pub fn evaluate_computed(
+    params: Res<SignalParams>,
+    computed: Res<CompiledSignals>,
+    time: Res<Time<Physics>>,
+    game: Res<State<GameState>>,
+    mut bus: ResMut<SignalBus>,
+) {
+    let recording = *game.get() == GameState::Playing;
+    for param in &params.0 {
+        bus.publish(&param.name, param.value, recording);
+    }
+    bus.publish(TIME_INPUT, time.elapsed_secs(), recording);
+    for (name, signal) in &computed.compiled {
+        let vars: Vec<f32> = signal
+            .inputs
+            .iter()
+            .map(|input| bus.get(input).unwrap_or(0.0))
+            .collect();
+        let value = signal.kernel.eval(&vars);
+        bus.publish(name, value, recording);
+    }
+}
+
 /// Evaluates every binding: reads its source, publishes to the bus, and
 /// writes/clears the derived color overrides. Runs every frame (cheap —
 /// a handful of bindings); history recording pauses with the simulation.
 pub fn evaluate_signals(
     mut commands: Commands,
     bindings: Res<SignalBindings>,
+    params: Res<SignalParams>,
+    computed: Res<ComputedSignals>,
     script_names: Res<ScriptSignals>,
     index: Res<IdIndex>,
     transforms: Query<&Transform, With<Body>>,
@@ -202,9 +271,14 @@ pub fn evaluate_signals(
         }
     }
 
-    // Bus hygiene: keep bound names and script-published names; drop the rest.
+    // Bus hygiene: keep the names that still have a producer — bindings,
+    // params, computed signals, `t`, and script-published names.
     bus.retain(|name| {
-        bindings.0.iter().any(|b| b.name == name) || script_names.0.iter().any(|n| n == name)
+        name == TIME_INPUT
+            || bindings.0.iter().any(|b| b.name == name)
+            || params.0.iter().any(|p| p.name == name)
+            || computed.0.iter().any(|c| c.name == name)
+            || script_names.0.iter().any(|n| n == name)
     });
 
     // Apply overrides change-detected (a same-color frame must not dirty
@@ -236,10 +310,26 @@ pub struct SignalPlugin;
 impl Plugin for SignalPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SignalBindings>();
+        app.init_resource::<SignalParams>();
+        app.init_resource::<ComputedSignals>();
+        app.init_resource::<CompiledSignals>();
         app.init_resource::<SignalBus>();
         app.init_resource::<ScriptSignals>();
         app.register_type::<SignalBindings>();
-        app.add_systems(Update, evaluate_signals);
+        app.register_type::<SignalParams>();
+        app.register_type::<ComputedSignals>();
+        // Recompile when the authored computed set changes (and once at
+        // startup via the initial change tick); evaluate every frame,
+        // computed modulators before the bindings that read them.
+        app.add_systems(
+            Update,
+            (
+                recompile_signals.run_if(resource_changed::<ComputedSignals>),
+                evaluate_computed,
+                evaluate_signals,
+            )
+                .chain(),
+        );
     }
 }
 

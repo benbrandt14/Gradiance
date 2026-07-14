@@ -61,7 +61,6 @@ impl Plugin for GradianceUiPlugin {
                 settings::settings_window,
                 plot::plot_panel,
                 probe::probe_panel,
-                signals::signals_panel,
                 context_menu::context_menu,
                 capture_pointer_over_ui,
             )

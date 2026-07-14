@@ -488,13 +488,17 @@ a normal dependency, not a cargo feature — see the decision doc's
     `register-action`). Doubles as a test-fixture runner.
   - **Remaining P1:** a fuel/step budget for runaway authoring scripts.
 - **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam
-  (`defsignal`/`defparam` → auto-slider; live probes / tracers / plots).
-  **Queued behind the physics/tracer substrate** (see "Sequencing after M17.1"):
-  we script drivers once the constraints/joints and the tracer/plotter read
-  surface they drive and observe are in place. The seams are ready — a **sensor**
-  is a read (a query builtin / reflect read over the facade), a **modulator** is
-  a `kernel` over signals, an **actuator** is a config- or edit-op the signal
-  drives — so P2 is a wiring layer, not new foundation.
+  — **first cut landed** (`docs/signal-dataflow.md`): `defparam` (tunable
+  slider knobs) and `defsignal` (computed **modulator** signals authored as a
+  serializable `SignalExpr`, RPN in the console) join the signal bus. A
+  computed signal is **lowered once to the pure `script::kernel`** and only
+  `Kernel::eval` runs per frame — the two-tier perf rule honored. Params +
+  computed + bindings are config-seam resources persisted with the scene; the
+  Signals **dock** section edits them with live sliders. Completes the
+  sensor→modulator→actuator triad in the resource model (sensor = a source
+  read, modulator = a computed kernel signal, actuator = a color/plot sink; sim
+  and gizmo actuators are the next accretion). Remaining P2: node-canvas UI,
+  more actuator kinds, per-particle `Kernel::drive` populations.
 - **P3 — the extension surface (the tool authored in its own DSL).** Because
   edits, config, and reads all route through one registry, the editor's own
   chrome can be *authored as data over that registry*:

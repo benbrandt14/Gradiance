@@ -232,5 +232,7 @@
             perspective_deg: 0.0,
         ),
         signals: ([]),
+        params: ([]),
+        computed: ([]),
     ),
 )
