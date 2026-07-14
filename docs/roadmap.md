@@ -321,7 +321,14 @@ shadow items from M19. Design decisions in the slice PRs.
     one rebuilt `ParticleCloud` mesh (camera-facing quads, group+speed tint,
     opaque depth-write) instead of per-particle gizmos; a `group` column
     lands on `ParticleState` as the selection/tint handle. True GPU
-    instancing is deferred to S8.
+    instancing is the endgame (S9).
+  - **S3 — particle groups + shape→particles** *(in progress)*: pure
+    `kernel::fill_shape` (uniform jittered-lattice sampling of any shape via
+    the SDF) plus a live `ParticleGroups` table (each group locks a shared
+    `DepthBand` so the cloud obeys collision layers as one entity) and a
+    context-menu **"Fill shape"** action that turns a body into N
+    uniformly-distributed particles inheriting its depth + color. (Still to
+    come in S3: emitter authoring/persistence, group selection.)
 - Deferred within this track: gradient color pickers, color-by-signal
   (pairs with P2 dataflow — a "modulator" driving Appearance is the right
   seam; do not pre-plumb); the continuum solver stages (APIC fluid →

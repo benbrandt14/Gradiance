@@ -19,7 +19,8 @@
 
 use crate::domain::settings::SimSettings;
 use crate::physics::fields::Fields;
-use crate::sim::kernel::{ParticleState, nbody_accelerations};
+use crate::sim::groups::{GroupAttrs, ParticleGroups};
+use crate::sim::kernel::{ParticleState, fill_shape, nbody_accelerations};
 use bevy::prelude::*;
 
 /// An authored-shaped particle source: a fountain/cloud spawner. Carried
@@ -188,4 +189,55 @@ pub fn step_particles(
         .fold(0.0_f32, f32::max)
         .max(0.5);
     state.cull_older_than(max_age);
+}
+
+/// Drains "fill this body's shape with N particles" requests (the
+/// context-menu action): samples the body's shape with [`fill_shape`],
+/// registers a group inheriting the body's depth band + fill color, and
+/// pushes the sampled points (in world space, at rest) into the buffer.
+/// The group's `DepthBand` is why the cloud obeys collision layers as one
+/// entity (consumed by the S4 interaction gating).
+pub fn fill_from_shape(
+    mut queue: ResMut<crate::ui::context_menu::ParticleFillQueue>,
+    index: Res<crate::core::ids::IdIndex>,
+    bodies: Query<
+        (
+            &crate::domain::shape::ShapeDef,
+            &Transform,
+            &crate::domain::appearance::Appearance,
+            &crate::domain::depth::DepthBand,
+        ),
+        With<crate::domain::Body>,
+    >,
+    config: Res<SimConfig>,
+    mut groups: ResMut<ParticleGroups>,
+    mut particles: ResMut<Particles>,
+) {
+    if queue.requests.is_empty() {
+        return;
+    }
+    for (id, count) in std::mem::take(&mut queue.requests) {
+        let Some(entity) = index.entity(id) else {
+            continue;
+        };
+        let Ok((shape, transform, appearance, depth)) = bodies.get(entity) else {
+            continue;
+        };
+        let budget = count.min(config.max_particles.saturating_sub(particles.0.len()));
+        if budget == 0 {
+            continue;
+        }
+        let local = fill_shape(shape, budget, id.0.as_u128() as u32);
+        let group = groups.add(GroupAttrs {
+            depth: *depth,
+            tint: appearance.fill,
+            self_gravity: 0.0,
+        });
+        let pose = crate::core::units::PosRot::from_transform(transform);
+        let rot = Vec2::from_angle(pose.rot);
+        for p in local {
+            let world = pose.pos + rot.rotate(p);
+            particles.0.push(world, Vec2::ZERO, 1.0, group);
+        }
+    }
 }

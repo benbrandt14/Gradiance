@@ -16,6 +16,7 @@
 //! CI, and test loop stay lean until the crate split.
 
 pub mod bridge;
+pub mod groups;
 pub mod kernel;
 pub mod render;
 
@@ -33,7 +34,15 @@ impl Plugin for SimPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Particles>();
         app.init_resource::<SimConfig>();
+        app.init_resource::<groups::ParticleGroups>();
+        // The fill queue lives in the UI crate (the button writes it) but
+        // its drain lives here, so the sim owns the init — the resource
+        // exists whenever the drain runs (incl. headless tests).
+        app.init_resource::<crate::ui::context_menu::ParticleFillQueue>();
         app.register_type::<Emitter>();
+        // Fill-shape requests are authoring (drained any time, not just
+        // while playing, so a filled cloud appears immediately when paused).
+        app.add_systems(Update, bridge::fill_from_shape);
         // Emit + step run on the fixed clock (determinism + coupling), and
         // only while playing — pausing freezes the population.
         app.add_systems(

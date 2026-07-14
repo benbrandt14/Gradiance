@@ -22,6 +22,8 @@ mod reflect_intents;
 mod registry_validation;
 mod replay;
 mod scripting;
+#[cfg(feature = "sim")]
+mod sim;
 mod tools;
 mod ui_panels;
 mod unit_commands;
