@@ -37,6 +37,21 @@ pub struct ParticleState {
     pub group: Vec<u32>,
 }
 
+/// Summary statistics over one particle group — what the plotters and
+/// scripts read to "show average position/velocity" without touching the
+/// per-particle buffer. Derived, never persisted.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GroupAggregate {
+    /// Number of live particles in the group.
+    pub count: usize,
+    /// Mass-weighted centroid (average position).
+    pub centroid: Vec2,
+    /// Mass-weighted mean velocity.
+    pub mean_velocity: Vec2,
+    /// Total kinetic energy `Σ ½·m·|v|²`.
+    pub kinetic_energy: f32,
+}
+
 impl ParticleState {
     /// Live particle count.
     pub fn len(&self) -> usize {
@@ -72,6 +87,44 @@ impl ParticleState {
                 .get(group as usize)
                 .is_some_and(|&limit| age > limit)
         });
+    }
+
+    /// Aggregate statistics over the particles in `group` (mass-weighted
+    /// centroid & mean velocity, count, kinetic energy) — the read primitive
+    /// the plotters and scripts summarize a group with ("show average
+    /// position/velocity"). Pure; `None` when the group has no particles.
+    ///
+    /// Reads are total (the governance rule), so this is a plain scan; it is
+    /// never a mutation path. One pass, allocation-free.
+    pub fn aggregate(&self, group: u32) -> Option<GroupAggregate> {
+        let mut count = 0usize;
+        let mut mass = 0.0f32;
+        let mut pos = Vec2::ZERO;
+        let mut vel = Vec2::ZERO;
+        let mut ke = 0.0f32;
+        for i in 0..self.pos.len() {
+            if self.group[i] != group {
+                continue;
+            }
+            let m = self.mass[i];
+            count += 1;
+            mass += m;
+            pos += self.pos[i] * m;
+            vel += self.vel[i] * m;
+            ke += 0.5 * m * self.vel[i].length_squared();
+        }
+        if count == 0 {
+            return None;
+        }
+        // Mass-weighted means; fall back to a plain count if the group is
+        // entirely massless (degenerate but possible for test material).
+        let w = if mass > 0.0 { mass } else { count as f32 };
+        Some(GroupAggregate {
+            count,
+            centroid: pos / w,
+            mean_velocity: vel / w,
+            kinetic_energy: ke,
+        })
     }
 
     /// Swap-removes every particle for which `drop(group, age)` is true.
@@ -262,6 +315,30 @@ mod tests {
             s.group.contains(&1),
             "the persistent group-1 particle stays"
         );
+    }
+
+    #[test]
+    fn aggregate_summarizes_a_group() {
+        let mut s = ParticleState::default();
+        // Group 0: two particles straddling the origin, moving oppositely.
+        s.push(Vec2::new(-10.0, 0.0), Vec2::new(0.0, 4.0), 1.0, 0);
+        s.push(Vec2::new(10.0, 0.0), Vec2::new(0.0, -4.0), 1.0, 0);
+        // Group 1: one particle elsewhere.
+        s.push(Vec2::new(100.0, 50.0), Vec2::new(2.0, 0.0), 2.0, 1);
+
+        let a = s.aggregate(0).expect("group 0 populated");
+        assert_eq!(a.count, 2);
+        assert_eq!(a.centroid, Vec2::ZERO, "centroid at the origin");
+        assert_eq!(a.mean_velocity, Vec2::ZERO, "opposite velocities cancel");
+        // KE = ½·1·16 + ½·1·16 = 16.
+        assert!((a.kinetic_energy - 16.0).abs() < 1e-4);
+
+        let b = s.aggregate(1).expect("group 1 populated");
+        assert_eq!(b.count, 1);
+        assert_eq!(b.centroid, Vec2::new(100.0, 50.0));
+        assert_eq!(b.mean_velocity, Vec2::new(2.0, 0.0));
+
+        assert!(s.aggregate(7).is_none(), "empty group → None");
     }
 
     #[test]
