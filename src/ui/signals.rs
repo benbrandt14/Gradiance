@@ -169,6 +169,7 @@ pub fn node_kind_editor(
             signal,
             map,
             gradient,
+            target,
         } => {
             ui.horizontal(|ui| {
                 ui.label("signal →");
@@ -184,6 +185,16 @@ pub fn node_kind_editor(
                     .show_ui(ui, |ui| {
                         for g in GradientSpec::ALL {
                             ui.selectable_value(gradient, g, format!("{g:?}"));
+                        }
+                    });
+            });
+            ui.horizontal(|ui| {
+                ui.label("drives");
+                egui::ComboBox::from_id_salt(ui.id().with((salt, "target")))
+                    .selected_text(target.label())
+                    .show_ui(ui, |ui| {
+                        for t in crate::domain::node::ActuatorTarget::ALL {
+                            ui.selectable_value(target, t, t.label());
                         }
                     });
             });

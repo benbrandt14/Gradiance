@@ -78,8 +78,9 @@ pub enum NodeKind {
         signal: String,
     },
     /// An **actuator**: reads a bus `signal`, maps it through a domain +
-    /// gradient, and tints its attached body's fill. The node-shaped
-    /// counterpart of a binding's *sink* — the dataflow's output port.
+    /// gradient, and tints its attached body's fill or tracer trail (per
+    /// `target`). The node-shaped counterpart of a binding's *sink* — the
+    /// dataflow's output port.
     Actuator {
         /// Bus name to read.
         signal: String,
@@ -87,7 +88,35 @@ pub enum NodeKind {
         map: crate::domain::signal::SignalMap,
         /// Color ramp.
         gradient: crate::domain::signal::GradientSpec,
+        /// Which channel the color drives (fill vs tracer trail).
+        target: ActuatorTarget,
     },
+}
+
+/// Which render channel an [actuator node](NodeKind::Actuator) drives — the
+/// two channels of [`SignalColorOverride`](crate::signal::SignalColorOverride),
+/// in placeable form (the node-shaped counterpart of a color
+/// [`SignalSink`](crate::domain::signal::SignalSink)).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Reflect)]
+pub enum ActuatorTarget {
+    /// Tint the body's fill (default).
+    #[default]
+    Fill,
+    /// Tint the body's tracer trail.
+    TracerColor,
+}
+
+impl ActuatorTarget {
+    /// Both targets, for the tool/menu cycle.
+    pub const ALL: [Self; 2] = [Self::Fill, Self::TracerColor];
+
+    /// A short label.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Fill => "fill",
+            Self::TracerColor => "tracer",
+        }
+    }
 }
 
 /// A scene quantity a [sensor node](NodeKind::Sensor) reads from its body —
@@ -101,6 +130,11 @@ pub enum SensorQuantity {
     Spin,
     /// Height (world y, px).
     Height,
+    /// Horizontal position (world x, px).
+    PosX,
+    /// Vertical position (world y, px) — an alias for [`Self::Height`] kept
+    /// for the position pair; both read `Transform.translation.y`.
+    PosY,
     /// Net normal contact force.
     ContactForce,
     /// Number of bodies touched.
@@ -109,10 +143,12 @@ pub enum SensorQuantity {
 
 impl SensorQuantity {
     /// Every quantity, for the tool/menu cycle.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::Speed,
         Self::Spin,
         Self::Height,
+        Self::PosX,
+        Self::PosY,
         Self::ContactForce,
         Self::ContactCount,
     ];
@@ -123,6 +159,8 @@ impl SensorQuantity {
             Self::Speed => "speed",
             Self::Spin => "spin",
             Self::Height => "height",
+            Self::PosX => "pos x",
+            Self::PosY => "pos y",
             Self::ContactForce => "force",
             Self::ContactCount => "contacts",
         }

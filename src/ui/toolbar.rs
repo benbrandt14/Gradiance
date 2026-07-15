@@ -3,8 +3,31 @@
 use crate::command::intent::{RedoIntent, UndoIntent};
 use crate::core::states::{GameState, ToolState};
 use crate::interaction::tools::handles::ScaleFrame;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+
+/// The editor panels the transport strip toggles, bundled so the toolbar
+/// system stays under Bevy's system-parameter limit.
+#[derive(SystemParam)]
+pub struct Panels<'w> {
+    /// Settings window.
+    pub settings: ResMut<'w, crate::ui::settings::SettingsWindow>,
+    /// Properties inspector pop-out.
+    pub inspector: ResMut<'w, crate::ui::inspector::InspectorPanel>,
+    /// Live plot panel.
+    pub plot: ResMut<'w, crate::ui::plot::PlotPanel>,
+    /// Physics probe panel.
+    pub probe: ResMut<'w, crate::ui::probe::ProbePanel>,
+    /// Signals dock section.
+    pub signals: ResMut<'w, crate::ui::signals::SignalsPanel>,
+    /// Node-graph canvas.
+    pub node_graph: ResMut<'w, crate::ui::node_graph::NodeGraph>,
+    /// Scripting console.
+    pub console: ResMut<'w, crate::ui::console::ScriptConsole>,
+    /// Debug overlays (field vectors).
+    pub debug: ResMut<'w, crate::domain::settings::DebugSettings>,
+}
 
 const TOOLS: [(ToolState, &str, &str); 14] = [
     (ToolState::Select, "Select", "S"),
@@ -33,13 +56,7 @@ pub fn toolbar(
     mut frame: ResMut<ScaleFrame>,
     mut undo: MessageWriter<UndoIntent>,
     mut redo: MessageWriter<RedoIntent>,
-    mut settings: ResMut<crate::ui::settings::SettingsWindow>,
-    mut plot: ResMut<crate::ui::plot::PlotPanel>,
-    mut probe: ResMut<crate::ui::probe::ProbePanel>,
-    mut signals: ResMut<crate::ui::signals::SignalsPanel>,
-    mut inspector: ResMut<crate::ui::inspector::InspectorPanel>,
-    mut console: ResMut<crate::ui::console::ScriptConsole>,
-    mut debug: ResMut<crate::domain::settings::DebugSettings>,
+    mut panels: Panels,
     mut rig: ResMut<crate::interaction::camera::CameraRig>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -90,18 +107,10 @@ pub fn toolbar(
                     rig.glide_home();
                 }
                 ui.separator();
-                panel_toggles(
-                    ui,
-                    &mut inspector,
-                    &mut plot,
-                    &mut probe,
-                    &mut signals,
-                    &mut console,
-                    &mut debug,
-                );
+                panel_toggles(ui, &mut panels);
                 ui.separator();
                 if ui.button("⚙ Settings").clicked() {
-                    settings.open = !settings.open;
+                    panels.settings.open = !panels.settings.open;
                 }
             });
         });
@@ -121,56 +130,55 @@ pub fn toolbar(
 /// knowing the `\` / backquote shortcuts. Each button reflects its panel's
 /// open state. (The field overlay lives with the debug toggles, but it's
 /// the main way to *see* attraction/repulsion — surfaced here too.)
-fn panel_toggles(
-    ui: &mut egui::Ui,
-    inspector: &mut crate::ui::inspector::InspectorPanel,
-    plot: &mut crate::ui::plot::PlotPanel,
-    probe: &mut crate::ui::probe::ProbePanel,
-    signals: &mut crate::ui::signals::SignalsPanel,
-    console: &mut crate::ui::console::ScriptConsole,
-    debug: &mut crate::domain::settings::DebugSettings,
-) {
+fn panel_toggles(ui: &mut egui::Ui, panels: &mut Panels) {
     if ui
-        .selectable_label(inspector.open, "Properties")
+        .selectable_label(panels.inspector.open, "Properties")
         .on_hover_text("properties pop-out (also in the right-click menu)")
         .clicked()
     {
-        inspector.open = !inspector.open;
+        panels.inspector.open = !panels.inspector.open;
     }
     if ui
-        .selectable_label(plot.is_open(), "Plot")
+        .selectable_label(panels.plot.is_open(), "Plot")
         .on_hover_text("live plot of the selected body/joint (\\)")
         .clicked()
     {
-        plot.toggle();
+        panels.plot.toggle();
     }
     if ui
-        .selectable_label(probe.is_open(), "Probe")
+        .selectable_label(panels.probe.is_open(), "Probe")
         .on_hover_text("live physics readouts: pinned bodies + hover")
         .clicked()
     {
-        probe.toggle();
+        panels.probe.toggle();
     }
     if ui
-        .selectable_label(signals.is_open(), "Signals")
+        .selectable_label(panels.signals.is_open(), "Signals")
         .on_hover_text("wire scene attributes to colors and plots (signal dataflow)")
         .clicked()
     {
-        signals.toggle();
+        panels.signals.toggle();
     }
     if ui
-        .selectable_label(console.is_open(), "λ Script")
+        .selectable_label(panels.node_graph.is_open(), "⬡ Graph")
+        .on_hover_text("node-graph canvas: wire signals visually (drag output → actuator input)")
+        .clicked()
+    {
+        panels.node_graph.toggle();
+    }
+    if ui
+        .selectable_label(panels.console.is_open(), "λ Script")
         .on_hover_text("scripting console / REPL (`)")
         .clicked()
     {
-        console.toggle();
+        panels.console.toggle();
     }
     if ui
-        .selectable_label(debug.show_fields, "⇢ Fields")
+        .selectable_label(panels.debug.show_fields, "⇢ Fields")
         .on_hover_text("vector plot of the superposed field (also in Settings ▸ Debug)")
         .clicked()
     {
-        debug.show_fields = !debug.show_fields;
+        panels.debug.show_fields = !panels.debug.show_fields;
     }
 }
 

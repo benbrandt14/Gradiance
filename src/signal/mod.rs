@@ -213,7 +213,8 @@ pub fn read_quantity(
     match quantity {
         Q::Speed => physics.velocity_of(entity).map(|(v, _)| v.length()),
         Q::Spin => physics.velocity_of(entity).map(|(_, w)| w.abs()),
-        Q::Height => transforms.get(entity).ok().map(|t| t.translation.y),
+        Q::Height | Q::PosY => transforms.get(entity).ok().map(|t| t.translation.y),
+        Q::PosX => transforms.get(entity).ok().map(|t| t.translation.x),
         Q::ContactForce => Some(physics.net_contact_impulse(entity).length() / dt),
         Q::ContactCount => Some(physics.touching_count(entity) as f32),
     }
@@ -329,25 +330,8 @@ pub fn evaluate_signals(
         }
     }
 
-    // Actuator nodes: read a bus signal, map + gradient → tint the attached
-    // body's fill. The same desired map, so cleanup below is unified.
-    for (kind, attachment) in &nodes {
-        let crate::domain::node::NodeKind::Actuator {
-            signal,
-            map,
-            gradient,
-        } = kind
-        else {
-            continue;
-        };
-        let (Some(entity), Some(value)) = (
-            attachment.target.and_then(|id| index.entity(id)),
-            bus.get(signal),
-        ) else {
-            continue;
-        };
-        desired.entry(entity).or_default().fill = Some(gradient.at(map.normalize(value)));
-    }
+    // Actuator nodes fold into the same desired map (unified cleanup below).
+    apply_actuators(&nodes, &index, &bus, &mut desired);
 
     // Bus hygiene: keep the names that still have a producer — bindings,
     // params, computed signals, sensor nodes, `t`, and script names.
@@ -379,6 +363,45 @@ pub fn evaluate_signals(
     for entity in &overridden {
         if !desired.contains_key(&entity) {
             commands.entity(entity).remove::<SignalColorOverride>();
+        }
+    }
+}
+
+/// Folds every **actuator node** into the desired-override map: read its bus
+/// signal, map + gradient → a color, and tint the attached body's fill or
+/// tracer trail (per its target). Split from [`evaluate_signals`] to keep
+/// that system readable.
+fn apply_actuators(
+    nodes: &Query<(
+        &crate::domain::node::NodeKind,
+        &crate::domain::node::NodeAttachment,
+    )>,
+    index: &IdIndex,
+    bus: &SignalBus,
+    desired: &mut HashMap<Entity, SignalColorOverride>,
+) {
+    use crate::domain::node::{ActuatorTarget, NodeKind};
+    for (kind, attachment) in nodes {
+        let NodeKind::Actuator {
+            signal,
+            map,
+            gradient,
+            target,
+        } = kind
+        else {
+            continue;
+        };
+        let (Some(entity), Some(value)) = (
+            attachment.target.and_then(|id| index.entity(id)),
+            bus.get(signal),
+        ) else {
+            continue;
+        };
+        let color = gradient.at(map.normalize(value));
+        let entry = desired.entry(entity).or_default();
+        match target {
+            ActuatorTarget::Fill => entry.fill = Some(color),
+            ActuatorTarget::TracerColor => entry.trail = Some(color),
         }
     }
 }

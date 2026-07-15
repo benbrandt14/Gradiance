@@ -411,7 +411,13 @@ governance").
   appearance untouched — or plot). The `SignalBus` carries named values +
   histories (plotted in the plot panel); scripts join via
   `signal-set`/`signal-get`/`touch-count`. Simple functional *Signals*
-  window; the node-editor canvas replaces it later.
+  window plus the **⬡ Graph** canvas (`src/ui/node_graph.rs`): the
+  Simulink-style node editor renders params, computed signals, and
+  sensor/actuator nodes as draggable boxes with ports, wired by bus name,
+  and rewires an actuator by dragging a producer output onto its input
+  (undoable `PropertyEditIntent`). Sensor quantities and actuator targets
+  (fill / tracer) are the placeable palette; more node kinds accrete on the
+  same seam.
 - **Probes** — **landed**: the *Probes* window (transport toggle) shows live
   readouts — position, speed, spin, mass, net contact force, sleep state —
   for bodies pinned from the right-click menu ("Pin probe", tracked by
@@ -504,8 +510,12 @@ a normal dependency, not a cargo feature — see the decision doc's
   Signals **dock** section edits them with live sliders. Completes the
   sensor→modulator→actuator triad in the resource model (sensor = a source
   read, modulator = a computed kernel signal, actuator = a color/plot sink; sim
-  and gizmo actuators are the next accretion). Remaining P2: node-canvas UI,
-  more actuator kinds, per-particle `Kernel::drive` populations.
+  and gizmo actuators are the next accretion). The **node-canvas UI landed**
+  (`src/ui/node_graph.rs`, **⬡ Graph**): draggable producer/modulator/consumer
+  boxes wired by bus name, with drag-to-rewire actuators through the undoable
+  `PropertyEditIntent` seam. Remaining P2: fold `SignalBinding` into the
+  canvas, more actuator kinds (sim/gizmo), per-particle `Kernel::drive`
+  populations.
 - **P3 — the extension surface (the tool authored in its own DSL).** Because
   edits, config, and reads all route through one registry, the editor's own
   chrome can be *authored as data over that registry*:
