@@ -46,4 +46,7 @@ pub enum ToolState {
     Ground,
     /// Cut bodies along a dragged segment (CSG difference).
     Cut,
+    /// Place tracer nodes (a placeable trajectory probe; attaches to a body
+    /// under the cursor, else free).
+    Tracer,
 }

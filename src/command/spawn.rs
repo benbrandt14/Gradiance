@@ -1,9 +1,33 @@
 //! Spawn, delete, and duplicate commands.
 
-use crate::command::snapshot::BodyRecord;
+use crate::command::snapshot::{BodyRecord, NodeRecord};
 use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::StableId;
 use bevy::prelude::*;
+
+/// Spawns one behavior node from a record.
+#[derive(Debug)]
+pub struct SpawnNodeCommand {
+    /// The authored node to create; its `id` is reused on redo.
+    pub record: NodeRecord,
+}
+
+impl GameCommand for SpawnNodeCommand {
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
+        self.record.spawn(world);
+        Ok(())
+    }
+
+    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
+        let entity = resolve(world, self.record.id)?;
+        world.despawn(entity);
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        crate::command::intent::name::SPAWN_NODE
+    }
+}
 
 /// Spawns one body from a record.
 #[derive(Debug)]
@@ -34,47 +58,62 @@ impl GameCommand for SpawnBodyCommand {
 /// everything — same ids — on undo.
 #[derive(Debug)]
 pub struct DeleteCommand {
-    /// Bodies to delete.
+    /// Bodies and/or behavior nodes to delete.
     pub targets: Vec<StableId>,
     /// Captured body state for undo; filled during `apply`.
     records: Vec<BodyRecord>,
     /// Captured joints (targeted or cascaded); filled during `apply`.
     joint_records: Vec<crate::command::snapshot::JointRecord>,
+    /// Captured behavior nodes among the targets; filled during `apply`.
+    node_records: Vec<NodeRecord>,
 }
 
 impl DeleteCommand {
-    /// Builds a delete command for `targets`.
+    /// Builds a delete command for `targets` (bodies and/or nodes).
     pub fn new(targets: Vec<StableId>) -> Self {
         Self {
             targets,
             records: Vec::new(),
             joint_records: Vec::new(),
+            node_records: Vec::new(),
         }
     }
 }
 
 impl GameCommand for DeleteCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        // Capture-first so a missing entity aborts before any despawn.
-        let mut pairs = Vec::with_capacity(self.targets.len());
+        // Capture-first so a missing entity aborts before any despawn. Each
+        // target is either a body (with a cascade of joints) or a behavior
+        // node — a mixed selection deletes both in one undoable step.
+        let mut body_pairs = Vec::new();
+        let mut node_pairs = Vec::new();
         for &id in &self.targets {
             let entity = resolve(world, id)?;
-            let record =
-                BodyRecord::capture(world, entity).ok_or(CommandError::MissingEntity(id))?;
-            pairs.push((entity, record));
+            if let Some(record) = BodyRecord::capture(world, entity) {
+                body_pairs.push((entity, record));
+            } else if let Some(record) = NodeRecord::capture(world, entity) {
+                node_pairs.push((entity, record));
+            } else {
+                return Err(CommandError::MissingEntity(id));
+            }
         }
-        if pairs.is_empty() {
+        if body_pairs.is_empty() && node_pairs.is_empty() {
             return Err(CommandError::NoEffect);
         }
         // Cascade: joints referencing any deleted body go too (a joint
         // with a dangling endpoint must never exist).
-        let joints = crate::command::joint_cmd::joints_referencing(world, &self.targets);
-        self.records = pairs.iter().map(|(_, r)| r.clone()).collect();
+        let body_ids: Vec<StableId> = body_pairs.iter().map(|(_, r)| r.id).collect();
+        let joints = crate::command::joint_cmd::joints_referencing(world, &body_ids);
+        self.records = body_pairs.iter().map(|(_, r)| r.clone()).collect();
         self.joint_records = joints.iter().map(|(_, r)| r.clone()).collect();
+        self.node_records = node_pairs.iter().map(|(_, r)| r.clone()).collect();
         for (entity, _) in joints {
             world.despawn(entity);
         }
-        for (entity, _) in pairs {
+        for (entity, _) in body_pairs {
+            world.despawn(entity);
+        }
+        for (entity, _) in node_pairs {
             world.despawn(entity);
         }
         Ok(())
@@ -85,6 +124,9 @@ impl GameCommand for DeleteCommand {
             record.spawn(world);
         }
         for record in &self.joint_records {
+            record.spawn(world);
+        }
+        for record in &self.node_records {
             record.spawn(world);
         }
         Ok(())
@@ -182,6 +224,12 @@ pub struct DuplicateCommand {
     pub offset: Vec2,
     clones: Vec<BodyRecord>,
     joint_clones: Vec<crate::command::snapshot::JointRecord>,
+    /// Behavior nodes attached to a duplicated body, cloned and remapped.
+    node_clones: Vec<NodeRecord>,
+    /// Signal bindings referencing a duplicated body, cloned and remapped
+    /// (names captured so undo removes exactly them). "Behavior copies with
+    /// the base object" (`docs/signal-dataflow.md`).
+    binding_clones: Vec<String>,
 }
 
 impl DuplicateCommand {
@@ -192,6 +240,8 @@ impl DuplicateCommand {
             offset,
             clones: Vec::new(),
             joint_clones: Vec::new(),
+            node_clones: Vec::new(),
+            binding_clones: Vec::new(),
         }
     }
 }
@@ -216,6 +266,8 @@ impl GameCommand for DuplicateCommand {
             }
             let offset = self.offset;
             self.joint_clones = clone_internal_joints(world, &id_map, |p| p + offset, 0.0);
+            self.node_clones = clone_attached_nodes(world, &id_map, offset);
+            self.binding_clones = clone_bindings(world, &id_map);
             let mut next_group = next_group_id(world);
             remap_clone_groups(&mut clones, &mut next_group);
             self.clones = clones;
@@ -226,10 +278,17 @@ impl GameCommand for DuplicateCommand {
         for record in &self.joint_clones {
             record.spawn(world);
         }
+        for record in &self.node_clones {
+            record.spawn(world);
+        }
         Ok(())
     }
 
     fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
+        for record in &self.node_clones {
+            let entity = resolve(world, record.id)?;
+            world.despawn(entity);
+        }
         for record in &self.joint_clones {
             let entity = resolve(world, record.id)?;
             world.despawn(entity);
@@ -238,10 +297,92 @@ impl GameCommand for DuplicateCommand {
             let entity = resolve(world, record.id)?;
             world.despawn(entity);
         }
+        // Remove the binding clones this command added (config seam).
+        if !self.binding_clones.is_empty()
+            && let Some(mut bindings) = world.get_resource_mut::<crate::signal::SignalBindings>()
+        {
+            bindings
+                .0
+                .retain(|b| !self.binding_clones.contains(&b.name));
+        }
         Ok(())
     }
 
     fn name(&self) -> &'static str {
         crate::command::intent::name::DUPLICATE
+    }
+}
+
+/// Clones every behavior node attached to a duplicated body, remapping its
+/// attachment to the clone and offsetting a free node's pose. Nodes not
+/// attached to any duplicated body are left alone.
+fn clone_attached_nodes(
+    world: &mut World,
+    id_map: &[(StableId, StableId)],
+    offset: Vec2,
+) -> Vec<NodeRecord> {
+    let remap = |id: StableId| id_map.iter().find(|(s, _)| *s == id).map(|(_, c)| *c);
+    let node_entities: Vec<Entity> = world
+        .query_filtered::<Entity, With<crate::domain::node::BehaviorNode>>()
+        .iter(world)
+        .collect();
+    let mut clones = Vec::new();
+    for entity in node_entities {
+        let Some(mut record) = NodeRecord::capture(world, entity) else {
+            continue;
+        };
+        let Some(target) = record.attachment.target else {
+            continue; // free nodes don't belong to any duplicated body
+        };
+        let Some(clone_target) = remap(target) else {
+            continue; // attached to a body outside the duplicated set
+        };
+        record.id = StableId::new();
+        record.attachment.target = Some(clone_target);
+        record.pose.pos += offset;
+        clones.push(record);
+    }
+    clones
+}
+
+/// Clones every signal binding that references a duplicated body, remapping
+/// its source/sink to the clone and giving it a fresh unique name; returns
+/// the new names (for undo). Bindings referencing bodies outside the set are
+/// left alone.
+fn clone_bindings(world: &mut World, id_map: &[(StableId, StableId)]) -> Vec<String> {
+    let Some(bindings) = world.get_resource::<crate::signal::SignalBindings>() else {
+        return Vec::new();
+    };
+    let existing: Vec<crate::signal::SignalBinding> = bindings.0.clone();
+    let mut taken: Vec<String> = existing.iter().map(|b| b.name.clone()).collect();
+    let mut new_bindings = Vec::new();
+    for binding in &existing {
+        if let Some(mut clone) = crate::signal::remap_binding(binding, id_map) {
+            let name = fresh_binding_name(&binding.name, &taken);
+            clone.name.clone_from(&name);
+            taken.push(name);
+            new_bindings.push(clone);
+        }
+    }
+    let names: Vec<String> = new_bindings.iter().map(|b| b.name.clone()).collect();
+    if let Some(mut res) = world.get_resource_mut::<crate::signal::SignalBindings>() {
+        res.0.extend(new_bindings);
+    }
+    names
+}
+
+/// A fresh `base-copy`, `base-copy-2`, … name not already taken.
+fn fresh_binding_name(base: &str, taken: &[String]) -> String {
+    let first = format!("{base}-copy");
+    if !taken.iter().any(|n| n == &first) {
+        return first;
+    }
+    let mut n = 2;
+    loop {
+        let name = format!("{base}-copy-{n}");
+        if !taken.iter().any(|t| t == &name) {
+            return name;
+        }
+        n += 1;
     }
 }

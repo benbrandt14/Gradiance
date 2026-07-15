@@ -381,12 +381,19 @@ tracer is *just another reader* of `physics::queries` / the scripting
 `docs/script-lisp-decision.md` §"Live plotters are enabled by read-total
 governance").
 
-- Body/point **tracers** — **landed** (body tracers): an authored `Tracer`
-  marker (fade window; toggled in the Material section, undoable via
-  `PropertyValue::Tracer`, serde-defaulted in saves) drives a derived
-  `TraceTrail` sampled on the physics clock (pause freezes it) and drawn
-  as a fading polyline in the body's own color. Samples are never
-  command-wrapped or serialized (rule #5). Point/local-anchor tracers open.
+- Body/point **tracers** — **landed** (body tracers *and* placeable node
+  tracers): an authored `Tracer` marker (fade window) drives a derived
+  `TraceTrail` sampled on the physics clock (pause freezes it), drawn as a
+  fading polyline. On a **body** it toggles in the Material section
+  (`PropertyValue::Tracer`); as a **placeable node** the *Tracer tool*
+  (toolbar, key `Y`) drops a standalone, individually-selectable
+  [behavior node](signal-dataflow.md) that attaches to the body under the
+  cursor (rides it) or floats free. Nodes are authored scene content
+  (`SceneRecord.nodes`, undoable `SpawnNode`/`Delete`), and **behavior
+  copies with the base object** — duplicating a body clones its attached
+  tracer nodes and the signal bindings about it. Samples are never
+  command-wrapped or serialized (rule #5). This is the first
+  sensor/actuator-as-its-own-tool; more node kinds accrete behind it.
 - **Live plotters** — **landed** (`src/ui/plot.rs`): a backslash-toggled panel
   time-series-plots the selected **body** (speed, height) *or* selected **joint**
   (length, and a hinge's angle), sampled each frame while playing from

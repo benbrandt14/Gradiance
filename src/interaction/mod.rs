@@ -24,6 +24,7 @@ pub mod gesture;
 pub mod indicators;
 pub mod input;
 pub mod joint_edit;
+pub mod node_edit;
 pub mod pointer;
 pub mod selection;
 pub mod snap;

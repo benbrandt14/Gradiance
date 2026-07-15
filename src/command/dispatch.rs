@@ -7,14 +7,14 @@ use crate::command::intent::LoadSceneIntent;
 use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
     DuplicateIntent, GroupIntent, MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent,
-    SpawnBodyIntent, SpawnJointIntent, UndoIntent, UngroupIntent,
+    SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, UndoIntent, UngroupIntent,
 };
 use crate::command::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::command::merge_cmd::MergeCommand;
 use crate::command::property::PropertyEditCommand;
 use crate::command::scale_cmd::ScaleCommand;
 use crate::command::scene_cmd::LoadSceneCommand;
-use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnBodyCommand};
+use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnBodyCommand, SpawnNodeCommand};
 use crate::command::transform_cmd::CommitTransformCommand;
 use crate::command::{CommandStack, GameCommand};
 use bevy::prelude::*;
@@ -63,6 +63,11 @@ pub fn dispatch_intents(world: &mut World) {
 
     for intent in drain::<SpawnBodyIntent>(world) {
         commands.push(Box::new(SpawnBodyCommand {
+            record: intent.record,
+        }));
+    }
+    for intent in drain::<SpawnNodeIntent>(world) {
+        commands.push(Box::new(SpawnNodeCommand {
             record: intent.record,
         }));
     }

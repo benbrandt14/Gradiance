@@ -189,6 +189,7 @@ fn bindings_persist_with_the_scene_and_old_files_parse() {
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
+        nodes: vec![],
         environment: gradiance::command::snapshot::EnvironmentRecord::default(),
     };
     let id = record.bodies[0].id;
@@ -318,6 +319,7 @@ fn params_and_computed_persist_and_old_files_parse() {
         app_version: String::new(),
         bodies: vec![],
         joints: vec![],
+        nodes: vec![],
         environment: gradiance::command::snapshot::EnvironmentRecord::default(),
     };
     record.environment.params.0.push(SignalParam::unit("amp"));

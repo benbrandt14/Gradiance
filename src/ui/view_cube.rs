@@ -53,6 +53,10 @@ pub fn view_cube(mut contexts: EguiContexts, mut rig: ResMut<CameraRig>) -> Resu
     let ctx = contexts.ctx_mut()?;
     egui::Area::new(egui::Id::new("view-cube"))
         .anchor(egui::Align2::RIGHT_TOP, [-16.0, 16.0])
+        // Behind panels: when the right dock is open it covers the cube
+        // (the dock owns the top-right); the cube shows when the dock is
+        // closed. The cube still takes clicks when nothing is over it.
+        .order(egui::Order::Background)
         .show(ctx, |ui| {
             let (rect, response) =
                 ui.allocate_exact_size(egui::vec2(HALF * 2.6, HALF * 2.6), egui::Sense::click());

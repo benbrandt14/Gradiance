@@ -69,6 +69,32 @@ source (read) ──▶ map [in_min, in_max] → t ──▶ gradient(t) ──�
 | `SignalBus`, `ScriptSignals` | derived | rebuilt continuously; never persisted; bus hygiene drops entries whose binding/param/computed/script producer is gone |
 | `CompiledSignals` | derived | the compiled kernels behind `ComputedSignals`, rebuilt by `recompile_signals` on change — keeps the *compile* step off the frame loop |
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
+| `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer tool today, sensors/actuators next; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
+
+## Behavior nodes: dataflow as placeable, selectable entities
+
+The dataflow's endpoints don't have to live in a panel — they can be
+**placed in the scene**. A [`domain::node`](../src/domain/node.rs) is an
+authored entity (its own `StableId`, pose, and optional attachment to a
+body) that represents a piece of the graph:
+
+- **The tracer tool** (toolbar `Tracer`, key `Y`) places a tracer node.
+  Click on a body → the node *attaches* and rides it (its trail traces the
+  body's motion, `follow_node_attachments` re-derives the pose each frame);
+  click in empty space → a free node fixed at the click.
+- Nodes are **individually selectable** (`node_edit::pick_node`, after
+  joint picking) and deletable/undoable like bodies — their glyph shows the
+  selection state and a tether to the attached body.
+- **Behavior copies with the base object.** Duplicating a body clones the
+  tracer nodes attached to it (attachment remapped to the copy) *and* the
+  signal bindings that reference it (`signal::remap_binding`, fresh names),
+  so a duplicated object brings its whole behavior — undoably.
+
+This is the first "a dataflow endpoint is its own tool" instance; every
+future **sensor** (a reader glyph) and **actuator** (a writer glyph) is a
+sibling `NodeKind` + tool, spawned through the same `ToolCommit::SpawnNode`
+seam. The node canvas of the eventual editor wires these nodes' ports;
+today they publish/read through the same named `SignalBus`.
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)
 is plain queries + arithmetic over the `physics::queries` facade — the

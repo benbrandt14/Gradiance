@@ -146,6 +146,73 @@ pub struct SignalBinding {
 #[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct SignalBindings(pub Vec<SignalBinding>);
 
+/// Remaps a body id through `id_map` (old → new), returning the new id and
+/// whether it changed.
+fn remap_id(id: StableId, id_map: &[(StableId, StableId)]) -> (StableId, bool) {
+    id_map
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map_or((id, false), |(_, new)| (*new, true))
+}
+
+impl SignalSource {
+    /// Remaps body references through `id_map`; the bool is whether any
+    /// reference belonged to the map (the source "touches" a remapped body).
+    fn remapped(&self, id_map: &[(StableId, StableId)]) -> (Self, bool) {
+        let one = |id: StableId| remap_id(id, id_map);
+        match self {
+            Self::Speed(a) => (Self::Speed(one(*a).0), one(*a).1),
+            Self::Spin(a) => (Self::Spin(one(*a).0), one(*a).1),
+            Self::Height(a) => (Self::Height(one(*a).0), one(*a).1),
+            Self::ContactForce(a) => (Self::ContactForce(one(*a).0), one(*a).1),
+            Self::ContactCount(a) => (Self::ContactCount(one(*a).0), one(*a).1),
+            Self::Distance(a, b) => {
+                let (ra, ta) = one(*a);
+                let (rb, tb) = one(*b);
+                (Self::Distance(ra, rb), ta || tb)
+            }
+            Self::Named(n) => (Self::Named(n.clone()), false),
+        }
+    }
+}
+
+impl SignalSink {
+    /// Remaps body references through `id_map` (see [`SignalSource::remapped`]).
+    fn remapped(&self, id_map: &[(StableId, StableId)]) -> (Self, bool) {
+        match self {
+            Self::Fill(a) => {
+                let (r, t) = remap_id(*a, id_map);
+                (Self::Fill(r), t)
+            }
+            Self::TracerColor(a) => {
+                let (r, t) = remap_id(*a, id_map);
+                (Self::TracerColor(r), t)
+            }
+            Self::Plot => (Self::Plot, false),
+        }
+    }
+}
+
+/// Clones `binding` with its body references remapped through `id_map`,
+/// returning `Some` only when it references at least one remapped body — so
+/// duplicating a body copies exactly the bindings that were about it
+/// ("behavior copies with the base object"). The clone keeps `binding`'s
+/// name; the caller assigns a fresh one.
+pub fn remap_binding(
+    binding: &SignalBinding,
+    id_map: &[(StableId, StableId)],
+) -> Option<SignalBinding> {
+    let (source, s_touched) = binding.source.remapped(id_map);
+    let (sink, k_touched) = binding.sink.remapped(id_map);
+    (s_touched || k_touched).then(|| SignalBinding {
+        name: binding.name.clone(),
+        source,
+        map: binding.map,
+        gradient: binding.gradient,
+        sink,
+    })
+}
+
 /// A tunable named parameter — the auto-slider a `defparam` produces
 /// (the "knob" of the P2 driver layer, `docs/signal-dataflow.md`). Its
 /// value is published on the bus each frame under `name`, and it is the

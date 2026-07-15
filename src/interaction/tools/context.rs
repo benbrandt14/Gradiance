@@ -166,6 +166,8 @@ pub enum ToolCommit {
         /// Its current kind, captured for undo.
         old: RigidBody,
     },
+    /// Author a new behavior node (the tracer tool; future sensors/actuators).
+    SpawnNode(Box<crate::command::snapshot::NodeRecord>),
 }
 
 /// One gizmo primitive for a tool's transient preview.
@@ -302,6 +304,7 @@ pub trait DraftTool: Resource<Mutability = Mutable> {
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct ToolCommitWriters<'w> {
     spawn: MessageWriter<'w, SpawnBodyIntent>,
+    spawn_node: MessageWriter<'w, crate::command::intent::SpawnNodeIntent>,
     cut: MessageWriter<'w, CutIntent>,
     joint: MessageWriter<'w, SpawnJointIntent>,
     moves: MessageWriter<'w, CommitTransformIntent>,
@@ -318,6 +321,10 @@ impl ToolCommitWriters<'_> {
         match commit {
             ToolCommit::SpawnBody(record) => {
                 self.spawn.write(SpawnBodyIntent { record: *record });
+            }
+            ToolCommit::SpawnNode(record) => {
+                self.spawn_node
+                    .write(crate::command::intent::SpawnNodeIntent { record: *record });
             }
             ToolCommit::Cut { a, b, width } => {
                 self.cut.write(CutIntent { a, b, width });

@@ -76,6 +76,7 @@ impl Plugin for GradianceRenderPlugin {
                 decorations::draw_body_borders,
                 debug_viz::draw_debug_overlays,
                 tracer::draw_traces,
+                tracer::draw_node_glyphs,
             ),
         );
         app.add_systems(

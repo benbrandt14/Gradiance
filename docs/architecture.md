@@ -25,6 +25,8 @@ bottom — no unclassified state.
 | `Transform` (x, y, θ) | component | authored pose, captured as `PosRot`; z/scale derived |
 | avian `RigidBody`, `Friction`, `Restitution`, `ColliderDensity`, `GravityScale`, `Sensor`, `LockedAxes` | components | authored physics **is** avian components (de-adapter) |
 | `FieldSource` | component | field source (signed repulsion, falloff); sampled only via `physics::fields::Fields` (`docs/field-architecture.md`) |
+| `Tracer` | component | trajectory-trail marker (on a body, or on a node) |
+| `BehaviorNode`, `NodeAttachment`, `NodeKind` | components | placeable dataflow node (the tracer tool; future sensors/actuators) — `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes` (`docs/signal-dataflow.md`) |
 | `Tracer` | component | trajectory-trail marker (fade window); the sampled trail is derived (`TraceTrail`) |
 
 ### Config (settings resources — UI writes directly; invariant-4 exception)
@@ -72,7 +74,8 @@ bottom — no unclassified state.
 | live avian joints (`RevoluteJoint`, `PrismaticJoint`, `DistanceJoint`, `JointDamping`), `JointUnresolved`, `PinAnchor` | `joint_sync` |
 | `Mesh3d`, `MeshMaterial3d`, `ToonMaterial` | `extrude_sync`, `material_sync` |
 | `FieldMass` | `fields::sync_field_mass` (shape area × density — the field-coupling mass, `docs/field-architecture.md`) |
-| `TraceTrail` | `render::tracer::sample_traces` (physics-clock position window behind the authored `Tracer`; removed with its marker) |
+| `TraceTrail` | `render::tracer::sample_traces` (physics-clock position window behind the authored `Tracer`, on a body or a node; removed with its marker) |
+| attached node `Transform` | `render::tracer::follow_node_attachments` (an attached behavior node's pose re-derived each frame from its target body) |
 | `SignalBus`, `ScriptSignals` | `signal::evaluate_signals` + script `signal-set` (named values + rolling histories; bus hygiene drops unbound names) |
 | `CompiledSignals` | `signal::recompile_signals` (compiled kernels behind `ComputedSignals`, rebuilt on change — keeps the kernel *compile* off the frame loop) |
 | `SignalColorOverride` | `signal::evaluate_signals` (derived tint preferred by `material_sync`/`tracer` over authored `Appearance`; removed with its binding) |
