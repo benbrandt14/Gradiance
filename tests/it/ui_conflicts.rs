@@ -1,0 +1,22 @@
+//! Guards against B0002 system-parameter conflicts in the egui panel
+//! systems. These systems only run under the render plugin, so the headless
+//! integration tests never initialize them — a conflicting-access bug (e.g.
+//! two `MessageWriter`s of the same intent in one system) would panic only
+//! at runtime. `System::initialize` runs Bevy's access-conflict validation
+//! without a window, catching that class here.
+
+use bevy::ecs::system::IntoSystem;
+use bevy::prelude::*;
+
+fn assert_initializes<M, S: IntoSystem<(), Result, M>>(system: S) {
+    let mut world = World::new();
+    let mut system = IntoSystem::into_system(system);
+    system.initialize(&mut world);
+}
+
+#[test]
+fn panel_systems_have_no_conflicting_params() {
+    assert_initializes(gradiance::ui::dock::right_dock);
+    assert_initializes(gradiance::ui::node_graph::node_graph_panel);
+    assert_initializes(gradiance::ui::toolbar::toolbar);
+}
