@@ -126,7 +126,7 @@ impl NodeRecord {
             id: *entity_ref.get::<StableId>()?,
             pose: PosRot::from_transform(entity_ref.get::<Transform>()?),
             attachment: *entity_ref.get::<crate::domain::node::NodeAttachment>()?,
-            kind: *entity_ref.get::<crate::domain::node::NodeKind>()?,
+            kind: entity_ref.get::<crate::domain::node::NodeKind>()?.clone(),
             appearance: *entity_ref.get::<Appearance>()?,
         })
     }
@@ -142,13 +142,14 @@ impl NodeRecord {
             self.id,
             transform,
             self.attachment,
-            self.kind,
+            self.kind.clone(),
             self.appearance,
         ));
-        match self.kind {
-            crate::domain::node::NodeKind::Tracer(tracer) => {
-                entity.insert(tracer);
-            }
+        // The tracer kind also gets a `Tracer` component so the trail
+        // sampler drives it uniformly with body tracers; sensor/actuator
+        // nodes are driven by the signal runtime from their `NodeKind`.
+        if let crate::domain::node::NodeKind::Tracer(tracer) = self.kind {
+            entity.insert(tracer);
         }
         entity.id()
     }

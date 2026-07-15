@@ -41,6 +41,9 @@ pub enum PropertyValue {
     Depth(DepthBand),
     /// Full joint definition (limits, motors, collide flags, anchors).
     Joint(JointDef),
+    /// A behavior node's kind (sensor quantity/signal, actuator wiring,
+    /// tracer fade). Editing wires the dataflow — undoable like any prop.
+    NodeKind(crate::domain::node::NodeKind),
 }
 
 impl PropertyValue {
@@ -106,6 +109,19 @@ impl PropertyValue {
             }
             Self::Joint(v) => {
                 entity_mut.insert(v.clone());
+            }
+            Self::NodeKind(kind) => {
+                entity_mut.insert(kind.clone());
+                // A tracer node also carries the `Tracer` component the
+                // trail sampler reads; keep it in sync (and off other kinds).
+                match kind {
+                    crate::domain::node::NodeKind::Tracer(tracer) => {
+                        entity_mut.insert(*tracer);
+                    }
+                    _ => {
+                        entity_mut.remove::<crate::domain::tracer::Tracer>();
+                    }
+                }
             }
         }
         Ok(())

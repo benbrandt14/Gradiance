@@ -175,10 +175,17 @@ pub fn draw_node_glyphs(
             r - 2.5,
             if selected { css::WHITE.into() } else { base },
         );
-        // A tick distinguishes the kind (tracer = a short comet tail).
+        // A tick distinguishes the kind: tracer = a comet tail; sensor =
+        // an outward arrow (reads out); actuator = an inward arrow (drives).
         match kind {
             NodeKind::Tracer(_) => {
                 gizmos.line_2d(p, p + Vec2::new(-r - 4.0, 0.0), base.with_alpha(0.6));
+            }
+            NodeKind::Sensor { .. } => {
+                gizmos.arrow_2d(p, p + Vec2::new(r + 5.0, 0.0), base);
+            }
+            NodeKind::Actuator { .. } => {
+                gizmos.arrow_2d(p + Vec2::new(r + 5.0, 0.0), p, base);
             }
         }
         // Tether to the attached body.
