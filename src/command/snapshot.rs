@@ -98,6 +98,62 @@ impl BodyRecord {
     }
 }
 
+/// A complete authored-state snapshot of one behavior node (a placeable
+/// dataflow entity — see [`domain::node`](crate::domain::node)).
+///
+/// The node analogue of [`BodyRecord`]: shared by undo records,
+/// duplicate cloning, and scene files.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
+pub struct NodeRecord {
+    /// Stable identity.
+    pub id: StableId,
+    /// Authored pose (a free node's fixed pose; an attached node's is
+    /// re-derived each frame from its target).
+    pub pose: PosRot,
+    /// Optional attachment to a body.
+    pub attachment: crate::domain::node::NodeAttachment,
+    /// The node's payload (kind).
+    pub kind: crate::domain::node::NodeKind,
+    /// Appearance (glyph / trail color).
+    pub appearance: Appearance,
+}
+
+impl NodeRecord {
+    /// Captures the authored state of a behavior-node entity.
+    pub fn capture(world: &World, entity: Entity) -> Option<Self> {
+        let entity_ref = world.get_entity(entity).ok()?;
+        Some(Self {
+            id: *entity_ref.get::<StableId>()?,
+            pose: PosRot::from_transform(entity_ref.get::<Transform>()?),
+            attachment: *entity_ref.get::<crate::domain::node::NodeAttachment>()?,
+            kind: *entity_ref.get::<crate::domain::node::NodeKind>()?,
+            appearance: *entity_ref.get::<Appearance>()?,
+        })
+    }
+
+    /// Spawns a behavior-node entity with exactly this authored state.
+    /// The `Tracer` kind also inserts the `Tracer` component so the trail
+    /// sampler (`render::tracer`) drives it uniformly with body tracers.
+    pub fn spawn(&self, world: &mut World) -> Entity {
+        let mut transform = Transform::default();
+        self.pose.apply_to(&mut transform);
+        let mut entity = world.spawn((
+            crate::domain::node::BehaviorNode,
+            self.id,
+            transform,
+            self.attachment,
+            self.kind,
+            self.appearance,
+        ));
+        match self.kind {
+            crate::domain::node::NodeKind::Tracer(tracer) => {
+                entity.insert(tracer);
+            }
+        }
+        entity.id()
+    }
+}
+
 /// A complete authored-state snapshot of one joint.
 ///
 /// The joint analogue of [`BodyRecord`]: shared by undo records,
@@ -179,6 +235,9 @@ pub struct SceneRecord {
     pub bodies: Vec<BodyRecord>,
     /// All authored joints.
     pub joints: Vec<JointRecord>,
+    /// All authored behavior nodes (tracers, future sensors/actuators).
+    #[serde(default)]
+    pub nodes: Vec<NodeRecord>,
     /// Scene-level settings.
     pub environment: EnvironmentRecord,
 }
@@ -204,6 +263,16 @@ impl SceneRecord {
                 .collect()
         };
         joints.sort_by_key(|r| r.id.0);
+        let mut nodes: Vec<NodeRecord> = {
+            let mut query =
+                world.query_filtered::<Entity, With<crate::domain::node::BehaviorNode>>();
+            let entities: Vec<Entity> = query.iter(world).collect();
+            entities
+                .into_iter()
+                .filter_map(|e| NodeRecord::capture(world, e))
+                .collect()
+        };
+        nodes.sort_by_key(|r| r.id.0);
         Self {
             // Keep in sync with persist::FORMAT_VERSION (v2: avian-component
             // physics — see docs/physics-deadapter-decision.md).
@@ -211,6 +280,7 @@ impl SceneRecord {
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
             bodies,
             joints,
+            nodes,
             environment: EnvironmentRecord {
                 sim: world
                     .get_resource::<crate::domain::settings::SimSettings>()
@@ -270,6 +340,9 @@ impl SceneRecord {
             record.spawn(world);
         }
         for record in &self.joints {
+            record.spawn(world);
+        }
+        for record in &self.nodes {
             record.spawn(world);
         }
         world.insert_resource(self.environment.sim.clone());

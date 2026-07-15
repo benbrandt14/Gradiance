@@ -221,6 +221,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                 app_version: String::new(),
                 bodies,
                 joints,
+                nodes: vec![],
                 environment: EnvironmentRecord {
                     sim: SimSettings {
                         gravity: Vec2::new(gravity.0, gravity.1),
@@ -322,6 +323,7 @@ fn loading_a_scene_is_one_undoable_command() {
         app_version: String::new(),
         bodies: vec![incoming_body],
         joints: vec![],
+        nodes: vec![],
         environment: EnvironmentRecord::default(),
     };
 
@@ -480,6 +482,7 @@ fn pre_field_files_still_parse() {
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
+        nodes: vec![],
         environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();
@@ -506,6 +509,7 @@ fn v4_layer_masks_migrate_to_depth_bands() {
         app_version: String::new(),
         bodies: vec![record],
         joints: vec![],
+        nodes: vec![],
         environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();
@@ -531,6 +535,7 @@ fn pre_tracer_files_still_parse() {
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
+        nodes: vec![],
         environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();
@@ -547,6 +552,7 @@ fn version_mismatch_is_rejected() {
         app_version: String::new(),
         bodies: vec![],
         joints: vec![],
+        nodes: vec![],
         environment: EnvironmentRecord::default(),
     })
     .unwrap();
@@ -562,6 +568,7 @@ fn pre_render_settings_files_still_parse() {
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
+        nodes: vec![],
         environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();

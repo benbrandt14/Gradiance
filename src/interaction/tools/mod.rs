@@ -23,6 +23,7 @@ pub mod handles;
 pub mod polygon_tool;
 pub mod select;
 pub mod strut_tool;
+pub mod tracer_tool;
 
 use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_tool};
 
@@ -61,6 +62,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<ground_tool::GroundTool>();
         app.init_resource::<polygon_tool::PolygonTool>();
         app.init_resource::<strut_tool::StrutDraft>();
+        app.init_resource::<tracer_tool::TracerTool>();
 
         app.add_systems(
             Update,
@@ -69,6 +71,12 @@ impl Plugin for ToolsPlugin {
                 // press so the body select tool skips it this frame.
                 crate::interaction::joint_edit::pick_joint
                     .run_if(in_state(ToolState::Select))
+                    .before(run_manip_tool::<select::SelectGesture>),
+                // Node picking runs after joint picking (joints keep
+                // priority) and before the body select gesture.
+                crate::interaction::node_edit::pick_node
+                    .run_if(in_state(ToolState::Select))
+                    .after(crate::interaction::joint_edit::pick_joint)
                     .before(run_manip_tool::<select::SelectGesture>),
                 crate::interaction::joint_edit::drag_joint_anchor
                     .run_if(in_state(ToolState::Select)),
@@ -86,6 +94,7 @@ impl Plugin for ToolsPlugin {
                 run_manip_tool::<connector_tool::ConnectorDraft>
                     .run_if(connector_tool::connector_active),
                 run_manip_tool::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
+                run_manip_tool::<tracer_tool::TracerTool>.run_if(in_state(ToolState::Tracer)),
             )
                 .in_set(ToolDriverSet)
                 .in_set(InteractionSet)
@@ -117,6 +126,8 @@ impl Plugin for ToolsPlugin {
                     draw_manip_preview::<connector_tool::ConnectorDraft>
                         .run_if(connector_tool::connector_active),
                     draw_manip_preview::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
+                    draw_manip_preview::<tracer_tool::TracerTool>
+                        .run_if(in_state(ToolState::Tracer)),
                 ),
             );
         }

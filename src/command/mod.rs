@@ -211,6 +211,7 @@ impl Plugin for CommandPlugin {
         app.init_resource::<CommandStack>();
         app.init_resource::<HistoryInfo>();
         app.add_message::<intent::SpawnBodyIntent>();
+        app.add_message::<intent::SpawnNodeIntent>();
         app.add_message::<intent::DeleteIntent>();
         app.add_message::<intent::DuplicateIntent>();
         app.add_message::<intent::CommitTransformIntent>();
@@ -235,6 +236,7 @@ impl Plugin for CommandPlugin {
         // types, avian components), giving the read-total path a complete
         // registry without naming those types individually.
         app.register_type::<intent::SpawnBodyIntent>();
+        app.register_type::<intent::SpawnNodeIntent>();
         app.register_type::<crate::domain::field::FieldSource>();
         app.register_type::<crate::domain::tracer::Tracer>();
         app.register_type::<intent::DeleteIntent>();

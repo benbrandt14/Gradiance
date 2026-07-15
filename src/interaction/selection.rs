@@ -188,15 +188,16 @@ pub(crate) fn dedup_preserving_order(entities: Vec<Entity>) -> Vec<Entity> {
     out
 }
 
-/// Drops despawned entities from the selection.
+/// Drops despawned entities from the selection. Both bodies and behavior
+/// nodes are selectable, so an entity survives if it is still either.
 pub fn prune_dead_selection(
     mut selection: ResMut<Selection>,
     mut selected_joint: ResMut<SelectedJoint>,
-    bodies: Query<(), With<Body>>,
+    selectable: Query<(), Or<(With<Body>, With<crate::domain::node::BehaviorNode>)>>,
     joints: Query<(), With<crate::domain::Joint>>,
 ) {
     if !selection.is_empty() {
-        selection.retain(|e| bodies.contains(*e));
+        selection.retain(|e| selectable.contains(*e));
     }
     if let Some(joint) = selected_joint.0
         && !joints.contains(joint)

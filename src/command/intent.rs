@@ -20,6 +20,8 @@ use bevy::prelude::*;
 pub mod name {
     /// [`SpawnBodyIntent`](super::SpawnBodyIntent) → `SpawnBodyCommand`.
     pub const SPAWN_BODY: &str = "spawn-body";
+    /// [`SpawnNodeIntent`](super::SpawnNodeIntent) → `SpawnNodeCommand`.
+    pub const SPAWN_NODE: &str = "spawn-node";
     /// [`DeleteIntent`](super::DeleteIntent) → `DeleteCommand`.
     pub const DELETE: &str = "delete";
     /// [`DuplicateIntent`](super::DuplicateIntent) → `DuplicateCommand`.
@@ -58,6 +60,14 @@ pub mod name {
 pub struct SpawnBodyIntent {
     /// The complete authored state to create.
     pub record: BodyRecord,
+}
+
+/// Request to spawn one behavior node (a placeable tracer/sensor/actuator).
+// Trace: dispatch.rs → SpawnNodeCommand (spawn.rs) → follow_node_attachments, render::tracer.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SpawnNodeIntent {
+    /// The complete authored node state to create.
+    pub record: crate::command::snapshot::NodeRecord,
 }
 
 /// Request to delete a set of bodies.

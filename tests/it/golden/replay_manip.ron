@@ -200,6 +200,7 @@
         ),
     ],
     joints: [],
+    nodes: [],
     environment: (
         sim: (
             gravity: (0.0, -1000.0),
