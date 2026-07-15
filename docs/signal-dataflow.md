@@ -78,10 +78,16 @@ The dataflow's endpoints don't have to live in a panel — they can be
 authored entity (its own `StableId`, pose, and optional attachment to a
 body) that represents a piece of the graph:
 
-- **The tracer tool** (toolbar `Tracer`, key `Y`) places a tracer node.
-  Click on a body → the node *attaches* and rides it (its trail traces the
-  body's motion, `follow_node_attachments` re-derives the pose each frame);
-  click in empty space → a free node fixed at the click.
+- **Node tools** (toolbar): `Tracer` (key `Y`) draws a trail; `Sensor`
+  (`N`) reads a scene quantity at its body and **publishes** a bus signal
+  (a dataflow *input* port); `Actuator` (`U`) **reads** a bus signal and
+  tints its body through a domain + gradient (an *output* port). A
+  sensor+actuator pair sharing a signal name is the two placeable halves of
+  a binding, wired by the bus — decompose a binding into nodes, or build a
+  chain across bodies. Signal names are edited in the **node inspector**
+  (the Signals dock's top block, undoable via `PropertyValue::NodeKind`).
+  Each tool click attaches to the body under the cursor (rides it) or
+  drops a free node.
 - Nodes are **individually selectable** (`node_edit::pick_node`, after
   joint picking) and deletable/undoable like bodies — their glyph shows the
   selection state and a tether to the attached body.

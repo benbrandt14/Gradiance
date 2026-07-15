@@ -62,12 +62,71 @@ impl NodeAttachment {
 
 /// What a behavior node *is* — its authored payload. One variant per node
 /// kind; adding a sensor/actuator is one variant here plus its tool.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Reflect)]
+#[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub enum NodeKind {
     /// A trajectory-trail probe (the placeable [`Tracer`]).
     ///
     /// [`Tracer`]: crate::domain::tracer::Tracer
     Tracer(crate::domain::tracer::Tracer),
+    /// A **sensor**: reads a scene quantity at its attached body and
+    /// publishes it on the bus under `signal`. The placeable, node-shaped
+    /// counterpart of a binding's *source* — the dataflow's input port.
+    Sensor {
+        /// Which scene quantity to read.
+        quantity: SensorQuantity,
+        /// Bus name to publish the reading under.
+        signal: String,
+    },
+    /// An **actuator**: reads a bus `signal`, maps it through a domain +
+    /// gradient, and tints its attached body's fill. The node-shaped
+    /// counterpart of a binding's *sink* — the dataflow's output port.
+    Actuator {
+        /// Bus name to read.
+        signal: String,
+        /// Input-domain mapping to `[0, 1]`.
+        map: crate::domain::signal::SignalMap,
+        /// Color ramp.
+        gradient: crate::domain::signal::GradientSpec,
+    },
+}
+
+/// A scene quantity a [sensor node](NodeKind::Sensor) reads from its body —
+/// the same readings a binding [`SignalSource`](crate::domain::signal::SignalSource)
+/// offers, in placeable form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Reflect)]
+pub enum SensorQuantity {
+    /// Linear speed (px/s).
+    Speed,
+    /// Angular speed (rad/s, absolute).
+    Spin,
+    /// Height (world y, px).
+    Height,
+    /// Net normal contact force.
+    ContactForce,
+    /// Number of bodies touched.
+    ContactCount,
+}
+
+impl SensorQuantity {
+    /// Every quantity, for the tool/menu cycle.
+    pub const ALL: [Self; 5] = [
+        Self::Speed,
+        Self::Spin,
+        Self::Height,
+        Self::ContactForce,
+        Self::ContactCount,
+    ];
+
+    /// A short label.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Speed => "speed",
+            Self::Spin => "spin",
+            Self::Height => "height",
+            Self::ContactForce => "force",
+            Self::ContactCount => "contacts",
+        }
+    }
 }
 
 impl NodeKind {
@@ -75,6 +134,8 @@ impl NodeKind {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Tracer(_) => "tracer",
+            Self::Sensor { .. } => "sensor",
+            Self::Actuator { .. } => "actuator",
         }
     }
 }

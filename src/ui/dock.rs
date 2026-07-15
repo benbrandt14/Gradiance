@@ -107,7 +107,7 @@ pub fn right_dock(
                 let h = section(ui, &mut drawn);
                 ui.push_id("signals-dock", |ui| {
                     ui.set_max_height(h);
-                    signals::signals_section(ui, &mut signals, &selected);
+                    signals::signals_section(ui, &mut signals, &selected, &selection);
                 });
             }
             if console.is_open() {

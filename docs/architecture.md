@@ -26,7 +26,7 @@ bottom — no unclassified state.
 | avian `RigidBody`, `Friction`, `Restitution`, `ColliderDensity`, `GravityScale`, `Sensor`, `LockedAxes` | components | authored physics **is** avian components (de-adapter) |
 | `FieldSource` | component | field source (signed repulsion, falloff); sampled only via `physics::fields::Fields` (`docs/field-architecture.md`) |
 | `Tracer` | component | trajectory-trail marker (on a body, or on a node) |
-| `BehaviorNode`, `NodeAttachment`, `NodeKind` | components | placeable dataflow node (the tracer tool; future sensors/actuators) — `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes` (`docs/signal-dataflow.md`) |
+| `BehaviorNode`, `NodeAttachment`, `NodeKind` | components | placeable dataflow node (tracer / sensor / actuator tools) — `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`; kind edited via `PropertyValue::NodeKind` (`docs/signal-dataflow.md`) |
 | `Tracer` | component | trajectory-trail marker (fade window); the sampled trail is derived (`TraceTrail`) |
 
 ### Config (settings resources — UI writes directly; invariant-4 exception)

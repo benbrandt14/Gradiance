@@ -39,7 +39,7 @@ impl SignalsPanel {
 /// The signal-graph config resources the dock section edits, bundled so the
 /// dock host stays under Bevy's system-parameter limit.
 #[derive(SystemParam)]
-pub struct SignalsDock<'w> {
+pub struct SignalsDock<'w, 's> {
     /// Source→sink bindings.
     pub bindings: bevy::prelude::ResMut<'w, SignalBindings>,
     /// Tunable slider params.
@@ -50,20 +50,118 @@ pub struct SignalsDock<'w> {
     pub bus: bevy::prelude::Res<'w, SignalBus>,
     /// Compile errors to surface (read-only).
     pub compiled: bevy::prelude::Res<'w, crate::signal::CompiledSignals>,
+    /// Selected behavior nodes to edit (id + kind).
+    pub nodes: bevy::prelude::Query<
+        'w,
+        's,
+        (
+            bevy::prelude::Entity,
+            &'static StableId,
+            &'static crate::domain::node::NodeKind,
+        ),
+        bevy::prelude::With<crate::domain::node::BehaviorNode>,
+    >,
+    /// Undoable node edits (wiring sensor/actuator signal names).
+    pub edits: bevy::prelude::MessageWriter<'w, crate::command::intent::PropertyEditIntent>,
 }
 
 /// Renders the whole Signals section into a dock `ui`. `selected` is the
-/// current body selection (for the binding add-buttons).
-pub fn signals_section(ui: &mut egui::Ui, dock: &mut SignalsDock, selected: &[StableId]) {
+/// current body selection (for the binding add-buttons); `selection` is the
+/// full selection (to find a selected node to edit).
+pub fn signals_section(
+    ui: &mut egui::Ui,
+    dock: &mut SignalsDock,
+    selected: &[StableId],
+    selection: &crate::interaction::selection::Selection,
+) {
     egui::ScrollArea::vertical()
         .id_salt("signals-section")
         .show(ui, |ui| {
+            node_block(ui, dock, selection);
             params_block(ui, &mut dock.params.0);
             ui.separator();
             computed_block(ui, &mut dock.computed.0, &dock.compiled, &dock.bus);
             ui.separator();
             bindings_block(ui, &mut dock.bindings, selected);
         });
+}
+
+/// Editor for the selected behavior node — wires sensor/actuator signal
+/// names (the node-graph edges) and tracer fade. Emits one undoable
+/// [`PropertyEditIntent`](crate::command::intent::PropertyEditIntent) per
+/// change (authored state → the command seam, never a direct write).
+fn node_block(
+    ui: &mut egui::Ui,
+    dock: &mut SignalsDock,
+    selection: &crate::interaction::selection::Selection,
+) {
+    use crate::domain::node::{NodeKind, SensorQuantity};
+    let Some((id, kind)) = selection
+        .iter()
+        .find_map(|e| dock.nodes.get(e).ok().map(|(_, id, k)| (*id, k.clone())))
+    else {
+        return;
+    };
+    ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
+    let mut next = kind.clone();
+    match &mut next {
+        NodeKind::Tracer(tracer) => {
+            ui.horizontal(|ui| {
+                ui.label("fade (s)");
+                ui.add(egui::DragValue::new(&mut tracer.fade_secs).speed(0.05));
+            });
+        }
+        NodeKind::Sensor { quantity, signal } => {
+            ui.horizontal(|ui| {
+                ui.label("reads");
+                egui::ComboBox::from_id_salt("sensor-q")
+                    .selected_text(quantity.label())
+                    .show_ui(ui, |ui| {
+                        for q in SensorQuantity::ALL {
+                            ui.selectable_value(quantity, q, q.label());
+                        }
+                    });
+            });
+            ui.horizontal(|ui| {
+                ui.label("→ signal");
+                ui.text_edit_singleline(signal);
+            });
+        }
+        NodeKind::Actuator {
+            signal,
+            map,
+            gradient,
+        } => {
+            ui.horizontal(|ui| {
+                ui.label("signal →");
+                ui.text_edit_singleline(signal);
+            });
+            ui.horizontal(|ui| {
+                ui.label("domain");
+                ui.add(egui::DragValue::new(&mut map.in_min).speed(1.0));
+                ui.label("→");
+                ui.add(egui::DragValue::new(&mut map.in_max).speed(1.0));
+                egui::ComboBox::from_id_salt("act-grad")
+                    .selected_text(format!("{gradient:?}"))
+                    .show_ui(ui, |ui| {
+                        for g in GradientSpec::ALL {
+                            ui.selectable_value(gradient, g, format!("{g:?}"));
+                        }
+                    });
+            });
+        }
+    }
+    if next != kind {
+        dock.edits
+            .write(crate::command::intent::PropertyEditIntent {
+                changes: vec![crate::command::property::PropertyChange {
+                    id,
+                    old: crate::command::property::PropertyValue::NodeKind(kind),
+                    new: crate::command::property::PropertyValue::NodeKind(next),
+                }],
+            });
+    }
+    ui.separator();
 }
 
 /// The param sliders (`defparam` knobs) — the P2 driver inputs.

@@ -6,7 +6,7 @@ use crate::interaction::tools::handles::ScaleFrame;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-const TOOLS: [(ToolState, &str, &str); 12] = [
+const TOOLS: [(ToolState, &str, &str); 14] = [
     (ToolState::Select, "Select", "S"),
     (ToolState::Drag, "Drag", "D"),
     (ToolState::Box, "Box", "B"),
@@ -19,6 +19,8 @@ const TOOLS: [(ToolState, &str, &str); 12] = [
     (ToolState::Ground, "Ground", "G"),
     (ToolState::Cut, "Cut", "K"),
     (ToolState::Tracer, "Tracer", "Y"),
+    (ToolState::Sensor, "Sensor", "N"),
+    (ToolState::Actuator, "Actuator", "U"),
 ];
 
 /// Left tool palette and top transport strip.

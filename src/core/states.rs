@@ -49,4 +49,8 @@ pub enum ToolState {
     /// Place tracer nodes (a placeable trajectory probe; attaches to a body
     /// under the cursor, else free).
     Tracer,
+    /// Place sensor nodes (read a body's quantity, publish a signal).
+    Sensor,
+    /// Place actuator nodes (read a signal, tint a body's fill).
+    Actuator,
 }

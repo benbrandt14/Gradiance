@@ -186,3 +186,68 @@ fn duplicating_a_body_copies_its_attached_tracer_and_bindings() {
         "undo removes the copied binding"
     );
 }
+
+#[test]
+fn a_sensor_publishes_and_an_actuator_consumes_over_the_bus() {
+    use avian2d::prelude::LinearVelocity;
+    use gradiance::domain::node::{NodeKind, SensorQuantity};
+    use gradiance::domain::signal::{GradientSpec, SignalMap};
+    use gradiance::signal::{SignalBus, SignalColorOverride};
+
+    let mut app = paused_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+
+    // Body A moves; a sensor on it publishes its speed under "wire".
+    let mut a = box_record(Vec2::ZERO, 20.0, 20.0);
+    a.physics.rigid_body = avian2d::prelude::RigidBody::Dynamic;
+    let a_id = a.id;
+    app.world_mut().write_message(SpawnBodyIntent { record: a });
+    // Body B is tinted by an actuator reading "wire".
+    let b = box_record(Vec2::new(200.0, 0.0), 20.0, 20.0);
+    let b_id = b.id;
+    app.world_mut().write_message(SpawnBodyIntent { record: b });
+    app.update();
+
+    let mut sensor = tracer_record(Vec2::ZERO, NodeAttachment::to(a_id, Vec2::ZERO));
+    sensor.kind = NodeKind::Sensor {
+        quantity: SensorQuantity::Speed,
+        signal: "wire".into(),
+    };
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: sensor });
+    let mut actuator = tracer_record(Vec2::new(200.0, 0.0), NodeAttachment::to(b_id, Vec2::ZERO));
+    actuator.kind = NodeKind::Actuator {
+        signal: "wire".into(),
+        map: SignalMap {
+            in_min: 0.0,
+            in_max: 200.0,
+        },
+        gradient: GradientSpec::Turbo,
+    };
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: actuator });
+    app.update();
+
+    // Drive A at 150 px/s; the sensor publishes it, the actuator tints B.
+    let a_entity = entity_of(&app, a_id).unwrap();
+    app.world_mut()
+        .entity_mut(a_entity)
+        .insert(LinearVelocity(Vec2::new(150.0, 0.0)));
+    step(&mut app, 3);
+
+    let speed = app.world().resource::<SignalBus>().get("wire").unwrap();
+    assert!(
+        (speed - 150.0).abs() < 10.0,
+        "the sensor published A's speed ({speed})"
+    );
+    let b_entity = entity_of(&app, b_id).unwrap();
+    assert!(
+        app.world()
+            .get::<SignalColorOverride>(b_entity)
+            .is_some_and(|o| o.fill.is_some()),
+        "the actuator tinted B from the wired signal"
+    );
+}

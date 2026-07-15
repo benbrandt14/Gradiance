@@ -198,9 +198,63 @@ pub fn evaluate_computed(
     }
 }
 
+/// Reads a [`SensorQuantity`](crate::domain::node::SensorQuantity) at
+/// `entity` (a body) — the shared read the
+/// sensor nodes and binding sources both use. `None` when the quantity
+/// needs a simulating body that isn't there.
+pub fn read_quantity(
+    quantity: crate::domain::node::SensorQuantity,
+    entity: Entity,
+    physics: &PhysicsQueries,
+    transforms: &Query<&Transform, With<Body>>,
+    dt: f32,
+) -> Option<f32> {
+    use crate::domain::node::SensorQuantity as Q;
+    match quantity {
+        Q::Speed => physics.velocity_of(entity).map(|(v, _)| v.length()),
+        Q::Spin => physics.velocity_of(entity).map(|(_, w)| w.abs()),
+        Q::Height => transforms.get(entity).ok().map(|t| t.translation.y),
+        Q::ContactForce => Some(physics.net_contact_impulse(entity).length() / dt),
+        Q::ContactCount => Some(physics.touching_count(entity) as f32),
+    }
+}
+
+/// Publishes each **sensor node's** reading on the bus (a placeable dataflow
+/// input port). Runs before [`evaluate_computed`], so computed signals and
+/// bindings read this frame's value. A sensor reads its attached body; a
+/// free sensor has nothing to read.
+pub fn evaluate_sensor_nodes(
+    index: Res<IdIndex>,
+    physics: PhysicsQueries,
+    fixed: Res<Time<Fixed>>,
+    game: Res<State<GameState>>,
+    transforms: Query<&Transform, With<Body>>,
+    nodes: Query<(
+        &crate::domain::node::NodeKind,
+        &crate::domain::node::NodeAttachment,
+    )>,
+    mut bus: ResMut<SignalBus>,
+) {
+    let recording = *game.get() == GameState::Playing;
+    let dt = fixed.timestep().as_secs_f32().max(1e-6);
+    for (kind, attachment) in &nodes {
+        let crate::domain::node::NodeKind::Sensor { quantity, signal } = kind else {
+            continue;
+        };
+        let Some(entity) = attachment.target.and_then(|id| index.entity(id)) else {
+            continue;
+        };
+        if let Some(value) = read_quantity(*quantity, entity, &physics, &transforms, dt) {
+            bus.publish(signal, value, recording);
+        }
+    }
+}
+
 /// Evaluates every binding: reads its source, publishes to the bus, and
-/// writes/clears the derived color overrides. Runs every frame (cheap —
-/// a handful of bindings); history recording pauses with the simulation.
+/// writes/clears the derived color overrides. **Actuator nodes** fold into
+/// the same desired-override map (a placeable dataflow output port), so one
+/// change-detected apply/cleanup covers bindings and actuators alike. Runs
+/// every frame (cheap); history recording pauses with the simulation.
 pub fn evaluate_signals(
     mut commands: Commands,
     bindings: Res<SignalBindings>,
@@ -212,6 +266,10 @@ pub fn evaluate_signals(
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
     game: Res<State<GameState>>,
+    nodes: Query<(
+        &crate::domain::node::NodeKind,
+        &crate::domain::node::NodeAttachment,
+    )>,
     mut bus: ResMut<SignalBus>,
     mut overrides: Query<&mut SignalColorOverride, With<Body>>,
     overridden: Query<Entity, With<SignalColorOverride>>,
@@ -271,14 +329,37 @@ pub fn evaluate_signals(
         }
     }
 
+    // Actuator nodes: read a bus signal, map + gradient → tint the attached
+    // body's fill. The same desired map, so cleanup below is unified.
+    for (kind, attachment) in &nodes {
+        let crate::domain::node::NodeKind::Actuator {
+            signal,
+            map,
+            gradient,
+        } = kind
+        else {
+            continue;
+        };
+        let (Some(entity), Some(value)) = (
+            attachment.target.and_then(|id| index.entity(id)),
+            bus.get(signal),
+        ) else {
+            continue;
+        };
+        desired.entry(entity).or_default().fill = Some(gradient.at(map.normalize(value)));
+    }
+
     // Bus hygiene: keep the names that still have a producer — bindings,
-    // params, computed signals, `t`, and script-published names.
+    // params, computed signals, sensor nodes, `t`, and script names.
     bus.retain(|name| {
         name == TIME_INPUT
             || bindings.0.iter().any(|b| b.name == name)
             || params.0.iter().any(|p| p.name == name)
             || computed.0.iter().any(|c| c.name == name)
             || script_names.0.iter().any(|n| n == name)
+            || nodes.iter().any(|(kind, _)| {
+                matches!(kind, crate::domain::node::NodeKind::Sensor { signal, .. } if signal == name)
+            })
     });
 
     // Apply overrides change-detected (a same-color frame must not dirty
@@ -325,6 +406,7 @@ impl Plugin for SignalPlugin {
             Update,
             (
                 recompile_signals.run_if(resource_changed::<ComputedSignals>),
+                evaluate_sensor_nodes,
                 evaluate_computed,
                 evaluate_signals,
             )
