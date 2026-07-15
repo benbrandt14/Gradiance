@@ -203,17 +203,20 @@ pub fn draw_node_glyphs(
             r - 2.5,
             if selected { css::WHITE.into() } else { base },
         );
-        // A tick distinguishes the kind: tracer = a comet tail; sensor =
-        // an outward arrow (reads out); actuator = an inward arrow (drives).
+        // A tick distinguishes the kind, colored by its canvas category so
+        // the scene glyph and the node-graph box read as the same thing:
+        // tracer = a neutral comet tail; sensor (producer, green) = an
+        // outward arrow (reads out); actuator (consumer, orange) = an inward
+        // arrow (drives).
         match kind {
             NodeKind::Tracer(_) => {
                 gizmos.line_2d(p, p + Vec2::new(-r - 4.0, 0.0), base.with_alpha(0.6));
             }
             NodeKind::Sensor { .. } => {
-                gizmos.arrow_2d(p, p + Vec2::new(r + 5.0, 0.0), base);
+                gizmos.arrow_2d(p, p + Vec2::new(r + 5.0, 0.0), css::MEDIUM_SEA_GREEN);
             }
             NodeKind::Actuator { .. } => {
-                gizmos.arrow_2d(p + Vec2::new(r + 5.0, 0.0), p, base);
+                gizmos.arrow_2d(p + Vec2::new(r + 5.0, 0.0), p, css::SANDY_BROWN);
             }
         }
         // Tether to the attached body.
