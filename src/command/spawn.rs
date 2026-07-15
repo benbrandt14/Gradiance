@@ -104,6 +104,26 @@ impl GameCommand for DeleteCommand {
         // with a dangling endpoint must never exist).
         let body_ids: Vec<StableId> = body_pairs.iter().map(|(_, r)| r.id).collect();
         let joints = crate::command::joint_cmd::joints_referencing(world, &body_ids);
+        // Cascade: behavior nodes attached to a deleted body go too (a
+        // tracer/sensor/actuator on a body dies with it, like a joint).
+        let already: Vec<Entity> = node_pairs.iter().map(|(e, _)| *e).collect();
+        let node_entities: Vec<Entity> = world
+            .query_filtered::<Entity, With<crate::domain::node::BehaviorNode>>()
+            .iter(world)
+            .collect();
+        for entity in node_entities {
+            if already.contains(&entity) {
+                continue;
+            }
+            if let Some(record) = NodeRecord::capture(world, entity)
+                && record
+                    .attachment
+                    .target
+                    .is_some_and(|t| body_ids.contains(&t))
+            {
+                node_pairs.push((entity, record));
+            }
+        }
         self.records = body_pairs.iter().map(|(_, r)| r.clone()).collect();
         self.joint_records = joints.iter().map(|(_, r)| r.clone()).collect();
         self.node_records = node_pairs.iter().map(|(_, r)| r.clone()).collect();

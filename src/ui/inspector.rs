@@ -291,6 +291,7 @@ fn tracer_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps,
                 props,
                 Some(Tracer {
                     fade_secs: new.max(0.05),
+                    ..tracer
                 }),
             );
         }

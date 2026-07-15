@@ -2,8 +2,8 @@
 //! layer operations.
 
 use crate::command::intent::{
-    CommitTransformIntent, DeleteJointIntent, GroupIntent, MergeIntent, PropertyEditIntent,
-    UngroupIntent,
+    CommitTransformIntent, DeleteIntent, DeleteJointIntent, GroupIntent, MergeIntent,
+    PropertyEditIntent, UngroupIntent,
 };
 use crate::command::property::{PropertyChange, PropertyValue};
 use crate::core::ids::{IdIndex, StableId};
@@ -12,6 +12,7 @@ use crate::domain::Body;
 use crate::domain::appearance::{Appearance, Rgba};
 use crate::domain::depth::DepthBand;
 use crate::domain::joint::JointDef;
+use crate::domain::node::{BehaviorNode, NodeKind};
 use crate::domain::shape::ShapeDef;
 use crate::interaction::PointerOverUi;
 use crate::interaction::align::{AlignItem, AlignOp, align_changes};
@@ -136,6 +137,19 @@ pub struct GroupWriters<'w> {
     probes: ResMut<'w, crate::ui::probe::ProbePanel>,
 }
 
+/// Behavior-node access for the node-specific context menu, bundled to keep
+/// `context_menu` under the system-parameter limit (it replaces the lone
+/// joint-delete writer).
+#[derive(SystemParam)]
+pub struct NodeMenu<'w, 's> {
+    /// Selectable node kinds by id (for the node menu editor).
+    nodes: Query<'w, 's, (&'static StableId, &'static NodeKind), With<BehaviorNode>>,
+    /// Joint deletion (moved here from a standalone param).
+    delete_joint: MessageWriter<'w, DeleteJointIntent>,
+    /// Body/node deletion (the node menu's Delete).
+    delete: MessageWriter<'w, DeleteIntent>,
+}
+
 /// Open context menu state.
 #[derive(Resource, Default, Debug)]
 pub struct ContextMenu {
@@ -150,6 +164,9 @@ pub struct ContextMenu {
     pub under: Vec<StableId>,
     /// Joint whose anchor is under the click, if any.
     pub joint: Option<StableId>,
+    /// Behavior node under the click, if any (opens the node menu instead
+    /// of the physical-object menu).
+    pub node: Option<StableId>,
 }
 
 /// Nearest joint id whose glyph distance is within `radius`. Pure so the
@@ -183,6 +200,7 @@ pub fn open_context_menu(
     transforms: Query<&Transform, With<Body>>,
     index: Res<IdIndex>,
     cam_scale: Res<crate::interaction::camera::CameraScale>,
+    nodes: Query<(&StableId, &Transform), With<BehaviorNode>>,
     mut press_pos: Local<Option<Vec2>>,
     mut menu: ResMut<ContextMenu>,
 ) {
@@ -224,6 +242,17 @@ pub fn open_context_menu(
                 ))
             }),
         );
+        // A node glyph under the click opens the node menu (its own menu,
+        // distinct from the physical-object one).
+        let node_radius = crate::interaction::node_edit::NODE_PICK_PX * scale;
+        menu.node = nodes
+            .iter()
+            .filter_map(|(id, t)| {
+                let d = t.translation.truncate().distance(world);
+                (d <= node_radius).then_some((d, *id))
+            })
+            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map(|(_, id)| id);
         menu.screen = now;
         menu.open = true;
         menu.fresh = true;
@@ -245,7 +274,7 @@ pub fn context_menu(
     joints: Query<&JointDef>,
     mut writers: GroupWriters,
     mut moves: MessageWriter<CommitTransformIntent>,
-    mut deletes: MessageWriter<DeleteJointIntent>,
+    mut node_menu: NodeMenu,
     mut script: ScriptMenu,
     mut background: BackgroundMenu,
     mut depth_panel: ResMut<crate::ui::depth_panel::DepthPanel>,
@@ -264,7 +293,16 @@ pub fn context_menu(
             .iter()
             .filter_map(|e| props.ids.get(e).ok())
             .any(|id| menu.under.contains(id));
-        if !clicked_selected
+        // A node click selects the node; otherwise select the clicked body.
+        if let Some(node_id) = menu.node
+            && let Some(entity) = index.entity(node_id)
+        {
+            SelectTransition::SetBodies(vec![entity]).apply(
+                &mut selection,
+                &mut selected_joint,
+                &groups,
+            );
+        } else if !clicked_selected
             && let Some(top) = menu.under.first()
             && let Some(entity) = index.entity(*top)
         {
@@ -286,6 +324,33 @@ pub fn context_menu(
         .show(ctx, |ui| {
             egui::Frame::menu(ui.style()).show(ui, |ui| {
                 ui.set_min_width(180.0);
+
+                // A behavior node has its own menu — kind editor + delete —
+                // distinct from the physical-object menu below.
+                if let Some(node_id) = menu.node
+                    && let Some(entity) = index.entity(node_id)
+                    && let Ok((_, kind)) = node_menu.nodes.get(entity)
+                {
+                    let kind = kind.clone();
+                    ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
+                    if let Some(next) = crate::ui::signals::node_kind_editor(ui, "menu", &kind) {
+                        props.edits.write(PropertyEditIntent {
+                            changes: vec![PropertyChange {
+                                id: node_id,
+                                old: PropertyValue::NodeKind(kind),
+                                new: PropertyValue::NodeKind(next),
+                            }],
+                        });
+                    }
+                    ui.separator();
+                    if ui.button("Delete node").clicked() {
+                        node_menu.delete.write(DeleteIntent {
+                            targets: vec![node_id],
+                        });
+                        close = true;
+                    }
+                    return; // node menu replaces the physical-object menu
+                }
 
                 // Joint under the click: configuration, reachable via right-click
                 // (not only the select-and-inspect flow).
@@ -319,7 +384,9 @@ pub fn context_menu(
                         close = true;
                     }
                     if ui.button("Delete joint").clicked() {
-                        deletes.write(DeleteJointIntent { id: joint_id });
+                        node_menu
+                            .delete_joint
+                            .write(DeleteJointIntent { id: joint_id });
                         close = true;
                     }
                     ui.separator();

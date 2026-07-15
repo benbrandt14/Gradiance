@@ -4,7 +4,7 @@
 // Test-only file: unwraps are the failure mechanism.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use crate::harness::{box_record, entity_of, paused_app, step, undo};
+use crate::harness::{box_record, entity_of, headless_app, paused_app, step, undo};
 use bevy::prelude::*;
 use gradiance::command::intent::{DuplicateIntent, SpawnNodeIntent};
 use gradiance::command::snapshot::NodeRecord;
@@ -21,7 +21,10 @@ fn tracer_record(pos: Vec2, attach: NodeAttachment) -> NodeRecord {
         id,
         pose: PosRot { pos, rot: 0.0 },
         attachment: attach,
-        kind: NodeKind::Tracer(Tracer { fade_secs: 2.0 }),
+        kind: NodeKind::Tracer(Tracer {
+            fade_secs: 2.0,
+            ..Default::default()
+        }),
         appearance: gradiance::domain::appearance::Appearance::default(),
     }
 }
@@ -249,5 +252,56 @@ fn a_sensor_publishes_and_an_actuator_consumes_over_the_bus() {
             .get::<SignalColorOverride>(b_entity)
             .is_some_and(|o| o.fill.is_some()),
         "the actuator tinted B from the wired signal"
+    );
+}
+
+#[test]
+fn deleting_a_body_cascades_its_attached_nodes() {
+    let mut app = paused_app();
+    let body = box_record(Vec2::ZERO, 20.0, 20.0);
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+    let node = tracer_record(Vec2::ZERO, NodeAttachment::to(body_id, Vec2::ZERO));
+    let node_id = node.id;
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: node });
+    app.update();
+    assert_eq!(node_count(&mut app), 1);
+
+    // Delete the body — the attached node goes too (like a joint cascade).
+    app.world_mut().write_message(DeleteIntent {
+        targets: vec![body_id],
+    });
+    app.update();
+    assert_eq!(
+        node_count(&mut app),
+        0,
+        "attached node deleted with its body"
+    );
+    assert!(entity_of(&app, node_id).is_none());
+
+    // Undo restores both the body and its node.
+    undo(&mut app);
+    assert!(entity_of(&app, body_id).is_some(), "body back");
+    assert!(entity_of(&app, node_id).is_some(), "node back");
+    assert_eq!(node_count(&mut app), 1);
+}
+
+#[test]
+fn a_free_tracer_node_does_nothing() {
+    use gradiance::render::tracer::TraceTrail;
+    let mut app = headless_app();
+    // A free tracer (no attachment) — inert, no trail accumulates.
+    let free = tracer_record(Vec2::new(50.0, 50.0), NodeAttachment::free());
+    let free_id = free.id;
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: free });
+    step(&mut app, 20);
+    let entity = entity_of(&app, free_id).unwrap();
+    assert!(
+        app.world().get::<TraceTrail>(entity).is_none(),
+        "a free tracer accumulates no trail"
     );
 }

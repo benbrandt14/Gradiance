@@ -67,14 +67,27 @@ pub fn follow_node_attachments(
 
 /// Samples every traced entity's position while playing, and expires
 /// samples older than the tracer's fade window. Ages on the physics
-/// clock, so pausing freezes the trail.
+/// clock, so pausing freezes the trail. A **free** tracer node (attached to
+/// nothing) does nothing — a tracer traces an object's motion, and there is
+/// none to trace.
 pub fn sample_traces(
     mut commands: Commands,
     time: Res<Time<Physics>>,
-    mut traced: Query<(Entity, &Tracer, &Transform, Option<&mut TraceTrail>)>,
+    mut traced: Query<(
+        Entity,
+        &Tracer,
+        &Transform,
+        Option<&NodeAttachment>,
+        Option<&mut TraceTrail>,
+    )>,
 ) {
     let now = time.elapsed_secs();
-    for (entity, tracer, transform, trail) in &mut traced {
+    for (entity, tracer, transform, attachment, trail) in &mut traced {
+        // A node tracer with no target is inert (body tracers have no
+        // `NodeAttachment` at all and always sample).
+        if attachment.is_some_and(|a| a.target.is_none()) {
+            continue;
+        }
         let p = transform.translation.truncate();
         let Some(mut trail) = trail else {
             let mut fresh = TraceTrail::default();
@@ -139,15 +152,30 @@ pub fn draw_traces(
             }
             None => appearance.fill,
         };
-        for pair in trail.0.iter().collect::<Vec<_>>().windows(2) {
-            let (t, a) = *pair[0];
-            let (_, b) = *pair[1];
-            let alpha = (1.0 - (now - t) / fade).clamp(0.0, 1.0);
-            if alpha <= 0.0 {
-                continue;
+        let samples: Vec<(f32, Vec2)> = trail.0.iter().copied().collect();
+        match tracer.pattern {
+            crate::domain::tracer::TracePattern::Line => {
+                for pair in samples.windows(2) {
+                    let (t, a) = pair[0];
+                    let (_, b) = pair[1];
+                    let alpha = (1.0 - (now - t) / fade).clamp(0.0, 1.0);
+                    if alpha > 0.0 {
+                        gizmos.line_2d(a, b, Color::srgba(fill.r, fill.g, fill.b, alpha * 0.9));
+                    }
+                }
             }
-            let color = Color::srgba(fill.r, fill.g, fill.b, alpha * 0.9);
-            gizmos.line_2d(a, b, color);
+            crate::domain::tracer::TracePattern::Dots => {
+                for (t, p) in samples {
+                    let alpha = (1.0 - (now - t) / fade).clamp(0.0, 1.0);
+                    if alpha > 0.0 {
+                        gizmos.circle_2d(
+                            Isometry2d::from_translation(p),
+                            tracer.size.max(0.5),
+                            Color::srgba(fill.r, fill.g, fill.b, alpha),
+                        );
+                    }
+                }
+            }
         }
     }
 }

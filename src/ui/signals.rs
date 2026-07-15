@@ -95,7 +95,6 @@ fn node_block(
     dock: &mut SignalsDock,
     selection: &crate::interaction::selection::Selection,
 ) {
-    use crate::domain::node::{NodeKind, SensorQuantity};
     let Some((id, kind)) = selection
         .iter()
         .find_map(|e| dock.nodes.get(e).ok().map(|(_, id, k)| (*id, k.clone())))
@@ -103,18 +102,57 @@ fn node_block(
         return;
     };
     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
+    if let Some(next) = node_kind_editor(ui, "dock", &kind) {
+        dock.edits
+            .write(crate::command::intent::PropertyEditIntent {
+                changes: vec![crate::command::property::PropertyChange {
+                    id,
+                    old: crate::command::property::PropertyValue::NodeKind(kind),
+                    new: crate::command::property::PropertyValue::NodeKind(next),
+                }],
+            });
+    }
+    ui.separator();
+}
+
+/// The behavior-node kind editor widgets — shared by the Signals dock and
+/// the node context menu. Returns the edited kind when a field changed
+/// (the caller emits one undoable `PropertyEditIntent`). `salt` keeps
+/// widget ids unique between host surfaces.
+pub fn node_kind_editor(
+    ui: &mut egui::Ui,
+    salt: &str,
+    kind: &crate::domain::node::NodeKind,
+) -> Option<crate::domain::node::NodeKind> {
+    use crate::domain::node::{NodeKind, SensorQuantity};
     let mut next = kind.clone();
     match &mut next {
         NodeKind::Tracer(tracer) => {
             ui.horizontal(|ui| {
                 ui.label("fade (s)");
                 ui.add(egui::DragValue::new(&mut tracer.fade_secs).speed(0.05));
+                ui.label("size");
+                ui.add(
+                    egui::DragValue::new(&mut tracer.size)
+                        .speed(0.1)
+                        .range(0.5..=20.0),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("pattern");
+                egui::ComboBox::from_id_salt(ui.id().with((salt, "pattern")))
+                    .selected_text(format!("{:?}", tracer.pattern))
+                    .show_ui(ui, |ui| {
+                        for p in crate::domain::tracer::TracePattern::ALL {
+                            ui.selectable_value(&mut tracer.pattern, p, format!("{p:?}"));
+                        }
+                    });
             });
         }
         NodeKind::Sensor { quantity, signal } => {
             ui.horizontal(|ui| {
                 ui.label("reads");
-                egui::ComboBox::from_id_salt("sensor-q")
+                egui::ComboBox::from_id_salt(ui.id().with((salt, "q")))
                     .selected_text(quantity.label())
                     .show_ui(ui, |ui| {
                         for q in SensorQuantity::ALL {
@@ -141,7 +179,7 @@ fn node_block(
                 ui.add(egui::DragValue::new(&mut map.in_min).speed(1.0));
                 ui.label("→");
                 ui.add(egui::DragValue::new(&mut map.in_max).speed(1.0));
-                egui::ComboBox::from_id_salt("act-grad")
+                egui::ComboBox::from_id_salt(ui.id().with((salt, "grad")))
                     .selected_text(format!("{gradient:?}"))
                     .show_ui(ui, |ui| {
                         for g in GradientSpec::ALL {
@@ -151,17 +189,7 @@ fn node_block(
             });
         }
     }
-    if next != kind {
-        dock.edits
-            .write(crate::command::intent::PropertyEditIntent {
-                changes: vec![crate::command::property::PropertyChange {
-                    id,
-                    old: crate::command::property::PropertyValue::NodeKind(kind),
-                    new: crate::command::property::PropertyValue::NodeKind(next),
-                }],
-            });
-    }
-    ui.separator();
+    (next != *kind).then_some(next)
 }
 
 /// The param sliders (`defparam` knobs) — the P2 driver inputs.
