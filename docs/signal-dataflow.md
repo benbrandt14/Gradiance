@@ -88,6 +88,11 @@ body) that represents a piece of the graph:
   (the Signals dock's top block, undoable via `PropertyValue::NodeKind`).
   Each tool click attaches to the body under the cursor (rides it) or
   drops a free node.
+- **Palette breadth.** A sensor reads speed, spin, height, pos-x, pos-y,
+  contact force, or contact count (`SensorQuantity`); an actuator drives
+  either color channel — the body's fill or its tracer trail
+  (`ActuatorTarget`, the two channels of `SignalColorOverride` in placeable
+  form). Both are cycled in the node inspector / context menu.
 - Nodes are **individually selectable** (`node_edit::pick_node`, after
   joint picking) and deletable/undoable like bodies — their glyph shows the
   selection state and a tether to the attached body. Right-clicking a node
@@ -103,8 +108,33 @@ body) that represents a piece of the graph:
 This is the first "a dataflow endpoint is its own tool" instance; every
 future **sensor** (a reader glyph) and **actuator** (a writer glyph) is a
 sibling `NodeKind` + tool, spawned through the same `ToolCommit::SpawnNode`
-seam. The node canvas of the eventual editor wires these nodes' ports;
-today they publish/read through the same named `SignalBus`.
+seam. The node canvas (below) wires these nodes' ports; today they
+publish/read through the same named `SignalBus`.
+
+## The node-graph canvas
+
+The Simulink-style editor this substrate has grown toward now ships as a
+windowed canvas ([`ui::node_graph`](../src/ui/node_graph.rs), toolbar
+**⬡ Graph**). It draws the *bus graph* the naming already defines:
+
+- **producers** — params (`defparam`) and sensor nodes — as left-column
+  boxes with one **output port** (the bus name they publish);
+- **modulators** — computed signals (`defsignal`) — as middle-column boxes
+  with **input ports** (the names their expression reads) and one output;
+- **consumers** — actuator nodes — as right-column boxes with one **input
+  port** (the signal they read).
+
+A **wire** is drawn wherever a consumer/modulator input's name matches a
+producer/modulator output's name — the graph is *already* connected by
+naming, the canvas makes it visible. Boxes drag to arrange (layout is pure
+editor view-state in the `NodeGraph` resource — never authored, never
+persisted, like a scroll position). The one authored edit is **rewiring an
+actuator**: drag from a producer's output port onto an actuator's input and
+its `signal` re-points to that producer's name — routed through the same
+undoable `PropertyEditIntent` seam the dock uses (never a direct write). The
+canvas is a UI over the existing model, not a second representation: it reads
+the same config-seam resources + `NodeKind` components and emits the same
+intents.
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)
 is plain queries + arithmetic over the `physics::queries` facade — the
@@ -113,23 +143,23 @@ cold runs by publishing named values.
 
 ## Trajectory to the node editor
 
-Deliberate seams for what comes next, so the editor is a UI change, not a
-rearchitecture:
+The canvas landed as a UI change over the existing model (as designed —
+below), not a rearchitecture. What still accretes on the same seams:
 
-- **Enums become node kinds.** `SignalSource`/`SignalSink` variants are
-  today's node palette; the map + gradient are the first two modulator
-  nodes. A graph is `Vec<SignalBinding>` generalized to nodes + edges —
-  the bus already names every wire.
+- **More node kinds.** The canvas already renders params, computed signals,
+  and sensor/actuator nodes; `SignalBinding` (the flat form) is next to
+  fold in as a source→sink pair of boxes so the dock and canvas edit one
+  model. New `NodeKind`s (readers/writers) appear on the canvas for free.
 - **Drag-a-property becomes a source.** The inspector/probe panels read
   the same facade quantities the sources do; "drag speed out of the probe
-  panel" will mint a `SignalSource` the same way the Signals window's
-  add-buttons do today.
-- **Modulators lower to the Tier-B kernel.** When bindings grow
-  expressions (P2), they compile through `script::kernel` — the
-  allocation-free tape — not the VM.
+  panel" will mint a sensor node the same way the node tools do today.
+- **Modulators lower to the Tier-B kernel.** Computed signals already
+  compile through `script::kernel` — the allocation-free tape — not the VM;
+  richer expressions reuse that path.
 - **More sinks accrete**: gizmo tints, per-vertex color mixing (SDF color
   blend), emissive, sim parameters (an *actuator* is a config write —
-  same seam `sim-set` uses).
+  same seam `sim-set` uses). New `ActuatorTarget`s extend the existing
+  fill/tracer pair.
 
 ## Using it today
 
@@ -140,3 +170,6 @@ rearchitecture:
 3. The plot panel (`\`) draws every binding's history under its bus name.
 4. From a script: `(signal-set "excitement" (touch-count 0))` then bind
    *named* `excitement` to the body's fill.
+5. Place a **Sensor** (`N`) and an **Actuator** (`U`) on bodies, open
+   **⬡ Graph**, and drag the sensor's output port onto the actuator's input
+   to wire them — the actuator tints its body from the sensor's reading.

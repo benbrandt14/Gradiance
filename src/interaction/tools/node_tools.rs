@@ -118,5 +118,6 @@ node_tool!(
         signal: fresh_signal(),
         map: SignalMap::default(),
         gradient: GradientSpec::default(),
+        target: crate::domain::node::ActuatorTarget::Fill,
     }
 );

@@ -229,6 +229,7 @@ fn a_sensor_publishes_and_an_actuator_consumes_over_the_bus() {
             in_max: 200.0,
         },
         gradient: GradientSpec::Turbo,
+        target: gradiance::domain::node::ActuatorTarget::Fill,
     };
     app.world_mut()
         .write_message(SpawnNodeIntent { record: actuator });
@@ -252,6 +253,63 @@ fn a_sensor_publishes_and_an_actuator_consumes_over_the_bus() {
             .get::<SignalColorOverride>(b_entity)
             .is_some_and(|o| o.fill.is_some()),
         "the actuator tinted B from the wired signal"
+    );
+}
+
+#[test]
+fn an_actuator_can_drive_the_tracer_trail_from_pos_x() {
+    use gradiance::domain::node::{ActuatorTarget, NodeKind, SensorQuantity};
+    use gradiance::domain::signal::{GradientSpec, SignalMap};
+    use gradiance::signal::{SignalBus, SignalColorOverride};
+
+    let mut app = paused_app();
+    // A static body at x = 300; a PosX sensor publishes it under "px".
+    let mut body = box_record(Vec2::new(300.0, 0.0), 20.0, 20.0);
+    body.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+
+    let mut sensor = tracer_record(
+        Vec2::new(300.0, 0.0),
+        NodeAttachment::to(body_id, Vec2::ZERO),
+    );
+    sensor.kind = NodeKind::Sensor {
+        quantity: SensorQuantity::PosX,
+        signal: "px".into(),
+    };
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: sensor });
+    // An actuator on the same body reads "px" and drives the *trail* channel.
+    let mut actuator = tracer_record(
+        Vec2::new(300.0, 0.0),
+        NodeAttachment::to(body_id, Vec2::ZERO),
+    );
+    actuator.kind = NodeKind::Actuator {
+        signal: "px".into(),
+        map: SignalMap {
+            in_min: 0.0,
+            in_max: 500.0,
+        },
+        gradient: GradientSpec::Turbo,
+        target: ActuatorTarget::TracerColor,
+    };
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: actuator });
+    step(&mut app, 3);
+
+    let px = app.world().resource::<SignalBus>().get("px").unwrap();
+    assert!(
+        (px - 300.0).abs() < 1e-3,
+        "the sensor published pos x ({px})"
+    );
+    let entity = entity_of(&app, body_id).unwrap();
+    let over = app.world().get::<SignalColorOverride>(entity).unwrap();
+    assert!(over.trail.is_some(), "the actuator drove the trail channel");
+    assert!(
+        over.fill.is_none(),
+        "fill left untouched by a tracer actuator"
     );
 }
 

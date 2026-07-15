@@ -16,6 +16,7 @@ pub mod dock;
 pub mod inspector;
 pub mod joint_inspector;
 pub mod labels;
+pub mod node_graph;
 pub mod plot;
 pub mod probe;
 pub mod reflect_grid;
@@ -49,6 +50,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<plot::PlotPanel>();
         app.init_resource::<probe::ProbePanel>();
         app.init_resource::<signals::SignalsPanel>();
+        app.init_resource::<node_graph::NodeGraph>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
@@ -60,6 +62,7 @@ impl Plugin for GradianceUiPlugin {
                 joint_inspector::joint_inspector,
                 settings::settings_window,
                 plot::plot_panel,
+                node_graph::node_graph_panel,
                 probe::probe_panel,
                 context_menu::context_menu,
                 capture_pointer_over_ui,
