@@ -90,7 +90,11 @@ body) that represents a piece of the graph:
   drops a free node.
 - Nodes are **individually selectable** (`node_edit::pick_node`, after
   joint picking) and deletable/undoable like bodies — their glyph shows the
-  selection state and a tether to the attached body.
+  selection state and a tether to the attached body. Right-clicking a node
+  opens its **own context menu** (kind editor + Delete), distinct from the
+  physical-object menu. A node is **deleted with its parent body** (cascade,
+  like a joint), and a tracer attached to nothing is **inert**. The tracer's
+  size, fade, and pattern (line / dots) are configurable.
 - **Behavior copies with the base object.** Duplicating a body clones the
   tracer nodes attached to it (attachment remapped to the copy) *and* the
   signal bindings that reference it (`signal::remap_binding`, fresh names),
