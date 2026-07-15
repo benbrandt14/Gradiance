@@ -25,5 +25,6 @@ mod replay;
 mod scripting;
 mod signals;
 mod tools;
+mod ui_conflicts;
 mod ui_panels;
 mod unit_commands;

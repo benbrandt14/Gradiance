@@ -61,8 +61,6 @@ pub struct SignalsDock<'w, 's> {
         ),
         bevy::prelude::With<crate::domain::node::BehaviorNode>,
     >,
-    /// Undoable node edits (wiring sensor/actuator signal names).
-    pub edits: bevy::prelude::MessageWriter<'w, crate::command::intent::PropertyEditIntent>,
 }
 
 /// Renders the whole Signals section into a dock `ui`. `selected` is the
@@ -73,11 +71,12 @@ pub fn signals_section(
     dock: &mut SignalsDock,
     selected: &[StableId],
     selection: &crate::interaction::selection::Selection,
+    edits: &mut bevy::prelude::MessageWriter<crate::command::intent::PropertyEditIntent>,
 ) {
     egui::ScrollArea::vertical()
         .id_salt("signals-section")
         .show(ui, |ui| {
-            node_block(ui, dock, selection);
+            node_block(ui, dock, selection, edits);
             params_block(ui, &mut dock.params.0);
             ui.separator();
             computed_block(ui, &mut dock.computed.0, &dock.compiled, &dock.bus);
@@ -94,6 +93,7 @@ fn node_block(
     ui: &mut egui::Ui,
     dock: &mut SignalsDock,
     selection: &crate::interaction::selection::Selection,
+    edits: &mut bevy::prelude::MessageWriter<crate::command::intent::PropertyEditIntent>,
 ) {
     let Some((id, kind)) = selection
         .iter()
@@ -103,14 +103,13 @@ fn node_block(
     };
     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
     if let Some(next) = node_kind_editor(ui, "dock", &kind) {
-        dock.edits
-            .write(crate::command::intent::PropertyEditIntent {
-                changes: vec![crate::command::property::PropertyChange {
-                    id,
-                    old: crate::command::property::PropertyValue::NodeKind(kind),
-                    new: crate::command::property::PropertyValue::NodeKind(next),
-                }],
-            });
+        edits.write(crate::command::intent::PropertyEditIntent {
+            changes: vec![crate::command::property::PropertyChange {
+                id,
+                old: crate::command::property::PropertyValue::NodeKind(kind),
+                new: crate::command::property::PropertyValue::NodeKind(next),
+            }],
+        });
     }
     ui.separator();
 }
