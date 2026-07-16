@@ -145,12 +145,10 @@ impl NodeRecord {
             self.kind.clone(),
             self.appearance,
         ));
-        // The tracer kind also gets a `Tracer` component so the trail
-        // sampler drives it uniformly with body tracers; sensor/actuator
-        // nodes are driven by the signal runtime from their `NodeKind`.
-        if let crate::domain::node::NodeKind::Tracer(tracer) = self.kind {
-            entity.insert(tracer);
-        }
+        // The tracer kind also gets a `Tracer` component so the trail sampler
+        // drives it uniformly with body tracers.
+        let crate::domain::node::NodeKind::Tracer(tracer) = self.kind;
+        entity.insert(tracer);
         entity.id()
     }
 }

@@ -63,8 +63,6 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<polygon_tool::PolygonTool>();
         app.init_resource::<strut_tool::StrutDraft>();
         app.init_resource::<node_tools::TracerTool>();
-        app.init_resource::<node_tools::SensorTool>();
-        app.init_resource::<node_tools::ActuatorTool>();
 
         app.add_systems(
             Update,
@@ -97,8 +95,6 @@ impl Plugin for ToolsPlugin {
                     .run_if(connector_tool::connector_active),
                 run_manip_tool::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
                 run_manip_tool::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
-                run_manip_tool::<node_tools::SensorTool>.run_if(in_state(ToolState::Sensor)),
-                run_manip_tool::<node_tools::ActuatorTool>.run_if(in_state(ToolState::Actuator)),
             )
                 .in_set(ToolDriverSet)
                 .in_set(InteractionSet)
@@ -132,10 +128,6 @@ impl Plugin for ToolsPlugin {
                     draw_manip_preview::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
                     draw_manip_preview::<node_tools::TracerTool>
                         .run_if(in_state(ToolState::Tracer)),
-                    draw_manip_preview::<node_tools::SensorTool>
-                        .run_if(in_state(ToolState::Sensor)),
-                    draw_manip_preview::<node_tools::ActuatorTool>
-                        .run_if(in_state(ToolState::Actuator)),
                 ),
             );
         }

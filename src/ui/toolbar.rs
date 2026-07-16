@@ -29,7 +29,7 @@ pub struct Panels<'w> {
     pub debug: ResMut<'w, crate::domain::settings::DebugSettings>,
 }
 
-const TOOLS: [(ToolState, &str, &str); 14] = [
+const TOOLS: [(ToolState, &str, &str); 12] = [
     (ToolState::Select, "Select", "S"),
     (ToolState::Drag, "Drag", "D"),
     (ToolState::Box, "Box", "B"),
@@ -42,8 +42,6 @@ const TOOLS: [(ToolState, &str, &str); 14] = [
     (ToolState::Ground, "Ground", "G"),
     (ToolState::Cut, "Cut", "K"),
     (ToolState::Tracer, "Tracer", "Y"),
-    (ToolState::Sensor, "Sensor", "N"),
-    (ToolState::Actuator, "Actuator", "U"),
 ];
 
 /// Left tool palette and top transport strip.

@@ -3,101 +3,125 @@
 //! widget (the one major node editor tracking our pinned egui 0.35 —
 //! `egui_node_graph2` is stuck on 0.29). snarl owns the box layout, pan/zoom,
 //! and the drag-to-connect interaction; this module is the **adapter** between
-//! it and our ECS-derived dataflow.
+//! it and the ECS dataflow.
 //!
-//! The graph is *derived from the scene*, not owned by the canvas: every frame
-//! `reconcile` rebuilds the snarl node set from the live dataflow (params,
-//! computed signals, sensor/actuator nodes) keyed by `GraphKey`, preserving
-//! each box's dragged position, and re-draws the wires by **bus-name match**
-//! (a producer's output name to every consumer input reading it). The only
-//! authored write is a **rewire**: dragging a producer output onto an actuator
-//! input (or disconnecting one) emits an undoable `PropertyEditIntent` that
-//! re-points the actuator's `signal` — snarl's own graph is never the source of
-//! truth, so the wire follows once the command lands.
+//! **Objects are the nodes** (Algodoo per-object behavior + Simulink blocks): a
+//! body appears as a block whose **outputs are its sensor ports** (speed,
+//! height, contact force, …) and **inputs are its actuator ports** (fill,
+//! tracer color). Params and computed signals are their own producer/modulator
+//! blocks. A **wire is a [`SignalBinding`]**: dragging a producer output onto a
+//! body's actuator input creates one (source → sink); removing the wire deletes
+//! it. Bindings are the single config-seam currency (edited directly, persisted)
+//! — there is no separate placeable sensor/actuator entity anymore.
+//!
+//! The graph is *derived from the scene* every frame by `reconcile`: a node per
+//! body that participates in a binding or is selected, plus every param and
+//! computed signal, keyed by `GraphKey` so dragged positions persist; the
+//! wires are rebuilt from the bindings.
 //!
 //! [`egui-snarl`]: https://crates.io/crates/egui-snarl
+//! [`SignalBinding`]: crate::domain::signal::SignalBinding
 
-use crate::command::intent::PropertyEditIntent;
-use crate::command::property::{PropertyChange, PropertyValue};
 use crate::core::ids::StableId;
-use crate::domain::node::{BehaviorNode, NodeKind};
-use crate::signal::{ComputedSignals, SignalBus, SignalParams};
+use crate::domain::Body;
+use crate::interaction::selection::Selection;
+use crate::signal::{
+    ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalParams,
+    SignalSink, SignalSource,
+};
+use crate::ui::ports::{body_actuators, body_sensors};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use egui_snarl::ui::{PinInfo, SnarlStyle, SnarlViewer};
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use std::collections::{HashMap, HashSet};
 
-/// Identity of a box on the canvas — the node-graph analogue of a
-/// [`StableId`], spanning config-seam producers (params, computed) and the
-/// authored behavior nodes, so reconciliation can match a snarl node to its
-/// dataflow source across frames.
-#[derive(Clone, PartialEq, Eq, Hash)]
+/// Identity of a block on the canvas, so reconciliation matches a snarl node
+/// to its dataflow source across frames.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum GraphKey {
+    /// A scene body (its sensor/actuator ports), by id.
+    Body(StableId),
     /// A `defparam` knob, by name.
     Param(String),
     /// A `defsignal` modulator, by name.
     Computed(String),
-    /// An authored behavior node (sensor/actuator), by id.
-    Node(StableId),
 }
 
-/// Which column a node sorts into (producers left, modulators middle,
-/// consumers right) — the readable left-to-right dataflow.
-#[derive(Clone, Copy, PartialEq)]
+/// What a block *is* — carries what the viewer needs to label pins and resolve
+/// a pin back to a [`SignalSource`] / [`SignalSink`].
+#[derive(Clone)]
+enum NodeData {
+    /// A body block: outputs are `body_sensors`, inputs are `body_actuators`.
+    Body(StableId),
+    /// A param block: one output (its published bus name).
+    Param(String),
+    /// A computed block: inputs are the bus names its expression reads, one
+    /// output (its published name).
+    Computed { name: String, inputs: Vec<String> },
+}
+
+impl NodeData {
+    fn key(&self) -> GraphKey {
+        match self {
+            Self::Body(id) => GraphKey::Body(*id),
+            Self::Param(name) => GraphKey::Param(name.clone()),
+            Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
+        }
+    }
+
+    fn role(&self) -> Role {
+        match self {
+            Self::Body(_) => Role::Body,
+            Self::Param(_) => Role::Producer,
+            Self::Computed { .. } => Role::Modulator,
+        }
+    }
+
+    /// The [`SignalSource`] a given output pin publishes (for wiring).
+    fn output_source(&self, index: usize) -> Option<SignalSource> {
+        match self {
+            Self::Body(id) => body_sensors(*id).get(index).map(|(_, s)| s.clone()),
+            Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
+            Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
+        }
+    }
+
+    /// The [`SignalSink`] a given input pin drives (only body actuators are
+    /// wireable targets; a computed input is read-only display).
+    fn input_sink(&self, index: usize) -> Option<SignalSink> {
+        match self {
+            Self::Body(id) => body_actuators(*id).get(index).map(|(_, s)| s.clone()),
+            _ => None,
+        }
+    }
+}
+
+/// Column/color role of a block.
+#[derive(Clone, Copy)]
 enum Role {
-    /// A source: params, sensors (output only).
     Producer,
-    /// A modulator: computed signals (inputs + output).
     Modulator,
-    /// A sink: actuators (input only).
-    Consumer,
+    Body,
 }
 
 impl Role {
-    /// The initial canvas x for this role's column (before the user drags).
     fn column_x(self) -> f32 {
         match self {
             Self::Producer => 20.0,
             Self::Modulator => 220.0,
-            Self::Consumer => 420.0,
-        }
-    }
-
-    /// Pin/accent color, shared with the scene-view node glyphs.
-    fn color(self) -> egui::Color32 {
-        match self {
-            Self::Producer => egui::Color32::from_rgb(90, 200, 120),
-            Self::Modulator => egui::Color32::from_rgb(120, 170, 235),
-            Self::Consumer => egui::Color32::from_rgb(235, 165, 100),
+            Self::Body => 420.0,
         }
     }
 }
 
-/// One box on the canvas, owned by the [`Snarl`] but rebuilt each frame from
-/// the live dataflow by [`reconcile`].
-#[derive(Clone)]
-struct GraphNode {
-    key: GraphKey,
-    title: String,
-    subtitle: String,
-    /// Input-port bus names (consumer/modulator reads).
-    inputs: Vec<String>,
-    /// Output-port bus name (producer/modulator publishes), if any.
-    output: Option<String>,
-    role: Role,
-    /// For an actuator: `(id, current kind)`, so a wire connect/disconnect
-    /// can emit the undoable rewire. `None` for read-only nodes.
-    rewire: Option<(StableId, NodeKind)>,
-}
-
-/// The node-graph canvas state: visibility plus the snarl graph and the
+/// The node-graph canvas state: visibility, the snarl graph, and the
 /// `GraphKey` → `NodeId` map reconciliation keeps in sync. Pure editor
-/// view-state — never authored, never persisted (like a scroll position).
+/// view-state — never authored, never persisted.
 #[derive(Resource)]
 pub struct NodeGraph {
     open: bool,
-    snarl: Snarl<GraphNode>,
+    snarl: Snarl<NodeData>,
     keys: HashMap<GraphKey, NodeId>,
 }
 
@@ -123,134 +147,200 @@ impl NodeGraph {
     }
 }
 
-/// Renders the node-graph canvas (toolbar toggle). Reconciles the snarl graph
-/// from the live dataflow, shows it, and drains any rewire the user made into
-/// undoable intents.
+/// The index of the sensor output pin a scene [`SignalSource`] maps to — must
+/// match the order of [`body_sensors`]. `None` for sources that aren't a
+/// single body's sensor port (distance, named).
+fn sensor_index(source: &SignalSource) -> Option<usize> {
+    match source {
+        SignalSource::Speed(_) => Some(0),
+        SignalSource::Spin(_) => Some(1),
+        SignalSource::Height(_) => Some(2),
+        SignalSource::PosX(_) => Some(3),
+        SignalSource::ContactForce(_) => Some(4),
+        SignalSource::ContactCount(_) => Some(5),
+        SignalSource::Distance(..) | SignalSource::Named(_) => None,
+    }
+}
+
+/// The `(GraphKey, output index)` a binding source resolves to, if it maps to
+/// a producer block on the canvas.
+fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
+    match source {
+        SignalSource::Named(name) => Some((GraphKey::Param(name.clone()), 0)),
+        SignalSource::Distance(..) => None,
+        other => {
+            let id = *match other {
+                SignalSource::Speed(id)
+                | SignalSource::Spin(id)
+                | SignalSource::Height(id)
+                | SignalSource::PosX(id)
+                | SignalSource::ContactForce(id)
+                | SignalSource::ContactCount(id) => id,
+                _ => return None,
+            };
+            Some((GraphKey::Body(id), sensor_index(other)?))
+        }
+    }
+}
+
+/// The `(GraphKey, input index)` a binding sink resolves to (body actuators;
+/// `Plot` has no block).
+fn sink_pin(sink: &SignalSink) -> Option<(GraphKey, usize)> {
+    match sink {
+        SignalSink::Fill(id) => Some((GraphKey::Body(*id), 0)),
+        SignalSink::TracerColor(id) => Some((GraphKey::Body(*id), 1)),
+        SignalSink::Plot => None,
+    }
+}
+
+/// Renders the node-graph canvas. Reconciles blocks + wires from the live
+/// dataflow, shows it, and applies any wire the user made/removed to the
+/// bindings (config-seam direct edit, like the Signals dock).
 pub fn node_graph_panel(
     mut contexts: EguiContexts,
     mut graph: ResMut<NodeGraph>,
+    mut bindings: ResMut<SignalBindings>,
     params: Res<SignalParams>,
     computed: Res<ComputedSignals>,
-    bus: Res<SignalBus>,
-    nodes: Query<(&StableId, &NodeKind), With<BehaviorNode>>,
-    mut edits: MessageWriter<PropertyEditIntent>,
+    bodies: Query<&StableId, With<Body>>,
+    selection: Res<Selection>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !graph.open {
         return Ok(());
     }
 
-    let desired = collect_desired(&params, &computed, &bus, &nodes);
+    let desired = collect_desired(&bindings, &params, &computed, &bodies, &selection);
     reconcile(&mut graph, desired);
+    rebuild_wires(&mut graph, &bindings);
 
     let mut viewer = GraphViewer::default();
     let style = SnarlStyle::new();
     let mut open = true;
     egui::Window::new("Node Graph")
         .open(&mut open)
-        .default_width(560.0)
-        .default_height(420.0)
+        .default_width(620.0)
+        .default_height(440.0)
         .show(ctx, |ui| {
             if graph.keys.is_empty() {
                 ui.weak(
-                    "Place sensor/actuator nodes, or add params/computed signals — \
-                     they appear here wired by signal name. Drag a producer output \
-                     onto an actuator input to rewire it.",
+                    "Select a body (or add a param/computed signal) to place it here, \
+                     then drag a sensor output onto another body's actuator input to \
+                     wire them.",
                 );
                 return;
             }
+            ui.weak("Drag a sensor output → a body's actuator input to bind · drag off to unbind");
             graph.snarl.show(&mut viewer, &style, "node-graph", ui);
         });
     graph.open = open;
 
-    for change in viewer.rewires {
-        edits.write(PropertyEditIntent {
-            changes: vec![change],
-        });
+    // Apply wiring edits (config-seam: bindings are edited directly).
+    for binding in viewer.new_bindings {
+        bindings.0.push(binding);
+    }
+    for (source, sink) in viewer.removed {
+        bindings
+            .0
+            .retain(|b| !(b.source == source && b.sink == sink));
     }
     Ok(())
 }
 
-/// Builds the desired canvas node set from the live dataflow (params, computed
-/// signals, sensor/actuator nodes). Tracers are physical trails, not part of
-/// the signal graph, so they are excluded.
+/// Builds the desired block set: a node per body referenced by a binding or
+/// currently selected, plus every param and computed signal.
 fn collect_desired(
+    bindings: &SignalBindings,
     params: &SignalParams,
     computed: &ComputedSignals,
-    bus: &SignalBus,
-    nodes: &Query<(&StableId, &NodeKind), With<BehaviorNode>>,
-) -> Vec<GraphNode> {
-    let mut items = Vec::new();
-    for param in &params.0 {
-        items.push(GraphNode {
-            key: GraphKey::Param(param.name.clone()),
-            title: format!("⊙ {}", param.name),
-            subtitle: format!("{:.3}", param.value),
-            inputs: Vec::new(),
-            output: Some(param.name.clone()),
-            role: Role::Producer,
-            rewire: None,
-        });
-    }
-    for (id, kind) in nodes {
-        match kind {
-            NodeKind::Sensor { quantity, signal } => items.push(GraphNode {
-                key: GraphKey::Node(*id),
-                title: "▷ sensor".into(),
-                subtitle: quantity.label().into(),
-                inputs: Vec::new(),
-                output: Some(signal.clone()),
-                role: Role::Producer,
-                rewire: None,
-            }),
-            NodeKind::Actuator {
-                signal,
-                gradient,
-                target,
-                ..
-            } => items.push(GraphNode {
-                key: GraphKey::Node(*id),
-                title: "◁ actuator".into(),
-                subtitle: format!("{gradient:?} → {}", target.label()),
-                inputs: vec![signal.clone()],
-                output: None,
-                role: Role::Consumer,
-                rewire: Some((*id, kind.clone())),
-            }),
-            NodeKind::Tracer(_) => {}
+    bodies: &Query<&StableId, With<Body>>,
+    selection: &Selection,
+) -> Vec<NodeData> {
+    let live: HashSet<StableId> = bodies.iter().copied().collect();
+    let mut shown: HashSet<StableId> = HashSet::new();
+    // Bodies referenced by a binding.
+    for binding in &bindings.0 {
+        for id in binding_bodies(binding) {
+            if live.contains(&id) {
+                shown.insert(id);
+            }
         }
     }
+    // Selected bodies.
+    for entity in selection.iter() {
+        if let Ok(id) = bodies.get(entity) {
+            shown.insert(*id);
+        }
+    }
+
+    let mut items: Vec<NodeData> = Vec::new();
+    for param in &params.0 {
+        items.push(NodeData::Param(param.name.clone()));
+    }
     for signal in &computed.0 {
-        let value = bus
-            .get(&signal.name)
-            .map_or_else(String::new, |v| format!("{v:.3}"));
-        items.push(GraphNode {
-            key: GraphKey::Computed(signal.name.clone()),
-            title: format!("ƒ {}", signal.name),
-            subtitle: value,
+        items.push(NodeData::Computed {
+            name: signal.name.clone(),
             inputs: signal.expr.inputs(),
-            output: Some(signal.name.clone()),
-            role: Role::Modulator,
-            rewire: None,
         });
+    }
+    for id in shown {
+        items.push(NodeData::Body(id));
     }
     items
 }
 
-/// The initial position for a freshly appearing node (before the user drags
-/// it): its role's column, staggered down.
-fn auto_pos(role: Role, index: usize) -> egui::Pos2 {
-    egui::pos2(role.column_x(), 20.0 + (index % 8) as f32 * 72.0)
+/// The bodies a binding references (source + sink).
+fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
+    let mut ids = Vec::new();
+    match &binding.source {
+        SignalSource::Speed(id)
+        | SignalSource::Spin(id)
+        | SignalSource::Height(id)
+        | SignalSource::PosX(id)
+        | SignalSource::ContactForce(id)
+        | SignalSource::ContactCount(id) => ids.push(*id),
+        SignalSource::Distance(a, b) => {
+            ids.push(*a);
+            ids.push(*b);
+        }
+        SignalSource::Named(_) => {}
+    }
+    match &binding.sink {
+        SignalSink::Fill(id) | SignalSink::TracerColor(id) => ids.push(*id),
+        SignalSink::Plot => {}
+    }
+    ids
 }
 
-/// Rebuilds the snarl graph to mirror `desired`: updates existing boxes in
-/// place (keeping their dragged position), inserts new ones, removes vanished
-/// ones, then re-draws the wires by bus-name match. This makes the canvas a
-/// *view* of the ECS dataflow — the scene is the source of truth.
-fn reconcile(graph: &mut NodeGraph, desired: Vec<GraphNode>) {
+/// The per-column running y-cursor, so freshly appearing blocks stack down
+/// their column instead of overlapping.
+#[derive(Default)]
+struct ColumnCursor {
+    producer: f32,
+    modulator: f32,
+    body: f32,
+}
+
+impl ColumnCursor {
+    fn next(&mut self, role: Role) -> egui::Pos2 {
+        let slot = match role {
+            Role::Producer => &mut self.producer,
+            Role::Modulator => &mut self.modulator,
+            Role::Body => &mut self.body,
+        };
+        let y = *slot + 16.0;
+        *slot = y + 96.0;
+        egui::pos2(role.column_x(), y)
+    }
+}
+
+/// Rebuilds the snarl graph to mirror `desired`, preserving dragged positions,
+/// then re-draws the wires from the bindings + computed-input name matches.
+fn reconcile(graph: &mut NodeGraph, desired: Vec<NodeData>) {
+    let mut cursor = ColumnCursor::default();
     let mut seen: HashSet<GraphKey> = HashSet::with_capacity(desired.len());
     for node in desired {
-        let key = node.key.clone();
+        let key = node.key();
         seen.insert(key.clone());
         if let Some(&id) = graph.keys.get(&key)
             && let Some(slot) = graph.snarl.get_node_mut(id)
@@ -258,11 +348,10 @@ fn reconcile(graph: &mut NodeGraph, desired: Vec<GraphNode>) {
             *slot = node;
             continue;
         }
-        let pos = auto_pos(node.role, graph.keys.len());
+        let pos = cursor.next(node.role());
         let id = graph.snarl.insert_node(pos, node);
         graph.keys.insert(key, id);
     }
-    // Drop nodes whose dataflow source is gone.
     let stale: Vec<(GraphKey, NodeId)> = graph
         .keys
         .iter()
@@ -275,171 +364,158 @@ fn reconcile(graph: &mut NodeGraph, desired: Vec<GraphNode>) {
         }
         graph.keys.remove(&key);
     }
-    rebuild_wires(&mut graph.snarl);
 }
 
-/// Clears every wire and re-draws it from bus-name matching: a producer's
-/// output pin to each consumer/modulator input pin reading the same name. The
-/// naming *is* the connection; the canvas just visualizes it.
-fn rebuild_wires(snarl: &mut Snarl<GraphNode>) {
-    let existing: Vec<(OutPinId, InPinId)> = snarl.wires().collect();
-    for (out, in_) in existing {
-        snarl.disconnect(out, in_);
-    }
-    // Map each output bus name to its producing node.
-    let outputs: HashMap<String, NodeId> = snarl
-        .node_ids()
-        .filter_map(|(id, node)| node.output.clone().map(|name| (name, id)))
-        .collect();
-    // For each input pin, connect the matching producer (if any).
-    let links: Vec<(OutPinId, InPinId)> = snarl
-        .node_ids()
-        .flat_map(|(id, node)| {
-            node.inputs
-                .iter()
-                .enumerate()
-                .filter_map(|(input, name)| {
-                    outputs.get(name).map(|&src| {
-                        (
-                            OutPinId {
-                                node: src,
-                                output: 0,
-                            },
-                            InPinId { node: id, input },
-                        )
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect();
-    for (out, in_) in links {
-        snarl.connect(out, in_);
-    }
-}
-
-/// Returns `kind` with its input signal repointed to `signal`, or `None` if it
-/// is not a rewirable consumer (only actuators rewire today).
-fn rewired(kind: &NodeKind, signal: &str) -> Option<NodeKind> {
-    match kind {
-        NodeKind::Actuator {
-            map,
-            gradient,
-            target,
-            ..
-        } => Some(NodeKind::Actuator {
-            signal: signal.to_owned(),
-            map: *map,
-            gradient: *gradient,
-            target: *target,
-        }),
-        _ => None,
-    }
-}
-
-/// The snarl viewer: renders each box's title/subtitle/pins and translates
-/// user connect/disconnect gestures into rewire [`PropertyChange`]s (drained
-/// by the system into undoable intents). It never mutates the snarl graph —
-/// reconciliation owns the wires.
+/// The snarl viewer: labels each block's pins and turns user connect/disconnect
+/// gestures into binding edits (collected, applied by the system). Wires shown
+/// are the current bindings; it never owns the graph.
 #[derive(Default)]
 struct GraphViewer {
-    /// Rewires the user made this frame (actuator signal edits).
-    rewires: Vec<PropertyChange>,
+    new_bindings: Vec<SignalBinding>,
+    removed: Vec<(SignalSource, SignalSink)>,
 }
 
-impl SnarlViewer<GraphNode> for GraphViewer {
-    fn title(&mut self, node: &GraphNode) -> String {
-        node.title.clone()
+impl GraphViewer {
+    /// Resolves an output pin to the [`SignalSource`] it publishes.
+    fn out_source(snarl: &Snarl<NodeData>, pin: OutPinId) -> Option<SignalSource> {
+        snarl.get_node(pin.node)?.output_source(pin.output)
     }
 
-    fn inputs(&mut self, node: &GraphNode) -> usize {
-        node.inputs.len()
+    /// Resolves an input pin to the [`SignalSink`] it drives.
+    fn in_sink(snarl: &Snarl<NodeData>, pin: InPinId) -> Option<SignalSink> {
+        snarl.get_node(pin.node)?.input_sink(pin.input)
+    }
+}
+
+impl SnarlViewer<NodeData> for GraphViewer {
+    fn title(&mut self, node: &NodeData) -> String {
+        match node {
+            NodeData::Body(id) => format!("◻ body {id:.4}"),
+            NodeData::Param(name) => format!("⊙ {name}"),
+            NodeData::Computed { name, .. } => format!("ƒ {name}"),
+        }
     }
 
-    fn outputs(&mut self, node: &GraphNode) -> usize {
-        usize::from(node.output.is_some())
+    fn inputs(&mut self, node: &NodeData) -> usize {
+        match node {
+            NodeData::Body(id) => body_actuators(*id).len(),
+            NodeData::Param(_) => 0,
+            NodeData::Computed { inputs, .. } => inputs.len(),
+        }
+    }
+
+    fn outputs(&mut self, node: &NodeData) -> usize {
+        match node {
+            NodeData::Body(id) => body_sensors(*id).len(),
+            NodeData::Param(_) | NodeData::Computed { .. } => 1,
+        }
     }
 
     fn show_input(
         &mut self,
         pin: &InPin,
         ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
-        let (label, color) = snarl.get_node(pin.id.node).map_or_else(
-            || (String::new(), egui::Color32::GRAY),
-            |node| {
-                let name = node.inputs.get(pin.id.input).cloned().unwrap_or_default();
-                (name, node.role.color())
-            },
-        );
-        ui.label(if label.is_empty() {
-            "(unwired)".to_owned()
-        } else {
-            label
-        });
-        PinInfo::circle().with_fill(color)
+        let label = match snarl.get_node(pin.id.node) {
+            Some(NodeData::Body(id)) => body_actuators(*id)
+                .get(pin.id.input)
+                .map_or_else(String::new, |(l, _)| (*l).to_owned()),
+            Some(NodeData::Computed { inputs, .. }) => {
+                inputs.get(pin.id.input).cloned().unwrap_or_default()
+            }
+            _ => String::new(),
+        };
+        ui.label(label);
+        PinInfo::circle().with_fill(egui::Color32::from_rgb(210, 170, 120))
     }
 
     fn show_output(
         &mut self,
         pin: &OutPin,
         ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
-        let (label, subtitle, color) = snarl.get_node(pin.id.node).map_or_else(
-            || (String::new(), String::new(), egui::Color32::GRAY),
-            |node| {
-                (
-                    node.output.clone().unwrap_or_default(),
-                    node.subtitle.clone(),
-                    node.role.color(),
-                )
-            },
-        );
-        ui.vertical(|ui| {
-            ui.label(label);
-            if !subtitle.is_empty() {
-                ui.weak(subtitle);
-            }
-        });
-        PinInfo::circle().with_fill(color)
-    }
-
-    fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<GraphNode>) {
-        // A producer output → an actuator input: rewire the actuator's signal
-        // to the producer's bus name (undoable). Do not touch the snarl graph
-        // — reconciliation redraws the wire once the command lands.
-        let Some(name) = snarl
-            .get_node(from.id.node)
-            .and_then(|node| node.output.clone())
-        else {
-            return;
+        let label = match snarl.get_node(pin.id.node) {
+            Some(NodeData::Body(id)) => body_sensors(*id)
+                .get(pin.id.output)
+                .map_or_else(String::new, |(l, _)| (*l).to_owned()),
+            Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => name.clone(),
+            None => String::new(),
         };
-        self.push_rewire(snarl.get_node(to.id.node), &name);
+        ui.label(label);
+        PinInfo::circle().with_fill(egui::Color32::from_rgb(140, 220, 150))
     }
 
-    fn disconnect(&mut self, _from: &OutPin, to: &InPin, snarl: &mut Snarl<GraphNode>) {
-        // Detach: clear the actuator's signal (an empty wire name).
-        self.push_rewire(snarl.get_node(to.id.node), "");
+    fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<NodeData>) {
+        // A producer output → a body actuator input: create a binding
+        // (source → sink). Don't mutate snarl; reconciliation redraws the wire
+        // once the binding lands.
+        if let (Some(source), Some(sink)) = (
+            Self::out_source(snarl, from.id),
+            Self::in_sink(snarl, to.id),
+        ) {
+            self.new_bindings.push(SignalBinding {
+                name: format!("wire-{}", self.new_bindings.len() + 1),
+                source,
+                map: SignalMap::default(),
+                gradient: GradientSpec::default(),
+                sink,
+            });
+        }
     }
 
-    fn drop_inputs(&mut self, pin: &InPin, snarl: &mut Snarl<GraphNode>) {
-        self.push_rewire(snarl.get_node(pin.id.node), "");
+    fn disconnect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<NodeData>) {
+        if let (Some(source), Some(sink)) = (
+            Self::out_source(snarl, from.id),
+            Self::in_sink(snarl, to.id),
+        ) {
+            self.removed.push((source, sink));
+        }
+    }
+
+    fn drop_inputs(&mut self, pin: &InPin, snarl: &mut Snarl<NodeData>) {
+        if let Some(sink) = Self::in_sink(snarl, pin.id) {
+            for remote in &pin.remotes {
+                if let Some(source) = Self::out_source(snarl, *remote) {
+                    self.removed.push((source, sink.clone()));
+                }
+            }
+        }
     }
 }
 
-impl GraphViewer {
-    /// Queues an undoable rewire of `node` (if it is a rewirable actuator) to
-    /// read `signal`.
-    fn push_rewire(&mut self, node: Option<&GraphNode>, signal: &str) {
-        if let Some((id, old)) = node.and_then(|n| n.rewire.as_ref())
-            && let Some(new) = rewired(old, signal)
-        {
-            self.rewires.push(PropertyChange {
-                id: *id,
-                old: PropertyValue::NodeKind(old.clone()),
-                new: PropertyValue::NodeKind(new),
-            });
+/// Rebuilds the snarl wires to mirror the bindings + computed-input name
+/// matches. Called each frame after reconcile so the visible wires always
+/// equal the dataflow. Kept separate for unit testing.
+fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
+    let existing: Vec<(OutPinId, InPinId)> = graph.snarl.wires().collect();
+    for (out, in_) in existing {
+        graph.snarl.disconnect(out, in_);
+    }
+    // Binding wires: source output pin → sink input pin.
+    for binding in &bindings.0 {
+        let (Some((src_key, out)), Some((sink_key, in_))) =
+            (source_pin(&binding.source), sink_pin(&binding.sink))
+        else {
+            continue;
+        };
+        // A named source may be a param or a computed block.
+        let src = graph.keys.get(&src_key).or_else(|| match &binding.source {
+            SignalSource::Named(name) => graph.keys.get(&GraphKey::Computed(name.clone())),
+            _ => None,
+        });
+        if let (Some(&src_id), Some(&sink_id)) = (src, graph.keys.get(&sink_key)) {
+            graph.snarl.connect(
+                OutPinId {
+                    node: src_id,
+                    output: out,
+                },
+                InPinId {
+                    node: sink_id,
+                    input: in_,
+                },
+            );
         }
     }
 }
@@ -447,125 +523,60 @@ impl GraphViewer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::node::{ActuatorTarget, SensorQuantity};
-    use crate::domain::signal::{GradientSpec, SignalMap};
 
-    fn sensor(signal: &str) -> GraphNode {
-        GraphNode {
-            key: GraphKey::Node(StableId::new()),
-            title: "sensor".into(),
-            subtitle: String::new(),
-            inputs: Vec::new(),
-            output: Some(signal.into()),
-            role: Role::Producer,
-            rewire: None,
-        }
+    fn body(graph: &mut NodeGraph, id: StableId) {
+        reconcile_add(graph, NodeData::Body(id));
     }
 
-    fn actuator(id: StableId, signal: &str) -> GraphNode {
-        let kind = NodeKind::Actuator {
-            signal: signal.into(),
-            map: SignalMap::default(),
-            gradient: GradientSpec::Turbo,
-            target: ActuatorTarget::Fill,
-        };
-        GraphNode {
-            key: GraphKey::Node(id),
-            title: "actuator".into(),
-            subtitle: String::new(),
-            inputs: vec![signal.into()],
-            output: None,
-            role: Role::Consumer,
-            rewire: Some((id, kind)),
-        }
+    fn reconcile_add(graph: &mut NodeGraph, node: NodeData) {
+        let key = node.key();
+        let pos = egui::pos2(0.0, 0.0);
+        let node_id = graph.snarl.insert_node(pos, node);
+        graph.keys.insert(key, node_id);
     }
 
     #[test]
-    fn reconcile_matches_wires_by_name_and_prunes_vanished_nodes() {
+    fn a_binding_draws_a_wire_between_the_right_ports() {
+        let a = StableId::new();
+        let b = StableId::new();
         let mut graph = NodeGraph::default();
-        let act_id = StableId::new();
-        // A sensor publishing "wire" and an actuator reading "wire" → one wire.
-        reconcile(&mut graph, vec![sensor("wire"), actuator(act_id, "wire")]);
-        assert_eq!(graph.keys.len(), 2);
-        assert_eq!(graph.snarl.wires().count(), 1, "name match draws one wire");
-
-        // Rename the actuator to read a non-existent signal → no wire.
-        reconcile(&mut graph, vec![sensor("wire"), actuator(act_id, "other")]);
-        assert_eq!(graph.snarl.wires().count(), 0, "no producer for 'other'");
-
-        // Drop the sensor → only the actuator remains, still no wire.
-        reconcile(&mut graph, vec![actuator(act_id, "wire")]);
-        assert_eq!(graph.keys.len(), 1, "vanished node pruned");
-        assert_eq!(graph.snarl.wires().count(), 0);
-    }
-
-    #[test]
-    fn connecting_a_producer_to_an_actuator_queues_a_rewire() {
-        let mut graph = NodeGraph::default();
-        let act_id = StableId::new();
-        reconcile(&mut graph, vec![sensor("wire"), actuator(act_id, "old")]);
-
-        // Find the two node ids.
-        let ids: Vec<NodeId> = graph.snarl.node_ids().map(|(id, _)| id).collect();
-        let (sensor_id, actuator_id) =
-            graph
-                .snarl
-                .node_ids()
-                .fold((ids[0], ids[0]), |(s, a), (id, node)| {
-                    if node.output.is_some() {
-                        (id, a)
-                    } else {
-                        (s, id)
-                    }
-                });
-
-        let mut viewer = GraphViewer::default();
-        let from = graph.snarl.out_pin(OutPinId {
-            node: sensor_id,
-            output: 0,
-        });
-        let to = graph.snarl.in_pin(InPinId {
-            node: actuator_id,
-            input: 0,
-        });
-        viewer.connect(&from, &to, &mut graph.snarl);
-
-        assert_eq!(viewer.rewires.len(), 1, "one rewire queued");
-        match &viewer.rewires[0].new {
-            PropertyValue::NodeKind(NodeKind::Actuator { signal, .. }) => {
-                assert_eq!(signal, "wire", "actuator repointed to the sensor's name");
-            }
-            other => panic!("expected an actuator rewire, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn rewiring_an_actuator_repoints_only_its_signal() {
-        let kind = NodeKind::Actuator {
-            signal: "old".into(),
+        body(&mut graph, a);
+        body(&mut graph, b);
+        // A speed→fill binding from A to B.
+        let mut bindings = SignalBindings::default();
+        bindings.0.push(SignalBinding {
+            name: "w".into(),
+            source: SignalSource::Speed(a),
             map: SignalMap::default(),
-            gradient: GradientSpec::Turbo,
-            target: ActuatorTarget::TracerColor,
-        };
-        let next = rewired(&kind, "new").unwrap();
+            gradient: GradientSpec::default(),
+            sink: SignalSink::Fill(b),
+        });
+        rebuild_wires(&mut graph, &bindings);
+        assert_eq!(graph.snarl.wires().count(), 1, "one wire for the binding");
+
+        // The wire runs A's speed output (index 0) → B's fill input (index 0).
+        let (out, in_) = graph.snarl.wires().next().unwrap();
+        assert_eq!(out.output, 0, "speed is output 0");
+        assert_eq!(in_.input, 0, "fill is input 0");
+        assert_eq!(graph.keys[&GraphKey::Body(a)], out.node);
+        assert_eq!(graph.keys[&GraphKey::Body(b)], in_.node);
+    }
+
+    #[test]
+    fn source_and_sink_pins_match_the_port_order() {
+        let id = StableId::new();
+        // Sensor index must line up with body_sensors order.
+        assert_eq!(sensor_index(&SignalSource::Speed(id)), Some(0));
+        assert_eq!(sensor_index(&SignalSource::ContactCount(id)), Some(5));
+        assert_eq!(sensor_index(&SignalSource::Named("x".into())), None);
         assert_eq!(
-            next,
-            NodeKind::Actuator {
-                signal: "new".into(),
-                map: SignalMap::default(),
-                gradient: GradientSpec::Turbo,
-                target: ActuatorTarget::TracerColor,
-            }
+            sink_pin(&SignalSink::Fill(id)),
+            Some((GraphKey::Body(id), 0))
         );
-        assert!(
-            rewired(
-                &NodeKind::Sensor {
-                    quantity: SensorQuantity::Speed,
-                    signal: "s".into()
-                },
-                "x"
-            )
-            .is_none()
+        assert_eq!(
+            sink_pin(&SignalSink::TracerColor(id)),
+            Some((GraphKey::Body(id), 1))
         );
+        assert_eq!(sink_pin(&SignalSink::Plot), None);
     }
 }

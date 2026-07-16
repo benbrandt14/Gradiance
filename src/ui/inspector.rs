@@ -62,6 +62,8 @@ pub struct BodyProps<'w, 's> {
     appearance_q: Query<'w, 's, &'static Appearance, With<Body>>,
     /// Live physics reads for the sensor-port readouts (read-only facade).
     physics: crate::physics::queries::PhysicsQueries<'w, 's>,
+    /// `StableId` → `Entity` for resolving sensor-port sources.
+    id_index: Res<'w, crate::core::ids::IdIndex>,
     /// Body poses for the position/height sensor ports.
     body_transforms: Query<'w, 's, &'static Transform, With<Body>>,
     /// Fixed timestep, for the impulse→force sensor readout.
@@ -90,9 +92,18 @@ impl BodyProps<'_, '_> {
 
     /// Renders `entity`'s live sensor-port readouts (shared by the pop-out and
     /// the context menu). Encapsulates the read facade so hosts don't touch
-    /// the private query fields.
+    /// the private query fields. No-op for an entity without a `StableId`.
     pub fn sensors(&self, ui: &mut egui::Ui, entity: Entity) {
-        ports::sensor_readouts(ui, entity, &self.physics, &self.body_transforms, self.dt());
+        if let Ok(&id) = self.ids.get(entity) {
+            ports::sensor_readouts(
+                ui,
+                id,
+                &self.id_index,
+                &self.physics,
+                &self.body_transforms,
+                self.dt(),
+            );
+        }
     }
 }
 

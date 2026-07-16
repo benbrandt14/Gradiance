@@ -123,7 +123,7 @@ pub fn node_kind_editor(
     salt: &str,
     kind: &crate::domain::node::NodeKind,
 ) -> Option<crate::domain::node::NodeKind> {
-    use crate::domain::node::{NodeKind, SensorQuantity};
+    use crate::domain::node::NodeKind;
     let mut next = kind.clone();
     match &mut next {
         NodeKind::Tracer(tracer) => {
@@ -144,56 +144,6 @@ pub fn node_kind_editor(
                     .show_ui(ui, |ui| {
                         for p in crate::domain::tracer::TracePattern::ALL {
                             ui.selectable_value(&mut tracer.pattern, p, format!("{p:?}"));
-                        }
-                    });
-            });
-        }
-        NodeKind::Sensor { quantity, signal } => {
-            ui.horizontal(|ui| {
-                ui.label("reads");
-                egui::ComboBox::from_id_salt(ui.id().with((salt, "q")))
-                    .selected_text(quantity.label())
-                    .show_ui(ui, |ui| {
-                        for q in SensorQuantity::ALL {
-                            ui.selectable_value(quantity, q, q.label());
-                        }
-                    });
-            });
-            ui.horizontal(|ui| {
-                ui.label("→ signal");
-                ui.text_edit_singleline(signal);
-            });
-        }
-        NodeKind::Actuator {
-            signal,
-            map,
-            gradient,
-            target,
-        } => {
-            ui.horizontal(|ui| {
-                ui.label("signal →");
-                ui.text_edit_singleline(signal);
-            });
-            ui.horizontal(|ui| {
-                ui.label("domain");
-                ui.add(egui::DragValue::new(&mut map.in_min).speed(1.0));
-                ui.label("→");
-                ui.add(egui::DragValue::new(&mut map.in_max).speed(1.0));
-                egui::ComboBox::from_id_salt(ui.id().with((salt, "grad")))
-                    .selected_text(format!("{gradient:?}"))
-                    .show_ui(ui, |ui| {
-                        for g in GradientSpec::ALL {
-                            ui.selectable_value(gradient, g, format!("{g:?}"));
-                        }
-                    });
-            });
-            ui.horizontal(|ui| {
-                ui.label("drives");
-                egui::ComboBox::from_id_salt(ui.id().with((salt, "target")))
-                    .selected_text(target.label())
-                    .show_ui(ui, |ui| {
-                        for t in crate::domain::node::ActuatorTarget::ALL {
-                            ui.selectable_value(target, t, t.label());
                         }
                     });
             });
@@ -318,6 +268,7 @@ fn source_label(source: &SignalSource) -> &'static str {
         SignalSource::Speed(_) => "speed",
         SignalSource::Spin(_) => "spin",
         SignalSource::Height(_) => "height",
+        SignalSource::PosX(_) => "pos x",
         SignalSource::Distance(..) => "distance",
         SignalSource::ContactForce(_) => "contact force",
         SignalSource::ContactCount(_) => "contact count",
@@ -412,6 +363,7 @@ fn binding_row(
                         SignalSource::Speed(id)
                         | SignalSource::Spin(id)
                         | SignalSource::Height(id)
+                        | SignalSource::PosX(id)
                         | SignalSource::ContactForce(id)
                         | SignalSource::ContactCount(id)
                         | SignalSource::Distance(id, _) => Some(*id),

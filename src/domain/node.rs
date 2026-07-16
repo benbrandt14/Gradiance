@@ -60,111 +60,18 @@ impl NodeAttachment {
     }
 }
 
-/// What a behavior node *is* — its authored payload. One variant per node
-/// kind; adding a sensor/actuator is one variant here plus its tool.
+/// What a behavior node *is* — its authored payload. Sensors and actuators
+/// are **not** placeable nodes: they are ports on objects (read via
+/// [`SignalSource`](crate::domain::signal::SignalSource), written via
+/// [`SignalSink`](crate::domain::signal::SignalSink)), wired in the node
+/// editor. The one remaining placeable node kind is the **tracer** — a
+/// trajectory probe you can drop anywhere or ride on a body.
 #[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub enum NodeKind {
     /// A trajectory-trail probe (the placeable [`Tracer`]).
     ///
     /// [`Tracer`]: crate::domain::tracer::Tracer
     Tracer(crate::domain::tracer::Tracer),
-    /// A **sensor**: reads a scene quantity at its attached body and
-    /// publishes it on the bus under `signal`. The placeable, node-shaped
-    /// counterpart of a binding's *source* — the dataflow's input port.
-    Sensor {
-        /// Which scene quantity to read.
-        quantity: SensorQuantity,
-        /// Bus name to publish the reading under.
-        signal: String,
-    },
-    /// An **actuator**: reads a bus `signal`, maps it through a domain +
-    /// gradient, and tints its attached body's fill or tracer trail (per
-    /// `target`). The node-shaped counterpart of a binding's *sink* — the
-    /// dataflow's output port.
-    Actuator {
-        /// Bus name to read.
-        signal: String,
-        /// Input-domain mapping to `[0, 1]`.
-        map: crate::domain::signal::SignalMap,
-        /// Color ramp.
-        gradient: crate::domain::signal::GradientSpec,
-        /// Which channel the color drives (fill vs tracer trail).
-        target: ActuatorTarget,
-    },
-}
-
-/// Which render channel an [actuator node](NodeKind::Actuator) drives — the
-/// two channels of [`SignalColorOverride`](crate::signal::SignalColorOverride),
-/// in placeable form (the node-shaped counterpart of a color
-/// [`SignalSink`](crate::domain::signal::SignalSink)).
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Reflect)]
-pub enum ActuatorTarget {
-    /// Tint the body's fill (default).
-    #[default]
-    Fill,
-    /// Tint the body's tracer trail.
-    TracerColor,
-}
-
-impl ActuatorTarget {
-    /// Both targets, for the tool/menu cycle.
-    pub const ALL: [Self; 2] = [Self::Fill, Self::TracerColor];
-
-    /// A short label.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Fill => "fill",
-            Self::TracerColor => "tracer",
-        }
-    }
-}
-
-/// A scene quantity a [sensor node](NodeKind::Sensor) reads from its body —
-/// the same readings a binding [`SignalSource`](crate::domain::signal::SignalSource)
-/// offers, in placeable form.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Reflect)]
-pub enum SensorQuantity {
-    /// Linear speed (px/s).
-    Speed,
-    /// Angular speed (rad/s, absolute).
-    Spin,
-    /// Height (world y, px).
-    Height,
-    /// Horizontal position (world x, px).
-    PosX,
-    /// Vertical position (world y, px) — an alias for [`Self::Height`] kept
-    /// for the position pair; both read `Transform.translation.y`.
-    PosY,
-    /// Net normal contact force.
-    ContactForce,
-    /// Number of bodies touched.
-    ContactCount,
-}
-
-impl SensorQuantity {
-    /// Every quantity, for the tool/menu cycle.
-    pub const ALL: [Self; 7] = [
-        Self::Speed,
-        Self::Spin,
-        Self::Height,
-        Self::PosX,
-        Self::PosY,
-        Self::ContactForce,
-        Self::ContactCount,
-    ];
-
-    /// A short label.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Speed => "speed",
-            Self::Spin => "spin",
-            Self::Height => "height",
-            Self::PosX => "pos x",
-            Self::PosY => "pos y",
-            Self::ContactForce => "force",
-            Self::ContactCount => "contacts",
-        }
-    }
 }
 
 impl NodeKind {
@@ -172,8 +79,6 @@ impl NodeKind {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Tracer(_) => "tracer",
-            Self::Sensor { .. } => "sensor",
-            Self::Actuator { .. } => "actuator",
         }
     }
 }
