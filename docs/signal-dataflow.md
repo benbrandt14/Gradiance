@@ -107,8 +107,8 @@ any other actuator.
 ## The node-graph canvas
 
 The Simulink-style editor this substrate has grown toward now ships as a
-windowed canvas ([`ui::node_graph`](../src/ui/node_graph.rs), toolbar
-**⬡ Graph**), built on the [`egui-snarl`] node-graph widget — the one major
+screen-**bottom docked** canvas ([`ui::node_graph`](../src/ui/node_graph.rs),
+toolbar **⬡ Graph**), built on the [`egui-snarl`] node-graph widget — the one major
 node editor tracking our pinned egui 0.35 (`egui_node_graph2` is stuck on
 0.29 and can't share the bevy_egui context). snarl owns the box layout,
 pan/zoom, and the drag-to-connect gesture; `ui::node_graph` is the **adapter**
@@ -125,15 +125,19 @@ between it and the ECS dataflow. **Objects are the nodes**:
 
 A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
 body's actuator input creates one (`source → sink`), and dragging the wire off
-deletes it. The snarl graph is **reconciled from the scene every frame**
-(`node_graph::reconcile`): a block per body referenced by a binding or currently
-selected, plus every param/computed, keyed by `GraphKey` so dragged positions
-persist; the wires are rebuilt from the bindings — the ECS is the source of
-truth, not snarl's own graph. Layout is pure editor view-state in the
-`NodeGraph` resource (never persisted). Wiring edits `SignalBindings` directly
-(config-seam, like the Signals dock) — no placeable entity, one currency. The
-canvas is usable without scripting: the sensor → map + gradient → actuator loop
-is entirely UI-driven.
+deletes it. Blocks show their **type** ("body" / `⊙ param` / `ƒ signal`) with an
+optional custom name (an editable field in a body block); a body is added
+explicitly via its right-click **Add to node editor** — bodies never auto-appear
+on selection, so the canvas stays uncluttered — and the selected body's block is
+highlighted. The snarl graph is **reconciled from the scene every frame**
+(`node_graph::reconcile`): a block per **added** or binding-referenced body, plus
+every param/computed, keyed by `GraphKey` so dragged positions persist; the wires
+are rebuilt from the bindings — the ECS is the source of truth, not snarl's own
+graph. Wires are right-angle (Simulink), so a body's own sensor→actuator
+self-wire routes around it. Layout is pure editor view-state in the `NodeGraph`
+resource (never persisted). Wiring edits `SignalBindings` directly (config-seam,
+like the Signals dock) — no placeable entity, one currency. Usable without
+scripting: the sensor → map + gradient → actuator loop is entirely UI-driven.
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)
 is plain queries + arithmetic over the `physics::queries` facade — the
@@ -167,6 +171,7 @@ below), not a rearchitecture. What still accretes on the same seams:
 3. The plot panel (`\`) draws every binding's history under its bus name.
 4. From a script: `(signal-set "excitement" (touch-count 0))` then bind
    *named* `excitement` to the body's fill.
-5. Open **⬡ Graph**, select two bodies so their blocks appear, and drag one
-   body's **speed** output onto another's **fill** input — the wire is a
-   binding and the target tints from the source's reading. No scripting needed.
+5. Right-click two bodies ▸ **Add to node editor**, open **⬡ Graph** (docks at
+   the bottom), and drag one body's **speed** output onto another's **fill**
+   input — the wire is a binding and the target tints from the source's
+   reading. No scripting needed.

@@ -15,9 +15,10 @@
 //! — there is no separate placeable sensor/actuator entity anymore.
 //!
 //! The graph is *derived from the scene* every frame by `reconcile`: a node per
-//! body that participates in a binding or is selected, plus every param and
-//! computed signal, keyed by `GraphKey` so dragged positions persist; the
-//! wires are rebuilt from the bindings.
+//! body **explicitly added** ("Add to node editor") or referenced by a binding
+//! — never merely selected, so the canvas stays uncluttered — plus every param
+//! and computed signal, keyed by `GraphKey` so dragged positions persist; the
+//! wires are rebuilt from the bindings. It docks to the screen bottom.
 //!
 //! [`egui-snarl`]: https://crates.io/crates/egui-snarl
 //! [`SignalBinding`]: crate::domain::signal::SignalBinding
@@ -32,7 +33,7 @@ use crate::signal::{
 use crate::ui::ports::{body_actuators, body_sensors};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use egui_snarl::ui::{PinInfo, SnarlStyle, SnarlViewer};
+use egui_snarl::ui::{PinInfo, SnarlStyle, SnarlViewer, WireStyle};
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use std::collections::{HashMap, HashSet};
 
@@ -53,7 +54,8 @@ enum GraphKey {
 #[derive(Clone)]
 enum NodeData {
     /// A body block: outputs are `body_sensors`, inputs are `body_actuators`.
-    Body(StableId),
+    /// `name` is an optional custom short label (else the block shows "body").
+    Body { id: StableId, name: Option<String> },
     /// A param block: one output (its published bus name).
     Param(String),
     /// A computed block: inputs are the bus names its expression reads, one
@@ -64,7 +66,7 @@ enum NodeData {
 impl NodeData {
     fn key(&self) -> GraphKey {
         match self {
-            Self::Body(id) => GraphKey::Body(*id),
+            Self::Body { id, .. } => GraphKey::Body(*id),
             Self::Param(name) => GraphKey::Param(name.clone()),
             Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
         }
@@ -72,16 +74,25 @@ impl NodeData {
 
     fn role(&self) -> Role {
         match self {
-            Self::Body(_) => Role::Body,
+            Self::Body { .. } => Role::Body,
             Self::Param(_) => Role::Producer,
             Self::Computed { .. } => Role::Modulator,
+        }
+    }
+
+    /// The short title — the block's *type*, or its custom name if set.
+    fn title(&self) -> String {
+        match self {
+            Self::Body { name, .. } => name.clone().unwrap_or_else(|| "body".to_owned()),
+            Self::Param(name) => format!("⊙ {name}"),
+            Self::Computed { name, .. } => format!("ƒ {name}"),
         }
     }
 
     /// The [`SignalSource`] a given output pin publishes (for wiring).
     fn output_source(&self, index: usize) -> Option<SignalSource> {
         match self {
-            Self::Body(id) => body_sensors(*id).get(index).map(|(_, s)| s.clone()),
+            Self::Body { id, .. } => body_sensors(*id).get(index).map(|(_, s)| s.clone()),
             Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
             Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
         }
@@ -91,7 +102,7 @@ impl NodeData {
     /// wireable targets; a computed input is read-only display).
     fn input_sink(&self, index: usize) -> Option<SignalSink> {
         match self {
-            Self::Body(id) => body_actuators(*id).get(index).map(|(_, s)| s.clone()),
+            Self::Body { id, .. } => body_actuators(*id).get(index).map(|(_, s)| s.clone()),
             _ => None,
         }
     }
@@ -123,6 +134,12 @@ pub struct NodeGraph {
     open: bool,
     snarl: Snarl<NodeData>,
     keys: HashMap<GraphKey, NodeId>,
+    /// Bodies explicitly added to the canvas ("Add to node editor"). Bodies
+    /// don't auto-appear on selection — only when added or when a binding
+    /// references them — so the canvas stays uncluttered.
+    added: HashSet<StableId>,
+    /// Optional custom short names per body (editable in the block; view-state).
+    names: HashMap<StableId, String>,
 }
 
 impl Default for NodeGraph {
@@ -131,6 +148,8 @@ impl Default for NodeGraph {
             open: false,
             snarl: Snarl::new(),
             keys: HashMap::new(),
+            added: HashSet::new(),
+            names: HashMap::new(),
         }
     }
 }
@@ -144,6 +163,13 @@ impl NodeGraph {
     /// Flips the canvas visibility.
     pub fn toggle(&mut self) {
         self.open = !self.open;
+    }
+
+    /// Adds a body's block to the canvas and opens it (the "Add to node
+    /// editor" context action).
+    pub fn add_body(&mut self, id: StableId) {
+        self.added.insert(id);
+        self.open = true;
     }
 }
 
@@ -204,36 +230,64 @@ pub fn node_graph_panel(
     computed: Res<ComputedSignals>,
     bodies: Query<&StableId, With<Body>>,
     selection: Res<Selection>,
+    ids: Query<&StableId>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !graph.open {
         return Ok(());
     }
 
-    let desired = collect_desired(&bindings, &params, &computed, &bodies, &selection);
+    let desired = collect_desired(
+        &graph.added,
+        &graph.names,
+        &bindings,
+        &params,
+        &computed,
+        &bodies,
+    );
     reconcile(&mut graph, desired);
     rebuild_wires(&mut graph, &bindings);
 
-    let mut viewer = GraphViewer::default();
-    let style = SnarlStyle::new();
-    let mut open = true;
-    egui::Window::new("Node Graph")
-        .open(&mut open)
-        .default_width(620.0)
-        .default_height(440.0)
-        .show(ctx, |ui| {
-            if graph.keys.is_empty() {
+    // Scene selection → highlight the matching body blocks.
+    let selected: HashSet<StableId> = selection
+        .iter()
+        .filter_map(|e| ids.get(e).ok().copied())
+        .collect();
+    let mut viewer = GraphViewer {
+        selected,
+        ..GraphViewer::default()
+    };
+    let style = SnarlStyle {
+        // Simulink-style right-angle wires — they route around a block instead
+        // of behind it (a body's own sensor→actuator self-wire).
+        wire_style: Some(WireStyle::AxisAligned { corner_radius: 8.0 }),
+        ..SnarlStyle::new()
+    };
+    // A screen-bottom dock (same background-layer root pattern the right dock
+    // uses, so panels claim edges rather than float).
+    let mut root = egui::Ui::new(
+        ctx.clone(),
+        "node-graph-root".into(),
+        egui::UiBuilder::new()
+            .layer_id(egui::LayerId::background())
+            .max_rect(ctx.viewport_rect()),
+    );
+    egui::Panel::bottom("node-graph-dock")
+        .resizable(true)
+        .default_size(260.0)
+        .show(&mut root, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Node Graph").strong());
                 ui.weak(
-                    "Select a body (or add a param/computed signal) to place it here, \
-                     then drag a sensor output onto another body's actuator input to \
-                     wire them.",
+                    "· right-click a body ▸ Add to node editor · drag sensor → actuator to bind",
                 );
+            });
+            if graph.keys.is_empty() {
+                ui.weak("Empty — add a body from its right-click menu, or add params/computed.");
                 return;
             }
-            ui.weak("Drag a sensor output → a body's actuator input to bind · drag off to unbind");
             graph.snarl.show(&mut viewer, &style, "node-graph", ui);
         });
-    graph.open = open;
 
     // Apply wiring edits (config-seam: bindings are edited directly).
     for binding in viewer.new_bindings {
@@ -244,32 +298,40 @@ pub fn node_graph_panel(
             .0
             .retain(|b| !(b.source == source && b.sink == sink));
     }
+    // Apply custom-name edits (view-state).
+    for (id, name) in viewer.renames {
+        if name.trim().is_empty() {
+            graph.names.remove(&id);
+        } else {
+            graph.names.insert(id, name);
+        }
+    }
     Ok(())
 }
 
-/// Builds the desired block set: a node per body referenced by a binding or
-/// currently selected, plus every param and computed signal.
+/// Builds the desired block set: a node per **explicitly added** body or body
+/// **referenced by a binding** (never merely selected — that would clutter the
+/// canvas), plus every param and computed signal.
 fn collect_desired(
+    added: &HashSet<StableId>,
+    names: &HashMap<StableId, String>,
     bindings: &SignalBindings,
     params: &SignalParams,
     computed: &ComputedSignals,
     bodies: &Query<&StableId, With<Body>>,
-    selection: &Selection,
 ) -> Vec<NodeData> {
     let live: HashSet<StableId> = bodies.iter().copied().collect();
-    let mut shown: HashSet<StableId> = HashSet::new();
-    // Bodies referenced by a binding.
+    let mut shown: HashSet<StableId> = added
+        .iter()
+        .copied()
+        .filter(|id| live.contains(id))
+        .collect();
+    // Bodies referenced by a binding (a wire needs its endpoints on-canvas).
     for binding in &bindings.0 {
         for id in binding_bodies(binding) {
             if live.contains(&id) {
                 shown.insert(id);
             }
-        }
-    }
-    // Selected bodies.
-    for entity in selection.iter() {
-        if let Ok(id) = bodies.get(entity) {
-            shown.insert(*id);
         }
     }
 
@@ -284,7 +346,10 @@ fn collect_desired(
         });
     }
     for id in shown {
-        items.push(NodeData::Body(id));
+        items.push(NodeData::Body {
+            id,
+            name: names.get(&id).cloned(),
+        });
     }
     items
 }
@@ -371,8 +436,12 @@ fn reconcile(graph: &mut NodeGraph, desired: Vec<NodeData>) {
 /// are the current bindings; it never owns the graph.
 #[derive(Default)]
 struct GraphViewer {
+    /// Scene-selected body ids — their blocks get a highlight frame.
+    selected: HashSet<StableId>,
     new_bindings: Vec<SignalBinding>,
     removed: Vec<(SignalSource, SignalSink)>,
+    /// Custom-name edits `(body, new name)` from the block's rename field.
+    renames: Vec<(StableId, String)>,
 }
 
 impl GraphViewer {
@@ -389,16 +458,59 @@ impl GraphViewer {
 
 impl SnarlViewer<NodeData> for GraphViewer {
     fn title(&mut self, node: &NodeData) -> String {
-        match node {
-            NodeData::Body(id) => format!("◻ body {id:.4}"),
-            NodeData::Param(name) => format!("⊙ {name}"),
-            NodeData::Computed { name, .. } => format!("ƒ {name}"),
+        node.title()
+    }
+
+    fn node_frame(
+        &mut self,
+        default: egui::Frame,
+        node: NodeId,
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
+        snarl: &Snarl<NodeData>,
+    ) -> egui::Frame {
+        if let Some(NodeData::Body { id, .. }) = snarl.get_node(node)
+            && self.selected.contains(id)
+        {
+            return default.stroke(egui::Stroke::new(
+                2.0,
+                egui::Color32::from_rgb(120, 200, 255),
+            ));
+        }
+        default
+    }
+
+    fn has_body(&mut self, node: &NodeData) -> bool {
+        matches!(node, NodeData::Body { .. })
+    }
+
+    fn show_body(
+        &mut self,
+        node: NodeId,
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
+        ui: &mut egui::Ui,
+        snarl: &mut Snarl<NodeData>,
+    ) {
+        let Some(NodeData::Body { id, name }) = snarl.get_node(node) else {
+            return;
+        };
+        let (id, mut text) = (*id, name.clone().unwrap_or_default());
+        if ui
+            .add(
+                egui::TextEdit::singleline(&mut text)
+                    .desired_width(90.0)
+                    .hint_text("name"),
+            )
+            .changed()
+        {
+            self.renames.push((id, text));
         }
     }
 
     fn inputs(&mut self, node: &NodeData) -> usize {
         match node {
-            NodeData::Body(id) => body_actuators(*id).len(),
+            NodeData::Body { id, .. } => body_actuators(*id).len(),
             NodeData::Param(_) => 0,
             NodeData::Computed { inputs, .. } => inputs.len(),
         }
@@ -406,7 +518,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
 
     fn outputs(&mut self, node: &NodeData) -> usize {
         match node {
-            NodeData::Body(id) => body_sensors(*id).len(),
+            NodeData::Body { id, .. } => body_sensors(*id).len(),
             NodeData::Param(_) | NodeData::Computed { .. } => 1,
         }
     }
@@ -418,7 +530,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
         let label = match snarl.get_node(pin.id.node) {
-            Some(NodeData::Body(id)) => body_actuators(*id)
+            Some(NodeData::Body { id, .. }) => body_actuators(*id)
                 .get(pin.id.input)
                 .map_or_else(String::new, |(l, _)| (*l).to_owned()),
             Some(NodeData::Computed { inputs, .. }) => {
@@ -437,7 +549,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
         let label = match snarl.get_node(pin.id.node) {
-            Some(NodeData::Body(id)) => body_sensors(*id)
+            Some(NodeData::Body { id, .. }) => body_sensors(*id)
                 .get(pin.id.output)
                 .map_or_else(String::new, |(l, _)| (*l).to_owned()),
             Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => name.clone(),
@@ -525,7 +637,7 @@ mod tests {
     use super::*;
 
     fn body(graph: &mut NodeGraph, id: StableId) {
-        reconcile_add(graph, NodeData::Body(id));
+        reconcile_add(graph, NodeData::Body { id, name: None });
     }
 
     fn reconcile_add(graph: &mut NodeGraph, node: NodeData) {

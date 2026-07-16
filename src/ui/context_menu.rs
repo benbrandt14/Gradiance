@@ -135,6 +135,9 @@ pub struct GroupWriters<'w> {
     /// Probe-pin target (the "Pin probe" menu action); bundled here to
     /// keep `context_menu` under Bevy's system-parameter count limit.
     probes: ResMut<'w, crate::ui::probe::ProbePanel>,
+    /// Node-graph canvas (the "Add to node editor" action); bundled here for
+    /// the same param-count reason.
+    node_graph: ResMut<'w, crate::ui::node_graph::NodeGraph>,
 }
 
 /// Behavior-node access for the node-specific context menu, bundled to keep
@@ -443,6 +446,19 @@ pub fn context_menu(
                 {
                     for id in &selected_ids {
                         writers.probes.pin(*id);
+                    }
+                    close = true;
+                }
+                if ui
+                    .add_enabled(
+                        !selected_ids.is_empty(),
+                        egui::Button::new("Add to node editor"),
+                    )
+                    .on_hover_text("place this body's block on the ⬡ Graph canvas")
+                    .clicked()
+                {
+                    for id in &selected_ids {
+                        writers.node_graph.add_body(*id);
                     }
                     close = true;
                 }
