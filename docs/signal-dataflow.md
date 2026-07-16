@@ -71,45 +71,38 @@ source (read) ──▶ map [in_min, in_max] → t ──▶ gradient(t) ──�
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
 | `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer tool today, sensors/actuators next; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
 
-## Behavior nodes: dataflow as placeable, selectable entities
+## Sensors & actuators are object ports, not tools
 
-The dataflow's endpoints don't have to live in a panel — they can be
-**placed in the scene**. A [`domain::node`](../src/domain/node.rs) is an
-authored entity (its own `StableId`, pose, and optional attachment to a
-body) that represents a piece of the graph:
+Sensors and actuators are **properties of objects**, not placeable things. A
+body exposes named **ports**: its **sensor ports** (read-only) are the scene
+reads it publishes — speed, spin, height, pos-x, contact force, contact count
+([`SignalSource`]) — and its **actuator ports** (writable) are the color
+channels a bound signal can drive — fill, tracer trail ([`SignalSink`]). The
+single catalog lives in [`ui::ports`](../src/ui/ports.rs)
+(`body_sensors`/`body_actuators`), reused by the inspector's live readouts and
+the node canvas's pins, and read through the one shared reader
+[`signal::read_source`](../src/signal/mod.rs) — there is no parallel "read a
+body quantity" implementation, and no `SensorQuantity`/`ActuatorTarget` enum.
 
-- **Node tools** (toolbar): `Tracer` (key `Y`) draws a trail; `Sensor`
-  (`N`) reads a scene quantity at its body and **publishes** a bus signal
-  (a dataflow *input* port); `Actuator` (`U`) **reads** a bus signal and
-  tints its body through a domain + gradient (an *output* port). A
-  sensor+actuator pair sharing a signal name is the two placeable halves of
-  a binding, wired by the bus — decompose a binding into nodes, or build a
-  chain across bodies. Signal names are edited in the **node inspector**
-  (the Signals dock's top block, undoable via `PropertyValue::NodeKind`).
-  Each tool click attaches to the body under the cursor (rides it) or
-  drops a free node.
-- **Palette breadth.** A sensor reads speed, spin, height, pos-x, pos-y,
-  contact force, or contact count (`SensorQuantity`); an actuator drives
-  either color channel — the body's fill or its tracer trail
-  (`ActuatorTarget`, the two channels of `SignalColorOverride` in placeable
-  form). Both are cycled in the node inspector / context menu.
-- Nodes are **individually selectable** (`node_edit::pick_node`, after
-  joint picking) and deletable/undoable like bodies — their glyph shows the
-  selection state and a tether to the attached body. Right-clicking a node
-  opens its **own context menu** (kind editor + Delete), distinct from the
-  physical-object menu. A node is **deleted with its parent body** (cascade,
-  like a joint), and a tracer attached to nothing is **inert**. The tracer's
-  size, fade, and pattern (line / dots) are configurable.
-- **Behavior copies with the base object.** Duplicating a body clones the
-  tracer nodes attached to it (attachment remapped to the copy) *and* the
-  signal bindings that reference it (`signal::remap_binding`, fresh names),
-  so a duplicated object brings its whole behavior — undoably.
+A **wire between ports is a [`SignalBinding`]**: a source (a sensor port, a
+param, or a computed signal) → a map + gradient → a sink (an actuator port or
+the plot). Bindings are the single config-seam currency — edited directly,
+persisted with the scene, not undoable — and duplicating a body copies the
+bindings that reference it (`signal::remap_binding`, fresh names), so behavior
+copies with the base object.
 
-This is the first "a dataflow endpoint is its own tool" instance; every
-future **sensor** (a reader glyph) and **actuator** (a writer glyph) is a
-sibling `NodeKind` + tool, spawned through the same `ToolCommit::SpawnNode`
-seam. The node canvas (below) wires these nodes' ports; today they
-publish/read through the same named `SignalBus`.
+## The placeable tracer node
+
+The one remaining *placeable* dataflow entity is the **tracer** — a trajectory
+probe. A [`domain::node`](../src/domain/node.rs) is an authored entity
+(`StableId`, pose, optional body attachment) whose only [`NodeKind`] is
+`Tracer`. The **Tracer tool** (key `Y`) drops one on the body under the cursor
+(it rides the body) or free; nodes are individually selectable
+(`node_edit::pick_node`, after joint picking), have their own right-click menu
+(size / fade / pattern + Delete), cascade-delete with their parent body, and a
+tracer attached to nothing is inert. A tracer's *trail color* is an actuator
+port on the body it rides (the `TracerColor` sink), so wiring drives it like
+any other actuator.
 
 ## The node-graph canvas
 
@@ -119,32 +112,28 @@ windowed canvas ([`ui::node_graph`](../src/ui/node_graph.rs), toolbar
 node editor tracking our pinned egui 0.35 (`egui_node_graph2` is stuck on
 0.29 and can't share the bevy_egui context). snarl owns the box layout,
 pan/zoom, and the drag-to-connect gesture; `ui::node_graph` is the **adapter**
-between it and the ECS dataflow. It draws the *bus graph* the naming already
-defines:
+between it and the ECS dataflow. **Objects are the nodes**:
 
 [`egui-snarl`]: https://crates.io/crates/egui-snarl
 
-- **producers** — params (`defparam`) and sensor nodes — as left-column
-  boxes with one **output port** (the bus name they publish);
-- **modulators** — computed signals (`defsignal`) — as middle-column boxes
-  with **input ports** (the names their expression reads) and one output;
-- **consumers** — actuator nodes — as right-column boxes with one **input
-  port** (the signal they read).
+- a **body** is a block whose **outputs are its sensor ports** (speed, spin,
+  height, pos-x, contact force, contact count) and **inputs are its actuator
+  ports** (fill, tracer color) — Simulink blocks, Algodoo per-object behavior;
+- a **param** (`defparam`) is a producer block (one output);
+- a **computed signal** (`defsignal`) is a modulator block (inputs = the names
+  its expression reads, one output).
 
-A **wire** is drawn wherever a consumer/modulator input's name matches a
-producer/modulator output's name — the graph is *already* connected by
-naming, the canvas makes it visible. The snarl graph is **reconciled from the
-scene every frame** (`node_graph::reconcile`): boxes are rebuilt from the live
-dataflow keyed by a `GraphKey`, preserving each box's dragged position, and
-the wires are re-derived from name matching — the ECS is the source of truth,
-not snarl's own graph. Layout is pure editor view-state in the `NodeGraph`
-resource (never authored, never persisted, like a scroll position). The one
-authored edit is **rewiring an actuator**: drag from a producer's output port
-onto an actuator's input (or disconnect one) and its `signal` re-points —
-routed through the same undoable `PropertyEditIntent` seam the dock uses
-(never a direct write; the wire follows once the command lands). The canvas is
-a UI over the existing model, not a second representation: it reads the same
-config-seam resources + `NodeKind` components and emits the same intents.
+A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
+body's actuator input creates one (`source → sink`), and dragging the wire off
+deletes it. The snarl graph is **reconciled from the scene every frame**
+(`node_graph::reconcile`): a block per body referenced by a binding or currently
+selected, plus every param/computed, keyed by `GraphKey` so dragged positions
+persist; the wires are rebuilt from the bindings — the ECS is the source of
+truth, not snarl's own graph. Layout is pure editor view-state in the
+`NodeGraph` resource (never persisted). Wiring edits `SignalBindings` directly
+(config-seam, like the Signals dock) — no placeable entity, one currency. The
+canvas is usable without scripting: the sensor → map + gradient → actuator loop
+is entirely UI-driven.
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)
 is plain queries + arithmetic over the `physics::queries` facade — the
@@ -156,20 +145,18 @@ cold runs by publishing named values.
 The canvas landed as a UI change over the existing model (as designed —
 below), not a rearchitecture. What still accretes on the same seams:
 
-- **More node kinds.** The canvas already renders params, computed signals,
-  and sensor/actuator nodes; `SignalBinding` (the flat form) is next to
-  fold in as a source→sink pair of boxes so the dock and canvas edit one
-  model. New `NodeKind`s (readers/writers) appear on the canvas for free.
-- **Drag-a-property becomes a source.** The inspector/probe panels read
-  the same facade quantities the sources do; "drag speed out of the probe
-  panel" will mint a sensor node the same way the node tools do today.
+- **More ports.** The canvas renders bodies (sensor/actuator ports), params,
+  and computed signals; new sensor `SignalSource`s / actuator `SignalSink`s
+  appear as pins for free once added to the `ui::ports` catalog.
+- **Drag-a-property becomes a wire.** The inspector's sensor readouts and the
+  canvas's output pins share one port catalog (`ui::ports`); dragging a port
+  out of the inspector to bind it is the same `SignalBinding` the canvas makes.
 - **Modulators lower to the Tier-B kernel.** Computed signals already
   compile through `script::kernel` — the allocation-free tape — not the VM;
   richer expressions reuse that path.
-- **More sinks accrete**: gizmo tints, per-vertex color mixing (SDF color
-  blend), emissive, sim parameters (an *actuator* is a config write —
-  same seam `sim-set` uses). New `ActuatorTarget`s extend the existing
-  fill/tracer pair.
+- **More ports accrete**: writable authored scalars as actuator ports (a
+  derived per-field shadow that respects invariant #5), gizmo tints, emissive,
+  sim parameters — each a new catalog entry in `ui::ports` + a `SignalSink`.
 
 ## Using it today
 
@@ -180,6 +167,6 @@ below), not a rearchitecture. What still accretes on the same seams:
 3. The plot panel (`\`) draws every binding's history under its bus name.
 4. From a script: `(signal-set "excitement" (touch-count 0))` then bind
    *named* `excitement` to the body's fill.
-5. Place a **Sensor** (`N`) and an **Actuator** (`U`) on bodies, open
-   **⬡ Graph**, and drag the sensor's output port onto the actuator's input
-   to wire them — the actuator tints its body from the sensor's reading.
+5. Open **⬡ Graph**, select two bodies so their blocks appear, and drag one
+   body's **speed** output onto another's **fill** input — the wire is a
+   binding and the target tints from the source's reading. No scripting needed.

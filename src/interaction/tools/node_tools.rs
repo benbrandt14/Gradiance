@@ -1,25 +1,15 @@
-//! Placeable behavior-node tools: **tracer**, **sensor**, **actuator**.
+//! The placeable **tracer** tool — the one remaining behavior-node tool.
 //!
-//! Each is the same one-click placement gesture — click a body to attach
-//! (the node rides it), click empty space for a free node — differing only
-//! in the [`NodeKind`] it commits. This uniformity *is* the modularity: a
-//! new dataflow node kind is one `NodeKind` variant plus a three-line tool
-//! here, all going through the shared [`ToolCommit::SpawnNode`] seam.
-//!
-//! - **Tracer** draws a trajectory trail.
-//! - **Sensor** reads a scene quantity at its body and publishes a bus
-//!   signal (a dataflow *input* port).
-//! - **Actuator** reads a bus signal and tints its body (an *output* port).
-//!
-//! Sensor/actuator signal names default to a fresh `sig-*`; the node
-//! inspector (`ui::node_inspector`) wires them (rename an actuator's signal
-//! to a sensor's to connect the two).
+//! One-click placement: click a body to attach (the trail rides it), click
+//! empty space for a free node. Sensors and actuators are **not** tools —
+//! they are ports on objects (read via `SignalSource`, written via
+//! `SignalSink`), wired in the node editor — so only the tracer places a
+//! [`NodeKind`] entity, through the shared [`ToolCommit::SpawnNode`] seam.
 
 use crate::command::snapshot::NodeRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
-use crate::domain::node::{NodeAttachment, NodeKind, SensorQuantity};
-use crate::domain::signal::{GradientSpec, SignalMap};
+use crate::domain::node::{NodeAttachment, NodeKind};
 use crate::domain::tracer::Tracer;
 use crate::interaction::selection::Selection;
 use crate::interaction::tools::appearance_for_id;
@@ -59,12 +49,6 @@ fn place_node(ctx: &ManipContext, world: &ToolWorld, kind: NodeKind) -> ManipOut
     ManipOutput::commit(ToolCommit::SpawnNode(Box::new(record)))
 }
 
-/// A short unique-ish signal name seeded from a fresh id (the node
-/// inspector renames it to wire nodes together).
-fn fresh_signal() -> String {
-    format!("sig-{}", &StableId::new().0.to_string()[..4])
-}
-
 /// Ghost ring at the cursor — shared node-placement preview.
 fn ghost(ctx: &ManipContext, out: &mut ToolPreview) {
     if let Some(p) = ctx.cursor {
@@ -102,22 +86,4 @@ node_tool!(
     TracerTool,
     "Places tracer nodes (trajectory trails).",
     || { NodeKind::Tracer(Tracer::default()) }
-);
-node_tool!(
-    SensorTool,
-    "Places sensor nodes (read a body's speed, publish a signal).",
-    || NodeKind::Sensor {
-        quantity: SensorQuantity::Speed,
-        signal: fresh_signal(),
-    }
-);
-node_tool!(
-    ActuatorTool,
-    "Places actuator nodes (read a signal, tint the body).",
-    || NodeKind::Actuator {
-        signal: fresh_signal(),
-        map: SignalMap::default(),
-        gradient: GradientSpec::default(),
-        target: crate::domain::node::ActuatorTarget::Fill,
-    }
 );

@@ -191,11 +191,12 @@ fn duplicating_a_body_copies_its_attached_tracer_and_bindings() {
 }
 
 #[test]
-fn a_sensor_publishes_and_an_actuator_consumes_over_the_bus() {
+fn a_speed_to_fill_binding_tints_the_target_body() {
     use avian2d::prelude::LinearVelocity;
-    use gradiance::domain::node::{NodeKind, SensorQuantity};
     use gradiance::domain::signal::{GradientSpec, SignalMap};
-    use gradiance::signal::{SignalBus, SignalColorOverride};
+    use gradiance::signal::{
+        SignalBinding, SignalBindings, SignalColorOverride, SignalSink, SignalSource,
+    };
 
     let mut app = paused_app();
     app.world_mut()
@@ -203,67 +204,55 @@ fn a_sensor_publishes_and_an_actuator_consumes_over_the_bus() {
         .gravity = Vec2::ZERO;
     app.update();
 
-    // Body A moves; a sensor on it publishes its speed under "wire".
+    // Body A moves; body B is tinted by A's speed through a binding (the
+    // object-port model: a sensor port on A wired to an actuator port on B).
     let mut a = box_record(Vec2::ZERO, 20.0, 20.0);
     a.physics.rigid_body = avian2d::prelude::RigidBody::Dynamic;
     let a_id = a.id;
     app.world_mut().write_message(SpawnBodyIntent { record: a });
-    // Body B is tinted by an actuator reading "wire".
     let b = box_record(Vec2::new(200.0, 0.0), 20.0, 20.0);
     let b_id = b.id;
     app.world_mut().write_message(SpawnBodyIntent { record: b });
     app.update();
 
-    let mut sensor = tracer_record(Vec2::ZERO, NodeAttachment::to(a_id, Vec2::ZERO));
-    sensor.kind = NodeKind::Sensor {
-        quantity: SensorQuantity::Speed,
-        signal: "wire".into(),
-    };
     app.world_mut()
-        .write_message(SpawnNodeIntent { record: sensor });
-    let mut actuator = tracer_record(Vec2::new(200.0, 0.0), NodeAttachment::to(b_id, Vec2::ZERO));
-    actuator.kind = NodeKind::Actuator {
-        signal: "wire".into(),
-        map: SignalMap {
-            in_min: 0.0,
-            in_max: 200.0,
-        },
-        gradient: GradientSpec::Turbo,
-        target: gradiance::domain::node::ActuatorTarget::Fill,
-    };
-    app.world_mut()
-        .write_message(SpawnNodeIntent { record: actuator });
-    app.update();
+        .resource_mut::<SignalBindings>()
+        .0
+        .push(SignalBinding {
+            name: "wire".into(),
+            source: SignalSource::Speed(a_id),
+            map: SignalMap {
+                in_min: 0.0,
+                in_max: 200.0,
+            },
+            gradient: GradientSpec::Turbo,
+            sink: SignalSink::Fill(b_id),
+        });
 
-    // Drive A at 150 px/s; the sensor publishes it, the actuator tints B.
+    // Drive A; the binding reads its speed and tints B's fill.
     let a_entity = entity_of(&app, a_id).unwrap();
     app.world_mut()
         .entity_mut(a_entity)
         .insert(LinearVelocity(Vec2::new(150.0, 0.0)));
     step(&mut app, 3);
 
-    let speed = app.world().resource::<SignalBus>().get("wire").unwrap();
-    assert!(
-        (speed - 150.0).abs() < 10.0,
-        "the sensor published A's speed ({speed})"
-    );
     let b_entity = entity_of(&app, b_id).unwrap();
     assert!(
         app.world()
             .get::<SignalColorOverride>(b_entity)
             .is_some_and(|o| o.fill.is_some()),
-        "the actuator tinted B from the wired signal"
+        "the binding tinted B from A's speed"
     );
 }
 
 #[test]
-fn an_actuator_can_drive_the_tracer_trail_from_pos_x() {
-    use gradiance::domain::node::{ActuatorTarget, NodeKind, SensorQuantity};
+fn a_pos_x_to_tracer_binding_drives_the_trail_channel() {
     use gradiance::domain::signal::{GradientSpec, SignalMap};
-    use gradiance::signal::{SignalBus, SignalColorOverride};
+    use gradiance::signal::{
+        SignalBinding, SignalBindings, SignalColorOverride, SignalSink, SignalSource,
+    };
 
     let mut app = paused_app();
-    // A static body at x = 300; a PosX sensor publishes it under "px".
     let mut body = box_record(Vec2::new(300.0, 0.0), 20.0, 20.0);
     body.physics.rigid_body = avian2d::prelude::RigidBody::Static;
     let body_id = body.id;
@@ -271,46 +260,26 @@ fn an_actuator_can_drive_the_tracer_trail_from_pos_x() {
         .write_message(SpawnBodyIntent { record: body });
     app.update();
 
-    let mut sensor = tracer_record(
-        Vec2::new(300.0, 0.0),
-        NodeAttachment::to(body_id, Vec2::ZERO),
-    );
-    sensor.kind = NodeKind::Sensor {
-        quantity: SensorQuantity::PosX,
-        signal: "px".into(),
-    };
+    // A pos-x → tracer-color binding on the same body drives its *trail*.
     app.world_mut()
-        .write_message(SpawnNodeIntent { record: sensor });
-    // An actuator on the same body reads "px" and drives the *trail* channel.
-    let mut actuator = tracer_record(
-        Vec2::new(300.0, 0.0),
-        NodeAttachment::to(body_id, Vec2::ZERO),
-    );
-    actuator.kind = NodeKind::Actuator {
-        signal: "px".into(),
-        map: SignalMap {
-            in_min: 0.0,
-            in_max: 500.0,
-        },
-        gradient: GradientSpec::Turbo,
-        target: ActuatorTarget::TracerColor,
-    };
-    app.world_mut()
-        .write_message(SpawnNodeIntent { record: actuator });
+        .resource_mut::<SignalBindings>()
+        .0
+        .push(SignalBinding {
+            name: "px".into(),
+            source: SignalSource::PosX(body_id),
+            map: SignalMap {
+                in_min: 0.0,
+                in_max: 500.0,
+            },
+            gradient: GradientSpec::Turbo,
+            sink: SignalSink::TracerColor(body_id),
+        });
     step(&mut app, 3);
 
-    let px = app.world().resource::<SignalBus>().get("px").unwrap();
-    assert!(
-        (px - 300.0).abs() < 1e-3,
-        "the sensor published pos x ({px})"
-    );
     let entity = entity_of(&app, body_id).unwrap();
     let over = app.world().get::<SignalColorOverride>(entity).unwrap();
-    assert!(over.trail.is_some(), "the actuator drove the trail channel");
-    assert!(
-        over.fill.is_none(),
-        "fill left untouched by a tracer actuator"
-    );
+    assert!(over.trail.is_some(), "the binding drove the trail channel");
+    assert!(over.fill.is_none(), "fill left untouched by a tracer sink");
 }
 
 #[test]

@@ -198,56 +198,47 @@ pub fn evaluate_computed(
     }
 }
 
-/// Reads a [`SensorQuantity`](crate::domain::node::SensorQuantity) at
-/// `entity` (a body) — the shared read the
-/// sensor nodes and binding sources both use. `None` when the quantity
-/// needs a simulating body that isn't there.
-pub fn read_quantity(
-    quantity: crate::domain::node::SensorQuantity,
-    entity: Entity,
+/// Reads a scene [`SignalSource`] to a scalar — the single shared reader the
+/// binding evaluator and the inspector's sensor-port readouts both use (one
+/// reader, no parallel implementations). [`SignalSource::Named`] is bus-only
+/// (resolved by the caller against the [`SignalBus`]); everything else is a
+/// scene read through the `physics::queries` facade + `Transform`. `None` when
+/// a referenced body isn't resolvable this frame.
+pub fn read_source(
+    source: &SignalSource,
+    index: &IdIndex,
     physics: &PhysicsQueries,
     transforms: &Query<&Transform, With<Body>>,
     dt: f32,
 ) -> Option<f32> {
-    use crate::domain::node::SensorQuantity as Q;
-    match quantity {
-        Q::Speed => physics.velocity_of(entity).map(|(v, _)| v.length()),
-        Q::Spin => physics.velocity_of(entity).map(|(_, w)| w.abs()),
-        Q::Height | Q::PosY => transforms.get(entity).ok().map(|t| t.translation.y),
-        Q::PosX => transforms.get(entity).ok().map(|t| t.translation.x),
-        Q::ContactForce => Some(physics.net_contact_impulse(entity).length() / dt),
-        Q::ContactCount => Some(physics.touching_count(entity) as f32),
-    }
-}
-
-/// Publishes each **sensor node's** reading on the bus (a placeable dataflow
-/// input port). Runs before [`evaluate_computed`], so computed signals and
-/// bindings read this frame's value. A sensor reads its attached body; a
-/// free sensor has nothing to read.
-pub fn evaluate_sensor_nodes(
-    index: Res<IdIndex>,
-    physics: PhysicsQueries,
-    fixed: Res<Time<Fixed>>,
-    game: Res<State<GameState>>,
-    transforms: Query<&Transform, With<Body>>,
-    nodes: Query<(
-        &crate::domain::node::NodeKind,
-        &crate::domain::node::NodeAttachment,
-    )>,
-    mut bus: ResMut<SignalBus>,
-) {
-    let recording = *game.get() == GameState::Playing;
-    let dt = fixed.timestep().as_secs_f32().max(1e-6);
-    for (kind, attachment) in &nodes {
-        let crate::domain::node::NodeKind::Sensor { quantity, signal } = kind else {
-            continue;
-        };
-        let Some(entity) = attachment.target.and_then(|id| index.entity(id)) else {
-            continue;
-        };
-        if let Some(value) = read_quantity(*quantity, entity, &physics, &transforms, dt) {
-            bus.publish(signal, value, recording);
+    let pos_of = |id: StableId| -> Option<Vec2> {
+        index
+            .entity(id)
+            .and_then(|e| transforms.get(e).ok())
+            .map(|t| t.translation.truncate())
+    };
+    match source {
+        SignalSource::Speed(id) => index
+            .entity(*id)
+            .and_then(|e| physics.velocity_of(e))
+            .map(|(v, _)| v.length()),
+        SignalSource::Spin(id) => index
+            .entity(*id)
+            .and_then(|e| physics.velocity_of(e))
+            .map(|(_, w)| w.abs()),
+        SignalSource::Height(id) => pos_of(*id).map(|p| p.y),
+        SignalSource::PosX(id) => pos_of(*id).map(|p| p.x),
+        SignalSource::Distance(a, b) => match (pos_of(*a), pos_of(*b)) {
+            (Some(pa), Some(pb)) => Some(pa.distance(pb)),
+            _ => None,
+        },
+        SignalSource::ContactForce(id) => index
+            .entity(*id)
+            .map(|e| physics.net_contact_impulse(e).length() / dt),
+        SignalSource::ContactCount(id) => {
+            index.entity(*id).map(|e| physics.touching_count(e) as f32)
         }
+        SignalSource::Named(_) => None,
     }
 }
 
@@ -267,47 +258,19 @@ pub fn evaluate_signals(
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
     game: Res<State<GameState>>,
-    nodes: Query<(
-        &crate::domain::node::NodeKind,
-        &crate::domain::node::NodeAttachment,
-    )>,
     mut bus: ResMut<SignalBus>,
     mut overrides: Query<&mut SignalColorOverride, With<Body>>,
     overridden: Query<Entity, With<SignalColorOverride>>,
 ) {
     let recording = *game.get() == GameState::Playing;
     let dt = fixed.timestep().as_secs_f32().max(1e-6);
-    let pos_of = |id: StableId| -> Option<Vec2> {
-        index
-            .entity(id)
-            .and_then(|e| transforms.get(e).ok())
-            .map(|t| t.translation.truncate())
-    };
 
     // Evaluate sources and gather the desired per-entity overrides.
     let mut desired: HashMap<Entity, SignalColorOverride> = HashMap::new();
     for binding in &bindings.0 {
         let value = match &binding.source {
-            SignalSource::Speed(id) => index
-                .entity(*id)
-                .and_then(|e| physics.velocity_of(e))
-                .map(|(v, _)| v.length()),
-            SignalSource::Spin(id) => index
-                .entity(*id)
-                .and_then(|e| physics.velocity_of(e))
-                .map(|(_, w)| w.abs()),
-            SignalSource::Height(id) => pos_of(*id).map(|p| p.y),
-            SignalSource::Distance(a, b) => match (pos_of(*a), pos_of(*b)) {
-                (Some(pa), Some(pb)) => Some(pa.distance(pb)),
-                _ => None,
-            },
-            SignalSource::ContactForce(id) => index
-                .entity(*id)
-                .map(|e| physics.net_contact_impulse(e).length() / dt),
-            SignalSource::ContactCount(id) => {
-                index.entity(*id).map(|e| physics.touching_count(e) as f32)
-            }
             SignalSource::Named(name) => bus.get(name),
+            other => read_source(other, &index, &physics, &transforms, dt),
         };
         let Some(value) = value else {
             continue;
@@ -330,20 +293,14 @@ pub fn evaluate_signals(
         }
     }
 
-    // Actuator nodes fold into the same desired map (unified cleanup below).
-    apply_actuators(&nodes, &index, &bus, &mut desired);
-
     // Bus hygiene: keep the names that still have a producer — bindings,
-    // params, computed signals, sensor nodes, `t`, and script names.
+    // params, computed signals, `t`, and script names.
     bus.retain(|name| {
         name == TIME_INPUT
             || bindings.0.iter().any(|b| b.name == name)
             || params.0.iter().any(|p| p.name == name)
             || computed.0.iter().any(|c| c.name == name)
             || script_names.0.iter().any(|n| n == name)
-            || nodes.iter().any(|(kind, _)| {
-                matches!(kind, crate::domain::node::NodeKind::Sensor { signal, .. } if signal == name)
-            })
     });
 
     // Apply overrides change-detected (a same-color frame must not dirty
@@ -363,45 +320,6 @@ pub fn evaluate_signals(
     for entity in &overridden {
         if !desired.contains_key(&entity) {
             commands.entity(entity).remove::<SignalColorOverride>();
-        }
-    }
-}
-
-/// Folds every **actuator node** into the desired-override map: read its bus
-/// signal, map + gradient → a color, and tint the attached body's fill or
-/// tracer trail (per its target). Split from [`evaluate_signals`] to keep
-/// that system readable.
-fn apply_actuators(
-    nodes: &Query<(
-        &crate::domain::node::NodeKind,
-        &crate::domain::node::NodeAttachment,
-    )>,
-    index: &IdIndex,
-    bus: &SignalBus,
-    desired: &mut HashMap<Entity, SignalColorOverride>,
-) {
-    use crate::domain::node::{ActuatorTarget, NodeKind};
-    for (kind, attachment) in nodes {
-        let NodeKind::Actuator {
-            signal,
-            map,
-            gradient,
-            target,
-        } = kind
-        else {
-            continue;
-        };
-        let (Some(entity), Some(value)) = (
-            attachment.target.and_then(|id| index.entity(id)),
-            bus.get(signal),
-        ) else {
-            continue;
-        };
-        let color = gradient.at(map.normalize(value));
-        let entry = desired.entry(entity).or_default();
-        match target {
-            ActuatorTarget::Fill => entry.fill = Some(color),
-            ActuatorTarget::TracerColor => entry.trail = Some(color),
         }
     }
 }
@@ -429,7 +347,6 @@ impl Plugin for SignalPlugin {
             Update,
             (
                 recompile_signals.run_if(resource_changed::<ComputedSignals>),
-                evaluate_sensor_nodes,
                 evaluate_computed,
                 evaluate_signals,
             )

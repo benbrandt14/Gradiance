@@ -28,6 +28,8 @@ pub enum SignalSource {
     Spin(StableId),
     /// A body's height (world y, px).
     Height(StableId),
+    /// A body's horizontal position (world x, px).
+    PosX(StableId),
     /// Centre-to-centre distance between two bodies (px).
     Distance(StableId, StableId),
     /// Net normal contact force on a body (impulse / fixed dt).
@@ -164,6 +166,7 @@ impl SignalSource {
             Self::Speed(a) => (Self::Speed(one(*a).0), one(*a).1),
             Self::Spin(a) => (Self::Spin(one(*a).0), one(*a).1),
             Self::Height(a) => (Self::Height(one(*a).0), one(*a).1),
+            Self::PosX(a) => (Self::PosX(one(*a).0), one(*a).1),
             Self::ContactForce(a) => (Self::ContactForce(one(*a).0), one(*a).1),
             Self::ContactCount(a) => (Self::ContactCount(one(*a).0), one(*a).1),
             Self::Distance(a, b) => {
