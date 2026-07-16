@@ -395,13 +395,14 @@ governance").
   command-wrapped or serialized (rule #5). This is the first
   sensor/actuator-as-its-own-tool; more node kinds accrete behind it.
 - **Live plotters** — **landed** (`src/ui/plot.rs`): a backslash-toggled panel
-  time-series-plots the selected **body** (speed, height) *or* selected **joint**
-  (length, and a hinge's angle), sampled each frame while playing from
-  `physics::queries` (a pure read; a pause freezes the plot). The history is a
-  generic **named-signal** store, so adding a plottable quantity is one line and
-  the model is ready to back the `(measure …)` data-out seam. Hand-drawn with
-  the egui painter, no plotting dependency. Next: contact-force signal, pinnable
-  multi-body probes, and the script-driven `(measure …)` seam.
+  that time-series-plots **every bus signal with a recorded history** — there is
+  one history in the system, the `SignalBus`. Plotting a quantity is *wiring it
+  to the plot sink*: a `SignalSink::Plot` binding, added with one click from a
+  sensor port's **▸plot** toggle in the inspector. Recording pauses with the
+  simulation. Hand-drawn with the egui painter, no plotting dependency. (The old
+  dual PlotHistory/sample_plot store was removed — one bus.) Next: joint sensor
+  sources (length/angle as `SignalSource`s so joints plot again) and the
+  script-driven `(measure …)` seam.
 - **Signal dataflow scaffolding** — **landed** (`docs/signal-dataflow.md`):
   the substrate for the time-series node editor. `SignalBindings` (config
   seam, persisted with the scene) wire **sources** (speed, spin, height,

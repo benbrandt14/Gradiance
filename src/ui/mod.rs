@@ -27,7 +27,6 @@ pub mod toolbar;
 pub mod view_cube;
 pub mod widgets;
 
-use crate::core::states::GameState;
 use crate::interaction::PointerOverUi;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
@@ -47,7 +46,6 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<context_menu::ContextMenu>();
         app.init_resource::<depth_panel::DepthPanel>();
         app.init_resource::<console::ScriptConsole>();
-        app.init_resource::<plot::PlotHistory>();
         app.init_resource::<plot::PlotPanel>();
         app.init_resource::<probe::ProbePanel>();
         app.init_resource::<signals::SignalsPanel>();
@@ -71,11 +69,6 @@ impl Plugin for GradianceUiPlugin {
                 .chain(),
         );
         app.add_systems(Update, context_menu::open_context_menu);
-        // Sampling is a plain read; freeze it while paused.
-        app.add_systems(
-            Update,
-            plot::sample_plot.run_if(in_state(GameState::Playing)),
-        );
     }
 }
 

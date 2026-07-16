@@ -12,7 +12,9 @@
 
 use crate::core::ids::{IdIndex, StableId};
 use crate::domain::Body;
-use crate::domain::signal::{SignalSink, SignalSource};
+use crate::domain::signal::{
+    GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource,
+};
 use crate::physics::queries::PhysicsQueries;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -51,9 +53,11 @@ pub fn unit(source: &SignalSource) -> &'static str {
     }
 }
 
-/// Renders a body's sensor ports as live read-only rows (name → value) plus
-/// its derived mass — the read-only half of "every datum is a port". `dt`
-/// scales the impulse→force readout (matching the binding evaluator).
+/// Renders a body's sensor ports as live read-only rows (name → value → a
+/// **plot** toggle) plus its derived mass — the read-only half of "every datum
+/// is a port". The plot toggle adds/removes a `SignalSink::Plot` binding for
+/// the source, so the Live Plot draws it (wiring a sensor to the plot sink).
+/// `dt` scales the impulse→force readout (matching the binding evaluator).
 pub fn sensor_readouts(
     ui: &mut egui::Ui,
     id: StableId,
@@ -61,6 +65,7 @@ pub fn sensor_readouts(
     physics: &PhysicsQueries,
     transforms: &Query<&Transform, With<Body>>,
     dt: f32,
+    bindings: &mut SignalBindings,
 ) {
     for (label, source) in body_sensors(id) {
         ui.horizontal(|ui| {
@@ -69,6 +74,25 @@ pub fn sensor_readouts(
                 Some(value) => ui.monospace(format!("{value:.2} {}", unit(&source))),
                 None => ui.weak("—"),
             };
+            let plotted = plot_index(bindings, &source).is_some();
+            if ui
+                .selectable_label(plotted, "▸plot")
+                .on_hover_text("plot this sensor over time (a plot-sink binding)")
+                .clicked()
+            {
+                match plot_index(bindings, &source) {
+                    Some(i) => {
+                        bindings.0.remove(i);
+                    }
+                    None => bindings.0.push(SignalBinding {
+                        name: format!("{label}@{id:.4}"),
+                        source: source.clone(),
+                        map: SignalMap::default(),
+                        gradient: GradientSpec::default(),
+                        sink: SignalSink::Plot,
+                    }),
+                }
+            }
         });
     }
     ui.horizontal(|ui| {
@@ -78,6 +102,14 @@ pub fn sensor_readouts(
             None => ui.weak("—"),
         };
     });
+}
+
+/// Index of an existing plot-sink binding for `source`, if any.
+fn plot_index(bindings: &SignalBindings, source: &SignalSource) -> Option<usize> {
+    bindings
+        .0
+        .iter()
+        .position(|b| b.source == *source && b.sink == SignalSink::Plot)
 }
 
 #[cfg(test)]
