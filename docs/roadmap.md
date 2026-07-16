@@ -511,11 +511,12 @@ a normal dependency, not a cargo feature — see the decision doc's
   sensor→modulator→actuator triad in the resource model (sensor = a source
   read, modulator = a computed kernel signal, actuator = a color/plot sink; sim
   and gizmo actuators are the next accretion). The **node-canvas UI landed**
-  (`src/ui/node_graph.rs`, **⬡ Graph**): draggable producer/modulator/consumer
-  boxes wired by bus name, with drag-to-rewire actuators through the undoable
-  `PropertyEditIntent` seam. Remaining P2: fold `SignalBinding` into the
-  canvas, more actuator kinds (sim/gizmo), per-particle `Kernel::drive`
-  populations.
+  (`src/ui/node_graph.rs`, **⬡ Graph**) on the `egui-snarl` widget (the node
+  editor tracking our pinned egui 0.35): draggable producer/modulator/consumer
+  boxes wired by bus name, reconciled from the ECS each frame, with
+  drag-to-rewire actuators through the undoable `PropertyEditIntent` seam.
+  Remaining P2: fold `SignalBinding` into the canvas, more actuator kinds
+  (sim/gizmo), per-particle `Kernel::drive` populations.
 - **P3 — the extension surface (the tool authored in its own DSL).** Because
   edits, config, and reads all route through one registry, the editor's own
   chrome can be *authored as data over that registry*:

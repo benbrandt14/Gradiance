@@ -15,6 +15,10 @@ avian2d = { version = "=0.7.0", features = ["serialize"] }
 bevy_egui = "=0.41.0"
 # In-editor script console: a code editor widget with lisp syntax highlighting
 # and completion (shares egui 0.35 with bevy_egui). UI-only, `src/ui/` only.
+# Node-graph editor widget: the Simulink-style signal canvas. Shares egui 0.35
+# with bevy_egui (the only major node-editor crate on egui 0.35 —
+# egui_node_graph2 is stuck on 0.29). UI-only, imported in `src/ui/` only.
+egui-snarl = "=0.11.0"
 leafwing-input-manager = "=0.21.0"
 
 # Geometry
