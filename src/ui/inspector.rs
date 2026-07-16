@@ -64,6 +64,9 @@ pub struct BodyProps<'w, 's> {
     physics: crate::physics::queries::PhysicsQueries<'w, 's>,
     /// `StableId` → `Entity` for resolving sensor-port sources.
     id_index: Res<'w, crate::core::ids::IdIndex>,
+    /// Signal bindings (config seam) — the sensor ports' "plot" toggle adds a
+    /// plot-sink binding directly, like the Signals dock.
+    bindings: ResMut<'w, crate::domain::signal::SignalBindings>,
     /// Body poses for the position/height sensor ports.
     body_transforms: Query<'w, 's, &'static Transform, With<Body>>,
     /// Fixed timestep, for the impulse→force sensor readout.
@@ -90,18 +93,21 @@ impl BodyProps<'_, '_> {
         self.fixed.timestep().as_secs_f32().max(1e-6)
     }
 
-    /// Renders `entity`'s live sensor-port readouts (shared by the pop-out and
-    /// the context menu). Encapsulates the read facade so hosts don't touch
-    /// the private query fields. No-op for an entity without a `StableId`.
-    pub fn sensors(&self, ui: &mut egui::Ui, entity: Entity) {
+    /// Renders `entity`'s live sensor-port readouts + plot toggles (shared by
+    /// the pop-out and the context menu). Encapsulates the read facade so hosts
+    /// don't touch the private query fields. No-op for an entity without a
+    /// `StableId`.
+    pub fn sensors(&mut self, ui: &mut egui::Ui, entity: Entity) {
         if let Ok(&id) = self.ids.get(entity) {
+            let dt = self.dt();
             ports::sensor_readouts(
                 ui,
                 id,
                 &self.id_index,
                 &self.physics,
                 &self.body_transforms,
-                self.dt(),
+                dt,
+                &mut self.bindings,
             );
         }
     }

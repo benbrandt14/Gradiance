@@ -1,84 +1,19 @@
-//! The live plotter: a time-series panel for the selected body's or joint's
-//! physics.
+//! The live plotter: a time-series panel drawn **entirely from the
+//! [`SignalBus`]** (`docs/signal-dataflow.md`).
 //!
-//! A pure *read* — the plotter introspects `physics::queries` and `Transform`
-//! and records a rolling history; it never mutates authored state (invariant
-//! #4). This is the visualization half of the read-total governance model
-//! (`docs/script-lisp-decision.md` §"Live plotters"): a plotter is just another
-//! reader of the same facade scripts read through.
+//! There is one history in the system — the bus. To plot a quantity you wire
+//! it to the **plot sink**: a `SignalSink::Plot` binding publishes its source
+//! on the bus under its name, and this panel draws every bus signal with a
+//! recorded history. The inspector's sensor ports have a one-click "plot"
+//! toggle that adds/removes such a binding, so plotting a body's speed is a
+//! click. Recording pauses with the simulation (the bus records only while
+//! playing). Hand-rendered with the egui painter — no plotting dependency.
 //!
-//! The history is a set of **named signals**, so adding a plottable quantity is
-//! a one-line change and the model is ready to back the future `(measure …)`
-//! data-out seam. `sample_plot` fills it each frame while playing; `plot_panel`
-//! (backslash) draws it, hand-rendered with the egui painter — no plotting
-//! dependency.
+//! [`SignalBus`]: crate::signal::SignalBus
 
-use crate::core::ids::IdIndex;
-use crate::core::units::PosRot;
-use crate::domain::joint::{JointDef, JointKind};
-use crate::interaction::selection::{SelectedJoint, Selection};
-use crate::physics::queries::PhysicsQueries;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use std::collections::VecDeque;
-
-/// One named live signal — a label plus its rolling samples.
-struct Signal {
-    label: &'static str,
-    samples: VecDeque<f32>,
-}
-
-/// Rolling live-signal history for the plot panel. Records the currently
-/// selected body *or* joint; changing what (or which signals) is selected
-/// resets it, so a plot never mixes two sources' histories.
-#[derive(Resource, Default)]
-pub struct PlotHistory {
-    tracked: Option<Entity>,
-    signals: Vec<Signal>,
-}
-
-impl PlotHistory {
-    /// Samples kept per signal (~10 s at 60 fps).
-    const CAP: usize = 600;
-
-    /// Points the history at `entity` with the given signal labels, rebuilding
-    /// (and clearing) only when the target or the signal set actually changed.
-    fn retarget(&mut self, entity: Entity, labels: &[&'static str]) {
-        let unchanged = self.tracked == Some(entity)
-            && self.signals.len() == labels.len()
-            && self
-                .signals
-                .iter()
-                .zip(labels)
-                .all(|(signal, label)| signal.label == *label);
-        if !unchanged {
-            self.tracked = Some(entity);
-            self.signals = labels
-                .iter()
-                .map(|&label| Signal {
-                    label,
-                    samples: VecDeque::new(),
-                })
-                .collect();
-        }
-    }
-
-    /// Appends one sample per signal (values in signal order).
-    fn push(&mut self, values: &[f32]) {
-        for (signal, &value) in self.signals.iter_mut().zip(values) {
-            signal.samples.push_back(value);
-            while signal.samples.len() > Self::CAP {
-                signal.samples.pop_front();
-            }
-        }
-    }
-
-    /// Forgets the tracked source and its signals (nothing plottable selected).
-    fn clear(&mut self) {
-        self.tracked = None;
-        self.signals.clear();
-    }
-}
 
 /// Plot panel visibility.
 #[derive(Resource, Default)]
@@ -100,7 +35,7 @@ impl PlotPanel {
     }
 }
 
-/// Colours cycled across a source's signals.
+/// Colours cycled across the plotted signals.
 const SIGNAL_COLORS: [egui::Color32; 4] = [
     egui::Color32::from_rgb(120, 200, 255),
     egui::Color32::from_rgb(255, 190, 120),
@@ -108,84 +43,11 @@ const SIGNAL_COLORS: [egui::Color32; 4] = [
     egui::Color32::from_rgb(230, 150, 230),
 ];
 
-/// Samples the selected body's or joint's live signals into the history. Gated
-/// on `Playing`, so a pause freezes the plot instead of scrolling flat lines.
-pub fn sample_plot(
-    selection: Res<Selection>,
-    selected_joint: Res<SelectedJoint>,
-    joints: Query<&JointDef>,
-    transforms: Query<&Transform>,
-    index: Res<IdIndex>,
-    physics: PhysicsQueries,
-    fixed: Res<Time<Fixed>>,
-    mut history: ResMut<PlotHistory>,
-) {
-    // A selected joint takes precedence (body/joint selection are exclusive):
-    // plot its current length, and for a hinge its relative angle too.
-    if let Some(joint_entity) = selected_joint.0 {
-        if let Ok(def) = joints.get(joint_entity)
-            && let Some((length, angle)) = joint_signals(def, &transforms, &index)
-        {
-            if matches!(def.kind, JointKind::Hinge { .. }) {
-                history.retarget(joint_entity, &["length (px)", "angle (deg)"]);
-                history.push(&[length, angle]);
-            } else {
-                history.retarget(joint_entity, &["length (px)"]);
-                history.push(&[length]);
-            }
-        } else {
-            history.clear();
-        }
-        return;
-    }
-
-    // Otherwise, a single selected body: speed + height + contact force.
-    let mut selected = selection.iter();
-    let (Some(entity), None) = (selected.next(), selected.next()) else {
-        history.clear();
-        return;
-    };
-    let height = transforms.get(entity).map_or(0.0, |t| t.translation.y);
-    let speed = physics.velocity_of(entity).map_or(0.0, |(v, _)| v.length());
-    let dt = fixed.timestep().as_secs_f32().max(1e-6);
-    let contact_force = physics.net_contact_impulse(entity).length() / dt;
-    history.retarget(entity, &["speed (px/s)", "height (px)", "contact force"]);
-    history.push(&[speed, height, contact_force]);
-}
-
-/// A joint's live geometry: current anchor-to-anchor length and the relative
-/// angle of its bodies (degrees). `None` if an endpoint can't be resolved.
-fn joint_signals(
-    def: &JointDef,
-    transforms: &Query<&Transform>,
-    index: &IdIndex,
-) -> Option<(f32, f32)> {
-    let pose_a = index
-        .entity(def.body_a)
-        .and_then(|e| transforms.get(e).ok())
-        .map(PosRot::from_transform)?;
-    let world_a = def.anchor_world(pose_a.pos, pose_a.rot);
-    let (world_b, rot_b) = match def.body_b {
-        Some(id) => {
-            let pose_b = index
-                .entity(id)
-                .and_then(|e| transforms.get(e).ok())
-                .map(PosRot::from_transform)?;
-            (
-                pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b),
-                pose_b.rot,
-            )
-        }
-        None => (def.anchor_b, 0.0), // world pin
-    };
-    Some((world_a.distance(world_b), (rot_b - pose_a.rot).to_degrees()))
-}
-
-/// Renders the live-plot panel (toggle with backslash).
+/// Renders the live-plot panel (toggle with backslash). Draws every bus signal
+/// with a recorded history — the plot-sink bindings.
 pub fn plot_panel(
     mut contexts: EguiContexts,
     mut panel: ResMut<PlotPanel>,
-    history: Res<PlotHistory>,
     bus: Res<crate::signal::SignalBus>,
     keys: Res<ButtonInput<KeyCode>>,
 ) -> Result {
@@ -202,44 +64,23 @@ pub fn plot_panel(
         .open(&mut open)
         .default_width(320.0)
         .show(ctx, |ui| {
-            let bound: Vec<(&str, &std::collections::VecDeque<f32>)> = bus
+            let bound: Vec<(&str, &VecDeque<f32>)> = bus
                 .entries()
                 .filter(|(_, e)| e.history().len() >= 2)
                 .map(|(name, e)| (name, e.history()))
                 .collect();
-            if history.signals.is_empty() && bound.is_empty() {
+            if bound.is_empty() {
                 ui.label(
-                    "Select one body (speed, height) or a joint (length, angle) and press Play.",
+                    "Wire a sensor to the plot sink (a body's ▸plot toggle, or a \
+                     plot binding) and press Play.",
                 );
                 return;
             }
-            for (i, signal) in history.signals.iter().enumerate() {
+            for (i, (name, samples)) in bound.iter().enumerate() {
                 if i > 0 {
                     ui.add_space(4.0);
                 }
-                draw_series(
-                    ui,
-                    signal.label,
-                    &signal.samples,
-                    SIGNAL_COLORS[i % SIGNAL_COLORS.len()],
-                );
-            }
-            // Signal-dataflow bus histories (the Signals window's bindings).
-            if !bound.is_empty() {
-                if !history.signals.is_empty() {
-                    ui.separator();
-                }
-                for (i, (name, samples)) in bound.iter().enumerate() {
-                    if i > 0 {
-                        ui.add_space(4.0);
-                    }
-                    draw_series(
-                        ui,
-                        name,
-                        samples,
-                        SIGNAL_COLORS[(i + 2) % SIGNAL_COLORS.len()],
-                    );
-                }
+                draw_series(ui, name, samples, SIGNAL_COLORS[i % SIGNAL_COLORS.len()]);
             }
         });
     panel.open = open;
@@ -299,39 +140,4 @@ pub fn draw_series(ui: &mut egui::Ui, label: &str, data: &VecDeque<f32>, color: 
         font,
         egui::Color32::GRAY,
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn history_retargets_caps_and_keeps_matching_target() {
-        let mut world = World::new();
-        let a = world.spawn_empty().id();
-        let b = world.spawn_empty().id();
-        let mut history = PlotHistory::default();
-
-        history.retarget(a, &["x", "y"]);
-        for i in 0..(PlotHistory::CAP + 20) {
-            history.push(&[i as f32, 0.0]);
-        }
-        assert_eq!(history.tracked, Some(a));
-        assert_eq!(history.signals.len(), 2);
-        assert_eq!(history.signals[0].samples.len(), PlotHistory::CAP, "capped");
-
-        // Retargeting to the same target with the same labels keeps the data.
-        history.retarget(a, &["x", "y"]);
-        assert_eq!(history.signals[0].samples.len(), PlotHistory::CAP);
-
-        // A different target (or signal set) resets.
-        history.retarget(b, &["len"]);
-        assert_eq!(history.tracked, Some(b));
-        assert_eq!(history.signals.len(), 1);
-        assert!(history.signals[0].samples.is_empty(), "reset on change");
-
-        history.clear();
-        assert_eq!(history.tracked, None);
-        assert!(history.signals.is_empty());
-    }
 }
