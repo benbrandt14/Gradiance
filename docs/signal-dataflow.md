@@ -115,7 +115,14 @@ publish/read through the same named `SignalBus`.
 
 The Simulink-style editor this substrate has grown toward now ships as a
 windowed canvas ([`ui::node_graph`](../src/ui/node_graph.rs), toolbar
-**⬡ Graph**). It draws the *bus graph* the naming already defines:
+**⬡ Graph**), built on the [`egui-snarl`] node-graph widget — the one major
+node editor tracking our pinned egui 0.35 (`egui_node_graph2` is stuck on
+0.29 and can't share the bevy_egui context). snarl owns the box layout,
+pan/zoom, and the drag-to-connect gesture; `ui::node_graph` is the **adapter**
+between it and the ECS dataflow. It draws the *bus graph* the naming already
+defines:
+
+[`egui-snarl`]: https://crates.io/crates/egui-snarl
 
 - **producers** — params (`defparam`) and sensor nodes — as left-column
   boxes with one **output port** (the bus name they publish);
@@ -126,15 +133,18 @@ windowed canvas ([`ui::node_graph`](../src/ui/node_graph.rs), toolbar
 
 A **wire** is drawn wherever a consumer/modulator input's name matches a
 producer/modulator output's name — the graph is *already* connected by
-naming, the canvas makes it visible. Boxes drag to arrange (layout is pure
-editor view-state in the `NodeGraph` resource — never authored, never
-persisted, like a scroll position). The one authored edit is **rewiring an
-actuator**: drag from a producer's output port onto an actuator's input and
-its `signal` re-points to that producer's name — routed through the same
-undoable `PropertyEditIntent` seam the dock uses (never a direct write). The
-canvas is a UI over the existing model, not a second representation: it reads
-the same config-seam resources + `NodeKind` components and emits the same
-intents.
+naming, the canvas makes it visible. The snarl graph is **reconciled from the
+scene every frame** (`node_graph::reconcile`): boxes are rebuilt from the live
+dataflow keyed by a `GraphKey`, preserving each box's dragged position, and
+the wires are re-derived from name matching — the ECS is the source of truth,
+not snarl's own graph. Layout is pure editor view-state in the `NodeGraph`
+resource (never authored, never persisted, like a scroll position). The one
+authored edit is **rewiring an actuator**: drag from a producer's output port
+onto an actuator's input (or disconnect one) and its `signal` re-points —
+routed through the same undoable `PropertyEditIntent` seam the dock uses
+(never a direct write; the wire follows once the command lands). The canvas is
+a UI over the existing model, not a second representation: it reads the same
+config-seam resources + `NodeKind` components and emits the same intents.
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)
 is plain queries + arithmetic over the `physics::queries` facade — the
