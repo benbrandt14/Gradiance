@@ -28,6 +28,18 @@ pub fn precise_drag(
     speed: f32,
 ) -> Commit<f32> {
     let start_id = id.with("gesture-start");
+    let active_id = id.with("gesture-active");
+
+    // An authored-property field only commits on *release*, so its source
+    // (the component) stays at the pre-edit value for the whole gesture and
+    // the caller re-seeds `*value` to it every frame. Restore the in-progress
+    // value first, or the drag can never accumulate — it resets to the source
+    // each frame and the field looks "frozen". (Settings fields update in
+    // place, so `active` equals the source and this is a no-op for them.)
+    if let Some(active) = ui.data(|d| d.get_temp::<f32>(active_id)) {
+        *value = active;
+    }
+
     let response = ui.add(
         egui::DragValue::new(value)
             .speed(speed)
@@ -36,6 +48,7 @@ pub fn precise_drag(
 
     // Middle-click: reset to default, committed immediately.
     if response.clicked_by(egui::PointerButton::Middle) {
+        ui.data_mut(|d| d.remove::<f32>(active_id));
         let old = *value;
         *value = default;
         if (old - default).abs() > f32::EPSILON {
@@ -47,6 +60,14 @@ pub fn precise_drag(
     if response.drag_started() || response.gained_focus() {
         ui.data_mut(|d| d.insert_temp(start_id, *value));
     }
+    // Carry the working value across frames while the gesture is live; drop it
+    // the moment it ends so a stale value can't shadow the source.
+    if response.dragged() || response.has_focus() {
+        ui.data_mut(|d| d.insert_temp(active_id, *value));
+    } else {
+        ui.data_mut(|d| d.remove::<f32>(active_id));
+    }
+
     let finished = response.drag_stopped() || response.lost_focus();
     if finished {
         let old = ui
