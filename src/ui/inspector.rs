@@ -20,6 +20,7 @@ use crate::domain::appearance::Appearance;
 use crate::domain::depth::DepthBand;
 use crate::domain::shape::ShapeDef;
 use crate::interaction::selection::Selection;
+use crate::ui::ports;
 use crate::ui::widgets::{Commit, precise_drag};
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
@@ -59,6 +60,40 @@ pub struct BodyProps<'w, 's> {
     flags_q: Query<'w, 's, (Has<Sensor>, Has<LockedAxes>), With<Body>>,
     shapes_q: Query<'w, 's, &'static ShapeDef, With<Body>>,
     appearance_q: Query<'w, 's, &'static Appearance, With<Body>>,
+    /// Live physics reads for the sensor-port readouts (read-only facade).
+    physics: crate::physics::queries::PhysicsQueries<'w, 's>,
+    /// Body poses for the position/height sensor ports.
+    body_transforms: Query<'w, 's, &'static Transform, With<Body>>,
+    /// Fixed timestep, for the impulse→force sensor readout.
+    fixed: Res<'w, Time<Fixed>>,
+    /// Behavior-node kinds, so the pop-out edits a selected node instead of
+    /// rendering dead body-section headers (the freeze fix for nodes).
+    node_kinds: Query<
+        'w,
+        's,
+        &'static crate::domain::node::NodeKind,
+        With<crate::domain::node::BehaviorNode>,
+    >,
+}
+
+impl BodyProps<'_, '_> {
+    /// Whether `entity` is an inspectable rigid body (drives which sections
+    /// render, so a non-body selection never shows dead headers).
+    pub fn is_body(&self, entity: Entity) -> bool {
+        self.body_q.get(entity).is_ok()
+    }
+
+    /// The fixed-step seconds used to scale the contact-force readout.
+    pub fn dt(&self) -> f32 {
+        self.fixed.timestep().as_secs_f32().max(1e-6)
+    }
+
+    /// Renders `entity`'s live sensor-port readouts (shared by the pop-out and
+    /// the context menu). Encapsulates the read facade so hosts don't touch
+    /// the private query fields.
+    pub fn sensors(&self, ui: &mut egui::Ui, entity: Entity) {
+        ports::sensor_readouts(ui, entity, &self.physics, &self.body_transforms, self.dt());
+    }
 }
 
 /// Applies `make_new` to every selected body's component, emitting one
@@ -597,18 +632,59 @@ pub fn inspector_window(
         .show(ctx, |ui| {
             ui.heading(format!("Selection ({})", selection.len()));
             ui.separator();
-            ui.label(egui::RichText::new("Physics").strong());
-            physics_section(ui, &selection, &mut props);
-            ui.separator();
-            ui.label(egui::RichText::new("Shape").strong());
-            shape_section(ui, &selection, &mut props);
-            ui.separator();
-            ui.label(egui::RichText::new("Appearance").strong());
-            appearance_section(ui, &selection, &mut props);
-            ui.separator();
-            ui.label(egui::RichText::new("Depth").strong());
-            depth_section(ui, &selection, &mut props);
+            inspector_body(ui, &selection, &mut props);
         });
     panel.open = open;
     Ok(())
+}
+
+/// The pop-out's body, rendered per the *primary's* kind so a non-body
+/// selection never shows dead section headers (the freeze fix): a rigid body
+/// gets the sensor readouts + property sections; a behavior node gets its kind
+/// editor; anything else gets a note rather than empty headers.
+fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps) {
+    let Some(primary) = selection.primary() else {
+        ui.weak("Nothing selected.");
+        return;
+    };
+    if props.is_body(primary) {
+        ui.label(egui::RichText::new("Sensors").strong())
+            .on_hover_text("live read-only quantities — the object's sensor ports");
+        props.sensors(ui, primary);
+        ui.separator();
+        ui.label(egui::RichText::new("Physics").strong());
+        physics_section(ui, selection, props);
+        ui.separator();
+        ui.label(egui::RichText::new("Shape").strong());
+        shape_section(ui, selection, props);
+        ui.separator();
+        ui.label(egui::RichText::new("Appearance").strong());
+        appearance_section(ui, selection, props);
+        ui.separator();
+        ui.label(egui::RichText::new("Depth").strong());
+        depth_section(ui, selection, props);
+        return;
+    }
+    // A behavior node: edit its kind here too (previously only reachable from
+    // the Signals dock / context menu — the pop-out showed dead headers).
+    if let Some((id, kind)) = props
+        .ids
+        .get(primary)
+        .ok()
+        .copied()
+        .zip(props.node_kinds.get(primary).ok().cloned())
+    {
+        ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
+        if let Some(next) = crate::ui::signals::node_kind_editor(ui, "inspector", &kind) {
+            props.edits.write(PropertyEditIntent {
+                changes: vec![PropertyChange {
+                    id,
+                    old: PropertyValue::NodeKind(kind),
+                    new: PropertyValue::NodeKind(next),
+                }],
+            });
+        }
+        return;
+    }
+    ui.weak("This selection has no editable properties here (use its own editor).");
 }

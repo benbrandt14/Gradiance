@@ -405,6 +405,13 @@ pub fn context_menu(
                         .show(ui, |ui| {
                             crate::ui::inspector::physics_section(ui, &selection, &mut props);
                         });
+                    if let Some(primary) = selection.primary()
+                        && props.is_body(primary)
+                    {
+                        egui::CollapsingHeader::new("Sensors")
+                            .id_salt(ui.id().with("menu-sensors"))
+                            .show(ui, |ui| props.sensors(ui, primary));
+                    }
                     egui::CollapsingHeader::new("Appearance")
                         .id_salt(ui.id().with("menu-appearance"))
                         .show(ui, |ui| {

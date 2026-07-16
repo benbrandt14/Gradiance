@@ -18,6 +18,7 @@ pub mod joint_inspector;
 pub mod labels;
 pub mod node_graph;
 pub mod plot;
+pub mod ports;
 pub mod probe;
 pub mod reflect_grid;
 pub mod settings;
