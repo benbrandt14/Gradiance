@@ -614,6 +614,68 @@ fn tracers_sample_fading_trails_and_toggle_undoably() {
     assert_eq!(app.world().get::<Tracer>(entity), Some(&tracer));
 }
 
+#[test]
+fn box_size_density_and_restitution_edits_apply_and_undo() {
+    use avian2d::prelude::{ColliderDensity, Restitution};
+    use gradiance::domain::shape::ShapeDef;
+    let mut app = headless_app();
+    let record = box_record(Vec2::ZERO, 20.0, 20.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    let entity = entity_of(&app, id).unwrap();
+
+    let old_shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
+    let old_density = *app.world().get::<ColliderDensity>(entity).unwrap();
+    let old_restitution = *app.world().get::<Restitution>(entity).unwrap();
+
+    // One batched edit of all three (the inspector commits each separately,
+    // but the command path is identical) — proves the fields are editable.
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![
+            PropertyChange {
+                id,
+                old: PropertyValue::Shape(old_shape.clone()),
+                new: PropertyValue::Shape(ShapeDef::Box {
+                    width: 60.0,
+                    height: 40.0,
+                }),
+            },
+            PropertyChange {
+                id,
+                old: PropertyValue::Density(old_density),
+                new: PropertyValue::Density(ColliderDensity(2.5)),
+            },
+            PropertyChange {
+                id,
+                old: PropertyValue::Restitution(old_restitution),
+                new: PropertyValue::Restitution(Restitution::new(0.9)),
+            },
+        ],
+    });
+    app.update();
+
+    let entity = entity_of(&app, id).unwrap();
+    assert_eq!(
+        app.world().get::<ShapeDef>(entity).unwrap(),
+        &ShapeDef::Box {
+            width: 60.0,
+            height: 40.0
+        },
+        "box resize applied"
+    );
+    assert!((app.world().get::<ColliderDensity>(entity).unwrap().0 - 2.5).abs() < 1e-6);
+    assert!(
+        (app.world().get::<Restitution>(entity).unwrap().coefficient - 0.9).abs() < 1e-6,
+        "restitution applied"
+    );
+
+    undo(&mut app);
+    let entity = entity_of(&app, id).unwrap();
+    assert_eq!(app.world().get::<ShapeDef>(entity).unwrap(), &old_shape);
+    assert!((app.world().get::<ColliderDensity>(entity).unwrap().0 - old_density.0).abs() < 1e-6);
+}
+
 #[derive(Resource)]
 struct ProbeTarget(StableId);
 

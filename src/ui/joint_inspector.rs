@@ -8,7 +8,8 @@
 
 use crate::command::intent::{DeleteJointIntent, PropertyEditIntent};
 use crate::command::property::{PropertyChange, PropertyValue};
-use crate::core::ids::StableId;
+use crate::core::ids::{IdIndex, StableId};
+use crate::core::units::PosRot;
 use crate::domain::joint::{
     DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind, MotorDef,
 };
@@ -22,6 +23,8 @@ pub fn joint_inspector(
     mut contexts: EguiContexts,
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
+    transforms: Query<&Transform>,
+    index: Res<IdIndex>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
 ) -> Result {
@@ -51,6 +54,22 @@ pub fn joint_inspector(
                 .weak(),
             );
             ui.separator();
+
+            // Sensor readouts: the joint's live geometry (its read-only ports).
+            if let Some((length, angle)) = joint_geometry(def, &transforms, &index) {
+                ui.label(egui::RichText::new("Sensors").strong());
+                ui.horizontal(|ui| {
+                    ui.label("length");
+                    ui.monospace(format!("{length:.1} px"));
+                });
+                if matches!(def.kind, JointKind::Hinge { .. }) {
+                    ui.horizontal(|ui| {
+                        ui.label("angle");
+                        ui.monospace(format!("{:.1}°", angle.to_degrees()));
+                    });
+                }
+                ui.separator();
+            }
 
             // Struts collide by default and are governed by the collision-layer
             // menu, so they don't carry a per-joint collide toggle.
@@ -83,6 +102,35 @@ pub fn joint_inspector(
         });
     }
     Ok(())
+}
+
+/// The joint's live geometry — anchor-to-anchor `length` (px) and the relative
+/// `angle` (radians) of its bodies — the read-only sensor ports of a joint.
+/// `None` if an endpoint can't be resolved this frame.
+fn joint_geometry(
+    def: &JointDef,
+    transforms: &Query<&Transform>,
+    index: &IdIndex,
+) -> Option<(f32, f32)> {
+    let pose_a = index
+        .entity(def.body_a)
+        .and_then(|e| transforms.get(e).ok())
+        .map(PosRot::from_transform)?;
+    let world_a = def.anchor_world(pose_a.pos, pose_a.rot);
+    let (world_b, rot_b) = match def.body_b {
+        Some(id) => {
+            let pose_b = index
+                .entity(id)
+                .and_then(|e| transforms.get(e).ok())
+                .map(PosRot::from_transform)?;
+            (
+                pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b),
+                pose_b.rot,
+            )
+        }
+        None => (def.anchor_b, 0.0), // world pin
+    };
+    Some((world_a.distance(world_b), rot_b - pose_a.rot))
 }
 
 /// Renders the kind-specific config controls, writing any edit into `next.kind`.
