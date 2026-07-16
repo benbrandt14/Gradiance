@@ -19,4 +19,8 @@ fn panel_systems_have_no_conflicting_params() {
     assert_initializes(gradiance::ui::dock::right_dock);
     assert_initializes(gradiance::ui::node_graph::node_graph_panel);
     assert_initializes(gradiance::ui::toolbar::toolbar);
+    // BodyProps gained a read facade (PhysicsQueries + transforms) used by
+    // both hosts — guard both against param conflicts.
+    assert_initializes(gradiance::ui::inspector::inspector_window);
+    assert_initializes(gradiance::ui::context_menu::context_menu);
 }
