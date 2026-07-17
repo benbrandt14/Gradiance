@@ -121,7 +121,16 @@ between it and the ECS dataflow. **Objects are the nodes**:
   ports** (fill, tracer color) — Simulink blocks, Algodoo per-object behavior;
 - a **param** (`defparam`) is a producer block (one output);
 - a **computed signal** (`defsignal`) is a modulator block (inputs = the names
-  its expression reads, one output).
+  its expression reads, one output);
+- a singleton **Scope** block is the Live Plot as a sink — wiring a signal into
+  it makes a `SignalSink::Plot` binding.
+
+Every pin shows its **live value** next to the port name (the Simulink "watch
+the signal flow" readout), computed through `read_source` + the bus. Authoring
+is in-canvas too: **right-click the background** ▸ Add parameter (no scripting);
+**right-click a block** ▸ Remove / Delete; and a body block's **footer** edits
+the domain (map) + gradient of each wire driving it — Simulink-style
+double-click-to-configure, all editing the same `SignalBinding`.
 
 A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
 body's actuator input creates one (`source → sink`), and dragging the wire off
