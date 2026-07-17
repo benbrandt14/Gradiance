@@ -127,10 +127,15 @@ between it and the ECS dataflow. **Objects are the nodes**:
 
 Every pin shows its **live value** next to the port name (the Simulink "watch
 the signal flow" readout), computed through `read_source` + the bus. Authoring
-is in-canvas too: **right-click the background** ▸ Add parameter (no scripting);
-**right-click a block** ▸ Remove / Delete; and a body block's **footer** edits
-the domain (map) + gradient of each wire driving it — Simulink-style
-double-click-to-configure, all editing the same `SignalBinding`.
+is in-canvas too: **right-click the background** for a categorized **Add block**
+palette — **Input** (Parameter, Time, Oscillator), **Modulation** (Gain, Sum,
+Product), **Output** (the Scope). Modulation blocks are `ComputedSignal`s
+carrying a structured `BlockOp` that lowers to the existing `SignalExpr`/kernel;
+wiring a named producer (param / computed / block) into an operand pin sets that
+operand and re-lowers. **Right-click a block** ▸ Remove / Delete; a body block's
+**footer** edits the domain + gradient of each wire driving it and a modulation
+block's footer edits its constants (k / amp / freq) — Simulink-style
+double-click-to-configure, all editing the same authored state.
 
 A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
 body's actuator input creates one (`source → sink`), and dragging the wire off

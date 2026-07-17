@@ -38,8 +38,8 @@ use bevy::prelude::*;
 use std::collections::VecDeque;
 
 pub use crate::domain::signal::{
-    ComputedSignal, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalExpr,
-    SignalMap, SignalParam, SignalParams, SignalSink, SignalSource, remap_binding,
+    BlockOp, ComputedSignal, ComputedSignals, GradientSpec, SignalBinding, SignalBindings,
+    SignalExpr, SignalMap, SignalParam, SignalParams, SignalSink, SignalSource, remap_binding,
 };
 
 /// The reserved input name for elapsed simulated seconds (the "clock" every

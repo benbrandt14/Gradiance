@@ -28,7 +28,7 @@ use crate::domain::Body;
 use crate::interaction::selection::Selection;
 use crate::physics::queries::PhysicsQueries;
 use crate::signal::{
-    ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
+    BlockOp, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
     SignalParams, SignalSink, SignalSource, read_source,
 };
 use crate::ui::ports::{body_actuators, body_sensors};
@@ -62,9 +62,14 @@ enum NodeData {
     Body { id: StableId, name: Option<String> },
     /// A param block: one output (its published bus name).
     Param(String),
-    /// A computed block: inputs are the bus names its expression reads, one
-    /// output (its published name).
-    Computed { name: String, inputs: Vec<String> },
+    /// A computed/modulation block. `block` is the structured op (canvas
+    /// blocks) whose operand pins are wireable; `inputs` is the read-only pin
+    /// list for a console-authored RPN signal (`block` = `None`).
+    Computed {
+        name: String,
+        inputs: Vec<String>,
+        block: Option<BlockOp>,
+    },
     /// The singleton **Scope** block: one input, no output — wiring a signal
     /// into it makes a `SignalSink::Plot` binding (the Live Plot as a block).
     Scope,
@@ -378,6 +383,19 @@ fn apply_viewer_edits(
         let name = fresh_param_name(params);
         params.0.push(crate::signal::SignalParam::unit(name));
     }
+    for op in viewer.add_blocks {
+        let name = fresh_block_name(&op, computed);
+        computed
+            .0
+            .push(crate::signal::ComputedSignal::from_block(name, op));
+    }
+    // Operand wiring + constant edits: replace the block's op and re-lower.
+    for (name, op) in viewer.block_edits {
+        if let Some(signal) = computed.0.iter_mut().find(|c| c.name == name) {
+            signal.block = Some(op);
+            signal.relower();
+        }
+    }
     for id in viewer.remove_bodies {
         graph.added.remove(&id);
     }
@@ -431,6 +449,7 @@ fn collect_desired(
         items.push(NodeData::Computed {
             name: signal.name.clone(),
             inputs: signal.expr.inputs(),
+            block: signal.block.clone(),
         });
     }
     for id in shown {
@@ -565,6 +584,10 @@ struct GraphViewer {
     renames: Vec<(StableId, String)>,
     /// In-canvas authoring requests (applied by the system).
     add_param: bool,
+    /// Add a computed/modulation block from a template op.
+    add_blocks: Vec<BlockOp>,
+    /// Replace a computed block's op (operand wiring + footer constants).
+    block_edits: Vec<(String, BlockOp)>,
     remove_bodies: Vec<StableId>,
     delete_params: Vec<String>,
     delete_computed: Vec<String>,
@@ -579,6 +602,29 @@ impl GraphViewer {
     /// Resolves an input pin to the [`SignalSink`] it drives.
     fn in_sink(snarl: &Snarl<NodeData>, pin: InPinId) -> Option<SignalSink> {
         snarl.get_node(pin.node)?.input_sink(pin.input)
+    }
+
+    /// The bus name an output pin publishes under, if it is a **named**
+    /// producer (param / computed / modulation block). Body sensors have no
+    /// canonical bus name, so they can't feed a modulation operand (v1).
+    fn out_source_name(snarl: &Snarl<NodeData>, pin: OutPinId) -> Option<String> {
+        match Self::out_source(snarl, pin)? {
+            SignalSource::Named(name) => Some(name),
+            _ => None,
+        }
+    }
+
+    /// If `pin` is a modulation block's operand input, returns `(name, op)` so
+    /// the caller can rewrite its operand and re-lower.
+    fn block_at(snarl: &Snarl<NodeData>, pin: InPinId) -> Option<(String, BlockOp)> {
+        match snarl.get_node(pin.node) {
+            Some(NodeData::Computed {
+                name,
+                block: Some(op),
+                ..
+            }) => Some((name.clone(), op.clone())),
+            _ => None,
+        }
     }
 
     /// The precomputed live value at `(key, pin)` from `values`.
@@ -655,7 +701,9 @@ impl SnarlViewer<NodeData> for GraphViewer {
         match node {
             NodeData::Body { id, .. } => body_actuators(*id).len(),
             NodeData::Param(_) => 0,
-            NodeData::Computed { inputs, .. } => inputs.len(),
+            NodeData::Computed { inputs, block, .. } => block
+                .as_ref()
+                .map_or(inputs.len(), |op| op.input_slots().len()),
             NodeData::Scope => 1,
         }
     }
@@ -678,9 +726,17 @@ impl SnarlViewer<NodeData> for GraphViewer {
             Some(NodeData::Body { id, .. }) => body_actuators(*id)
                 .get(pin.id.input)
                 .map_or_else(String::new, |(l, _)| (*l).to_owned()),
-            Some(NodeData::Computed { inputs, .. }) => {
-                inputs.get(pin.id.input).cloned().unwrap_or_default()
-            }
+            Some(NodeData::Computed {
+                inputs,
+                block: None,
+                ..
+            }) => inputs.get(pin.id.input).cloned().unwrap_or_default(),
+            Some(NodeData::Computed {
+                block: Some(op), ..
+            }) => op
+                .input_slots()
+                .get(pin.id.input)
+                .map_or_else(String::new, |(l, _)| (*l).to_owned()),
             Some(NodeData::Scope) => "signals".to_owned(),
             _ => String::new(),
         };
@@ -714,9 +770,17 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<NodeData>) {
-        // A producer output → a body actuator input: create a binding
-        // (source → sink). Don't mutate snarl; reconciliation redraws the wire
-        // once the binding lands.
+        // A wire into a modulation block operand: rewrite that operand to the
+        // producer's bus name (a named producer only) and re-lower.
+        if let Some((name, mut op)) = Self::block_at(snarl, to.id) {
+            if let Some(src) = Self::out_source_name(snarl, from.id) {
+                op.set_input(to.id.input, Some(src));
+                self.block_edits.push((name, op));
+            }
+            return;
+        }
+        // Otherwise a producer output → a body actuator / scope input: create a
+        // binding. Reconciliation redraws the wire once it lands.
         if let (Some(source), Some(sink)) = (
             Self::out_source(snarl, from.id),
             Self::in_sink(snarl, to.id),
@@ -732,6 +796,11 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 
     fn disconnect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<NodeData>) {
+        if let Some((name, mut op)) = Self::block_at(snarl, to.id) {
+            op.set_input(to.id.input, None);
+            self.block_edits.push((name, op));
+            return;
+        }
         if let (Some(source), Some(sink)) = (
             Self::out_source(snarl, from.id),
             Self::in_sink(snarl, to.id),
@@ -761,11 +830,42 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         _snarl: &mut Snarl<NodeData>,
     ) {
-        ui.label(egui::RichText::new("Add block").weak());
-        if ui.button("⊙ Parameter").clicked() {
-            self.add_param = true;
-            ui.close();
-        }
+        ui.label(egui::RichText::new("Add block").strong());
+        ui.menu_button("Input", |ui| {
+            if ui.button("⊙ Parameter (slider)").clicked() {
+                self.add_param = true;
+                ui.close();
+            }
+            if ui.button("ƒ Time").clicked() {
+                self.add_blocks.push(BlockOp::Time);
+                ui.close();
+            }
+            if ui.button("ƒ Oscillator").clicked() {
+                self.add_blocks.push(BlockOp::Oscillator {
+                    amp: 1.0,
+                    freq: 1.0,
+                });
+                ui.close();
+            }
+        });
+        ui.menu_button("Modulation", |ui| {
+            if ui.button("ƒ Gain (× k)").clicked() {
+                self.add_blocks.push(BlockOp::Gain {
+                    input: None,
+                    k: 1.0,
+                });
+                ui.close();
+            }
+            if ui.button("ƒ Sum (a + b)").clicked() {
+                self.add_blocks.push(BlockOp::Sum { a: None, b: None });
+                ui.close();
+            }
+            if ui.button("ƒ Product (a · b)").clicked() {
+                self.add_blocks.push(BlockOp::Product { a: None, b: None });
+                ui.close();
+            }
+        });
+        ui.weak("Output: the ▭ Scope block is always present.");
     }
 
     // Right-click a block to remove/delete it.
@@ -809,10 +909,13 @@ impl SnarlViewer<NodeData> for GraphViewer {
         }
     }
 
-    // A body's footer edits the transfer (domain + gradient) of each wire
-    // driving one of its actuator inputs — in-canvas block configuration.
+    // A footer configures a block in place: a body edits the transfer of each
+    // wire driving it; a modulation block edits its constants (k / amp / freq).
     fn has_footer(&mut self, node: &NodeData) -> bool {
-        matches!(node, NodeData::Body { .. })
+        matches!(
+            node,
+            NodeData::Body { .. } | NodeData::Computed { block: Some(_), .. }
+        )
     }
 
     fn show_footer(
@@ -823,6 +926,20 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) {
+        // A modulation block's constants.
+        if let Some(NodeData::Computed {
+            name,
+            block: Some(op),
+            ..
+        }) = snarl.get_node(node)
+        {
+            let name = name.clone();
+            let mut op = op.clone();
+            if block_constants(ui, &mut op) {
+                self.block_edits.push((name, op));
+            }
+            return;
+        }
         let Some(NodeData::Body { id, .. }) = snarl.get_node(node) else {
             return;
         };
@@ -874,6 +991,40 @@ fn sink_label(sink: &SignalSink) -> &'static str {
     }
 }
 
+/// Edits a modulation block's scalar constants in its footer; returns whether
+/// anything changed.
+fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
+    let mut changed = false;
+    match op {
+        BlockOp::Gain { k, .. } => {
+            ui.horizontal(|ui| {
+                ui.small("k");
+                changed |= ui.add(egui::DragValue::new(k).speed(0.05)).changed();
+            });
+        }
+        BlockOp::Oscillator { amp, freq } => {
+            ui.horizontal(|ui| {
+                ui.small("amp");
+                changed |= ui.add(egui::DragValue::new(amp).speed(0.05)).changed();
+                ui.small("freq");
+                changed |= ui.add(egui::DragValue::new(freq).speed(0.05)).changed();
+            });
+        }
+        BlockOp::Time | BlockOp::Sum { .. } | BlockOp::Product { .. } => {}
+    }
+    changed
+}
+
+/// A fresh unique block name over the existing computed signals, seeded from
+/// the op's type label (e.g. `gain-1`).
+fn fresh_block_name(op: &BlockOp, computed: &ComputedSignals) -> String {
+    let base = op.label();
+    (1..=u32::try_from(computed.0.len()).unwrap_or(0) + 1)
+        .map(|n| format!("{base}-{n}"))
+        .find(|name| !computed.0.iter().any(|c| &c.name == name))
+        .unwrap_or_else(|| base.to_owned())
+}
+
 /// Rebuilds the snarl wires to mirror the bindings + computed-input name
 /// matches. Called each frame after reconcile so the visible wires always
 /// equal the dataflow. Kept separate for unit testing.
@@ -902,6 +1053,45 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
                 InPinId {
                     node: sink_id,
                     input: in_,
+                },
+            );
+        }
+    }
+    // Modulation-block operand wires: a producer output → the block input each
+    // operand names. Read from each block's structured op.
+    let operands: Vec<(NodeId, usize, String)> = graph
+        .snarl
+        .node_ids()
+        .filter_map(|(id, data)| match data {
+            NodeData::Computed {
+                block: Some(op), ..
+            } => Some((id, op.clone())),
+            _ => None,
+        })
+        .flat_map(|(id, op)| {
+            op.input_slots()
+                .into_iter()
+                .enumerate()
+                .filter_map(move |(slot, (_, name))| name.map(|n| (id, slot, n)))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    for (block_id, slot, name) in operands {
+        // A named producer is a param or another computed/modulation block.
+        let src = graph
+            .keys
+            .get(&GraphKey::Param(name.clone()))
+            .or_else(|| graph.keys.get(&GraphKey::Computed(name)))
+            .copied();
+        if let Some(src_id) = src {
+            graph.snarl.connect(
+                OutPinId {
+                    node: src_id,
+                    output: 0,
+                },
+                InPinId {
+                    node: block_id,
+                    input: slot,
                 },
             );
         }
@@ -1014,5 +1204,29 @@ mod tests {
         assert_eq!(fresh_param_name(&params), "param-1");
         params.0.push(crate::signal::SignalParam::unit("param-1"));
         assert_eq!(fresh_param_name(&params), "param-2");
+    }
+
+    #[test]
+    fn a_modulation_block_operand_wires_to_its_named_producer() {
+        let mut graph = NodeGraph::default();
+        // A param "amp" and a Gain block reading it.
+        reconcile_add(&mut graph, NodeData::Param("amp".into()));
+        reconcile_add(
+            &mut graph,
+            NodeData::Computed {
+                name: "gain-1".into(),
+                inputs: vec![],
+                block: Some(BlockOp::Gain {
+                    input: Some("amp".into()),
+                    k: 2.0,
+                }),
+            },
+        );
+        rebuild_wires(&mut graph, &SignalBindings::default());
+        assert_eq!(graph.snarl.wires().count(), 1, "operand wire drawn");
+        let (out, in_) = graph.snarl.wires().next().unwrap();
+        assert_eq!(graph.keys[&GraphKey::Param("amp".into())], out.node);
+        assert_eq!(graph.keys[&GraphKey::Computed("gain-1".into())], in_.node);
+        assert_eq!(in_.input, 0, "the gain's single input slot");
     }
 }
