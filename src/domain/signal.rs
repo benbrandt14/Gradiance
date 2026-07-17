@@ -158,6 +158,38 @@ fn remap_id(id: StableId, id_map: &[(StableId, StableId)]) -> (StableId, bool) {
 }
 
 impl SignalSource {
+    /// The canonical bus name a scene sensor publishes under so the modulation
+    /// tier (computed/blocks) can read it — `"speed@<uuid>"`. `None` for
+    /// non-body sources (`Distance`, `Named`), which have no single sensor pin.
+    pub fn bus_name(&self) -> Option<String> {
+        let (tag, id) = match self {
+            Self::Speed(id) => ("speed", id),
+            Self::Spin(id) => ("spin", id),
+            Self::Height(id) => ("height", id),
+            Self::PosX(id) => ("posx", id),
+            Self::ContactForce(id) => ("force", id),
+            Self::ContactCount(id) => ("contacts", id),
+            Self::Distance(..) | Self::Named(_) => return None,
+        };
+        Some(format!("{tag}@{}", id.0))
+    }
+
+    /// Parses a canonical sensor bus name back to its source (inverse of
+    /// [`bus_name`](Self::bus_name)).
+    pub fn from_bus_name(name: &str) -> Option<Self> {
+        let (tag, id) = name.split_once('@')?;
+        let sid = StableId(uuid::Uuid::parse_str(id).ok()?);
+        Some(match tag {
+            "speed" => Self::Speed(sid),
+            "spin" => Self::Spin(sid),
+            "height" => Self::Height(sid),
+            "posx" => Self::PosX(sid),
+            "force" => Self::ContactForce(sid),
+            "contacts" => Self::ContactCount(sid),
+            _ => return None,
+        })
+    }
+
     /// Remaps body references through `id_map`; the bool is whether any
     /// reference belonged to the map (the source "touches" a remapped body).
     fn remapped(&self, id_map: &[(StableId, StableId)]) -> (Self, bool) {
@@ -448,6 +480,32 @@ pub enum BlockOp {
         /// Second operand's bus name.
         b: Option<String>,
     },
+    /// `a − b` — a difference (two signal inputs).
+    Sub {
+        /// Minuend's bus name.
+        a: Option<String>,
+        /// Subtrahend's bus name.
+        b: Option<String>,
+    },
+    /// `|in|` — absolute value (one signal input).
+    Abs {
+        /// The bus name feeding the input.
+        input: Option<String>,
+    },
+    /// `min(a, b)` — the lesser of two signal inputs.
+    Min {
+        /// First operand's bus name.
+        a: Option<String>,
+        /// Second operand's bus name.
+        b: Option<String>,
+    },
+    /// `max(a, b)` — the greater of two signal inputs.
+    Max {
+        /// First operand's bus name.
+        a: Option<String>,
+        /// Second operand's bus name.
+        b: Option<String>,
+    },
 }
 
 impl BlockOp {
@@ -473,6 +531,10 @@ impl BlockOp {
             }
             Self::Sum { a, b } => SignalExpr::Add(Box::new(operand(a)), Box::new(operand(b))),
             Self::Product { a, b } => SignalExpr::Mul(Box::new(operand(a)), Box::new(operand(b))),
+            Self::Sub { a, b } => SignalExpr::Sub(Box::new(operand(a)), Box::new(operand(b))),
+            Self::Abs { input } => SignalExpr::Abs(Box::new(operand(input))),
+            Self::Min { a, b } => SignalExpr::Min(Box::new(operand(a)), Box::new(operand(b))),
+            Self::Max { a, b } => SignalExpr::Max(Box::new(operand(a)), Box::new(operand(b))),
         }
     }
 
@@ -481,8 +543,12 @@ impl BlockOp {
     pub fn input_slots(&self) -> Vec<(&'static str, Option<String>)> {
         match self {
             Self::Time | Self::Oscillator { .. } => Vec::new(),
-            Self::Gain { input, .. } => vec![("in", input.clone())],
-            Self::Sum { a, b } | Self::Product { a, b } => {
+            Self::Gain { input, .. } | Self::Abs { input } => vec![("in", input.clone())],
+            Self::Sum { a, b }
+            | Self::Product { a, b }
+            | Self::Sub { a, b }
+            | Self::Min { a, b }
+            | Self::Max { a, b } => {
                 vec![("a", a.clone()), ("b", b.clone())]
             }
         }
@@ -492,12 +558,16 @@ impl BlockOp {
     pub fn set_input(&mut self, i: usize, name: Option<String>) {
         match self {
             Self::Time | Self::Oscillator { .. } => {}
-            Self::Gain { input, .. } => {
+            Self::Gain { input, .. } | Self::Abs { input } => {
                 if i == 0 {
                     *input = name;
                 }
             }
-            Self::Sum { a, b } | Self::Product { a, b } => match i {
+            Self::Sum { a, b }
+            | Self::Product { a, b }
+            | Self::Sub { a, b }
+            | Self::Min { a, b }
+            | Self::Max { a, b } => match i {
                 0 => *a = name,
                 1 => *b = name,
                 _ => {}
@@ -513,6 +583,10 @@ impl BlockOp {
             Self::Gain { .. } => "gain",
             Self::Sum { .. } => "sum",
             Self::Product { .. } => "product",
+            Self::Sub { .. } => "sub",
+            Self::Abs { .. } => "abs",
+            Self::Min { .. } => "min",
+            Self::Max { .. } => "max",
         }
     }
 }
@@ -593,6 +667,25 @@ mod tests {
             // Quantization is stable: values in the same band agree.
             assert_eq!(spec.at(0.500), spec.at(0.505));
         }
+    }
+
+    #[test]
+    fn sensor_bus_names_round_trip() {
+        let id = StableId::new();
+        for source in [
+            SignalSource::Speed(id),
+            SignalSource::Spin(id),
+            SignalSource::Height(id),
+            SignalSource::PosX(id),
+            SignalSource::ContactForce(id),
+            SignalSource::ContactCount(id),
+        ] {
+            let name = source.bus_name().expect("has a bus name");
+            assert_eq!(SignalSource::from_bus_name(&name), Some(source));
+        }
+        // Non-body sources have no canonical name.
+        assert_eq!(SignalSource::Named("x".into()).bus_name(), None);
+        assert_eq!(SignalSource::from_bus_name("nonsense"), None);
     }
 
     #[test]

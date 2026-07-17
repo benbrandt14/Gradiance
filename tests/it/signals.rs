@@ -258,6 +258,57 @@ fn a_param_publishes_and_a_computed_signal_modulates_it() {
 }
 
 #[test]
+fn a_body_sensor_feeds_a_modulation_block_over_the_canonical_bus_name() {
+    use gradiance::signal::{ComputedSignal, ComputedSignals, SignalExpr};
+    // The node canvas wires a body's speed output into a modulation block by
+    // referencing the body's canonical sensor bus name ("speed@<uuid>"). Only
+    // `publish_sensor_refs` puts that name on the bus — no binding sinks it —
+    // so this is the end-to-end proof the sensor→modulation seam is live.
+    let mut app = headless_app();
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SimSettings>()
+        .gravity = Vec2::ZERO;
+    app.update();
+    let record = box_record(Vec2::ZERO, 20.0, 20.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+
+    // Give the body a known, constant speed (zero gravity, no drag).
+    let entity = entity_of(&app, id).unwrap();
+    app.world_mut()
+        .entity_mut(entity)
+        .insert(LinearVelocity(Vec2::new(30.0, 40.0)));
+
+    // "twice-speed" = speed@<id> * 2, referencing the sensor by its bus name.
+    let sensor = SignalSource::Speed(id).bus_name().unwrap();
+    app.world_mut()
+        .resource_mut::<ComputedSignals>()
+        .0
+        .push(ComputedSignal {
+            name: "twice-speed".into(),
+            expr: SignalExpr::Mul(
+                Box::new(SignalExpr::Input(sensor.clone())),
+                Box::new(SignalExpr::Const(2.0)),
+            ),
+            block: None,
+        });
+    step(&mut app, 2);
+
+    // publish_sensor_refs surfaced the sensor, and the computed read it.
+    assert_eq!(
+        bus_value(&app, &sensor),
+        Some(50.0),
+        "publish_sensor_refs put the body's speed on the canonical bus name"
+    );
+    assert_eq!(
+        bus_value(&app, "twice-speed"),
+        Some(100.0),
+        "the modulation block read the sensor and doubled it"
+    );
+}
+
+#[test]
 fn a_computed_signal_drives_a_body_color_through_a_named_binding() {
     use gradiance::signal::{
         ComputedSignal, ComputedSignals, SignalBinding, SignalExpr, SignalMap, SignalParam,
