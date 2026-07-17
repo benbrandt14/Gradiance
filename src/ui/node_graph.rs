@@ -247,7 +247,7 @@ pub fn node_graph_panel(
     mut params: ResMut<SignalParams>,
     mut computed: ResMut<ComputedSignals>,
     bodies: Query<&StableId, With<Body>>,
-    selection: Res<Selection>,
+    mut selection: ResMut<Selection>,
     ids: Query<&StableId>,
     bus: Res<SignalBus>,
     physics: PhysicsQueries,
@@ -334,6 +334,12 @@ pub fn node_graph_panel(
             graph.snarl.show(&mut viewer, &style, "node-graph", ui);
         });
 
+    // A "locate" click selects the body in the scene (the inspector follows).
+    if let Some(id) = viewer.select_body
+        && let Some(entity) = index.entity(id)
+    {
+        selection.set(entity);
+    }
     apply_viewer_edits(
         viewer,
         &mut graph,
@@ -593,6 +599,9 @@ struct GraphViewer {
     transfer_edits: Vec<(SignalSource, SignalSink, SignalMap, GradientSpec)>,
     /// Custom-name edits `(body, new name)` from the block's rename field.
     renames: Vec<(StableId, String)>,
+    /// A body block whose "locate" button was clicked — select it in the
+    /// scene (block → object → inspector, the reverse of the highlight).
+    select_body: Option<StableId>,
     /// In-canvas authoring requests (applied by the system).
     add_param: bool,
     /// Add a computed/modulation block from a template op.
@@ -695,16 +704,27 @@ impl SnarlViewer<NodeData> for GraphViewer {
             return;
         };
         let (id, mut text) = (*id, name.clone().unwrap_or_default());
-        if ui
-            .add(
-                egui::TextEdit::singleline(&mut text)
-                    .desired_width(90.0)
-                    .hint_text("name"),
-            )
-            .changed()
-        {
-            self.renames.push((id, text));
-        }
+        ui.horizontal(|ui| {
+            // Locate: select this body in the scene (block → object →
+            // inspector), the reverse of the scene-selection highlight.
+            if ui
+                .small_button("⌖")
+                .on_hover_text("Select this object in the scene")
+                .clicked()
+            {
+                self.select_body = Some(id);
+            }
+            if ui
+                .add(
+                    egui::TextEdit::singleline(&mut text)
+                        .desired_width(72.0)
+                        .hint_text("name"),
+                )
+                .changed()
+            {
+                self.renames.push((id, text));
+            }
+        });
     }
 
     fn inputs(&mut self, node: &NodeData) -> usize {

@@ -143,7 +143,9 @@ deletes it. Blocks show their **type** ("body" / `⊙ param` / `ƒ signal`) with
 optional custom name (an editable field in a body block); a body is added
 explicitly via its right-click **Add to node editor** — bodies never auto-appear
 on selection, so the canvas stays uncluttered — and the selected body's block is
-highlighted. The snarl graph is **reconciled from the scene every frame**
+highlighted. Selection is bidirectional: a body block's **⌖ locate** button
+selects that object in the scene (so the inspector follows), the reverse of the
+scene-selection highlight. The snarl graph is **reconciled from the scene every frame**
 (`node_graph::reconcile`): a block per **added** or binding-referenced body, plus
 every param/computed, keyed by `GraphKey` so dragged positions persist; the wires
 are rebuilt from the bindings — the ECS is the source of truth, not snarl's own
