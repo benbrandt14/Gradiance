@@ -239,8 +239,8 @@ pub fn node_graph_panel(
     mut contexts: EguiContexts,
     mut graph: ResMut<NodeGraph>,
     mut bindings: ResMut<SignalBindings>,
-    params: Res<SignalParams>,
-    computed: Res<ComputedSignals>,
+    mut params: ResMut<SignalParams>,
+    mut computed: ResMut<ComputedSignals>,
     bodies: Query<&StableId, With<Body>>,
     selection: Res<Selection>,
     ids: Query<&StableId>,
@@ -294,6 +294,7 @@ pub fn node_graph_panel(
         selected,
         output_values,
         input_values,
+        bindings: bindings.0.clone(),
         ..GraphViewer::default()
     };
     let style = SnarlStyle {
@@ -328,7 +329,26 @@ pub fn node_graph_panel(
             graph.snarl.show(&mut viewer, &style, "node-graph", ui);
         });
 
-    // Apply wiring edits (config-seam: bindings are edited directly).
+    apply_viewer_edits(
+        viewer,
+        &mut graph,
+        &mut bindings,
+        &mut params,
+        &mut computed,
+    );
+    Ok(())
+}
+
+/// Drains a frame's [`GraphViewer`] edits into the config-seam resources:
+/// binding create/remove/transfer, custom names, and in-canvas authoring
+/// (add param, remove body, delete param/computed).
+fn apply_viewer_edits(
+    viewer: GraphViewer,
+    graph: &mut NodeGraph,
+    bindings: &mut SignalBindings,
+    params: &mut SignalParams,
+    computed: &mut ComputedSignals,
+) {
     for binding in viewer.new_bindings {
         bindings.0.push(binding);
     }
@@ -337,7 +357,16 @@ pub fn node_graph_panel(
             .0
             .retain(|b| !(b.source == source && b.sink == sink));
     }
-    // Apply custom-name edits (view-state).
+    for (source, sink, map, gradient) in viewer.transfer_edits {
+        if let Some(binding) = bindings
+            .0
+            .iter_mut()
+            .find(|b| b.source == source && b.sink == sink)
+        {
+            binding.map = map;
+            binding.gradient = gradient;
+        }
+    }
     for (id, name) in viewer.renames {
         if name.trim().is_empty() {
             graph.names.remove(&id);
@@ -345,7 +374,27 @@ pub fn node_graph_panel(
             graph.names.insert(id, name);
         }
     }
-    Ok(())
+    if viewer.add_param {
+        let name = fresh_param_name(params);
+        params.0.push(crate::signal::SignalParam::unit(name));
+    }
+    for id in viewer.remove_bodies {
+        graph.added.remove(&id);
+    }
+    for name in viewer.delete_params {
+        params.0.retain(|p| p.name != name);
+    }
+    for name in viewer.delete_computed {
+        computed.0.retain(|c| c.name != name);
+    }
+}
+
+/// A fresh unique `param-N` name over the existing params.
+fn fresh_param_name(params: &SignalParams) -> String {
+    (1..=u32::try_from(params.0.len()).unwrap_or(0) + 1)
+        .map(|n| format!("param-{n}"))
+        .find(|name| !params.0.iter().any(|p| &p.name == name))
+        .unwrap_or_else(|| "param".to_owned())
 }
 
 /// Builds the desired block set: a node per **explicitly added** body or body
@@ -505,10 +554,20 @@ struct GraphViewer {
     output_values: HashMap<GraphKey, Vec<Option<f32>>>,
     /// Live value driving each bound input pin, `[key][input]`.
     input_values: HashMap<GraphKey, Vec<Option<f32>>>,
+    /// A snapshot of the bindings, so a body footer can render + edit the
+    /// transfer (domain + gradient) of the wires driving it.
+    bindings: Vec<SignalBinding>,
     new_bindings: Vec<SignalBinding>,
     removed: Vec<(SignalSource, SignalSink)>,
+    /// Transfer edits `(source, sink, map, gradient)` from a body footer.
+    transfer_edits: Vec<(SignalSource, SignalSink, SignalMap, GradientSpec)>,
     /// Custom-name edits `(body, new name)` from the block's rename field.
     renames: Vec<(StableId, String)>,
+    /// In-canvas authoring requests (applied by the system).
+    add_param: bool,
+    remove_bodies: Vec<StableId>,
+    delete_params: Vec<String>,
+    delete_computed: Vec<String>,
 }
 
 impl GraphViewer {
@@ -690,6 +749,129 @@ impl SnarlViewer<NodeData> for GraphViewer {
             }
         }
     }
+
+    // In-canvas authoring: right-click the background to add a producer.
+    fn has_graph_menu(&mut self, _pos: egui::Pos2, _snarl: &mut Snarl<NodeData>) -> bool {
+        true
+    }
+
+    fn show_graph_menu(
+        &mut self,
+        _pos: egui::Pos2,
+        ui: &mut egui::Ui,
+        _snarl: &mut Snarl<NodeData>,
+    ) {
+        ui.label(egui::RichText::new("Add block").weak());
+        if ui.button("⊙ Parameter").clicked() {
+            self.add_param = true;
+            ui.close();
+        }
+    }
+
+    // Right-click a block to remove/delete it.
+    fn has_node_menu(&mut self, _node: &NodeData) -> bool {
+        true
+    }
+
+    fn show_node_menu(
+        &mut self,
+        node: NodeId,
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
+        ui: &mut egui::Ui,
+        snarl: &mut Snarl<NodeData>,
+    ) {
+        match snarl.get_node(node) {
+            Some(NodeData::Body { id, .. }) => {
+                let id = *id;
+                if ui.button("Remove from node editor").clicked() {
+                    self.remove_bodies.push(id);
+                    ui.close();
+                }
+            }
+            Some(NodeData::Param(name)) => {
+                let name = name.clone();
+                if ui.button("Delete parameter").clicked() {
+                    self.delete_params.push(name);
+                    ui.close();
+                }
+            }
+            Some(NodeData::Computed { name, .. }) => {
+                let name = name.clone();
+                if ui.button("Delete computed").clicked() {
+                    self.delete_computed.push(name);
+                    ui.close();
+                }
+            }
+            Some(NodeData::Scope) | None => {
+                ui.weak("the plot output");
+            }
+        }
+    }
+
+    // A body's footer edits the transfer (domain + gradient) of each wire
+    // driving one of its actuator inputs — in-canvas block configuration.
+    fn has_footer(&mut self, node: &NodeData) -> bool {
+        matches!(node, NodeData::Body { .. })
+    }
+
+    fn show_footer(
+        &mut self,
+        node: NodeId,
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
+        ui: &mut egui::Ui,
+        snarl: &mut Snarl<NodeData>,
+    ) {
+        let Some(NodeData::Body { id, .. }) = snarl.get_node(node) else {
+            return;
+        };
+        let id = *id;
+        for binding in &self.bindings {
+            let (key, _) = sink_pin(&binding.sink);
+            if key != GraphKey::Body(id) {
+                continue;
+            }
+            let mut map = binding.map;
+            let mut gradient = binding.gradient;
+            let mut changed = false;
+            ui.horizontal(|ui| {
+                ui.small(sink_label(&binding.sink));
+                changed |= ui
+                    .add(egui::DragValue::new(&mut map.in_min).speed(1.0).prefix("["))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut map.in_max).speed(1.0).suffix("]"))
+                    .changed();
+                egui::ComboBox::from_id_salt(ui.id().with(("grad", &binding.name)))
+                    .selected_text(format!("{gradient:?}"))
+                    .show_ui(ui, |ui| {
+                        for option in GradientSpec::ALL {
+                            changed |= ui
+                                .selectable_value(&mut gradient, option, format!("{option:?}"))
+                                .changed();
+                        }
+                    });
+            });
+            if changed {
+                self.transfer_edits.push((
+                    binding.source.clone(),
+                    binding.sink.clone(),
+                    map,
+                    gradient,
+                ));
+            }
+        }
+    }
+}
+
+/// A short label for an actuator sink channel.
+fn sink_label(sink: &SignalSink) -> &'static str {
+    match sink {
+        SignalSink::Fill(_) => "fill",
+        SignalSink::TracerColor(_) => "tracer",
+        SignalSink::Plot => "plot",
+    }
 }
 
 /// Rebuilds the snarl wires to mirror the bindings + computed-input name
@@ -781,5 +963,56 @@ mod tests {
             (GraphKey::Body(id), 1)
         );
         assert_eq!(sink_pin(&SignalSink::Plot), (GraphKey::Scope, 0));
+    }
+
+    #[test]
+    fn a_plot_binding_wires_into_the_scope_block() {
+        let a = StableId::new();
+        let mut graph = NodeGraph::default();
+        body(&mut graph, a);
+        reconcile_add(&mut graph, NodeData::Scope);
+        let mut bindings = SignalBindings::default();
+        bindings.0.push(SignalBinding {
+            name: "speed@x".into(),
+            source: SignalSource::Speed(a),
+            map: SignalMap::default(),
+            gradient: GradientSpec::default(),
+            sink: SignalSink::Plot,
+        });
+        rebuild_wires(&mut graph, &bindings);
+        assert_eq!(graph.snarl.wires().count(), 1, "plot binding → scope wire");
+        let (_, in_) = graph.snarl.wires().next().unwrap();
+        assert_eq!(
+            graph.keys[&GraphKey::Scope],
+            in_.node,
+            "into the Scope block"
+        );
+    }
+
+    #[test]
+    fn input_values_reflect_bound_bus_signals() {
+        let a = StableId::new();
+        let b = StableId::new();
+        let mut bus = SignalBus::default();
+        bus.publish("wire", 42.0, false);
+        let mut bindings = SignalBindings::default();
+        bindings.0.push(SignalBinding {
+            name: "wire".into(),
+            source: SignalSource::Speed(a),
+            map: SignalMap::default(),
+            gradient: GradientSpec::default(),
+            sink: SignalSink::Fill(b),
+        });
+        let values = binding_input_values(&bindings, &bus);
+        // Body b's fill input (index 0) carries the "wire" value.
+        assert_eq!(values[&GraphKey::Body(b)][0], Some(42.0));
+    }
+
+    #[test]
+    fn fresh_param_name_avoids_collisions() {
+        let mut params = SignalParams::default();
+        assert_eq!(fresh_param_name(&params), "param-1");
+        params.0.push(crate::signal::SignalParam::unit("param-1"));
+        assert_eq!(fresh_param_name(&params), "param-2");
     }
 }
