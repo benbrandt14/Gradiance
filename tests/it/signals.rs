@@ -244,6 +244,7 @@ fn a_param_publishes_and_a_computed_signal_modulates_it() {
         .push(ComputedSignal {
             name: "scaled".into(),
             expr: SignalExpr::parse_rpn("amp 2 *").unwrap(),
+            block: None,
         });
     step(&mut app, 2);
 
@@ -284,6 +285,7 @@ fn a_computed_signal_drives_a_body_color_through_a_named_binding() {
         .push(ComputedSignal {
             name: "warm".into(),
             expr: SignalExpr::parse_rpn("heat").unwrap(),
+            block: None,
         });
     bind(
         &mut app,
@@ -326,6 +328,7 @@ fn params_and_computed_persist_and_old_files_parse() {
     record.environment.computed.0.push(ComputedSignal {
         name: "osc".into(),
         expr: SignalExpr::parse_rpn("t sin amp *").unwrap(),
+        block: None,
     });
 
     let text = to_ron(&record).unwrap();

@@ -916,7 +916,11 @@ fn register_signal_verbs(
     let d = Arc::clone(defs);
     engine.register_fn(name::DEFSIGNAL, move |name: String, expr: String| {
         if let (Ok(mut queue), Ok(parsed)) = (d.lock(), SignalExpr::parse_rpn(&expr)) {
-            queue.push(SignalDef::Computed(ComputedSignal { name, expr: parsed }));
+            queue.push(SignalDef::Computed(ComputedSignal {
+                name,
+                expr: parsed,
+                block: None,
+            }));
         }
     });
 }

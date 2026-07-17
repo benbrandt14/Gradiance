@@ -384,8 +384,137 @@ pub enum SignalExprError {
 pub struct ComputedSignal {
     /// Bus name this computed value publishes under.
     pub name: String,
-    /// The expression, over other bus signals (and `"t"`).
+    /// The expression, over other bus signals (and `"t"`). Always the form
+    /// the kernel compiles; for a canvas block it is *derived* from `block`.
     pub expr: SignalExpr,
+    /// The structured node-editor block this signal came from, if authored on
+    /// the canvas (`None` = a console `defsignal` RPN). Drives the block's pins
+    /// and is re-lowered to `expr` when its operands change.
+    #[serde(default)]
+    pub block: Option<BlockOp>,
+}
+
+impl ComputedSignal {
+    /// A canvas block signal — `expr` lowered from `op`.
+    pub fn from_block(name: impl Into<String>, op: BlockOp) -> Self {
+        Self {
+            name: name.into(),
+            expr: op.to_expr(),
+            block: Some(op),
+        }
+    }
+
+    /// Re-lowers `expr` from the current `block` (call after editing operands).
+    pub fn relower(&mut self) {
+        if let Some(op) = &self.block {
+            self.expr = op.to_expr();
+        }
+    }
+}
+
+/// A structured node-editor block, lowered to a [`SignalExpr`] for the kernel.
+/// Input blocks are sources (no signal inputs); modulation blocks combine
+/// named bus signals through their operand slots. Wiring a producer into a slot
+/// sets that operand's bus name; the block re-lowers to `expr`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
+pub enum BlockOp {
+    /// The elapsed-seconds clock `t` (an input/source block).
+    Time,
+    /// `amp · sin(freq · t)` — a self-driving oscillator source.
+    Oscillator {
+        /// Amplitude.
+        amp: f32,
+        /// Frequency (radians per second of `t`).
+        freq: f32,
+    },
+    /// `in · k` — a scalar gain (one signal input + a constant).
+    Gain {
+        /// The bus name feeding the input (`None` = unconnected → 0).
+        input: Option<String>,
+        /// Gain constant.
+        k: f32,
+    },
+    /// `a + b` — a summing junction (two signal inputs).
+    Sum {
+        /// First operand's bus name.
+        a: Option<String>,
+        /// Second operand's bus name.
+        b: Option<String>,
+    },
+    /// `a · b` — a product (two signal inputs).
+    Product {
+        /// First operand's bus name.
+        a: Option<String>,
+        /// Second operand's bus name.
+        b: Option<String>,
+    },
+}
+
+impl BlockOp {
+    /// Lowers the block to the kernel expression. An unconnected operand reads
+    /// `0` (a disconnected wire contributes nothing).
+    pub fn to_expr(&self) -> SignalExpr {
+        let operand = |name: &Option<String>| {
+            name.as_ref()
+                .map_or(SignalExpr::Const(0.0), |n| SignalExpr::Input(n.clone()))
+        };
+        let clock = || Box::new(SignalExpr::Input("t".to_owned()));
+        match self {
+            Self::Time => SignalExpr::Input("t".to_owned()),
+            Self::Oscillator { amp, freq } => SignalExpr::Mul(
+                Box::new(SignalExpr::Const(*amp)),
+                Box::new(SignalExpr::Sin(Box::new(SignalExpr::Mul(
+                    Box::new(SignalExpr::Const(*freq)),
+                    clock(),
+                )))),
+            ),
+            Self::Gain { input, k } => {
+                SignalExpr::Mul(Box::new(operand(input)), Box::new(SignalExpr::Const(*k)))
+            }
+            Self::Sum { a, b } => SignalExpr::Add(Box::new(operand(a)), Box::new(operand(b))),
+            Self::Product { a, b } => SignalExpr::Mul(Box::new(operand(a)), Box::new(operand(b))),
+        }
+    }
+
+    /// The signal-input slots `(label, connected name)` this block exposes as
+    /// input pins — empty for source blocks.
+    pub fn input_slots(&self) -> Vec<(&'static str, Option<String>)> {
+        match self {
+            Self::Time | Self::Oscillator { .. } => Vec::new(),
+            Self::Gain { input, .. } => vec![("in", input.clone())],
+            Self::Sum { a, b } | Self::Product { a, b } => {
+                vec![("a", a.clone()), ("b", b.clone())]
+            }
+        }
+    }
+
+    /// Sets input slot `i` to `name` (`None` = disconnect).
+    pub fn set_input(&mut self, i: usize, name: Option<String>) {
+        match self {
+            Self::Time | Self::Oscillator { .. } => {}
+            Self::Gain { input, .. } => {
+                if i == 0 {
+                    *input = name;
+                }
+            }
+            Self::Sum { a, b } | Self::Product { a, b } => match i {
+                0 => *a = name,
+                1 => *b = name,
+                _ => {}
+            },
+        }
+    }
+
+    /// A short type label for the block palette / title.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Time => "time",
+            Self::Oscillator { .. } => "oscillator",
+            Self::Gain { .. } => "gain",
+            Self::Sum { .. } => "sum",
+            Self::Product { .. } => "product",
+        }
+    }
 }
 
 /// Every tunable parameter. Config-seam resource (UI slider edits directly,
@@ -464,5 +593,41 @@ mod tests {
             // Quantization is stable: values in the same band agree.
             assert_eq!(spec.at(0.500), spec.at(0.505));
         }
+    }
+
+    #[test]
+    fn block_ops_lower_to_the_expected_kernel_expr() {
+        // A sum of two named signals.
+        let sum = BlockOp::Sum {
+            a: Some("x".into()),
+            b: Some("y".into()),
+        };
+        assert_eq!(
+            sum.to_expr(),
+            SignalExpr::Add(
+                Box::new(SignalExpr::Input("x".into())),
+                Box::new(SignalExpr::Input("y".into())),
+            )
+        );
+        // Gain with an unconnected input reads 0.
+        let gain = BlockOp::Gain {
+            input: None,
+            k: 2.0,
+        };
+        assert_eq!(
+            gain.to_expr(),
+            SignalExpr::Mul(
+                Box::new(SignalExpr::Const(0.0)),
+                Box::new(SignalExpr::Const(2.0)),
+            )
+        );
+        // Wiring an operand re-lowers and shows in inputs().
+        let mut g = BlockOp::Gain {
+            input: None,
+            k: 3.0,
+        };
+        g.set_input(0, Some("speed".into()));
+        assert_eq!(g.input_slots(), vec![("in", Some("speed".to_string()))]);
+        assert_eq!(g.to_expr().inputs(), vec!["speed".to_string()]);
     }
 }
