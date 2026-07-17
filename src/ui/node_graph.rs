@@ -23,12 +23,13 @@
 //! [`egui-snarl`]: https://crates.io/crates/egui-snarl
 //! [`SignalBinding`]: crate::domain::signal::SignalBinding
 
-use crate::core::ids::StableId;
+use crate::core::ids::{IdIndex, StableId};
 use crate::domain::Body;
 use crate::interaction::selection::Selection;
+use crate::physics::queries::PhysicsQueries;
 use crate::signal::{
-    ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalParams,
-    SignalSink, SignalSource,
+    ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
+    SignalParams, SignalSink, SignalSource, read_source,
 };
 use crate::ui::ports::{body_actuators, body_sensors};
 use bevy::prelude::*;
@@ -47,6 +48,9 @@ enum GraphKey {
     Param(String),
     /// A `defsignal` modulator, by name.
     Computed(String),
+    /// The singleton **Scope** sink — the Live Plot as a block. Any signal
+    /// wired into it becomes a plot-sink binding.
+    Scope,
 }
 
 /// What a block *is* — carries what the viewer needs to label pins and resolve
@@ -61,6 +65,9 @@ enum NodeData {
     /// A computed block: inputs are the bus names its expression reads, one
     /// output (its published name).
     Computed { name: String, inputs: Vec<String> },
+    /// The singleton **Scope** block: one input, no output — wiring a signal
+    /// into it makes a `SignalSink::Plot` binding (the Live Plot as a block).
+    Scope,
 }
 
 impl NodeData {
@@ -69,6 +76,7 @@ impl NodeData {
             Self::Body { id, .. } => GraphKey::Body(*id),
             Self::Param(name) => GraphKey::Param(name.clone()),
             Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
+            Self::Scope => GraphKey::Scope,
         }
     }
 
@@ -77,6 +85,7 @@ impl NodeData {
             Self::Body { .. } => Role::Body,
             Self::Param(_) => Role::Producer,
             Self::Computed { .. } => Role::Modulator,
+            Self::Scope => Role::Scope,
         }
     }
 
@@ -86,6 +95,7 @@ impl NodeData {
             Self::Body { name, .. } => name.clone().unwrap_or_else(|| "body".to_owned()),
             Self::Param(name) => format!("⊙ {name}"),
             Self::Computed { name, .. } => format!("ƒ {name}"),
+            Self::Scope => "▭ Scope".to_owned(),
         }
     }
 
@@ -95,14 +105,15 @@ impl NodeData {
             Self::Body { id, .. } => body_sensors(*id).get(index).map(|(_, s)| s.clone()),
             Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
             Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
+            Self::Scope => None,
         }
     }
 
-    /// The [`SignalSink`] a given input pin drives (only body actuators are
-    /// wireable targets; a computed input is read-only display).
+    /// The [`SignalSink`] a given input pin drives.
     fn input_sink(&self, index: usize) -> Option<SignalSink> {
         match self {
             Self::Body { id, .. } => body_actuators(*id).get(index).map(|(_, s)| s.clone()),
+            Self::Scope => (index == 0).then_some(SignalSink::Plot),
             _ => None,
         }
     }
@@ -114,6 +125,7 @@ enum Role {
     Producer,
     Modulator,
     Body,
+    Scope,
 }
 
 impl Role {
@@ -122,6 +134,7 @@ impl Role {
             Self::Producer => 20.0,
             Self::Modulator => 220.0,
             Self::Body => 420.0,
+            Self::Scope => 640.0,
         }
     }
 }
@@ -209,13 +222,13 @@ fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
     }
 }
 
-/// The `(GraphKey, input index)` a binding sink resolves to (body actuators;
-/// `Plot` has no block).
-fn sink_pin(sink: &SignalSink) -> Option<(GraphKey, usize)> {
+/// The `(GraphKey, input index)` a binding sink resolves to — body actuator
+/// pins, or the Scope block's input for `Plot`.
+fn sink_pin(sink: &SignalSink) -> (GraphKey, usize) {
     match sink {
-        SignalSink::Fill(id) => Some((GraphKey::Body(*id), 0)),
-        SignalSink::TracerColor(id) => Some((GraphKey::Body(*id), 1)),
-        SignalSink::Plot => None,
+        SignalSink::Fill(id) => (GraphKey::Body(*id), 0),
+        SignalSink::TracerColor(id) => (GraphKey::Body(*id), 1),
+        SignalSink::Plot => (GraphKey::Scope, 0),
     }
 }
 
@@ -231,6 +244,11 @@ pub fn node_graph_panel(
     bodies: Query<&StableId, With<Body>>,
     selection: Res<Selection>,
     ids: Query<&StableId>,
+    bus: Res<SignalBus>,
+    physics: PhysicsQueries,
+    body_transforms: Query<&Transform, With<Body>>,
+    index: Res<IdIndex>,
+    fixed: Res<Time<Fixed>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !graph.open {
@@ -248,6 +266,25 @@ pub fn node_graph_panel(
     reconcile(&mut graph, desired);
     rebuild_wires(&mut graph, &bindings);
 
+    // Precompute the live value of every output pin (the Simulink "watch the
+    // signal flow" readout): sensors through the shared reader, params/computed
+    // off the bus.
+    let dt = fixed.timestep().as_secs_f32().max(1e-6);
+    let mut output_values: HashMap<GraphKey, Vec<Option<f32>>> = HashMap::new();
+    for (_, data) in graph.snarl.node_ids() {
+        let vals: Vec<Option<f32>> = match data {
+            NodeData::Body { id, .. } => body_sensors(*id)
+                .iter()
+                .map(|(_, s)| read_source(s, &index, &physics, &body_transforms, dt))
+                .collect(),
+            NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
+            NodeData::Scope => Vec::new(),
+        };
+        output_values.insert(data.key(), vals);
+    }
+    // The value driving each bound actuator/scope input (from its binding).
+    let input_values = binding_input_values(&bindings, &bus);
+
     // Scene selection → highlight the matching body blocks.
     let selected: HashSet<StableId> = selection
         .iter()
@@ -255,6 +292,8 @@ pub fn node_graph_panel(
         .collect();
     let mut viewer = GraphViewer {
         selected,
+        output_values,
+        input_values,
         ..GraphViewer::default()
     };
     let style = SnarlStyle {
@@ -351,7 +390,29 @@ fn collect_desired(
             name: names.get(&id).cloned(),
         });
     }
+    // The Scope sink is a fixture whenever there's anything to plot into it.
+    if !items.is_empty() {
+        items.push(NodeData::Scope);
+    }
     items
+}
+
+/// The live value driving each bound input pin — `map[key][input]` is the bus
+/// value of the binding whose sink is that pin (Simulink's value-on-the-wire).
+fn binding_input_values(
+    bindings: &SignalBindings,
+    bus: &SignalBus,
+) -> HashMap<GraphKey, Vec<Option<f32>>> {
+    let mut map: HashMap<GraphKey, Vec<Option<f32>>> = HashMap::new();
+    for binding in &bindings.0 {
+        let (key, input) = sink_pin(&binding.sink);
+        let slot = map.entry(key).or_default();
+        if slot.len() <= input {
+            slot.resize(input + 1, None);
+        }
+        slot[input] = bus.get(&binding.name);
+    }
+    map
 }
 
 /// The bodies a binding references (source + sink).
@@ -384,6 +445,7 @@ struct ColumnCursor {
     producer: f32,
     modulator: f32,
     body: f32,
+    scope: f32,
 }
 
 impl ColumnCursor {
@@ -392,6 +454,7 @@ impl ColumnCursor {
             Role::Producer => &mut self.producer,
             Role::Modulator => &mut self.modulator,
             Role::Body => &mut self.body,
+            Role::Scope => &mut self.scope,
         };
         let y = *slot + 16.0;
         *slot = y + 96.0;
@@ -438,6 +501,10 @@ fn reconcile(graph: &mut NodeGraph, desired: Vec<NodeData>) {
 struct GraphViewer {
     /// Scene-selected body ids — their blocks get a highlight frame.
     selected: HashSet<StableId>,
+    /// Live value of each output pin, `[key][output]` (the running readout).
+    output_values: HashMap<GraphKey, Vec<Option<f32>>>,
+    /// Live value driving each bound input pin, `[key][input]`.
+    input_values: HashMap<GraphKey, Vec<Option<f32>>>,
     new_bindings: Vec<SignalBinding>,
     removed: Vec<(SignalSource, SignalSink)>,
     /// Custom-name edits `(body, new name)` from the block's rename field.
@@ -453,6 +520,23 @@ impl GraphViewer {
     /// Resolves an input pin to the [`SignalSink`] it drives.
     fn in_sink(snarl: &Snarl<NodeData>, pin: InPinId) -> Option<SignalSink> {
         snarl.get_node(pin.node)?.input_sink(pin.input)
+    }
+
+    /// The precomputed live value at `(key, pin)` from `values`.
+    fn value_at(
+        values: &HashMap<GraphKey, Vec<Option<f32>>>,
+        key: &GraphKey,
+        pin: usize,
+    ) -> Option<f32> {
+        values.get(key).and_then(|v| v.get(pin).copied()).flatten()
+    }
+}
+
+/// Appends a live value readout to a pin label (Simulink's on-wire value).
+fn pin_label(name: &str, value: Option<f32>) -> String {
+    match value {
+        Some(v) => format!("{name}  {v:.2}"),
+        None => name.to_owned(),
     }
 }
 
@@ -513,6 +597,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
             NodeData::Body { id, .. } => body_actuators(*id).len(),
             NodeData::Param(_) => 0,
             NodeData::Computed { inputs, .. } => inputs.len(),
+            NodeData::Scope => 1,
         }
     }
 
@@ -520,6 +605,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         match node {
             NodeData::Body { id, .. } => body_sensors(*id).len(),
             NodeData::Param(_) | NodeData::Computed { .. } => 1,
+            NodeData::Scope => 0,
         }
     }
 
@@ -529,16 +615,21 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
-        let label = match snarl.get_node(pin.id.node) {
+        let name = match snarl.get_node(pin.id.node) {
             Some(NodeData::Body { id, .. }) => body_actuators(*id)
                 .get(pin.id.input)
                 .map_or_else(String::new, |(l, _)| (*l).to_owned()),
             Some(NodeData::Computed { inputs, .. }) => {
                 inputs.get(pin.id.input).cloned().unwrap_or_default()
             }
+            Some(NodeData::Scope) => "signals".to_owned(),
             _ => String::new(),
         };
-        ui.label(label);
+        let key = snarl.get_node(pin.id.node).map(NodeData::key);
+        let value = key
+            .as_ref()
+            .and_then(|k| Self::value_at(&self.input_values, k, pin.id.input));
+        ui.label(pin_label(&name, value));
         PinInfo::circle().with_fill(egui::Color32::from_rgb(210, 170, 120))
     }
 
@@ -548,14 +639,18 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
-        let label = match snarl.get_node(pin.id.node) {
+        let name = match snarl.get_node(pin.id.node) {
             Some(NodeData::Body { id, .. }) => body_sensors(*id)
                 .get(pin.id.output)
                 .map_or_else(String::new, |(l, _)| (*l).to_owned()),
             Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => name.clone(),
-            None => String::new(),
+            Some(NodeData::Scope) | None => String::new(),
         };
-        ui.label(label);
+        let key = snarl.get_node(pin.id.node).map(NodeData::key);
+        let value = key
+            .as_ref()
+            .and_then(|k| Self::value_at(&self.output_values, k, pin.id.output));
+        ui.label(pin_label(&name, value));
         PinInfo::circle().with_fill(egui::Color32::from_rgb(140, 220, 150))
     }
 
@@ -607,11 +702,10 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
     }
     // Binding wires: source output pin → sink input pin.
     for binding in &bindings.0 {
-        let (Some((src_key, out)), Some((sink_key, in_))) =
-            (source_pin(&binding.source), sink_pin(&binding.sink))
-        else {
+        let Some((src_key, out)) = source_pin(&binding.source) else {
             continue;
         };
+        let (sink_key, in_) = sink_pin(&binding.sink);
         // A named source may be a param or a computed block.
         let src = graph.keys.get(&src_key).or_else(|| match &binding.source {
             SignalSource::Named(name) => graph.keys.get(&GraphKey::Computed(name.clone())),
@@ -681,14 +775,11 @@ mod tests {
         assert_eq!(sensor_index(&SignalSource::Speed(id)), Some(0));
         assert_eq!(sensor_index(&SignalSource::ContactCount(id)), Some(5));
         assert_eq!(sensor_index(&SignalSource::Named("x".into())), None);
-        assert_eq!(
-            sink_pin(&SignalSink::Fill(id)),
-            Some((GraphKey::Body(id), 0))
-        );
+        assert_eq!(sink_pin(&SignalSink::Fill(id)), (GraphKey::Body(id), 0));
         assert_eq!(
             sink_pin(&SignalSink::TracerColor(id)),
-            Some((GraphKey::Body(id), 1))
+            (GraphKey::Body(id), 1)
         );
-        assert_eq!(sink_pin(&SignalSink::Plot), None);
+        assert_eq!(sink_pin(&SignalSink::Plot), (GraphKey::Scope, 0));
     }
 }
