@@ -41,7 +41,12 @@ pub struct MotorDef {
     pub target_velocity: f32,
     /// Maximum torque (hinge) or force (slider) the motor may exert.
     pub max_force: f32,
-    /// Velocity-tracking damping of the motor model.
+    /// Velocity-tracking gain of the acceleration-based motor model: the
+    /// angular/linear acceleration applied per unit of velocity error
+    /// (units 1/s). It sets how firmly the motor holds its target velocity —
+    /// too low and any load stalls it (the classic "weak motor"). Instability
+    /// in this model comes from high *stiffness*, not this gain, so a firm
+    /// value is safe.
     pub damping: f32,
     /// Reverse direction at the joint limits (requires limits).
     pub oscillate: bool,
@@ -54,7 +59,10 @@ impl Default for MotorDef {
         Self {
             target_velocity: 2.0,
             max_force: 1.0e7,
-            damping: 1.0,
+            // A firm velocity gain: ~2-frame time constant at 60 fps, so the
+            // motor actually holds its target under load instead of drifting
+            // (the earlier default of 1.0 read as "motors are very weak").
+            damping: 30.0,
             oscillate: false,
             enabled: true,
         }

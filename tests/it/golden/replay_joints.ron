@@ -110,7 +110,7 @@
                     motor: Some((
                         target_velocity: 2.0,
                         max_force: 10000000.0,
-                        damping: 1.0,
+                        damping: 30.0,
                         oscillate: false,
                         enabled: true,
                     )),
