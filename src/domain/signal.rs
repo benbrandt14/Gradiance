@@ -452,6 +452,11 @@ impl ComputedSignal {
 pub enum BlockOp {
     /// The elapsed-seconds clock `t` (an input/source block).
     Time,
+    /// A fixed value — the plainest source block (a Simulink Constant).
+    Constant {
+        /// The constant this block emits.
+        value: f32,
+    },
     /// `amp · sin(freq · t)` — a self-driving oscillator source.
     Oscillator {
         /// Amplitude.
@@ -519,6 +524,7 @@ impl BlockOp {
         let clock = || Box::new(SignalExpr::Input("t".to_owned()));
         match self {
             Self::Time => SignalExpr::Input("t".to_owned()),
+            Self::Constant { value } => SignalExpr::Const(*value),
             Self::Oscillator { amp, freq } => SignalExpr::Mul(
                 Box::new(SignalExpr::Const(*amp)),
                 Box::new(SignalExpr::Sin(Box::new(SignalExpr::Mul(
@@ -542,7 +548,7 @@ impl BlockOp {
     /// input pins — empty for source blocks.
     pub fn input_slots(&self) -> Vec<(&'static str, Option<String>)> {
         match self {
-            Self::Time | Self::Oscillator { .. } => Vec::new(),
+            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } => Vec::new(),
             Self::Gain { input, .. } | Self::Abs { input } => vec![("in", input.clone())],
             Self::Sum { a, b }
             | Self::Product { a, b }
@@ -557,7 +563,7 @@ impl BlockOp {
     /// Sets input slot `i` to `name` (`None` = disconnect).
     pub fn set_input(&mut self, i: usize, name: Option<String>) {
         match self {
-            Self::Time | Self::Oscillator { .. } => {}
+            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } => {}
             Self::Gain { input, .. } | Self::Abs { input } => {
                 if i == 0 {
                     *input = name;
@@ -579,6 +585,7 @@ impl BlockOp {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Time => "time",
+            Self::Constant { .. } => "constant",
             Self::Oscillator { .. } => "oscillator",
             Self::Gain { .. } => "gain",
             Self::Sum { .. } => "sum",
@@ -722,5 +729,11 @@ mod tests {
         g.set_input(0, Some("speed".into()));
         assert_eq!(g.input_slots(), vec![("in", Some("speed".to_string()))]);
         assert_eq!(g.to_expr().inputs(), vec!["speed".to_string()]);
+
+        // A Constant is a source (no input pins) lowering to a bare const.
+        let c = BlockOp::Constant { value: 4.5 };
+        assert_eq!(c.to_expr(), SignalExpr::Const(4.5));
+        assert!(c.input_slots().is_empty());
+        assert!(c.to_expr().inputs().is_empty());
     }
 }
