@@ -29,7 +29,7 @@ use crate::interaction::selection::Selection;
 use crate::physics::queries::PhysicsQueries;
 use crate::signal::{
     BlockOp, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
-    SignalParams, SignalSink, SignalSource, read_source,
+    SignalParam, SignalParams, SignalSink, SignalSource, read_source,
 };
 use crate::ui::ports::{body_actuators, body_sensors};
 use bevy::prelude::*;
@@ -300,6 +300,7 @@ pub fn node_graph_panel(
         output_values,
         input_values,
         bindings: bindings.0.clone(),
+        params: params.0.clone(),
         ..GraphViewer::default()
     };
     let style = SnarlStyle {
@@ -383,6 +384,11 @@ fn apply_viewer_edits(
             graph.names.remove(&id);
         } else {
             graph.names.insert(id, name);
+        }
+    }
+    for (name, value) in viewer.param_edits {
+        if let Some(param) = params.0.iter_mut().find(|p| p.name == name) {
+            param.value = value;
         }
     }
     if viewer.add_param {
@@ -593,6 +599,11 @@ struct GraphViewer {
     /// A snapshot of the bindings, so a body footer can render + edit the
     /// transfer (domain + gradient) of the wires driving it.
     bindings: Vec<SignalBinding>,
+    /// A snapshot of the params, so a param block's footer can tune its value
+    /// in place (the same knob the Signals dock exposes).
+    params: Vec<SignalParam>,
+    /// Param value edits `(name, new value)` from a param block's footer.
+    param_edits: Vec<(String, f32)>,
     new_bindings: Vec<SignalBinding>,
     removed: Vec<(SignalSource, SignalSink)>,
     /// Transfer edits `(source, sink, map, gradient)` from a body footer.
@@ -965,7 +976,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
     fn has_footer(&mut self, node: &NodeData) -> bool {
         matches!(
             node,
-            NodeData::Body { .. } | NodeData::Computed { block: Some(_), .. }
+            NodeData::Body { .. } | NodeData::Param(_) | NodeData::Computed { block: Some(_), .. }
         )
     }
 
@@ -988,6 +999,20 @@ impl SnarlViewer<NodeData> for GraphViewer {
             let mut op = op.clone();
             if block_constants(ui, &mut op) {
                 self.block_edits.push((name, op));
+            }
+            return;
+        }
+        // A param block's value — the same tunable knob as the Signals dock,
+        // edited in place (Simulink source-block-style).
+        if let Some(NodeData::Param(name)) = snarl.get_node(node) {
+            if let Some(param) = self.params.iter().find(|p| &p.name == name) {
+                let mut value = param.value;
+                if ui
+                    .add(egui::Slider::new(&mut value, param.min..=param.max))
+                    .changed()
+                {
+                    self.param_edits.push((param.name.clone(), value));
+                }
             }
             return;
         }

@@ -132,9 +132,10 @@ palette — **Input** (Parameter, Constant, Time, Oscillator), **Modulation**
 (Gain, Sum, Sub, Product, Min, Max, Abs), **Output** (the Scope). Modulation blocks are `ComputedSignal`s
 carrying a structured `BlockOp` that lowers to the existing `SignalExpr`/kernel;
 wiring a named producer (param / computed / block) into an operand pin sets that
-operand and re-lowers. **Right-click a block** ▸ Remove / Delete; a body block's
-**footer** edits the domain + gradient of each wire driving it and a modulation
-block's footer edits its constants (k / amp / freq) — Simulink-style
+operand and re-lowers. **Right-click a block** ▸ Remove / Delete; a block's **footer** configures it
+in place — a body edits the domain + gradient of each wire driving it, a
+modulation block edits its constants (k / amp / freq), and a param block carries
+its tuning slider (the same knob as the Signals dock) — Simulink-style
 double-click-to-configure, all editing the same authored state.
 
 A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
