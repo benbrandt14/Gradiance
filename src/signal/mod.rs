@@ -169,6 +169,33 @@ pub fn recompile_signals(computed: Res<ComputedSignals>, mut cache: ResMut<Compi
     }
 }
 
+/// Publishes each **body-sensor** bus name a computed signal references
+/// (`SignalSource::bus_name`), so the modulation tier can read a body's speed,
+/// height, etc. Runs before [`evaluate_computed`] so blocks see this frame's
+/// value. Targeted: only names actually referenced by a computed signal are
+/// published (a disconnected sensor costs nothing).
+pub fn publish_sensor_refs(
+    computed: Res<ComputedSignals>,
+    index: Res<IdIndex>,
+    physics: PhysicsQueries,
+    fixed: Res<Time<Fixed>>,
+    game: Res<State<GameState>>,
+    transforms: Query<&Transform, With<Body>>,
+    mut bus: ResMut<SignalBus>,
+) {
+    let recording = *game.get() == GameState::Playing;
+    let dt = fixed.timestep().as_secs_f32().max(1e-6);
+    for signal in &computed.0 {
+        for input in signal.expr.inputs() {
+            if let Some(source) = SignalSource::from_bus_name(&input)
+                && let Some(value) = read_source(&source, &index, &physics, &transforms, dt)
+            {
+                bus.publish(&input, value, recording);
+            }
+        }
+    }
+}
+
 /// Publishes every parameter's value, then evaluates each computed signal
 /// through its compiled kernel — the modulator layer — before the bindings
 /// read the bus. Params first, so a computed signal reading a param sees
@@ -294,12 +321,18 @@ pub fn evaluate_signals(
     }
 
     // Bus hygiene: keep the names that still have a producer — bindings,
-    // params, computed signals, `t`, and script names.
+    // params, computed signals, `t`, script names, and the canonical sensor
+    // names `publish_sensor_refs` surfaces for a computed's operands (a body
+    // sensor feeding a modulation block has no binding/param producer, only
+    // the reference from a computed's expression).
     bus.retain(|name| {
         name == TIME_INPUT
             || bindings.0.iter().any(|b| b.name == name)
             || params.0.iter().any(|p| p.name == name)
-            || computed.0.iter().any(|c| c.name == name)
+            || computed
+                .0
+                .iter()
+                .any(|c| c.name == name || c.expr.inputs().iter().any(|i| i == name))
             || script_names.0.iter().any(|n| n == name)
     });
 
@@ -347,6 +380,7 @@ impl Plugin for SignalPlugin {
             Update,
             (
                 recompile_signals.run_if(resource_changed::<ComputedSignals>),
+                publish_sensor_refs,
                 evaluate_computed,
                 evaluate_signals,
             )

@@ -440,6 +440,17 @@ fn collect_desired(
             }
         }
     }
+    // Bodies feeding a modulation block (a canonical sensor name in its expr).
+    for signal in &computed.0 {
+        for input in signal.expr.inputs() {
+            if let Some(source) = SignalSource::from_bus_name(&input)
+                && let Some((GraphKey::Body(id), _)) = source_pin(&source)
+                && live.contains(&id)
+            {
+                shown.insert(id);
+            }
+        }
+    }
 
     let mut items: Vec<NodeData> = Vec::new();
     for param in &params.0 {
@@ -604,13 +615,12 @@ impl GraphViewer {
         snarl.get_node(pin.node)?.input_sink(pin.input)
     }
 
-    /// The bus name an output pin publishes under, if it is a **named**
-    /// producer (param / computed / modulation block). Body sensors have no
-    /// canonical bus name, so they can't feed a modulation operand (v1).
+    /// The bus name an output pin publishes under, so it can feed a modulation
+    /// operand: a named producer's name, or a body sensor's canonical name.
     fn out_source_name(snarl: &Snarl<NodeData>, pin: OutPinId) -> Option<String> {
         match Self::out_source(snarl, pin)? {
             SignalSource::Named(name) => Some(name),
-            _ => None,
+            other => other.bus_name(),
         }
     }
 
@@ -785,13 +795,21 @@ impl SnarlViewer<NodeData> for GraphViewer {
             Self::out_source(snarl, from.id),
             Self::in_sink(snarl, to.id),
         ) {
-            self.new_bindings.push(SignalBinding {
-                name: format!("wire-{}", self.new_bindings.len() + 1),
-                source,
-                map: SignalMap::default(),
-                gradient: GradientSpec::default(),
-                sink,
-            });
+            // Don't create a second identical wire.
+            let exists = self
+                .bindings
+                .iter()
+                .chain(self.new_bindings.iter())
+                .any(|b| b.source == source && b.sink == sink);
+            if !exists {
+                self.new_bindings.push(SignalBinding {
+                    name: format!("wire-{}", self.new_bindings.len() + 1),
+                    source,
+                    map: SignalMap::default(),
+                    gradient: GradientSpec::default(),
+                    sink,
+                });
+            }
         }
     }
 
@@ -849,21 +867,30 @@ impl SnarlViewer<NodeData> for GraphViewer {
             }
         });
         ui.menu_button("Modulation", |ui| {
-            if ui.button("ƒ Gain (× k)").clicked() {
-                self.add_blocks.push(BlockOp::Gain {
+            let mut add = |ui: &mut egui::Ui, label: &str, op: BlockOp| {
+                if ui.button(label).clicked() {
+                    self.add_blocks.push(op);
+                    ui.close();
+                }
+            };
+            add(
+                ui,
+                "ƒ Gain (× k)",
+                BlockOp::Gain {
                     input: None,
                     k: 1.0,
-                });
-                ui.close();
-            }
-            if ui.button("ƒ Sum (a + b)").clicked() {
-                self.add_blocks.push(BlockOp::Sum { a: None, b: None });
-                ui.close();
-            }
-            if ui.button("ƒ Product (a · b)").clicked() {
-                self.add_blocks.push(BlockOp::Product { a: None, b: None });
-                ui.close();
-            }
+                },
+            );
+            add(ui, "ƒ Sum (a + b)", BlockOp::Sum { a: None, b: None });
+            add(ui, "ƒ Sub (a − b)", BlockOp::Sub { a: None, b: None });
+            add(
+                ui,
+                "ƒ Product (a · b)",
+                BlockOp::Product { a: None, b: None },
+            );
+            add(ui, "ƒ Min (a, b)", BlockOp::Min { a: None, b: None });
+            add(ui, "ƒ Max (a, b)", BlockOp::Max { a: None, b: None });
+            add(ui, "ƒ Abs |in|", BlockOp::Abs { input: None });
         });
         ui.weak("Output: the ▭ Scope block is always present.");
     }
@@ -1010,7 +1037,14 @@ fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
                 changed |= ui.add(egui::DragValue::new(freq).speed(0.05)).changed();
             });
         }
-        BlockOp::Time | BlockOp::Sum { .. } | BlockOp::Product { .. } => {}
+        // Ops without editable constants (their behavior is fully wired).
+        BlockOp::Time
+        | BlockOp::Sum { .. }
+        | BlockOp::Product { .. }
+        | BlockOp::Sub { .. }
+        | BlockOp::Abs { .. }
+        | BlockOp::Min { .. }
+        | BlockOp::Max { .. } => {}
     }
     changed
 }
@@ -1077,17 +1111,24 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
         })
         .collect();
     for (block_id, slot, name) in operands {
-        // A named producer is a param or another computed/modulation block.
+        // A named producer is a param or another computed/modulation block; a
+        // canonical sensor name resolves to a body's sensor output pin.
         let src = graph
             .keys
             .get(&GraphKey::Param(name.clone()))
-            .or_else(|| graph.keys.get(&GraphKey::Computed(name)))
-            .copied();
-        if let Some(src_id) = src {
+            .or_else(|| graph.keys.get(&GraphKey::Computed(name.clone())))
+            .copied()
+            .map(|id| (id, 0usize))
+            .or_else(|| {
+                let source = SignalSource::from_bus_name(&name)?;
+                let (key, out) = source_pin(&source)?;
+                graph.keys.get(&key).copied().map(|id| (id, out))
+            });
+        if let Some((src_id, out)) = src {
             graph.snarl.connect(
                 OutPinId {
                     node: src_id,
-                    output: 0,
+                    output: out,
                 },
                 InPinId {
                     node: block_id,
