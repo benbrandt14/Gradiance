@@ -854,6 +854,10 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 self.add_param = true;
                 ui.close();
             }
+            if ui.button("# Constant").clicked() {
+                self.add_blocks.push(BlockOp::Constant { value: 1.0 });
+                ui.close();
+            }
             if ui.button("ƒ Time").clicked() {
                 self.add_blocks.push(BlockOp::Time);
                 ui.close();
@@ -1035,6 +1039,12 @@ fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
                 changed |= ui.add(egui::DragValue::new(amp).speed(0.05)).changed();
                 ui.small("freq");
                 changed |= ui.add(egui::DragValue::new(freq).speed(0.05)).changed();
+            });
+        }
+        BlockOp::Constant { value } => {
+            ui.horizontal(|ui| {
+                ui.small("value");
+                changed |= ui.add(egui::DragValue::new(value).speed(0.05)).changed();
             });
         }
         // Ops without editable constants (their behavior is fully wired).
