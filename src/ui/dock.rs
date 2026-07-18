@@ -1,11 +1,14 @@
-//! The right **dock**: one host panel shared by the Depth section and the
-//! script console.
+//! The right **dock**: an [`egui_tiles`] workspace hosting the Depth, Signals,
+//! and Script-console sections as re-arrangeable tabs — the first
+//! `egui_tiles` surface of the desktop-app shell (`docs/ui-shell-decision.md`).
 //!
-//! egui side panels claim screen space from a root `Ui`, so stacked docks
-//! must be drawn by one system — separate systems would each claim the
-//! right edge independently and overlap. This host owns the panel; the
-//! sections (`depth_panel::depth_section`, `console::console_section`)
-//! stay self-contained renderers over their own state.
+//! The sections (`depth_panel::depth_section`, `signals::signals_section`,
+//! `console::console_section`) stay self-contained renderers over their own
+//! state; the dock's [`Behavior`](egui_tiles::Behavior) just routes each pane
+//! to its renderer. Which panes exist tracks the open toggles: the tree is
+//! rebuilt only when that open-set changes, so a user's tab layout survives
+//! between frames. It docks the screen's right edge on the background layer and
+//! feeds its rect to [`PanelRects`](crate::ui::PanelRects).
 
 use crate::command::intent::PropertyEditIntent;
 use crate::core::ids::StableId;
@@ -20,8 +23,88 @@ use crate::ui::signals::{self, SignalsDock, SignalsPanel};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-/// Renders the dock when any section is open. The backquote key toggles
-/// the console (unless something is capturing keyboard input).
+/// A dockable section of the right workspace.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Pane {
+    /// Depth-band editor for the selection.
+    Depth,
+    /// Signal bindings / params / computed.
+    Signals,
+    /// The scripting REPL.
+    Console,
+}
+
+impl Pane {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Depth => "Depth",
+            Self::Signals => "Signals",
+            Self::Console => "Script",
+        }
+    }
+}
+
+/// The right dock's persisted `egui_tiles` layout plus the open-set it was
+/// built for (so we only rebuild — losing the user's arrangement — when the
+/// visible sections actually change). Editor view-state; never persisted.
+#[derive(Resource, Default)]
+pub struct RightDock {
+    tree: Option<egui_tiles::Tree<Pane>>,
+    shown: Vec<Pane>,
+}
+
+/// Routes each `egui_tiles` pane to its section renderer, holding the state the
+/// renderers need for this frame. The writer and the signals bundle carry
+/// independent system lifetimes, so each gets its own.
+struct DockBehavior<'a, 'we, 'ws, 'ss> {
+    depth: &'a mut DepthPanel,
+    rows: &'a [(StableId, DepthBand, egui::Color32)],
+    edits: &'a mut MessageWriter<'we, PropertyEditIntent>,
+    signals: &'a mut SignalsDock<'ws, 'ss>,
+    selected: &'a [StableId],
+    selection: &'a Selection,
+    console: &'a mut ScriptConsole,
+    inputs: &'a mut ScriptInputs,
+    registry: &'a OperationRegistry,
+    log: &'a ScriptLog,
+}
+
+impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
+    fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
+        pane.title().into()
+    }
+
+    fn pane_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        _tile_id: egui_tiles::TileId,
+        pane: &mut Pane,
+    ) -> egui_tiles::UiResponse {
+        let height = ui.available_height();
+        match pane {
+            Pane::Depth => {
+                depth_panel::depth_section(ui, self.depth, self.rows, self.edits, height);
+            }
+            Pane::Signals => {
+                signals::signals_section(
+                    ui,
+                    self.signals,
+                    self.selected,
+                    self.selection,
+                    self.edits,
+                );
+            }
+            Pane::Console => {
+                console::console_section(ui, self.console, self.inputs, self.registry, self.log);
+            }
+        }
+        egui_tiles::UiResponse::None
+    }
+}
+
+/// Renders the dock when any section is open, as an `egui_tiles` tab workspace.
+/// The backquote key toggles the console (unless something is capturing
+/// keyboard input).
 #[expect(clippy::too_many_arguments)] // one dock host, grouped section reads
 pub fn right_dock(
     mut contexts: EguiContexts,
@@ -39,15 +122,39 @@ pub fn right_dock(
     log: Res<ScriptLog>,
     keys: Res<ButtonInput<KeyCode>>,
     mut panels: ResMut<crate::ui::PanelRects>,
+    mut dock: ResMut<RightDock>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     // Toggle with `` ` `` — but not while typing (so the key reaches editors).
     if keys.just_pressed(KeyCode::Backquote) && !ctx.egui_wants_keyboard_input() {
         console.toggle();
     }
-    if !panel.open && !console.is_open() && !signals_panel.is_open() {
+
+    // Which panes are visible, in a stable order. Rebuild the tree only when
+    // this set changes, so a user's tab arrangement persists between frames.
+    let desired: Vec<Pane> = [
+        panel.open.then_some(Pane::Depth),
+        signals_panel.is_open().then_some(Pane::Signals),
+        console.is_open().then_some(Pane::Console),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if desired.is_empty() {
+        dock.tree = None;
+        dock.shown.clear();
         return Ok(());
     }
+    if dock.shown != desired {
+        dock.tree = Some(egui_tiles::Tree::new_tabs(
+            "right-dock-tiles",
+            desired.clone(),
+        ));
+        dock.shown = desired;
+    }
+    let Some(tree) = dock.tree.as_mut() else {
+        return Ok(());
+    };
 
     // Rows for the depth section: the selection projected to bars.
     let rows: Vec<(StableId, DepthBand, egui::Color32)> = selection
@@ -68,6 +175,24 @@ pub fn right_dock(
             Some((id, band, color))
         })
         .collect();
+    // Selected body ids (for the signal binding add-buttons).
+    let selected: Vec<StableId> = selection
+        .iter()
+        .filter_map(|e| ids.get(e).ok().copied())
+        .collect();
+
+    let mut behavior = DockBehavior {
+        depth: &mut panel,
+        rows: &rows,
+        edits: &mut edits,
+        signals: &mut signals,
+        selected: &selected,
+        selection: &selection,
+        console: &mut console,
+        inputs: &mut inputs,
+        registry: &registry,
+        log: &log,
+    };
 
     // egui 0.35 panels dock inside a `Ui`; build the screen-root one.
     let mut root = egui::Ui::new(
@@ -77,46 +202,13 @@ pub fn right_dock(
             .layer_id(egui::LayerId::background())
             .max_rect(ctx.viewport_rect()),
     );
-    // Selected body ids (for the signal binding add-buttons).
-    let selected: Vec<StableId> = selection
-        .iter()
-        .filter_map(|e| ids.get(e).ok().copied())
-        .collect();
-
-    // The open sections share the dock height; give each an even slice so
-    // no single section starves the others.
-    let open_sections =
-        u32::from(panel.open) + u32::from(signals_panel.is_open()) + u32::from(console.is_open());
-    let dock = egui::Panel::right("right-dock-panel")
+    let panel_resp = egui::Panel::right("right-dock-panel")
         .resizable(true)
         .default_size(240.0)
         .show(&mut root, |ui| {
-            let mut drawn = 0u32;
-            let section = |ui: &mut egui::Ui, drawn: &mut u32| {
-                if *drawn > 0 {
-                    ui.separator();
-                }
-                let remaining = open_sections - *drawn;
-                *drawn += 1;
-                (ui.available_height() / remaining.max(1) as f32).max(80.0)
-            };
-            if panel.open {
-                let max_height = section(ui, &mut drawn);
-                depth_panel::depth_section(ui, &mut panel, &rows, &mut edits, max_height);
-            }
-            if signals_panel.is_open() {
-                let h = section(ui, &mut drawn);
-                ui.push_id("signals-dock", |ui| {
-                    ui.set_max_height(h);
-                    signals::signals_section(ui, &mut signals, &selected, &selection, &mut edits);
-                });
-            }
-            if console.is_open() {
-                let _ = section(ui, &mut drawn);
-                console::console_section(ui, &mut console, &mut inputs, &registry, &log);
-            }
+            tree.ui(&mut behavior, ui);
         });
     // Claim the dock's rect so input over it doesn't leak to the scene.
-    panels.push(dock.response.rect);
+    panels.push(panel_resp.response.rect);
     Ok(())
 }
