@@ -89,3 +89,22 @@ building features on the **egui shell**, and **spike the Slint hybrid** before
 committing to any framework move. Revisit this doc when the spike returns or a
 concrete wall (rich-text/document editing, deep accessibility, a design system
 egui can't express) forces the hybrid.
+
+## Progress on option A (the egui app shell)
+
+Being built by accretion, not big-bang:
+
+- **Menu/action bar** — File/Edit/View/Help routing to existing intents/toggles.
+- **Right dock → `egui_tiles`** (`src/ui/dock.rs`) — Depth/Signals/Script as
+  re-arrangeable tabs; the first `egui_tiles` surface, proving the docking lib
+  composes with `bevy_egui`.
+- **Bottom dock → `egui_tiles`** (`src/ui/bottom_dock.rs`) — Node Graph + Live
+  Plot as tabs, routed to their self-contained section renderers; the plot's
+  floating window and the node graph's fixed bottom panel are unified into one
+  workspace. Same open-set/persist-layout pattern as the right dock.
+
+Both docks overlay the full-window scene on the background layer and feed
+`PanelRects` (no camera-viewport change yet). **Next:** the scene itself becomes
+a dockable pane with the Bevy camera rendering into that pane's rect — the
+riskiest stage (picking/gizmo/scale + `PanelRects` all move), best done with
+visual verification.
