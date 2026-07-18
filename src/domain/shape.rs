@@ -115,6 +115,19 @@ pub enum ShapeError {
 }
 
 impl ShapeDef {
+    /// A short type label for the shape — the node-graph block title and other
+    /// terse readouts. Composite trees report their outermost operator.
+    pub fn kind_label(&self) -> &'static str {
+        match self {
+            Self::Box { .. } => "box",
+            Self::Circle { .. } => "circle",
+            Self::Polygon { .. } => "polygon",
+            Self::HalfPlane => "plane",
+            Self::Csg { .. } => "csg",
+            Self::Placed { .. } => "shape",
+        }
+    }
+
     /// Validates the shape, returning it untouched when acceptable.
     ///
     /// Commands must refuse to spawn or update bodies with invalid shapes.

@@ -25,6 +25,7 @@
 
 use crate::core::ids::{IdIndex, StableId};
 use crate::domain::Body;
+use crate::domain::shape::ShapeDef;
 use crate::interaction::selection::Selection;
 use crate::physics::queries::PhysicsQueries;
 use crate::signal::{
@@ -58,8 +59,13 @@ enum GraphKey {
 #[derive(Clone)]
 enum NodeData {
     /// A body block: outputs are `body_sensors`, inputs are `body_actuators`.
-    /// `name` is an optional custom short label (else the block shows "body").
-    Body { id: StableId, name: Option<String> },
+    /// `name` is an optional custom short label; without one the block shows
+    /// its shape `kind` (box / circle / polygon …) so bodies are distinct.
+    Body {
+        id: StableId,
+        name: Option<String>,
+        kind: &'static str,
+    },
     /// A param block: one output (its published bus name).
     Param(String),
     /// A computed/modulation block. `block` is the structured op (canvas
@@ -97,7 +103,7 @@ impl NodeData {
     /// The short title — the block's *type*, or its custom name if set.
     fn title(&self) -> String {
         match self {
-            Self::Body { name, .. } => name.clone().unwrap_or_else(|| "body".to_owned()),
+            Self::Body { name, kind, .. } => name.clone().unwrap_or_else(|| (*kind).to_owned()),
             Self::Param(name) => format!("⊙ {name}"),
             Self::Computed { name, .. } => format!("ƒ {name}"),
             Self::Scope => "▭ Scope".to_owned(),
@@ -246,7 +252,7 @@ pub fn node_graph_panel(
     mut bindings: ResMut<SignalBindings>,
     mut params: ResMut<SignalParams>,
     mut computed: ResMut<ComputedSignals>,
-    bodies: Query<&StableId, With<Body>>,
+    bodies: Query<(&StableId, &ShapeDef), With<Body>>,
     mut selection: ResMut<Selection>,
     ids: Query<&StableId>,
     bus: Res<SignalBus>,
@@ -436,9 +442,13 @@ fn collect_desired(
     bindings: &SignalBindings,
     params: &SignalParams,
     computed: &ComputedSignals,
-    bodies: &Query<&StableId, With<Body>>,
+    bodies: &Query<(&StableId, &ShapeDef), With<Body>>,
 ) -> Vec<NodeData> {
-    let live: HashSet<StableId> = bodies.iter().copied().collect();
+    let kinds: HashMap<StableId, &'static str> = bodies
+        .iter()
+        .map(|(id, shape)| (*id, shape.kind_label()))
+        .collect();
+    let live: HashSet<StableId> = kinds.keys().copied().collect();
     let mut shown: HashSet<StableId> = added
         .iter()
         .copied()
@@ -479,6 +489,7 @@ fn collect_desired(
         items.push(NodeData::Body {
             id,
             name: names.get(&id).cloned(),
+            kind: kinds.get(&id).copied().unwrap_or("body"),
         });
     }
     // The Scope sink is a fixture whenever there's anything to plot into it.
@@ -729,7 +740,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) {
-        let Some(NodeData::Body { id, name }) = snarl.get_node(node) else {
+        let Some(NodeData::Body { id, name, .. }) = snarl.get_node(node) else {
             return;
         };
         let (id, mut text) = (*id, name.clone().unwrap_or_default());
@@ -1217,7 +1228,14 @@ mod tests {
     use super::*;
 
     fn body(graph: &mut NodeGraph, id: StableId) {
-        reconcile_add(graph, NodeData::Body { id, name: None });
+        reconcile_add(
+            graph,
+            NodeData::Body {
+                id,
+                name: None,
+                kind: "box",
+            },
+        );
     }
 
     fn reconcile_add(graph: &mut NodeGraph, node: NodeData) {
@@ -1318,6 +1336,23 @@ mod tests {
         assert_eq!(fresh_param_name(&params), "param-1");
         params.0.push(crate::signal::SignalParam::unit("param-1"));
         assert_eq!(fresh_param_name(&params), "param-2");
+    }
+
+    #[test]
+    fn an_unnamed_body_block_titles_by_its_shape_kind() {
+        let id = StableId::new();
+        let unnamed = NodeData::Body {
+            id,
+            name: None,
+            kind: "circle",
+        };
+        assert_eq!(unnamed.title(), "circle", "falls back to the shape kind");
+        let named = NodeData::Body {
+            id,
+            name: Some("wheel".into()),
+            kind: "circle",
+        };
+        assert_eq!(named.title(), "wheel", "a custom name wins");
     }
 
     #[test]
