@@ -13,12 +13,50 @@
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 /// Plot panel visibility.
 #[derive(Resource, Default)]
 pub struct PlotPanel {
     open: bool,
+}
+
+/// What the plot's horizontal axis represents. Time (sample order, the live
+/// default) today; the enum leaves room for "versus another signal" (XY) later.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum XAxis {
+    /// Elapsed time — the recorded sample order.
+    #[default]
+    Time,
+}
+
+impl XAxis {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Time => "t",
+        }
+    }
+}
+
+/// Plotter configuration: which series are hidden (default: show all) and what
+/// the X axis is. A signal is drawn unless the user unchecks it, so new signals
+/// appear automatically. Editor view-state — never persisted.
+#[derive(Resource, Default)]
+pub struct PlotConfig {
+    hidden: HashSet<String>,
+    x_axis: XAxis,
+}
+
+/// The plottable series to draw, in bus order, minus the ones the user hid —
+/// pure, so the selection logic is unit-testable without a window.
+fn visible_series<'a>(
+    names: impl IntoIterator<Item = &'a str>,
+    hidden: &HashSet<String>,
+) -> Vec<&'a str> {
+    names
+        .into_iter()
+        .filter(|n| is_plottable(n) && !hidden.contains(*n))
+        .collect()
 }
 
 impl PlotPanel {
@@ -43,11 +81,13 @@ const SIGNAL_COLORS: [egui::Color32; 4] = [
     egui::Color32::from_rgb(230, 150, 230),
 ];
 
-/// Renders the live-plot panel (toggle with backslash). Draws every bus signal
-/// with a recorded history — the plot-sink bindings.
+/// Renders the live-plot panel (toggle with backslash). Draws every plottable
+/// bus signal with a recorded history, minus the ones hidden in [`PlotConfig`];
+/// a **signals** picker toggles each series and the X axis defaults to time.
 pub fn plot_panel(
     mut contexts: EguiContexts,
     mut panel: ResMut<PlotPanel>,
+    mut config: ResMut<PlotConfig>,
     bus: Res<crate::signal::SignalBus>,
     keys: Res<ButtonInput<KeyCode>>,
 ) -> Result {
@@ -59,37 +99,65 @@ pub fn plot_panel(
         return Ok(());
     }
 
+    // Every named signal with a recorded history — params, computed, and
+    // plot-sink bindings. The canonical sensor-ref names (`speed@<uuid>`) that
+    // `publish_sensor_refs` puts on the bus for modulation operands are
+    // internal plumbing, not user-chosen series, so `is_plottable` drops them.
+    let plottable: Vec<(&str, &VecDeque<f32>)> = bus
+        .entries()
+        .filter(|(name, e)| e.history().len() >= 2 && is_plottable(name))
+        .map(|(name, e)| (name, e.history()))
+        .collect();
+
     let mut open = true;
     egui::Window::new("Live Plot")
         .open(&mut open)
-        .default_width(320.0)
+        .default_width(340.0)
         .show(ctx, |ui| {
-            // Every named signal with a recorded history — params, computed,
-            // and plot-sink bindings. The canonical sensor-ref names
-            // (`speed@<uuid>`) that `publish_sensor_refs` puts on the bus so a
-            // modulation block can read a body sensor are internal plumbing,
-            // not user-chosen series, so they stay out of the plot.
-            let bound: Vec<(&str, &VecDeque<f32>)> = bus
-                .entries()
-                .filter(|(name, e)| e.history().len() >= 2 && is_plottable(name))
-                .map(|(name, e)| (name, e.history()))
-                .collect();
-            if bound.is_empty() {
+            if plottable.is_empty() {
                 ui.label(
                     "Wire a sensor to the plot sink (a body's ▸plot toggle, or a \
                      plot binding) and press Play.",
                 );
                 return;
             }
-            for (i, (name, samples)) in bound.iter().enumerate() {
+            signal_picker(ui, &plottable, &mut config);
+
+            let visible = visible_series(plottable.iter().map(|(n, _)| *n), &config.hidden);
+            if visible.is_empty() {
+                ui.weak("No series selected — pick one above.");
+                return;
+            }
+            for (i, name) in visible.iter().enumerate() {
                 if i > 0 {
                     ui.add_space(4.0);
                 }
-                draw_series(ui, name, samples, SIGNAL_COLORS[i % SIGNAL_COLORS.len()]);
+                if let Some((_, samples)) = plottable.iter().find(|(n, _)| n == name) {
+                    draw_series(ui, name, samples, SIGNAL_COLORS[i % SIGNAL_COLORS.len()]);
+                }
             }
+            ui.add_space(2.0);
+            ui.weak(format!("x-axis: {} →", config.x_axis.label()));
         });
     panel.open = open;
     Ok(())
+}
+
+/// A collapsible list of the plottable signals, each a checkbox that hides or
+/// shows its series (unchecking adds the name to [`PlotConfig::hidden`]).
+fn signal_picker(ui: &mut egui::Ui, plottable: &[(&str, &VecDeque<f32>)], config: &mut PlotConfig) {
+    ui.collapsing("signals", |ui| {
+        for (name, _) in plottable {
+            let mut shown = !config.hidden.contains(*name);
+            if ui.checkbox(&mut shown, *name).changed() {
+                if shown {
+                    config.hidden.remove(*name);
+                } else {
+                    config.hidden.insert((*name).to_owned());
+                }
+            }
+        }
+    });
 }
 
 /// Whether a bus signal is a user-facing series the plot should draw. Params,
@@ -157,9 +225,10 @@ pub fn draw_series(ui: &mut egui::Ui, label: &str, data: &VecDeque<f32>, color: 
 
 #[cfg(test)]
 mod tests {
-    use super::is_plottable;
+    use super::{is_plottable, visible_series};
     use crate::core::ids::StableId;
     use crate::signal::SignalSource;
+    use std::collections::HashSet;
 
     #[test]
     fn sensor_ref_names_stay_out_of_the_plot() {
@@ -169,5 +238,22 @@ mod tests {
         assert!(is_plottable("wire-1"));
         let sensor_ref = SignalSource::Speed(StableId::new()).bus_name().unwrap();
         assert!(!is_plottable(&sensor_ref), "speed@<uuid> is plumbing");
+    }
+
+    #[test]
+    fn the_picker_shows_everything_until_a_series_is_hidden() {
+        let sensor_ref = SignalSource::Speed(StableId::new()).bus_name().unwrap();
+        let names = ["speed", "warm", sensor_ref.as_str()];
+
+        // Nothing hidden → every plottable series shows (plumbing still out).
+        let none = HashSet::new();
+        assert_eq!(
+            visible_series(names.iter().copied(), &none),
+            ["speed", "warm"]
+        );
+
+        // Hiding one drops just that series.
+        let hidden: HashSet<String> = ["warm".to_owned()].into_iter().collect();
+        assert_eq!(visible_series(names.iter().copied(), &hidden), ["speed"]);
     }
 }
