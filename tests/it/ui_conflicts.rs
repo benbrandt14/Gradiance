@@ -17,7 +17,9 @@ fn assert_initializes<M, S: IntoSystem<(), Result, M>>(system: S) {
 #[test]
 fn panel_systems_have_no_conflicting_params() {
     assert_initializes(gradiance::ui::dock::right_dock);
-    assert_initializes(gradiance::ui::node_graph::node_graph_panel);
+    // The bottom dock unions the node-graph and plot read-sets in one system —
+    // guard that large param set against access conflicts.
+    assert_initializes(gradiance::ui::bottom_dock::bottom_dock);
     assert_initializes(gradiance::ui::toolbar::toolbar);
     assert_initializes(gradiance::ui::menu::menu_bar);
     // BodyProps gained a read facade (PhysicsQueries + transforms) used by

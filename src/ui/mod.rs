@@ -9,6 +9,7 @@
 //! `Changed<>`/`resource_changed` (physics applies `SimSettings`; UI never
 //! touches avian).
 
+pub mod bottom_dock;
 pub mod console;
 pub mod context_menu;
 pub mod depth_panel;
@@ -33,7 +34,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 
 /// Screen rects claimed this frame by the **background-layer** docked panels
-/// (the right dock, the node-graph dock). egui draws these into a root `Ui` on
+/// (the right dock, the bottom dock). egui draws these into a root `Ui` on
 /// [`egui::LayerId::background()`], which `is_pointer_over_egui` deliberately
 /// ignores — so without this the scene tools/camera would react to input over
 /// them (the "click-through"). Each panel pushes its rect while open;
@@ -78,6 +79,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
         app.init_resource::<dock::RightDock>();
+        app.init_resource::<bottom_dock::BottomDock>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
@@ -89,8 +91,7 @@ impl Plugin for GradianceUiPlugin {
                 inspector::inspector_window,
                 joint_inspector::joint_inspector,
                 settings::settings_window,
-                plot::plot_panel,
-                node_graph::node_graph_panel,
+                bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,
                 capture_pointer_over_ui,

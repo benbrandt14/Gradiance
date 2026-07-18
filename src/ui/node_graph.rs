@@ -33,8 +33,9 @@ use crate::signal::{
     SignalParam, SignalParams, SignalSink, SignalSource, read_source,
 };
 use crate::ui::ports::{body_actuators, body_sensors};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, egui};
+use bevy_egui::egui;
 use egui_snarl::ui::{BackgroundPattern, PinInfo, SnarlStyle, SnarlViewer, WireStyle};
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use std::collections::{HashMap, HashSet};
@@ -251,103 +252,105 @@ fn sink_pin(sink: &SignalSink) -> (GraphKey, usize) {
     }
 }
 
-/// Renders the node-graph canvas. Reconciles blocks + wires from the live
-/// dataflow, shows it, and applies any wire the user made/removed to the
-/// bindings (config-seam direct edit, like the Signals dock).
-pub fn node_graph_panel(
-    mut contexts: EguiContexts,
-    mut graph: ResMut<NodeGraph>,
-    mut bindings: ResMut<SignalBindings>,
-    mut params: ResMut<SignalParams>,
-    mut computed: ResMut<ComputedSignals>,
-    bodies: Query<(&StableId, &ShapeDef), With<Body>>,
-    mut selection: ResMut<Selection>,
-    ids: Query<&StableId>,
-    bus: Res<SignalBus>,
-    physics: PhysicsQueries,
-    body_transforms: Query<&Transform, With<Body>>,
-    index: Res<IdIndex>,
-    fixed: Res<Time<Fixed>>,
-    mut panels: ResMut<crate::ui::PanelRects>,
-) -> Result {
-    let ctx = contexts.ctx_mut()?;
-    if !graph.open {
-        return Ok(());
-    }
+/// The node-graph pane's full ECS read/write set, bundled as one
+/// [`SystemParam`] so the bottom-dock host stays under Bevy's system-parameter
+/// cap: the config-seam resources (bindings / params / computed / the graph
+/// view-state), the scene reads the live per-pin readouts need, and the
+/// selection the highlight + "locate" use. The bus is shared with the plot pane,
+/// so the host owns it separately.
+#[derive(SystemParam)]
+pub struct GraphParams<'w, 's> {
+    pub(crate) graph: ResMut<'w, NodeGraph>,
+    pub(crate) bindings: ResMut<'w, SignalBindings>,
+    pub(crate) params: ResMut<'w, SignalParams>,
+    pub(crate) computed: ResMut<'w, ComputedSignals>,
+    pub(crate) bodies: Query<'w, 's, (&'static StableId, &'static ShapeDef), With<Body>>,
+    pub(crate) selection: ResMut<'w, Selection>,
+    pub(crate) ids: Query<'w, 's, &'static StableId>,
+    pub(crate) physics: PhysicsQueries<'w, 's>,
+    pub(crate) body_transforms: Query<'w, 's, &'static Transform, With<Body>>,
+    pub(crate) index: Res<'w, IdIndex>,
+    pub(crate) fixed: Res<'w, Time<Fixed>>,
+}
 
+/// Reconciles the canvas blocks + wires from the live dataflow and builds the
+/// frame's [`GraphViewer`] (block highlights + the live per-pin readouts). The
+/// bottom-dock host calls this before rendering; [`node_graph_section`] draws
+/// the returned viewer and [`apply_pane`] drains its edits afterward.
+pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
     let desired = collect_desired(
-        &graph.added,
-        &graph.names,
-        &bindings,
-        &params,
-        &computed,
-        &bodies,
+        &gp.graph.added,
+        &gp.graph.names,
+        &gp.bindings,
+        &gp.params,
+        &gp.computed,
+        &gp.bodies,
     );
-    reconcile(&mut graph, desired);
-    rebuild_wires(&mut graph, &bindings);
+    reconcile(&mut gp.graph, desired);
+    rebuild_wires(&mut gp.graph, &gp.bindings);
 
     // Precompute the live value of every output/input pin (the Simulink
     // "watch the signal flow" readout).
-    let dt = fixed.timestep().as_secs_f32().max(1e-6);
-    let output_values =
-        output_pin_values(&graph.snarl, &index, &physics, &body_transforms, &bus, dt);
-    let input_values = binding_input_values(&bindings, &bus);
+    let dt = gp.fixed.timestep().as_secs_f32().max(1e-6);
+    let output_values = output_pin_values(
+        &gp.graph.snarl,
+        &gp.index,
+        &gp.physics,
+        &gp.body_transforms,
+        bus,
+        dt,
+    );
+    let input_values = binding_input_values(&gp.bindings, bus);
 
     // Scene selection → highlight the matching body blocks.
-    let selected: HashSet<StableId> = selection
+    let selected: HashSet<StableId> = gp
+        .selection
         .iter()
-        .filter_map(|e| ids.get(e).ok().copied())
+        .filter_map(|e| gp.ids.get(e).ok().copied())
         .collect();
-    let mut viewer = GraphViewer {
+    GraphViewer {
         selected,
         output_values,
         input_values,
-        bindings: bindings.0.clone(),
-        params: params.0.clone(),
+        bindings: gp.bindings.0.clone(),
+        params: gp.params.0.clone(),
         ..GraphViewer::default()
-    };
+    }
+}
+
+/// Renders the node-graph canvas into `ui` (its dock pane): the header + fit
+/// button, the canvas-following dot-grid, and the snarl node view. Persists this
+/// frame's pan/zoom transform and retires a fulfilled fit request. The user's
+/// connect/disconnect gestures land in `viewer`, drained by [`apply_pane`].
+pub(crate) fn node_graph_section(
+    ui: &mut egui::Ui,
+    graph: &mut NodeGraph,
+    viewer: &mut GraphViewer,
+) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Node Graph").strong());
+        if ui
+            .small_button("⛶ fit")
+            .on_hover_text("Zoom to fit the whole graph")
+            .clicked()
+        {
+            graph.fit_requested = true;
+        }
+        ui.weak("· right-click a body ▸ Add to node editor · drag sensor → actuator to bind");
+    });
+    if graph.keys.is_empty() {
+        ui.weak("Empty — add a body from its right-click menu, or add params/computed.");
+        return;
+    }
+    // The canvas-following dot-grid (last frame's transform), behind the
+    // blocks; then hand the view rect + fit request to the viewer.
+    if let Some(t) = graph.last_transform {
+        paint_dot_grid(ui.painter(), ui.max_rect(), t);
+    }
+    viewer.fit = graph.fit_requested;
+    viewer.view_rect = Some(ui.max_rect());
     let style = themed_style();
-    // A screen-bottom dock (same background-layer root pattern the right dock
-    // uses, so panels claim edges rather than float).
-    let mut root = egui::Ui::new(
-        ctx.clone(),
-        "node-graph-root".into(),
-        egui::UiBuilder::new()
-            .layer_id(egui::LayerId::background())
-            .max_rect(ctx.viewport_rect()),
-    );
-    let panel = egui::Panel::bottom("node-graph-dock")
-        .resizable(true)
-        .default_size(260.0)
-        .show(&mut root, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Node Graph").strong());
-                if ui
-                    .small_button("⛶ fit")
-                    .on_hover_text("Zoom to fit the whole graph")
-                    .clicked()
-                {
-                    graph.fit_requested = true;
-                }
-                ui.weak(
-                    "· right-click a body ▸ Add to node editor · drag sensor → actuator to bind",
-                );
-            });
-            if graph.keys.is_empty() {
-                ui.weak("Empty — add a body from its right-click menu, or add params/computed.");
-                return;
-            }
-            // The canvas-following dot-grid (last frame's transform), behind
-            // the blocks; then hand the view rect + fit request to the viewer.
-            if let Some(t) = graph.last_transform {
-                paint_dot_grid(ui.painter(), ui.max_rect(), t);
-            }
-            viewer.fit = graph.fit_requested;
-            viewer.view_rect = Some(ui.max_rect());
-            graph.snarl.show(&mut viewer, &style, "node-graph", ui);
-        });
-    // Claim the dock's rect so input over it doesn't leak to the scene.
-    panels.push(panel.response.rect);
+    graph.snarl.show(viewer, &style, "node-graph", ui);
     // Persist the pan/zoom transform (for next frame's grid) and retire a
     // fulfilled fit request.
     if let Some(t) = viewer.captured_transform {
@@ -356,21 +359,26 @@ pub fn node_graph_panel(
     if viewer.fit_done {
         graph.fit_requested = false;
     }
+}
 
+/// Drains the frame's [`GraphViewer`] into the scene: a "locate" click selects
+/// the body, then every authoring/binding edit flows to the config-seam
+/// resources via [`apply_viewer_edits`]. Called by the dock host after the
+/// pane renders.
+pub(crate) fn apply_pane(viewer: GraphViewer, gp: &mut GraphParams) {
     // A "locate" click selects the body in the scene (the inspector follows).
     if let Some(id) = viewer.select_body
-        && let Some(entity) = index.entity(id)
+        && let Some(entity) = gp.index.entity(id)
     {
-        selection.set(entity);
+        gp.selection.set(entity);
     }
     apply_viewer_edits(
         viewer,
-        &mut graph,
-        &mut bindings,
-        &mut params,
-        &mut computed,
+        &mut gp.graph,
+        &mut gp.bindings,
+        &mut gp.params,
+        &mut gp.computed,
     );
-    Ok(())
 }
 
 /// Drains a frame's [`GraphViewer`] edits into the config-seam resources:
@@ -720,7 +728,7 @@ fn reconcile(graph: &mut NodeGraph, desired: Vec<NodeData>) {
 /// gestures into binding edits (collected, applied by the system). Wires shown
 /// are the current bindings; it never owns the graph.
 #[derive(Default)]
-struct GraphViewer {
+pub(crate) struct GraphViewer {
     /// Scene-selected body ids — their blocks get a highlight frame.
     selected: HashSet<StableId>,
     /// Live value of each output pin, `[key][output]` (the running readout).
