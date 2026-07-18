@@ -17,11 +17,15 @@ use crate::domain::appearance::Appearance;
 use crate::domain::depth::DepthBand;
 use crate::interaction::selection::Selection;
 use crate::script::bridge::{OperationRegistry, ScriptInputs, ScriptLog};
+use crate::signal::SignalBus;
 use crate::ui::console::{self, ScriptConsole};
 use crate::ui::depth_panel::{self, DepthPanel};
+use crate::ui::plot::{self, PlotConfig, PlotPanel};
 use crate::ui::signals::{self, SignalsDock, SignalsPanel};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use std::collections::VecDeque;
 
 /// A dockable section of the right workspace.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,6 +34,8 @@ pub enum Pane {
     Depth,
     /// Signal bindings / params / computed.
     Signals,
+    /// The live time-series plotter (drawn from the signal bus).
+    Plot,
     /// The scripting REPL.
     Console,
 }
@@ -39,9 +45,29 @@ impl Pane {
         match self {
             Self::Depth => "Depth",
             Self::Signals => "Signals",
+            Self::Plot => "Live Plot",
             Self::Console => "Script",
         }
     }
+}
+
+/// The scripting-console resources, bundled so the dock host stays under Bevy's
+/// system-parameter cap.
+#[derive(SystemParam)]
+pub struct ConsoleParams<'w> {
+    pub(crate) console: ResMut<'w, ScriptConsole>,
+    pub(crate) inputs: ResMut<'w, ScriptInputs>,
+    pub(crate) registry: Res<'w, OperationRegistry>,
+    pub(crate) log: Res<'w, ScriptLog>,
+}
+
+/// The plotter's resources, bundled likewise. `bus` is the single signal
+/// history the plot draws from.
+#[derive(SystemParam)]
+pub struct PlotParams<'w> {
+    pub(crate) panel: ResMut<'w, PlotPanel>,
+    pub(crate) config: ResMut<'w, PlotConfig>,
+    pub(crate) bus: Res<'w, SignalBus>,
 }
 
 /// The right dock's persisted `egui_tiles` layout plus the open-set it was
@@ -63,6 +89,8 @@ struct DockBehavior<'a, 'we, 'ws, 'ss> {
     signals: &'a mut SignalsDock<'ws, 'ss>,
     selected: &'a [StableId],
     selection: &'a Selection,
+    plottable: &'a [(&'a str, &'a VecDeque<f32>)],
+    plot_config: &'a mut PlotConfig,
     console: &'a mut ScriptConsole,
     inputs: &'a mut ScriptInputs,
     registry: &'a OperationRegistry,
@@ -94,6 +122,9 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
                     self.edits,
                 );
             }
+            Pane::Plot => {
+                plot::plot_section(ui, self.plottable, self.plot_config);
+            }
             Pane::Console => {
                 console::console_section(ui, self.console, self.inputs, self.registry, self.log);
             }
@@ -109,7 +140,6 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
 pub fn right_dock(
     mut contexts: EguiContexts,
     mut panel: ResMut<DepthPanel>,
-    mut console: ResMut<ScriptConsole>,
     signals_panel: Res<SignalsPanel>,
     mut signals: SignalsDock,
     selection: Res<Selection>,
@@ -117,17 +147,22 @@ pub fn right_dock(
     bands: Query<&DepthBand, With<Body>>,
     appearances: Query<&Appearance, With<Body>>,
     mut edits: MessageWriter<PropertyEditIntent>,
-    mut inputs: ResMut<ScriptInputs>,
-    registry: Res<OperationRegistry>,
-    log: Res<ScriptLog>,
+    mut plot: PlotParams,
+    mut console: ConsoleParams,
     keys: Res<ButtonInput<KeyCode>>,
     mut panels: ResMut<crate::ui::PanelRects>,
     mut dock: ResMut<RightDock>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    // Toggle with `` ` `` — but not while typing (so the key reaches editors).
-    if keys.just_pressed(KeyCode::Backquote) && !ctx.egui_wants_keyboard_input() {
-        console.toggle();
+    // Panel shortcuts — but not while typing (so keys reach editors): `` ` ``
+    // toggles the console, `\` toggles the plot.
+    if !ctx.egui_wants_keyboard_input() {
+        if keys.just_pressed(KeyCode::Backquote) {
+            console.console.toggle();
+        }
+        if keys.just_pressed(KeyCode::Backslash) {
+            plot.panel.toggle();
+        }
     }
 
     // Which panes are visible, in a stable order. Rebuild the tree only when
@@ -135,7 +170,8 @@ pub fn right_dock(
     let desired: Vec<Pane> = [
         panel.open.then_some(Pane::Depth),
         signals_panel.is_open().then_some(Pane::Signals),
-        console.is_open().then_some(Pane::Console),
+        plot.panel.is_open().then_some(Pane::Plot),
+        console.console.is_open().then_some(Pane::Console),
     ]
     .into_iter()
     .flatten()
@@ -180,6 +216,8 @@ pub fn right_dock(
         .iter()
         .filter_map(|e| ids.get(e).ok().copied())
         .collect();
+    // The plot pane's series list, computed from the bus.
+    let plottable = plot::plottable_series(&plot.bus);
 
     let mut behavior = DockBehavior {
         depth: &mut panel,
@@ -188,10 +226,12 @@ pub fn right_dock(
         signals: &mut signals,
         selected: &selected,
         selection: &selection,
-        console: &mut console,
-        inputs: &mut inputs,
-        registry: &registry,
-        log: &log,
+        plottable: &plottable,
+        plot_config: &mut plot.config,
+        console: &mut console.console,
+        inputs: &mut console.inputs,
+        registry: &console.registry,
+        log: &console.log,
     };
 
     // egui 0.35 panels dock inside a `Ui`; build the screen-root one.
