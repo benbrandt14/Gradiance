@@ -635,6 +635,24 @@ impl GraphViewer {
         snarl.get_node(pin.node)?.input_sink(pin.input)
     }
 
+    /// A fresh `wire-N` binding name, unique over the existing bindings *and*
+    /// the ones already made this frame. A binding's name is its **bus name**
+    /// (the plot-legend key), so a collision would clobber another wire's
+    /// published value — the count-based name did exactly that when a `wire-N`
+    /// already existed.
+    fn fresh_wire_name(&self) -> String {
+        let taken = |name: &str| {
+            self.bindings
+                .iter()
+                .chain(self.new_bindings.iter())
+                .any(|b| b.name == name)
+        };
+        (1..=self.bindings.len() + self.new_bindings.len() + 1)
+            .map(|n| format!("wire-{n}"))
+            .find(|name| !taken(name))
+            .unwrap_or_else(|| "wire".to_owned())
+    }
+
     /// The bus name an output pin publishes under, so it can feed a modulation
     /// operand: a named producer's name, or a body sensor's canonical name.
     fn out_source_name(snarl: &Snarl<NodeData>, pin: OutPinId) -> Option<String> {
@@ -834,7 +852,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 .any(|b| b.source == source && b.sink == sink);
             if !exists {
                 self.new_bindings.push(SignalBinding {
-                    name: format!("wire-{}", self.new_bindings.len() + 1),
+                    name: self.fresh_wire_name(),
                     source,
                     map: SignalMap::default(),
                     gradient: GradientSpec::default(),
@@ -1300,6 +1318,29 @@ mod tests {
         assert_eq!(fresh_param_name(&params), "param-1");
         params.0.push(crate::signal::SignalParam::unit("param-1"));
         assert_eq!(fresh_param_name(&params), "param-2");
+    }
+
+    #[test]
+    fn a_new_wire_name_never_collides_with_an_existing_binding() {
+        // A binding's name is its bus name; a duplicate would clobber the
+        // other wire's published value, so names must be unique.
+        let id = StableId::new();
+        let existing = SignalBinding {
+            name: "wire-1".into(),
+            source: SignalSource::Speed(id),
+            map: SignalMap::default(),
+            gradient: GradientSpec::default(),
+            sink: SignalSink::Plot,
+        };
+        let viewer = GraphViewer {
+            bindings: vec![existing],
+            ..GraphViewer::default()
+        };
+        // The count-based scheme would also pick "wire-1" here; the fresh name
+        // must skip it.
+        let name = viewer.fresh_wire_name();
+        assert_ne!(name, "wire-1", "must not reuse the taken name");
+        assert_eq!(name, "wire-2");
     }
 
     #[test]
