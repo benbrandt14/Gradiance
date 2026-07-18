@@ -38,6 +38,7 @@ pub fn right_dock(
     registry: Res<OperationRegistry>,
     log: Res<ScriptLog>,
     keys: Res<ButtonInput<KeyCode>>,
+    mut panels: ResMut<crate::ui::PanelRects>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     // Toggle with `` ` `` — but not while typing (so the key reaches editors).
@@ -86,7 +87,7 @@ pub fn right_dock(
     // no single section starves the others.
     let open_sections =
         u32::from(panel.open) + u32::from(signals_panel.is_open()) + u32::from(console.is_open());
-    egui::Panel::right("right-dock-panel")
+    let dock = egui::Panel::right("right-dock-panel")
         .resizable(true)
         .default_size(240.0)
         .show(&mut root, |ui| {
@@ -115,5 +116,7 @@ pub fn right_dock(
                 console::console_section(ui, &mut console, &mut inputs, &registry, &log);
             }
         });
+    // Claim the dock's rect so input over it doesn't leak to the scene.
+    panels.push(dock.response.rect);
     Ok(())
 }

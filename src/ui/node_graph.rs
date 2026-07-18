@@ -260,6 +260,7 @@ pub fn node_graph_panel(
     body_transforms: Query<&Transform, With<Body>>,
     index: Res<IdIndex>,
     fixed: Res<Time<Fixed>>,
+    mut panels: ResMut<crate::ui::PanelRects>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !graph.open {
@@ -324,7 +325,7 @@ pub fn node_graph_panel(
             .layer_id(egui::LayerId::background())
             .max_rect(ctx.viewport_rect()),
     );
-    egui::Panel::bottom("node-graph-dock")
+    let panel = egui::Panel::bottom("node-graph-dock")
         .resizable(true)
         .default_size(260.0)
         .show(&mut root, |ui| {
@@ -340,6 +341,8 @@ pub fn node_graph_panel(
             }
             graph.snarl.show(&mut viewer, &style, "node-graph", ui);
         });
+    // Claim the dock's rect so input over it doesn't leak to the scene.
+    panels.push(panel.response.rect);
 
     // A "locate" click selects the body in the scene (the inspector follows).
     if let Some(id) = viewer.select_body

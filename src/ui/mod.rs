@@ -29,7 +29,30 @@ pub mod widgets;
 
 use crate::interaction::PointerOverUi;
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+
+/// Screen rects claimed this frame by the **background-layer** docked panels
+/// (the right dock, the node-graph dock). egui draws these into a root `Ui` on
+/// [`egui::LayerId::background()`], which `is_pointer_over_egui` deliberately
+/// ignores — so without this the scene tools/camera would react to input over
+/// them (the "click-through"). Each panel pushes its rect while open;
+/// `capture_pointer_over_ui` folds them into [`PointerOverUi`] and clears the
+/// list for the next frame.
+#[derive(Resource, Default)]
+pub struct PanelRects(pub Vec<egui::Rect>);
+
+impl PanelRects {
+    /// Records a docked panel's occupied screen rect for this frame.
+    pub fn push(&mut self, rect: egui::Rect) {
+        self.0.push(rect);
+    }
+}
+
+/// Whether `pos` falls inside any recorded background-layer panel rect — pure,
+/// so the click-through gate is unit-testable without a window.
+fn pointer_over_panels(rects: &[egui::Rect], pos: Option<egui::Pos2>) -> bool {
+    pos.is_some_and(|p| rects.iter().any(|r| r.contains(p)))
+}
 
 /// Installs egui and the editor panels (no-op headless).
 #[derive(Default)]
@@ -50,6 +73,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<probe::ProbePanel>();
         app.init_resource::<signals::SignalsPanel>();
         app.init_resource::<node_graph::NodeGraph>();
+        app.init_resource::<PanelRects>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
@@ -78,9 +102,34 @@ fn capture_pointer_over_ui(
     mut contexts: EguiContexts,
     mut over_ui: ResMut<PointerOverUi>,
     mut keyboard: ResMut<crate::interaction::KeyboardCaptured>,
+    mut panels: ResMut<PanelRects>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    over_ui.0 = ctx.is_pointer_over_egui();
+    // `is_pointer_over_egui` covers normal areas/windows but not the
+    // background-layer docked panels — fold their rects in so input over them
+    // doesn't leak to the scene. Runs last in the pass; clear for next frame.
+    let pointer = ctx.pointer_latest_pos();
+    over_ui.0 = ctx.is_pointer_over_egui() || pointer_over_panels(&panels.0, pointer);
     keyboard.0 = ctx.egui_wants_keyboard_input();
+    panels.0.clear();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pointer_over_panels;
+    use bevy_egui::egui::{Pos2, Rect};
+
+    #[test]
+    fn a_pointer_inside_a_panel_rect_counts_as_over_ui() {
+        let dock = Rect::from_min_max(Pos2::new(100.0, 0.0), Pos2::new(200.0, 300.0));
+        let rects = [dock];
+        assert!(pointer_over_panels(&rects, Some(Pos2::new(150.0, 100.0))));
+        // Over the free scene area, not any panel.
+        assert!(!pointer_over_panels(&rects, Some(Pos2::new(50.0, 100.0))));
+        // No pointer (cursor off-window) is never "over UI".
+        assert!(!pointer_over_panels(&rects, None));
+        // No panels drawn this frame.
+        assert!(!pointer_over_panels(&[], Some(Pos2::new(150.0, 100.0))));
+    }
 }
