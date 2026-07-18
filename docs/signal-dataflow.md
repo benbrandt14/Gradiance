@@ -112,7 +112,12 @@ toolbar **⬡ Graph**), built on the [`egui-snarl`] node-graph widget — the on
 node editor tracking our pinned egui 0.35 (`egui_node_graph2` is stuck on
 0.29 and can't share the bevy_egui context). snarl owns the box layout,
 pan/zoom, and the drag-to-connect gesture; `ui::node_graph` is the **adapter**
-between it and the ECS dataflow. **Objects are the nodes**:
+between it and the ECS dataflow. The canvas **captures its own input** (it does
+not click/scroll/resize through to the scene — its rect feeds `PointerOverUi`),
+so pan/zoom is independent of the scene camera; a header **⛶ fit** button
+zoom-to-fits the whole graph. The look is vvvv-flavoured — sharp corners, flat
+fills, thin wires, and a faint **dot-grid that pans and zooms with the canvas**.
+**Objects are the nodes**:
 
 [`egui-snarl`]: https://crates.io/crates/egui-snarl
 

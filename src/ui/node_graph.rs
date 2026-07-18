@@ -35,7 +35,7 @@ use crate::signal::{
 use crate::ui::ports::{body_actuators, body_sensors};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use egui_snarl::ui::{PinInfo, SnarlStyle, SnarlViewer, WireStyle};
+use egui_snarl::ui::{BackgroundPattern, PinInfo, SnarlStyle, SnarlViewer, WireStyle};
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use std::collections::{HashMap, HashSet};
 
@@ -164,6 +164,12 @@ pub struct NodeGraph {
     added: HashSet<StableId>,
     /// Optional custom short names per body (editable in the block; view-state).
     names: HashMap<StableId, String>,
+    /// Set by the header **fit** button; consumed next frame to re-center the
+    /// view on the graph's bounding box.
+    fit_requested: bool,
+    /// Last frame's pan/zoom transform (captured via `current_transform`), used
+    /// to paint the canvas-following dot-grid a frame later.
+    last_transform: Option<egui::emath::TSTransform>,
 }
 
 impl Default for NodeGraph {
@@ -174,6 +180,8 @@ impl Default for NodeGraph {
             keys: HashMap::new(),
             added: HashSet::new(),
             names: HashMap::new(),
+            fit_requested: false,
+            last_transform: None,
         }
     }
 }
@@ -278,23 +286,11 @@ pub fn node_graph_panel(
     reconcile(&mut graph, desired);
     rebuild_wires(&mut graph, &bindings);
 
-    // Precompute the live value of every output pin (the Simulink "watch the
-    // signal flow" readout): sensors through the shared reader, params/computed
-    // off the bus.
+    // Precompute the live value of every output/input pin (the Simulink
+    // "watch the signal flow" readout).
     let dt = fixed.timestep().as_secs_f32().max(1e-6);
-    let mut output_values: HashMap<GraphKey, Vec<Option<f32>>> = HashMap::new();
-    for (_, data) in graph.snarl.node_ids() {
-        let vals: Vec<Option<f32>> = match data {
-            NodeData::Body { id, .. } => body_sensors(*id)
-                .iter()
-                .map(|(_, s)| read_source(s, &index, &physics, &body_transforms, dt))
-                .collect(),
-            NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
-            NodeData::Scope => Vec::new(),
-        };
-        output_values.insert(data.key(), vals);
-    }
-    // The value driving each bound actuator/scope input (from its binding).
+    let output_values =
+        output_pin_values(&graph.snarl, &index, &physics, &body_transforms, &bus, dt);
     let input_values = binding_input_values(&bindings, &bus);
 
     // Scene selection → highlight the matching body blocks.
@@ -310,12 +306,7 @@ pub fn node_graph_panel(
         params: params.0.clone(),
         ..GraphViewer::default()
     };
-    let style = SnarlStyle {
-        // Simulink-style right-angle wires — they route around a block instead
-        // of behind it (a body's own sensor→actuator self-wire).
-        wire_style: Some(WireStyle::AxisAligned { corner_radius: 8.0 }),
-        ..SnarlStyle::new()
-    };
+    let style = themed_style();
     // A screen-bottom dock (same background-layer root pattern the right dock
     // uses, so panels claim edges rather than float).
     let mut root = egui::Ui::new(
@@ -331,6 +322,13 @@ pub fn node_graph_panel(
         .show(&mut root, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("Node Graph").strong());
+                if ui
+                    .small_button("⛶ fit")
+                    .on_hover_text("Zoom to fit the whole graph")
+                    .clicked()
+                {
+                    graph.fit_requested = true;
+                }
                 ui.weak(
                     "· right-click a body ▸ Add to node editor · drag sensor → actuator to bind",
                 );
@@ -339,10 +337,25 @@ pub fn node_graph_panel(
                 ui.weak("Empty — add a body from its right-click menu, or add params/computed.");
                 return;
             }
+            // The canvas-following dot-grid (last frame's transform), behind
+            // the blocks; then hand the view rect + fit request to the viewer.
+            if let Some(t) = graph.last_transform {
+                paint_dot_grid(ui.painter(), ui.max_rect(), t);
+            }
+            viewer.fit = graph.fit_requested;
+            viewer.view_rect = Some(ui.max_rect());
             graph.snarl.show(&mut viewer, &style, "node-graph", ui);
         });
     // Claim the dock's rect so input over it doesn't leak to the scene.
     panels.push(panel.response.rect);
+    // Persist the pan/zoom transform (for next frame's grid) and retire a
+    // fulfilled fit request.
+    if let Some(t) = viewer.captured_transform {
+        graph.last_transform = Some(t);
+    }
+    if viewer.fit_done {
+        graph.fit_requested = false;
+    }
 
     // A "locate" click selects the body in the scene (the inspector follows).
     if let Some(id) = viewer.select_body
@@ -434,6 +447,110 @@ fn fresh_param_name(params: &SignalParams) -> String {
         .map(|n| format!("param-{n}"))
         .find(|name| !params.0.iter().any(|p| &p.name == name))
         .unwrap_or_else(|| "param".to_owned())
+}
+
+/// The node-canvas theme (vvvv-flavoured): sharp corners, flat fills, thin
+/// strokes, no gradients — the faint dot-grid is painted separately, so the
+/// snarl background pattern is off.
+fn themed_style() -> SnarlStyle {
+    let node_frame = egui::Frame::new()
+        .fill(egui::Color32::from_gray(30))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(72)))
+        .corner_radius(egui::CornerRadius::same(0))
+        .inner_margin(egui::Margin::same(6));
+    let header_frame = egui::Frame::new()
+        .fill(egui::Color32::from_gray(40))
+        .corner_radius(egui::CornerRadius::same(0))
+        .inner_margin(egui::Margin::symmetric(6, 3));
+    SnarlStyle {
+        // Simulink-style right-angle wires; sharp corners (vvvv).
+        wire_style: Some(WireStyle::AxisAligned { corner_radius: 0.0 }),
+        wire_width: Some(1.5),
+        node_frame: Some(node_frame),
+        header_frame: Some(header_frame),
+        bg_frame: Some(egui::Frame::new().fill(egui::Color32::from_gray(18))),
+        bg_pattern: Some(BackgroundPattern::NoPattern),
+        pin_size: Some(4.0),
+        ..SnarlStyle::new()
+    }
+}
+
+/// The live value of every block's output pins (sensors through the shared
+/// reader, params/computed off the bus) — the "watch the signal flow" readout.
+fn output_pin_values(
+    snarl: &Snarl<NodeData>,
+    index: &IdIndex,
+    physics: &PhysicsQueries,
+    body_transforms: &Query<&Transform, With<Body>>,
+    bus: &SignalBus,
+    dt: f32,
+) -> HashMap<GraphKey, Vec<Option<f32>>> {
+    let mut values: HashMap<GraphKey, Vec<Option<f32>>> = HashMap::new();
+    for (_, data) in snarl.node_ids() {
+        let vals: Vec<Option<f32>> = match data {
+            NodeData::Body { id, .. } => body_sensors(*id)
+                .iter()
+                .map(|(_, s)| read_source(s, index, physics, body_transforms, dt))
+                .collect(),
+            NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
+            NodeData::Scope => Vec::new(),
+        };
+        values.insert(data.key(), vals);
+    }
+    values
+}
+
+/// Snarl's zoom range (its defaults) — the fit transform clamps to it.
+const MIN_SCALE: f32 = 0.2;
+const MAX_SCALE: f32 = 2.0;
+
+/// The pan/zoom transform that frames every node position into `view` — snarl's
+/// own initial-fit (expand the bounding box, center it, clamp the scale). Pure,
+/// so zoom-to-fit is unit-testable without a window. `None` when there are no
+/// nodes to frame.
+fn fit_transform(
+    node_positions: &[egui::Pos2],
+    view: egui::Rect,
+) -> Option<egui::emath::TSTransform> {
+    let mut bb = egui::Rect::NOTHING;
+    for &p in node_positions {
+        bb.extend_with(p);
+    }
+    if !bb.is_finite() {
+        return None;
+    }
+    let bb = bb.expand(80.0); // node bodies extend past their top-left anchor
+    let scaling = (view.width() / bb.width())
+        .min(view.height() / bb.height())
+        .clamp(MIN_SCALE, MAX_SCALE);
+    let translation = view.center().to_vec2() - scaling * bb.center().to_vec2();
+    Some(egui::emath::TSTransform {
+        scaling,
+        translation,
+    })
+}
+
+/// Paints a faint dot-grid over `rect` aligned to `t`, so the dots pan and zoom
+/// with the canvas (the vvvv graph-paper feel). A power-of-two level-of-detail
+/// keeps the on-screen dot spacing — and the dot count — bounded at any zoom.
+fn paint_dot_grid(painter: &egui::Painter, rect: egui::Rect, t: egui::emath::TSTransform) {
+    let mut spacing = 40.0_f32; // graph-space px between dots
+    while spacing * t.scaling < 16.0 {
+        spacing *= 2.0; // LOD: never denser than ~16px on screen
+    }
+    let inv = t.inverse();
+    let top_left = inv.mul_pos(rect.left_top());
+    let bottom_right = inv.mul_pos(rect.right_bottom());
+    let dot = egui::Color32::from_gray(128).gamma_multiply(0.18);
+    let mut gx = (top_left.x / spacing).floor() * spacing;
+    while gx <= bottom_right.x {
+        let mut gy = (top_left.y / spacing).floor() * spacing;
+        while gy <= bottom_right.y {
+            painter.circle_filled(t.mul_pos(egui::pos2(gx, gy)), 1.0, dot);
+            gy += spacing;
+        }
+        gx += spacing;
+    }
 }
 
 /// Builds the desired block set: a node per **explicitly added** body or body
@@ -627,6 +744,15 @@ struct GraphViewer {
     /// A body block whose "locate" button was clicked — select it in the
     /// scene (block → object → inspector, the reverse of the highlight).
     select_body: Option<StableId>,
+    /// Whether a zoom-to-fit was requested this frame (from the header button).
+    fit: bool,
+    /// The snarl canvas rect, set before `show` so `current_transform` can fit
+    /// the graph into it.
+    view_rect: Option<egui::Rect>,
+    /// The pan/zoom transform snarl used this frame (for the dot-grid).
+    captured_transform: Option<egui::emath::TSTransform>,
+    /// Whether the fit actually ran (so the request flag can be cleared).
+    fit_done: bool,
     /// In-canvas authoring requests (applied by the system).
     add_param: bool,
     /// Add a computed/modulation block from a template op.
@@ -710,6 +836,25 @@ fn pin_label(name: &str, value: Option<f32>) -> String {
 impl SnarlViewer<NodeData> for GraphViewer {
     fn title(&mut self, node: &NodeData) -> String {
         node.title()
+    }
+
+    fn current_transform(
+        &mut self,
+        to_global: &mut egui::emath::TSTransform,
+        snarl: &mut Snarl<NodeData>,
+    ) {
+        // Fulfil a pending zoom-to-fit before capturing the transform.
+        if self.fit
+            && let Some(view) = self.view_rect
+        {
+            let positions: Vec<egui::Pos2> = snarl.nodes_pos().map(|(pos, _)| pos).collect();
+            if let Some(t) = fit_transform(&positions, view) {
+                *to_global = t;
+                self.fit_done = true;
+            }
+        }
+        // Remember it so next frame's dot-grid aligns to the canvas.
+        self.captured_transform = Some(*to_global);
     }
 
     fn node_frame(
@@ -1339,6 +1484,29 @@ mod tests {
         assert_eq!(fresh_param_name(&params), "param-1");
         params.0.push(crate::signal::SignalParam::unit("param-1"));
         assert_eq!(fresh_param_name(&params), "param-2");
+    }
+
+    #[test]
+    fn zoom_to_fit_centers_the_graph_and_clamps_the_scale() {
+        let view = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 300.0));
+        // No nodes → nothing to fit.
+        assert!(fit_transform(&[], view).is_none());
+
+        // Two blocks; the fit maps their (expanded) bbox centre to the view
+        // centre and never exceeds snarl's zoom range.
+        let positions = [egui::pos2(-100.0, -50.0), egui::pos2(300.0, 150.0)];
+        let t = fit_transform(&positions, view).expect("some nodes → a transform");
+        let bb_center = egui::pos2(100.0, 50.0); // midpoint of the two
+        let mapped = t.mul_pos(bb_center);
+        assert!(
+            (mapped - view.center()).length() < 0.01,
+            "bbox centre → view centre"
+        );
+        assert!(
+            (MIN_SCALE..=MAX_SCALE).contains(&t.scaling),
+            "scale clamped to snarl's range ({})",
+            t.scaling
+        );
     }
 
     #[test]
