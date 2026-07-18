@@ -16,6 +16,7 @@ pub mod dock;
 pub mod inspector;
 pub mod joint_inspector;
 pub mod labels;
+pub mod menu;
 pub mod node_graph;
 pub mod plot;
 pub mod ports;
@@ -75,9 +76,11 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<signals::SignalsPanel>();
         app.init_resource::<node_graph::NodeGraph>();
         app.init_resource::<PanelRects>();
+        app.init_resource::<menu::AboutWindow>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
+                menu::menu_bar,
                 toolbar::toolbar,
                 view_cube::view_cube,
                 dock::right_dock,
