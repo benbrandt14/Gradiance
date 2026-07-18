@@ -88,6 +88,7 @@ pub fn sensor_readouts(
                         name: format!("{label}@{id:.4}"),
                         source: source.clone(),
                         map: SignalMap::default(),
+                        curve: None,
                         gradient: GradientSpec::default(),
                         sink: SignalSink::Plot,
                     }),

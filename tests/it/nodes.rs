@@ -142,6 +142,7 @@ fn duplicating_a_body_copies_its_attached_tracer_and_bindings() {
             name: "speed".into(),
             source: SignalSource::Speed(body_id),
             map: SignalMap::default(),
+            curve: None,
             gradient: gradiance::signal::GradientSpec::default(),
             sink: SignalSink::Fill(body_id),
         });
@@ -225,6 +226,7 @@ fn a_speed_to_fill_binding_tints_the_target_body() {
                 in_min: 0.0,
                 in_max: 200.0,
             },
+            curve: None,
             gradient: GradientSpec::Turbo,
             sink: SignalSink::Fill(b_id),
         });
@@ -271,6 +273,7 @@ fn a_pos_x_to_tracer_binding_drives_the_trail_channel() {
                 in_min: 0.0,
                 in_max: 500.0,
             },
+            curve: None,
             gradient: GradientSpec::Turbo,
             sink: SignalSink::TracerColor(body_id),
         });
