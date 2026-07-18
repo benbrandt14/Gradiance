@@ -1,39 +1,35 @@
-//! The bottom **dock**: an [`egui_tiles`] workspace hosting the Node Graph and
-//! the Live Plot as re-arrangeable tabs — the second `egui_tiles` surface of
-//! the desktop-app shell (`docs/ui-shell-decision.md`), sibling to the right
-//! [`dock`](crate::ui::dock).
+//! The bottom **dock**: an [`egui_tiles`] workspace hosting the Node Graph
+//! canvas — the vvvv/Simulink-style block diagram — docked to the screen's
+//! bottom edge (`docs/ui-shell-decision.md`), sibling to the right
+//! [`dock`](crate::ui::dock). It's a one-pane workspace today (the Live Plot
+//! moved to the right dock next to Signals); keeping the `egui_tiles` container
+//! lets future bottom panes (a timeline, a second canvas) dock and re-arrange
+//! here without a rewrite.
 //!
-//! Both panes stay self-contained renderers over their own state
-//! (`node_graph::node_graph_section`, `plot::plot_section`); the dock's
-//! [`Behavior`](egui_tiles::Behavior) just routes each pane to its renderer. The
-//! node-graph pane is prepared (reconcile → viewer) before the tree renders and
-//! its edits are drained after, so the config-seam mutation path is unchanged.
-//! Which panes exist tracks the open toggles: the tree is rebuilt only when that
-//! open-set changes, so a user's tab layout survives between frames. It docks the
-//! screen's bottom edge on the background layer and feeds its rect to
-//! [`PanelRects`](crate::ui::PanelRects).
+//! The pane stays a self-contained renderer over its own state
+//! (`node_graph::node_graph_section`); the dock's
+//! [`Behavior`](egui_tiles::Behavior) just routes it. The node-graph pane is
+//! prepared (reconcile → viewer) before the tree renders and its edits are
+//! drained after, so the config-seam mutation path is unchanged. It feeds its
+//! rect to [`PanelRects`](crate::ui::PanelRects) so input over it doesn't leak
+//! to the scene.
 
 use crate::signal::SignalBus;
 use crate::ui::node_graph::{self, GraphParams, GraphViewer, NodeGraph};
-use crate::ui::plot::{self, PlotConfig, PlotPanel};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use std::collections::VecDeque;
 
 /// A dockable pane of the bottom workspace.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BottomPane {
     /// The Simulink-style node-graph canvas.
     Graph,
-    /// The live time-series plotter.
-    Plot,
 }
 
 impl BottomPane {
     fn title(self) -> &'static str {
         match self {
             Self::Graph => "⬡ Node Graph",
-            Self::Plot => "Live Plot",
         }
     }
 }
@@ -47,14 +43,11 @@ pub struct BottomDock {
     shown: Vec<BottomPane>,
 }
 
-/// Routes each `egui_tiles` pane to its renderer, holding the state each needs
-/// for this frame. The node-graph viewer is `Some` exactly when the Graph pane
-/// is present.
+/// Routes each `egui_tiles` pane to its renderer. The node-graph viewer is
+/// `Some` exactly when the Graph pane is present.
 struct BottomBehavior<'a> {
     graph: &'a mut NodeGraph,
     viewer: Option<&'a mut GraphViewer>,
-    plottable: &'a [(&'a str, &'a VecDeque<f32>)],
-    plot_config: &'a mut PlotConfig,
 }
 
 impl egui_tiles::Behavior<BottomPane> for BottomBehavior<'_> {
@@ -74,43 +67,28 @@ impl egui_tiles::Behavior<BottomPane> for BottomBehavior<'_> {
                     node_graph::node_graph_section(ui, self.graph, viewer);
                 }
             }
-            BottomPane::Plot => {
-                plot::plot_section(ui, self.plottable, self.plot_config);
-            }
         }
         egui_tiles::UiResponse::None
     }
 }
 
-/// Renders the bottom dock when the Node Graph or the Live Plot is open, as an
-/// `egui_tiles` tab workspace. Backslash toggles the plot (unless something is
-/// capturing keyboard input); the graph toggles from the toolbar / context menu.
+/// Renders the bottom dock when the Node Graph is open, as an `egui_tiles` tab
+/// workspace. The graph toggles from the toolbar / context menu.
 pub fn bottom_dock(
     mut contexts: EguiContexts,
     mut gp: GraphParams,
     bus: Res<SignalBus>,
-    mut plot: ResMut<PlotPanel>,
-    mut plot_config: ResMut<PlotConfig>,
-    keys: Res<ButtonInput<KeyCode>>,
     mut panels: ResMut<crate::ui::PanelRects>,
     mut dock: ResMut<BottomDock>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    // Toggle the plot with `\` — but not while typing (so the key reaches
-    // editors), matching the old standalone plot panel.
-    if keys.just_pressed(KeyCode::Backslash) && !ctx.egui_wants_keyboard_input() {
-        plot.toggle();
-    }
 
     // Which panes are visible, in a stable order. Rebuild the tree only when
     // this set changes, so a user's tab arrangement persists between frames.
-    let desired: Vec<BottomPane> = [
-        gp.graph.is_open().then_some(BottomPane::Graph),
-        plot.is_open().then_some(BottomPane::Plot),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
+    let desired: Vec<BottomPane> = [gp.graph.is_open().then_some(BottomPane::Graph)]
+        .into_iter()
+        .flatten()
+        .collect();
     if desired.is_empty() {
         dock.tree = None;
         dock.shown.clear();
@@ -127,20 +105,15 @@ pub fn bottom_dock(
         return Ok(());
     };
 
-    // Prepare the node-graph pane (reconcile + per-pin readouts) before render,
-    // and the plot's series list — both self-contained once built.
-    let graph_open = gp.graph.is_open();
-    let mut viewer = graph_open.then(|| node_graph::prepare(&mut gp, &bus));
-    let plottable = plot::plottable_series(&bus);
+    // Prepare the node-graph pane (reconcile + per-pin readouts) before render.
+    let mut viewer = node_graph::prepare(&mut gp, &bus);
 
     // Scope the behavior so its partial borrow of `gp` (the graph pane) ends
     // before we drain the pane's edits back into `gp` below.
     let panel_rect = {
         let mut behavior = BottomBehavior {
             graph: &mut gp.graph,
-            viewer: viewer.as_mut(),
-            plottable: &plottable,
-            plot_config: &mut plot_config,
+            viewer: Some(&mut viewer),
         };
         // egui 0.35 panels dock inside a `Ui`; build the screen-root one (the
         // same background-layer pattern the right dock uses, so it claims the
@@ -165,8 +138,6 @@ pub fn bottom_dock(
     panels.push(panel_rect);
 
     // Drain the node-graph pane's edits into the config-seam resources.
-    if let Some(viewer) = viewer {
-        node_graph::apply_pane(viewer, &mut gp);
-    }
+    node_graph::apply_pane(viewer, &mut gp);
     Ok(())
 }
