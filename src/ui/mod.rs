@@ -70,6 +70,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<depth_panel::DepthPanel>();
         app.init_resource::<console::ScriptConsole>();
         app.init_resource::<plot::PlotPanel>();
+        app.init_resource::<plot::PlotConfig>();
         app.init_resource::<probe::ProbePanel>();
         app.init_resource::<signals::SignalsPanel>();
         app.init_resource::<node_graph::NodeGraph>();

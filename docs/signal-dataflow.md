@@ -191,7 +191,9 @@ below), not a rearchitecture. What still accretes on the same seams:
    — the body tints by its speed through viridis. Adjust the domain
    drags; switch the gradient or the sink (fill / tracer / plot).
 2. Distances need two selected bodies; **named** reads a script signal.
-3. The plot panel (`\`) draws every binding's history under its bus name.
+3. The plot panel (`\`) draws every plottable signal's history under its bus
+   name; a **signals** picker toggles each series and the X axis defaults to
+   time.
 4. From a script: `(signal-set "excitement" (touch-count 0))` then bind
    *named* `excitement` to the body's fill.
 5. Right-click two bodies ▸ **Add to node editor**, open **⬡ Graph** (docks at
