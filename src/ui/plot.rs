@@ -64,9 +64,14 @@ pub fn plot_panel(
         .open(&mut open)
         .default_width(320.0)
         .show(ctx, |ui| {
+            // Every named signal with a recorded history — params, computed,
+            // and plot-sink bindings. The canonical sensor-ref names
+            // (`speed@<uuid>`) that `publish_sensor_refs` puts on the bus so a
+            // modulation block can read a body sensor are internal plumbing,
+            // not user-chosen series, so they stay out of the plot.
             let bound: Vec<(&str, &VecDeque<f32>)> = bus
                 .entries()
-                .filter(|(_, e)| e.history().len() >= 2)
+                .filter(|(name, e)| e.history().len() >= 2 && is_plottable(name))
                 .map(|(name, e)| (name, e.history()))
                 .collect();
             if bound.is_empty() {
@@ -85,6 +90,14 @@ pub fn plot_panel(
         });
     panel.open = open;
     Ok(())
+}
+
+/// Whether a bus signal is a user-facing series the plot should draw. Params,
+/// computed signals, and plot-sink bindings qualify; the canonical sensor-ref
+/// names (`speed@<uuid>`) `publish_sensor_refs` surfaces for modulation
+/// operands are internal plumbing and stay out of the plot.
+fn is_plottable(name: &str) -> bool {
+    crate::signal::SignalSource::from_bus_name(name).is_none()
 }
 
 /// Hand-draws one signal as a line plot auto-scaled to its own min/max.
@@ -140,4 +153,21 @@ pub fn draw_series(ui: &mut egui::Ui, label: &str, data: &VecDeque<f32>, color: 
         font,
         egui::Color32::GRAY,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_plottable;
+    use crate::core::ids::StableId;
+    use crate::signal::SignalSource;
+
+    #[test]
+    fn sensor_ref_names_stay_out_of_the_plot() {
+        // User-facing named signals plot; internal sensor-ref plumbing doesn't.
+        assert!(is_plottable("speed"));
+        assert!(is_plottable("my-param"));
+        assert!(is_plottable("wire-1"));
+        let sensor_ref = SignalSource::Speed(StableId::new()).bus_name().unwrap();
+        assert!(!is_plottable(&sensor_ref), "speed@<uuid> is plumbing");
+    }
 }
