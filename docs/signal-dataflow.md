@@ -140,8 +140,9 @@ double-click-to-configure, all editing the same authored state.
 
 A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
 body's actuator input creates one (`source → sink`), and dragging the wire off
-deletes it. Blocks show their **type** ("body" / `⊙ param` / `ƒ signal`) with an
-optional custom name (an editable field in a body block); a body is added
+deletes it. Blocks show their **type** — a body defaults to its **shape kind** (box /
+circle / polygon …) so several bodies stay distinct, `⊙ param`, `ƒ signal` —
+with an optional custom name (an editable field in a body block); a body is added
 explicitly via its right-click **Add to node editor** — bodies never auto-appear
 on selection, so the canvas stays uncluttered — and the selected body's block is
 highlighted. Selection is bidirectional: a body block's **⌖ locate** button
