@@ -430,6 +430,62 @@ governance").
 - Discipline it enforces: each new plottable quantity is *added to the query
   surface*, which is exactly what makes it scriptable (a sensor) for free.
 
+## UI overhaul & desktop-app shell (active)
+
+Gradiance is now a real desktop app, not a debug overlay — this track treats the
+editor chrome as a first-class surface. **Framework decision: stay on egui** (see
+`docs/ui-shell-decision.md`). The central artifact is a live wgpu viewport, and
+egui is the only mature UI that composes with in-process wgpu rendering without a
+second runtime; Rerun (egui + `egui_tiles` + wgpu) is the existence proof that
+egui scales to a large, dense, viewport-centric desktop tool. Alternatives
+(web/Tauri, Slint, Dioxus) would each require embedding a live GPU viewport in a
+foreign UI runtime — the single hardest integration and a full rewrite — so they
+stay off-table unless a concrete wall appears. "Managing the larger app" is
+instead engineering hygiene: an **app-shell architecture** (view registry +
+menu/action system + persisted layout) and, as compile times bite, a **workspace
+crate split** (`gradiance-core` / `-physics` / `-ui`), which the existing module
+boundary test already prepares.
+
+- **Panel input independence** *(landed)*: the node graph and right dock capture
+  their own pointer/scroll/resize (rects fed into `PointerOverUi`) instead of
+  leaking to the scene — independent pan/zoom falls out.
+- **Node-editor feel** *(landed)*: header zoom-to-fit, a vvvv-flavoured theme
+  (sharp corners, flat fills, thin wires), and a faint dot-grid that pans and
+  zooms with the canvas.
+- **Configurable plotter** *(landed)*: a signals picker (per-series show/hide)
+  and a time X-axis; the enum leaves room for XY / other-signal axes.
+- **Dockable/tabbable shell + menu bar** *(planned)*: an `egui_tiles`-based
+  workspace (Rerun's tiling lib, egui-0.35-compatible) hosting Node Graph /
+  Signals / Plot / Inspector as dock tabs, with a File/Edit/View/Help menu bar
+  and persisted layout. Needs bevy camera-viewport management (the scene renders
+  under egui, so the dock leaves a central region for it) — its own PR.
+- **Lightroom-style curve editor** *(planned; see below)*.
+
+### Lightroom-style curve editor
+
+A reusable, direct-manipulation **curve widget** — draggable control points with
+tangent handles over a piecewise curve (linear / monotone-cubic / bezier;
+presets: linear, ease, S-curve) — that shapes any scalar response. It accretes on
+the **existing signal-dataflow seams** (no new mutation path), and every use
+**lowers once to the Tier-B `script::kernel`** as a segment-evaluated,
+allocation-free tape, so the authoring editor never runs in the per-frame loop
+(the two-tier PERF rule, like `SignalExpr`/`BlockOp` today).
+
+- **Binding transfer**: generalises the linear `SignalMap {in_min, in_max}` on a
+  `SignalBinding` into an arbitrary response curve (source → **curve** → t →
+  gradient → sink). A straight two-point curve *is* today's linear map, so it is
+  backward-compatible; edited in the body block's footer next to the gradient.
+- **Curve modulation block**: a new `BlockOp::Curve` in the node canvas — one
+  input → curve → output — sitting beside Gain/Sum/… and lowering through the
+  same `to_expr`/kernel path.
+- **Parameter & envelope shaping**: a param or `t` driven through a curve (an
+  envelope), the "vary nonlinearly" hook the M20 strut knobs already anticipate.
+- **Persistence**: serializable control points inside the config-seam
+  (`SignalBindings`/`ComputedSignals`), serde-defaulted so old RON loads;
+  never undo-recorded, never in the hot path.
+- **UI reuse**: the one widget embeds in the binding footer, the curve block, and
+  param editors — a concrete payoff of the shell's shared-view direction.
+
 ## M21 — CSG modeling & pieces
 
 - Boolean operations between bodies via context menu (join / subtract /
@@ -539,8 +595,9 @@ The former backlog lines below are now subsumed by that record:
 
 ## Backlog / later
 
-- Curve pickers (lightroom-style), symbolic & equation input — see the scripting
-  section above and `docs/script-lisp-decision.md` (12)
+- Curve pickers (lightroom-style) — now a planned milestone item, see "UI
+  overhaul & desktop-app shell → Lightroom-style curve editor" above. Symbolic &
+  equation input — see the scripting section and `docs/script-lisp-decision.md` (12)
 - Tracers / live plotters, scripting, fluids — enabled by the read-total facade
   and Tier-B kernels in the decision record (12)
 - Investigate: load-time crash reported with a pre-M12 partial-cut save
