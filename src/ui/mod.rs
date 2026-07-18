@@ -77,6 +77,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<node_graph::NodeGraph>();
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
+        app.init_resource::<dock::RightDock>();
         app.add_systems(
             EguiPrimaryContextPass,
             (

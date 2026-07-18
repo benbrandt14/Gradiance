@@ -19,6 +19,9 @@ bevy_egui = "=0.41.0"
 # with bevy_egui (the only major node-editor crate on egui 0.35 —
 # egui_node_graph2 is stuck on 0.29). UI-only, imported in `src/ui/` only.
 egui-snarl = "=0.11.0"
+# Docking/tabbing workspace (Rerun's tiling lib; the desktop-app shell — see
+# docs/ui-shell-decision.md). Shares egui 0.35 with bevy_egui. UI-only.
+egui_tiles = "=0.16.0"
 leafwing-input-manager = "=0.21.0"
 
 # Geometry
