@@ -1014,6 +1014,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
                     name: self.fresh_wire_name(),
                     source,
                     map: SignalMap::default(),
+                    curve: None,
                     gradient: GradientSpec::default(),
                     sink,
                 });
@@ -1406,6 +1407,7 @@ mod tests {
             name: "w".into(),
             source: SignalSource::Speed(a),
             map: SignalMap::default(),
+            curve: None,
             gradient: GradientSpec::default(),
             sink: SignalSink::Fill(b),
         });
@@ -1446,6 +1448,7 @@ mod tests {
             name: "speed@x".into(),
             source: SignalSource::Speed(a),
             map: SignalMap::default(),
+            curve: None,
             gradient: GradientSpec::default(),
             sink: SignalSink::Plot,
         });
@@ -1470,6 +1473,7 @@ mod tests {
             name: "wire".into(),
             source: SignalSource::Speed(a),
             map: SignalMap::default(),
+            curve: None,
             gradient: GradientSpec::default(),
             sink: SignalSink::Fill(b),
         });
@@ -1535,6 +1539,7 @@ mod tests {
             name: "wire-1".into(),
             source: SignalSource::Speed(id),
             map: SignalMap::default(),
+            curve: None,
             gradient: GradientSpec::default(),
             sink: SignalSink::Plot,
         };

@@ -21,9 +21,17 @@ computed (defsignal) ┘        ▲                          └─▶ (future a
   map + gradient into one sink:
 
 ```
-source (read) ──▶ map [in_min, in_max] → t ──▶ gradient(t) ──▶ sink (derived write)
-                          └────────────────── value ─────────▶ SignalBus (name → value + history)
+source (read) ──▶ map [in_min, in_max] → t ──▶ [curve] → t' ──▶ gradient(t') ──▶ sink (derived write)
+                          └────────────────── value ────────────────────────▶ SignalBus (name → value + history)
 ```
+
+The optional **curve** (`SignalBinding.curve`, serde-defaulted so old scenes
+load) is the Lightroom-style response transfer — control points reshaping the
+normalized `t ∈ [0, 1]` before the gradient (`SignalBinding::transfer` is the
+one place map + curve compose). The default identity line is today's straight
+map; the curve *editor widget* is the upcoming UI (roadmap "Lightroom-style
+curve editor"), with the same `Curve` also lowering to a `BlockOp::Curve`
+modulation block.
 
 - **Params** (`defparam name value min max`) are tunable knobs — an
   auto-slider in the Signals dock. Each publishes its value on the bus

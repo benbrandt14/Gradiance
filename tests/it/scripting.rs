@@ -308,6 +308,7 @@ fn a_script_drives_color_from_touch_count() {
                 in_min: 0.0,
                 in_max: 4.0,
             },
+            curve: None,
             gradient: gradiance::signal::GradientSpec::default(),
             sink: SignalSink::Fill(box_id),
         });

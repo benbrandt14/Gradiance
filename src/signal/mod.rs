@@ -304,7 +304,7 @@ pub fn evaluate_signals(
         };
         bus.publish(&binding.name, value, recording);
 
-        let color = binding.gradient.at(binding.map.normalize(value));
+        let color = binding.gradient.at(binding.transfer(value));
         match &binding.sink {
             SignalSink::Fill(id) => {
                 if let Some(entity) = index.entity(*id) {

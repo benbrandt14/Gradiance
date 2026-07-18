@@ -293,6 +293,7 @@ fn add_buttons(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[Sta
                     name,
                     source,
                     map: SignalMap::default(),
+                    curve: None,
                     gradient: GradientSpec::default(),
                     sink: SignalSink::Fill(target),
                 });

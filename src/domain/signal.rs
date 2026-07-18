@@ -72,6 +72,110 @@ impl SignalMap {
     }
 }
 
+/// How a [`Curve`] interpolates between its control points.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Reflect)]
+pub enum CurveInterp {
+    /// Straight segments between points.
+    #[default]
+    Linear,
+    /// A smooth, non-overshooting monotone-cubic spline (the Lightroom feel).
+    Smooth,
+}
+
+/// An authored **response curve** reshaping a normalized input `x ∈ [0, 1]` to
+/// an output `y ∈ [0, 1]` — the Lightroom-style transfer the curve editor edits
+/// and the signal path applies after [`SignalMap`]. Control points are `(x, y)`
+/// ascending in `x`; the default identity line `(0,0)–(1,1)` is a no-op (today's
+/// straight map), so it is fully backward-compatible. Pure; the hot path lowers
+/// it to the Tier-B kernel (later), the cold binding path calls [`eval`](Self::eval).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
+pub struct Curve {
+    /// Control points `(x, y)`, ascending in `x`; at least two.
+    pub points: Vec<Vec2>,
+    /// How to interpolate between them.
+    pub interp: CurveInterp,
+}
+
+impl Default for Curve {
+    fn default() -> Self {
+        Self {
+            points: vec![Vec2::ZERO, Vec2::ONE],
+            interp: CurveInterp::Linear,
+        }
+    }
+}
+
+impl Curve {
+    /// Evaluates the curve at `x`, clamped to the point range and to `[0, 1]`.
+    /// Degenerate curves (fewer than two points) fall back to the identity.
+    pub fn eval(&self, x: f32) -> f32 {
+        let pts = &self.points;
+        match pts.len() {
+            0 => return x.clamp(0.0, 1.0),
+            1 => return pts[0].y.clamp(0.0, 1.0),
+            _ => {}
+        }
+        // Clamp outside the authored domain to the end points (flat holds).
+        if x <= pts[0].x {
+            return pts[0].y.clamp(0.0, 1.0);
+        }
+        if x >= pts[pts.len() - 1].x {
+            return pts[pts.len() - 1].y.clamp(0.0, 1.0);
+        }
+        // The segment [i, i+1] bracketing x.
+        let i = pts.iter().rposition(|p| p.x <= x).unwrap_or(0);
+        let (p0, p1) = (pts[i], pts[i + 1]);
+        let h = p1.x - p0.x;
+        if h.abs() < f32::EPSILON {
+            return p0.y.clamp(0.0, 1.0);
+        }
+        let s = (x - p0.x) / h;
+        let y = match self.interp {
+            CurveInterp::Linear => p0.y + s * (p1.y - p0.y),
+            CurveInterp::Smooth => {
+                // Monotone-cubic (Fritsch–Carlson) Hermite over this segment.
+                let m0 = self.tangent_at(i);
+                let m1 = self.tangent_at(i + 1);
+                let (s2, s3) = (s * s, s * s * s);
+                let h00 = 2.0 * s3 - 3.0 * s2 + 1.0;
+                let h10 = s3 - 2.0 * s2 + s;
+                let h01 = -2.0 * s3 + 3.0 * s2;
+                let h11 = s3 - s2;
+                h00 * p0.y + h10 * h * m0 + h01 * p1.y + h11 * h * m1
+            }
+        };
+        y.clamp(0.0, 1.0)
+    }
+
+    /// The monotonicity-preserving tangent (slope) at control point `i`, from
+    /// its adjacent secants (Fritsch–Carlson). Local, so `eval` stays cheap.
+    fn tangent_at(&self, i: usize) -> f32 {
+        let pts = &self.points;
+        let secant = |a: usize, b: usize| {
+            let dx = pts[b].x - pts[a].x;
+            if dx.abs() < f32::EPSILON {
+                0.0
+            } else {
+                (pts[b].y - pts[a].y) / dx
+            }
+        };
+        let last = pts.len() - 1;
+        if i == 0 {
+            return secant(0, 1);
+        }
+        if i == last {
+            return secant(last - 1, last);
+        }
+        let (left, right) = (secant(i - 1, i), secant(i, i + 1));
+        // A local extremum → flat tangent, so the spline can't overshoot.
+        if left * right <= 0.0 {
+            0.0
+        } else {
+            0.5 * (left + right)
+        }
+    }
+}
+
 /// A named color gradient (via the `colorgrad` crate — no reinvented
 /// wheels). Serializable so bindings persist; the node editor later swaps
 /// this for user-authored gradients through the same `at()` contract.
@@ -137,10 +241,25 @@ pub struct SignalBinding {
     pub source: SignalSource,
     /// Input domain → `[0, 1]`.
     pub map: SignalMap,
+    /// Optional response curve reshaping the normalized `t` before the gradient
+    /// (the Lightroom-style transfer). `None` is the straight identity, so old
+    /// scenes without the field load unchanged.
+    #[serde(default)]
+    pub curve: Option<Curve>,
     /// Color ramp for color sinks.
     pub gradient: GradientSpec,
     /// The derived write.
     pub sink: SignalSink,
+}
+
+impl SignalBinding {
+    /// The final transfer `t ∈ [0, 1]`: the normalized value reshaped by the
+    /// optional [`Curve`]. The single place the map + curve compose, shared by
+    /// the evaluator and any preview.
+    pub fn transfer(&self, value: f32) -> f32 {
+        let t = self.map.normalize(value);
+        self.curve.as_ref().map_or(t, |c| c.eval(t))
+    }
 }
 
 /// The signal graph: every active binding. Config-seam resource (UI edits
@@ -243,6 +362,7 @@ pub fn remap_binding(
         name: binding.name.clone(),
         source,
         map: binding.map,
+        curve: binding.curve.clone(),
         gradient: binding.gradient,
         sink,
     })
@@ -627,6 +747,78 @@ mod tests {
             in_max: 5.0,
         };
         assert!(degenerate.normalize(9.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_default_curve_is_the_identity() {
+        let id = Curve::default();
+        for x in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            assert!((id.eval(x) - x).abs() < 1e-6, "identity at {x}");
+        }
+    }
+
+    #[test]
+    fn a_linear_curve_interpolates_and_holds_at_the_ends() {
+        // An inverting ramp with a kink: (0,1)-(0.5,0.5)-(1,0).
+        let curve = Curve {
+            points: vec![
+                Vec2::new(0.0, 1.0),
+                Vec2::new(0.5, 0.5),
+                Vec2::new(1.0, 0.0),
+            ],
+            interp: CurveInterp::Linear,
+        };
+        assert!((curve.eval(0.0) - 1.0).abs() < 1e-6);
+        assert!((curve.eval(0.25) - 0.75).abs() < 1e-6, "lerp in segment 0");
+        assert!((curve.eval(0.5) - 0.5).abs() < 1e-6, "the kink");
+        assert!((curve.eval(0.75) - 0.25).abs() < 1e-6, "lerp in segment 1");
+        // Outside the authored x-range holds flat at the end value.
+        assert!((curve.eval(-1.0) - 1.0).abs() < 1e-6);
+        assert!(curve.eval(2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_smooth_curve_passes_through_points_and_never_overshoots() {
+        // A monotone step; the smooth spline must stay within [0, 1] (no
+        // Fritsch–Carlson overshoot) and hit every control point.
+        let curve = Curve {
+            points: vec![
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.5, 0.9),
+                Vec2::new(1.0, 1.0),
+            ],
+            interp: CurveInterp::Smooth,
+        };
+        for p in &curve.points {
+            assert!((curve.eval(p.x) - p.y).abs() < 1e-5, "passes through {p:?}");
+        }
+        for i in 0..=100 {
+            let y = curve.eval(i as f32 / 100.0);
+            assert!((0.0..=1.0).contains(&y), "no overshoot at {i} → {y}");
+        }
+    }
+
+    #[test]
+    fn a_binding_composes_its_map_then_curve() {
+        // Map [0,400] then an inverting curve: a fast value → a low transfer.
+        let binding = SignalBinding {
+            name: "b".into(),
+            source: SignalSource::Speed(StableId::new()),
+            map: SignalMap {
+                in_min: 0.0,
+                in_max: 400.0,
+            },
+            curve: Some(Curve {
+                points: vec![Vec2::new(0.0, 1.0), Vec2::new(1.0, 0.0)],
+                interp: CurveInterp::Linear,
+            }),
+            gradient: GradientSpec::default(),
+            sink: SignalSink::Plot,
+        };
+        // 400 → normalized 1.0 → curve → 0.0; 0 → 0.0 → curve → 1.0.
+        assert!(binding.transfer(400.0).abs() < 1e-6);
+        assert!((binding.transfer(0.0) - 1.0).abs() < 1e-6);
+        assert!((binding.transfer(200.0) - 0.5).abs() < 1e-6, "midpoint");
     }
 
     #[test]
