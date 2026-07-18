@@ -433,18 +433,17 @@ governance").
 ## UI overhaul & desktop-app shell (active)
 
 Gradiance is now a real desktop app, not a debug overlay — this track treats the
-editor chrome as a first-class surface. **Framework decision: stay on egui** (see
-`docs/ui-shell-decision.md`). The central artifact is a live wgpu viewport, and
-egui is the only mature UI that composes with in-process wgpu rendering without a
-second runtime; Rerun (egui + `egui_tiles` + wgpu) is the existence proof that
-egui scales to a large, dense, viewport-centric desktop tool. Alternatives
-(web/Tauri, Slint, Dioxus) would each require embedding a live GPU viewport in a
-foreign UI runtime — the single hardest integration and a full rewrite — so they
-stay off-table unless a concrete wall appears. "Managing the larger app" is
-instead engineering hygiene: an **app-shell architecture** (view registry +
-menu/action system + persisted layout) and, as compile times bite, a **workspace
-crate split** (`gradiance-core` / `-physics` / `-ui`), which the existing module
-boundary test already prepares.
+editor chrome as a first-class surface. **Framework choice is under evaluation**
+(`docs/ui-shell-decision.md`): the egui app-shell is the low-risk default and
+what feature work builds on now, but a richer **hybrid** (a Slint/wgpu native
+shell compositing the Bevy viewport) is on the table and gated behind a
+time-boxed spike rather than assumed away. Independent of that answer, the
+highest-leverage growth work is engineering hygiene — a **workspace crate split**
+(`gradiance-core` / `-physics` / `-script` / `-ui` + app binary) to cut
+incremental compile times and enforce boundaries at the crate level, plus an
+**app-shell architecture** (view registry + menu/action system + persisted
+layout) so any later framework move is a port, not a rewrite. The existing
+module boundary test already puts the seams where crate edges would go.
 
 - **Panel input independence** *(landed)*: the node graph and right dock capture
   their own pointer/scroll/resize (rects fed into `PointerOverUi`) instead of
