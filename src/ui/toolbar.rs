@@ -83,13 +83,18 @@ pub fn toolbar(
     mut redo: MessageWriter<RedoIntent>,
     mut panels: Panels,
     mut rig: ResMut<crate::interaction::camera::CameraRig>,
+    panel_rects: Res<crate::ui::PanelRects>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
+    // Sit below the menu bar (it pushed its rect first this frame) so the
+    // transport strip doesn't cover the File/Edit/View/Help menus.
+    let viewport = ctx.viewport_rect();
+    let top = panel_rects.top_inset(viewport) - viewport.top() + 4.0;
     egui::Window::new("transport")
         .title_bar(false)
         .resizable(false)
-        .anchor(egui::Align2::LEFT_TOP, [8.0, 8.0])
+        .anchor(egui::Align2::LEFT_TOP, [8.0, top])
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let playing = *game.get() == GameState::Playing;

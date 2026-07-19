@@ -49,6 +49,33 @@ impl PanelRects {
     pub fn push(&mut self, rect: egui::Rect) {
         self.0.push(rect);
     }
+
+    /// The bottom `y` of a full-width panel docked to the top edge (the menu
+    /// bar), or the viewport top when none — so floating chrome can sit below
+    /// it instead of under it. Only meaningful once the top panel has pushed
+    /// its rect this frame.
+    pub fn top_inset(&self, viewport: egui::Rect) -> f32 {
+        self.0
+            .iter()
+            .filter(|r| {
+                (r.top() - viewport.top()).abs() < 2.0 && r.width() > viewport.width() * 0.8
+            })
+            .map(egui::Rect::bottom)
+            .fold(viewport.top(), f32::max)
+    }
+
+    /// The left `x` of a panel docked to the right edge (the right dock), or the
+    /// viewport right when none — so bottom overlays and the view cube can stay
+    /// left of it. Only meaningful once the right panel has pushed its rect.
+    pub fn right_inset(&self, viewport: egui::Rect) -> f32 {
+        self.0
+            .iter()
+            .filter(|r| {
+                (r.right() - viewport.right()).abs() < 2.0 && r.left() > viewport.center().x
+            })
+            .map(egui::Rect::left)
+            .fold(viewport.right(), f32::min)
+    }
 }
 
 /// Whether `pos` falls inside any recorded background-layer panel rect — pure,
@@ -87,8 +114,8 @@ impl Plugin for GradianceUiPlugin {
             (
                 menu::menu_bar,
                 toolbar::toolbar,
-                view_cube::view_cube,
                 dock::right_dock,
+                view_cube::view_cube,
                 labels::draw_workspace_labels,
                 inspector::inspector_window,
                 joint_inspector::joint_inspector,

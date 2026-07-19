@@ -35,10 +35,9 @@ pub enum Pane {
     Tree,
     /// Depth-band editor for the selection.
     Depth,
-    /// Signal bindings / params / computed.
+    /// Signal bindings / params / computed **and** the live plotter — one
+    /// merged pane (the signal dataflow and its readout live together).
     Signals,
-    /// The live time-series plotter (drawn from the signal bus).
-    Plot,
     /// The scripting REPL.
     Console,
 }
@@ -48,8 +47,7 @@ impl Pane {
         match self {
             Self::Tree => "Outliner",
             Self::Depth => "Depth",
-            Self::Signals => "Signals",
-            Self::Plot => "Live Plot",
+            Self::Signals => "Signals + Plot",
             Self::Console => "Script",
         }
     }
@@ -95,6 +93,8 @@ struct DockBehavior<'a, 'we, 'ws, 'ss> {
     selection: &'a Selection,
     outliner: &'a OutlinerModel,
     outliner_click: &'a mut Option<OutlinerClick>,
+    show_signals: bool,
+    show_plot: bool,
     plottable: &'a [(&'a str, &'a VecDeque<f32>)],
     plot_config: &'a mut PlotConfig,
     console: &'a mut ScriptConsole,
@@ -123,16 +123,23 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
                 depth_panel::depth_section(ui, self.depth, self.rows, self.edits, height);
             }
             Pane::Signals => {
-                signals::signals_section(
-                    ui,
-                    self.signals,
-                    self.selected,
-                    self.selection,
-                    self.edits,
-                );
-            }
-            Pane::Plot => {
-                plot::plot_section(ui, self.plottable, self.plot_config);
+                // One merged pane: the bindings/params/computed above, the live
+                // plotter below. Each half honors its own open toggle.
+                if self.show_signals {
+                    signals::signals_section(
+                        ui,
+                        self.signals,
+                        self.selected,
+                        self.selection,
+                        self.edits,
+                    );
+                }
+                if self.show_plot {
+                    if self.show_signals {
+                        ui.separator();
+                    }
+                    plot::plot_section(ui, self.plottable, self.plot_config);
+                }
             }
             Pane::Console => {
                 console::console_section(ui, self.console, self.inputs, self.registry, self.log);
@@ -208,8 +215,7 @@ pub fn right_dock(
     let desired: Vec<Pane> = [
         op.panel.is_open().then_some(Pane::Tree),
         panel.open.then_some(Pane::Depth),
-        signals_panel.is_open().then_some(Pane::Signals),
-        plot.panel.is_open().then_some(Pane::Plot),
+        (signals_panel.is_open() || plot.panel.is_open()).then_some(Pane::Signals),
         console.console.is_open().then_some(Pane::Console),
     ]
     .into_iter()
@@ -260,6 +266,8 @@ pub fn right_dock(
             selection: &selection,
             outliner: &outliner_model,
             outliner_click: &mut outliner_click,
+            show_signals: signals_panel.is_open(),
+            show_plot: plot.panel.is_open(),
             plottable: &plottable,
             plot_config: &mut plot.config,
             console: &mut console.console,

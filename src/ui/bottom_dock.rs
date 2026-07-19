@@ -117,13 +117,17 @@ pub fn bottom_dock(
         };
         // egui 0.35 panels dock inside a `Ui`; build the screen-root one (the
         // same background-layer pattern the right dock uses, so it claims the
-        // edge).
+        // edge). Stop at the right dock's left edge so the two don't overlap in
+        // the bottom-right corner (the right dock pushed its rect first).
+        let viewport = ctx.viewport_rect();
+        let right = panels.right_inset(viewport);
+        let area = egui::Rect::from_min_max(viewport.min, egui::pos2(right, viewport.max.y));
         let mut root = egui::Ui::new(
             ctx.clone(),
             "bottom-dock".into(),
             egui::UiBuilder::new()
                 .layer_id(egui::LayerId::background())
-                .max_rect(ctx.viewport_rect()),
+                .max_rect(area),
         );
         egui::Panel::bottom("bottom-dock-panel")
             .resizable(true)
