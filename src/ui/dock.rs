@@ -1,16 +1,19 @@
-//! The right **dock**: an [`egui_tiles`] workspace hosting the Depth, Signals,
-//! and Script-console sections as re-arrangeable tabs — the first
-//! `egui_tiles` surface of the desktop-app shell (`docs/ui-shell-decision.md`).
+//! The right **dock**: an [`egui_tiles`] workspace hosting the Outliner, Depth,
+//! Signals+Plot, Properties, and Script-console sections as re-arrangeable tabs
+//! — the first `egui_tiles` surface of the desktop-app shell
+//! (`docs/ui-shell-decision.md`).
 //!
-//! The sections (`depth_panel::depth_section`, `signals::signals_section`,
-//! `console::console_section`) stay self-contained renderers over their own
-//! state; the dock's [`Behavior`](egui_tiles::Behavior) just routes each pane
-//! to its renderer. Which panes exist tracks the open toggles: the tree is
+//! The sections stay self-contained renderers over their own state; the dock's
+//! [`Behavior`](egui_tiles::Behavior) just routes each pane to its renderer. The
+//! Properties pane hosts the body inspector, and its [`BodyProps`] bundle is
+//! also where the dock keeps its single `PropertyEditIntent` writer and
+//! `SignalBindings` (the Depth and Signals sections edit through them), so the
+//! one dock system holds exactly one of each. Which panes exist tracks the open
+//! toggles: the tree is
 //! rebuilt only when that open-set changes, so a user's tab layout survives
 //! between frames. It docks the screen's right edge on the background layer and
 //! feeds its rect to [`PanelRects`](crate::ui::PanelRects).
 
-use crate::command::intent::PropertyEditIntent;
 use crate::core::ids::StableId;
 use crate::domain::Body;
 use crate::domain::appearance::Appearance;
@@ -20,6 +23,7 @@ use crate::script::bridge::{OperationRegistry, ScriptInputs, ScriptLog};
 use crate::signal::SignalBus;
 use crate::ui::console::{self, ScriptConsole};
 use crate::ui::depth_panel::{self, DepthPanel};
+use crate::ui::inspector::{self, BodyProps, InspectorPanel};
 use crate::ui::outliner::{self, OutlinerClick, OutlinerModel, OutlinerParams};
 use crate::ui::plot::{self, PlotConfig, PlotPanel};
 use crate::ui::signals::{self, SignalsDock, SignalsPanel};
@@ -38,6 +42,8 @@ pub enum Pane {
     /// Signal bindings / params / computed **and** the live plotter — one
     /// merged pane (the signal dataflow and its readout live together).
     Signals,
+    /// The property inspector for the current selection.
+    Properties,
     /// The scripting REPL.
     Console,
 }
@@ -48,6 +54,7 @@ impl Pane {
             Self::Tree => "Outliner",
             Self::Depth => "Depth",
             Self::Signals => "Signals + Plot",
+            Self::Properties => "Properties",
             Self::Console => "Script",
         }
     }
@@ -84,10 +91,13 @@ pub struct RightDock {
 /// Routes each `egui_tiles` pane to its section renderer, holding the state the
 /// renderers need for this frame. The writer and the signals bundle carry
 /// independent system lifetimes, so each gets its own.
-struct DockBehavior<'a, 'we, 'ws, 'ss> {
+struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss> {
     depth: &'a mut DepthPanel,
     rows: &'a [(StableId, DepthBand, egui::Color32)],
-    edits: &'a mut MessageWriter<'we, PropertyEditIntent>,
+    /// The property inspector's read/write bundle — also the single
+    /// `PropertyEditIntent` writer and `SignalBindings` the Depth and Signals
+    /// sections edit through (so the dock host holds exactly one of each).
+    props: &'a mut BodyProps<'wp, 'sp>,
     signals: &'a mut SignalsDock<'ws, 'ss>,
     selected: &'a [StableId],
     selection: &'a Selection,
@@ -103,7 +113,7 @@ struct DockBehavior<'a, 'we, 'ws, 'ss> {
     log: &'a ScriptLog,
 }
 
-impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
+impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_> {
     fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
         pane.title().into()
     }
@@ -120,7 +130,13 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
                 outliner::outliner_section(ui, self.outliner, self.outliner_click);
             }
             Pane::Depth => {
-                depth_panel::depth_section(ui, self.depth, self.rows, self.edits, height);
+                depth_panel::depth_section(
+                    ui,
+                    self.depth,
+                    self.rows,
+                    &mut self.props.edits,
+                    height,
+                );
             }
             Pane::Signals => {
                 // One merged pane: the bindings/params/computed above, the live
@@ -129,9 +145,10 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
                     signals::signals_section(
                         ui,
                         self.signals,
+                        &mut self.props.bindings,
                         self.selected,
                         self.selection,
-                        self.edits,
+                        &mut self.props.edits,
                     );
                 }
                 if self.show_plot {
@@ -140,6 +157,9 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
                     }
                     plot::plot_section(ui, self.plottable, self.plot_config);
                 }
+            }
+            Pane::Properties => {
+                inspector::inspector_pane(ui, self.selection, self.props);
             }
             Pane::Console => {
                 console::console_section(ui, self.console, self.inputs, self.registry, self.log);
@@ -190,7 +210,8 @@ pub fn right_dock(
     ids: Query<&StableId, With<Body>>,
     bands: Query<&DepthBand, With<Body>>,
     appearances: Query<&Appearance, With<Body>>,
-    mut edits: MessageWriter<PropertyEditIntent>,
+    mut props: BodyProps,
+    inspector_panel: Res<InspectorPanel>,
     mut plot: PlotParams,
     mut console: ConsoleParams,
     mut op: OutlinerParams,
@@ -216,6 +237,7 @@ pub fn right_dock(
         op.panel.is_open().then_some(Pane::Tree),
         panel.open.then_some(Pane::Depth),
         (signals_panel.is_open() || plot.panel.is_open()).then_some(Pane::Signals),
+        inspector_panel.open.then_some(Pane::Properties),
         console.console.is_open().then_some(Pane::Console),
     ]
     .into_iter()
@@ -260,7 +282,7 @@ pub fn right_dock(
         let mut behavior = DockBehavior {
             depth: &mut panel,
             rows: &rows,
-            edits: &mut edits,
+            props: &mut props,
             signals: &mut signals,
             selected: &selected,
             selection: &selection,
