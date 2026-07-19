@@ -65,7 +65,7 @@ pub fn draw_joints(
                     draw_limit_arc(
                         &mut gizmos,
                         anchor,
-                        pose_a.rot,
+                        def.limit_reference_angle(pose_a.rot),
                         [min, max],
                         s,
                         arc_color,
