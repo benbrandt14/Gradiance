@@ -31,6 +31,8 @@ use bevy::prelude::*;
 
 /// Below this drag length a slider uses the body's local X axis.
 const AXIS_THRESHOLD: f32 = 5.0;
+/// Surface tolerance for connecting at a body's boundary (world px).
+const ATTACH_TOLERANCE: f32 = 8.0;
 
 /// In-progress connector gesture (anchor point).
 #[derive(Resource, Default, Debug)]
@@ -99,13 +101,15 @@ impl ManipTool for ConnectorDraft {
     }
 }
 
-/// Builds the weld tool's commit: two (finite) bodies at the anchor merge
-/// into one; a single body is pinned to the world by becoming static; the
-/// infinite ground is never a weld target (welding *onto* it is exactly the
+/// Builds the weld tool's commit: two (finite) bodies at the anchor get a
+/// rigid [`JointKind::Weld`] joint holding their current relative pose
+/// (the bodies stay separate — merging is the context menu's CSG union);
+/// a single body is pinned to the world by becoming static; the infinite
+/// ground is never a weld target (welding *onto* it is exactly the
 /// make-static case).
 fn build_weld(anchor: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
     let hits: Vec<_> = world
-        .bodies_at(anchor)
+        .attachment_bodies_at(anchor, ATTACH_TOLERANCE)
         .into_iter()
         .filter(|e| {
             world
@@ -121,9 +125,25 @@ fn build_weld(anchor: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
             // Welding an already-static body is a no-op, not a dead command.
             (old != RigidBody::Static).then_some(ToolCommit::MakeStatic { id, old })
         }
-        [a, b, ..] => Some(ToolCommit::Merge {
-            targets: vec![world.id_of(*a)?, world.id_of(*b)?],
-        }),
+        [a, b, ..] => {
+            let pose_a = world.pose_of(*a)?;
+            let pose_b = world.pose_of(*b)?;
+            let to_local =
+                |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
+            Some(ToolCommit::SpawnJoint(Box::new(JointRecord {
+                id: StableId::new(),
+                def: JointDef {
+                    kind: JointKind::Weld,
+                    common: JointCommon::default(),
+                    body_a: world.id_of(*a)?,
+                    body_b: Some(world.id_of(*b)?),
+                    anchor_a: to_local(pose_a, anchor),
+                    anchor_b: to_local(pose_b, anchor),
+                    rest_rot_a: pose_a.rot,
+                    rest_rot_b: pose_b.rot,
+                },
+            })))
+        }
     }
 }
 
@@ -136,8 +156,9 @@ fn build_joint(
     defaults: crate::domain::settings::ToolDefaults,
     world: &ToolWorld,
 ) -> Option<ToolCommit> {
-    // The two topmost bodies at the anchor; one body → world pin.
-    let hits = world.bodies_at(anchor);
+    // The two topmost bodies at the anchor (boundary-tolerant, so a click
+    // on an edge or a rod tip still connects); one body → world pin.
+    let hits = world.attachment_bodies_at(anchor, ATTACH_TOLERANCE);
     let &body_a = hits.first()?;
     let pose_a = world.pose_of(body_a)?;
     let id_a = world.id_of(body_a)?;

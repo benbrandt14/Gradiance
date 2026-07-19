@@ -39,8 +39,11 @@ pub enum ToolState {
     Weld,
     /// Connect two bodies with a prismatic (slider) joint.
     Slider,
-    /// Connect two points with a spring-damper strut (drag from one anchor
-    /// to the other; the drag length sets the rest length).
+    /// Connect two points with a spring-damper (drag from one anchor to
+    /// the other; the drag length sets the rest length).
+    Spring,
+    /// Draw a rigid rod (a capsule body with configurable end
+    /// constraints; optionally an elastic flexure).
     Strut,
     /// Draw static ground planes.
     Ground,

@@ -71,6 +71,13 @@ pub fn scale_shape(shape: &ShapeDef, m: Mat2) -> ShapeDef {
         ShapeDef::Circle { radius } if is_uniform(m) => ShapeDef::Circle {
             radius: radius * m.x_axis.x.abs(),
         },
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } if is_uniform(m) => ShapeDef::Capsule {
+            half_length: half_length * m.x_axis.x.abs(),
+            radius: radius * m.x_axis.x.abs(),
+        },
         ShapeDef::HalfPlane => ShapeDef::HalfPlane,
         other => mapped_polygon(other),
     }

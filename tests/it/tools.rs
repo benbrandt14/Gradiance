@@ -540,13 +540,13 @@ fn shift_drag_from_a_body_becomes_an_additive_band() {
     assert!(pos.length() < 1e-3, "A did not move ({pos})");
 }
 
-// ---------- Weld tool: merge or make-static, never a joint (M20, 4.2) ----------
+// ---------- Weld tool: weld joint or make-static (revision R7) ----------
 
 #[test]
-fn weld_tool_merges_two_overlapping_bodies() {
+fn weld_tool_joins_two_overlapping_bodies_with_a_weld_joint() {
     let mut app = paused_app();
     let a = spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
-    spawn_box_at(&mut app, Vec2::new(40.0, 0.0), 60.0, 40.0);
+    let b = spawn_box_at(&mut app, Vec2::new(40.0, 0.0), 60.0, 40.0);
     app.update(); // colliders
     app.world_mut()
         .resource_mut::<NextState<ToolState>>()
@@ -561,19 +561,34 @@ fn weld_tool_merges_two_overlapping_bodies() {
     mouse(&mut app, MouseButton::Left, false);
     app.update();
 
-    assert_eq!(body_count(&mut app), 1, "the two bodies merged into one");
+    assert_eq!(body_count(&mut app), 2, "the bodies stay separate");
     assert_eq!(stack_undo_len(&app), before + 1, "one undoable command");
-    let entity = entity_of(&app, a).expect("first target survives");
-    assert!(
-        matches!(
-            app.world().get::<ShapeDef>(entity).unwrap(),
-            ShapeDef::Csg { .. }
-        ),
-        "merged shape is a union tree"
-    );
+    let mut q = app.world_mut().query::<&JointDef>();
+    let def = q.iter(app.world()).next().expect("weld joint authored");
+    assert!(matches!(def.kind, JointKind::Weld), "{:?}", def.kind);
+    assert_eq!(def.body_a, a);
+    assert_eq!(def.body_b, Some(b));
 
     undo(&mut app);
-    assert_eq!(body_count(&mut app), 2, "undo splits the merge back");
+    let count = app
+        .world_mut()
+        .query::<&JointDef>()
+        .iter(app.world())
+        .count();
+    assert_eq!(count, 0, "undo removes the weld joint");
+}
+
+#[test]
+fn merge_stays_available_through_the_intent() {
+    let mut app = paused_app();
+    let a = spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
+    let b = spawn_box_at(&mut app, Vec2::new(40.0, 0.0), 60.0, 40.0);
+    app.update();
+    app.world_mut().write_message(MergeIntent {
+        targets: vec![a, b],
+    });
+    app.update();
+    assert_eq!(body_count(&mut app), 1, "merge intent unions the bodies");
 }
 
 #[test]
@@ -671,6 +686,8 @@ fn slider_limits_default_can_be_turned_off() {
     app.update();
     app.world_mut()
         .insert_resource(gradiance::domain::settings::ToolDefaults {
+            rod_fixed_ends: false,
+            rod_flexure: false,
             slider_limits: false,
         });
     app.world_mut()

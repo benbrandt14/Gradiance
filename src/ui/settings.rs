@@ -392,6 +392,12 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 if limits.is_some() { " +limits" } else { "" },
                 if motor.is_some() { " +motor" } else { "" },
             ),
+            JointKind::Weld => "Weld".to_owned(),
+            JointKind::Elastica {
+                length,
+                young_modulus,
+                ..
+            } => format!("Flexure L={length:.0} E={young_modulus:.1e}"),
             JointKind::Spring {
                 rest_length,
                 stiffness,
@@ -417,6 +423,10 @@ fn shape_summary(shape: &ShapeDef) -> String {
         ShapeDef::Polygon { outline, holes } => {
             format!("Polygon {}v {}h", outline.len(), holes.len())
         }
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => format!("Rod L={:.1} r={radius:.1}", 2.0 * half_length),
         ShapeDef::HalfPlane => "HalfPlane".to_owned(),
         ShapeDef::Csg { op, lhs, rhs } => {
             format!("({} {op:?} {})", shape_summary(lhs), shape_summary(rhs))

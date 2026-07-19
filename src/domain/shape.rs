@@ -73,6 +73,15 @@ pub enum ShapeDef {
         /// Interior holes, each clockwise.
         holes: Vec<Vec<Vec2>>,
     },
+    /// A capsule (stadium): the segment from `(-half_length, 0)` to
+    /// `(+half_length, 0)` inflated by `radius`. The rod tool's shape — a
+    /// visually 1D rigid rod whose collider is the exact inflated segment.
+    Capsule {
+        /// Half the segment length in world pixels (rod length = 2·`half_length`).
+        half_length: f32,
+        /// Inflation radius (half the drawn thickness) in world pixels.
+        radius: f32,
+    },
     /// An infinite half-plane whose surface passes through the body origin.
     ///
     /// The solid side is local −Y (surface normal +Y); the body's rotation
@@ -122,6 +131,7 @@ impl ShapeDef {
             Self::Box { .. } => "box",
             Self::Circle { .. } => "circle",
             Self::Polygon { .. } => "polygon",
+            Self::Capsule { .. } => "rod",
             Self::HalfPlane => "plane",
             Self::Csg { .. } => "csg",
             Self::Placed { .. } => "shape",
@@ -163,6 +173,18 @@ impl ShapeDef {
                 }
                 Ok(())
             }
+            Self::Capsule {
+                half_length,
+                radius,
+            } => {
+                if !(half_length.is_finite() && radius.is_finite()) {
+                    return Err(ShapeError::NonFinite);
+                }
+                if *half_length < MIN_SHAPE_SIZE || *radius < MIN_SHAPE_SIZE {
+                    return Err(ShapeError::Degenerate);
+                }
+                Ok(())
+            }
             Self::HalfPlane => Ok(()),
             Self::Csg { op, lhs, rhs } => {
                 if let CsgOp::SmoothUnion { radius } = op
@@ -185,7 +207,11 @@ impl ShapeDef {
     /// Depth of the CSG tree (leaves are 1).
     pub fn depth(&self) -> u32 {
         match self {
-            Self::Box { .. } | Self::Circle { .. } | Self::Polygon { .. } | Self::HalfPlane => 1,
+            Self::Box { .. }
+            | Self::Circle { .. }
+            | Self::Polygon { .. }
+            | Self::Capsule { .. }
+            | Self::HalfPlane => 1,
             Self::Csg { lhs, rhs, .. } => 1 + lhs.depth().max(rhs.depth()),
             Self::Placed { shape, .. } => 1 + shape.depth(),
         }
@@ -195,7 +221,10 @@ impl ShapeDef {
     pub fn contains_half_plane(&self) -> bool {
         match self {
             Self::HalfPlane => true,
-            Self::Box { .. } | Self::Circle { .. } | Self::Polygon { .. } => false,
+            Self::Box { .. }
+            | Self::Circle { .. }
+            | Self::Polygon { .. }
+            | Self::Capsule { .. } => false,
             Self::Csg { lhs, rhs, .. } => lhs.contains_half_plane() || rhs.contains_half_plane(),
             Self::Placed { shape, .. } => shape.contains_half_plane(),
         }

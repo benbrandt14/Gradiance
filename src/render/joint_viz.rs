@@ -19,7 +19,11 @@ use bevy::prelude::*;
 /// Draws every joint's anchor glyph (hinge = ring, weld = square,
 /// slider = axis line), following the connected bodies.
 pub fn draw_joints(
-    joints: Query<(Entity, &JointDef)>,
+    joints: Query<(
+        Entity,
+        &JointDef,
+        Option<&crate::physics::elastica::ElasticaCache>,
+    )>,
     selected: Res<SelectedJoint>,
     limit_drag: Res<JointLimitDrag>,
     index: Res<IdIndex>,
@@ -29,7 +33,7 @@ pub fn draw_joints(
 ) {
     // Screen-constant glyph size: readable at any zoom.
     let s = cam_scale.0;
-    for (entity, def) in &joints {
+    for (entity, def, elastica) in &joints {
         let Some(entity_a) = index.entity(def.body_a) else {
             continue;
         };
@@ -46,35 +50,18 @@ pub fn draw_joints(
         };
         match &def.kind {
             JointKind::Hinge { motor, limits } => {
-                // Under-stroke: a slightly offset dark ring reads as an
-                // outline at every zoom (gizmo lines have no width knob).
-                let r = HINGE_RING_PX * s;
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), r * 1.1, OUTLINE);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), r, color);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 1.5 * s, color);
-                // Exact allowed-rotation range (relative to body A), with
-                // grab handles at the ends when the joint is selected. A
-                // live handle drag previews its tentative range instead.
                 let (limits, live) = tentative_or(&limit_drag, entity, *limits);
-                if let Some([min, max]) = limits {
-                    let arc_color = if live {
-                        css::AQUAMARINE
-                    } else {
-                        css::CORNFLOWER_BLUE
-                    };
-                    draw_limit_arc(
-                        &mut gizmos,
-                        anchor,
-                        def.limit_reference_angle(pose_a.rot),
-                        [min, max],
-                        s,
-                        arc_color,
-                        selected.0 == Some(entity),
-                    );
-                }
-                if let Some(m) = motor {
-                    draw_angular_motor(&mut gizmos, anchor, *m, s);
-                }
+                draw_hinge(
+                    &mut gizmos,
+                    anchor,
+                    // World-pin hinges measure limits from the fixed frame.
+                    def.limit_reference_angle(pose_a.rot),
+                    color,
+                    (limits, live),
+                    *motor,
+                    selected.0 == Some(entity),
+                    s,
+                );
             }
             JointKind::Slider {
                 axis,
@@ -106,20 +93,39 @@ pub fn draw_joints(
                     draw_linear_motor(&mut gizmos, anchor, dir, *m, s);
                 }
             }
+            JointKind::Weld => {
+                // A square at the anchor: rigid, no articulation.
+                let r = 4.0 * s;
+                draw_square(&mut gizmos, anchor, r * 1.1, OUTLINE);
+                draw_square(&mut gizmos, anchor, r, color);
+            }
+            JointKind::Elastica {
+                length,
+                thickness,
+                end_a,
+                end_b,
+                ..
+            } => {
+                // The flexure rod's primary visual: its deflected
+                // centerline as a thick black line (double-stroked).
+                if let (Some(b), Some(cache)) = (world_anchor_b(def, &index, &transforms), elastica)
+                {
+                    draw_flexure(
+                        &mut gizmos,
+                        anchor,
+                        b,
+                        *length,
+                        *thickness,
+                        (*end_a, *end_b),
+                        cache,
+                        s,
+                    );
+                }
+            }
             JointKind::Spring { .. } => {
                 // A coil between the two anchors; the connected bodies don't
                 // collide, so it reads as a free spring, not a rod.
-                let world_b = match def.body_b {
-                    Some(id) => index
-                        .entity(id)
-                        .and_then(|e| transforms.get(e).ok())
-                        .map(PosRot::from_transform)
-                        .map(|pose_b| {
-                            pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b)
-                        }),
-                    None => Some(def.anchor_b), // world pin
-                };
-                if let Some(b) = world_b {
+                if let Some(b) = world_anchor_b(def, &index, &transforms) {
                     draw_spring(&mut gizmos, anchor, b, s);
                 }
             }
@@ -134,6 +140,69 @@ pub fn draw_joints(
 
 /// Dark under-stroke color for glyph outlines.
 const OUTLINE: bevy::color::Srgba = css::DARK_SLATE_GRAY;
+
+/// The hinge glyph: ring + center dot, allowed-rotation arc (relative to
+/// body A, live drag preview in aquamarine), and the motor arrow.
+#[allow(clippy::too_many_arguments)]
+fn draw_hinge(
+    gizmos: &mut Gizmos<OverlayGizmos>,
+    anchor: Vec2,
+    rot_a: f32,
+    color: bevy::color::Srgba,
+    (limits, live): (Option<[f32; 2]>, bool),
+    motor: Option<MotorDef>,
+    is_selected: bool,
+    s: f32,
+) {
+    // Under-stroke: a slightly offset dark ring reads as an outline at
+    // every zoom (gizmo lines have no width knob).
+    let r = HINGE_RING_PX * s;
+    gizmos.circle_2d(Isometry2d::from_translation(anchor), r * 1.1, OUTLINE);
+    gizmos.circle_2d(Isometry2d::from_translation(anchor), r, color);
+    gizmos.circle_2d(Isometry2d::from_translation(anchor), 1.5 * s, color);
+    if let Some([min, max]) = limits {
+        let arc_color = if live {
+            css::AQUAMARINE
+        } else {
+            css::CORNFLOWER_BLUE
+        };
+        draw_limit_arc(gizmos, anchor, rot_a, [min, max], s, arc_color, is_selected);
+    }
+    if let Some(m) = motor {
+        draw_angular_motor(gizmos, anchor, m, s);
+    }
+}
+
+/// The joint's world-space B anchor: body-B local rotated into world, or
+/// the raw world point for a world pin.
+fn world_anchor_b(def: &JointDef, index: &IdIndex, transforms: &Query<&Transform>) -> Option<Vec2> {
+    match def.body_b {
+        Some(id) => index
+            .entity(id)
+            .and_then(|e| transforms.get(e).ok())
+            .map(PosRot::from_transform)
+            .map(|pose_b| pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b)),
+        None => Some(def.anchor_b), // world pin
+    }
+}
+
+/// An axis-aligned square outline centered on `anchor` (the weld glyph).
+fn draw_square(
+    gizmos: &mut Gizmos<OverlayGizmos>,
+    anchor: Vec2,
+    half: f32,
+    color: bevy::color::Srgba,
+) {
+    let c = [
+        anchor + Vec2::new(-half, -half),
+        anchor + Vec2::new(half, -half),
+        anchor + Vec2::new(half, half),
+        anchor + Vec2::new(-half, half),
+    ];
+    for i in 0..4 {
+        gizmos.line_2d(c[i], c[(i + 1) % 4], color);
+    }
+}
 
 /// The limits to draw for `entity`: the live drag's tentative range when
 /// this joint's handle is being dragged (flagged `true`), else the
@@ -249,6 +318,65 @@ fn draw_spring(gizmos: &mut Gizmos<OverlayGizmos>, a: Vec2, b: Vec2, s: f32) {
         prev = point;
     }
     gizmos.line_2d(prev, end, color);
+}
+
+/// Draws a flexure rod's deflected centerline between its two world
+/// anchors as a thick black polyline (a parallel double stroke), with a
+/// small end dot per hinge end.
+#[allow(clippy::too_many_arguments)]
+fn draw_flexure(
+    gizmos: &mut Gizmos<OverlayGizmos>,
+    a: Vec2,
+    b: Vec2,
+    length: f32,
+    thickness: f32,
+    (end_a, end_b): (
+        crate::domain::rod::RodEndKind,
+        crate::domain::rod::RodEndKind,
+    ),
+    cache: &crate::physics::elastica::ElasticaCache,
+    s: f32,
+) {
+    const SAMPLES: usize = 24;
+    let color = bevy::color::Color::BLACK;
+    let chord_vec = b - a;
+    let chord = chord_vec.length();
+    if chord < 1.0e-3 {
+        return;
+    }
+    let rot = Vec2::from_angle(chord_vec.to_angle());
+    let params = crate::geometry::elastica::ElasticaParams {
+        length,
+        ea: 0.0, // unused by centerline
+        ei: 0.0,
+        hinge_a: end_a == crate::domain::rod::RodEndKind::Hinge,
+        hinge_b: end_b == crate::domain::rod::RodEndKind::Hinge,
+    };
+    let pts: Vec<Vec2> =
+        crate::geometry::elastica::centerline(&params, &cache.state, chord, SAMPLES)
+            .into_iter()
+            .map(|p| a + rot.rotate(p))
+            .collect();
+    // Double stroke offset by half the section thickness → reads as a
+    // solid thick line at any zoom.
+    let half = (thickness * 0.5).max(1.0 * s);
+    for offset in [-half, half] {
+        let stroked: Vec<Vec2> = pts
+            .windows(2)
+            .flat_map(|w| {
+                let dir = (w[1] - w[0]).normalize_or_zero();
+                let perp = Vec2::new(-dir.y, dir.x) * offset;
+                [w[0] + perp, w[1] + perp]
+            })
+            .collect();
+        gizmos.linestrip_2d(stroked, color);
+    }
+    gizmos.linestrip_2d(pts.iter().copied(), color);
+    for (end, kind) in [(a, end_a), (b, end_b)] {
+        if kind == crate::domain::rod::RodEndKind::Hinge {
+            gizmos.circle_2d(Isometry2d::from_translation(end), 3.0 * s, css::LIGHT_GRAY);
+        }
+    }
 }
 
 /// A straight arrow along the slider axis showing drive direction.

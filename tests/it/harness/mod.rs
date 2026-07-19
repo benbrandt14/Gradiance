@@ -68,6 +68,8 @@ pub fn box_record(pos: Vec2, width: f32, height: f32) -> BodyRecord {
         groups: Vec::new(),
         field: None,
         tracer: None,
+        rod: None,
+        rod_tip: false,
     }
 }
 

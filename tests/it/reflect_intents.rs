@@ -149,6 +149,8 @@ fn spawn_body_intent_round_trips_through_reflection() {
             fade_secs: 1.5,
             ..Default::default()
         }),
+        rod: None,
+        rod_tip: false,
     };
     let intent = SpawnBodyIntent {
         record: record.clone(),

@@ -22,8 +22,9 @@ pub mod ground_tool;
 pub mod handles;
 pub mod node_tools;
 pub mod polygon_tool;
+pub mod rod_tool;
 pub mod select;
-pub mod strut_tool;
+pub mod spring_tool;
 
 use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_tool};
 
@@ -61,7 +62,8 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<circle_tool::CircleTool>();
         app.init_resource::<ground_tool::GroundTool>();
         app.init_resource::<polygon_tool::PolygonTool>();
-        app.init_resource::<strut_tool::StrutDraft>();
+        app.init_resource::<spring_tool::SpringDraft>();
+        app.init_resource::<rod_tool::RodDraft>();
         app.init_resource::<node_tools::TracerTool>();
 
         app.add_systems(
@@ -93,7 +95,8 @@ impl Plugin for ToolsPlugin {
                 run_draft_tool::<polygon_tool::PolygonTool>.run_if(in_state(ToolState::Polygon)),
                 run_manip_tool::<connector_tool::ConnectorDraft>
                     .run_if(connector_tool::connector_active),
-                run_manip_tool::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
+                run_manip_tool::<spring_tool::SpringDraft>.run_if(in_state(ToolState::Spring)),
+                run_manip_tool::<rod_tool::RodDraft>.run_if(in_state(ToolState::Strut)),
                 run_manip_tool::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
             )
                 .in_set(ToolDriverSet)
@@ -125,7 +128,9 @@ impl Plugin for ToolsPlugin {
                         .run_if(in_state(ToolState::Polygon)),
                     draw_manip_preview::<connector_tool::ConnectorDraft>
                         .run_if(connector_tool::connector_active),
-                    draw_manip_preview::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
+                    draw_manip_preview::<spring_tool::SpringDraft>
+                        .run_if(in_state(ToolState::Spring)),
+                    draw_manip_preview::<rod_tool::RodDraft>.run_if(in_state(ToolState::Strut)),
                     draw_manip_preview::<node_tools::TracerTool>
                         .run_if(in_state(ToolState::Tracer)),
                 ),
@@ -199,5 +204,7 @@ pub fn new_body_record(
         groups: Vec::new(),
         field: None,
         tracer: None,
+        rod: None,
+        rod_tip: false,
     }
 }

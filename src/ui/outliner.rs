@@ -97,6 +97,8 @@ fn joint_label(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "hinge",
         JointKind::Slider { .. } => "prismatic",
+        JointKind::Weld => "weld",
+        JointKind::Elastica { .. } => "flexure",
         JointKind::Spring { .. } => "spring",
     }
 }

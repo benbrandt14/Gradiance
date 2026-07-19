@@ -1,5 +1,5 @@
 (
-    version: 5,
+    version: 6,
     app_version: "golden",
     bodies: [
         (
@@ -61,6 +61,7 @@
             groups: [],
             field: None,
             tracer: None,
+            rod: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000002"),
@@ -110,6 +111,7 @@
             groups: [],
             field: None,
             tracer: None,
+            rod: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000003"),
@@ -161,6 +163,7 @@
             ],
             field: None,
             tracer: None,
+            rod: None,
         ),
     ],
     joints: [],
@@ -169,7 +172,7 @@
         sim: (
             gravity: (0.0, -1000.0),
             speed: 1.0,
-            substeps: 6,
+            substeps: 12,
             plane_friction: 0.0,
             timestep_hz: 60.0,
         ),

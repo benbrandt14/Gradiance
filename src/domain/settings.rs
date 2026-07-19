@@ -119,12 +119,18 @@ pub struct ToolDefaults {
     /// New sliders get travel limits `[0, drag length]` — the drag *draws*
     /// the allowed travel. Off = unlimited sliders (the old behavior).
     pub slider_limits: bool,
+    /// New rods weld (fixed) at their attached ends instead of hinging.
+    pub rod_fixed_ends: bool,
+    /// New rods author an elastic flexure instead of a rigid capsule body.
+    pub rod_flexure: bool,
 }
 
 impl Default for ToolDefaults {
     fn default() -> Self {
         Self {
             slider_limits: true,
+            rod_fixed_ends: false,
+            rod_flexure: false,
         }
     }
 }
@@ -166,7 +172,9 @@ impl Default for SimSettings {
             gravity: Vec2::new(0.0, -1000.0),
             speed: 1.0,
             plane_friction: 0.0,
-            substeps: 6,
+            // 12 substeps: thin rods and stacked joint chains need the
+            // extra solver convergence (6 left rod welds visibly loose).
+            substeps: 12,
             timestep_hz: 60.0,
         }
     }

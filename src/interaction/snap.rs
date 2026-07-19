@@ -104,6 +104,26 @@ pub fn update_snapped_cursor(
             if !(config.sources.vertices || config.sources.midpoints || config.sources.edges) {
                 continue;
             }
+            // Rods snap on their **centerline** — endpoints and the axis
+            // segment, never the stadium outline (the thickness is visual;
+            // attachments live on the line).
+            if let ShapeDef::Capsule { half_length, .. } = shape {
+                let end_a = world_point(transform, Vec2::new(-half_length, 0.0));
+                let end_b = world_point(transform, Vec2::new(*half_length, 0.0));
+                if config.sources.vertices {
+                    consider(end_a.distance(p), end_a, SnapKind::Vertex);
+                    consider(end_b.distance(p), end_b, SnapKind::Vertex);
+                }
+                if config.sources.midpoints {
+                    let m = (end_a + end_b) / 2.0;
+                    consider(m.distance(p), m, SnapKind::Midpoint);
+                }
+                if config.sources.edges {
+                    let e = project_on_segment(p, end_a, end_b);
+                    consider(e.distance(p) + radius * 0.05, e, SnapKind::Edge);
+                }
+                continue;
+            }
             let contours = polygonize(shape);
             for ring in contours.rings() {
                 let n = ring.len();

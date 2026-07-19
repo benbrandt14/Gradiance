@@ -808,3 +808,77 @@ fn prismatic_locks_rotation_under_torque_load() {
         "prismatic-jointed arm must not rotate (rot {rot})"
     );
 }
+
+// ---------- Weld: rigid fixed joint holds the creation pose ----------
+
+#[test]
+fn weld_holds_the_creation_time_relative_pose() {
+    let mut app = headless_app();
+    let mut base = box_record(Vec2::ZERO, 40.0, 40.0);
+    base.physics.rigid_body = RigidBody::Static;
+    let base_id = spawn_body(&mut app, base);
+    // A dynamic box welded 50 px to the right; gravity pulls it, the weld
+    // must hold both offset and rotation.
+    let arm_id = spawn_body(&mut app, box_record(Vec2::new(50.0, 0.0), 30.0, 30.0));
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Weld,
+            common: JointCommon::default(),
+            body_a: base_id,
+            body_b: Some(arm_id),
+            anchor_a: Vec2::new(25.0, 0.0),
+            anchor_b: Vec2::new(-25.0, 0.0),
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    step(&mut app, 240);
+
+    let pose = pose_of(&app, arm_id);
+    assert!(
+        (pose.pos - Vec2::new(50.0, 0.0)).length() < 2.0,
+        "welded body must stay at its creation offset (pos {})",
+        pose.pos
+    );
+    assert!(
+        pose.rot.abs() < 0.05,
+        "welded body must not rotate (rot {})",
+        pose.rot
+    );
+}
+
+#[test]
+fn weld_absorbs_the_authored_relative_angle() {
+    let mut app = headless_app();
+    let mut base = box_record(Vec2::ZERO, 40.0, 40.0);
+    base.physics.rigid_body = RigidBody::Static;
+    let base_id = spawn_body(&mut app, base);
+    // The arm is authored pre-rotated; the weld's rest pose must hold that
+    // angle instead of snapping it back to alignment.
+    let tilt = 0.5_f32;
+    let mut arm = box_record(Vec2::new(50.0, 0.0), 30.0, 30.0);
+    arm.pose.rot = tilt;
+    let arm_id = spawn_body(&mut app, arm);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Weld,
+            common: JointCommon::default(),
+            body_a: base_id,
+            body_b: Some(arm_id),
+            anchor_a: Vec2::new(25.0, 0.0),
+            anchor_b: Vec2::from_angle(-tilt).rotate(Vec2::new(-25.0, 0.0)),
+            rest_rot_a: 0.0,
+            rest_rot_b: tilt,
+        },
+    );
+    step(&mut app, 240);
+
+    let pose = pose_of(&app, arm_id);
+    assert!(
+        (pose.rot - tilt).abs() < 0.05,
+        "weld must hold the authored tilt {tilt} (rot {})",
+        pose.rot
+    );
+}

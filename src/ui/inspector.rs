@@ -47,6 +47,8 @@ pub struct BodyProps<'w, 's> {
     pub depths: Query<'w, 's, &'static DepthBand, With<Body>>,
     /// The shared property-edit intent writer.
     pub edits: MessageWriter<'w, PropertyEditIntent>,
+    /// Rod rigid↔flexure conversion intents.
+    flexure_toggles: MessageWriter<'w, crate::command::intent::SetRodFlexureIntent>,
     /// Debug-overlay settings (config seam: the layers UI toggles the
     /// viewport layer visualization).
     debug: ResMut<'w, crate::domain::settings::DebugSettings>,
@@ -59,6 +61,9 @@ pub struct BodyProps<'w, 's> {
     gravity_q: Query<'w, 's, &'static GravityScale, With<Body>>,
     flags_q: Query<'w, 's, (Has<Sensor>, Has<LockedAxes>), With<Body>>,
     shapes_q: Query<'w, 's, &'static ShapeDef, With<Body>>,
+    rods_q: Query<'w, 's, &'static crate::domain::rod::Rod, With<Body>>,
+    /// Authored joints, for re-kinding a rigid rod's end constraints.
+    joints_q: Query<'w, 's, (&'static StableId, &'static crate::domain::joint::JointDef)>,
     appearance_q: Query<'w, 's, &'static Appearance, With<Body>>,
     /// Live physics reads for the sensor-port readouts (read-only facade).
     physics: crate::physics::queries::PhysicsQueries<'w, 's>,
@@ -519,6 +524,16 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
         ShapeDef::Polygon { outline, .. } => {
             ui.label(format!("polygon · {} vertices", outline.len()));
         }
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => {
+            ui.label(format!(
+                "rod · length {:.1} · thickness {:.1}",
+                2.0 * half_length,
+                2.0 * radius
+            ));
+        }
         ShapeDef::HalfPlane => {
             ui.label("infinite ground plane");
         }
@@ -526,6 +541,95 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
             ui.label(format!("CSG shape · depth {}", tree.depth()));
         }
     }
+}
+
+/// Rod: per-end constraint kinds of a rigid rod. Each toggle re-kinds
+/// the corresponding authored end joint (found by the rod's id + which
+/// side of the rod its anchor sits on) together with the `Rod` marker —
+/// one batched intent, one undo step.
+pub fn rod_section(ui: &mut egui::Ui, primary: Entity, props: &mut BodyProps) {
+    use crate::domain::rod::{Rod, RodEndKind};
+    let Ok(&rod) = props.rods_q.get(primary) else {
+        return;
+    };
+    let Ok(&rod_id) = props.ids.get(primary) else {
+        return;
+    };
+    ui.separator();
+    ui.label(egui::RichText::new("Rod ends").strong());
+
+    if ui
+        .button("Convert to elastic flexure")
+        .on_hover_text(
+            "Replace the rigid capsule with an analytic elastic beam \
+             (large deflections, Euler buckling). Undoable; tune \
+             stiffness by selecting the flexure line afterward.",
+        )
+        .clicked()
+    {
+        props
+            .flexure_toggles
+            .write(crate::command::intent::SetRodFlexureIntent {
+                target: rod_id,
+                enable: true,
+            });
+    }
+
+    let mut hinge_a = rod.end_a == RodEndKind::Hinge;
+    let mut hinge_b = rod.end_b == RodEndKind::Hinge;
+    let edited_a = ui.checkbox(&mut hinge_a, "hinge end A").changed();
+    let edited_b = ui.checkbox(&mut hinge_b, "hinge end B").changed();
+    if !(edited_a || edited_b) {
+        return;
+    }
+    let kind_of = |hinge: bool| {
+        if hinge {
+            RodEndKind::Hinge
+        } else {
+            RodEndKind::Fixed
+        }
+    };
+    let new_rod = Rod {
+        end_a: kind_of(hinge_a),
+        end_b: kind_of(hinge_b),
+    };
+    let mut changes = vec![PropertyChange {
+        id: rod_id,
+        old: PropertyValue::Rod(rod),
+        new: PropertyValue::Rod(new_rod),
+    }];
+    // Re-kind the touched end's authored joint (if that end is attached):
+    // the rod is always the joint's body A, and the anchor's sign along
+    // the rod axis tells which end it is.
+    for (&jid, def) in props.joints_q.iter() {
+        if def.body_a != rod_id {
+            continue;
+        }
+        let (is_end_a, edited, hinge) = if def.anchor_a.x < 0.0 {
+            (true, edited_a, hinge_a)
+        } else {
+            (false, edited_b, hinge_b)
+        };
+        let _ = is_end_a;
+        if !edited {
+            continue;
+        }
+        let mut new_def = def.clone();
+        new_def.kind = if hinge {
+            crate::domain::joint::JointKind::Hinge {
+                limits: None,
+                motor: None,
+            }
+        } else {
+            crate::domain::joint::JointKind::Weld
+        };
+        changes.push(PropertyChange {
+            id: jid,
+            old: PropertyValue::Joint(def.clone()),
+            new: PropertyValue::Joint(new_def),
+        });
+    }
+    props.edits.write(PropertyEditIntent { changes });
 }
 
 /// Appearance: fill/border colors and emissive strength.
@@ -668,6 +772,7 @@ fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProp
         ui.separator();
         ui.label(egui::RichText::new("Depth").strong());
         depth_section(ui, selection, props);
+        rod_section(ui, primary, props);
         return;
     }
     // A behavior node: edit its kind here too (previously only reachable from

@@ -7,7 +7,7 @@ use crate::command::intent::LoadSceneIntent;
 use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
     DuplicateIntent, GroupIntent, MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent,
-    SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, UndoIntent, UngroupIntent,
+    SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
 };
 use crate::command::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::command::merge_cmd::MergeCommand;
@@ -81,6 +81,16 @@ pub fn dispatch_intents(world: &mut World) {
             record: intent.record,
             locked_before: None,
         }));
+    }
+    for intent in drain::<SpawnRodIntent>(world) {
+        commands.push(Box::new(crate::command::rod_cmd::SpawnRodCommand {
+            spec: intent.spec,
+        }));
+    }
+    for intent in drain::<crate::command::intent::SetRodFlexureIntent>(world) {
+        commands.push(Box::new(
+            crate::command::rod_cmd::SetRodFlexureCommand::new(intent.target, intent.enable),
+        ));
     }
     for intent in drain::<LoadSceneIntent>(world) {
         commands.push(Box::new(LoadSceneCommand::new(intent.scene)));

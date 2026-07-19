@@ -34,6 +34,10 @@ pub mod name {
     pub const ARRAY: &str = "array";
     /// [`SpawnJointIntent`](super::SpawnJointIntent) → `SpawnJointCommand`.
     pub const SPAWN_JOINT: &str = "spawn-joint";
+    /// [`SpawnRodIntent`](super::SpawnRodIntent) → `SpawnRodCommand`.
+    pub const SPAWN_ROD: &str = "spawn-rod";
+    /// [`SetRodFlexureIntent`](super::SetRodFlexureIntent) → `SetRodFlexureCommand`.
+    pub const SET_ROD_FLEXURE: &str = "set-rod-flexure";
     /// [`PropertyEditIntent`](super::PropertyEditIntent) → `PropertyEditCommand`.
     pub const PROPERTY_EDIT: &str = "property-edit";
     /// [`GroupIntent`](super::GroupIntent) → `GroupCommand`.
@@ -141,6 +145,25 @@ pub struct SpawnJointIntent {
     /// The complete authored joint (id minted by the tool, stable across
     /// redo).
     pub record: crate::command::snapshot::JointRecord,
+}
+
+/// Request to author one rod (a capsule body + end joints, or a flexure's
+/// elastica joint + tip bodies) as a single undo step.
+// Trace: dispatch.rs → SpawnRodCommand (rod_cmd.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_joints.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SpawnRodIntent {
+    /// The complete records to author (ids minted by the tool).
+    pub spec: crate::command::rod_cmd::RodSpec,
+}
+
+/// Request to convert a rod between rigid and flexure representations.
+// Trace: dispatch.rs → SetRodFlexureCommand (rod_cmd.rs) → sync_colliders, sync_body_meshes, sync_joints, apply_elastica_forces.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SetRodFlexureIntent {
+    /// The rigid rod body (enable) or elastica joint (disable) to convert.
+    pub target: StableId,
+    /// `true` = rigid → flexure; `false` = flexure → rigid.
+    pub enable: bool,
 }
 
 /// Batched property edit (one gesture across N targets = one undo step).

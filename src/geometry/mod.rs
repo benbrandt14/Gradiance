@@ -6,6 +6,7 @@
 
 pub mod contour;
 pub mod contours;
+pub mod elastica;
 pub mod extrusion;
 pub mod polygonize;
 pub mod scale;

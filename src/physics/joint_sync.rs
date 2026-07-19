@@ -62,7 +62,14 @@ pub fn sync_joints(
     for (entity, def, old_pin) in &changed {
         // Drop any previously derived state (kind may have changed).
         let mut entity_commands = commands.entity(entity);
-        entity_commands.remove::<(RevoluteJoint, PrismaticJoint, DistanceJoint, JointDamping)>();
+        entity_commands.remove::<(
+            RevoluteJoint,
+            PrismaticJoint,
+            DistanceJoint,
+            FixedJoint,
+            JointDamping,
+            crate::physics::elastica::ElasticaCache,
+        )>();
         if let Some(pin) = old_pin {
             entity_commands.remove::<PinAnchor>();
             commands.entity(pin.0).despawn();
@@ -155,6 +162,36 @@ fn insert_derived_joint(
             }
             entity_commands.insert(joint);
         }
+        JointKind::Weld => {
+            // Derived as a revolute with zero angular freedom rather than
+            // avian's `FixedJoint`: the revolute point-constraint path is
+            // the solver's best-conditioned code, while `FixedJoint`'s own
+            // docs warn of iterative error under load.
+            entity_commands.insert(
+                RevoluteJoint::new(body_a, body_b)
+                    .with_local_anchor1(Vector::from(def.anchor_a))
+                    .with_local_anchor2(Vector::from(anchor_b))
+                    .with_local_basis2(basis_b)
+                    .with_angle_limits(0.0, 0.0),
+            );
+        }
+        // The flexure is a *non-solver* constraint: the derived warm-start
+        // cache is what the per-frame force system (`physics::elastica`)
+        // needs. The always-slack distance joint alongside it exerts zero
+        // force — it exists because avian's pair bookkeeping
+        // (`JointGraph`) only knows real joints, and
+        // `JointCollisionDisabled` is a no-op without a joint edge; the
+        // ghost registers the pair so `collide_connected` works for
+        // flexures too.
+        JointKind::Elastica { .. } => {
+            entity_commands.insert((
+                crate::physics::elastica::ElasticaCache::default(),
+                DistanceJoint::new(body_a, body_b)
+                    .with_local_anchor1(Vector::from(def.anchor_a))
+                    .with_local_anchor2(Vector::from(anchor_b))
+                    .with_limits(0.0, 1.0e9),
+            ));
+        }
         JointKind::Spring {
             rest_length,
             stiffness,
@@ -205,7 +242,14 @@ pub fn guard_dangling_joints(
             warn!(?entity, "joint lost a referenced body; disabling");
             commands
                 .entity(entity)
-                .remove::<(RevoluteJoint, PrismaticJoint, DistanceJoint, JointDamping)>()
+                .remove::<(
+                    RevoluteJoint,
+                    PrismaticJoint,
+                    DistanceJoint,
+                    FixedJoint,
+                    JointDamping,
+                    crate::physics::elastica::ElasticaCache,
+                )>()
                 .insert(JointUnresolved);
         }
     }

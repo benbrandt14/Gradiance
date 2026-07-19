@@ -23,10 +23,12 @@ pub fn joint_inspector(
     mut contexts: EguiContexts,
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
+    caches: Query<&crate::physics::elastica::ElasticaCache>,
     transforms: Query<&Transform>,
     index: Res<IdIndex>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
+    mut flexure_toggles: MessageWriter<crate::command::intent::SetRodFlexureIntent>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let Some(entity) = selected.0 else {
@@ -85,6 +87,10 @@ pub fn joint_inspector(
             }
 
             changed |= configure_kind(ui, &def.kind, &mut next);
+
+            if matches!(def.kind, JointKind::Elastica { .. }) {
+                elastica_extras(ui, id, entity, &caches, &mut flexure_toggles);
+            }
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -179,6 +185,32 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 changed = true;
             }
         }
+        JointKind::Weld => {
+            ui.label("rigidly holds the creation-time relative pose");
+        }
+        JointKind::Elastica {
+            length,
+            young_modulus,
+            thickness,
+            damping_ratio,
+            end_a,
+            end_b,
+            tangent_a,
+            tangent_b,
+        } => {
+            if let Some(new_kind) = elastica_section(
+                ui,
+                *length,
+                *young_modulus,
+                *thickness,
+                *damping_ratio,
+                (*end_a, *end_b),
+                (*tangent_a, *tangent_b),
+            ) {
+                next.kind = new_kind;
+                changed = true;
+            }
+        }
         JointKind::Spring {
             rest_length,
             stiffness,
@@ -194,20 +226,168 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
     changed
 }
 
+/// The flexure's live sensor readouts + rigid-rod conversion button.
+fn elastica_extras(
+    ui: &mut egui::Ui,
+    id: StableId,
+    entity: Entity,
+    caches: &Query<&crate::physics::elastica::ElasticaCache>,
+    flexure_toggles: &mut MessageWriter<crate::command::intent::SetRodFlexureIntent>,
+) {
+    if let Ok(cache) = caches.get(entity) {
+        ui.separator();
+        ui.label(egui::RichText::new("Sensors").strong());
+        let rows: [(&str, String); 5] = [
+            ("axial force", format!("{:+.3e}", -cache.loads.force_b.x)),
+            ("shear force", format!("{:+.3e}", cache.loads.force_b.y)),
+            ("moment A", format!("{:+.3e}", cache.loads.moment_a)),
+            ("moment B", format!("{:+.3e}", cache.loads.moment_b)),
+            ("bow", format!("{:.2} px", cache.bow)),
+        ];
+        for (label, value) in rows {
+            ui.horizontal(|ui| {
+                ui.label(label);
+                ui.monospace(value);
+            });
+        }
+    }
+    ui.separator();
+    if ui
+        .button("Convert to rigid rod")
+        .on_hover_text(
+            "Replace the elastic beam with a rigid capsule rod (weld/hinge \
+             end joints, collides along its length). Undoable.",
+        )
+        .clicked()
+    {
+        flexure_toggles.write(crate::command::intent::SetRodFlexureIntent {
+            target: id,
+            enable: false,
+        });
+    }
+}
+
 /// A human label for a joint kind, shared with the context menu.
 pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "Hinge (revolute)",
         JointKind::Slider { .. } => "Prismatic (slider)",
-        JointKind::Spring { .. } => "Strut (spring-damper)",
+        JointKind::Weld => "Weld (fixed)",
+        JointKind::Elastica { .. } => "Flexure (elastica)",
+        JointKind::Spring { .. } => "Spring (spring-damper)",
     }
 }
 
 fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
     match kind {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => *limits,
-        JointKind::Spring { .. } => None,
+        JointKind::Weld | JointKind::Elastica { .. } | JointKind::Spring { .. } => None,
     }
+}
+
+/// Flexure config: stiffness (Young's modulus), thickness, damping, and
+/// per-end hinge/weld toggles. Length and rest tangents are structural
+/// (creation-time) and shown read-only.
+#[allow(clippy::too_many_arguments)]
+fn elastica_section(
+    ui: &mut egui::Ui,
+    length: f32,
+    young_modulus: f32,
+    thickness: f32,
+    damping_ratio: f32,
+    (end_a, end_b): (
+        crate::domain::rod::RodEndKind,
+        crate::domain::rod::RodEndKind,
+    ),
+    (tangent_a, tangent_b): (f32, f32),
+) -> Option<JointKind> {
+    use crate::domain::rod::RodEndKind;
+    let mut e = young_modulus;
+    let mut t = thickness;
+    let mut zeta = damping_ratio;
+    let mut len = length;
+    let mut edited = false;
+
+    // Editable rest length: shorter than the anchor gap = pre-tension,
+    // longer = pre-compression (push it past onset and the rod buckles).
+    ui.horizontal(|ui| {
+        ui.label("rest length");
+        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("flex-l"), &mut len, length, 1.0) {
+            edited = true;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("stiffness E");
+        if let Commit::Done(..) = precise_drag(
+            ui,
+            egui::Id::new("flex-e"),
+            &mut e,
+            crate::domain::joint::DEFAULT_FLEXURE_E,
+            1.0e8,
+        ) {
+            edited = true;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("thickness");
+        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("flex-t"), &mut t, 5.0, 0.25) {
+            edited = true;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("damping ζ");
+        if let Commit::Done(..) = precise_drag(
+            ui,
+            egui::Id::new("flex-z"),
+            &mut zeta,
+            crate::domain::joint::DEFAULT_FLEXURE_DAMPING,
+            0.05,
+        ) {
+            edited = true;
+        }
+    });
+    let mut hinge_a = end_a == RodEndKind::Hinge;
+    let mut hinge_b = end_b == RodEndKind::Hinge;
+    if ui.checkbox(&mut hinge_a, "hinge end A").changed() {
+        edited = true;
+    }
+    if ui.checkbox(&mut hinge_b, "hinge end B").changed() {
+        edited = true;
+    }
+
+    // Derived stiffness readouts, tracking the (possibly edited) values.
+    let (ea, ei) = (e * t, e * t * t * t / 12.0);
+    let p_cr = std::f32::consts::PI.powi(2) * ei / (len * len).max(1.0e-6);
+    ui.horizontal(|ui| {
+        ui.label("EA / EI");
+        ui.monospace(format!("{ea:.2e} / {ei:.2e}"));
+    });
+    ui.horizontal(|ui| {
+        ui.label("buckling load")
+            .on_hover_text("Euler critical load π²EI/L²");
+        ui.monospace(format!("{p_cr:.2e}"));
+    });
+
+    if !edited {
+        return None;
+    }
+    let kind_of = |hinge: bool| {
+        if hinge {
+            RodEndKind::Hinge
+        } else {
+            RodEndKind::Fixed
+        }
+    };
+    Some(JointKind::Elastica {
+        length: len.max(1.0),
+        young_modulus: e.max(0.0),
+        thickness: t.max(0.1),
+        damping_ratio: zeta.max(0.0),
+        end_a: kind_of(hinge_a),
+        end_b: kind_of(hinge_b),
+        tangent_a,
+        tangent_b,
+    })
 }
 
 /// Limits UI: a toggle plus min/max drags. `degrees` shows/edits in

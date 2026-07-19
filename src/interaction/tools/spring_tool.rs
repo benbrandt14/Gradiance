@@ -1,4 +1,4 @@
-//! The strut tool: a spring-damper connecting two anchor points.
+//! The spring tool: a spring-damper connecting two anchor points.
 //!
 //! Unlike the connector tools (which link two bodies at a single shared
 //! point), a strut spans a *distance*: press on the first anchor, drag to the
@@ -21,8 +21,8 @@ use crate::interaction::tools::context::{
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
-/// Shortest strut that will commit (world px); a near-zero drag is a no-op.
-const MIN_STRUT_LENGTH: f32 = 5.0;
+/// Shortest spring that will commit (world px); a near-zero drag is a no-op.
+const MIN_SPRING_LENGTH: f32 = 5.0;
 /// Spring stiffness per unit mass proxy (AABB area, px²). Tuned so a typical
 /// body sags ~10 px under the default gravity (|g| ≈ 1000): `k ≈ m·g / sag`, so
 /// heavier bodies get proportionally stiffer struts instead of drooping.
@@ -30,11 +30,11 @@ const SPRING_STIFFNESS_PER_MASS: f32 = 100.0;
 /// Floor for the mass-based stiffness so tiny bodies still get a firm strut.
 const MIN_SPRING_STIFFNESS: f32 = 100.0;
 
-/// In-progress strut gesture (the first anchor).
+/// In-progress spring gesture (the first anchor).
 #[derive(Resource, Default, Debug)]
-pub struct StrutDraft(pub Option<Vec2>);
+pub struct SpringDraft(pub Option<Vec2>);
 
-impl ManipTool for StrutDraft {
+impl ManipTool for SpringDraft {
     fn update(
         &mut self,
         ctx: &ManipContext,
@@ -52,7 +52,7 @@ impl ManipTool for StrutDraft {
         if ctx.left == GesturePhase::Released
             && let Some(anchor_a) = self.0.take()
             && let Some(anchor_b) = ctx.cursor
-            && let Some(commit) = build_strut(anchor_a, anchor_b, world)
+            && let Some(commit) = build_spring(anchor_a, anchor_b, world)
         {
             return ManipOutput::commit(commit);
         }
@@ -75,11 +75,11 @@ impl ManipTool for StrutDraft {
     }
 }
 
-/// Builds the strut record for a completed gesture, or `None` if no body sits
+/// Builds the spring record for a completed gesture, or `None` if no body sits
 /// at the first anchor or the drag is too short.
-fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
+fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
     let rest = anchor_a.distance(anchor_b);
-    if rest < MIN_STRUT_LENGTH {
+    if rest < MIN_SPRING_LENGTH {
         return None;
     }
 
