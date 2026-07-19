@@ -19,6 +19,16 @@ fn collider_for(shape: &ShapeDef) -> Option<Collider> {
         ShapeDef::Polygon { outline, holes } => {
             decomposition_collider(std::iter::once(outline).chain(holes.iter()))
         }
+        // The exact inflated segment — a true 1D rod collider, not a
+        // polygon decomposition.
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => Some(Collider::capsule_endpoints(
+            *radius,
+            Vector::new(-half_length, 0.0),
+            Vector::new(*half_length, 0.0),
+        )),
         // Truly infinite: the surface passes through the body origin with
         // local +Y outward; body rotation orients it.
         ShapeDef::HalfPlane => Some(Collider::half_space(Vector::Y)),

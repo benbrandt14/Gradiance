@@ -519,6 +519,16 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
         ShapeDef::Polygon { outline, .. } => {
             ui.label(format!("polygon · {} vertices", outline.len()));
         }
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => {
+            ui.label(format!(
+                "rod · length {:.1} · thickness {:.1}",
+                2.0 * half_length,
+                2.0 * radius
+            ));
+        }
         ShapeDef::HalfPlane => {
             ui.label("infinite ground plane");
         }
