@@ -31,42 +31,43 @@ pub struct Panels<'w> {
     pub debug: ResMut<'w, crate::domain::settings::DebugSettings>,
 }
 
-/// Tool-palette entries grouped into labeled sections (Blender-style): each
-/// section is a heading plus its tools, in workflow order — pick/move, create a
-/// shape, connect with a constraint, then modify. Kept as data so
-/// `tools_palette_ui` stays a pure projection and `tests/it/ui_panels.rs` can
-/// assert every tool still renders after a reflow.
-const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str)])] = &[
+/// Tool-palette entries grouped into sections (Blender-style), in workflow
+/// order — pick/move, create a shape, connect with a constraint, then modify.
+/// Each entry is `(state, name, key, icon)`; the palette renders the icon with
+/// the name+key as hover text. Kept as data so `tools_palette_ui` stays a pure
+/// projection and `tests/it/ui_panels.rs` can assert every tool still renders.
+/// (The glyphs are placeholders to refine visually.)
+const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
     (
         "Select",
         &[
-            (ToolState::Select, "Select", "S"),
-            (ToolState::Drag, "Drag", "D"),
+            (ToolState::Select, "Select", "S", "▧"),
+            (ToolState::Drag, "Drag", "D", "✋"),
         ],
     ),
     (
         "Create",
         &[
-            (ToolState::Box, "Box", "B"),
-            (ToolState::Circle, "Circle", "C"),
-            (ToolState::Polygon, "Polygon", "P"),
+            (ToolState::Box, "Box", "B", "▭"),
+            (ToolState::Circle, "Circle", "C", "⬤"),
+            (ToolState::Polygon, "Polygon", "P", "⬠"),
         ],
     ),
     (
         "Connect",
         &[
-            (ToolState::Hinge, "Hinge", "H"),
-            (ToolState::Slider, "Prismatic", "R"),
-            (ToolState::Strut, "Strut", "T"),
-            (ToolState::Weld, "Weld", "W"),
-            (ToolState::Ground, "Ground", "G"),
+            (ToolState::Hinge, "Hinge", "H", "⊙"),
+            (ToolState::Slider, "Prismatic", "R", "⬌"),
+            (ToolState::Strut, "Strut", "T", "∿"),
+            (ToolState::Weld, "Weld", "W", "⧉"),
+            (ToolState::Ground, "Ground", "G", "⏚"),
         ],
     ),
     (
         "Modify",
         &[
-            (ToolState::Cut, "Cut", "K"),
-            (ToolState::Tracer, "Tracer", "Y"),
+            (ToolState::Cut, "Cut", "K", "✂"),
+            (ToolState::Tracer, "Tracer", "Y", "⌇"),
         ],
     ),
 ];
@@ -147,8 +148,11 @@ pub fn toolbar(
 
     egui::Window::new("Tools")
         .resizable(false)
-        .anchor(egui::Align2::LEFT_CENTER, [8.0, 0.0])
+        .default_pos([8.0, 120.0])
         .show(ctx, |ui| {
+            // Narrow enough that the icons wrap into a compact floating grid
+            // (a few per row) rather than one tall column.
+            ui.set_max_width(96.0);
             if let Some(state) = tools_palette_ui(ui, *tool.get()) {
                 next_tool.set(state);
             }
@@ -220,26 +224,29 @@ fn panel_toggles(ui: &mut egui::Ui, panels: &mut Panels) {
     }
 }
 
-/// The tool-palette buttons, grouped into labeled sections: highlights
-/// `current`, returns a clicked tool. Host-agnostic (pure `Ui` in, choice out)
-/// so `tests/it/ui_panels.rs` can exercise it under `egui_kittest`. Each button
-/// keeps its `"{name} ({key})"` label — the section headings are decoration.
+/// The tool-palette as a floating grid of **icon** buttons, grouped into
+/// sections by a separator: highlights `current`, returns a clicked tool. Each
+/// icon carries its `"{name} ({key})"` as hover text. Host-agnostic (pure `Ui`
+/// in, choice out) so `tests/it/ui_panels.rs` can exercise it under
+/// `egui_kittest`.
 pub fn tools_palette_ui(ui: &mut egui::Ui, current: ToolState) -> Option<ToolState> {
     let mut clicked = None;
-    for (i, (group, tools)) in TOOL_GROUPS.iter().enumerate() {
+    for (i, (_group, tools)) in TOOL_GROUPS.iter().enumerate() {
         if i > 0 {
-            ui.add_space(6.0);
+            ui.separator();
         }
-        ui.label(egui::RichText::new(*group).small().weak());
-        for (state, name, key) in *tools {
-            let selected = current == *state;
-            if ui
-                .selectable_label(selected, format!("{name} ({key})"))
-                .clicked()
-            {
-                clicked = Some(*state);
+        ui.horizontal_wrapped(|ui| {
+            for (state, name, key, icon) in *tools {
+                let selected = current == *state;
+                if ui
+                    .selectable_label(selected, egui::RichText::new(*icon).size(18.0))
+                    .on_hover_text(format!("{name} ({key})"))
+                    .clicked()
+                {
+                    clicked = Some(*state);
+                }
             }
-        }
+        });
     }
     clicked
 }
