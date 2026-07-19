@@ -116,15 +116,11 @@ pub fn view_cube(
                 .collect();
                 let hovered = hover.is_some_and(|h| point_in_quad(h, &corners));
                 let shade = (105.0 + depth * 65.0) as u8;
-                let fill = if hovered {
-                    egui::Color32::from_rgb(190, 175, 90)
-                } else {
-                    egui::Color32::from_gray(shade)
-                };
+                let (fill, edge) = face_colors(hovered, shade);
                 painter.add(egui::Shape::convex_polygon(
                     corners.clone(),
                     fill,
-                    egui::Stroke::new(1.0, egui::Color32::from_gray(60)),
+                    egui::Stroke::new(1.3, edge),
                 ));
                 painter.text(
                     project(*normal).0,
@@ -170,6 +166,23 @@ pub fn view_cube(
     // ignores).
     panel_rects.push(cube_rect.response.rect);
     Ok(())
+}
+
+/// A cube face's translucent `(fill, edge)` colors — faces are semi-transparent
+/// so the scene reads behind the cube, with a brighter edge highlight (brightest
+/// on the hovered face) so the cube's silhouette stays crisp.
+fn face_colors(hovered: bool, shade: u8) -> (egui::Color32, egui::Color32) {
+    if hovered {
+        (
+            egui::Color32::from_rgba_unmultiplied(190, 175, 90, 235),
+            egui::Color32::from_gray(220),
+        )
+    } else {
+        (
+            egui::Color32::from_rgba_unmultiplied(shade, shade, shade, 200),
+            egui::Color32::from_gray(130),
+        )
+    }
 }
 
 /// Point-in-convex-quad test (screen space).
