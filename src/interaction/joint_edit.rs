@@ -78,6 +78,7 @@ pub fn glyph_distance(
 ) -> f32 {
     match &def.kind {
         JointKind::Hinge { .. } => (anchor.distance(p) - HINGE_RING_PX * s).max(0.0),
+        JointKind::Weld => anchor.distance(p),
         JointKind::Slider { axis, limits, .. } => {
             let dir = Vec2::from_angle(rot_a).rotate(*axis);
             let (from, to) = slider_span(anchor, dir, *limits, s);
@@ -169,7 +170,7 @@ fn with_limits(def: &JointDef, new_limits: [f32; 2]) -> JointDef {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => {
             *limits = Some(new_limits);
         }
-        JointKind::Spring { .. } => {}
+        JointKind::Weld | JointKind::Spring { .. } => {}
     }
     new
 }

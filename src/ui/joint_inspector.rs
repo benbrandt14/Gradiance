@@ -179,6 +179,9 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 changed = true;
             }
         }
+        JointKind::Weld => {
+            ui.label("rigidly holds the creation-time relative pose");
+        }
         JointKind::Spring {
             rest_length,
             stiffness,
@@ -199,14 +202,15 @@ pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "Hinge (revolute)",
         JointKind::Slider { .. } => "Prismatic (slider)",
-        JointKind::Spring { .. } => "Strut (spring-damper)",
+        JointKind::Weld => "Weld (fixed)",
+        JointKind::Spring { .. } => "Spring (spring-damper)",
     }
 }
 
 fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
     match kind {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => *limits,
-        JointKind::Spring { .. } => None,
+        JointKind::Weld | JointKind::Spring { .. } => None,
     }
 }
 

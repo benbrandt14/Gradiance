@@ -41,7 +41,11 @@ use std::path::PathBuf;
 /// maps to the equivalent band; non-default *filters* are dropped with a
 /// warning (checkbox filter art is unrepresentable by design — collision
 /// is depth overlap).
-pub const FORMAT_VERSION: u32 = 5;
+///
+/// v6: rigid rods — additive only (`ShapeDef::Capsule` leaf,
+/// `JointKind::Weld` returns for rod ends, `JointKind::Elastica` flexure,
+/// `BodyRecord.rod` marker). v5 files load unchanged.
+pub const FORMAT_VERSION: u32 = 6;
 
 /// What went wrong while persisting.
 #[derive(Debug, thiserror::Error)]
@@ -73,6 +77,11 @@ pub fn from_ron(text: &str) -> Result<SceneRecord, PersistError> {
     let mut scene: SceneRecord = ron::from_str(text)?;
     match scene.version {
         FORMAT_VERSION => Ok(scene),
+        // v5 → v6 is purely additive; the file loads as-is.
+        5 => {
+            scene.version = FORMAT_VERSION;
+            Ok(scene)
+        }
         4 => {
             migrate_v4_layers(&mut scene);
             Ok(scene)

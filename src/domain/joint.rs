@@ -98,6 +98,12 @@ pub enum JointKind {
         /// Optional linear motor.
         motor: Option<MotorDef>,
     },
+    /// Rigid weld: locks the two bodies at their creation-time relative
+    /// pose (maps onto avian's `FixedJoint`). Authored for rod ends and
+    /// via the joint inspector; the weld *tool* stays the merge tool
+    /// (CSG union / make-static), which is why this variant has no tool
+    /// of its own.
+    Weld,
     /// Spring-damper strut: a soft distance constraint between the two
     /// anchors, drawn as a coil. Maps onto avian's `DistanceJoint`
     /// (`compliance` = `1 / stiffness`) plus a `JointDamping` component; when
@@ -124,7 +130,7 @@ pub enum JointKind {
 }
 
 /// Fallback spring constant for the inspector's reset (the strut tool computes
-/// a mass-based value at creation; see `interaction::tools::strut_tool`).
+/// a mass-based value at creation; see `interaction::tools::spring_tool`).
 pub const DEFAULT_SPRING_STIFFNESS: f32 = 1000.0;
 /// Default linear damping for a freshly authored strut.
 pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;

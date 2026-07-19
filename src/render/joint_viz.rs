@@ -106,6 +106,12 @@ pub fn draw_joints(
                     draw_linear_motor(&mut gizmos, anchor, dir, *m, s);
                 }
             }
+            JointKind::Weld => {
+                // A square at the anchor: rigid, no articulation.
+                let r = 4.0 * s;
+                draw_square(&mut gizmos, anchor, r * 1.1, OUTLINE);
+                draw_square(&mut gizmos, anchor, r, color);
+            }
             JointKind::Spring { .. } => {
                 // A coil between the two anchors; the connected bodies don't
                 // collide, so it reads as a free spring, not a rod.
@@ -134,6 +140,24 @@ pub fn draw_joints(
 
 /// Dark under-stroke color for glyph outlines.
 const OUTLINE: bevy::color::Srgba = css::DARK_SLATE_GRAY;
+
+/// An axis-aligned square outline centered on `anchor` (the weld glyph).
+fn draw_square(
+    gizmos: &mut Gizmos<OverlayGizmos>,
+    anchor: Vec2,
+    half: f32,
+    color: bevy::color::Srgba,
+) {
+    let c = [
+        anchor + Vec2::new(-half, -half),
+        anchor + Vec2::new(half, -half),
+        anchor + Vec2::new(half, half),
+        anchor + Vec2::new(-half, half),
+    ];
+    for i in 0..4 {
+        gizmos.line_2d(c[i], c[(i + 1) % 4], color);
+    }
+}
 
 /// The limits to draw for `entity`: the live drag's tentative range when
 /// this joint's handle is being dragged (flagged `true`), else the

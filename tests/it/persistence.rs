@@ -159,7 +159,7 @@ fn joint_seed_strategy() -> impl Strategy<Value = JointSeed> {
     (
         0usize..16,
         proptest::option::of(0usize..16),
-        0u8..3,
+        0u8..4,
         proptest::option::of((-2.0f32..0.0, 0.0f32..2.0).prop_map(|(a, b)| [a, b])),
         proptest::option::of(motor_strategy()),
     )
@@ -195,6 +195,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                             limits,
                             motor,
                         },
+                        2 => JointKind::Weld,
                         _ => JointKind::Slider {
                             axis: Vec2::X,
                             limits,
