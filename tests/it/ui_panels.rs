@@ -23,7 +23,7 @@ use std::collections::VecDeque;
 fn toolbar_palette_lists_all_tools_and_reports_clicks() {
     let clicked: Cell<Option<ToolState>> = Cell::new(None);
     let mut harness = Harness::new_ui(|ui| {
-        if let Some(tool) = tools_palette_ui(ui, ToolState::Select) {
+        if let Some(tool) = tools_palette_ui(ui, ToolState::Select, None) {
             clicked.set(Some(tool));
         }
     });

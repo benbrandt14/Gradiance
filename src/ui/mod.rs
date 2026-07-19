@@ -157,6 +157,8 @@ impl Plugin for GradianceUiPlugin {
             egui_settings.auto_create_primary_context = false;
         }
         app.add_systems(Startup, spawn_ui_camera);
+        app.init_resource::<toolbar::ToolIcons>();
+        app.add_systems(Startup, toolbar::load_tool_icons);
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
