@@ -243,8 +243,10 @@ mod tests {
         assert!((eval(&rod, Vec2::new(0.0, 5.0)) - 2.5).abs() < 1e-5);
         // Cap: beyond the right endpoint along the axis.
         assert!((eval(&rod, Vec2::new(30.0, 0.0)) - 7.5).abs() < 1e-5);
-        // Cap surface point at 45° off the left endpoint.
-        let p = Vec2::new(-20.0, 0.0) + Vec2::splat(2.5 / std::f32::consts::SQRT_2);
+        // Cap surface point at 45° off the left endpoint (outward, past
+        // the segment end, where the cap arc is the nearest surface).
+        let offset = 2.5 / std::f32::consts::SQRT_2;
+        let p = Vec2::new(-20.0 - offset, offset);
         assert!(eval(&rod, p).abs() < 1e-5);
         // Deep inside: on the segment itself.
         assert!((eval(&rod, Vec2::new(10.0, 0.0)) + 2.5).abs() < 1e-5);

@@ -329,7 +329,7 @@ impl SelectGesture {
         // Set (or keep) the selection, then start moving it. The move bodies
         // are the selection *as it will be* after the transition the driver
         // applies this frame.
-        let (transition, move_entities): (SelectTransition, Vec<Entity>) =
+        let (transition, mut move_entities): (SelectTransition, Vec<Entity>) =
             if selection.contains(hit) {
                 (SelectTransition::DeselectJoint, selection.iter().collect())
             } else {
@@ -338,6 +338,9 @@ impl SelectGesture {
                     dedup_preserving_order(members),
                 )
             };
+        // Rigid rods attached to a moved body follow the move (transient
+        // preview + the same commit, so undo restores them too).
+        world.expand_rod_followers(&mut move_entities);
         let bodies: Vec<(Entity, StableId, PosRot)> = move_entities
             .iter()
             .filter_map(|e| Some((*e, world.id_of(*e)?, world.pose_of(*e)?)))

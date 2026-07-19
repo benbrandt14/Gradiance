@@ -491,6 +491,9 @@ pub struct ToolWorld<'w, 's> {
     ids: Query<'w, 's, &'static StableId>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
     kinds: Query<'w, 's, &'static RigidBody, With<Body>>,
+    joints: Query<'w, 's, &'static crate::domain::joint::JointDef>,
+    rods: Query<'w, 's, (), (With<crate::domain::rod::Rod>, With<Body>)>,
+    index: Res<'w, crate::core::ids::IdIndex>,
 }
 
 impl ToolWorld<'_, '_> {
@@ -572,6 +575,29 @@ impl ToolWorld<'_, '_> {
     /// of them (selecting one grouped body selects the whole assembly).
     pub fn expand_group_members(&self, members: &mut Vec<Entity>) {
         expand_groups(members, &self.groups);
+    }
+
+    /// Expands `members` with every rigid rod whose end joint attaches to
+    /// one of them, so a paused move kinematically carries the rods along
+    /// instead of leaving them behind for the solver to yank on resume.
+    /// One hop only — rods hanging off followed rods don't cascade.
+    pub fn expand_rod_followers(&self, members: &mut Vec<Entity>) {
+        let member_ids: Vec<StableId> = members.iter().filter_map(|e| self.id_of(*e)).collect();
+        for def in &self.joints {
+            // A rod is always `body_a` of its own end joints.
+            let Some(other) = def.body_b else {
+                continue;
+            };
+            if !member_ids.contains(&other) {
+                continue;
+            }
+            let Some(rod_entity) = self.index.entity(def.body_a) else {
+                continue;
+            };
+            if self.rods.contains(rod_entity) && !members.contains(&rod_entity) {
+                members.push(rod_entity);
+            }
+        }
     }
 
     /// The selection's oriented bounding box in `frame`, if anything scalable

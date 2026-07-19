@@ -654,3 +654,65 @@ fn rod_flexure_toggle_round_trips_and_undoes() {
         "one end joint for the real attachment"
     );
 }
+
+// ---------- Pause-mode kinematic follow (revision R6) ----------
+
+#[test]
+fn moving_an_attached_body_carries_its_rod_and_undoes_together() {
+    use gradiance::core::states::ToolState;
+    let mut app = paused_app();
+    let base = box_record(Vec2::ZERO, 40.0, 40.0);
+    let base_id = base.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: base });
+    app.update();
+    let spec = rod_spec(
+        Vec2::new(0.0, 0.0),
+        Vec2::new(100.0, 0.0),
+        Some(base_id),
+        None,
+    );
+    let rod_id = spec.bodies[0].id;
+    app.world_mut().write_message(SpawnRodIntent { spec });
+    crate::harness::step(&mut app, 2);
+
+    // Select-move the box by 60 px in pause mode.
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Select);
+    app.update();
+    // Press well away from the joint anchor at the origin (a press within
+    // the glyph pick radius selects the joint instead).
+    set_cursor(&mut app, Vec2::new(-14.0, 12.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(-14.0, 72.0));
+    app.update();
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    let base_entity = entity_of(&app, base_id).unwrap();
+    let base_pose = PosRot::from_transform(app.world().get::<Transform>(base_entity).unwrap());
+    assert!(
+        (base_pose.pos.y - 60.0).abs() < 5.0,
+        "box moved (box pos = {})",
+        base_pose.pos
+    );
+    let rod = entity_of(&app, rod_id).unwrap();
+    let rod_pose = PosRot::from_transform(app.world().get::<Transform>(rod).unwrap());
+    assert!(
+        (rod_pose.pos.y - 60.0).abs() < 5.0,
+        "rod followed the moved box (rod y = {})",
+        rod_pose.pos.y
+    );
+
+    undo(&mut app);
+    let rod = entity_of(&app, rod_id).unwrap();
+    let rod_pose = PosRot::from_transform(app.world().get::<Transform>(rod).unwrap());
+    assert!(
+        rod_pose.pos.y.abs() < 1.0,
+        "undo restores the rod too (rod y = {})",
+        rod_pose.pos.y
+    );
+}
