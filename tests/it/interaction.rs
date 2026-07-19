@@ -256,3 +256,39 @@ fn gesture_constraints_follow_modifier_keys() {
     let q = constraints.apply_rotation(17_f32.to_radians(), &config);
     assert!((q - 15_f32.to_radians()).abs() < 1e-5);
 }
+
+#[test]
+fn rods_snap_on_their_centerline_and_endpoints_not_the_outline() {
+    let mut app = paused_app();
+    // A rod along x: centerline y = 0, outline at y = ±2.5, tips at ±50.
+    let mut rod = box_record(Vec2::ZERO, 10.0, 10.0);
+    rod.shape = ShapeDef::Capsule {
+        half_length: 50.0,
+        radius: 2.5,
+    };
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: rod });
+    step(&mut app, 2);
+
+    // Near the rod's side: the snap must land on the centerline (y = 0),
+    // not the stadium outline (y = 2.5).
+    app.world_mut()
+        .insert_resource(CursorWorldPos(Some(Vec2::new(10.0, 6.0))));
+    let _ = app
+        .world_mut()
+        .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
+    let snapped = app.world().resource::<SnappedCursor>();
+    let pos = snapped.position.unwrap();
+    assert!(pos.y.abs() < 1e-3, "centerline, not outline ({pos})");
+
+    // Near a tip: exact endpoint vertex.
+    app.world_mut()
+        .insert_resource(CursorWorldPos(Some(Vec2::new(53.0, 4.0))));
+    let _ = app
+        .world_mut()
+        .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
+    let snapped = app.world().resource::<SnappedCursor>();
+    assert_eq!(snapped.kind, Some(SnapKind::Vertex), "{snapped:?}");
+    let pos = snapped.position.unwrap();
+    assert!((pos - Vec2::new(50.0, 0.0)).length() < 1e-3, "{pos}");
+}

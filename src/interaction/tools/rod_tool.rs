@@ -26,6 +26,10 @@ const MIN_ROD_LENGTH: f32 = 10.0;
 /// Rod capsule radius (half the drawn thickness, world px) — reads as a
 /// thick line next to 1-px gizmo strokes.
 pub const ROD_RADIUS: f32 = 2.5;
+/// Surface tolerance for end attachment (world px): a snapped endpoint
+/// lands *exactly on* an edge or a rod tip, where exact containment is a
+/// coin flip.
+const ATTACH_TOLERANCE: f32 = 8.0;
 
 /// In-progress rod gesture (the first endpoint).
 #[derive(Resource, Default, Debug)]
@@ -148,7 +152,7 @@ fn build_flexure(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Opt
     // Each end resolves to (body id, local anchor, body rotation) — the
     // hit body's, or a freshly minted tip circle's.
     let mut resolve_end = |point: Vec2| -> (crate::core::ids::StableId, Vec2, f32) {
-        if let Some(&hit) = world.bodies_at(point).first()
+        if let Some(hit) = world.attachment_body_at(point, ATTACH_TOLERANCE)
             && let Some((_, pose)) = world.shape_pose(hit)
             && let Some(id) = world.id_of(hit)
         {
@@ -235,7 +239,7 @@ fn end_joint(
     rod_rot: f32,
     kind: RodEndKind,
 ) -> Option<JointRecord> {
-    let &hit = world.bodies_at(point).first()?;
+    let hit = world.attachment_body_at(point, ATTACH_TOLERANCE)?;
     let (_, pose) = world.shape_pose(hit)?;
     let hit_id = world.id_of(hit)?;
     let to_local = Vec2::from_angle(-pose.rot).rotate(point - pose.pos);

@@ -505,6 +505,43 @@ impl ToolWorld<'_, '_> {
         super::bodies_at_sorted(p, &self.physics, &self.hit)
     }
 
+    /// Attachment candidates at `p`, tolerating boundary landings: exact
+    /// containment hits first (topmost order), then bodies whose surface
+    /// is within `tol` (SDF distance, nearest first), ground half-planes
+    /// last. A snapped point sits *exactly on* an edge or a rod tip,
+    /// where exact containment is a coin flip — this is the
+    /// connector/rod attachment hit-test.
+    pub fn attachment_bodies_at(&self, p: Vec2, tol: f32) -> Vec<Entity> {
+        let mut hits = self.bodies_at(p);
+        let mut near: Vec<(f32, bool, Entity)> = Vec::new();
+        for entity in self
+            .physics
+            .bodies_in_aabb(p - Vec2::splat(tol), p + Vec2::splat(tol))
+        {
+            if hits.contains(&entity) {
+                continue;
+            }
+            let Ok((shape, transform)) = self.shapes.get(entity) else {
+                continue;
+            };
+            let pose = PosRot::from_transform(transform);
+            let local = Vec2::from_angle(-pose.rot).rotate(p - pose.pos);
+            let dist = crate::geometry::sdf::eval(shape, local);
+            if dist <= tol {
+                near.push((dist, shape.contains_half_plane(), entity));
+            }
+        }
+        near.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.total_cmp(&b.0)));
+        hits.extend(near.into_iter().map(|(_, _, entity)| entity));
+        hits
+    }
+
+    /// The single best attachment body at `p` (see
+    /// [`attachment_bodies_at`](Self::attachment_bodies_at)).
+    pub fn attachment_body_at(&self, p: Vec2, tol: f32) -> Option<Entity> {
+        self.attachment_bodies_at(p, tol).first().copied()
+    }
+
     /// A body entity's authored pose.
     pub fn pose_of(&self, entity: Entity) -> Option<PosRot> {
         self.shapes

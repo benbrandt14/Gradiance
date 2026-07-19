@@ -363,3 +363,84 @@ fn elastica_cache(app: &mut App) -> gradiance::physics::elastica::ElasticaCache 
         .unwrap_or_default();
     gradiance::physics::elastica::ElasticaCache(state)
 }
+
+// ---------- Boundary-tolerant attachment (revision R2) ----------
+
+fn set_cursor(app: &mut App, p: Vec2) {
+    use gradiance::interaction::cursor::CursorWorldPos;
+    use gradiance::interaction::snap::SnappedCursor;
+    app.world_mut().insert_resource(CursorWorldPos(Some(p)));
+    app.world_mut().insert_resource(SnappedCursor {
+        raw: Some(p),
+        position: Some(p),
+        kind: None,
+    });
+}
+
+fn mouse(app: &mut App, button: MouseButton, down: bool) {
+    let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+    if down {
+        input.press(button);
+    } else {
+        input.release(button);
+    }
+}
+
+#[test]
+fn rod_drawn_tip_to_tip_onto_another_rod_attaches() {
+    use gradiance::core::states::ToolState;
+    let mut app = paused_app();
+    // First rod: capsule from (0,0) to (100,0), spawned directly.
+    let spec = rod_spec(Vec2::ZERO, Vec2::new(100.0, 0.0), None, None);
+    app.world_mut().write_message(SpawnRodIntent { spec });
+    crate::harness::step(&mut app, 2); // colliders derive
+
+    // Draw a second rod starting exactly ON the first rod's tip.
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Strut);
+    app.update();
+    set_cursor(&mut app, Vec2::new(100.0, 0.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(200.0, 60.0));
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    assert_eq!(body_count(&mut app), 2, "second rod authored");
+    assert_eq!(
+        joint_count(&mut app),
+        1,
+        "tip-to-tip landing creates the pin joint"
+    );
+}
+
+#[test]
+fn rod_ending_exactly_on_a_box_edge_attaches() {
+    use gradiance::core::states::ToolState;
+    let mut app = paused_app();
+    // Box centered at (150, 0), 40 wide: left edge exactly at x = 130.
+    let boxy = box_record(Vec2::new(150.0, 0.0), 40.0, 40.0);
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: boxy });
+    crate::harness::step(&mut app, 2);
+
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Strut);
+    app.update();
+    set_cursor(&mut app, Vec2::new(0.0, 0.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(130.0, 0.0));
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    assert_eq!(
+        joint_count(&mut app),
+        1,
+        "edge landing creates the constraint"
+    );
+}

@@ -31,6 +31,8 @@ use bevy::prelude::*;
 
 /// Below this drag length a slider uses the body's local X axis.
 const AXIS_THRESHOLD: f32 = 5.0;
+/// Surface tolerance for connecting at a body's boundary (world px).
+const ATTACH_TOLERANCE: f32 = 8.0;
 
 /// In-progress connector gesture (anchor point).
 #[derive(Resource, Default, Debug)]
@@ -136,8 +138,9 @@ fn build_joint(
     defaults: crate::domain::settings::ToolDefaults,
     world: &ToolWorld,
 ) -> Option<ToolCommit> {
-    // The two topmost bodies at the anchor; one body → world pin.
-    let hits = world.bodies_at(anchor);
+    // The two topmost bodies at the anchor (boundary-tolerant, so a click
+    // on an edge or a rod tip still connects); one body → world pin.
+    let hits = world.attachment_bodies_at(anchor, ATTACH_TOLERANCE);
     let &body_a = hits.first()?;
     let pose_a = world.pose_of(body_a)?;
     let id_a = world.id_of(body_a)?;
