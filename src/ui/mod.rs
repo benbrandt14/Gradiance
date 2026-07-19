@@ -32,7 +32,9 @@ pub mod widgets;
 
 use crate::interaction::PointerOverUi;
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use bevy_egui::{
+    EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext, egui,
+};
 
 /// Screen rects claimed this frame by the **background-layer** docked panels
 /// (the right dock, the bottom dock). egui draws these into a root `Ui` on
@@ -146,6 +148,15 @@ impl Plugin for GradianceUiPlugin {
             return;
         }
         app.add_plugins(EguiPlugin::default());
+        // Give egui its OWN full-window camera (below): the scene `Camera3d`
+        // must be free to route into a sub-viewport (stage 2) without dragging
+        // egui's drawable area with it. So stop bevy_egui from auto-attaching
+        // the primary context to the scene camera, and spawn a dedicated UI
+        // camera that owns it.
+        if let Some(mut egui_settings) = app.world_mut().get_resource_mut::<EguiGlobalSettings>() {
+            egui_settings.auto_create_primary_context = false;
+        }
+        app.add_systems(Startup, spawn_ui_camera);
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
@@ -174,11 +185,11 @@ impl Plugin for GradianceUiPlugin {
                 bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,
-                // `apply_scene_viewport` (stage 2) is deliberately NOT scheduled:
-                // bevy_egui renders the UI into the same Camera3d whose viewport
-                // it would shrink, so routing the scene into a sub-rect feeds
-                // back into egui's drawable area and oscillates. Re-enable only
-                // once the UI renders on its own full-window camera.
+                // Stage 2: route the scene camera into the dock-bounded pane.
+                // Safe now that egui renders on its own full-window camera
+                // (`spawn_ui_camera`), so shrinking the scene camera no longer
+                // shrinks the UI.
+                apply_scene_viewport,
                 capture_pointer_over_ui,
             )
                 .chain(),
@@ -187,18 +198,32 @@ impl Plugin for GradianceUiPlugin {
     }
 }
 
+/// Spawns the dedicated **UI camera** that hosts the primary egui context: a
+/// full-window `Camera2d` rendering *after* the scene (higher `order`) and not
+/// clearing it (`ClearColorConfig::None`), so egui overlays the scene. Because
+/// this camera has no viewport of its own, egui's drawable area stays the full
+/// window even when [`apply_scene_viewport`] routes the scene `Camera3d` into a
+/// sub-pane — which is what breaks the stage-2 feedback loop.
+fn spawn_ui_camera(mut commands: Commands) {
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 1,
+            clear_color: bevy::camera::ClearColorConfig::None,
+            ..default()
+        },
+        PrimaryEguiContext,
+    ));
+}
+
 /// Routes the scene camera to render only into the **scene pane** — the central
 /// area left by the docked panels — so the docks are a real shell around the
 /// viewport rather than an overlay on top of it (`docs/ui-shell-decision.md`,
 /// stage 2). Bevy's `viewport_to_world` already offsets by the camera viewport,
-/// so picking/gizmos follow the pane for free.
-///
-/// **Currently NOT scheduled** (see the note in [`GradianceUiPlugin::build`]):
-/// `bevy_egui` renders the UI into this same `Camera3d`, so shrinking its
-/// viewport shrinks egui's drawable area, which feeds back through `top_inset`
-/// and
-/// oscillates. Re-enable once the UI has its own full-window camera. Kept (with
-/// its tests) so that fix is a one-line re-schedule.
+/// so picking/gizmos follow the pane for free. Only the scene `Camera3d` is
+/// routed; egui lives on its own full-window camera ([`spawn_ui_camera`]), so
+/// shrinking this viewport no longer shrinks the UI. Runs after the docks have
+/// pushed their rects (before `capture_pointer_over_ui` clears them).
 pub fn apply_scene_viewport(
     mut contexts: EguiContexts,
     panels: Res<PanelRects>,
