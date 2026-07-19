@@ -302,7 +302,7 @@ pub fn pick_joint(
             && let Some((anchor, rot_a)) = frame_of(def)
         {
             let handle_grab = reselected
-                .then(|| limit_handles(def, anchor, rot_a, s))
+                .then(|| limit_handles(def, anchor, def.limit_reference_angle(rot_a), s))
                 .flatten()
                 .and_then(|handles| {
                     handles
@@ -384,7 +384,7 @@ pub fn drag_joint_limit(
         drag.engaged = true;
     }
     if drag.engaged {
-        drag.tentative = dragged_limits(def, anchor, rot_a, p, end);
+        drag.tentative = dragged_limits(def, anchor, def.limit_reference_angle(rot_a), p, end);
     }
 }
 
