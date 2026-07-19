@@ -169,7 +169,6 @@ impl Plugin for GradianceUiPlugin {
                 dock::right_dock,
                 view_cube::view_cube,
                 labels::draw_workspace_labels,
-                inspector::inspector_window,
                 joint_inspector::joint_inspector,
                 settings::settings_window,
                 bottom_dock::bottom_dock,
