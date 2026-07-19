@@ -146,13 +146,17 @@ pub fn toolbar(
             });
         });
 
+    // A fixed docked strip on the left edge (not a collapsible/movable
+    // floating window). Anchored below the transport; hover-reveal + a
+    // right-edge placement can follow once the icon set lands.
     egui::Window::new("Tools")
+        .title_bar(false)
+        .collapsible(false)
+        .movable(false)
         .resizable(false)
-        .default_pos([8.0, 120.0])
+        .anchor(egui::Align2::LEFT_TOP, [8.0, 120.0])
         .show(ctx, |ui| {
-            // Narrow enough that the icons wrap into a compact floating grid
-            // (a few per row) rather than one tall column.
-            ui.set_max_width(96.0);
+            ui.set_max_width(120.0);
             if let Some(state) = tools_palette_ui(ui, *tool.get()) {
                 next_tool.set(state);
             }
@@ -224,29 +228,28 @@ fn panel_toggles(ui: &mut egui::Ui, panels: &mut Panels) {
     }
 }
 
-/// The tool-palette as a floating grid of **icon** buttons, grouped into
-/// sections by a separator: highlights `current`, returns a clicked tool. Each
-/// icon carries its `"{name} ({key})"` as hover text. Host-agnostic (pure `Ui`
-/// in, choice out) so `tests/it/ui_panels.rs` can exercise it under
+/// The tool-palette as a docked strip of labeled buttons, grouped into sections
+/// (a small weak heading per group): highlights `current`, returns a clicked
+/// tool. Text labels for now — egui's bundled font lacks the icon glyphs (they
+/// render as tofu), so real icons wait on a bundled icon font. Host-agnostic
+/// (pure `Ui` in, choice out) so `tests/it/ui_panels.rs` can exercise it under
 /// `egui_kittest`.
 pub fn tools_palette_ui(ui: &mut egui::Ui, current: ToolState) -> Option<ToolState> {
     let mut clicked = None;
-    for (i, (_group, tools)) in TOOL_GROUPS.iter().enumerate() {
+    for (i, (group, tools)) in TOOL_GROUPS.iter().enumerate() {
         if i > 0 {
-            ui.separator();
+            ui.add_space(6.0);
         }
-        ui.horizontal_wrapped(|ui| {
-            for (state, name, key, icon) in *tools {
-                let selected = current == *state;
-                if ui
-                    .selectable_label(selected, egui::RichText::new(*icon).size(18.0))
-                    .on_hover_text(format!("{name} ({key})"))
-                    .clicked()
-                {
-                    clicked = Some(*state);
-                }
+        ui.label(egui::RichText::new(*group).small().weak());
+        for (state, name, key, _icon) in *tools {
+            let selected = current == *state;
+            if ui
+                .selectable_label(selected, format!("{name} ({key})"))
+                .clicked()
+            {
+                clicked = Some(*state);
             }
-        });
+        }
     }
     clicked
 }
