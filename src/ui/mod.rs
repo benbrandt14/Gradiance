@@ -221,7 +221,7 @@ fn spawn_ui_camera(mut commands: Commands) {
 /// viewport rather than an overlay on top of it (`docs/ui-shell-decision.md`,
 /// stage 2). Bevy's `viewport_to_world` already offsets by the camera viewport,
 /// so picking/gizmos follow the pane for free. Only the scene `Camera3d` is
-/// routed; egui lives on its own full-window camera ([`spawn_ui_camera`]), so
+/// routed; egui lives on its own full-window camera (`spawn_ui_camera`), so
 /// shrinking this viewport no longer shrinks the UI. Runs after the docks have
 /// pushed their rects (before `capture_pointer_over_ui` clears them).
 pub fn apply_scene_viewport(
