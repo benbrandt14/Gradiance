@@ -29,13 +29,25 @@ fn toolbar_palette_lists_all_tools_and_reports_clicks() {
     });
     harness.run();
 
-    // Every tool icon is present (a missing entry = a palette reflow bug).
-    for icon in ["▧", "✋", "▭", "⬤", "⬠", "⊙", "⬌", "∿", "⧉", "⏚", "✂", "⌇"]
-    {
-        harness.get_by_label(icon);
+    // Every tool button is present (a missing entry = a palette reflow bug).
+    for label in [
+        "Select (S)",
+        "Drag (D)",
+        "Box (B)",
+        "Circle (C)",
+        "Polygon (P)",
+        "Hinge (H)",
+        "Prismatic (R)",
+        "Strut (T)",
+        "Weld (W)",
+        "Ground (G)",
+        "Cut (K)",
+        "Tracer (Y)",
+    ] {
+        harness.get_by_label(label);
     }
 
-    harness.get_by_label("▭").click(); // Box
+    harness.get_by_label("Box (B)").click();
     harness.run();
     assert_eq!(clicked.get(), Some(ToolState::Box));
 }
