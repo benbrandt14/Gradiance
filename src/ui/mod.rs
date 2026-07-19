@@ -212,6 +212,11 @@ fn spawn_ui_camera(mut commands: Commands) {
             clear_color: bevy::camera::ClearColorConfig::None,
             ..default()
         },
+        // Render NO world entities — in particular no gizmos (grid, outlines,
+        // joint glyphs, handles), which otherwise this 2D camera would redraw
+        // flat over the 3D scene's gizmos (the "duplicate flat view"). egui
+        // still overlays: bevy_egui's pass runs regardless of render layers.
+        bevy::camera::visibility::RenderLayers::none(),
         PrimaryEguiContext,
     ));
 }
