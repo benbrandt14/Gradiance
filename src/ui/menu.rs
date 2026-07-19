@@ -187,6 +187,9 @@ fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
         ui.checkbox(&mut panels.settings.open, "Settings");
         ui.separator();
         // Panels toggled through their `is_open`/`toggle` API.
+        toggle_item(ui, "Outliner", panels.outliner.is_open(), || {
+            panels.outliner.toggle();
+        });
         toggle_item(ui, "Node Graph", panels.node_graph.is_open(), || {
             panels.node_graph.toggle();
         });
