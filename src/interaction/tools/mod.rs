@@ -205,5 +205,6 @@ pub fn new_body_record(
         field: None,
         tracer: None,
         rod: None,
+        rod_tip: false,
     }
 }

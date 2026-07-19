@@ -23,10 +23,12 @@ pub fn joint_inspector(
     mut contexts: EguiContexts,
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
+    caches: Query<&crate::physics::elastica::ElasticaCache>,
     transforms: Query<&Transform>,
     index: Res<IdIndex>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
+    mut flexure_toggles: MessageWriter<crate::command::intent::SetRodFlexureIntent>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let Some(entity) = selected.0 else {
@@ -85,6 +87,10 @@ pub fn joint_inspector(
             }
 
             changed |= configure_kind(ui, &def.kind, &mut next);
+
+            if matches!(def.kind, JointKind::Elastica { .. }) {
+                elastica_extras(ui, id, entity, &caches, &mut flexure_toggles);
+            }
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -220,6 +226,47 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
     changed
 }
 
+/// The flexure's live sensor readouts + rigid-rod conversion button.
+fn elastica_extras(
+    ui: &mut egui::Ui,
+    id: StableId,
+    entity: Entity,
+    caches: &Query<&crate::physics::elastica::ElasticaCache>,
+    flexure_toggles: &mut MessageWriter<crate::command::intent::SetRodFlexureIntent>,
+) {
+    if let Ok(cache) = caches.get(entity) {
+        ui.separator();
+        ui.label(egui::RichText::new("Sensors").strong());
+        let rows: [(&str, String); 5] = [
+            ("axial force", format!("{:+.3e}", -cache.loads.force_b.x)),
+            ("shear force", format!("{:+.3e}", cache.loads.force_b.y)),
+            ("moment A", format!("{:+.3e}", cache.loads.moment_a)),
+            ("moment B", format!("{:+.3e}", cache.loads.moment_b)),
+            ("bow", format!("{:.2} px", cache.bow)),
+        ];
+        for (label, value) in rows {
+            ui.horizontal(|ui| {
+                ui.label(label);
+                ui.monospace(value);
+            });
+        }
+    }
+    ui.separator();
+    if ui
+        .button("Convert to rigid rod")
+        .on_hover_text(
+            "Replace the elastic beam with a rigid capsule rod (weld/hinge \
+             end joints, collides along its length). Undoable.",
+        )
+        .clicked()
+    {
+        flexure_toggles.write(crate::command::intent::SetRodFlexureIntent {
+            target: id,
+            enable: false,
+        });
+    }
+}
+
 /// A human label for a joint kind, shared with the context menu.
 pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
@@ -258,11 +305,16 @@ fn elastica_section(
     let mut e = young_modulus;
     let mut t = thickness;
     let mut zeta = damping_ratio;
+    let mut len = length;
     let mut edited = false;
 
+    // Editable rest length: shorter than the anchor gap = pre-tension,
+    // longer = pre-compression (push it past onset and the rod buckles).
     ui.horizontal(|ui| {
-        ui.label("length");
-        ui.monospace(format!("{length:.1} px"));
+        ui.label("rest length");
+        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("flex-l"), &mut len, length, 1.0) {
+            edited = true;
+        }
     });
     ui.horizontal(|ui| {
         ui.label("stiffness E");
@@ -303,6 +355,19 @@ fn elastica_section(
         edited = true;
     }
 
+    // Derived stiffness readouts, tracking the (possibly edited) values.
+    let (ea, ei) = (e * t, e * t * t * t / 12.0);
+    let p_cr = std::f32::consts::PI.powi(2) * ei / (len * len).max(1.0e-6);
+    ui.horizontal(|ui| {
+        ui.label("EA / EI");
+        ui.monospace(format!("{ea:.2e} / {ei:.2e}"));
+    });
+    ui.horizontal(|ui| {
+        ui.label("buckling load")
+            .on_hover_text("Euler critical load π²EI/L²");
+        ui.monospace(format!("{p_cr:.2e}"));
+    });
+
     if !edited {
         return None;
     }
@@ -314,7 +379,7 @@ fn elastica_section(
         }
     };
     Some(JointKind::Elastica {
-        length,
+        length: len.max(1.0),
         young_modulus: e.max(0.0),
         thickness: t.max(0.1),
         damping_ratio: zeta.max(0.0),

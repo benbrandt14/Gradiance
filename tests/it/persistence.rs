@@ -130,6 +130,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                 field: None,
                 tracer: None,
                 rod: None,
+                rod_tip: false,
             },
         )
 }

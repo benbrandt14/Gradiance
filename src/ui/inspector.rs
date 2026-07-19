@@ -47,6 +47,8 @@ pub struct BodyProps<'w, 's> {
     pub depths: Query<'w, 's, &'static DepthBand, With<Body>>,
     /// The shared property-edit intent writer.
     pub edits: MessageWriter<'w, PropertyEditIntent>,
+    /// Rod rigid↔flexure conversion intents.
+    flexure_toggles: MessageWriter<'w, crate::command::intent::SetRodFlexureIntent>,
     /// Debug-overlay settings (config seam: the layers UI toggles the
     /// viewport layer visualization).
     debug: ResMut<'w, crate::domain::settings::DebugSettings>,
@@ -555,6 +557,23 @@ pub fn rod_section(ui: &mut egui::Ui, primary: Entity, props: &mut BodyProps) {
     };
     ui.separator();
     ui.label(egui::RichText::new("Rod ends").strong());
+
+    if ui
+        .button("Convert to elastic flexure")
+        .on_hover_text(
+            "Replace the rigid capsule with an analytic elastic beam \
+             (large deflections, Euler buckling). Undoable; tune \
+             stiffness by selecting the flexure line afterward.",
+        )
+        .clicked()
+    {
+        props
+            .flexure_toggles
+            .write(crate::command::intent::SetRodFlexureIntent {
+                target: rod_id,
+                enable: true,
+            });
+    }
 
     let mut hinge_a = rod.end_a == RodEndKind::Hinge;
     let mut hinge_b = rod.end_b == RodEndKind::Hinge;

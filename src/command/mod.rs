@@ -220,6 +220,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::ArrayIntent>();
         app.add_message::<intent::SpawnJointIntent>();
         app.add_message::<intent::SpawnRodIntent>();
+        app.add_message::<intent::SetRodFlexureIntent>();
         app.add_message::<intent::PropertyEditIntent>();
         app.add_message::<intent::GroupIntent>();
         app.add_message::<intent::UngroupIntent>();
@@ -248,6 +249,7 @@ impl Plugin for CommandPlugin {
         app.register_type::<intent::ArrayIntent>();
         app.register_type::<intent::SpawnJointIntent>();
         app.register_type::<intent::SpawnRodIntent>();
+        app.register_type::<intent::SetRodFlexureIntent>();
         app.register_type::<intent::PropertyEditIntent>();
         app.register_type::<intent::GroupIntent>();
         app.register_type::<intent::UngroupIntent>();

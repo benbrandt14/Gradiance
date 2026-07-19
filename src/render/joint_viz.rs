@@ -352,10 +352,11 @@ fn draw_flexure(
         hinge_a: end_a == crate::domain::rod::RodEndKind::Hinge,
         hinge_b: end_b == crate::domain::rod::RodEndKind::Hinge,
     };
-    let pts: Vec<Vec2> = crate::geometry::elastica::centerline(&params, &cache.0, chord, SAMPLES)
-        .into_iter()
-        .map(|p| a + rot.rotate(p))
-        .collect();
+    let pts: Vec<Vec2> =
+        crate::geometry::elastica::centerline(&params, &cache.state, chord, SAMPLES)
+            .into_iter()
+            .map(|p| a + rot.rotate(p))
+            .collect();
     // Double stroke offset by half the section thickness → reads as a
     // solid thick line at any zoom.
     let half = (thickness * 0.5).max(1.0 * s);

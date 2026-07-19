@@ -38,6 +38,7 @@ fn rod_spec(a: Vec2, b: Vec2, hit_a: Option<StableId>, hit_b: Option<StableId>) 
             end_a: RodEndKind::Hinge,
             end_b: RodEndKind::Fixed,
         }),
+        rod_tip: false,
     };
     let joints = [
         (
@@ -295,8 +296,8 @@ fn compressed_flexure_buckles_and_pushes_its_ends_apart() {
     // Then let the pitchfork develop: the warm-start cache carries a
     // transverse (buckled) deflection.
     crate::harness::step(&mut app, 30);
-    let cache = elastica_cache(&mut app);
-    let bow = cache.0.x[2].abs().max(cache.0.x[3].abs());
+    let state = elastica_cache(&mut app);
+    let bow = state.x[2].abs().max(state.x[3].abs());
     assert!(bow > 0.5, "transverse buckling amplitude developed ({bow})");
 }
 
@@ -372,14 +373,12 @@ fn velocity_of(app: &mut App, id: StableId) -> Vec2 {
         .unwrap_or_default()
 }
 
-fn elastica_cache(app: &mut App) -> gradiance::physics::elastica::ElasticaCache {
-    let state = app
-        .world_mut()
+fn elastica_cache(app: &mut App) -> gradiance::geometry::elastica::ElasticaState {
+    app.world_mut()
         .query::<&gradiance::physics::elastica::ElasticaCache>()
         .single(app.world())
-        .map(|c| c.0)
-        .unwrap_or_default();
-    gradiance::physics::elastica::ElasticaCache(state)
+        .map(|c| c.state)
+        .unwrap_or_default()
 }
 
 // ---------- Boundary-tolerant attachment (revision R2) ----------
@@ -577,5 +576,81 @@ fn welded_overlapping_pair_does_not_collide_probe() {
     assert!(
         va.length() < 0.5 && vb.length() < 0.5,
         "hinged overlapping pair must not collide (va {va}, vb {vb})"
+    );
+}
+
+// ---------- Rigid ↔ flexure conversion (revision R3) ----------
+
+#[test]
+fn rod_flexure_toggle_round_trips_and_undoes() {
+    use gradiance::command::intent::SetRodFlexureIntent;
+    let mut app = paused_app();
+    let base = box_record(Vec2::ZERO, 40.0, 40.0);
+    let base_id = base.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: base });
+    app.update();
+    // Rigid rod: attached to the box at end A, free at end B.
+    let spec = rod_spec(
+        Vec2::new(0.0, 0.0),
+        Vec2::new(120.0, 0.0),
+        Some(base_id),
+        None,
+    );
+    let rod_id = spec.bodies[0].id;
+    app.world_mut().write_message(SpawnRodIntent { spec });
+    app.update();
+    assert_eq!(body_count(&mut app), 2);
+
+    // Enable flexure: capsule out; elastica joint + one tip body in.
+    app.world_mut().write_message(SetRodFlexureIntent {
+        target: rod_id,
+        enable: true,
+    });
+    app.update();
+    assert!(entity_of(&app, rod_id).is_none(), "capsule replaced");
+    assert_eq!(body_count(&mut app), 2, "box + tip body");
+    let elastica_id = {
+        let mut q = app.world_mut().query::<(&StableId, &JointDef)>();
+        let (id, def) = q
+            .iter(app.world())
+            .find(|(_, def)| matches!(def.kind, JointKind::Elastica { .. }))
+            .expect("elastica joint authored");
+        assert!(def.body_b.is_some());
+        *id
+    };
+    let tip_count = app
+        .world_mut()
+        .query::<&gradiance::domain::rod::RodTip>()
+        .iter(app.world())
+        .count();
+    assert_eq!(tip_count, 1, "free end got a tip body");
+
+    // Undo restores the rigid rod exactly.
+    undo(&mut app);
+    assert!(entity_of(&app, rod_id).is_some(), "undo restores the rod");
+    assert_eq!(joint_count(&mut app), 1, "end joint restored");
+
+    // Redo, then convert back to rigid via the elastica joint.
+    redo(&mut app);
+    app.world_mut().write_message(SetRodFlexureIntent {
+        target: elastica_id,
+        enable: false,
+    });
+    app.update();
+    let mut q = app.world_mut().query::<(&Rod, &ShapeDef)>();
+    let (rod, shape) = q.iter(app.world()).next().expect("rigid rod again");
+    assert!(matches!(shape, ShapeDef::Capsule { .. }));
+    assert_eq!(rod.end_a, RodEndKind::Hinge);
+    let tips = app
+        .world_mut()
+        .query::<&gradiance::domain::rod::RodTip>()
+        .iter(app.world())
+        .count();
+    assert_eq!(tips, 0, "tip body absorbed");
+    assert_eq!(
+        joint_count(&mut app),
+        1,
+        "one end joint for the real attachment"
     );
 }

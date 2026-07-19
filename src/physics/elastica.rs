@@ -21,10 +21,19 @@ use crate::geometry::elastica::{ElasticaInput, ElasticaParams, ElasticaState, so
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-/// Derived warm-start cache for one elastica joint (never serialized;
-/// rebuilt from zero on load).
+/// Derived warm-start cache + live sensor readouts for one elastica
+/// joint (never serialized; rebuilt from zero on load).
 #[derive(Component, Debug, Default)]
-pub struct ElasticaCache(pub ElasticaState);
+pub struct ElasticaCache {
+    /// The warm-start solver state.
+    pub state: ElasticaState,
+    /// Last frame's end loads (chord frame) — the joint's sensor ports.
+    pub loads: crate::geometry::elastica::ElasticaLoads,
+    /// Last frame's maximum transverse deflection (px).
+    pub bow: f32,
+    /// Last frame's chord length (px).
+    pub chord: f32,
+}
 
 /// One end body's kinematic snapshot for the beam solve.
 struct EndBody {
@@ -126,12 +135,19 @@ pub fn apply_elastica_forces(
             i_red: if inv_i > 0.0 { 1.0 / inv_i } else { f32::MAX },
             h_step,
         };
-        let loads = solve(&input, &mut cache.0);
+        let loads = solve(&input, &mut cache.state);
         let f_world = Vec2::from_angle(psi).rotate(loads.force_b);
         if !(f_world.is_finite() && loads.moment_a.is_finite() && loads.moment_b.is_finite()) {
-            cache.0 = ElasticaState::default();
+            cache.state = ElasticaState::default();
             continue;
         }
+        // Sensor readouts: the joint's live output ports.
+        cache.loads = loads;
+        cache.chord = chord;
+        cache.bow = crate::geometry::elastica::centerline(&input.params, &cache.state, chord, 9)
+            .iter()
+            .map(|v| v.y.abs())
+            .fold(0.0, f32::max);
 
         // Equal-and-opposite wrench pair at the two anchor points — zero
         // net force, zero net moment (see geometry::elastica).

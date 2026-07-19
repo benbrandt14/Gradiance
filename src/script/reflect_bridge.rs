@@ -211,6 +211,7 @@ mod tests {
                 field: None,
                 tracer: None,
                 rod: None,
+                rod_tip: false,
             },
         };
 

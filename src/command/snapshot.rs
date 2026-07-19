@@ -50,6 +50,9 @@ pub struct BodyRecord {
     /// the body is one (v6+).
     #[serde(default)]
     pub rod: Option<crate::domain::rod::Rod>,
+    /// Flexure tip-body marker (v6+).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rod_tip: bool,
 }
 
 impl BodyRecord {
@@ -74,6 +77,7 @@ impl BodyRecord {
                 .copied(),
             tracer: entity_ref.get::<crate::domain::tracer::Tracer>().copied(),
             rod: entity_ref.get::<crate::domain::rod::Rod>().copied(),
+            rod_tip: entity_ref.get::<crate::domain::rod::RodTip>().is_some(),
         })
     }
 
@@ -101,6 +105,9 @@ impl BodyRecord {
         }
         if let Some(rod) = self.rod {
             entity.insert(rod);
+        }
+        if self.rod_tip {
+            entity.insert(crate::domain::rod::RodTip);
         }
         entity.id()
     }

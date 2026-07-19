@@ -130,6 +130,7 @@ fn build_rod(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Option<
             end_a: end_kind,
             end_b: end_kind,
         }),
+        rod_tip: false,
     };
 
     // End joints: each endpoint that lands on a body gets one; empty
@@ -182,6 +183,7 @@ fn build_flexure(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Opt
             field: None,
             tracer: None,
             rod: None,
+            rod_tip: true,
         };
         let id = tip.id;
         bodies.push(tip);

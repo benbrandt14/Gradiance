@@ -23,6 +23,13 @@ pub enum RodEndKind {
     Hinge,
 }
 
+/// Marker on a flexure rod's derived-at-authoring "tip" body: the small
+/// circle giving an unattached beam end inertia and contact. Authored
+/// (persisted, undoable) but owned by its rod — converting the flexure
+/// back to a rigid rod absorbs it.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RodTip;
+
 /// Marker + creation metadata for a rigid rod body.
 #[derive(
     Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect,

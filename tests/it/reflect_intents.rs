@@ -150,6 +150,7 @@ fn spawn_body_intent_round_trips_through_reflection() {
             ..Default::default()
         }),
         rod: None,
+        rod_tip: false,
     };
     let intent = SpawnBodyIntent {
         record: record.clone(),

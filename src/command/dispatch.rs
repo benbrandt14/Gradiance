@@ -87,6 +87,11 @@ pub fn dispatch_intents(world: &mut World) {
             spec: intent.spec,
         }));
     }
+    for intent in drain::<crate::command::intent::SetRodFlexureIntent>(world) {
+        commands.push(Box::new(
+            crate::command::rod_cmd::SetRodFlexureCommand::new(intent.target, intent.enable),
+        ));
+    }
     for intent in drain::<LoadSceneIntent>(world) {
         commands.push(Box::new(LoadSceneCommand::new(intent.scene)));
     }

@@ -152,6 +152,7 @@ impl CutCommand {
                             // A severed rod is no longer a rod — its
                             // pieces are ordinary polygon bodies.
                             rod: None,
+                            rod_tip: false,
                         }
                     })
                     .collect();
