@@ -162,6 +162,55 @@ fn resting_bodies_report_contacts_through_the_facade() {
     );
 }
 
+#[derive(Resource, Default)]
+struct PickProbe {
+    point: Vec2,
+    hits: Vec<Entity>,
+}
+
+fn probe_pick(physics: gradiance::physics::queries::PhysicsQueries, mut probe: ResMut<PickProbe>) {
+    let point = probe.point;
+    probe.hits = physics.bodies_at_point(point);
+}
+
+#[test]
+fn picking_follows_a_body_moved_while_paused() {
+    // Regression: while paused, avian's spatial BVH broad phase is frozen, so a
+    // body a tool moves (by writing Transform directly) must still be pickable
+    // at its new spot — the "objects go non-selectable until I play/pause" bug.
+    // The read facade now hit-tests the live Transform, not the frozen BVH.
+    let mut app = paused_app();
+    app.init_resource::<PickProbe>();
+    app.add_systems(Update, probe_pick);
+
+    let record = box_record(Vec2::ZERO, 40.0, 40.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    step(&mut app, 2); // collider syncs while paused
+
+    let entity = entity_of(&app, id).unwrap();
+    // Move it far away by writing Transform directly, exactly as a paused
+    // drag/move does — no physics step, so the BVH would stay at the old slot.
+    app.world_mut()
+        .get_mut::<Transform>(entity)
+        .unwrap()
+        .translation = Vec3::new(500.0, 0.0, 0.0);
+
+    app.world_mut().resource_mut::<PickProbe>().point = Vec2::new(500.0, 0.0);
+    step(&mut app, 2);
+    assert!(
+        app.world().resource::<PickProbe>().hits.contains(&entity),
+        "a body moved while paused is pickable at its new position"
+    );
+
+    app.world_mut().resource_mut::<PickProbe>().point = Vec2::ZERO;
+    step(&mut app, 2);
+    assert!(
+        !app.world().resource::<PickProbe>().hits.contains(&entity),
+        "and not at its old position"
+    );
+}
+
 #[test]
 fn pausing_freezes_the_simulation() {
     let mut app = headless_app();
