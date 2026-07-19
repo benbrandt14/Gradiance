@@ -76,6 +76,58 @@ impl PanelRects {
             .map(egui::Rect::left)
             .fold(viewport.right(), f32::min)
     }
+
+    /// The top `y` of a panel docked to the bottom edge (the bottom dock), or
+    /// the viewport bottom when none. The filter requires the panel to sit in
+    /// the lower half so the full-height right dock (whose bottom also touches
+    /// the edge) doesn't count.
+    pub fn bottom_inset(&self, viewport: egui::Rect) -> f32 {
+        self.0
+            .iter()
+            .filter(|r| {
+                (r.bottom() - viewport.bottom()).abs() < 2.0 && r.top() > viewport.center().y
+            })
+            .map(egui::Rect::top)
+            .fold(viewport.bottom(), f32::min)
+    }
+
+    /// The central scene rect (logical): the viewport inset by the menu (top),
+    /// the right dock, and the bottom dock. The left edge is never inset — the
+    /// tool palette and transport float *over* the scene (Blender-style).
+    pub fn scene_rect(&self, viewport: egui::Rect) -> egui::Rect {
+        egui::Rect::from_min_max(
+            egui::pos2(viewport.min.x, self.top_inset(viewport)),
+            egui::pos2(self.right_inset(viewport), self.bottom_inset(viewport)),
+        )
+    }
+}
+
+/// Converts the scene pane's logical rect into a camera `Viewport` in physical
+/// pixels, clamped to the window. Returns `None` when the pane is degenerate
+/// (fully covered / off-window) so the camera falls back to the full window.
+/// Pure, so the routing math is unit-testable without a window.
+pub fn scene_viewport(
+    scene: egui::Rect,
+    scale_factor: f32,
+    window_physical: bevy::math::UVec2,
+) -> Option<bevy::camera::Viewport> {
+    let sf = scale_factor.max(1e-3);
+    let to_px = |v: f32, cap: u32| ((v * sf).round().max(0.0) as u32).min(cap);
+    let x0 = to_px(scene.min.x, window_physical.x);
+    let y0 = to_px(scene.min.y, window_physical.y);
+    let x1 = to_px(scene.max.x, window_physical.x);
+    let y1 = to_px(scene.max.y, window_physical.y);
+    let (w, h) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+    // A near-empty pane (docks cover the window) falls back to the full window
+    // rather than a zero-area viewport (which the renderer rejects).
+    if w < 16 || h < 16 {
+        return None;
+    }
+    Some(bevy::camera::Viewport {
+        physical_position: bevy::math::UVec2::new(x0, y0),
+        physical_size: bevy::math::UVec2::new(w, h),
+        ..default()
+    })
 }
 
 /// Whether `pos` falls inside any recorded background-layer panel rect — pure,
@@ -123,12 +175,38 @@ impl Plugin for GradianceUiPlugin {
                 bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,
+                apply_scene_viewport,
                 capture_pointer_over_ui,
             )
                 .chain(),
         );
         app.add_systems(Update, context_menu::open_context_menu);
     }
+}
+
+/// Routes the scene camera to render only into the **scene pane** — the central
+/// area left by the docked panels — so the docks are a real shell around the
+/// viewport rather than an overlay on top of it (`docs/ui-shell-decision.md`,
+/// stage 2). Runs after the docks have pushed their rects (before
+/// `capture_pointer_over_ui` clears them). Bevy's `viewport_to_world` already
+/// offsets by the camera viewport, so picking/gizmos follow the pane for free.
+pub fn apply_scene_viewport(
+    mut contexts: EguiContexts,
+    panels: Res<PanelRects>,
+    windows: Query<&bevy::window::Window, With<bevy::window::PrimaryWindow>>,
+    mut cameras: Query<&mut Camera, With<Camera3d>>,
+) -> Result {
+    let ctx = contexts.ctx_mut()?;
+    let scene = panels.scene_rect(ctx.viewport_rect());
+    let Some(window) = windows.iter().next() else {
+        return Ok(());
+    };
+    let phys = bevy::math::UVec2::new(window.physical_width(), window.physical_height());
+    let viewport = scene_viewport(scene, window.scale_factor(), phys);
+    for mut camera in &mut cameras {
+        camera.viewport.clone_from(&viewport);
+    }
+    Ok(())
 }
 
 /// Publishes whether egui wants the pointer/keyboard, for shortcut and
@@ -152,8 +230,57 @@ fn capture_pointer_over_ui(
 
 #[cfg(test)]
 mod tests {
-    use super::pointer_over_panels;
+    use super::{PanelRects, pointer_over_panels, scene_viewport};
+    use bevy::math::UVec2;
     use bevy_egui::egui::{Pos2, Rect};
+
+    #[test]
+    fn the_scene_rect_insets_by_top_right_and_bottom_docks_but_not_the_left() {
+        let viewport = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(800.0, 600.0));
+        let mut panels = PanelRects::default();
+        // Menu bar (full width, top), right dock (full height, right), bottom
+        // dock (lower-half, bottom-left), and a small floating view cube that
+        // must NOT inset the scene.
+        panels.push(Rect::from_min_max(
+            Pos2::new(0.0, 0.0),
+            Pos2::new(800.0, 24.0),
+        ));
+        panels.push(Rect::from_min_max(
+            Pos2::new(560.0, 24.0),
+            Pos2::new(800.0, 600.0),
+        ));
+        panels.push(Rect::from_min_max(
+            Pos2::new(0.0, 400.0),
+            Pos2::new(560.0, 600.0),
+        ));
+        panels.push(Rect::from_min_max(
+            Pos2::new(480.0, 30.0),
+            Pos2::new(540.0, 90.0),
+        )); // view cube
+        let scene = panels.scene_rect(viewport);
+        assert_eq!(
+            scene.min,
+            Pos2::new(0.0, 24.0),
+            "top inset by menu, left free"
+        );
+        assert_eq!(
+            scene.max,
+            Pos2::new(560.0, 400.0),
+            "right inset by dock, bottom by bottom-dock"
+        );
+    }
+
+    #[test]
+    fn scene_viewport_scales_to_physical_and_rejects_degenerate() {
+        let scene = Rect::from_min_max(Pos2::new(0.0, 24.0), Pos2::new(560.0, 400.0));
+        // scale_factor 2 → physical is doubled; position and size in px.
+        let vp = scene_viewport(scene, 2.0, UVec2::new(1600, 1200)).expect("valid pane");
+        assert_eq!(vp.physical_position, UVec2::new(0, 48));
+        assert_eq!(vp.physical_size, UVec2::new(1120, 752));
+        // A sliver (docks cover almost everything) → None (full-window fallback).
+        let sliver = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(8.0, 600.0));
+        assert!(scene_viewport(sliver, 1.0, UVec2::new(800, 600)).is_none());
+    }
 
     #[test]
     fn a_pointer_inside_a_panel_rect_counts_as_over_ui() {
