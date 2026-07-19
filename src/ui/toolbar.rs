@@ -1,6 +1,5 @@
 //! Tool palette + transport (play/pause, undo/redo, scale frame).
 
-use crate::command::intent::{RedoIntent, UndoIntent};
 use crate::core::states::{GameState, ToolState};
 use crate::interaction::tools::handles::ScaleFrame;
 use bevy::ecs::system::SystemParam;
@@ -104,9 +103,6 @@ pub fn toolbar(
     game: Res<State<GameState>>,
     mut next_game: ResMut<NextState<GameState>>,
     mut frame: ResMut<ScaleFrame>,
-    mut undo: MessageWriter<UndoIntent>,
-    mut redo: MessageWriter<RedoIntent>,
-    mut panels: Panels,
     mut rig: ResMut<crate::interaction::camera::CameraRig>,
     panel_rects: Res<crate::ui::PanelRects>,
     tool_icons: Res<ToolIcons>,
@@ -122,6 +118,9 @@ pub fn toolbar(
         .resizable(false)
         .anchor(egui::Align2::LEFT_TOP, [8.0, top])
         .show(ctx, |ui| {
+            // Only *simulation/view* controls that aren't in the menus. Undo/
+            // Redo (Edit menu), panel toggles + Fields + Settings (View menu)
+            // used to live here too — that duplication is removed.
             ui.horizontal(|ui| {
                 let playing = *game.get() == GameState::Playing;
                 if ui
@@ -133,13 +132,6 @@ pub fn toolbar(
                     } else {
                         GameState::Playing
                     });
-                }
-                ui.separator();
-                if ui.button("⟲ Undo").clicked() {
-                    undo.write(UndoIntent);
-                }
-                if ui.button("⟳ Redo").clicked() {
-                    redo.write(RedoIntent);
                 }
                 ui.separator();
                 let label = match *frame {
@@ -162,97 +154,28 @@ pub fn toolbar(
                 {
                     rig.glide_home();
                 }
-                ui.separator();
-                panel_toggles(ui, &mut panels);
-                ui.separator();
-                if ui.button("⚙ Settings").clicked() {
-                    panels.settings.open = !panels.settings.open;
-                }
             });
         });
 
-    // A fixed docked strip on the left edge (not a collapsible/movable
-    // floating window). Anchored below the transport; hover-reveal + a
-    // right-edge placement can follow once the icon set lands.
+    // A fixed docked strip on the left edge (not a collapsible/movable floating
+    // window), slightly translucent so the scene reads behind it.
+    let tools_frame = egui::Frame::window(&ctx.global_style()).multiply_with_opacity(0.82);
     egui::Window::new("Tools")
         .title_bar(false)
         .collapsible(false)
         .movable(false)
         .resizable(false)
+        .frame(tools_frame)
         .anchor(egui::Align2::LEFT_TOP, [8.0, 120.0])
         .show(ctx, |ui| {
-            // Narrow enough that the ~26px icons wrap two per row (a compact
-            // Blender-style T-panel strip).
-            ui.set_max_width(72.0);
+            // A single column about twice the icon width (icons ~26px), so each
+            // sits in a roomy cell — a compact Blender-style T-panel strip.
+            ui.set_max_width(52.0);
             if let Some(state) = tools_palette_ui(ui, *tool.get(), Some(&tool_icons)) {
                 next_tool.set(state);
             }
         });
     Ok(())
-}
-
-/// Toggles for the hotkey-only panels, so they're discoverable without
-/// knowing the `\` / backquote shortcuts. Each button reflects its panel's
-/// open state. (The field overlay lives with the debug toggles, but it's
-/// the main way to *see* attraction/repulsion — surfaced here too.)
-fn panel_toggles(ui: &mut egui::Ui, panels: &mut Panels) {
-    ui.label(egui::RichText::new("Panels").small().weak());
-    if ui
-        .selectable_label(panels.outliner.is_open(), "Outliner")
-        .on_hover_text("object tree: every scene entity, grouped — click to select")
-        .clicked()
-    {
-        panels.outliner.toggle();
-    }
-    if ui
-        .selectable_label(panels.inspector.open, "Properties")
-        .on_hover_text("properties pop-out (also in the right-click menu)")
-        .clicked()
-    {
-        panels.inspector.open = !panels.inspector.open;
-    }
-    if ui
-        .selectable_label(panels.plot.is_open(), "Plot")
-        .on_hover_text("live plot of the selected body/joint (\\)")
-        .clicked()
-    {
-        panels.plot.toggle();
-    }
-    if ui
-        .selectable_label(panels.probe.is_open(), "Probe")
-        .on_hover_text("live physics readouts: pinned bodies + hover")
-        .clicked()
-    {
-        panels.probe.toggle();
-    }
-    if ui
-        .selectable_label(panels.signals.is_open(), "Signals")
-        .on_hover_text("wire scene attributes to colors and plots (signal dataflow)")
-        .clicked()
-    {
-        panels.signals.toggle();
-    }
-    if ui
-        .selectable_label(panels.node_graph.is_open(), "⬡ Graph")
-        .on_hover_text("node-graph canvas: wire signals visually (drag output → actuator input)")
-        .clicked()
-    {
-        panels.node_graph.toggle();
-    }
-    if ui
-        .selectable_label(panels.console.is_open(), "λ Script")
-        .on_hover_text("scripting console / REPL (`)")
-        .clicked()
-    {
-        panels.console.toggle();
-    }
-    if ui
-        .selectable_label(panels.debug.show_fields, "⇢ Fields")
-        .on_hover_text("vector plot of the superposed field (also in Settings ▸ Debug)")
-        .clicked()
-    {
-        panels.debug.show_fields = !panels.debug.show_fields;
-    }
 }
 
 /// The tool-palette as a docked icon strip, grouped into sections by a
