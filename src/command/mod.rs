@@ -55,6 +55,7 @@ pub mod intent;
 pub mod joint_cmd;
 pub mod merge_cmd;
 pub mod property;
+pub mod rod_cmd;
 pub mod scale_cmd;
 pub mod scene_cmd;
 pub mod snapshot;
@@ -218,6 +219,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::ScaleIntent>();
         app.add_message::<intent::ArrayIntent>();
         app.add_message::<intent::SpawnJointIntent>();
+        app.add_message::<intent::SpawnRodIntent>();
         app.add_message::<intent::PropertyEditIntent>();
         app.add_message::<intent::GroupIntent>();
         app.add_message::<intent::UngroupIntent>();
@@ -245,6 +247,7 @@ impl Plugin for CommandPlugin {
         app.register_type::<intent::ScaleIntent>();
         app.register_type::<intent::ArrayIntent>();
         app.register_type::<intent::SpawnJointIntent>();
+        app.register_type::<intent::SpawnRodIntent>();
         app.register_type::<intent::PropertyEditIntent>();
         app.register_type::<intent::GroupIntent>();
         app.register_type::<intent::UngroupIntent>();

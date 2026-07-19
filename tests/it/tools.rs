@@ -671,6 +671,8 @@ fn slider_limits_default_can_be_turned_off() {
     app.update();
     app.world_mut()
         .insert_resource(gradiance::domain::settings::ToolDefaults {
+            rod_fixed_ends: false,
+            rod_flexure: false,
             slider_limits: false,
         });
     app.world_mut()

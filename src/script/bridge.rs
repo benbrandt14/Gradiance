@@ -622,6 +622,7 @@ fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
         groups: Vec::new(),
         field: None,
         tracer: None,
+        rod: None,
     }
 }
 

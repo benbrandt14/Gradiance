@@ -29,7 +29,7 @@ pub struct Panels<'w> {
     pub debug: ResMut<'w, crate::domain::settings::DebugSettings>,
 }
 
-const TOOLS: [(ToolState, &str, &str); 12] = [
+const TOOLS: [(ToolState, &str, &str); 13] = [
     (ToolState::Select, "Select", "S"),
     (ToolState::Drag, "Drag", "D"),
     (ToolState::Box, "Box", "B"),
@@ -38,7 +38,8 @@ const TOOLS: [(ToolState, &str, &str); 12] = [
     (ToolState::Hinge, "Hinge", "H"),
     (ToolState::Weld, "Weld", "W"),
     (ToolState::Slider, "Prismatic", "R"),
-    (ToolState::Strut, "Strut", "T"),
+    (ToolState::Spring, "Spring", "T"),
+    (ToolState::Strut, "Strut", "L"),
     (ToolState::Ground, "Ground", "G"),
     (ToolState::Cut, "Cut", "K"),
     (ToolState::Tracer, "Tracer", "Y"),

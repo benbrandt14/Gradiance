@@ -13,6 +13,7 @@ pub mod joint;
 pub mod layers;
 pub mod node;
 pub mod props;
+pub mod rod;
 pub mod settings;
 pub mod shape;
 pub mod signal;

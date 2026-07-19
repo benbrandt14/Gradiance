@@ -46,6 +46,10 @@ pub struct BodyRecord {
     /// Trajectory-trail marker, if the body carries one.
     #[serde(default)]
     pub tracer: Option<crate::domain::tracer::Tracer>,
+    /// Rigid-rod marker (a capsule body authored by the strut tool), if
+    /// the body is one (v6+).
+    #[serde(default)]
+    pub rod: Option<crate::domain::rod::Rod>,
 }
 
 impl BodyRecord {
@@ -69,6 +73,7 @@ impl BodyRecord {
                 .get::<crate::domain::field::FieldSource>()
                 .copied(),
             tracer: entity_ref.get::<crate::domain::tracer::Tracer>().copied(),
+            rod: entity_ref.get::<crate::domain::rod::Rod>().copied(),
         })
     }
 
@@ -93,6 +98,9 @@ impl BodyRecord {
         }
         if let Some(tracer) = self.tracer {
             entity.insert(tracer);
+        }
+        if let Some(rod) = self.rod {
+            entity.insert(rod);
         }
         entity.id()
     }

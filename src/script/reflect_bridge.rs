@@ -210,6 +210,7 @@ mod tests {
                 groups: Vec::new(),
                 field: None,
                 tracer: None,
+                rod: None,
             },
         };
 

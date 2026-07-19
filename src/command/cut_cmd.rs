@@ -149,6 +149,9 @@ impl CutCommand {
                             // and tracer.
                             field: original.field,
                             tracer: original.tracer,
+                            // A severed rod is no longer a rod — its
+                            // pieces are ordinary polygon bodies.
+                            rod: None,
                         }
                     })
                     .collect();

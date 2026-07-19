@@ -34,6 +34,8 @@ pub mod name {
     pub const ARRAY: &str = "array";
     /// [`SpawnJointIntent`](super::SpawnJointIntent) → `SpawnJointCommand`.
     pub const SPAWN_JOINT: &str = "spawn-joint";
+    /// [`SpawnRodIntent`](super::SpawnRodIntent) → `SpawnRodCommand`.
+    pub const SPAWN_ROD: &str = "spawn-rod";
     /// [`PropertyEditIntent`](super::PropertyEditIntent) → `PropertyEditCommand`.
     pub const PROPERTY_EDIT: &str = "property-edit";
     /// [`GroupIntent`](super::GroupIntent) → `GroupCommand`.
@@ -141,6 +143,15 @@ pub struct SpawnJointIntent {
     /// The complete authored joint (id minted by the tool, stable across
     /// redo).
     pub record: crate::command::snapshot::JointRecord,
+}
+
+/// Request to author one rod (a capsule body + end joints, or a flexure's
+/// elastica joint + tip bodies) as a single undo step.
+// Trace: dispatch.rs → SpawnRodCommand (rod_cmd.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_joints.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SpawnRodIntent {
+    /// The complete records to author (ids minted by the tool).
+    pub spec: crate::command::rod_cmd::RodSpec,
 }
 
 /// Batched property edit (one gesture across N targets = one undo step).

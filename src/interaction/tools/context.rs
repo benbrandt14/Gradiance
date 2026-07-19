@@ -133,6 +133,9 @@ pub enum ToolCommit {
     },
     /// Author a new joint (hinge/weld/slider — the connector tools).
     SpawnJoint(Box<JointRecord>),
+    /// Author a rod atomically (capsule body + end joints, or a flexure's
+    /// elastica + tip bodies) — the strut tool.
+    SpawnRod(Box<crate::command::rod_cmd::RodSpec>),
     /// Commit a completed move/rotate gesture (one undo step for the batch).
     Move(Vec<TransformChange>),
     /// Commit a completed bounding-box scale gesture.
@@ -307,6 +310,7 @@ pub struct ToolCommitWriters<'w> {
     spawn_node: MessageWriter<'w, crate::command::intent::SpawnNodeIntent>,
     cut: MessageWriter<'w, CutIntent>,
     joint: MessageWriter<'w, SpawnJointIntent>,
+    rod: MessageWriter<'w, crate::command::intent::SpawnRodIntent>,
     moves: MessageWriter<'w, CommitTransformIntent>,
     scales: MessageWriter<'w, ScaleIntent>,
     dups: MessageWriter<'w, DuplicateIntent>,
@@ -331,6 +335,10 @@ impl ToolCommitWriters<'_> {
             }
             ToolCommit::SpawnJoint(record) => {
                 self.joint.write(SpawnJointIntent { record: *record });
+            }
+            ToolCommit::SpawnRod(spec) => {
+                self.rod
+                    .write(crate::command::intent::SpawnRodIntent { spec: *spec });
             }
             ToolCommit::Move(changes) => {
                 self.moves.write(CommitTransformIntent { changes });

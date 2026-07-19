@@ -22,6 +22,7 @@ mod physics_sync;
 mod reflect_intents;
 mod registry_validation;
 mod replay;
+mod rods;
 mod scripting;
 mod signals;
 mod tools;
