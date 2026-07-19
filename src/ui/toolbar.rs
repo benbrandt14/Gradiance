@@ -23,6 +23,8 @@ pub struct Panels<'w> {
     pub signals: ResMut<'w, crate::ui::signals::SignalsPanel>,
     /// Node-graph canvas.
     pub node_graph: ResMut<'w, crate::ui::node_graph::NodeGraph>,
+    /// Object tree (outliner).
+    pub outliner: ResMut<'w, crate::ui::outliner::ObjectTreePanel>,
     /// Scripting console.
     pub console: ResMut<'w, crate::ui::console::ScriptConsole>,
     /// Debug overlays (field vectors).
@@ -129,6 +131,13 @@ pub fn toolbar(
 /// open state. (The field overlay lives with the debug toggles, but it's
 /// the main way to *see* attraction/repulsion — surfaced here too.)
 fn panel_toggles(ui: &mut egui::Ui, panels: &mut Panels) {
+    if ui
+        .selectable_label(panels.outliner.is_open(), "Outliner")
+        .on_hover_text("object tree: every scene entity, grouped — click to select")
+        .clicked()
+    {
+        panels.outliner.toggle();
+    }
     if ui
         .selectable_label(panels.inspector.open, "Properties")
         .on_hover_text("properties pop-out (also in the right-click menu)")
