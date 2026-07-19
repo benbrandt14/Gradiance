@@ -31,19 +31,44 @@ pub struct Panels<'w> {
     pub debug: ResMut<'w, crate::domain::settings::DebugSettings>,
 }
 
-const TOOLS: [(ToolState, &str, &str); 12] = [
-    (ToolState::Select, "Select", "S"),
-    (ToolState::Drag, "Drag", "D"),
-    (ToolState::Box, "Box", "B"),
-    (ToolState::Circle, "Circle", "C"),
-    (ToolState::Polygon, "Polygon", "P"),
-    (ToolState::Hinge, "Hinge", "H"),
-    (ToolState::Weld, "Weld", "W"),
-    (ToolState::Slider, "Prismatic", "R"),
-    (ToolState::Strut, "Strut", "T"),
-    (ToolState::Ground, "Ground", "G"),
-    (ToolState::Cut, "Cut", "K"),
-    (ToolState::Tracer, "Tracer", "Y"),
+/// Tool-palette entries grouped into labeled sections (Blender-style): each
+/// section is a heading plus its tools, in workflow order — pick/move, create a
+/// shape, connect with a constraint, then modify. Kept as data so
+/// `tools_palette_ui` stays a pure projection and `tests/it/ui_panels.rs` can
+/// assert every tool still renders after a reflow.
+const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str)])] = &[
+    (
+        "Select",
+        &[
+            (ToolState::Select, "Select", "S"),
+            (ToolState::Drag, "Drag", "D"),
+        ],
+    ),
+    (
+        "Create",
+        &[
+            (ToolState::Box, "Box", "B"),
+            (ToolState::Circle, "Circle", "C"),
+            (ToolState::Polygon, "Polygon", "P"),
+        ],
+    ),
+    (
+        "Connect",
+        &[
+            (ToolState::Hinge, "Hinge", "H"),
+            (ToolState::Slider, "Prismatic", "R"),
+            (ToolState::Strut, "Strut", "T"),
+            (ToolState::Weld, "Weld", "W"),
+            (ToolState::Ground, "Ground", "G"),
+        ],
+    ),
+    (
+        "Modify",
+        &[
+            (ToolState::Cut, "Cut", "K"),
+            (ToolState::Tracer, "Tracer", "Y"),
+        ],
+    ),
 ];
 
 /// Left tool palette and top transport strip.
@@ -131,6 +156,7 @@ pub fn toolbar(
 /// open state. (The field overlay lives with the debug toggles, but it's
 /// the main way to *see* attraction/repulsion — surfaced here too.)
 fn panel_toggles(ui: &mut egui::Ui, panels: &mut Panels) {
+    ui.label(egui::RichText::new("Panels").small().weak());
     if ui
         .selectable_label(panels.outliner.is_open(), "Outliner")
         .on_hover_text("object tree: every scene entity, grouped — click to select")
@@ -189,18 +215,25 @@ fn panel_toggles(ui: &mut egui::Ui, panels: &mut Panels) {
     }
 }
 
-/// The tool-palette buttons: highlights `current`, returns a clicked tool.
-/// Host-agnostic (pure `Ui` in, choice out) so `tests/it/ui_panels.rs` can
-/// exercise it under `egui_kittest`.
+/// The tool-palette buttons, grouped into labeled sections: highlights
+/// `current`, returns a clicked tool. Host-agnostic (pure `Ui` in, choice out)
+/// so `tests/it/ui_panels.rs` can exercise it under `egui_kittest`. Each button
+/// keeps its `"{name} ({key})"` label — the section headings are decoration.
 pub fn tools_palette_ui(ui: &mut egui::Ui, current: ToolState) -> Option<ToolState> {
     let mut clicked = None;
-    for (state, name, key) in TOOLS {
-        let selected = current == state;
-        if ui
-            .selectable_label(selected, format!("{name} ({key})"))
-            .clicked()
-        {
-            clicked = Some(state);
+    for (i, (group, tools)) in TOOL_GROUPS.iter().enumerate() {
+        if i > 0 {
+            ui.add_space(6.0);
+        }
+        ui.label(egui::RichText::new(*group).small().weak());
+        for (state, name, key) in *tools {
+            let selected = current == *state;
+            if ui
+                .selectable_label(selected, format!("{name} ({key})"))
+                .clicked()
+            {
+                clicked = Some(*state);
+            }
         }
     }
     clicked
