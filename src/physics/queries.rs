@@ -7,6 +7,7 @@
 //! because it keeps common reads in one discoverable, unit-testable place and
 //! returns plain `Vec2`/`Entity`, which is what most callers want.
 
+use crate::core::units::PosRot;
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -26,7 +27,10 @@ pub struct ContactSample {
 /// Read-only spatial queries against the physics world.
 #[derive(SystemParam)]
 pub struct PhysicsQueries<'w, 's> {
-    spatial: SpatialQuery<'w, 's>,
+    /// Colliders keyed by their **live** editor `Transform` — the hit-test
+    /// facade reads these directly rather than avian's spatial BVH, which is
+    /// frozen while the sim is paused (see [`bodies_at_point`](Self::bodies_at_point)).
+    colliders: Query<'w, 's, (Entity, &'static Transform, &'static Collider)>,
     velocities: Query<'w, 's, (&'static LinearVelocity, &'static AngularVelocity)>,
     masses: Query<'w, 's, &'static ComputedMass>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
@@ -59,15 +63,41 @@ impl PhysicsQueries<'_, '_> {
     }
 
     /// All collider entities containing `point`, unordered.
+    ///
+    /// Iterates colliders against their **live** [`Transform`] and tests
+    /// `contains_point` exactly, rather than avian's spatial BVH. The BVH's
+    /// broad phase runs inside the physics step, which is frozen while the sim
+    /// is paused — so a body moved while paused stays at its old BVH slot and
+    /// becomes unpickable until the next step (the "objects go non-selectable
+    /// until I play/pause" bug). The editor has few bodies and this runs only
+    /// on a click / box gesture, so the linear scan is cheap and always fresh.
     pub fn bodies_at_point(&self, point: Vec2) -> Vec<Entity> {
-        self.spatial
-            .point_intersections(point, &SpatialQueryFilter::default())
+        self.colliders
+            .iter()
+            .filter_map(|(entity, transform, collider)| {
+                let pose = PosRot::from_transform(transform);
+                collider
+                    .contains_point(Position::new(pose.pos), Rotation::radians(pose.rot), point)
+                    .then_some(entity)
+            })
+            .collect()
     }
 
-    /// All collider entities whose AABB intersects the given box, unordered.
+    /// All collider entities whose live AABB intersects the given box, unordered.
+    /// Uses the live [`Transform`] for the same paused-freshness reason as
+    /// [`bodies_at_point`](Self::bodies_at_point).
     pub fn bodies_in_aabb(&self, min: Vec2, max: Vec2) -> Vec<Entity> {
-        self.spatial
-            .aabb_intersections_with_aabb(ColliderAabb::from_min_max(min, max))
+        let box_aabb = ColliderAabb::from_min_max(min, max);
+        self.colliders
+            .iter()
+            .filter_map(|(entity, transform, collider)| {
+                let pose = PosRot::from_transform(transform);
+                collider
+                    .aabb(pose.pos, Rotation::radians(pose.rot))
+                    .intersects(&box_aabb)
+                    .then_some(entity)
+            })
+            .collect()
     }
 
     /// The entity's `(linear, angular)` velocity, if it simulates.
