@@ -174,7 +174,11 @@ impl Plugin for GradianceUiPlugin {
                 bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,
-                apply_scene_viewport,
+                // `apply_scene_viewport` (stage 2) is deliberately NOT scheduled:
+                // bevy_egui renders the UI into the same Camera3d whose viewport
+                // it would shrink, so routing the scene into a sub-rect feeds
+                // back into egui's drawable area and oscillates. Re-enable only
+                // once the UI renders on its own full-window camera.
                 capture_pointer_over_ui,
             )
                 .chain(),
@@ -186,9 +190,15 @@ impl Plugin for GradianceUiPlugin {
 /// Routes the scene camera to render only into the **scene pane** — the central
 /// area left by the docked panels — so the docks are a real shell around the
 /// viewport rather than an overlay on top of it (`docs/ui-shell-decision.md`,
-/// stage 2). Runs after the docks have pushed their rects (before
-/// `capture_pointer_over_ui` clears them). Bevy's `viewport_to_world` already
-/// offsets by the camera viewport, so picking/gizmos follow the pane for free.
+/// stage 2). Bevy's `viewport_to_world` already offsets by the camera viewport,
+/// so picking/gizmos follow the pane for free.
+///
+/// **Currently NOT scheduled** (see the note in [`GradianceUiPlugin::build`]):
+/// `bevy_egui` renders the UI into this same `Camera3d`, so shrinking its
+/// viewport shrinks egui's drawable area, which feeds back through `top_inset`
+/// and
+/// oscillates. Re-enable once the UI has its own full-window camera. Kept (with
+/// its tests) so that fix is a one-line re-schedule.
 pub fn apply_scene_viewport(
     mut contexts: EguiContexts,
     panels: Res<PanelRects>,
