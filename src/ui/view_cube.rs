@@ -49,17 +49,26 @@ fn feature_points() -> Vec<Vec3> {
 }
 
 /// Renders the view cube and steers the rig on click.
-pub fn view_cube(mut contexts: EguiContexts, mut rig: ResMut<CameraRig>) -> Result {
+pub fn view_cube(
+    mut contexts: EguiContexts,
+    mut rig: ResMut<CameraRig>,
+    mut panel_rects: ResMut<crate::ui::PanelRects>,
+) -> Result {
     let ctx = contexts.ctx_mut()?;
-    egui::Area::new(egui::Id::new("view-cube"))
-        .anchor(egui::Align2::RIGHT_TOP, [-16.0, 16.0])
-        // Behind panels: when the right dock is open it covers the cube
-        // (the dock owns the top-right); the cube shows when the dock is
-        // closed. The cube still takes clicks when nothing is over it.
+    // Sit just left of the right dock and below the menu bar (both pushed
+    // their rects earlier this frame), so the cube no longer hides under the
+    // dock's top-right corner.
+    let viewport = ctx.viewport_rect();
+    let dock_w = viewport.right() - panel_rects.right_inset(viewport);
+    let top = panel_rects.top_inset(viewport) - viewport.top() + 8.0;
+    let cube_rect = egui::Area::new(egui::Id::new("view-cube"))
+        .anchor(egui::Align2::RIGHT_TOP, [-(dock_w + 16.0), top])
         .order(egui::Order::Background)
         .show(ctx, |ui| {
+            // Room for the cube's corners at any rotation (a unit-cube corner
+            // reaches √3·HALF from center) so it never clips its own edges.
             let (rect, response) =
-                ui.allocate_exact_size(egui::vec2(HALF * 2.6, HALF * 2.6), egui::Sense::click());
+                ui.allocate_exact_size(egui::vec2(HALF * 3.6, HALF * 3.6), egui::Sense::click());
             let center = rect.center();
             // World → view space: what the camera sees of the world axes.
             let inv = rig.rotation().inverse();
@@ -156,6 +165,10 @@ pub fn view_cube(mut contexts: EguiContexts, mut rig: ResMut<CameraRig>) -> Resu
             }
             response.on_hover_text("click: face = axis view · corner = isometric · edge = level");
         });
+    // Claim the cube's rect so clicking it doesn't fall through to the scene
+    // (its Area is on the background layer, which `is_pointer_over_egui`
+    // ignores).
+    panel_rects.push(cube_rect.response.rect);
     Ok(())
 }
 

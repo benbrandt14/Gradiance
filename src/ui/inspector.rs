@@ -25,7 +25,7 @@ use crate::ui::widgets::{Commit, precise_drag};
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, egui};
+use bevy_egui::egui;
 
 /// Whether the *Properties* pop-out is showing. Closed by default —
 /// the context menu is the first-line editing surface (feedback 2.8).
@@ -69,7 +69,7 @@ pub struct BodyProps<'w, 's> {
     id_index: Res<'w, crate::core::ids::IdIndex>,
     /// Signal bindings (config seam) — the sensor ports' "plot" toggle adds a
     /// plot-sink binding directly, like the Signals dock.
-    bindings: ResMut<'w, crate::domain::signal::SignalBindings>,
+    pub(crate) bindings: ResMut<'w, crate::domain::signal::SignalBindings>,
     /// Body poses for the position/height sensor ports.
     body_transforms: Query<'w, 's, &'static Transform, With<Body>>,
     /// Fixed timestep, for the impulse→force sensor readout.
@@ -715,29 +715,17 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
     }
 }
 
-/// Renders the *Properties* pop-out for the current selection (opened from
-/// the context menu or the toolbar; closed by default).
-pub fn inspector_window(
-    mut contexts: EguiContexts,
-    mut panel: ResMut<InspectorPanel>,
-    selection: Res<Selection>,
-    mut props: BodyProps,
-) -> Result {
-    let ctx = contexts.ctx_mut()?;
-    if !panel.open || selection.is_empty() {
-        return Ok(());
+/// Renders the *Properties* section into a dock `ui` (a right-dock pane): the
+/// selection heading plus the per-kind property body. Empty selection shows a
+/// hint rather than dead headers.
+pub(crate) fn inspector_pane(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps) {
+    if selection.is_empty() {
+        ui.weak("Nothing selected — pick a body to edit its properties.");
+        return;
     }
-    let mut open = panel.open;
-    egui::Window::new("Properties")
-        .default_width(240.0)
-        .open(&mut open)
-        .show(ctx, |ui| {
-            ui.heading(format!("Selection ({})", selection.len()));
-            ui.separator();
-            inspector_body(ui, &selection, &mut props);
-        });
-    panel.open = open;
-    Ok(())
+    ui.heading(format!("Selection ({})", selection.len()));
+    ui.separator();
+    inspector_body(ui, selection, props);
 }
 
 /// The pop-out's body, rendered per the *primary's* kind so a non-body

@@ -54,7 +54,8 @@ pub fn draw_joints(
                 draw_hinge(
                     &mut gizmos,
                     anchor,
-                    pose_a.rot,
+                    // World-pin hinges measure limits from the fixed frame.
+                    def.limit_reference_angle(pose_a.rot),
                     color,
                     (limits, live),
                     *motor,

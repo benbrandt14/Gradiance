@@ -12,7 +12,7 @@
 //! [`SignalBus`]: crate::signal::SignalBus
 
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, egui};
+use bevy_egui::egui;
 use std::collections::{HashSet, VecDeque};
 
 /// Plot panel visibility.
@@ -81,66 +81,53 @@ const SIGNAL_COLORS: [egui::Color32; 4] = [
     egui::Color32::from_rgb(230, 150, 230),
 ];
 
-/// Renders the live-plot panel (toggle with backslash). Draws every plottable
-/// bus signal with a recorded history, minus the ones hidden in [`PlotConfig`];
-/// a **signals** picker toggles each series and the X axis defaults to time.
-pub fn plot_panel(
-    mut contexts: EguiContexts,
-    mut panel: ResMut<PlotPanel>,
-    mut config: ResMut<PlotConfig>,
-    bus: Res<crate::signal::SignalBus>,
-    keys: Res<ButtonInput<KeyCode>>,
-) -> Result {
-    let ctx = contexts.ctx_mut()?;
-    if keys.just_pressed(KeyCode::Backslash) && !ctx.egui_wants_keyboard_input() {
-        panel.toggle();
-    }
-    if !panel.open {
-        return Ok(());
-    }
-
-    // Every named signal with a recorded history — params, computed, and
-    // plot-sink bindings. The canonical sensor-ref names (`speed@<uuid>`) that
-    // `publish_sensor_refs` puts on the bus for modulation operands are
-    // internal plumbing, not user-chosen series, so `is_plottable` drops them.
-    let plottable: Vec<(&str, &VecDeque<f32>)> = bus
-        .entries()
+/// Every named bus signal the plotter can draw (name + recorded history), in
+/// bus order — params, computed signals, and plot-sink bindings. The canonical
+/// sensor-ref names (`speed@<uuid>`) that `publish_sensor_refs` puts on the bus
+/// for modulation operands are internal plumbing, not user-chosen series, so
+/// `is_plottable` drops them. The dock host computes this from the bus and hands
+/// it to [`plot_section`].
+pub fn plottable_series(bus: &crate::signal::SignalBus) -> Vec<(&str, &VecDeque<f32>)> {
+    bus.entries()
         .filter(|(name, e)| e.history().len() >= 2 && is_plottable(name))
         .map(|(name, e)| (name, e.history()))
-        .collect();
+        .collect()
+}
 
-    let mut open = true;
-    egui::Window::new("Live Plot")
-        .open(&mut open)
-        .default_width(340.0)
-        .show(ctx, |ui| {
-            if plottable.is_empty() {
-                ui.label(
-                    "Wire a sensor to the plot sink (a body's ▸plot toggle, or a \
-                     plot binding) and press Play.",
-                );
-                return;
-            }
-            signal_picker(ui, &plottable, &mut config);
+/// Renders the plotter's content into `ui` (the **Live Plot** dock pane): a
+/// **signals** picker toggling each series, then every visible plottable signal
+/// drawn from its recorded bus history, and the X-axis label. `plottable` is the
+/// current [`plottable_series`]; the panel's open/toggle handling lives in the
+/// bottom-dock host.
+pub fn plot_section(
+    ui: &mut egui::Ui,
+    plottable: &[(&str, &VecDeque<f32>)],
+    config: &mut PlotConfig,
+) {
+    if plottable.is_empty() {
+        ui.label(
+            "Wire a sensor to the plot sink (a body's ▸plot toggle, or a \
+             plot binding) and press Play.",
+        );
+        return;
+    }
+    signal_picker(ui, plottable, config);
 
-            let visible = visible_series(plottable.iter().map(|(n, _)| *n), &config.hidden);
-            if visible.is_empty() {
-                ui.weak("No series selected — pick one above.");
-                return;
-            }
-            for (i, name) in visible.iter().enumerate() {
-                if i > 0 {
-                    ui.add_space(4.0);
-                }
-                if let Some((_, samples)) = plottable.iter().find(|(n, _)| n == name) {
-                    draw_series(ui, name, samples, SIGNAL_COLORS[i % SIGNAL_COLORS.len()]);
-                }
-            }
-            ui.add_space(2.0);
-            ui.weak(format!("x-axis: {} →", config.x_axis.label()));
-        });
-    panel.open = open;
-    Ok(())
+    let visible = visible_series(plottable.iter().map(|(n, _)| *n), &config.hidden);
+    if visible.is_empty() {
+        ui.weak("No series selected — pick one above.");
+        return;
+    }
+    for (i, name) in visible.iter().enumerate() {
+        if i > 0 {
+            ui.add_space(4.0);
+        }
+        if let Some((_, samples)) = plottable.iter().find(|(n, _)| n == name) {
+            draw_series(ui, name, samples, SIGNAL_COLORS[i % SIGNAL_COLORS.len()]);
+        }
+    }
+    ui.add_space(2.0);
+    ui.weak(format!("x-axis: {} →", config.x_axis.label()));
 }
 
 /// A collapsible list of the plottable signals, each a checkbox that hides or

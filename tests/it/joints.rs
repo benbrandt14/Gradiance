@@ -541,6 +541,84 @@ fn hinged_arm_swings_down_under_gravity() {
     );
 }
 
+/// A hinge with angle limits but **no motor** must stop the free arm at the
+/// limit under gravity — the reported "limits have no effect" case.
+#[test]
+fn hinge_angle_limit_stops_a_free_arm_under_gravity() {
+    let mut app = headless_app();
+    let mut anchor_block = box_record(Vec2::ZERO, 20.0, 20.0);
+    anchor_block.physics.rigid_body = RigidBody::Static;
+    let block = spawn_body(&mut app, anchor_block);
+    let arm = spawn_body(&mut app, box_record(Vec2::new(40.0, 0.0), 60.0, 8.0));
+
+    let limits = [-0.3_f32, 0.3];
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: Some(limits),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: block,
+            body_b: Some(arm),
+            anchor_a: Vec2::new(10.0, 0.0),
+            anchor_b: Vec2::new(-30.0, 0.0),
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    step(&mut app, 240);
+
+    let rot = pose_of(&app, arm).rot;
+    assert!(
+        rot < -0.05,
+        "arm swung toward the lower limit under gravity (rot {rot})"
+    );
+    assert!(
+        rot >= limits[0] - 0.15,
+        "angle limit holds — arm didn't blow past it (rot {rot}, min {})",
+        limits[0]
+    );
+}
+
+/// A **world-pinned** hinge with angle limits holds the body's swing at the
+/// fixed world limit (the pin's static frame). This is the reference case the
+/// limit gizmo must anchor to the world, not to the body's live rotation.
+#[test]
+fn world_pin_hinge_limit_holds_the_swing() {
+    let mut app = headless_app();
+    let rod = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
+    let rod_id = spawn_body(&mut app, rod);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: Some([-0.3, 0.3]),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: rod_id,
+            body_b: None,
+            anchor_a: Vec2::new(-40.0, 0.0),
+            anchor_b: Vec2::ZERO,
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    step(&mut app, 240);
+
+    let rot = pose_of(&app, rod_id).rot;
+    assert!(
+        rot < -0.1,
+        "rod swung down toward its lower limit (rot {rot})"
+    );
+    assert!(
+        rot >= -0.3 - 0.15,
+        "the world-pin angle limit held the swing (rot {rot})"
+    );
+}
+
 // ---------- Rest-orientation frames (user snapshot regressions) ----------
 
 /// The user's snapshot gradiance-1783344618.ron distilled: a rotated body

@@ -17,13 +17,18 @@ fn assert_initializes<M, S: IntoSystem<(), Result, M>>(system: S) {
 #[test]
 fn panel_systems_have_no_conflicting_params() {
     assert_initializes(gradiance::ui::dock::right_dock);
-    assert_initializes(gradiance::ui::node_graph::node_graph_panel);
+    // The bottom dock unions the node-graph and plot read-sets in one system —
+    // guard that large param set against access conflicts.
+    assert_initializes(gradiance::ui::bottom_dock::bottom_dock);
     assert_initializes(gradiance::ui::toolbar::toolbar);
     assert_initializes(gradiance::ui::menu::menu_bar);
-    // BodyProps gained a read facade (PhysicsQueries + transforms) used by
-    // both hosts — guard both against param conflicts.
-    assert_initializes(gradiance::ui::inspector::inspector_window);
+    // BodyProps (PhysicsQueries + transforms + the shared PropertyEditIntent
+    // writer and SignalBindings) is now folded into right_dock's Properties
+    // pane — right_dock above guards that union. The context menu is the other
+    // BodyProps host.
     assert_initializes(gradiance::ui::context_menu::context_menu);
     // joint_inspector gained transform/index reads for its sensor readouts.
     assert_initializes(gradiance::ui::joint_inspector::joint_inspector);
+    // apply_scene_viewport mutates the camera viewport from the panel rects.
+    assert_initializes(gradiance::ui::apply_scene_viewport);
 }

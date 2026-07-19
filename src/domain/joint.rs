@@ -218,4 +218,81 @@ impl JointDef {
     pub fn anchor_world(&self, body_a_pos: Vec2, body_a_rot: f32) -> Vec2 {
         body_a_pos + Vec2::from_angle(body_a_rot).rotate(self.anchor_a)
     }
+
+    /// The world angle a **hinge** limit arc is measured from — shared by the
+    /// gizmo, the pick test, and the limit-handle drag so all three agree.
+    ///
+    /// For a **world pin** (`body_b == None`) the constraint is against the
+    /// fixed pin frame, which sits at body A's authored `rest_rot_a`; the
+    /// allowed range is `rest_rot_a + [min, max]` in *world* angles, so the arc
+    /// must anchor to `rest_rot_a` and **not** rotate with the swinging body
+    /// (the old bug). For a body-to-body hinge, body A *is* the reference frame,
+    /// so the arc tracks A's live rotation. (Sliders always use the live angle;
+    /// only a world-pin hinge substitutes the rest frame.)
+    pub fn limit_reference_angle(&self, body_a_rot: f32) -> f32 {
+        match self.kind {
+            JointKind::Hinge { .. } if self.body_b.is_none() => self.rest_rot_a,
+            _ => body_a_rot,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hinge(body_b: Option<StableId>, rest_rot_a: f32) -> JointDef {
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: Some([-0.5, 0.5]),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: StableId::new(),
+            body_b,
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            rest_rot_a,
+            rest_rot_b: 0.0,
+        }
+    }
+
+    fn close(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1e-6
+    }
+
+    #[test]
+    fn a_world_pin_hinge_anchors_its_limit_arc_to_the_rest_frame() {
+        // World pin: the arc stays at rest_rot_a regardless of the body's live
+        // rotation — it must not rotate with the swinging body.
+        let def = hinge(None, 0.7);
+        assert!(close(def.limit_reference_angle(1.3), 0.7));
+    }
+
+    #[test]
+    fn a_body_to_body_hinge_tracks_body_a() {
+        // Body A is the reference frame, so the arc follows its live rotation.
+        let def = hinge(Some(StableId::new()), 0.7);
+        assert!(close(def.limit_reference_angle(1.3), 1.3));
+    }
+
+    #[test]
+    fn a_world_pin_slider_keeps_the_live_angle() {
+        // Only world-pin hinges substitute the rest frame; sliders don't.
+        let def = JointDef {
+            kind: JointKind::Slider {
+                axis: Vec2::X,
+                limits: Some([-1.0, 1.0]),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: StableId::new(),
+            body_b: None,
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            rest_rot_a: 0.7,
+            rest_rot_b: 0.0,
+        };
+        assert!(close(def.limit_reference_angle(1.3), 1.3));
+    }
 }

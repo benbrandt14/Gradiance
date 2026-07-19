@@ -40,8 +40,6 @@ impl SignalsPanel {
 /// dock host stays under Bevy's system-parameter limit.
 #[derive(SystemParam)]
 pub struct SignalsDock<'w, 's> {
-    /// Source→sink bindings.
-    pub bindings: bevy::prelude::ResMut<'w, SignalBindings>,
     /// Tunable slider params.
     pub params: bevy::prelude::ResMut<'w, SignalParams>,
     /// Computed modulator signals.
@@ -69,6 +67,7 @@ pub struct SignalsDock<'w, 's> {
 pub fn signals_section(
     ui: &mut egui::Ui,
     dock: &mut SignalsDock,
+    bindings: &mut SignalBindings,
     selected: &[StableId],
     selection: &crate::interaction::selection::Selection,
     edits: &mut bevy::prelude::MessageWriter<crate::command::intent::PropertyEditIntent>,
@@ -81,7 +80,7 @@ pub fn signals_section(
             ui.separator();
             computed_block(ui, &mut dock.computed.0, &dock.compiled, &dock.bus);
             ui.separator();
-            bindings_block(ui, &mut dock.bindings, selected);
+            bindings_block(ui, bindings, selected);
         });
 }
 
