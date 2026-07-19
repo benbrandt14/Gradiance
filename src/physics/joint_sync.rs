@@ -163,18 +163,34 @@ fn insert_derived_joint(
             entity_commands.insert(joint);
         }
         JointKind::Weld => {
+            // Derived as a revolute with zero angular freedom rather than
+            // avian's `FixedJoint`: the revolute point-constraint path is
+            // the solver's best-conditioned code, while `FixedJoint`'s own
+            // docs warn of iterative error under load.
             entity_commands.insert(
-                FixedJoint::new(body_a, body_b)
+                RevoluteJoint::new(body_a, body_b)
                     .with_local_anchor1(Vector::from(def.anchor_a))
                     .with_local_anchor2(Vector::from(anchor_b))
-                    .with_local_basis2(basis_b),
+                    .with_local_basis2(basis_b)
+                    .with_angle_limits(0.0, 0.0),
             );
         }
-        // The flexure is a *non-solver* constraint: no avian joint at all,
-        // only the derived warm-start cache the per-frame force system
-        // (`physics::elastica`) needs.
+        // The flexure is a *non-solver* constraint: the derived warm-start
+        // cache is what the per-frame force system (`physics::elastica`)
+        // needs. The always-slack distance joint alongside it exerts zero
+        // force — it exists because avian's pair bookkeeping
+        // (`JointGraph`) only knows real joints, and
+        // `JointCollisionDisabled` is a no-op without a joint edge; the
+        // ghost registers the pair so `collide_connected` works for
+        // flexures too.
         JointKind::Elastica { .. } => {
-            entity_commands.insert(crate::physics::elastica::ElasticaCache::default());
+            entity_commands.insert((
+                crate::physics::elastica::ElasticaCache::default(),
+                DistanceJoint::new(body_a, body_b)
+                    .with_local_anchor1(Vector::from(def.anchor_a))
+                    .with_local_anchor2(Vector::from(anchor_b))
+                    .with_limits(0.0, 1.0e9),
+            ));
         }
         JointKind::Spring {
             rest_length,

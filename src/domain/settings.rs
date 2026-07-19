@@ -172,7 +172,9 @@ impl Default for SimSettings {
             gravity: Vec2::new(0.0, -1000.0),
             speed: 1.0,
             plane_friction: 0.0,
-            substeps: 6,
+            // 12 substeps: thin rods and stacked joint chains need the
+            // extra solver convergence (6 left rod welds visibly loose).
+            substeps: 12,
             timestep_hz: 60.0,
         }
     }

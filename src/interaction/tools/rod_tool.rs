@@ -30,6 +30,11 @@ pub const ROD_RADIUS: f32 = 2.5;
 /// lands *exactly on* an edge or a rod tip, where exact containment is a
 /// coin flip.
 const ATTACH_TOLERANCE: f32 = 8.0;
+/// Rod collider density: a thin capsule at unit density is the light side
+/// of a bad solver mass ratio against typical attached bodies (loose,
+/// jittery joints). Denser rods keep the constraint firm; editable per
+/// rod in the physics inspector as usual.
+const ROD_DENSITY: f32 = 5.0;
 
 /// In-progress rod gesture (the first endpoint).
 #[derive(Resource, Default, Debug)]
@@ -111,7 +116,10 @@ fn build_rod(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Option<
             half_length: length / 2.0,
             radius: ROD_RADIUS,
         },
-        physics: crate::domain::props::BodyPhysics::default(),
+        physics: crate::domain::props::BodyPhysics {
+            density: avian2d::prelude::ColliderDensity(ROD_DENSITY),
+            ..Default::default()
+        },
         appearance: rod_appearance(),
         depth: crate::domain::depth::DepthBand::default(),
         layers: None,
@@ -199,8 +207,10 @@ fn build_flexure(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Opt
                 tangent_a: chord_angle - rot_a,
                 tangent_b: chord_angle - rot_b,
             },
+            // Attached pairs don't collide (the connection point would
+            // otherwise chatter against the parent's surface).
             common: JointCommon {
-                collide_connected: true,
+                collide_connected: false,
             },
             body_a: id_a,
             body_b: Some(id_b),

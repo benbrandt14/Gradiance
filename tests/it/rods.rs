@@ -223,9 +223,7 @@ fn flexure_spec(id_a: StableId, pos_a: Vec2, id_b: StableId, pos_b: Vec2, length
                     tangent_a: chord_angle,
                     tangent_b: chord_angle,
                 },
-                common: JointCommon {
-                    collide_connected: true,
-                },
+                common: JointCommon::default(),
                 body_a: id_a,
                 body_b: Some(id_b),
                 anchor_a: Vec2::ZERO,
@@ -346,6 +344,26 @@ fn deleting_an_attached_body_disables_the_flexure_without_panic() {
     assert_eq!(body_count(&mut app), 1);
 }
 
+/// Zeroes both bodies' velocities (used to discard the startup contact
+/// kick from the pre-joint frame, isolating steady-state behavior).
+fn reset_velocities(app: &mut App, ids: &[StableId]) {
+    for &id in ids {
+        let entity = entity_of(app, id).unwrap();
+        if let Some(mut v) = app
+            .world_mut()
+            .get_mut::<avian2d::prelude::LinearVelocity>(entity)
+        {
+            v.0 = Vec2::ZERO;
+        }
+        if let Some(mut w) = app
+            .world_mut()
+            .get_mut::<avian2d::prelude::AngularVelocity>(entity)
+        {
+            w.0 = 0.0;
+        }
+    }
+}
+
 fn velocity_of(app: &mut App, id: StableId) -> Vec2 {
     let entity = entity_of(app, id).unwrap();
     app.world()
@@ -442,5 +460,122 @@ fn rod_ending_exactly_on_a_box_edge_attaches() {
         joint_count(&mut app),
         1,
         "edge landing creates the constraint"
+    );
+}
+
+// ---------- Looseness + collision exclusion (revision R4/R5) ----------
+
+#[test]
+fn welded_rod_between_boxes_stays_tight_under_gravity() {
+    let mut app = crate::harness::headless_app();
+    let mut left = box_record(Vec2::new(-120.0, 0.0), 40.0, 40.0);
+    left.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    let right = box_record(Vec2::new(120.0, 0.0), 40.0, 40.0);
+    let (left_id, right_id) = (left.id, right.id);
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: left });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: right });
+    app.update();
+    // Weld-ended rod bridging the boxes; the dynamic right box hangs off it.
+    let mut spec = rod_spec(
+        Vec2::new(-100.0, 0.0),
+        Vec2::new(100.0, 0.0),
+        Some(left_id),
+        Some(right_id),
+    );
+    for joint in &mut spec.joints {
+        joint.def.kind = JointKind::Weld;
+    }
+    // Anchor each end joint at the rod end's location in the box's local
+    // frame (rod_spec defaults to the box center, 20 px off).
+    spec.joints[0].def.anchor_b = Vec2::new(20.0, 0.0);
+    spec.joints[1].def.anchor_b = Vec2::new(-20.0, 0.0);
+    let rod_id = spec.bodies[0].id;
+    app.world_mut().write_message(SpawnRodIntent { spec });
+    crate::harness::step(&mut app, 240);
+
+    // The rod's left end must stay pinned at its authored anchor: the
+    // "looseness" regression guard.
+    let rod = entity_of(&app, rod_id).unwrap();
+    let pose = PosRot::from_transform(app.world().get::<Transform>(rod).unwrap());
+    let end_a = pose.pos + Vec2::from_angle(pose.rot).rotate(Vec2::new(-100.0, 0.0));
+    let sag = (end_a - Vec2::new(-100.0, 0.0)).length();
+    assert!(sag < 6.0, "welded rod end must stay tight (drift {sag} px)");
+}
+
+#[test]
+fn flexure_pair_does_not_collide_when_collide_connected_is_off() {
+    let mut app = weightless_app();
+    // Two boxes overlapping by 10 px: without pair exclusion, contacts
+    // shove them apart.
+    let a = box_record(Vec2::new(0.0, 0.0), 40.0, 40.0);
+    let b = box_record(Vec2::new(30.0, 0.0), 40.0, 40.0);
+    let (id_a, id_b) = (a.id, b.id);
+    app.world_mut().write_message(SpawnBodyIntent { record: a });
+    app.world_mut().write_message(SpawnBodyIntent { record: b });
+    app.update();
+    // Flexure at rest (length == chord): the beam itself exerts nothing.
+    app.world_mut().write_message(SpawnRodIntent {
+        spec: flexure_spec(id_a, Vec2::ZERO, id_b, Vec2::new(30.0, 0.0), 30.0),
+    });
+    // Let the joint derive (the frame before it exists applies one
+    // contact kick in this artificial setup; the tool flow derives the
+    // collider and joint in the same sync pass), then discard the kick
+    // and verify no further contact impulses ever fire.
+    crate::harness::step(&mut app, 3);
+    let mut q = app.world_mut().query_filtered::<(
+        Option<&avian2d::prelude::DistanceJoint>,
+        Option<&avian2d::prelude::JointCollisionDisabled>,
+    ), With<Joint>>();
+    let (ghost, disabled) = q.single(app.world()).unwrap();
+    assert!(ghost.is_some(), "ghost joint derived");
+    assert!(disabled.is_some(), "collision-disabled marker present");
+    reset_velocities(&mut app, &[id_a, id_b]);
+    crate::harness::step(&mut app, 30);
+
+    let va = velocity_of(&mut app, id_a);
+    let vb = velocity_of(&mut app, id_b);
+    assert!(
+        va.length() < 0.5 && vb.length() < 0.5,
+        "no contact shove between the connected pair (va {va}, vb {vb})"
+    );
+}
+
+#[test]
+fn welded_overlapping_pair_does_not_collide_probe() {
+    let mut app = weightless_app();
+    let a = box_record(Vec2::new(0.0, 0.0), 40.0, 40.0);
+    let b = box_record(Vec2::new(30.0, 0.0), 40.0, 40.0);
+    let (id_a, id_b) = (a.id, b.id);
+    app.world_mut().write_message(SpawnBodyIntent { record: a });
+    app.world_mut().write_message(SpawnBodyIntent { record: b });
+    app.update();
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def: JointDef {
+                kind: JointKind::Hinge {
+                    limits: None,
+                    motor: None,
+                },
+                common: JointCommon::default(),
+                body_a: id_a,
+                body_b: Some(id_b),
+                anchor_a: Vec2::new(15.0, 0.0),
+                anchor_b: Vec2::new(-15.0, 0.0),
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
+            },
+        },
+    });
+    crate::harness::step(&mut app, 3);
+    reset_velocities(&mut app, &[id_a, id_b]);
+    crate::harness::step(&mut app, 30);
+    let va = velocity_of(&mut app, id_a);
+    let vb = velocity_of(&mut app, id_b);
+    assert!(
+        va.length() < 0.5 && vb.length() < 0.5,
+        "hinged overlapping pair must not collide (va {va}, vb {vb})"
     );
 }
