@@ -28,4 +28,6 @@ fn panel_systems_have_no_conflicting_params() {
     assert_initializes(gradiance::ui::context_menu::context_menu);
     // joint_inspector gained transform/index reads for its sensor readouts.
     assert_initializes(gradiance::ui::joint_inspector::joint_inspector);
+    // apply_scene_viewport mutates the camera viewport from the panel rects.
+    assert_initializes(gradiance::ui::apply_scene_viewport);
 }
