@@ -182,6 +182,29 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
         JointKind::Weld => {
             ui.label("rigidly holds the creation-time relative pose");
         }
+        JointKind::Elastica {
+            length,
+            young_modulus,
+            thickness,
+            damping_ratio,
+            end_a,
+            end_b,
+            tangent_a,
+            tangent_b,
+        } => {
+            if let Some(new_kind) = elastica_section(
+                ui,
+                *length,
+                *young_modulus,
+                *thickness,
+                *damping_ratio,
+                (*end_a, *end_b),
+                (*tangent_a, *tangent_b),
+            ) {
+                next.kind = new_kind;
+                changed = true;
+            }
+        }
         JointKind::Spring {
             rest_length,
             stiffness,
@@ -203,6 +226,7 @@ pub fn kind_name(kind: &JointKind) -> &'static str {
         JointKind::Hinge { .. } => "Hinge (revolute)",
         JointKind::Slider { .. } => "Prismatic (slider)",
         JointKind::Weld => "Weld (fixed)",
+        JointKind::Elastica { .. } => "Flexure (elastica)",
         JointKind::Spring { .. } => "Spring (spring-damper)",
     }
 }
@@ -210,8 +234,95 @@ pub fn kind_name(kind: &JointKind) -> &'static str {
 fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
     match kind {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => *limits,
-        JointKind::Weld | JointKind::Spring { .. } => None,
+        JointKind::Weld | JointKind::Elastica { .. } | JointKind::Spring { .. } => None,
     }
+}
+
+/// Flexure config: stiffness (Young's modulus), thickness, damping, and
+/// per-end hinge/weld toggles. Length and rest tangents are structural
+/// (creation-time) and shown read-only.
+#[allow(clippy::too_many_arguments)]
+fn elastica_section(
+    ui: &mut egui::Ui,
+    length: f32,
+    young_modulus: f32,
+    thickness: f32,
+    damping_ratio: f32,
+    (end_a, end_b): (
+        crate::domain::rod::RodEndKind,
+        crate::domain::rod::RodEndKind,
+    ),
+    (tangent_a, tangent_b): (f32, f32),
+) -> Option<JointKind> {
+    use crate::domain::rod::RodEndKind;
+    let mut e = young_modulus;
+    let mut t = thickness;
+    let mut zeta = damping_ratio;
+    let mut edited = false;
+
+    ui.horizontal(|ui| {
+        ui.label("length");
+        ui.monospace(format!("{length:.1} px"));
+    });
+    ui.horizontal(|ui| {
+        ui.label("stiffness E");
+        if let Commit::Done(..) = precise_drag(
+            ui,
+            egui::Id::new("flex-e"),
+            &mut e,
+            crate::domain::joint::DEFAULT_FLEXURE_E,
+            1.0e8,
+        ) {
+            edited = true;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("thickness");
+        if let Commit::Done(..) = precise_drag(ui, egui::Id::new("flex-t"), &mut t, 5.0, 0.25) {
+            edited = true;
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("damping ζ");
+        if let Commit::Done(..) = precise_drag(
+            ui,
+            egui::Id::new("flex-z"),
+            &mut zeta,
+            crate::domain::joint::DEFAULT_FLEXURE_DAMPING,
+            0.05,
+        ) {
+            edited = true;
+        }
+    });
+    let mut hinge_a = end_a == RodEndKind::Hinge;
+    let mut hinge_b = end_b == RodEndKind::Hinge;
+    if ui.checkbox(&mut hinge_a, "hinge end A").changed() {
+        edited = true;
+    }
+    if ui.checkbox(&mut hinge_b, "hinge end B").changed() {
+        edited = true;
+    }
+
+    if !edited {
+        return None;
+    }
+    let kind_of = |hinge: bool| {
+        if hinge {
+            RodEndKind::Hinge
+        } else {
+            RodEndKind::Fixed
+        }
+    };
+    Some(JointKind::Elastica {
+        length,
+        young_modulus: e.max(0.0),
+        thickness: t.max(0.1),
+        damping_ratio: zeta.max(0.0),
+        end_a: kind_of(hinge_a),
+        end_b: kind_of(hinge_b),
+        tangent_a,
+        tangent_b,
+    })
 }
 
 /// Limits UI: a toggle plus min/max drags. `degrees` shows/edits in

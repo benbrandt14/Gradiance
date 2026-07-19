@@ -166,6 +166,7 @@ fn draw_joint_anchors(
             JointKind::Hinge { .. } => css::ORANGE,
             JointKind::Slider { .. } => css::DEEP_SKY_BLUE,
             JointKind::Weld => css::LIGHT_GRAY,
+            JointKind::Elastica { .. } => css::DARK_ORANGE,
             JointKind::Spring { .. } => css::SPRING_GREEN,
         };
         let world_a = index

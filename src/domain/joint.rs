@@ -98,6 +98,33 @@ pub enum JointKind {
         /// Optional linear motor.
         motor: Option<MotorDef>,
     },
+    /// Flexure rod: a large-deflection elastic beam ("elastica") between
+    /// the two anchors, solved analytically outside the physics solver
+    /// (`geometry::elastica`, applied by `physics::elastica`). Exhibits
+    /// real Euler buckling and post-buckling bowing. Ends are `Fixed`
+    /// (tangent welded to the body's rotation) or `Hinge` (moment-free).
+    /// Both bodies must be real (`body_b` is never a world pin — the rod
+    /// tool spawns a tip body for an unattached end).
+    Elastica {
+        /// Beam arclength (px); the chord equals it at rest.
+        length: f32,
+        /// Young's modulus `E` (force/px²); `EA = E·t`, `EI = E·t³/12`.
+        young_modulus: f32,
+        /// Section thickness `t` (px).
+        thickness: f32,
+        /// Stiffness-proportional damping ratio ζ.
+        damping_ratio: f32,
+        /// End-A constraint kind.
+        end_a: crate::domain::rod::RodEndKind,
+        /// End-B constraint kind.
+        end_b: crate::domain::rod::RodEndKind,
+        /// Rest tangent direction at end A, in body-A local space (rad):
+        /// the beam's tangent is `rot_a + tangent_a`, so the rod rests
+        /// straight along its creation chord.
+        tangent_a: f32,
+        /// Rest tangent direction at end B, body-B local (rad).
+        tangent_b: f32,
+    },
     /// Rigid weld: locks the two bodies at their creation-time relative
     /// pose (maps onto avian's `FixedJoint`). Authored for rod ends and
     /// via the joint inspector; the weld *tool* stays the merge tool
@@ -128,6 +155,14 @@ pub enum JointKind {
         range: Option<[f32; 2]>,
     },
 }
+
+/// Default Young's modulus for a new flexure rod. Scaled for density-1
+/// bodies: a 200-px rod of default thickness carries a 40×40 box with a
+/// visible, bounded sag (axial response saturates at the per-step
+/// stability clamp for light bodies — behaves like a firm spring).
+pub const DEFAULT_FLEXURE_E: f32 = 3.0e9;
+/// Default flexure damping ratio.
+pub const DEFAULT_FLEXURE_DAMPING: f32 = 0.5;
 
 /// Fallback spring constant for the inspector's reset (the strut tool computes
 /// a mass-based value at creation; see `interaction::tools::spring_tool`).

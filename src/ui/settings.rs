@@ -393,6 +393,11 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 if motor.is_some() { " +motor" } else { "" },
             ),
             JointKind::Weld => "Weld".to_owned(),
+            JointKind::Elastica {
+                length,
+                young_modulus,
+                ..
+            } => format!("Flexure L={length:.0} E={young_modulus:.1e}"),
             JointKind::Spring {
                 rest_length,
                 stiffness,

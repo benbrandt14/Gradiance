@@ -41,6 +41,8 @@ pub enum PropertyValue {
     Depth(DepthBand),
     /// Full joint definition (limits, motors, collide flags, anchors).
     Joint(JointDef),
+    /// Rigid-rod end-kind metadata (the marker on a capsule rod body).
+    Rod(crate::domain::rod::Rod),
     /// A behavior node's kind (sensor quantity/signal, actuator wiring,
     /// tracer fade). Editing wires the dataflow — undoable like any prop.
     NodeKind(crate::domain::node::NodeKind),
@@ -57,6 +59,9 @@ impl PropertyValue {
                 entity_mut.insert(v.clone());
             }
             Self::RigidBody(v) => {
+                entity_mut.insert(*v);
+            }
+            Self::Rod(v) => {
                 entity_mut.insert(*v);
             }
             Self::Friction(v) => {

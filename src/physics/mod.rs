@@ -10,6 +10,7 @@
 //! ordinary `Static` body with a large box shape.
 
 pub mod body_sync;
+pub mod elastica;
 pub mod fields;
 pub mod grab;
 pub mod hold;
@@ -73,6 +74,7 @@ impl Plugin for GradiancePhysicsPlugin {
                 grab::apply_mouse_twist,
                 fields::sync_field_mass,
                 fields::apply_field_forces.run_if(in_state(GameState::Playing)),
+                elastica::apply_elastica_forces.run_if(in_state(GameState::Playing)),
                 fields::apply_plane_friction.run_if(in_state(GameState::Playing)),
                 fields::set_in_orbit,
             ),

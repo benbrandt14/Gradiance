@@ -105,8 +105,11 @@ pub struct ElasticaInput {
     pub m_red: f32,
     /// Reduced rotational inertia of the pair.
     pub i_red: f32,
-    /// Solver substep dt (s) — the stability clamp's timescale.
-    pub h_sub: f32,
+    /// The explicit-force hold interval (s): the *fixed step* dt, not the
+    /// substep — the accumulated force is computed once per frame and held
+    /// constant across the whole physics step, so that is the stability
+    /// timescale.
+    pub h_step: f32,
 }
 
 /// Warm-start cache: the last converged DOF vector `(φa, φb, q₁, q₂)`.
@@ -277,22 +280,30 @@ fn minimize(
         let bias = x[0] + x[1];
         x[2] = SEED * l * if bias < 0.0 { -1.0 } else { 1.0 };
     }
-    let step_cap = 0.5 * l;
+    // Newton runs in non-dimensionalized DOF space (mode amplitudes in
+    // units of L, slopes in radians) so every direction has a comparable
+    // curvature scale — a uniform Levenberg shift then damps them evenly
+    // instead of freezing the soft (buckling) direction to protect the
+    // stiff ones.
+    let dof_scale = [1.0, 1.0, l, l];
+    // Scaled step cap ≈ half a radian / half a length per iteration.
+    let step_cap = 0.5;
     for _ in 0..NEWTON_ITERS {
         let e = strain(x, g, c, l);
         let grad = gradient(x, k, g, k_ax, e);
         let gx = mat_vec(g, x);
-        // Free-subspace Hessian: K + k_ax (Gx)(Gx)ᵀ + k_ax e G, plus a
-        // small Levenberg diagonal so near-saddle steps stay tame.
+        // Free-subspace Hessian: K + k_ax (Gx)(Gx)ᵀ + k_ax e G, scaled
+        // into non-dimensional space (H' = D·H·D, g' = D·g).
         let mut h = [[0.0f32; 4]; 4];
         let mut rhs = [0.0f32; 4];
         let mut scale = 0.0f32;
         for (r, &i) in free_idx.iter().enumerate() {
             for (s, &j) in free_idx.iter().enumerate() {
-                h[r][s] = k[i][j] + k_ax * (gx[i] * gx[j] + e * g[i][j]);
+                h[r][s] =
+                    dof_scale[i] * (k[i][j] + k_ax * (gx[i] * gx[j] + e * g[i][j])) * dof_scale[j];
             }
             scale = scale.max(h[r][r].abs());
-            rhs[r] = -grad[i];
+            rhs[r] = -grad[i] * dof_scale[i];
         }
         // Positive-definite-ified Newton: plain Newton converges to the
         // *nearest stationary point*, which at a compressed straight rod
@@ -300,8 +311,12 @@ fn minimize(
         // the Levenberg shift λ (deterministic ×10 schedule) until the
         // shifted Hessian is PD, guaranteeing a descent direction.
         let mut delta = None;
+        // Gentle ×3 escalation: a shift that barely clears the most
+        // negative eigenvalue keeps the descent step along the buckling
+        // direction large (fast pitchfork escape); ×10 would overshoot
+        // and crawl.
         let mut lambda = 1.0e-6 * scale.max(1.0e-6);
-        for _ in 0..10 {
+        for _ in 0..16 {
             let mut shifted = h;
             for (r, row) in shifted.iter_mut().enumerate().take(n) {
                 row[r] += lambda;
@@ -311,14 +326,15 @@ fn minimize(
                 delta = solve_linear(&mut shifted, &mut rhs_try, n);
                 break;
             }
-            lambda *= 10.0;
+            lambda *= 3.0;
         }
         let Some(delta) = delta else {
             break;
         };
         let mut bad = false;
         for (r, &i) in free_idx.iter().enumerate() {
-            let step = delta[r].clamp(-step_cap, step_cap);
+            // Map the scaled step back to real units (δ = D·δ').
+            let step = delta[r].clamp(-step_cap, step_cap) * dof_scale[i];
             if !step.is_finite() {
                 bad = true;
                 break;
@@ -341,7 +357,7 @@ fn minimize(
 fn clamped_rigidity(input: &ElasticaInput) -> (f32, f32) {
     let p = &input.params;
     let l = p.length.max(1.0e-3);
-    let h2 = (input.h_sub * input.h_sub).max(1.0e-12);
+    let h2 = (input.h_step * input.h_step).max(1.0e-12);
     let m = input.m_red.max(1.0e-6);
     let i_r = input.i_red.max(1.0e-6);
     let cap = |k: f32, inertia: f32| {
@@ -475,7 +491,7 @@ mod tests {
             zeta: 0.0,
             m_red: 1.0e12,
             i_red: 1.0e12,
-            h_sub: 1.0 / 240.0,
+            h_step: 1.0 / 60.0,
         }
     }
 
@@ -609,7 +625,7 @@ mod tests {
         // With the clamp, k_eff ≤ α·m/h²; a 10-px strain can't exceed
         // that bound times the strain magnitude (plus bending's share —
         // order-of-magnitude sanity, not exactness).
-        let bound = ALPHA * input.m_red / (input.h_sub * input.h_sub) * 20.0;
+        let bound = ALPHA * input.m_red / (input.h_step * input.h_step) * 20.0;
         assert!(
             loads.force_b.length() < bound,
             "clamped force {} < {bound}",

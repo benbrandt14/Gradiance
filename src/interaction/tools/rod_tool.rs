@@ -91,6 +91,9 @@ fn build_rod(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Option<
     if length < MIN_ROD_LENGTH {
         return None;
     }
+    if ctx.defaults.rod_flexure {
+        return build_flexure(a, b, world, ctx);
+    }
     let end_kind = default_end(ctx);
     let rot = (b - a).to_angle();
     let rod_id = StableId::new();
@@ -130,6 +133,82 @@ fn build_rod(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Option<
     Some(ToolCommit::SpawnRod(Box::new(RodSpec {
         bodies: vec![body],
         joints,
+    })))
+}
+
+/// Builds a flexure rod: one elastica joint between the two end
+/// attachments; any end over empty space gets a small dynamic circle
+/// "tip" body (inertia + contact for the free end).
+fn build_flexure(a: Vec2, b: Vec2, world: &ToolWorld, ctx: &ManipContext) -> Option<ToolCommit> {
+    let length = a.distance(b);
+    let chord_angle = (b - a).to_angle();
+    let end_kind = default_end(ctx);
+
+    let mut bodies = Vec::new();
+    // Each end resolves to (body id, local anchor, body rotation) — the
+    // hit body's, or a freshly minted tip circle's.
+    let mut resolve_end = |point: Vec2| -> (crate::core::ids::StableId, Vec2, f32) {
+        if let Some(&hit) = world.bodies_at(point).first()
+            && let Some((_, pose)) = world.shape_pose(hit)
+            && let Some(id) = world.id_of(hit)
+        {
+            let local = Vec2::from_angle(-pose.rot).rotate(point - pose.pos);
+            return (id, local, pose.rot);
+        }
+        let tip = BodyRecord {
+            id: crate::core::ids::StableId::new(),
+            pose: PosRot {
+                pos: point,
+                rot: 0.0,
+            },
+            shape: ShapeDef::Circle { radius: ROD_RADIUS },
+            physics: crate::domain::props::BodyPhysics::default(),
+            appearance: rod_appearance(),
+            depth: crate::domain::depth::DepthBand::default(),
+            layers: None,
+            groups: Vec::new(),
+            field: None,
+            tracer: None,
+            rod: None,
+        };
+        let id = tip.id;
+        bodies.push(tip);
+        (id, Vec2::ZERO, 0.0)
+    };
+    let (id_a, anchor_a, rot_a) = resolve_end(a);
+    let (id_b, anchor_b, rot_b) = resolve_end(b);
+    if id_a == id_b {
+        return None; // both ends on the same body: nothing to flex
+    }
+
+    let joint = JointRecord {
+        id: crate::core::ids::StableId::new(),
+        def: JointDef {
+            kind: JointKind::Elastica {
+                length,
+                young_modulus: crate::domain::joint::DEFAULT_FLEXURE_E,
+                thickness: 2.0 * ROD_RADIUS,
+                damping_ratio: crate::domain::joint::DEFAULT_FLEXURE_DAMPING,
+                end_a: end_kind,
+                end_b: end_kind,
+                // Rest tangents: the beam lies along the creation chord.
+                tangent_a: chord_angle - rot_a,
+                tangent_b: chord_angle - rot_b,
+            },
+            common: JointCommon {
+                collide_connected: true,
+            },
+            body_a: id_a,
+            body_b: Some(id_b),
+            anchor_a,
+            anchor_b,
+            rest_rot_a: rot_a,
+            rest_rot_b: rot_b,
+        },
+    };
+    Some(ToolCommit::SpawnRod(Box::new(RodSpec {
+        bodies,
+        joints: vec![joint],
     })))
 }
 

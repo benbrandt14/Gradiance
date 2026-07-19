@@ -68,6 +68,7 @@ pub fn sync_joints(
             DistanceJoint,
             FixedJoint,
             JointDamping,
+            crate::physics::elastica::ElasticaCache,
         )>();
         if let Some(pin) = old_pin {
             entity_commands.remove::<PinAnchor>();
@@ -169,6 +170,12 @@ fn insert_derived_joint(
                     .with_local_basis2(basis_b),
             );
         }
+        // The flexure is a *non-solver* constraint: no avian joint at all,
+        // only the derived warm-start cache the per-frame force system
+        // (`physics::elastica`) needs.
+        JointKind::Elastica { .. } => {
+            entity_commands.insert(crate::physics::elastica::ElasticaCache::default());
+        }
         JointKind::Spring {
             rest_length,
             stiffness,
@@ -225,6 +232,7 @@ pub fn guard_dangling_joints(
                     DistanceJoint,
                     FixedJoint,
                     JointDamping,
+                    crate::physics::elastica::ElasticaCache,
                 )>()
                 .insert(JointUnresolved);
         }
