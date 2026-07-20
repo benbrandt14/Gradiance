@@ -1,110 +1,68 @@
-# UI shell decision: options for a growing desktop app
+# UI shell decision: the egui app shell
 
-Status: **under evaluation** (reopened 2026-07-18). Prompted by: "I am open to
-other options for UI other than purely egui, or other assistance to manage what
-is becoming a larger desktop application." This doc is deliberately *not* a
-foregone conclusion — it lays out the real options, their honest costs, and a
-way to decide with evidence rather than assertion.
-
-Two separable questions:
-
-1. **Framework** — keep egui, or move (partly/wholly) to something richer?
-2. **Manage the growth** — what makes a larger app tractable *regardless* of the
-   framework answer?
+Status: **decided (option A) and executed** (opened 2026-07-18). Prompted by
+"I am open to other options for UI other than purely egui." We evaluated the
+options honestly, chose the egui shell, and built it out (through the
+scene-viewport routing). The north star is a **Blender-style UI** (dockable
+panels, a T-panel tool strip, an embedded node editor, menu-driven chrome).
 
 ## The one hard constraint
 
 The app's heart is a **live wgpu-rendered viewport** (Bevy's render graph owns a
-`wgpu::Device`/`Queue` and a winit window). Every option is really a question of
-*how the UI toolkit coexists with that*. That — not widget richness — is what
+`wgpu::Device`/`Queue` and a winit window). Every framework option is really a
+question of *how the UI toolkit coexists with that* — that, not widget richness,
 separates "a weekend" from "an R&D project."
 
-## Framework options (honest trade-offs)
+## Options considered (record)
 
-- **A. egui as an app shell (lowest risk).** Keep `bevy_egui`; add `egui_tiles`
-  (Rerun's docking, egui-0.35-ready), a menu/action system, a view registry,
-  persisted layout. *Pros:* zero new integration risk, the whole editor already
-  runs on it, and Rerun proves egui scales to a large viewport-centric desktop
-  tool. *Cons:* immediate-mode ceilings — deeply-styled/animated chrome,
-  theming, accessibility, and very complex custom widgets are more work than in
-  a retained toolkit.
+- **A. egui as an app shell — CHOSEN.** Keep `bevy_egui`; add `egui_tiles`
+  (Rerun's docking). Zero new integration risk, the whole editor already runs on
+  it, Rerun proves egui scales to a viewport-centric desktop tool. Cost:
+  immediate-mode ceilings for deeply-styled/animated chrome, theming, and
+  accessibility.
+- **B. Hybrid retained shell (Slint+wgpu / web / gpui).** The real "move off
+  egui" path — richest, but compositing a Bevy texture across two render loops +
+  input routing is weeks of R&D and ongoing maintenance. Deferred unless a
+  concrete wall (rich-text/document editing, deep accessibility, a design system
+  egui can't express) forces it.
+- **C. `bevy_ui`.** ECS-native, no integration seam, but lacks docking/rich
+  editor widgets today. Worth re-checking each Bevy release.
 
-- **B. Hybrid: a retained native shell hosting the Bevy viewport (richest, real
-  R&D).** The serious "move off egui" path.
-  - **Slint + wgpu** is the most promising: Slint 1.x exposes custom-wgpu
-    rendering (underlay/overlay via a rendering notifier, and an existing-device
-    path), so compositing a Bevy-rendered texture into a styled, declarative,
-    animated Slint UI is *conceivable* — but it means sharing/compositing across
-    two render loops and routing input between them. Weeks, not days, plus
-    ongoing maintenance as both projects move.
-  - **Web frontend (Tauri/wry) or Dioxus** gives the best ergonomics for dense
-    tooling and things like curve editors (SVG/canvas), but embedding a live GPU
-    viewport in a webview is the hardest variant (native child surface or
-    frame-streaming) and adds a permanent two-runtime data-sync cost.
-  - **gpui** (Zed) is GPU-native and capable but young and has no established
-    Bevy integration.
+## No-regret growth work (framework-independent, still open)
 
-- **C. `bevy_ui` (no second runtime).** ECS-native, no integration seam at all.
-  *But* it lacks docking and rich editor widgets today and is verbose for
-  inspectors/node graphs — not ready for this tool's chrome. Worth re-checking
-  each Bevy release.
+- **Split into a Cargo workspace** (`-core`/`-physics`/`-script`/`-ui` + app
+  binary) — the biggest compile-time win, and enforces the module boundaries at
+  the crate level (stronger than `tests/boundaries.rs`). The boundary discipline
+  already puts the seams where crate edges would go.
+- **App-shell architecture** — a `View`/`Panel` trait + registry and an
+  action/command layer (dovetails with the scripting operation registry — a menu
+  item is a registered op), so chrome is extensible and a later framework swap is
+  a port, not a rewrite.
+- Keep the `dev` dynamic-linking loop; widen `egui_kittest` headless coverage.
 
-## Recommended way to decide (not a bet)
+## What landed (option A, by accretion)
 
-If the pull toward a richer shell is real, **de-risk it with a time-boxed spike**
-(≈2–3 days): stand up a minimal **Slint window compositing one Bevy-rendered
-texture** with basic input routing. If that comes up clean, a phased migration
-(shell first, panels ported behind a `View` trait) becomes credible. If it
-fights the two render loops, we have concrete evidence to stay on the egui shell
-— and we lost only the spike. I can run this spike on request.
+- **Menu bar** — File/Edit/View/Help, routing to existing intents/toggles.
+- **Right dock** (`src/ui/dock.rs`, `egui_tiles`) — Outliner / Depth /
+  Signals+Plot / Properties / Script as re-arrangeable, splittable tabs. The
+  Properties inspector and the Live Plot are dock panes (their floating windows
+  are gone). One `BodyProps` bundle holds the dock's single `PropertyEditIntent`
+  writer + `SignalBindings`, so the one dock system stays under Bevy's param cap.
+- **Bottom dock** (`src/ui/bottom_dock.rs`, `egui_tiles`) — the Node Graph canvas.
+- **Object-tree outliner** with **universal selection** — a tree row, a viewport
+  shape, and a node-graph block are the same ECS entity, so selecting one
+  highlights all three (via the `SelectTransition` seam).
+- **Scene-viewport routing** (stage 2, `apply_scene_viewport`) — the scene
+  `Camera3d` renders only into the dock-bounded central pane. This required
+  giving egui its **own full-window camera** (`spawn_ui_camera`,
+  `RenderLayers::none()`): bevy_egui otherwise attaches the UI to the scene
+  camera, so shrinking that camera's viewport oscillated the whole UI. Picking
+  needs no changes — Bevy's `viewport_to_ndc` offsets by the viewport origin.
+  The pane math (`PanelRects::{top,right,bottom}_inset`, `scene_rect`,
+  `scene_viewport`) is pure and unit-tested.
+- **Tool strip** — a fixed, translucent left T-panel of image icons
+  (from `assets/icons/tool_*.png`, registered as egui textures).
 
-Absent that signal, **option A is the low-risk default** and unblocks everything
-else now.
-
-## Manage the growth — no-regret, framework-independent
-
-These pay off under *any* framework answer and are the highest-leverage
-"manage the larger app" moves:
-
-- **Split into a Cargo workspace** — `gradiance-core` (domain/geometry/pure),
-  `-physics`, `-script`, `-ui`, and a thin app binary. **This is the biggest
-  immediate win:** it cuts incremental compile times (the real drag on a growing
-  app), enforces the module boundaries at the *crate* level (stronger than
-  today's `tests/boundaries.rs`), and lets a future UI shell be swapped without
-  touching core. The existing boundary discipline means the seams are already
-  where crate edges would go.
-- **App-shell architecture inside the UI** — a `View`/`Panel` trait + registry,
-  an action/command layer (dovetails with the scripting **operation registry** —
-  a menu item is a registered op), and persisted workspace layout. Makes chrome
-  extensible instead of ad-hoc, and is what makes any later framework swap a
-  port rather than a rewrite.
-- **Iteration + regression safety** — keep the `dev` dynamic-linking loop; widen
-  `egui_kittest` panel snapshot coverage so UI logic has headless guards (the
-  environment can't screenshot).
-
-## Standing recommendation
-
-Pursue the **no-regret growth work now** (start with the workspace split), keep
-building features on the **egui shell**, and **spike the Slint hybrid** before
-committing to any framework move. Revisit this doc when the spike returns or a
-concrete wall (rich-text/document editing, deep accessibility, a design system
-egui can't express) forces the hybrid.
-
-## Progress on option A (the egui app shell)
-
-Being built by accretion, not big-bang:
-
-- **Menu/action bar** — File/Edit/View/Help routing to existing intents/toggles.
-- **Right dock → `egui_tiles`** (`src/ui/dock.rs`) — Depth/Signals/Script as
-  re-arrangeable tabs; the first `egui_tiles` surface, proving the docking lib
-  composes with `bevy_egui`.
-- **Bottom dock → `egui_tiles`** (`src/ui/bottom_dock.rs`) — Node Graph + Live
-  Plot as tabs, routed to their self-contained section renderers; the plot's
-  floating window and the node graph's fixed bottom panel are unified into one
-  workspace. Same open-set/persist-layout pattern as the right dock.
-
-Both docks overlay the full-window scene on the background layer and feed
-`PanelRects` (no camera-viewport change yet). **Next:** the scene itself becomes
-a dockable pane with the Bevy camera rendering into that pane's rect — the
-riskiest stage (picking/gizmo/scale + `PanelRects` all move), best done with
-visual verification.
+**Next (fresh context):** dock the Probe & Settings pop-ups (needs a right-dock
+param restructure — it's at Bevy's 16-param cap), outliner grouping/filters, the
+undo/redo overhaul (incl. undoing scene-play), and embedded node-editor polish.

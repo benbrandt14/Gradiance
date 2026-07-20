@@ -1,4 +1,5 @@
-//! Tool palette + transport (play/pause, undo/redo, scale frame).
+//! Tool palette (left T-panel of icons) + transport strip (play/pause, scale
+//! frame, 2D-view home). Undo/redo and panel toggles live in the menu bar.
 
 use crate::core::states::{GameState, ToolState};
 use crate::interaction::tools::handles::ScaleFrame;
@@ -12,7 +13,7 @@ use bevy_egui::{EguiContexts, egui};
 pub struct Panels<'w> {
     /// Settings window.
     pub settings: ResMut<'w, crate::ui::settings::SettingsWindow>,
-    /// Properties inspector pop-out.
+    /// Properties inspector dock pane (toggle).
     pub inspector: ResMut<'w, crate::ui::inspector::InspectorPanel>,
     /// Live plot panel.
     pub plot: ResMut<'w, crate::ui::plot::PlotPanel>,
