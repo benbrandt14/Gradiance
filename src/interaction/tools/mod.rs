@@ -186,9 +186,9 @@ pub fn new_body_record(
     shape: ShapeDef,
     pos: Vec2,
     rot: f32,
-) -> crate::command::snapshot::BodyRecord {
+) -> crate::scene::BodyRecord {
     let id = crate::core::ids::StableId::new();
-    crate::command::snapshot::BodyRecord {
+    crate::scene::BodyRecord {
         id,
         pose: crate::core::units::PosRot { pos, rot },
         shape,

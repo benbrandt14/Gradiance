@@ -12,7 +12,7 @@
 //! their anchor (anchor remapped into the piece's frame) and are deleted
 //! when no piece contains it.
 
-use crate::command::snapshot::{BodyRecord, JointRecord};
+use crate::scene::{BodyRecord, JointRecord};
 use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::StableId;
 use crate::domain::Body;

@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use gradiance::domain::settings::{
     GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
 };
-use gradiance::persist::{from_ron, to_ron};
+use gradiance::scene::{from_ron, to_ron};
 use gradiance::prelude::*;
 use proptest::prelude::*;
 
@@ -217,7 +217,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                 })
                 .collect();
             let mut scene = SceneRecord {
-                version: gradiance::persist::FORMAT_VERSION,
+                version: gradiance::scene::FORMAT_VERSION,
                 app_version: String::new(),
                 bodies,
                 joints,
@@ -319,7 +319,7 @@ fn loading_a_scene_is_one_undoable_command() {
     let incoming_body = box_record(Vec2::new(50.0, 0.0), 30.0, 30.0);
     let incoming_id = incoming_body.id;
     let scene = SceneRecord {
-        version: gradiance::persist::FORMAT_VERSION,
+        version: gradiance::scene::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![incoming_body],
         joints: vec![],
@@ -478,7 +478,7 @@ fn pre_field_files_still_parse() {
     // `field` is serde-defaulted: files written before field sources load
     // with none (no format bump needed).
     let scene = SceneRecord {
-        version: gradiance::persist::FORMAT_VERSION,
+        version: gradiance::scene::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
@@ -514,7 +514,7 @@ fn v4_layer_masks_migrate_to_depth_bands() {
     };
     let text = to_ron(&scene).unwrap();
     let parsed = from_ron(&text).expect("v4 file migrates");
-    assert_eq!(parsed.version, gradiance::persist::FORMAT_VERSION);
+    assert_eq!(parsed.version, gradiance::scene::FORMAT_VERSION);
     assert_eq!(
         parsed.bodies[0].depth,
         DepthBand {
@@ -531,7 +531,7 @@ fn pre_tracer_files_still_parse() {
     // `tracer` is serde-defaulted, so scenes saved before tracers existed
     // load unchanged.
     let scene = SceneRecord {
-        version: gradiance::persist::FORMAT_VERSION,
+        version: gradiance::scene::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
@@ -564,7 +564,7 @@ fn pre_render_settings_files_still_parse() {
     // Simulate a pre-M10 save: serialize a current scene, then strip the
     // trailing `render` field from its environment block.
     let scene = SceneRecord {
-        version: gradiance::persist::FORMAT_VERSION,
+        version: gradiance::scene::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],

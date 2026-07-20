@@ -5,7 +5,7 @@
 //! the [`SignalBindings`] config-seam resource that persists with the
 //! scene (like [`settings`](crate::domain::settings)). The runtime that
 //! evaluates them (the bus, the derived color override, the per-frame
-//! evaluator) lives in [`crate::signal`].
+//! evaluator) lives in the `signal` layer crate.
 
 use crate::core::ids::StableId;
 use bevy::prelude::*;
@@ -36,7 +36,7 @@ pub enum SignalSource {
     ContactForce(StableId),
     /// Number of bodies a body is currently touching.
     ContactCount(StableId),
-    /// A named value published on the [`SignalBus`](crate::signal::SignalBus)
+    /// A named value published on the `SignalBus` (in the `signal` layer)
     /// — by a script
     /// (`signal-set`), a future node, or another binding.
     Named(String),
@@ -219,7 +219,7 @@ impl GradientSpec {
 }
 
 /// What a signal drives. Color sinks write the derived
-/// [`SignalColorOverride`](crate::signal::SignalColorOverride); `Plot`
+/// `SignalColorOverride` (in the `signal` layer); `Plot`
 /// only publishes (every binding's value
 /// lands on the bus and in the plot panel regardless).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
@@ -398,7 +398,7 @@ impl SignalParam {
 
 /// A serializable numeric expression over **named** signals — the authored
 /// form of a computed signal (`defsignal`). It mirrors the pure Tier-B
-/// kernel's `Expr` (`crate::script::kernel`) but references inputs by bus
+/// kernel's `Expr` (`crate::kernel`) but references inputs by bus
 /// name instead of a var index, so it persists and round-trips; the signal
 /// runtime lowers it to a compiled, allocation-free `Kernel` for the hot
 /// path (`crate::signal::compile`). Kept small on purpose — power comes

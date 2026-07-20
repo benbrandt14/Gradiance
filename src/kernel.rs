@@ -18,7 +18,7 @@
 //! proptested math, in the spirit of the `geometry` module.
 //!
 //! ```
-//! use gradiance::script::kernel::{BinaryOp, Expr, Kernel, UnaryOp};
+//! use gradiance::kernel::{BinaryOp, Expr, Kernel, UnaryOp};
 //!
 //! // position offset = amplitude * sin(t): amplitude is per-element var 1,
 //! // t is the broadcast scalar var 0.

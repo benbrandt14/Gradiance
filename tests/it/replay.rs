@@ -11,7 +11,7 @@
 
 use crate::harness::{box_record, paused_app};
 use bevy::prelude::*;
-use gradiance::command::snapshot::{JointRecord, SceneRecord};
+use gradiance::scene::{JointRecord, SceneRecord};
 use gradiance::prelude::*;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -32,7 +32,7 @@ fn snapshot(app: &mut App) -> String {
     let mut scene = SceneRecord::capture(app.world_mut());
     "golden".clone_into(&mut scene.app_version);
     normalize_ids(&mut scene);
-    gradiance::persist::to_ron(&scene).expect("scene serializes")
+    gradiance::scene::to_ron(&scene).expect("scene serializes")
 }
 
 /// Re-keys every `StableId` from a deterministic content ordering, so ids
@@ -40,7 +40,7 @@ fn snapshot(app: &mut App) -> String {
 /// golden compare. Scenarios keep body poses distinct by construction.
 fn normalize_ids(scene: &mut SceneRecord) {
     let mut order: Vec<usize> = (0..scene.bodies.len()).collect();
-    let key = |b: &gradiance::command::snapshot::BodyRecord| {
+    let key = |b: &gradiance::scene::BodyRecord| {
         (
             (b.pose.pos.x * 1000.0).round() as i64,
             (b.pose.pos.y * 1000.0).round() as i64,

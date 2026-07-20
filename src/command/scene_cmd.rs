@@ -1,6 +1,6 @@
 //! Whole-scene replacement as an undoable command.
 
-use crate::command::snapshot::SceneRecord;
+use crate::scene::SceneRecord;
 use crate::command::{CommandError, GameCommand};
 use bevy::prelude::*;
 

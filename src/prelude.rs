@@ -8,7 +8,7 @@ pub use crate::command::intent::{
     SpawnBodyIntent, SpawnJointIntent, TransformChange, UndoIntent, UngroupIntent,
 };
 pub use crate::command::property::{PropertyChange, PropertyValue};
-pub use crate::command::snapshot::{BodyRecord, EnvironmentRecord, JointRecord, SceneRecord};
+pub use crate::scene::{BodyRecord, EnvironmentRecord, JointRecord, SceneRecord};
 // Note: `CommandStack` is deliberately NOT re-exported — only the dispatcher
 // (and tests, via the full `crate::command::CommandStack` path) may name it.
 pub use crate::GradiancePlugins;

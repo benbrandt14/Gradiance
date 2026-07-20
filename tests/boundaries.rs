@@ -127,12 +127,7 @@ fn engine_facing_dependencies_stay_exact_pinned() {
 
 #[test]
 fn serialization_is_confined_to_authored_data() {
-    let allowed = [
-        "src/domain/",
-        "src/core/",
-        "src/command/snapshot.rs",
-        "src/persist/",
-    ];
+    let allowed = ["src/domain/", "src/core/", "src/scene/", "src/persist/"];
     let v = violations("Serialize", &allowed);
     assert!(
         v.is_empty(),

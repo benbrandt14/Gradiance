@@ -105,7 +105,7 @@ pub fn extrude_contours(contours: &Contours, z_front: f32, depth: f32) -> MeshBu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::shape::ShapeDef;
+    use crate::geometry::shape::ShapeDef;
     use crate::geometry::polygonize::polygonize;
 
     fn z_extent(mesh: &MeshBuffers) -> (f32, f32) {

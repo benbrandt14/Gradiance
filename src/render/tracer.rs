@@ -20,7 +20,7 @@ use crate::domain::appearance::Appearance;
 use crate::domain::node::{BehaviorNode, NodeAttachment, NodeKind};
 use crate::domain::tracer::Tracer;
 use crate::interaction::selection::Selection;
-use crate::render::overlay::OverlayGizmos;
+use crate::interaction::overlay::OverlayGizmos;
 use avian2d::prelude::Physics;
 use bevy::color::palettes::css;
 use bevy::prelude::*;

@@ -186,7 +186,7 @@ mod tests {
         // `SimSettings` now reads a real, newly-`Reflect` authored intent —
         // the read-total path the operation registry / live plotters use.
         use crate::command::intent::SpawnBodyIntent;
-        use crate::command::snapshot::BodyRecord;
+        use crate::scene::BodyRecord;
         use crate::core::ids::StableId;
         use crate::core::units::PosRot;
         use crate::domain::appearance::Appearance;

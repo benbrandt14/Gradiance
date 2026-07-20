@@ -75,7 +75,7 @@ pub fn tessellate(contours: &Contours) -> Triangulation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::shape::ShapeDef;
+    use crate::geometry::shape::ShapeDef;
     use crate::geometry::polygonize::polygonize;
 
     #[test]

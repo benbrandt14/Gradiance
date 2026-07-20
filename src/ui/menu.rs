@@ -9,12 +9,13 @@
 use crate::command::intent::{
     DeleteIntent, GroupIntent, LoadSceneIntent, RedoIntent, UndoIntent, UngroupIntent,
 };
-use crate::command::snapshot::{EnvironmentRecord, SceneRecord};
+use crate::scene::{EnvironmentRecord, SceneRecord};
 use crate::core::ids::StableId;
 use crate::domain::Body;
 use crate::domain::settings::GridSettings;
 use crate::interaction::selection::Selection;
-use crate::persist::{FORMAT_VERSION, LoadSceneRequest, SaveSceneRequest, SnapshotRequest};
+use crate::persist::{LoadSceneRequest, SaveSceneRequest, SnapshotRequest};
+use crate::scene::FORMAT_VERSION;
 use crate::ui::PanelRects;
 use crate::ui::toolbar::Panels;
 use bevy::app::AppExit;

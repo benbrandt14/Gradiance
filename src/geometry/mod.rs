@@ -10,6 +10,7 @@ pub mod extrusion;
 pub mod polygonize;
 pub mod scale;
 pub mod sdf;
+pub mod shape;
 pub mod snapping;
 pub mod tessellate;
 

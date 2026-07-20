@@ -14,7 +14,7 @@ pub mod layers;
 pub mod node;
 pub mod props;
 pub mod settings;
-pub mod shape;
+pub use crate::geometry::shape;
 pub mod signal;
 pub mod tracer;
 

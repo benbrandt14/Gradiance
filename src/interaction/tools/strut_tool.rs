@@ -9,7 +9,7 @@
 //! World reads go through the read-total [`ToolWorld`] facade; the created
 //! joint leaves as a [`ToolCommit::SpawnJoint`] through the shared commit seam.
 
-use crate::command::snapshot::JointRecord;
+use crate::scene::JointRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use crate::domain::joint::{DEFAULT_SPRING_DAMPING, JointCommon, JointDef, JointKind};

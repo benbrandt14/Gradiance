@@ -1,6 +1,6 @@
 //! Array repeats: linear and radial patterns of the selection.
 
-use crate::command::snapshot::BodyRecord;
+use crate::scene::BodyRecord;
 use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::StableId;
 use bevy::prelude::*;
@@ -38,7 +38,7 @@ pub struct ArrayCommand {
     /// Placement rule.
     pub mode: ArrayMode,
     clones: Vec<BodyRecord>,
-    joint_clones: Vec<crate::command::snapshot::JointRecord>,
+    joint_clones: Vec<crate::scene::JointRecord>,
 }
 
 impl ArrayCommand {

@@ -3,7 +3,7 @@
 
 use crate::core::constants::INTERACTION_PLANE_Z;
 use crate::domain::settings::{GridSettings, GridSystem};
-use crate::render::overlay::GridGizmos;
+use crate::interaction::overlay::GridGizmos;
 use bevy::prelude::*;
 
 /// Preferred on-screen line spacing band, in logical pixels.

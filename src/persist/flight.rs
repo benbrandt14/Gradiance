@@ -90,7 +90,7 @@ pub fn dump_flight_recorder(
     let dir = PathBuf::from("snapshots");
     let path = dir.join(format!("flight-{stamp}.ron"));
     let result = std::fs::create_dir_all(&dir)
-        .map_err(crate::persist::PersistError::from)
+        .map_err(crate::scene::PersistError::from)
         .and_then(|()| {
             let text = ron::ser::to_string_pretty(&dump, ron::ser::PrettyConfig::new())?;
             Ok(std::fs::write(&path, text)?)

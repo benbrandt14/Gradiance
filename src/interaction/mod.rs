@@ -25,6 +25,7 @@ pub mod indicators;
 pub mod input;
 pub mod joint_edit;
 pub mod node_edit;
+pub mod overlay;
 pub mod pointer;
 pub mod selection;
 pub mod snap;
@@ -54,6 +55,7 @@ pub struct InteractionPlugin;
 
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
+        overlay::install(app);
         app.init_resource::<PointerOverUi>();
         app.init_resource::<KeyboardCaptured>();
         app.init_resource::<pointer::PointerButtons>();
@@ -109,7 +111,7 @@ impl Plugin for InteractionPlugin {
                 .before(crate::command::CommandDispatchSet),
         );
         // Indicator gizmos need the gizmo plugin (present with rendering);
-        // they draw through the shared overlay group (render::overlay).
+        // they draw through the shared overlay group (interaction::overlay).
         if app.is_plugin_added::<bevy::render::RenderPlugin>() {
             app.add_systems(
                 Update,

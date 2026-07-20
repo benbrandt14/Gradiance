@@ -187,14 +187,14 @@ fn contact_count_source_reads_the_facade() {
 
 #[test]
 fn bindings_persist_with_the_scene_and_old_files_parse() {
-    use gradiance::persist::{from_ron, to_ron};
-    let mut record = gradiance::command::snapshot::SceneRecord {
-        version: gradiance::persist::FORMAT_VERSION,
+    use gradiance::scene::{from_ron, to_ron};
+    let mut record = gradiance::scene::SceneRecord {
+        version: gradiance::scene::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![box_record(Vec2::ZERO, 10.0, 10.0)],
         joints: vec![],
         nodes: vec![],
-        environment: gradiance::command::snapshot::EnvironmentRecord::default(),
+        environment: gradiance::scene::EnvironmentRecord::default(),
     };
     let id = record.bodies[0].id;
     record.environment.signals.0.push(SignalBinding {
@@ -211,8 +211,8 @@ fn bindings_persist_with_the_scene_and_old_files_parse() {
     assert_eq!(parsed.environment.signals, record.environment.signals);
 
     // Pre-signal files (no `signals` field) still parse.
-    let plain = gradiance::command::snapshot::SceneRecord {
-        environment: gradiance::command::snapshot::EnvironmentRecord::default(),
+    let plain = gradiance::scene::SceneRecord {
+        environment: gradiance::scene::EnvironmentRecord::default(),
         ..record
     };
     let text = to_ron(&plain).unwrap();
@@ -371,15 +371,15 @@ fn a_computed_signal_drives_a_body_color_through_a_named_binding() {
 
 #[test]
 fn params_and_computed_persist_and_old_files_parse() {
-    use gradiance::persist::{from_ron, to_ron};
+    use gradiance::scene::{from_ron, to_ron};
     use gradiance::signal::{ComputedSignal, SignalExpr, SignalParam};
-    let mut record = gradiance::command::snapshot::SceneRecord {
-        version: gradiance::persist::FORMAT_VERSION,
+    let mut record = gradiance::scene::SceneRecord {
+        version: gradiance::scene::FORMAT_VERSION,
         app_version: String::new(),
         bodies: vec![],
         joints: vec![],
         nodes: vec![],
-        environment: gradiance::command::snapshot::EnvironmentRecord::default(),
+        environment: gradiance::scene::EnvironmentRecord::default(),
     };
     record.environment.params.0.push(SignalParam::unit("amp"));
     record.environment.computed.0.push(ComputedSignal {
@@ -395,8 +395,8 @@ fn params_and_computed_persist_and_old_files_parse() {
 
     // A pre-P2 file (no params/computed fields) still parses. Serialize an
     // empty-environment record and strip the two default fields out.
-    let plain = gradiance::command::snapshot::SceneRecord {
-        environment: gradiance::command::snapshot::EnvironmentRecord::default(),
+    let plain = gradiance::scene::SceneRecord {
+        environment: gradiance::scene::EnvironmentRecord::default(),
         ..record
     };
     let text = to_ron(&plain).unwrap();

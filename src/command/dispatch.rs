@@ -1,29 +1,32 @@
 //! The single choke point turning intents into applied commands.
+//!
+//! The whole intent surface lives in one [`command_intents!`] table below:
+//! each row names an intent type and how it builds its command. The table
+//! generates both the message/type registration (used by `CommandPlugin`)
+//! and the drain loop, so adding a command touches exactly one row here
+//! (plus the intent and command types themselves).
 
 use crate::command::array_cmd::ArrayCommand;
 use crate::command::cut_cmd::CutCommand;
 use crate::command::group_cmd::{GroupCommand, UngroupCommand};
-use crate::command::intent::LoadSceneIntent;
+use crate::command::intent::name;
 use crate::command::intent::{
     ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
-    DuplicateIntent, GroupIntent, MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent,
-    SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, UndoIntent, UngroupIntent,
+    DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent, PropertyEditIntent, RedoIntent,
+    ScaleIntent, SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, UndoIntent, UngroupIntent,
 };
 use crate::command::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::command::merge_cmd::MergeCommand;
 use crate::command::property::PropertyEditCommand;
 use crate::command::scale_cmd::ScaleCommand;
 use crate::command::scene_cmd::LoadSceneCommand;
-use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnBodyCommand, SpawnNodeCommand};
+use crate::command::spawn::{DeleteCommand, DuplicateCommand, SpawnCommand};
 use crate::command::transform_cmd::CommitTransformCommand;
 use crate::command::{CommandStack, GameCommand};
 use bevy::prelude::*;
 
 fn drain<M: Message + Reflect + bevy::reflect::TypePath>(world: &mut World) -> Vec<M> {
-    let drained: Vec<M> = world
-        .get_resource_mut::<Messages<M>>()
-        .map(|mut messages| messages.drain().collect())
-        .unwrap_or_default();
+    let drained: Vec<M> = crate::core::messages::drain(world);
     // Flight recorder (dev): every drained intent is recorded via reflection —
     // one generic hook, zero per-intent code.
     #[cfg(feature = "dev")]
@@ -53,6 +56,60 @@ fn record_command(
     }
 }
 
+/// The intent table: one row per intent/command pair, in dispatch order.
+///
+/// Generates [`register_command_intents`] (message + reflected-type
+/// registration, called from `CommandPlugin`) and the dispatcher's drain
+/// loop, so registration and dispatch can never fall out of sync.
+macro_rules! command_intents {
+    ($( $intent:ty => $build:expr ),* $(,)?) => {
+        /// Registers every command intent as a message **and** a reflected
+        /// type (the scripting registry binds operations by reflected type
+        /// name — see `docs/script-lisp-decision.md`). `register_type` pulls
+        /// in each intent's transitive field types (records, domain types,
+        /// avian components), giving the read-total path a complete registry
+        /// without naming those types individually.
+        pub(crate) fn register_command_intents(app: &mut App) {
+            $(
+                app.add_message::<$intent>();
+                app.register_type::<$intent>();
+            )*
+        }
+
+        /// Drains every pending command intent into built commands, in
+        /// table order.
+        fn drain_command_intents(world: &mut World, commands: &mut Vec<Box<dyn GameCommand>>) {
+            $(
+                for intent in drain::<$intent>(world) {
+                    let build: fn($intent) -> Box<dyn GameCommand> = $build;
+                    commands.push(build(intent));
+                }
+            )*
+        }
+    };
+}
+
+command_intents! {
+    SpawnBodyIntent => |i| Box::new(SpawnCommand::new(i.record, name::SPAWN_BODY)),
+    SpawnNodeIntent => |i| Box::new(SpawnCommand::new(i.record, name::SPAWN_NODE)),
+    CommitTransformIntent => |i| Box::new(CommitTransformCommand { changes: i.changes }),
+    SpawnJointIntent => |i| Box::new(SpawnJointCommand {
+        record: i.record,
+        locked_before: None,
+    }),
+    LoadSceneIntent => |i| Box::new(LoadSceneCommand::new(i.scene)),
+    PropertyEditIntent => |i| Box::new(PropertyEditCommand { changes: i.changes }),
+    GroupIntent => |i| Box::new(GroupCommand::new(i.targets)),
+    UngroupIntent => |i| Box::new(UngroupCommand::new(i.targets)),
+    ScaleIntent => |i| Box::new(ScaleCommand::new(i.targets, i.pivot, i.frame_rot, i.factors)),
+    ArrayIntent => |i| Box::new(ArrayCommand::new(i.sources, i.count, i.mode)),
+    CutIntent => |i| Box::new(CutCommand::new(i.a, i.b, i.width)),
+    DeleteJointIntent => |i| Box::new(DeleteJointCommand::new(i.id)),
+    MergeIntent => |i| Box::new(MergeCommand::new(i.targets)),
+    DuplicateIntent => |i| Box::new(DuplicateCommand::new(i.sources, i.offset)),
+    DeleteIntent => |i| Box::new(DeleteCommand::new(i.targets)),
+}
+
 /// Drains all pending intents, builds commands, and applies them through
 /// the [`CommandStack`]. This is the **only** code that touches the stack.
 ///
@@ -60,75 +117,7 @@ fn record_command(
 /// simply consumed.
 pub fn dispatch_intents(world: &mut World) {
     let mut commands: Vec<Box<dyn GameCommand>> = Vec::new();
-
-    for intent in drain::<SpawnBodyIntent>(world) {
-        commands.push(Box::new(SpawnBodyCommand {
-            record: intent.record,
-        }));
-    }
-    for intent in drain::<SpawnNodeIntent>(world) {
-        commands.push(Box::new(SpawnNodeCommand {
-            record: intent.record,
-        }));
-    }
-    for intent in drain::<CommitTransformIntent>(world) {
-        commands.push(Box::new(CommitTransformCommand {
-            changes: intent.changes,
-        }));
-    }
-    for intent in drain::<SpawnJointIntent>(world) {
-        commands.push(Box::new(SpawnJointCommand {
-            record: intent.record,
-            locked_before: None,
-        }));
-    }
-    for intent in drain::<LoadSceneIntent>(world) {
-        commands.push(Box::new(LoadSceneCommand::new(intent.scene)));
-    }
-    for intent in drain::<PropertyEditIntent>(world) {
-        commands.push(Box::new(PropertyEditCommand {
-            changes: intent.changes,
-        }));
-    }
-    for intent in drain::<GroupIntent>(world) {
-        commands.push(Box::new(GroupCommand::new(intent.targets)));
-    }
-    for intent in drain::<UngroupIntent>(world) {
-        commands.push(Box::new(UngroupCommand::new(intent.targets)));
-    }
-    for intent in drain::<ScaleIntent>(world) {
-        commands.push(Box::new(ScaleCommand::new(
-            intent.targets,
-            intent.pivot,
-            intent.frame_rot,
-            intent.factors,
-        )));
-    }
-    for intent in drain::<ArrayIntent>(world) {
-        commands.push(Box::new(ArrayCommand::new(
-            intent.sources,
-            intent.count,
-            intent.mode,
-        )));
-    }
-    for intent in drain::<CutIntent>(world) {
-        commands.push(Box::new(CutCommand::new(intent.a, intent.b, intent.width)));
-    }
-    for intent in drain::<DeleteJointIntent>(world) {
-        commands.push(Box::new(DeleteJointCommand::new(intent.id)));
-    }
-    for intent in drain::<MergeIntent>(world) {
-        commands.push(Box::new(MergeCommand::new(intent.targets)));
-    }
-    for intent in drain::<DuplicateIntent>(world) {
-        commands.push(Box::new(DuplicateCommand::new(
-            intent.sources,
-            intent.offset,
-        )));
-    }
-    for intent in drain::<DeleteIntent>(world) {
-        commands.push(Box::new(DeleteCommand::new(intent.targets)));
-    }
+    drain_command_intents(world, &mut commands);
 
     let undos = drain::<UndoIntent>(world).len();
     let redos = drain::<RedoIntent>(world).len();
@@ -166,12 +155,7 @@ fn execute(
         let undone = stack.undo(world);
         #[cfg(feature = "dev")]
         if let Some(name) = undone {
-            record_command(
-                world,
-                crate::command::intent::name::UNDO,
-                format!("undo {name}"),
-                Ok(()),
-            );
+            record_command(world, name::UNDO, format!("undo {name}"), Ok(()));
         }
         #[cfg(not(feature = "dev"))]
         let _ = undone;
@@ -180,12 +164,7 @@ fn execute(
         let redone = stack.redo(world);
         #[cfg(feature = "dev")]
         if let Some(name) = redone {
-            record_command(
-                world,
-                crate::command::intent::name::REDO,
-                format!("redo {name}"),
-                Ok(()),
-            );
+            record_command(world, name::REDO, format!("redo {name}"), Ok(()));
         }
         #[cfg(not(feature = "dev"))]
         let _ = redone;
