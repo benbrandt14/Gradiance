@@ -18,8 +18,11 @@ pub struct Triangulation {
 }
 
 impl Triangulation {
-    /// Total area covered by the triangles.
-    pub fn area(&self) -> f32 {
+    /// Total area covered by the triangles — the coverage checksum the
+    /// tessellation tests assert against (production readers use
+    /// `Contours::area`).
+    #[cfg(test)]
+    pub(crate) fn area(&self) -> f32 {
         self.indices
             .chunks_exact(3)
             .map(|t| {

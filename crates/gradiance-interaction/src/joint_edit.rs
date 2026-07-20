@@ -151,7 +151,7 @@ pub fn dragged_limits(
             limits: Some([min, max]),
             ..
         } => {
-            let a = wrap_pi((p - anchor).to_angle() - rot_a);
+            let a = gradiance_geometry::wrap_angle((p - anchor).to_angle() - rot_a);
             Some(match end {
                 LimitEnd::Min => [a.min(*max - 0.05), *max],
                 LimitEnd::Max => [*min, a.max(*min + 0.05)],
@@ -172,16 +172,6 @@ fn with_limits(def: &JointDef, new_limits: [f32; 2]) -> JointDef {
         JointKind::Spring { .. } => {}
     }
     new
-}
-
-/// Wraps an angle into `(-π, π]`.
-fn wrap_pi(angle: f32) -> f32 {
-    let wrapped = angle.rem_euclid(std::f32::consts::TAU);
-    if wrapped > std::f32::consts::PI {
-        wrapped - std::f32::consts::TAU
-    } else {
-        wrapped
-    }
 }
 
 /// Set true by joint picking to tell the body select tool to skip this

@@ -44,6 +44,33 @@ future sessions don't re-litigate them.
 | `interaction ↔ render` cycle through the overlay gizmo groups | `render/overlay.rs` | Groups live in `gradiance-interaction` (their writers); `render → interaction` is the one sanctioned upward-looking edge |
 | Dead dependencies: `clipper2`, `rand`, `rstest` (zero references) | `Cargo.toml` | Deleted (`glam` kept, documented as features-only: serde on bevy math types) |
 
+## Fixed in the coverage round (2026-07-20, cargo-llvm-cov + visibility probe)
+
+Method: workspace coverage (55.3% lines — UI/render draw paths are
+headless-blind by nature) cross-referenced with a compiler probe
+(temporarily demote crate-local `pub` items to `pub(crate)` so rustc's
+`dead_code` lint can see them; what still compiles and warns is provably
+production-dead).
+
+| Pattern | Location | Action |
+|---|---|---|
+| `layer_z_range` — the bit-based depth mapping retired by continuous `DepthBand` (v5); no production caller | `geometry/extrusion.rs` | Deleted (+ its legacy-convention test); extrusion docs now state the band-driven contract |
+| `wrap_pi` — re-grown duplicate of `geometry::wrap_angle` (same math, same wrap) | `interaction/joint_edit.rs` | Deleted; call site uses `wrap_angle` |
+| `Expr::eval_ref`, `Kernel::stack_depth` — proptest oracle/diagnostic in the shipped API | `kernel/src/lib.rs` | Demoted to `#[cfg(test)] pub(crate)` (tests keep their oracle; product surface shrinks) |
+| `Triangulation::area` — test-only coverage checksum (production reads `Contours::area`) | `geometry/tessellate.rs` | Demoted to `#[cfg(test)] pub(crate)` |
+
+## Kept (uncovered, checked, not dead)
+
+- `reflect_bridge::{scalar_to_steel, reflect_to_steel}`: production-unused
+  today but the spike-1-validated "reads are total" conversion the P2
+  plotter/driver work binds to (`docs/script-spike-findings.md`); tested.
+- `intent::name::{UNDO, REDO}`: used by the dev-gated flight recorder (a
+  featureless probe run flags them — false positive).
+- UI/render draw paths (185 uncovered fns): gizmo/egui code needs a
+  windowed session; not reachable from the headless suite.
+- `physics::queries` facade entries without callers yet: the read-total
+  contract says the facade stays complete.
+
 ## Follow-ups
 
 - Move `ui/plot.rs::joint_signals` behind `physics::queries` when the next

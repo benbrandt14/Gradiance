@@ -149,13 +149,11 @@ impl Expr {
         Self::Binary(op, Box::new(lhs), Box::new(rhs))
     }
 
-    /// Reference (tree-walking) evaluator.
-    ///
-    /// This is the readable oracle the compiled [`Kernel`] is proptested
-    /// against; it is *not* the hot path (it recurses and is not used at
-    /// runtime). Reads variables from `vars`, treating out-of-range indices
-    /// as `0.0` so a malformed expression degrades rather than panics.
-    pub fn eval_ref(&self, vars: &[f32]) -> f32 {
+    /// Reference (tree-walking) evaluator — the readable oracle the
+    /// compiled [`Kernel`] is proptested against. Test-only: the hot path
+    /// is [`Kernel::eval`]; nothing at runtime walks the tree.
+    #[cfg(test)]
+    pub(crate) fn eval_ref(&self, vars: &[f32]) -> f32 {
         match self {
             Self::Const(c) => *c,
             Self::Var(i) => vars.get(usize::from(*i)).copied().unwrap_or(0.0),
@@ -244,8 +242,10 @@ impl Kernel {
         })
     }
 
-    /// The peak evaluation-stack depth this kernel reaches.
-    pub fn stack_depth(&self) -> usize {
+    /// The peak evaluation-stack depth this kernel reaches (test/report
+    /// diagnostics only).
+    #[cfg(test)]
+    pub(crate) fn stack_depth(&self) -> usize {
         self.stack_depth
     }
 
