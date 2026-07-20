@@ -215,7 +215,9 @@ enum Instr {
 #[derive(Debug, Clone)]
 pub struct Kernel {
     tape: Vec<Instr>,
-    /// Peak stack depth this tape reaches (≤ [`MAX_STACK`]).
+    /// Peak stack depth this tape reaches (≤ [`MAX_STACK`]); validated in
+    /// [`compile`](Kernel::compile), retained only for test diagnostics.
+    #[cfg(test)]
     stack_depth: usize,
 }
 
@@ -238,6 +240,7 @@ impl Kernel {
         }
         Ok(Self {
             tape,
+            #[cfg(test)]
             stack_depth: depth,
         })
     }
