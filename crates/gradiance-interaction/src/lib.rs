@@ -55,7 +55,6 @@ pub struct InteractionPlugin;
 
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
-        overlay::install(app);
         app.init_resource::<PointerOverUi>();
         app.init_resource::<KeyboardCaptured>();
         app.init_resource::<pointer::PointerButtons>();

@@ -42,6 +42,11 @@ impl Plugin for GradianceRenderPlugin {
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }
+        // The overlay gizmo groups are defined in `interaction` (their
+        // writers) but registered here: gizmo groups schedule mesh-update
+        // systems that need render-world assets, so headless apps must not
+        // register them.
+        gradiance_interaction::overlay::install(app);
         toon::install(app);
         plane::install(app);
 
