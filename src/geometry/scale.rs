@@ -9,7 +9,7 @@
 //! (axis-aligned diagonal / uniform); otherwise they **polygonize exactly**
 //! (the same convention as CSG) instead of being silently approximated.
 
-use crate::domain::shape::ShapeDef;
+use crate::geometry::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
 use bevy::math::{Mat2, Vec2};
 

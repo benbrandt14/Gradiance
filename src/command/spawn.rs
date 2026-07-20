@@ -1,56 +1,47 @@
 //! Spawn, delete, and duplicate commands.
 
-use crate::command::snapshot::{BodyRecord, NodeRecord};
 use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::StableId;
+use crate::scene::{AuthoredRecord, BodyRecord, NodeRecord};
 use bevy::prelude::*;
 
-/// Spawns one behavior node from a record.
+/// Spawns one authored entity (body, behavior node, …) from its record.
+///
+/// Generic over [`AuthoredRecord`]: the record validates and spawns itself,
+/// and its `id` is reused on redo so later commands referencing the entity
+/// stay valid across undo/redo cycles.
 #[derive(Debug)]
-pub struct SpawnNodeCommand {
-    /// The authored node to create; its `id` is reused on redo.
-    pub record: NodeRecord,
-}
-
-impl GameCommand for SpawnNodeCommand {
-    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        self.record.spawn(world);
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let entity = resolve(world, self.record.id)?;
-        world.despawn(entity);
-        Ok(())
-    }
-
-    fn name(&self) -> &'static str {
-        crate::command::intent::name::SPAWN_NODE
-    }
-}
-
-/// Spawns one body from a record.
-#[derive(Debug)]
-pub struct SpawnBodyCommand {
+pub struct SpawnCommand<R: AuthoredRecord> {
     /// The authored state to create; its `id` is reused on redo.
-    pub record: BodyRecord,
+    pub record: R,
+    name: &'static str,
 }
 
-impl GameCommand for SpawnBodyCommand {
+impl<R: AuthoredRecord> SpawnCommand<R> {
+    /// Builds a spawn command; `name` is the shared [`intent::name`]
+    /// constant of the intent that produced it.
+    ///
+    /// [`intent::name`]: crate::command::intent::name
+    pub fn new(record: R, name: &'static str) -> Self {
+        Self { record, name }
+    }
+}
+
+impl<R: AuthoredRecord> GameCommand for SpawnCommand<R> {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        self.record.shape.validate()?;
-        self.record.spawn(world);
+        self.record.validate()?;
+        self.record.spawn_into(world);
         Ok(())
     }
 
     fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let entity = resolve(world, self.record.id)?;
+        let entity = resolve(world, self.record.id())?;
         world.despawn(entity);
         Ok(())
     }
 
     fn name(&self) -> &'static str {
-        crate::command::intent::name::SPAWN_BODY
+        self.name
     }
 }
 
@@ -63,7 +54,7 @@ pub struct DeleteCommand {
     /// Captured body state for undo; filled during `apply`.
     records: Vec<BodyRecord>,
     /// Captured joints (targeted or cascaded); filled during `apply`.
-    joint_records: Vec<crate::command::snapshot::JointRecord>,
+    joint_records: Vec<crate::scene::JointRecord>,
     /// Captured behavior nodes among the targets; filled during `apply`.
     node_records: Vec<NodeRecord>,
 }
@@ -198,7 +189,7 @@ pub(crate) fn clone_internal_joints(
     id_map: &[(StableId, StableId)],
     map_world: impl Fn(Vec2) -> Vec2,
     rot_offset: f32,
-) -> Vec<crate::command::snapshot::JointRecord> {
+) -> Vec<crate::scene::JointRecord> {
     let sources: Vec<StableId> = id_map.iter().map(|(old, _)| *old).collect();
     let remap = |id: StableId| {
         id_map
@@ -223,7 +214,7 @@ pub(crate) fn clone_internal_joints(
                 // so only `rest_rot_a` advanced.
                 None => def.anchor_b = map_world(def.anchor_b),
             }
-            Some(crate::command::snapshot::JointRecord {
+            Some(crate::scene::JointRecord {
                 id: StableId::new(),
                 def,
             })
@@ -243,7 +234,7 @@ pub struct DuplicateCommand {
     /// World-space offset applied to each clone.
     pub offset: Vec2,
     clones: Vec<BodyRecord>,
-    joint_clones: Vec<crate::command::snapshot::JointRecord>,
+    joint_clones: Vec<crate::scene::JointRecord>,
     /// Behavior nodes attached to a duplicated body, cloned and remapped.
     node_clones: Vec<NodeRecord>,
     /// Signal bindings referencing a duplicated body, cloned and remapped

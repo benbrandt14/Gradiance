@@ -41,7 +41,7 @@ use crate::command::intent::{
     ScaleIntent, SpawnBodyIntent, SpawnJointIntent, TransformChange,
 };
 use crate::command::property::{PropertyChange, PropertyValue};
-use crate::command::snapshot::{BodyRecord, JointRecord};
+use crate::scene::{BodyRecord, JointRecord};
 use crate::core::ids::StableId;
 use crate::core::states::{GameState, ToolState};
 use crate::core::units::PosRot;
@@ -62,7 +62,7 @@ use crate::interaction::tools::handles::{ScaleFrame, SelectionBox, selection_box
 use crate::physics::grab::{Grab, MouseSpring, MouseTwist, Twist};
 use crate::physics::hold::KinematicHold;
 use crate::physics::queries::PhysicsQueries;
-use crate::render::overlay::OverlayGizmos;
+use crate::interaction::overlay::OverlayGizmos;
 use avian2d::prelude::RigidBody;
 use bevy::ecs::component::Mutable;
 use bevy::ecs::system::SystemParam;
@@ -167,7 +167,7 @@ pub enum ToolCommit {
         old: RigidBody,
     },
     /// Author a new behavior node (the tracer tool; future sensors/actuators).
-    SpawnNode(Box<crate::command::snapshot::NodeRecord>),
+    SpawnNode(Box<crate::scene::NodeRecord>),
 }
 
 /// One gizmo primitive for a tool's transient preview.

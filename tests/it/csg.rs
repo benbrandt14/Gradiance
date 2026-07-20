@@ -336,8 +336,8 @@ fn csg_trees_survive_scene_round_trips() {
     app.update();
 
     let scene = SceneRecord::capture(app.world_mut());
-    let text = gradiance::persist::to_ron(&scene).expect("serialize");
-    let parsed = gradiance::persist::from_ron(&text).expect("parse");
+    let text = gradiance::scene::to_ron(&scene).expect("serialize");
+    let parsed = gradiance::scene::from_ron(&text).expect("parse");
     assert_eq!(scene, parsed, "tree shapes round-trip through RON");
     assert!(
         matches!(parsed.bodies[0].shape, ShapeDef::Csg { .. }),

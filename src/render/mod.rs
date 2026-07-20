@@ -11,7 +11,6 @@ pub mod extrude_sync;
 pub mod grid;
 pub mod joint_viz;
 pub mod material_sync;
-pub mod overlay;
 pub mod plane;
 pub mod scenery;
 pub mod toon;
@@ -45,7 +44,7 @@ impl Plugin for GradianceRenderPlugin {
         }
         toon::install(app);
         plane::install(app);
-        overlay::install(app);
+
         app.init_resource::<GlobalAmbientLight>();
         app.add_systems(Startup, (setup_scene, scenery::setup));
         app.add_systems(

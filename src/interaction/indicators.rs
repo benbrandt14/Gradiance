@@ -10,7 +10,7 @@ use crate::geometry::polygonize::polygonize;
 use crate::interaction::gesture::{AxisConstraint, GestureConstraints};
 use crate::interaction::selection::Selection;
 use crate::interaction::snap::{SnapKind, SnappedCursor};
-use crate::render::overlay::OverlayGizmos;
+use crate::interaction::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 

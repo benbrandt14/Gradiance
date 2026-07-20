@@ -5,7 +5,7 @@ use crate::domain::appearance::Appearance;
 use crate::domain::depth::DepthBand;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
-use crate::render::overlay::OverlayGizmos;
+use crate::interaction::overlay::OverlayGizmos;
 use bevy::prelude::*;
 
 /// Depth just in front of a body's front cap.

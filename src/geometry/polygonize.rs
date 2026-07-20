@@ -3,7 +3,7 @@
 //! (colliders, meshes, snapping, scaling).
 
 use crate::core::constants::{CIRCLE_SEGMENTS, GROUND_SLAB_DEPTH, GROUND_SLAB_WIDTH};
-use crate::domain::shape::ShapeDef;
+use crate::geometry::shape::ShapeDef;
 use crate::geometry::contour::{FIELD_CELLS, contour_components};
 use crate::geometry::contours::Contours;
 use crate::geometry::sdf;

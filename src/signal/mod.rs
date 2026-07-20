@@ -146,7 +146,7 @@ pub struct ScriptSignals(pub Vec<String>);
 /// **compile** step off the per-frame path — only [`Kernel::eval`] runs
 /// each frame (`docs/signal-dataflow.md`).
 ///
-/// [`Kernel::eval`]: crate::script::kernel::Kernel::eval
+/// [`Kernel::eval`]: crate::kernel::Kernel::eval
 #[derive(Resource, Debug, Default)]
 pub struct CompiledSignals {
     /// One compiled tape per computed signal, in authored order.

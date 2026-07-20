@@ -39,7 +39,6 @@
 //! authored as `.scm` over the same registry.
 
 pub mod bridge;
-pub mod kernel;
 pub mod reflect_bridge;
 pub mod registry;
 

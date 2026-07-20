@@ -16,7 +16,7 @@
 //! the read-total [`ToolWorld`] facade; commits leave through the shared
 //! commit seam ([`ToolCommit::SpawnJoint`] / `Merge` / `MakeStatic`).
 
-use crate::command::snapshot::JointRecord;
+use crate::scene::JointRecord;
 use crate::core::ids::StableId;
 use crate::core::states::ToolState;
 use crate::core::units::PosRot;

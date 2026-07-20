@@ -145,41 +145,45 @@ sequenceDiagram
 Commands resolve entities by `StableId` at execution time, so they stay
 valid across undo/redo cycles that despawn and respawn the same body.
 
-## Layer boundaries (compile-fenced)
+## Layer boundaries (package-fenced)
+
+Since the workspace split (`docs/workspace-plan.md`), every layer is its own
+package under `crates/`, and the diagram below **is** the dependency graph
+in the manifests — an edge that isn't declared does not compile. Arrows
+point from a package to what it depends on:
 
 ```mermaid
-flowchart LR
-    subgraph pure["pure — no ECS engine deps"]
-        core[core]
-        geometry[geometry]
-    end
-    subgraph app["ECS layers"]
-        domain["domain<br/>(authored, avian-shaped)"]
-        command[command]
-        physics[physics]
-        interaction[interaction]
-        render[render]
-        ui["ui<br/>⟨only egui⟩"]
-        persist[persist]
-    end
-    domain --> command
-    geometry --> command
-    command --> physics
-    command --> interaction
-    domain --> render
-    geometry --> render
-    command --> persist
-    interaction -- "physics::queries read cut-point" --> physics
-    ui -- "intents only" --> command
+flowchart TD
+    kernel["kernel<br/>(pure, no bevy)"]
+    core[core]
+    geometry["geometry<br/>(SDF shape tree + math)"] --> core
+    domain["domain<br/>(authored, avian-shaped)"] --> core
+    domain --> geometry
+    scene["scene<br/>(records + RON format)"] --> domain
+    physics --> domain
+    signal --> kernel
+    signal --> physics
+    command --> scene
+    command --> signal
+    persist --> command
+    interaction --> persist
+    render -- "editor-state viz" --> interaction
+    script["script<br/>⟨only steel⟩"] --> command
+    script --> signal
+    ui["ui<br/>⟨only egui⟩"] --> interaction
+    ui --> script
 ```
 
-`tests/boundaries.rs` scans the source and fails the build if `egui`
-escapes `ui/`, `steel` escapes `script/`, or `CommandStack` is named
-outside `command/`. (The avian-confinement rule was retired by the
-de-adapter collapse — `docs/physics-deadapter-decision.md`: avian is used
-directly wherever physics is done, and `physics::queries` is a
-convenience/DRY read cut-point, not an abstraction boundary.) This keeps
-the UI a thin projection and the scripting seam single.
+`egui` is a dependency of `gradiance-ui` only and `steel` of
+`gradiance-script` only; `tests/boundaries.rs` re-checks the source as text
+(so a manifest drift is caught in review too), asserts serde stays confined
+to authored/persisted data, holds the exact-pin line on engine
+dependencies, and keeps `CommandStack` named only inside the command
+package. (The avian-confinement rule was retired by the de-adapter
+collapse — `docs/physics-deadapter-decision.md`: avian is used directly
+wherever physics is done, and `physics::queries` is a convenience/DRY read
+cut-point, not an abstraction boundary.) This keeps the UI a thin
+projection and the scripting seam single.
 
 ## Geometry: SDF trees are the base representation
 
@@ -225,10 +229,15 @@ separate filter mask — checkbox filter art was retired with save v5
 
 ## Where to start reading
 
-- `src/lib.rs` — the crate docs (module map + this dataflow in text).
-- `src/command/mod.rs` — the choke point and the "add a command" recipe.
-- `src/domain/` — the authored components; this *is* the save format.
-- `src/geometry/sdf.rs` and `contour.rs` — the geometry core, with
-  runnable examples.
-- `docs/sdf-geometry-decision.md`, `docs/roadmap.md`,
-  `docs/feature-feedback.md` — the design decisions and open work.
+- `src/lib.rs` — the app-shell crate docs (package map + this dataflow in
+  text).
+- `crates/gradiance-command/src/lib.rs` — the choke point and the "add a
+  command" recipe (one `command_intents!` table row per command).
+- `crates/gradiance-domain/` — the authored components (the save
+  *content*); `crates/gradiance-scene/` — the records and RON format (the
+  save *file*).
+- `crates/gradiance-geometry/src/sdf.rs` and `contour.rs` — the geometry
+  core, with runnable examples.
+- `docs/workspace-plan.md`, `docs/sdf-geometry-decision.md`,
+  `docs/roadmap.md`, `docs/feature-feedback.md` — the architecture
+  rationale, design decisions, and open work.

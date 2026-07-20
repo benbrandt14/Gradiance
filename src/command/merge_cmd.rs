@@ -13,7 +13,7 @@
 //! deeper than [`MAX_CSG_DEPTH`] bake to a polygon leaf.
 
 use crate::command::cut_cmd::{apply_joint_changes, revert_joint_changes};
-use crate::command::snapshot::{BodyRecord, JointRecord};
+use crate::scene::{BodyRecord, JointRecord};
 use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::StableId;
 use crate::domain::joint::JointDef;

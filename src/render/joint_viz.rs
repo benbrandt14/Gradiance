@@ -12,7 +12,7 @@ use crate::interaction::joint_edit::{
     HINGE_LIMIT_RADIUS_PX, HINGE_RING_PX, JointLimitDrag, slider_span,
 };
 use crate::interaction::selection::SelectedJoint;
-use crate::render::overlay::OverlayGizmos;
+use crate::interaction::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 

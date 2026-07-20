@@ -17,7 +17,7 @@ use crate::geometry::sdf;
 use crate::physics::SubstepTrace;
 use crate::physics::fields::Fields;
 use crate::physics::queries::PhysicsQueries;
-use crate::render::overlay::OverlayGizmos;
+use crate::interaction::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 

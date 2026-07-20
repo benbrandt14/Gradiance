@@ -4,6 +4,7 @@
 
 pub mod constants;
 pub mod ids;
+pub mod messages;
 pub mod states;
 pub mod units;
 

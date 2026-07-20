@@ -8,9 +8,29 @@ use crate::domain::depth::DepthBand;
 use crate::domain::group::SelectionGroup;
 use crate::domain::layers::LayerMask32;
 use crate::domain::props::BodyPhysics;
-use crate::domain::shape::ShapeDef;
+use crate::domain::shape::{ShapeDef, ShapeError};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+
+/// The shared contract of every authored-entity record: capture from a live
+/// entity, spawn back into a world, keyed by [`StableId`].
+///
+/// The command layer's generic spawn/despawn machinery works over this
+/// trait, so a new authored entity kind (body, joint, node, …) gets undoable
+/// spawn/delete for the cost of one record type.
+pub trait AuthoredRecord: Clone + Send + Sync + std::fmt::Debug + 'static {
+    /// Stable identity of the recorded entity.
+    fn id(&self) -> StableId;
+    /// Validates the record before spawning (shape sanity, etc.).
+    fn validate(&self) -> Result<(), ShapeError> {
+        Ok(())
+    }
+    /// Captures the authored state of `entity`, or `None` if it is not a
+    /// complete authored entity of this kind.
+    fn capture_from(world: &World, entity: Entity) -> Option<Self>;
+    /// Spawns an entity with exactly this authored state.
+    fn spawn_into(&self, world: &mut World) -> Entity;
+}
 
 /// A complete authored-state snapshot of one body.
 ///
@@ -33,7 +53,7 @@ pub struct BodyRecord {
     /// Authored depth band (extrusion *and* collision volume, v5+).
     #[serde(default)]
     pub depth: DepthBand,
-    /// Legacy v4 layer mask — parsed only so `persist` can migrate old
+    /// Legacy v4 layer mask — parsed only so the loader can migrate old
     /// files; never written (`None` after capture and after migration).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layers: Option<LayerMask32>,
@@ -98,6 +118,24 @@ impl BodyRecord {
     }
 }
 
+impl AuthoredRecord for BodyRecord {
+    fn id(&self) -> StableId {
+        self.id
+    }
+
+    fn validate(&self) -> Result<(), ShapeError> {
+        self.shape.validate()
+    }
+
+    fn capture_from(world: &World, entity: Entity) -> Option<Self> {
+        Self::capture(world, entity)
+    }
+
+    fn spawn_into(&self, world: &mut World) -> Entity {
+        self.spawn(world)
+    }
+}
+
 /// A complete authored-state snapshot of one behavior node (a placeable
 /// dataflow entity — see [`domain::node`](crate::domain::node)).
 ///
@@ -153,6 +191,20 @@ impl NodeRecord {
     }
 }
 
+impl AuthoredRecord for NodeRecord {
+    fn id(&self) -> StableId {
+        self.id
+    }
+
+    fn capture_from(world: &World, entity: Entity) -> Option<Self> {
+        Self::capture(world, entity)
+    }
+
+    fn spawn_into(&self, world: &mut World) -> Entity {
+        self.spawn(world)
+    }
+}
+
 /// A complete authored-state snapshot of one joint.
 ///
 /// The joint analogue of [`BodyRecord`]: shared by undo records,
@@ -191,33 +243,76 @@ impl JointRecord {
     }
 }
 
-/// Persisted editor environment (settings that travel with the scene).
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
-pub struct EnvironmentRecord {
+impl AuthoredRecord for JointRecord {
+    fn id(&self) -> StableId {
+        self.id
+    }
+
+    fn capture_from(world: &World, entity: Entity) -> Option<Self> {
+        Self::capture(world, entity)
+    }
+
+    fn spawn_into(&self, world: &mut World) -> Entity {
+        self.spawn(world)
+    }
+}
+
+/// Declares [`EnvironmentRecord`] — every settings resource that travels
+/// with the scene — from a single field list.
+///
+/// One line per resource generates the struct field, the capture arm, and
+/// the apply arm, so adding a scene-travelling settings resource cannot
+/// forget one of the three.
+macro_rules! environment_record {
+    ($( $(#[$meta:meta])* $field:ident : $ty:ty ),* $(,)?) => {
+        /// Persisted editor environment (settings that travel with the
+        /// scene). Every field defaults when absent, so files from before a
+        /// setting existed still load.
+        #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
+        pub struct EnvironmentRecord {
+            $(
+                $(#[$meta])*
+                #[serde(default)]
+                pub $field: $ty,
+            )*
+        }
+
+        impl EnvironmentRecord {
+            /// Captures every scene-travelling settings resource (missing
+            /// resources record their default).
+            pub fn capture(world: &World) -> Self {
+                Self {
+                    $( $field: world.get_resource::<$ty>().cloned().unwrap_or_default(), )*
+                }
+            }
+
+            /// Installs every recorded resource into the world.
+            pub fn apply(&self, world: &mut World) {
+                $( world.insert_resource(self.$field.clone()); )*
+            }
+        }
+    };
+}
+
+environment_record! {
     /// Simulation tuning.
-    pub sim: crate::domain::settings::SimSettings,
+    sim: crate::domain::settings::SimSettings,
     /// Grid configuration.
-    pub grid: crate::domain::settings::GridSettings,
+    grid: crate::domain::settings::GridSettings,
     /// Snap configuration.
-    pub snap: crate::domain::settings::SnapConfig,
+    snap: crate::domain::settings::SnapConfig,
     /// Rendering style (defaulted when absent — pre-M10 files).
-    #[serde(default)]
-    pub render: crate::domain::settings::RenderSettings,
+    render: crate::domain::settings::RenderSettings,
     /// Scene lighting (defaulted when absent — pre-V1 files).
-    #[serde(default)]
-    pub lighting: crate::domain::settings::LightingSettings,
+    lighting: crate::domain::settings::LightingSettings,
     /// Back plane / ground scenery (defaulted when absent — pre-V1 files).
-    #[serde(default)]
-    pub scenery: crate::domain::settings::ScenerySettings,
+    scenery: crate::domain::settings::ScenerySettings,
     /// Signal-dataflow bindings (defaulted when absent — pre-signal files).
-    #[serde(default)]
-    pub signals: crate::signal::SignalBindings,
+    signals: crate::domain::signal::SignalBindings,
     /// Signal parameters (`defparam` knobs; defaulted for pre-P2 files).
-    #[serde(default)]
-    pub params: crate::signal::SignalParams,
+    params: crate::domain::signal::SignalParams,
     /// Computed signals (`defsignal` modulators; defaulted for pre-P2 files).
-    #[serde(default)]
-    pub computed: crate::signal::ComputedSignals,
+    computed: crate::domain::signal::ComputedSignals,
 }
 
 /// A complete scene: the save file, and the unit of whole-world undo.
@@ -226,7 +321,7 @@ pub struct EnvironmentRecord {
 /// deterministic — saving the same world twice yields identical bytes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub struct SceneRecord {
-    /// Format version (see `persist::FORMAT_VERSION`).
+    /// Format version (see [`FORMAT_VERSION`](super::FORMAT_VERSION)).
     pub version: u32,
     /// `CARGO_PKG_VERSION` of the app that wrote the file (repro aid).
     pub app_version: String,
@@ -241,83 +336,28 @@ pub struct SceneRecord {
     pub environment: EnvironmentRecord,
 }
 
+/// Captures every authored entity matching `F` as records, sorted by id.
+fn capture_all<R: AuthoredRecord, F: bevy::ecs::query::QueryFilter>(world: &mut World) -> Vec<R> {
+    let mut query = world.query_filtered::<Entity, F>();
+    let entities: Vec<Entity> = query.iter(world).collect();
+    let mut records: Vec<R> = entities
+        .into_iter()
+        .filter_map(|e| R::capture_from(world, e))
+        .collect();
+    records.sort_by_key(|r| r.id().0);
+    records
+}
+
 impl SceneRecord {
     /// Captures the entire authored world, deterministically ordered.
     pub fn capture(world: &mut World) -> Self {
-        let mut bodies: Vec<BodyRecord> = {
-            let mut query = world.query_filtered::<Entity, With<Body>>();
-            let entities: Vec<Entity> = query.iter(world).collect();
-            entities
-                .into_iter()
-                .filter_map(|e| BodyRecord::capture(world, e))
-                .collect()
-        };
-        bodies.sort_by_key(|r| r.id.0);
-        let mut joints: Vec<JointRecord> = {
-            let mut query = world.query_filtered::<Entity, With<crate::domain::Joint>>();
-            let entities: Vec<Entity> = query.iter(world).collect();
-            entities
-                .into_iter()
-                .filter_map(|e| JointRecord::capture(world, e))
-                .collect()
-        };
-        joints.sort_by_key(|r| r.id.0);
-        let mut nodes: Vec<NodeRecord> = {
-            let mut query =
-                world.query_filtered::<Entity, With<crate::domain::node::BehaviorNode>>();
-            let entities: Vec<Entity> = query.iter(world).collect();
-            entities
-                .into_iter()
-                .filter_map(|e| NodeRecord::capture(world, e))
-                .collect()
-        };
-        nodes.sort_by_key(|r| r.id.0);
         Self {
-            // Keep in sync with persist::FORMAT_VERSION (v2: avian-component
-            // physics — see docs/physics-deadapter-decision.md).
-            version: crate::persist::FORMAT_VERSION,
+            version: super::FORMAT_VERSION,
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
-            bodies,
-            joints,
-            nodes,
-            environment: EnvironmentRecord {
-                sim: world
-                    .get_resource::<crate::domain::settings::SimSettings>()
-                    .cloned()
-                    .unwrap_or_default(),
-                grid: world
-                    .get_resource::<crate::domain::settings::GridSettings>()
-                    .cloned()
-                    .unwrap_or_default(),
-                snap: world
-                    .get_resource::<crate::domain::settings::SnapConfig>()
-                    .cloned()
-                    .unwrap_or_default(),
-                render: world
-                    .get_resource::<crate::domain::settings::RenderSettings>()
-                    .cloned()
-                    .unwrap_or_default(),
-                lighting: world
-                    .get_resource::<crate::domain::settings::LightingSettings>()
-                    .cloned()
-                    .unwrap_or_default(),
-                scenery: world
-                    .get_resource::<crate::domain::settings::ScenerySettings>()
-                    .cloned()
-                    .unwrap_or_default(),
-                signals: world
-                    .get_resource::<crate::signal::SignalBindings>()
-                    .cloned()
-                    .unwrap_or_default(),
-                params: world
-                    .get_resource::<crate::signal::SignalParams>()
-                    .cloned()
-                    .unwrap_or_default(),
-                computed: world
-                    .get_resource::<crate::signal::ComputedSignals>()
-                    .cloned()
-                    .unwrap_or_default(),
-            },
+            bodies: capture_all::<BodyRecord, With<Body>>(world),
+            joints: capture_all::<JointRecord, With<crate::domain::Joint>>(world),
+            nodes: capture_all::<NodeRecord, With<crate::domain::node::BehaviorNode>>(world),
+            environment: EnvironmentRecord::capture(world),
         }
     }
 
@@ -344,14 +384,6 @@ impl SceneRecord {
         for record in &self.nodes {
             record.spawn(world);
         }
-        world.insert_resource(self.environment.sim.clone());
-        world.insert_resource(self.environment.grid.clone());
-        world.insert_resource(self.environment.snap.clone());
-        world.insert_resource(self.environment.render.clone());
-        world.insert_resource(self.environment.lighting.clone());
-        world.insert_resource(self.environment.scenery.clone());
-        world.insert_resource(self.environment.signals.clone());
-        world.insert_resource(self.environment.params.clone());
-        world.insert_resource(self.environment.computed.clone());
+        self.environment.apply(world);
     }
 }

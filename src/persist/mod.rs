@@ -1,109 +1,26 @@
-//! Persistence: RON scene files, save/load requests, and debugging
+//! Persistence: scene files on disk, save/load requests, and debugging
 //! snapshots.
 //!
-//! Division of labor: `SceneRecord` (capture/apply, the actual world
-//! mutation) lives in the command layer — **loading is an undoable
-//! command**. This module only serializes, touches disk, shows dialogs,
-//! and turns requests into `LoadSceneIntent`s.
+//! Division of labor: the records and the RON format (versioning,
+//! migrations, encode/decode) live in [`crate::scene`]; `SceneRecord::apply`
+//! (the actual world mutation) runs inside the command layer — **loading is
+//! an undoable command**. This module only touches disk, shows dialogs, and
+//! turns requests into `LoadSceneIntent`s.
 //!
 //! Debug/repro aids:
 //! - `SnapshotRequest` (F12) dumps the live scene to
 //!   `snapshots/gradiance-<timestamp>.ron` — attach it to a bug report.
 //! - `gradiance <scene.ron>` loads a scene at startup, so a snapshot
 //!   reproduces a session in one command.
-//! - Files carry `version` (format migration gate) and `app_version`
-//!   (which build wrote it).
 
 #[cfg(feature = "dev")]
 pub mod flight;
 
 use crate::command::intent::LoadSceneIntent;
-use crate::command::snapshot::SceneRecord;
+use crate::core::messages::drain;
+use crate::scene::{PersistError, SceneRecord, from_ron, to_ron};
 use bevy::prelude::*;
-use std::path::PathBuf;
-
-/// Scene format version accepted by this build.
-///
-/// v2: the de-adapter collapse — authored physics is now avian components
-/// serialized directly (`docs/physics-deadapter-decision.md`). v1 files do
-/// not load (save-format stability across the collapse is not a goal).
-///
-/// v3: the weld rework (M20) — `JointKind::Weld` no longer exists (the weld
-/// tool merges bodies or makes them static), so v2 files carrying weld
-/// joints do not load.
-///
-/// v4: the strut rework — `JointKind::Spring` is authored as `rest_length`
-/// with an optional `range` clamp (was `bounds`), so v3 files carrying
-/// struts do not load.
-///
-/// v5: continuous depth (V3) — bodies author a `DepthBand` instead of a
-/// `LayerMask32`. v4 files migrate on load: each mask's occupied bit range
-/// maps to the equivalent band; non-default *filters* are dropped with a
-/// warning (checkbox filter art is unrepresentable by design — collision
-/// is depth overlap).
-pub const FORMAT_VERSION: u32 = 5;
-
-/// What went wrong while persisting.
-#[derive(Debug, thiserror::Error)]
-pub enum PersistError {
-    /// Filesystem failure.
-    #[error("io: {0}")]
-    Io(#[from] std::io::Error),
-    /// RON serialization failure.
-    #[error("serialize: {0}")]
-    Serialize(#[from] ron::Error),
-    /// RON parse failure.
-    #[error("parse: {0}")]
-    Parse(#[from] ron::de::SpannedError),
-    /// The file's format version is not supported.
-    #[error("unsupported scene version {0} (this build reads {FORMAT_VERSION})")]
-    Version(u32),
-}
-
-/// Serializes a scene to pretty RON (deterministic for identical scenes).
-pub fn to_ron(scene: &SceneRecord) -> Result<String, PersistError> {
-    Ok(ron::ser::to_string_pretty(
-        scene,
-        ron::ser::PrettyConfig::new(),
-    )?)
-}
-
-/// Parses and version-checks a scene, migrating supported old versions.
-pub fn from_ron(text: &str) -> Result<SceneRecord, PersistError> {
-    let mut scene: SceneRecord = ron::from_str(text)?;
-    match scene.version {
-        FORMAT_VERSION => Ok(scene),
-        4 => {
-            migrate_v4_layers(&mut scene);
-            Ok(scene)
-        }
-        v => Err(PersistError::Version(v)),
-    }
-}
-
-/// v4 → v5: each body's legacy layer mask becomes the equivalent depth
-/// band. Custom filter masks cannot be represented (collision is depth
-/// overlap now) and are dropped with a warning.
-fn migrate_v4_layers(scene: &mut SceneRecord) {
-    use crate::domain::depth::DepthBand;
-    for body in &mut scene.bodies {
-        if let Some(mask) = body.layers.take() {
-            body.depth = mask
-                .occupied_range()
-                .map_or_else(DepthBand::default, |(min, max)| {
-                    DepthBand::from_bit_range(min, max)
-                });
-            if mask.filters != u32::MAX {
-                warn!(
-                    id = %body.id.0,
-                    "v4 custom collision filters dropped on migration \
-                     (collision is depth overlap in v5)"
-                );
-            }
-        }
-    }
-    scene.version = FORMAT_VERSION;
-}
+use std::path::{Path, PathBuf};
 
 /// Request to save the scene (`path: None` → remembered path, then dialog).
 #[derive(Message, Debug, Clone)]
@@ -183,6 +100,12 @@ fn queue_startup_scene(
     }
 }
 
+/// Serializes `scene` and writes it to `path` — the one save flow shared by
+/// explicit saves, debug snapshots, and the exit autosave.
+fn write_scene_file(scene: &SceneRecord, path: &Path) -> Result<(), PersistError> {
+    Ok(std::fs::write(path, to_ron(scene)?)?)
+}
+
 /// Drains persistence requests: saves capture-and-write, loads parse into
 /// [`LoadSceneIntent`] (which dispatch turns into the undoable command).
 pub fn handle_persist_requests(world: &mut World) {
@@ -197,13 +120,12 @@ pub fn handle_persist_requests(world: &mut World) {
             .or_else(ask_save_path);
         let Some(path) = path else { continue };
         let scene = SceneRecord::capture(world);
-        match to_ron(&scene).map(|text| std::fs::write(&path, text)) {
-            Ok(Ok(())) => {
+        match write_scene_file(&scene, &path) {
+            Ok(()) => {
                 info!(path = %path.display(), "scene saved");
                 world.resource_mut::<LastScenePath>().0 = Some(path);
             }
-            Ok(Err(e)) => warn!(path = %path.display(), error = %e, "scene save failed"),
-            Err(e) => warn!(error = %e, "scene serialize failed"),
+            Err(e) => warn!(path = %path.display(), error = %e, "scene save failed"),
         }
     }
 
@@ -231,7 +153,7 @@ pub fn handle_persist_requests(world: &mut World) {
         let path = dir.join(format!("gradiance-{stamp}.ron"));
         let result = std::fs::create_dir_all(&dir)
             .map_err(PersistError::from)
-            .and_then(|()| Ok(std::fs::write(&path, to_ron(&scene)?)?));
+            .and_then(|()| write_scene_file(&scene, &path));
         match result {
             Ok(()) => info!(path = %path.display(), "debug snapshot written"),
             Err(e) => warn!(error = %e, "snapshot failed"),
@@ -256,18 +178,10 @@ pub fn autosave_on_exit(world: &mut World) {
         return;
     }
     let path = world.resource::<AutosavePath>().0.clone();
-    match to_ron(&scene).map(|text| std::fs::write(&path, text)) {
-        Ok(Ok(())) => info!(path = %path.display(), "session autosaved (reopen with --resume)"),
-        Ok(Err(e)) => warn!(path = %path.display(), error = %e, "session autosave failed"),
-        Err(e) => warn!(error = %e, "session autosave serialize failed"),
+    match write_scene_file(&scene, &path) {
+        Ok(()) => info!(path = %path.display(), "session autosaved (reopen with --resume)"),
+        Err(e) => warn!(path = %path.display(), error = %e, "session autosave failed"),
     }
-}
-
-fn drain<M: Message>(world: &mut World) -> Vec<M> {
-    world
-        .get_resource_mut::<Messages<M>>()
-        .map(|mut m| m.drain().collect())
-        .unwrap_or_default()
 }
 
 fn ask_save_path() -> Option<PathBuf> {

@@ -11,7 +11,7 @@ use crate::domain::Body;
 use crate::domain::shape::ShapeDef;
 use crate::geometry::polygonize::polygonize;
 use crate::interaction::selection::Selection;
-use crate::render::overlay::OverlayGizmos;
+use crate::interaction::overlay::OverlayGizmos;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 

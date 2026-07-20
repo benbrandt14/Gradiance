@@ -38,7 +38,7 @@
 
 use crate::command::CommandDispatchSet;
 use crate::command::intent::{CutIntent, SpawnBodyIntent};
-use crate::command::snapshot::BodyRecord;
+use crate::scene::BodyRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use crate::domain::Body;

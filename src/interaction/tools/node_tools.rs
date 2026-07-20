@@ -6,7 +6,7 @@
 //! `SignalSink`), wired in the node editor — so only the tracer places a
 //! [`NodeKind`] entity, through the shared [`ToolCommit::SpawnNode`] seam.
 
-use crate::command::snapshot::NodeRecord;
+use crate::scene::NodeRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use crate::domain::node::{NodeAttachment, NodeKind};

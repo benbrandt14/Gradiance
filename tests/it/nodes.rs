@@ -7,7 +7,7 @@
 use crate::harness::{box_record, entity_of, headless_app, paused_app, step, undo};
 use bevy::prelude::*;
 use gradiance::command::intent::{DuplicateIntent, SpawnNodeIntent};
-use gradiance::command::snapshot::NodeRecord;
+use gradiance::scene::NodeRecord;
 use gradiance::core::ids::StableId;
 use gradiance::core::units::PosRot;
 use gradiance::domain::node::{BehaviorNode, NodeAttachment, NodeKind};

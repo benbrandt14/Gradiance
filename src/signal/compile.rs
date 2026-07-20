@@ -1,5 +1,5 @@
 //! Lowering the authored, by-name [`SignalExpr`] to the pure Tier-B
-//! [`Kernel`] (`crate::script::kernel`) — the P2 "modulator lowers to a
+//! [`Kernel`] (`crate::kernel`) — the P2 "modulator lowers to a
 //! compiled, allocation-free numeric kernel" rule in action
 //! (`docs/signal-dataflow.md`, `CLAUDE.md`).
 //!
@@ -10,7 +10,7 @@
 //! [`Kernel::eval`] with zero allocation.
 
 use crate::domain::signal::SignalExpr;
-use crate::script::kernel::{BinaryOp, Expr, Kernel, KernelError, UnaryOp};
+use crate::kernel::{BinaryOp, Expr, Kernel, KernelError, UnaryOp};
 
 /// A computed signal compiled for the hot path: the ordered input names to
 /// gather (var 0, 1, …) plus the tape that consumes them.

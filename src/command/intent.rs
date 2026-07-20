@@ -8,7 +8,7 @@
 //! Each intent carries a `Trace:` line (dispatch site → command → sync
 //! systems); grep its [`name`] constant to walk the whole chain.
 
-use crate::command::snapshot::BodyRecord;
+use crate::scene::BodyRecord;
 use crate::core::ids::StableId;
 use crate::core::units::PosRot;
 use bevy::prelude::*;
@@ -18,9 +18,9 @@ use bevy::prelude::*;
 /// script verb maps 1:1, like [`CUT`](name::CUT)) the operation registry,
 /// so one grep walks the whole chain.
 pub mod name {
-    /// [`SpawnBodyIntent`](super::SpawnBodyIntent) → `SpawnBodyCommand`.
+    /// [`SpawnBodyIntent`](super::SpawnBodyIntent) → `SpawnCommand<BodyRecord>`.
     pub const SPAWN_BODY: &str = "spawn-body";
-    /// [`SpawnNodeIntent`](super::SpawnNodeIntent) → `SpawnNodeCommand`.
+    /// [`SpawnNodeIntent`](super::SpawnNodeIntent) → `SpawnCommand<NodeRecord>`.
     pub const SPAWN_NODE: &str = "spawn-node";
     /// [`DeleteIntent`](super::DeleteIntent) → `DeleteCommand`.
     pub const DELETE: &str = "delete";
@@ -55,7 +55,7 @@ pub mod name {
 }
 
 /// Request to spawn one fully-specified body.
-// Trace: dispatch.rs → SpawnBodyCommand (spawn.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_body_materials.
+// Trace: dispatch.rs → SpawnCommand (spawn.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_body_materials.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct SpawnBodyIntent {
     /// The complete authored state to create.
@@ -63,11 +63,11 @@ pub struct SpawnBodyIntent {
 }
 
 /// Request to spawn one behavior node (a placeable tracer/sensor/actuator).
-// Trace: dispatch.rs → SpawnNodeCommand (spawn.rs) → follow_node_attachments, render::tracer.
+// Trace: dispatch.rs → SpawnCommand (spawn.rs) → follow_node_attachments, render::tracer.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct SpawnNodeIntent {
     /// The complete authored node state to create.
-    pub record: crate::command::snapshot::NodeRecord,
+    pub record: crate::scene::NodeRecord,
 }
 
 /// Request to delete a set of bodies.
@@ -140,7 +140,7 @@ pub struct ArrayIntent {
 pub struct SpawnJointIntent {
     /// The complete authored joint (id minted by the tool, stable across
     /// redo).
-    pub record: crate::command::snapshot::JointRecord,
+    pub record: crate::scene::JointRecord,
 }
 
 /// Batched property edit (one gesture across N targets = one undo step).
@@ -172,7 +172,7 @@ pub struct UngroupIntent {
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct LoadSceneIntent {
     /// The parsed scene to load.
-    pub scene: crate::command::snapshot::SceneRecord,
+    pub scene: crate::scene::SceneRecord,
 }
 
 /// Request to delete one joint (undoable, restores the same id).

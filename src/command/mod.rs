@@ -34,12 +34,13 @@
 //! 1. Add an intent struct in [`intent`] (`#[derive(Message, Reflect)]`),
 //!    a kebab-case constant in [`intent::name`], and a `// Trace:` line
 //!    naming the command and the sync systems it triggers.
-//! 2. Register it in [`CommandPlugin::build`] with `add_message` **and**
-//!    `register_type` (the scripting registry binds by reflection).
-//! 3. Add a `struct MyCommand` implementing [`GameCommand`] (stage on
+//! 2. Add a `struct MyCommand` implementing [`GameCommand`] (stage on
 //!    first `apply`, replay on redo — see [`spawn`] for the pattern);
 //!    its `name()` returns the shared [`intent::name`] constant.
-//! 4. Drain the intent → push the command in [`dispatch`].
+//! 3. Add one row to the `command_intents!` table in [`dispatch`] —
+//!    that single row registers the message, registers the reflected type
+//!    (the scripting registry binds by reflection), and dispatches the
+//!    intent into your command.
 //!
 //! Undo/redo, history depth, and persistence then work for free; the
 //! combinatorial test in `tests/joints.rs` fuzzes arbitrary command
@@ -57,7 +58,6 @@ pub mod merge_cmd;
 pub mod property;
 pub mod scale_cmd;
 pub mod scene_cmd;
-pub mod snapshot;
 pub mod spawn;
 pub mod transform_cmd;
 
@@ -210,50 +210,18 @@ impl Plugin for CommandPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CommandStack>();
         app.init_resource::<HistoryInfo>();
-        app.add_message::<intent::SpawnBodyIntent>();
-        app.add_message::<intent::SpawnNodeIntent>();
-        app.add_message::<intent::DeleteIntent>();
-        app.add_message::<intent::DuplicateIntent>();
-        app.add_message::<intent::CommitTransformIntent>();
-        app.add_message::<intent::ScaleIntent>();
-        app.add_message::<intent::ArrayIntent>();
-        app.add_message::<intent::SpawnJointIntent>();
-        app.add_message::<intent::PropertyEditIntent>();
-        app.add_message::<intent::GroupIntent>();
-        app.add_message::<intent::UngroupIntent>();
-        app.add_message::<intent::CutIntent>();
-        app.add_message::<intent::DeleteJointIntent>();
-        app.add_message::<intent::MergeIntent>();
-        app.add_message::<intent::LoadSceneIntent>();
+        // The whole command intent surface — messages + reflected types —
+        // registers from the one `command_intents!` table in `dispatch`.
+        dispatch::register_command_intents(app);
+        // Undo/redo are meta-intents (they drive the stack, not a command).
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
-        // Reflection registry: the scripting layer binds operations by
-        // reflected type name (see `docs/script-lisp-decision.md`). Every
-        // authored intent now derives `Reflect` (spike #1 settled
-        // `StableId`/`ShapeDef` opacity — see `docs/script-spike-findings.md`),
-        // so the whole intent surface is registered here. `register_type`
-        // pulls in each intent's transitive field types (records, domain
-        // types, avian components), giving the read-total path a complete
-        // registry without naming those types individually.
-        app.register_type::<intent::SpawnBodyIntent>();
-        app.register_type::<intent::SpawnNodeIntent>();
-        app.register_type::<crate::domain::field::FieldSource>();
-        app.register_type::<crate::domain::tracer::Tracer>();
-        app.register_type::<intent::DeleteIntent>();
-        app.register_type::<intent::DuplicateIntent>();
-        app.register_type::<intent::CommitTransformIntent>();
-        app.register_type::<intent::ScaleIntent>();
-        app.register_type::<intent::ArrayIntent>();
-        app.register_type::<intent::SpawnJointIntent>();
-        app.register_type::<intent::PropertyEditIntent>();
-        app.register_type::<intent::GroupIntent>();
-        app.register_type::<intent::UngroupIntent>();
-        app.register_type::<intent::CutIntent>();
-        app.register_type::<intent::DeleteJointIntent>();
-        app.register_type::<intent::MergeIntent>();
-        app.register_type::<intent::LoadSceneIntent>();
         app.register_type::<intent::UndoIntent>();
         app.register_type::<intent::RedoIntent>();
+        // Marker components that only appear inside `Option`al record
+        // fields; registered explicitly so reflection sees them.
+        app.register_type::<crate::domain::field::FieldSource>();
+        app.register_type::<crate::domain::tracer::Tracer>();
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),

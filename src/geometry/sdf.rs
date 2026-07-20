@@ -15,7 +15,7 @@
 //! [`Union`](CsgOp::Union) node — no mesh booleans.
 //!
 //! ```
-//! use gradiance::domain::shape::{CsgOp, ShapeDef};
+//! use gradiance::geometry::shape::{CsgOp, ShapeDef};
 //! use gradiance::geometry::sdf::eval;
 //! use bevy::math::Vec2;
 //!
@@ -36,7 +36,7 @@
 //! ```
 
 use crate::core::constants::{GROUND_SLAB_DEPTH, GROUND_SLAB_WIDTH};
-use crate::domain::shape::{CsgOp, ShapeDef};
+use crate::geometry::shape::{CsgOp, ShapeDef};
 use bevy::math::Vec2;
 
 /// The field gradient of `shape`'s SDF at `p` (central differences).
@@ -46,7 +46,7 @@ use bevy::math::Vec2;
 ///
 /// ```
 /// # use gradiance::geometry::sdf::gradient;
-/// # use gradiance::domain::shape::ShapeDef;
+/// # use gradiance::geometry::shape::ShapeDef;
 /// # use bevy::math::Vec2;
 /// let circle = ShapeDef::Circle { radius: 10.0 };
 /// let g = gradient(&circle, Vec2::new(20.0, 0.0), 0.1);

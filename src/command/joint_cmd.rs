@@ -1,6 +1,6 @@
 //! Joint commands and the body↔joint cascade helper.
 
-use crate::command::snapshot::JointRecord;
+use crate::scene::JointRecord;
 use crate::command::{CommandError, GameCommand, resolve};
 use crate::core::ids::StableId;
 use crate::domain::joint::JointDef;
