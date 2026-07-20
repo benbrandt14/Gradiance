@@ -147,6 +147,16 @@ is the point of the split — a milestone's blast radius is now visible in
    state is derived-only (never `scene` records), which the DAG now
    states by construction.
 
+## Coverage baseline (2026-07-20)
+
+Workspace coverage after the split (cargo-llvm-cov; tarpaulin's forced
+`-Cdebuginfo=2` did not fit this container's disk): **55.3% lines / 60.1%
+functions** over the headless suite. The floor is structural: UI/render
+draw paths (egui panels, gizmo drawing, shaders) need a windowed session.
+The pure/logic crates sit high (kernel 98%, geometry 88–98%, scene 90–93%,
+command 85–100%, script bridge 93%). Dead-code findings and the
+kept-uncovered rationale are logged in `docs/desmell-log.md`.
+
 ## Verification
 
 The gate is unchanged: `cargo fmt --all -- --check`,

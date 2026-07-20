@@ -1,14 +1,12 @@
-//! 2.5D extrusion: contours + collision-layer bits → prism mesh buffers.
+//! 2.5D extrusion: contours + an authored depth span → prism mesh buffers.
 //!
-//! The depth convention (re-derived, behavior-preserving): a body occupying
-//! layer bits `min..=max` spans `z ∈ [z_front - depth, z_front]` where
-//! `z_front = -(min · LAYER_HEIGHT)` and `depth = (max - min + 1) · LAYER_HEIGHT`
-//! — bit 0 is front-most, bit 31 back-most.
+//! Callers pass the continuous `(z_front, depth)` straight from the body's
+//! `DepthBand` (`z_front = -near`, `depth = far - near`); the legacy
+//! layer-bit mapping retired with save v5.
 
 use crate::contours::Contours;
 use crate::tessellate::tessellate;
 use bevy::math::Vec2;
-use gradiance_core::constants::LAYER_HEIGHT;
 
 /// Raw mesh buffers, engine-agnostic.
 #[derive(Debug, Clone, Default)]
@@ -19,23 +17,6 @@ pub struct MeshBuffers {
     pub normals: Vec<[f32; 3]>,
     /// Triangle indices (CCW = outward).
     pub indices: Vec<u32>,
-}
-
-/// Maps occupied layer bits to `(z_front, depth)`.
-///
-/// ```
-/// use gradiance_geometry::extrusion::layer_z_range;
-///
-/// // A body on layer bit 0 alone: front face at z=0, one layer deep.
-/// assert_eq!(layer_z_range(0, 0), (0.0, 10.0));
-///
-/// // Occupying bits 1..=3: front pushed back to -10, three layers deep.
-/// assert_eq!(layer_z_range(1, 3), (-10.0, 30.0));
-/// ```
-pub fn layer_z_range(min_bit: u32, max_bit: u32) -> (f32, f32) {
-    let z_front = -(min_bit as f32 * LAYER_HEIGHT);
-    let depth = (max_bit - min_bit + 1) as f32 * LAYER_HEIGHT;
-    (z_front, depth)
 }
 
 /// Extrudes `contours` into a closed prism spanning
@@ -119,19 +100,12 @@ mod tests {
     }
 
     #[test]
-    fn layer_bits_map_to_depth_convention() {
-        assert_eq!(layer_z_range(0, 0), (0.0, 10.0));
-        assert_eq!(layer_z_range(1, 2), (-10.0, 20.0));
-        assert_eq!(layer_z_range(31, 31), (-310.0, 10.0));
-    }
-
-    #[test]
     fn extrusion_spans_the_requested_z_range() {
         let contours = polygonize(&ShapeDef::Box {
             width: 20.0,
             height: 10.0,
         });
-        let (z_front, depth) = layer_z_range(1, 2);
+        let (z_front, depth) = (-10.0, 20.0);
         let mesh = extrude_contours(&contours, z_front, depth);
         let (zmin, zmax) = z_extent(&mesh);
         assert!((zmax - -10.0).abs() < 1e-4);
