@@ -1,0 +1,29 @@
+[package]
+name = "gradiance-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance UI: the egui editor (the only crate that may import egui)"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-command.workspace = true
+gradiance-domain.workspace = true
+gradiance-geometry.workspace = true
+gradiance-interaction.workspace = true
+gradiance-persist.workspace = true
+gradiance-physics.workspace = true
+gradiance-scene.workspace = true
+gradiance-script.workspace = true
+gradiance-signal.workspace = true
+avian2d.workspace = true
+bevy.workspace = true
+bevy_egui.workspace = true
+egui-snarl.workspace = true
+egui_tiles.workspace = true
+
+[dev-dependencies]
+egui_kittest.workspace = true

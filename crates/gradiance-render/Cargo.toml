@@ -1,0 +1,19 @@
+[package]
+name = "gradiance-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance rendering: derived meshes, materials, lighting, gizmos"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-domain.workspace = true
+gradiance-geometry.workspace = true
+gradiance-interaction.workspace = true
+gradiance-physics.workspace = true
+gradiance-signal.workspace = true
+avian2d.workspace = true
+bevy.workspace = true

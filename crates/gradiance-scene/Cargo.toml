@@ -1,0 +1,19 @@
+[package]
+name = "gradiance-scene"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance scene format: authored-state records, RON serialization, migrations"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-domain.workspace = true
+bevy.workspace = true
+ron.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+# Features-only: serde impls for the bevy math types records serialize.
+glam.workspace = true

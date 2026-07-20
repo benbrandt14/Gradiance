@@ -1,0 +1,16 @@
+[package]
+name = "gradiance-physics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance physics: avian collider/joint derivation and the read facade"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-domain.workspace = true
+gradiance-geometry.workspace = true
+avian2d.workspace = true
+bevy.workspace = true

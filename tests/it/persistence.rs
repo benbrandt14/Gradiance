@@ -7,8 +7,8 @@ use bevy::prelude::*;
 use gradiance::domain::settings::{
     GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
 };
-use gradiance::scene::{from_ron, to_ron};
 use gradiance::prelude::*;
+use gradiance::scene::{from_ron, to_ron};
 use proptest::prelude::*;
 
 // ---------- Arbitrary scene generation ----------

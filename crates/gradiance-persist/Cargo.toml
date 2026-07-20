@@ -1,0 +1,22 @@
+[package]
+name = "gradiance-persist"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance persistence: scene files on disk, dialogs, autosave"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-command.workspace = true
+gradiance-scene.workspace = true
+bevy.workspace = true
+rfd.workspace = true
+ron.workspace = true
+serde.workspace = true
+
+[features]
+# Dev-only: the F9 flight-recorder dump (reads the command crate's recorder).
+dev = ["gradiance-command/dev"]

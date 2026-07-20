@@ -1,0 +1,23 @@
+[package]
+name = "gradiance-command"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance command layer: intents, undoable commands, the mutation choke point"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-domain.workspace = true
+gradiance-geometry.workspace = true
+gradiance-scene.workspace = true
+gradiance-signal.workspace = true
+avian2d.workspace = true
+bevy.workspace = true
+thiserror.workspace = true
+
+[features]
+# Dev-only observability: the intent/command flight recorder ring buffer.
+dev = []

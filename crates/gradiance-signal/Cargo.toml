@@ -1,0 +1,17 @@
+[package]
+name = "gradiance-signal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance signal dataflow: source-to-sink bindings evaluated per frame"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-domain.workspace = true
+gradiance-kernel.workspace = true
+gradiance-physics.workspace = true
+avian2d.workspace = true
+bevy.workspace = true

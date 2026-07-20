@@ -1,32 +1,32 @@
-[package]
-name = "gradiance"
+[workspace]
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.2.0"
 edition = "2024"
-description = "An Algodoo-inspired 2.5D physics sandbox"
 license = "MIT OR Apache-2.0"
 
-[dependencies]
-# Engine + physics. Versions are exact-pinned: agent sessions must not drift APIs.
+[workspace.dependencies]
+# Engine + physics. Versions are exact-pinned: agent sessions must not drift
+# APIs (enforced by tests/boundaries.rs).
 bevy = "=0.19.0"
 # `serialize` lets authored avian components go straight into the RON save
 # (the de-adapter collapse — see docs/physics-deadapter-decision.md). Save
 # stability across avian versions is explicitly not a goal.
 avian2d = { version = "=0.7.0", features = ["serialize"] }
 bevy_egui = "=0.41.0"
-# In-editor script console: a code editor widget with lisp syntax highlighting
-# and completion (shares egui 0.35 with bevy_egui). UI-only, `src/ui/` only.
 # Node-graph editor widget: the Simulink-style signal canvas. Shares egui 0.35
-# with bevy_egui (the only major node-editor crate on egui 0.35 —
-# egui_node_graph2 is stuck on 0.29). UI-only, imported in `src/ui/` only.
+# with bevy_egui (the only major node-editor crate on egui 0.35).
 egui-snarl = "=0.11.0"
 # Docking/tabbing workspace (Rerun's tiling lib; the desktop-app shell — see
-# docs/ui-shell-decision.md). Shares egui 0.35 with bevy_egui. UI-only.
+# docs/ui-shell-decision.md). Shares egui 0.35 with bevy_egui.
 egui_tiles = "=0.16.0"
 leafwing-input-manager = "=0.21.0"
 
 # Geometry
 lyon = "1.0"
-clipper2 = "0.6"
+# Features-only dependency: turns on the serde impls for the bevy math types
+# (Vec2) that authored data serializes. Never imported directly.
 glam = { version = "0.32", features = ["serde"] }
 
 # Identity + persistence
@@ -37,36 +37,42 @@ rfd = "0.17"
 
 # Utilities
 thiserror = "2"
-rand = "0.9"
 mimalloc = "0.1"
 
 # Scripting (Tier-A authoring engine): the Lisp control plane is a first-class
 # part of the tool, compiled into every build. The two-tier PERF rule still
 # holds — the steel VM runs only on the authoring (cold) path, never in the
-# per-frame loop (continuous drivers lower to `src/script/kernel.rs`); see
-# docs/script-lisp-decision.md. Confined to `src/script/` (tests/boundaries.rs).
+# per-frame loop (continuous drivers lower to `gradiance-kernel`); see
+# docs/script-lisp-decision.md. Confined to `crates/gradiance-script`.
 steel-core = "=0.8.2"
 colorgrad = { version = "0.8.0", features = ["preset"] }
 
-[features]
-# Dev-only inner loop: `cargo run --features dev`.
-# - dynamic_linking: links Bevy as a dylib, cutting incremental link time.
-# - file_watcher: asset hot-reload (and the hook for future .scm hot-reload).
-# Never enable for release/CI builds; the default build stays fully static.
-dev = ["bevy/dynamic_linking", "bevy/file_watcher"]
-
-[dev-dependencies]
+# Test-only
 proptest = "1.9"
-rstest = "0.26"
-# UI layout tests for the top panels' leaf renderers (shares egui 0.35 with
-# bevy_egui). Accessibility-tree queries only — no GPU, no screenshot farm.
+# UI layout tests for panel leaf renderers (shares egui 0.35 with bevy_egui).
+# Accessibility-tree queries only — no GPU, no screenshot farm.
 egui_kittest = "=0.35.0"
 
-[lints.rust]
+# Workspace members
+gradiance-core = { path = "crates/gradiance-core" }
+gradiance-kernel = { path = "crates/gradiance-kernel" }
+gradiance-geometry = { path = "crates/gradiance-geometry" }
+gradiance-domain = { path = "crates/gradiance-domain" }
+gradiance-scene = { path = "crates/gradiance-scene" }
+gradiance-physics = { path = "crates/gradiance-physics" }
+gradiance-signal = { path = "crates/gradiance-signal" }
+gradiance-command = { path = "crates/gradiance-command" }
+gradiance-persist = { path = "crates/gradiance-persist" }
+gradiance-interaction = { path = "crates/gradiance-interaction" }
+gradiance-render = { path = "crates/gradiance-render" }
+gradiance-script = { path = "crates/gradiance-script" }
+gradiance-ui = { path = "crates/gradiance-ui" }
+
+[workspace.lints.rust]
 missing_docs = "deny"
 unsafe_code = "deny"
 
-[lints.clippy]
+[workspace.lints.clippy]
 # Agentic hardening: no silent panics in product code (tests are exempted via clippy.toml).
 unwrap_used = "deny"
 expect_used = "deny"
@@ -90,6 +96,54 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 similar_names = "allow"
 too_many_lines = "warn"
+
+[package]
+name = "gradiance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "An Algodoo-inspired 2.5D physics sandbox"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-kernel.workspace = true
+gradiance-geometry.workspace = true
+gradiance-domain.workspace = true
+gradiance-scene.workspace = true
+gradiance-physics.workspace = true
+gradiance-signal.workspace = true
+gradiance-command.workspace = true
+gradiance-persist.workspace = true
+gradiance-interaction.workspace = true
+gradiance-render.workspace = true
+gradiance-script.workspace = true
+gradiance-ui.workspace = true
+bevy.workspace = true
+mimalloc.workspace = true
+
+[features]
+# Dev-only inner loop: `cargo run --features dev`.
+# - dynamic_linking: links Bevy as a dylib, cutting incremental link time.
+# - file_watcher: asset hot-reload (and the hook for future .scm hot-reload).
+# - the member `dev` features light up the intent/command flight recorder.
+# Never enable for release/CI builds; the default build stays fully static.
+dev = [
+    "bevy/dynamic_linking",
+    "bevy/file_watcher",
+    "gradiance-command/dev",
+    "gradiance-persist/dev",
+]
+
+[dev-dependencies]
+avian2d.workspace = true
+# The integration suite drives the whole app, egui panels included.
+bevy_egui.workspace = true
+proptest.workspace = true
+egui_kittest.workspace = true
+uuid.workspace = true
 
 # Enable a small amount of optimization in debug mode for our code,
 # and full optimization for dependencies (Bevy/physics are unusable at opt 0).

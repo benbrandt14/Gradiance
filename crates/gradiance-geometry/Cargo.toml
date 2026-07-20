@@ -1,0 +1,18 @@
+[package]
+name = "gradiance-geometry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance geometry: the SDF shape tree and all 2D/2.5D math"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+bevy.workspace = true
+lyon.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+# Features-only: serde impls for the bevy math types shapes serialize.
+glam.workspace = true
