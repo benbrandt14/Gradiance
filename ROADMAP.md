@@ -1,241 +1,103 @@
-# Gradiance Roadmap
-
-## Initial Features, supporting core tools
-- [x] right click menu on items
-- [x] select / delete items
-- [x] add hinge behavior
-- [x] add fix behavior ( ie make static )
-- [ ] add collision layers
-- [ ] add infinite plane tool (Currently approximated with large box)
-- [ ] add restitution and friction
-- [x] add square selection tool
-- [ ] add a lasso selection tool
-- [ ] add multiselect with shift+click
-- [ ] add copy/paste shortcuts by holding CTRL and dragging
-- [ ] add tracers
-- [x] add grid w/ locking
-- [ ] add ability to modify colors ( background and objects )
-- [ ] be able to modify attributes of multiple selected objects
-- [ ] add cutting tool and CSG operations ( later on )
-- [ ] add save/load behavior
-- [ ] document anything else that bevy/Rapier2d can expose as right clickable
-- [ ] mimic UI style of algodoo ( icons can be provided for some things )
-- [ ] add lasers / optics behavior
-- [ ] add translucency
-- [ ] add attraction/repulsion
-- [ ] be able to modify density & other physical attributes ( friction )
-- [ ] add sketch tool
-- [ ] add CAD style constraint-based sketching (much later)
-- [ ] add drag-and-drop SVG support (much later)
-- [ ] add particle-system type behaviors ( in a consistent way)
-- [ ] add rotation around points and other greebles
-- [ ] add distribute array-like physical alignment
-- [ ] add tweening and other animation polish
-- [ ] add some lighting / 2D shadow casting with shaders
-- [ ] add rockets & sliders
-- [ ] add fine control of constraints / damping / rotation limits / for nearly everything
-- [ ] add scripting support with a popup ( half-life style ) terminal
-- [ ] be able to control parameters by linking them to others ( ie restitution based on proximity ) + support math / functional notation in menus + visualize linkage between parameters (later on)
-- [x] add play/pause button with stepping control and sim time control
-- [ ] add sensors for proximity and force, make them thematically match ( proximity might be capacitance )
-- [ ] add a settings pane for things to be modified
-- [ ] add support for chains and pulleys ( esp. physically correct pulleys w/ non colliding wires -- not part of original algodoo and easy to add )
-- [ ] add support for arbitrary coordinate frames ( req plotters )
-
-## Core Tools ( Polish & Feature Complete )
-
-    [x] Plane Tool: Spawns static ground (Approximated). Needs infinite shader.
-
-    [x] Box Tool: Spawns Collider::cuboid.
-
-    [x] Circle Tool: Spawns Collider::ball.
-
-    [x] Polygon Tool: Click-to-place vertices, close loop to spawn.
-
-    [ ] Brush/Sketch Tool: Freehand draw -> simplify -> polygon.
-
-    [ ] Cut Tool: CSG difference operation on World geometry.
-
-    [x] Drag Tool: MouseJoint implementation. (Needs offset fix)
-
-    [ ] Scale/Rotate Tool: Gizmos for transforming entities (use bevy_transform_gizmo).
-
-    [x] Select Tool: Box selection and Move functionality.
-
-Physics & Constraints
-
-    [x] Hinge: RevoluteJoint (Implemented via ConnectorTool).
-
-    [x] Fixed: FixedJoint (Weld) (Implemented via ConnectorTool).
-
-    [ ] Spring: DistanceJoint with soft compliance.
-
-    [ ] Slider: PrismaticJoint with limits.
-
-    [ ] Chain: Procedurally generated linked bodies.
-
-    [ ] Rope (Pulley): Custom constraint (non-colliding length constraint).
-
-    [ ] Gear: Custom constraint (angular velocity ratio).
-
-    [ ] Collision Layers: UI to toggle collision masks (A collides with B). (Critical for Pinning)
-
-    [ ] Material Properties: Friction, Restitution (Bounciness), Density.
-
-Fluid & Particles
-
-    [ ] Liquify: Convert rigid body to particle cluster.
-
-    [ ] SPH Solver: Density/Pressure calculation.
-
-    [ ] Two-way Coupling: Particles push bodies; bodies push particles.
-
-    [ ] Buoyancy: Upward force on bodies intersecting fluid zone.
-
-    [ ] Soft Body: Convert Rigid Body to Soft
-
-Visuals
-
-    [ ] Tracers: Fade-out path visualization.
-
-    [ ] Lighting: Point lights, shadow casting (bevy_firefly).
-
-    [ ] Color: RGBA support with alpha blending.
-
-    [ ] Optics: Transmission and reflection of light.
-
-UI & UX
-
-    [x] Context Menu: Right-click entity to show actions.
-
-    [ ] Inspector: Sidebar showing properties of selected object.
-
-    [x] Grid: Snapping and visual grid.
-
-    [x] Play/Pause: Global time scale control.
-
-    [ ] Step: Advance simulation 1 tick.
-
-    [x] Camera Controller: Pan and Zoom.
-
-    [x] Undo/Redo: Command stack (Architecture implemented).
-
-Scripting
-
-    [ ] Console: Toggleable overlay (~ key).
-
-    [ ] Entity Scripts: Attach.lua files to entities.
-
-    [ ] Events: on_hit, on_spawn, on_click hooks.
-
-    [ ] Variable Linking: entity.restitution = other.velocity.length * 0.1.
-
-System
-
-    [ ] Save/Load: RON file format.
-
-    [ ] SVG Import: Drag-and-drop support.
-
-    [ ] Performance Monitor: FPS and Body Count display.
-
-## Future Roadmap (Design Goals)
-
-Phase 1: The Substrate (Months 1–2)
-
-Goal: A stable infinite 2D world where you can spawn rigid bodies and move the camera.
-
-Milestones:
-
-    Core scaffolding: Bevy 0.15.3 app structure with Rapier2d.
-
-    Input/Camera: Pan/Zoom camera and Mouse Picking.
-
-    The Floor: Infinite plane implementation.
-
-Tasks:
-
-    [x] Initialize project with bevy, Rapier2d, bevy_egui.
-
-    [x] Implement Camera2dBundle with custom Pan/Zoom system (Orthographic scale).
-
-    [x] Implement InfiniteFloor system (Approximated):
-        Spawn Collider::cuboid (Huge) at y=0.
-        *TODO*: Render infinite grid using a custom shader.
-
-    [x] Implement Selection resource:
-        Click to select single.
-        Shift+Click to multi-select.
-        Drag background to box-select.
-
-    [x] Implement MouseJoint (The "Hand" Tool):
-        On drag start: Spawn DistanceJoint.
-        *Issue*: Offset calculation needs fixing.
-
-Phase 2: Geometry & CSG Pipeline (Months 3–4)
-
-Goal: The "Sketch" and "Cut" tools. Creating custom shapes and slicing them.
-
-Milestones:
-
-    Vector Rendering: High-fidelity shape drawing.
-
-    CSG Kernel: Boolean operations (Cut, Weld).
-
-    Tessellation: Polygon to Mesh/Collider.
-
-Tasks:
-
-    [x] Integrate bevy_prototype_lyon:
-        Verified working with 0.13.0.
-
-    [ ] Implement Sketch Tool:
-        Capture points -> Ramer-Douglas-Peucker simplification -> Lyon Path.
-
-    [ ] Integrate clipper2 crate:
-        Implement utility fn to_clipper_path(Vec<Vec2>) -> Vec<Point64>.
-
-    [ ] Implement Cut Tool (Laser):
-        CSG operations on bodies.
-
-    [ ] Implement Polygon Decomposition:
-        Use parry2d's convex decomposition.
-
-Phase 3: The Mechanical Engineer (Months 5–6)
-
-Goal: Advanced constraints. Gears, Pulleys, and Linkages.
-
-Milestones:
-
-    Standard Joints: Hinge, Fixed, Spring.
-
-    Custom Solvers: Gear and Pulley constraints.
-
-Tasks:
-
-    [x] Implement Hinge Tool (ConnectorTool).
-
-    [x] Implement Fixed Tool (ConnectorTool).
-
-    [ ] Fix Pin Collision:
-        Ensure pinned bodies do not collide with their pin anchor (Explosion risk).
-        *Status*: Needs Fix (See TECH_DEBT.md).
-
-    [ ] Implement Spring/Slider Tool.
-
-    [ ] Custom Constraint: Gear Joint.
-
-    [ ] Custom Constraint: Pulley.
-
-    [ ] Chain Tool.
-
-(Phases 4-6 remain unchanged)
-
-## Maintenance & Refactoring
-- [ ] **Technical Debt**: Address items in `TECH_DEBT.md`.
-    - [ ] Pin Collision Instability.
-    - [ ] Drag Tool Offset.
-    - [ ] Inspector Query Simplification.
-- [ ] **Documentation**: Maintain `AGENTS.md` and `RUST_GUIDELINES.md`.
-
-## Technical Debt & Issues
-See `TECH_DEBT.md` for detailed analysis of architectural hurdles and known issues.
+# Gradiance Roadmap — the feature tree
+
+The milestone-by-milestone log (what landed, in which round, and why) lives
+in `docs/roadmap.md`; architecture rationale and the roadmap→package
+mapping live in `docs/workspace-plan.md`. This file is the curated **feature
+tree**: what the tool grows next, organized by the workspace package(s)
+each feature lands in — since the workspace split, a feature's blast
+radius is its branch of the package graph.
+
+Execution order (set 2026-07-11, unchanged by the split): **substrate
+first, then script it** — (1) constraints/joints + their editing UI,
+(2) tracers/plotters, (3) scripting P2 drivers over both, with CAD polish
+(M18) and rendering/camera (M19) interleaved where they unblock the above.
+
+## 1. Physics & constraints — `domain` + `physics` + `command` + `ui`
+
+Each new joint kind = a `JointKind` variant (domain), a `joint_sync`
+lowering (physics), one `command_intents!` row if it needs a new intent
+(command), inspector rows (ui), and a `physics::queries` read *as it
+lands* (the plotter/scripting gate).
+
+- [x] Hinge (revolute) and fixed pin, with limits and motors
+- [x] Strut (spring / rigid rod), authored as rest length + optional range
+- [x] Play-mode grab forces (mouse spring + twist)
+- [x] Attraction/repulsion field sources (`FieldSource`, sampled via `physics::fields`)
+- [ ] Slider (prismatic) travel limits polish + motor parity with hinges
+- [ ] Damper / damping control on every joint (`JointDamping` is derived today)
+- [ ] Gear constraint (angular velocity ratio between two hinges)
+- [ ] Rope / pulley (non-colliding length constraint; physically correct pulleys)
+- [ ] Chain tool (procedurally generated linked bodies)
+- [ ] Contact/force sensors surfaced as signal sources
+- [ ] Fluids & particles (SPH, buoyancy, liquify) — future
+      `gradiance-particles` package between `physics` and `render`;
+      bulk state is derived-only (never scene records) by construction
+
+## 2. Geometry & tools — `geometry` + `interaction` (+ `command`)
+
+- [x] Box / circle / polygon / ground draft tools over the `DraftTool` facade
+- [x] CSG cut (severs-only) and merge as SDF tree nodes
+- [x] Scale/rotate handles with global/local frames; linear + radial array
+- [x] Object + grid snapping (Cartesian / isometric / polar grid systems)
+- [x] Box & lasso selection, hierarchical groups, click-through selection
+- [ ] Brush/sketch tool: freehand → simplify → polygon (RDP over the SDF substrate)
+- [ ] Infinite ground plane (currently approximated; needs an infinite shader — with `render`)
+- [ ] Copy/paste shortcuts (Ctrl+drag duplicate exists; clipboard semantics pending)
+- [ ] SVG import (drag-and-drop) — much later
+- [ ] CAD-style constraint-based sketching — much later
+
+## 3. Tracers, plotters & signals — `signal` + `render` + `ui`
+
+The read-total substrate: everything here reads through
+`physics::queries` and the signal bus; no new mutation paths.
+
+- [x] Tracers on bodies and free/attached behavior nodes (fading trails)
+- [x] Signal dataflow: source→sink bindings, `defparam` knobs, `defsignal`
+      modulators compiled to the Tier-B kernel (`docs/signal-dataflow.md`)
+- [x] Live plot panel + probes; node-graph canvas for the signal wiring
+- [ ] More signal sources as physics lands them (constraint force, contact
+      impulse, joint error) — keep the facade complete
+- [ ] Arbitrary coordinate frames for plots (requires frames work)
+- [ ] Performance monitor (FPS / body count) as ordinary signals
+
+## 4. Scripting — `script` + `kernel` (P2/P3, queued behind 1–3)
+
+Architecturally paid for: a **sensor** is a `physics::queries` read, a
+**modulator** is a compiled kernel, an **actuator** is a registered
+edit/config op. The package DAG states the perf rule (`signal → kernel`,
+never `signal → script`).
+
+- [x] P1: operation registry, edit/config/query/editor verbs, REPL console,
+      `--script` startup loader, `register-action` context-menu hooks
+- [ ] P2: driver dataflow (sensor → modulator → actuator) authored in-language
+- [ ] P3: symbolic field forces over the SDF substrate
+- [ ] Entity event hooks (`on_hit`, `on_spawn`, `on_click`)
+
+## 5. Rendering & UX — `render` + `ui`
+
+- [x] Toon-shaded extruded prisms; continuous depth bands ≡ collision layers
+- [x] Dockable egui shell (tiles), tool palette, transport, view cube,
+      context menus, inspector, outliner, depth dock
+- [x] Scene lighting + scenery settings (key light, ambient, SSAO, back plane)
+- [x] Camera: pan/zoom, CAD orbit with 2D re-home
+- [ ] Translucency (RGBA alpha blending through the toon pipeline)
+- [ ] Lasers / optics (transmission & reflection) — after collision-layer optics design
+- [ ] 2D shadow casting / point lights
+- [ ] Tweening/animation polish for editor transitions
+- [ ] Algodoo-style icon/UI theming pass
+
+## 6. Persistence & system — `scene` + `persist`
+
+- [x] RON save/load with format versioning + v4→v5 migration; undoable load
+- [x] F12 debug snapshots; exit autosave + `--resume`; CLI scene loading
+- [x] Undo/redo command stack (records shared with the save format)
+- [ ] Autosave-on-interval (only exit autosave today)
+- [ ] Scene thumbnails / metadata for a future open-dialog gallery
+
+## Maintenance
+
+- Architecture contract: `CLAUDE.md` (package-fenced invariants).
+- Known-smell record + kept-pattern rationale: `docs/desmell-log.md`.
+- Coupling re-check: run `cargo coupling --ai --exclude-tests` after a
+  milestone lands; the workspace split reset the baseline
+  (`docs/workspace-plan.md` has the pre-split numbers).

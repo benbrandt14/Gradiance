@@ -1,8 +1,13 @@
 //! Architecture boundary tests.
 //!
-//! These scan `src/` as text and fail when a module reaches across a layer
-//! boundary. They are the local mirror of the CI "Architecture boundaries"
-//! step and the mechanical enforcement of the invariants in `CLAUDE.md`.
+//! Since the workspace split, the layer boundaries are primarily enforced
+//! by the package graph itself: a crate can only import what its
+//! `Cargo.toml` declares, so `egui` cannot leave `gradiance-ui` and `steel`
+//! cannot leave `gradiance-script` without a manifest diff. These tests are
+//! the second line: they scan the source as text so that even a
+//! *manifest* drift (someone adding `egui` to another crate's
+//! dependencies) is caught in review by a failing test, and they hold
+//! rules the package graph cannot express (serde confinement, exact pins).
 
 // Test-only file: panics are the failure mechanism (clippy's
 // allow-*-in-tests config does not extend to integration-test helpers).
@@ -10,16 +15,21 @@
 
 use std::path::{Path, PathBuf};
 
-/// Recursively collect all `.rs` files under `dir`.
-fn rust_files(dir: &Path) -> Vec<PathBuf> {
+/// Repo root (the workspace root; this test crate is the root package).
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+/// Recursively collect all files under `dir` with extension `ext`.
+fn files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let entries =
         std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()));
     for entry in entries {
         let path = entry.expect("dir entry").path();
         if path.is_dir() {
-            files.extend(rust_files(&path));
-        } else if path.extension().is_some_and(|e| e == "rs") {
+            files.extend(files_with_ext(&path, ext));
+        } else if path.extension().is_some_and(|e| e == ext) {
             files.push(path);
         }
     }
@@ -27,15 +37,24 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Return `(path, line_number, line)` for every line in `src/` matching `needle`,
-/// excluding files whose path (relative to the repo root) starts with one of `allowed`.
+/// All Rust sources of every workspace package (members under `crates/`
+/// plus the root package's `src/`).
+fn workspace_sources() -> Vec<PathBuf> {
+    let root = repo_root();
+    let mut files = files_with_ext(&root.join("src"), "rs");
+    files.extend(files_with_ext(&root.join("crates"), "rs"));
+    files
+}
+
+/// Return `(path, line_number, line)` for every line matching `needle`,
+/// excluding files whose repo-relative path starts with one of `allowed`.
 fn violations(needle: &str, allowed: &[&str]) -> Vec<String> {
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let root = repo_root();
     let mut found = Vec::new();
-    for file in rust_files(&src) {
+    for file in workspace_sources() {
         let rel = file
-            .strip_prefix(env!("CARGO_MANIFEST_DIR"))
-            .expect("path under manifest dir")
+            .strip_prefix(&root)
+            .expect("path under repo root")
             .to_string_lossy()
             .replace('\\', "/");
         if allowed.iter().any(|a| rel.starts_with(a)) {
@@ -58,38 +77,34 @@ fn violations(needle: &str, allowed: &[&str]) -> Vec<String> {
     found
 }
 
-// NOTE: the avian-confinement rule was retired by the de-adapter collapse
-// (docs/physics-deadapter-decision.md). avian is now used directly wherever
-// physics is done; authored physics state *is* avian components. Identity is
-// still `StableId` and raw `Entity` is never persisted.
-
 #[test]
 fn egui_is_confined_to_the_ui_layer() {
-    let v = violations("egui", &["src/ui/"]);
+    let v = violations("egui", &["crates/gradiance-ui/src/"]);
     assert!(
         v.is_empty(),
-        "egui may only be referenced from src/ui/:\n{}",
+        "egui may only be referenced from crates/gradiance-ui/:\n{}",
         v.join("\n")
     );
 }
 
 #[test]
 fn steel_is_confined_to_the_script_layer() {
-    let v = violations("steel", &["src/script/"]);
+    let v = violations("steel", &["crates/gradiance-script/src/"]);
     assert!(
         v.is_empty(),
-        "the steel scripting engine may only be referenced from src/script/ \
-         (Tier-A authoring seam):\n{}",
+        "the steel scripting engine may only be referenced from \
+         crates/gradiance-script/ (Tier-A authoring seam):\n{}",
         v.join("\n")
     );
 }
 
 #[test]
 fn command_stack_is_only_driven_by_the_command_module() {
-    let v = violations("CommandStack", &["src/command/"]);
+    let v = violations("CommandStack", &["crates/gradiance-command/src/"]);
     assert!(
         v.is_empty(),
-        "CommandStack may only be touched inside src/command/ (dispatch is the choke point):\n{}",
+        "CommandStack may only be touched inside crates/gradiance-command/ \
+         (dispatch is the choke point):\n{}",
         v.join("\n")
     );
 }
@@ -97,18 +112,20 @@ fn command_stack_is_only_driven_by_the_command_module() {
 #[test]
 fn engine_facing_dependencies_stay_exact_pinned() {
     // Agent sessions must not drift engine APIs: bevy-adjacent crates are
-    // exact-pinned in Cargo.toml (`=x.y.z`). This holds the line the CI
-    // `cargo tree --duplicates` log only reports on.
-    let manifest = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
-    )
-    .expect("read Cargo.toml");
+    // exact-pinned (`=x.y.z`) in the workspace dependency table. Member
+    // manifests only say `workspace = true`, so the root table is the one
+    // place a pin can drift.
+    let manifest =
+        std::fs::read_to_string(repo_root().join("Cargo.toml")).expect("read Cargo.toml");
     let pinned = [
         "bevy",
         "avian2d",
         "bevy_egui",
         "leafwing-input-manager",
         "steel-core",
+        "egui-snarl",
+        "egui_tiles",
+        "egui_kittest",
     ];
     for name in pinned {
         let line = manifest
@@ -127,11 +144,18 @@ fn engine_facing_dependencies_stay_exact_pinned() {
 
 #[test]
 fn serialization_is_confined_to_authored_data() {
-    let allowed = ["src/domain/", "src/core/", "src/scene/", "src/persist/"];
+    let allowed = [
+        "crates/gradiance-domain/src/",
+        "crates/gradiance-core/src/",
+        "crates/gradiance-geometry/src/shape.rs",
+        "crates/gradiance-scene/src/",
+        "crates/gradiance-persist/src/",
+    ];
     let v = violations("Serialize", &allowed);
     assert!(
         v.is_empty(),
-        "Serde derives are only allowed on authored/persisted data (domain, core, snapshot, persist):\n{}",
+        "Serde derives are only allowed on authored/persisted data \
+         (domain, core, the shape tree, scene records, persist):\n{}",
         v.join("\n")
     );
 }

@@ -1,0 +1,17 @@
+[package]
+name = "gradiance-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance foundations: stable ids, units, constants, app states"
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy.workspace = true
+serde.workspace = true
+uuid.workspace = true
+# Features-only: enables the serde impls on the bevy math types (Vec2) that
+# `PosRot` serializes. Never imported directly.
+glam.workspace = true

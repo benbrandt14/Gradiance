@@ -29,6 +29,21 @@ future sessions don't re-litigate them.
 - `physics::queries`, `ui/reflect_grid.rs`, the command staging pattern,
   toolbar's label table: all have multiple real users / are presentational.
 
+## Fixed in the workspace-split round (2026-07-20, `docs/workspace-plan.md`)
+
+| Pattern | Location | Action |
+|---|---|---|
+| Save format split across two layers (`command::snapshot` records vs `persist::FORMAT_VERSION`/RON) — the `command ↔ persist` cycle | `command/snapshot.rs`, `persist/mod.rs` | One `gradiance-scene` package owns records + format + migrations |
+| Per-intent triple registration (`add_message` + `register_type` + dispatch arm ×17) | `command/{mod,dispatch}.rs` | One `command_intents!` table row per intent generates all three |
+| `EnvironmentRecord` field/capture/apply triplication (9 resources ×3 lists) | `command/snapshot.rs` | One declarative `environment_record!` macro |
+| Twin commands: `SpawnBodyCommand` ≡ `SpawnNodeCommand` | `command/spawn.rs` | Generic `SpawnCommand<R: AuthoredRecord>` |
+| Two hand-rolled message `drain` helpers | `command/dispatch.rs`, `persist/mod.rs` | Shared `core::messages::drain` |
+| Capture-serialize-write flow ×3 (save / snapshot / autosave) | `persist/mod.rs` | One `write_scene_file` |
+| `script ↔ signal` cycle through the Tier-B kernel | `script/kernel.rs` | Kernel is its own bottom crate; `signal → kernel` only |
+| `geometry → domain` (the "pure" layer importing `ShapeDef`) | `domain/shape.rs` | Shape tree moved into `gradiance-geometry`; `domain::shape` re-exports |
+| `interaction ↔ render` cycle through the overlay gizmo groups | `render/overlay.rs` | Groups live in `gradiance-interaction` (their writers); `render → interaction` is the one sanctioned upward-looking edge |
+| Dead dependencies: `clipper2`, `rand`, `rstest` (zero references) | `Cargo.toml` | Deleted (`glam` kept, documented as features-only: serde on bevy math types) |
+
 ## Follow-ups
 
 - Move `ui/plot.rs::joint_signals` behind `physics::queries` when the next

@@ -11,8 +11,8 @@
 
 use crate::harness::{box_record, paused_app};
 use bevy::prelude::*;
-use gradiance::scene::{JointRecord, SceneRecord};
 use gradiance::prelude::*;
+use gradiance::scene::{JointRecord, SceneRecord};
 use std::path::PathBuf;
 use uuid::Uuid;
 

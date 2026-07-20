@@ -2344,27 +2344,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clipper2"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88f87fde54c74a3f45d04e691a14deb3eaebc85c3c889d59eca9129aa3894c5a"
-dependencies = [
- "clipper2c-sys",
- "libc",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "clipper2c-sys"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0afb0f7cef3e89b98fb687395b7d12c70521871f3a876465641ed5aeb450b9a8"
-dependencies = [
- "cc",
- "libc",
-]
-
-[[package]]
 name = "codegen"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3373,12 +3352,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "037711b3d59c33004d3856fbdc83b99d4ff37a24768fa1be9ce3538a1cde4393"
 
 [[package]]
-name = "futures-timer"
-version = "3.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af43fadb8a98512d547e37b4e92e0ced13e205c061b87b4623eff01d918d6968"
-
-[[package]]
 name = "futures-util"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3660,24 +3633,200 @@ dependencies = [
  "avian2d",
  "bevy",
  "bevy_egui",
- "clipper2",
- "colorgrad",
- "egui-snarl",
  "egui_kittest",
- "egui_tiles",
- "glam 0.32.1",
- "leafwing-input-manager",
- "lyon",
+ "gradiance-command",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-geometry",
+ "gradiance-interaction",
+ "gradiance-kernel",
+ "gradiance-persist",
+ "gradiance-physics",
+ "gradiance-render",
+ "gradiance-scene",
+ "gradiance-script",
+ "gradiance-signal",
+ "gradiance-ui",
  "mimalloc",
  "proptest",
- "rand 0.9.4",
+ "uuid",
+]
+
+[[package]]
+name = "gradiance-command"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-geometry",
+ "gradiance-scene",
+ "gradiance-signal",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gradiance-core"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "glam 0.32.1",
+ "serde",
+ "uuid",
+]
+
+[[package]]
+name = "gradiance-domain"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "colorgrad",
+ "glam 0.32.1",
+ "gradiance-core",
+ "gradiance-geometry",
+ "serde",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "gradiance-geometry"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "glam 0.32.1",
+ "gradiance-core",
+ "lyon",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gradiance-interaction"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "gradiance-command",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-geometry",
+ "gradiance-persist",
+ "gradiance-physics",
+ "gradiance-scene",
+ "leafwing-input-manager",
+]
+
+[[package]]
+name = "gradiance-kernel"
+version = "0.2.0"
+dependencies = [
+ "proptest",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gradiance-persist"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "gradiance-command",
+ "gradiance-core",
+ "gradiance-scene",
  "rfd",
  "ron",
- "rstest",
  "serde",
+]
+
+[[package]]
+name = "gradiance-physics"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-geometry",
+]
+
+[[package]]
+name = "gradiance-render"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-geometry",
+ "gradiance-interaction",
+ "gradiance-physics",
+ "gradiance-signal",
+]
+
+[[package]]
+name = "gradiance-scene"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "glam 0.32.1",
+ "gradiance-core",
+ "gradiance-domain",
+ "ron",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gradiance-script"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "gradiance-command",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-geometry",
+ "gradiance-scene",
+ "gradiance-signal",
  "steel-core",
  "thiserror 2.0.18",
  "uuid",
+]
+
+[[package]]
+name = "gradiance-signal"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-kernel",
+ "gradiance-physics",
+]
+
+[[package]]
+name = "gradiance-ui"
+version = "0.2.0"
+dependencies = [
+ "avian2d",
+ "bevy",
+ "bevy_egui",
+ "egui-snarl",
+ "egui_kittest",
+ "egui_tiles",
+ "gradiance-command",
+ "gradiance-core",
+ "gradiance-domain",
+ "gradiance-geometry",
+ "gradiance-interaction",
+ "gradiance-persist",
+ "gradiance-physics",
+ "gradiance-scene",
+ "gradiance-script",
+ "gradiance-signal",
 ]
 
 [[package]]
@@ -6040,12 +6189,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "relative-path"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
-
-[[package]]
 name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6109,35 +6252,6 @@ dependencies = [
  "serde",
  "serde_derive",
  "typeid",
- "unicode-ident",
-]
-
-[[package]]
-name = "rstest"
-version = "0.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5a3193c063baaa2a95a33f03035c8a72b83d97a54916055ba22d35ed3839d49"
-dependencies = [
- "futures-timer",
- "futures-util",
- "rstest_macros",
-]
-
-[[package]]
-name = "rstest_macros"
-version = "0.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c845311f0ff7951c5506121a9ad75aec44d083c31583b2ea5a30bcb0b0abba0"
-dependencies = [
- "cfg-if",
- "glob",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "regex",
- "relative-path",
- "rustc_version",
- "syn",
  "unicode-ident",
 ]
 

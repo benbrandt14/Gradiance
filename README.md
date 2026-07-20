@@ -70,8 +70,10 @@ in `.cargo/config.toml`.
 
 ## Architecture
 
-One-way dataflow with a single mutation choke point, mechanically enforced
-by lints and `tests/boundaries.rs`:
+One-way dataflow with a single mutation choke point. Since the workspace
+split (`docs/workspace-plan.md`) every layer is its own package under
+`crates/`, so the boundaries are enforced by the dependency graph itself
+(plus lints and `tests/boundaries.rs`):
 
 ```
 tools / UI ──intents──▶ command dispatch ──▶ authored components
@@ -80,13 +82,19 @@ tools / UI ──intents──▶ command dispatch ──▶ authored components
                         (undo/redo)     (colliders, meshes, joints)
 ```
 
-- `src/domain/` — authored components; exactly what the save file contains.
-- `src/geometry/` — pure math (SDF trees, contouring, tessellation,
-  extrusion, snapping); no ECS imports.
-- `src/physics/` — the only module allowed to import `avian2d`.
-- `src/ui/` — the only module allowed to import `egui`.
-- `src/command/` — intents, commands, and snapshot records shared by undo
-  and persistence.
+- `crates/gradiance-domain` — authored components; exactly what the save
+  file contains.
+- `crates/gradiance-geometry` — the SDF shape tree and all 2D/2.5D math
+  (contouring, tessellation, extrusion, snapping).
+- `crates/gradiance-scene` — the save format: records shared by undo and
+  persistence, RON encode/decode, version migrations.
+- `crates/gradiance-command` — intents, undoable commands, the mutation
+  choke point.
+- `crates/gradiance-kernel` — the pure Tier-B numeric kernel (no bevy).
+- `crates/gradiance-ui` — the only package that may depend on `egui`;
+  `crates/gradiance-script` — the only one that may depend on `steel`.
+- The root `gradiance` package is the app shell: plugin group, prelude,
+  `main`, and the integration test suite.
 
 See `CLAUDE.md` for the full invariants and `docs/bevy19-notes.md` for
 verified Bevy 0.19 API notes.

@@ -1,0 +1,21 @@
+[package]
+name = "gradiance-domain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance authored components: the data model that is the save file"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-geometry.workspace = true
+avian2d.workspace = true
+bevy.workspace = true
+colorgrad.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+# Features-only: serde impls for the bevy math types the components serialize.
+glam.workspace = true

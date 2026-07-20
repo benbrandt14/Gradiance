@@ -1,0 +1,21 @@
+[package]
+name = "gradiance-interaction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance interaction: cursor, camera, selection, tools, snapping"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-command.workspace = true
+gradiance-domain.workspace = true
+gradiance-geometry.workspace = true
+gradiance-persist.workspace = true
+gradiance-physics.workspace = true
+gradiance-scene.workspace = true
+avian2d.workspace = true
+bevy.workspace = true
+leafwing-input-manager.workspace = true
