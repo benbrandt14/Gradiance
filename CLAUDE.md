@@ -131,7 +131,17 @@ cargo run --features dev                     # dev inner loop: dynamic linking +
 Shared lint policy lives in `[workspace.lints]` (root `Cargo.toml`); every
 member inherits it (`[lints] workspace = true`). Shared dependency versions
 live in `[workspace.dependencies]` — the exact-pin line is asserted by
-`tests/boundaries.rs`.
+`tests/boundaries.rs`, which also asserts the **crate DAG itself** (the
+layer diagram above, as data): adding a `gradiance-*` dependency edge to a
+member manifest requires a matching row in that test — a deliberate,
+reviewed architecture change, never a side effect.
+
+**CI owns the heavy checks — do not run these in an agent container:**
+coverage (instrumented builds; the `coverage` CI job runs `cargo llvm-cov`
+over the `coverage` profile with a 50%-lines floor) and the module-level
+`cargo coupling` report (informational CI job). CI builds run `--locked`:
+never regenerate `Cargo.lock` as a side effect; a lockfile diff is a
+reviewed change.
 
 Integration tests live in the single umbrella binary `tests/it/` of the root
 package (one Bevy-sized link instead of one per file) — add new integration

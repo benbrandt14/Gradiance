@@ -155,3 +155,13 @@ debug = "line-tables-only"
 
 [profile.dev.package."*"]
 opt-level = 3
+
+# Coverage runs (the CI `coverage` job; locally only via `cargo llvm-cov
+# --profile coverage` on a machine with room for instrumented artifacts):
+# dev-shaped, but dependencies at opt 0 — coverage accuracy does not depend
+# on dependency codegen, and the instrumented graph stays CI-sized.
+[profile.coverage]
+inherits = "dev"
+
+[profile.coverage.package."*"]
+opt-level = 0

@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# One live run per ref: an agent pushing fixups shouldn't queue stale builds.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -12,6 +17,14 @@ env:
 # to triage, never a gate; only lints that prove consistently right get
 # promoted to deny there. `-D warnings` below gates on rustc + the explicitly
 # denied clippy lints (unwrap/expect/panic/etc.).
+#
+# All cargo invocations run `--locked`: agent sessions must not drift the
+# resolved graph silently — a lockfile change is a reviewed diff, not a
+# side effect.
+#
+# Architecture/coupling enforcement lives in `tests/boundaries.rs` (crate
+# DAG, egui/steel confinement, serde confinement, exact pins) — it runs in
+# the main job. The `coupling` job is an informational report, not a gate.
 #
 # Unused-dependency sweep: `cargo udeps` is deliberately NOT run — it needs a
 # nightly toolchain plus a full extra build of a Bevy-sized graph per run,
@@ -49,21 +62,95 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
-      - name: Architecture boundaries
-        run: cargo test --test boundaries
+      - name: Architecture boundaries (crate DAG, confinement, pins)
+        run: cargo test --locked --test boundaries
 
       - name: Dependency duplicates (informational)
         # Holds the pinned-dep line: the boundaries test fails on unpinned
         # engine deps; this log shows any accidental duplicate-major drift
         # in the resolved graph for review.
-        run: cargo tree --duplicates --depth 1 -e normal || true
+        run: cargo tree --locked --duplicates --depth 1 -e normal || true
 
       - name: Docs (no broken links)
-        run: cargo doc --workspace --no-deps --lib
+        run: cargo doc --locked --workspace --no-deps --lib
         env:
           RUSTDOCFLAGS: -D warnings
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
+
+  coverage:
+    # Instrumented builds are too heavy for agent containers (see
+    # docs/workspace-plan.md § coverage baseline) — CI owns coverage.
+    # cargo-llvm-cov (not tarpaulin: tarpaulin force-appends -Cdebuginfo=2
+    # to the whole graph, which does not fit constrained disks) over the
+    # `coverage` profile (deps at opt 0 — instrumentation accuracy does not
+    # depend on dependency codegen).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: taiki-e/install-action@cargo-llvm-cov
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Coverage artifacts (instrument-coverage RUSTFLAGS) never match
+          # the main job's; keep them in their own cache line.
+          shared-key: coverage
+
+      - name: Coverage (floor 50% lines)
+        # The floor has headroom under the current 55.3% so it flags real
+        # regressions (a milestone landing large untested logic), not noise.
+        # UI/render draw paths are headless-blind and hold the total down —
+        # raise the floor as windowed testing lands, never chase 100%.
+        run: cargo llvm-cov --locked --workspace --profile coverage --fail-under-lines 50 --lcov --output-path lcov.info
+        env:
+          # cargo-llvm-cov appends to RUSTFLAGS; restate lld because the env
+          # var overrides .cargo/config.toml's target rustflags.
+          RUSTFLAGS: -C link-arg=-fuse-ld=lld
+
+      - name: Coverage summary
+        run: |
+          echo '## Coverage' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cargo llvm-cov report --summary-only >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: lcov.info
+          retention-days: 14
+
+  coupling:
+    # Informational only (continue-on-error): module-level coupling drift is
+    # a review signal, not a gate — the *crate*-level DAG is the enforced
+    # boundary (tests/boundaries.rs::the_crate_dag_matches_the_architecture).
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-coupling
+
+      - name: Coupling report
+        run: |
+          echo '## cargo-coupling report' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cargo coupling --ai --exclude-tests --no-git | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

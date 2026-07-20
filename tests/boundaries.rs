@@ -159,3 +159,152 @@ fn serialization_is_confined_to_authored_data() {
         v.join("\n")
     );
 }
+
+/// The `gradiance-*` dependency names a member manifest declares.
+fn member_gradiance_deps(manifest: &str) -> Vec<String> {
+    let mut deps: Vec<String> = manifest
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim_start();
+            l.strip_prefix("gradiance-")
+                .map(|rest| rest.split(['.', ' ', '=']).next().unwrap_or("").to_owned())
+        })
+        .collect();
+    deps.sort();
+    deps.dedup();
+    deps
+}
+
+#[test]
+fn the_crate_dag_matches_the_architecture() {
+    // The layer diagram from CLAUDE.md, as data. Cargo already enforces
+    // acyclicity and that *undeclared* edges do not compile; this test
+    // enforces the absence of legal-but-unwanted edges. Adding a
+    // `gradiance-*` dependency to a member manifest must come with a
+    // matching row change here — a deliberate, reviewed architecture
+    // decision, never a convenience side effect.
+    let allowed: &[(&str, &[&str])] = &[
+        (
+            "command",
+            &["core", "domain", "geometry", "scene", "signal"],
+        ),
+        ("core", &[]),
+        ("domain", &["core", "geometry"]),
+        ("geometry", &["core"]),
+        (
+            "interaction",
+            &[
+                "command", "core", "domain", "geometry", "persist", "physics", "scene",
+            ],
+        ),
+        ("kernel", &[]),
+        ("persist", &["command", "core", "scene"]),
+        ("physics", &["core", "domain", "geometry"]),
+        (
+            "render",
+            &[
+                "core",
+                "domain",
+                "geometry",
+                "interaction",
+                "physics",
+                "signal",
+            ],
+        ),
+        ("scene", &["core", "domain"]),
+        (
+            "script",
+            &["command", "core", "domain", "geometry", "scene", "signal"],
+        ),
+        ("signal", &["core", "domain", "kernel", "physics"]),
+        (
+            "ui",
+            &[
+                "command",
+                "core",
+                "domain",
+                "geometry",
+                "interaction",
+                "persist",
+                "physics",
+                "scene",
+                "script",
+                "signal",
+            ],
+        ),
+    ];
+
+    let crates_dir = repo_root().join("crates");
+    let mut members: Vec<String> = std::fs::read_dir(&crates_dir)
+        .expect("read crates/")
+        .map(|e| {
+            e.expect("dir entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter_map(|n| n.strip_prefix("gradiance-").map(str::to_owned))
+        .collect();
+    members.sort();
+    let expected: Vec<String> = allowed.iter().map(|(n, _)| (*n).to_owned()).collect();
+    assert_eq!(
+        members, expected,
+        "workspace members changed — update the DAG table (and CLAUDE.md)"
+    );
+
+    for (name, edges) in allowed {
+        let manifest_path = crates_dir
+            .join(format!("gradiance-{name}"))
+            .join("Cargo.toml");
+        let manifest = std::fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", manifest_path.display()));
+        let declared = member_gradiance_deps(&manifest);
+        let expected: Vec<String> = edges.iter().map(|e| (*e).to_owned()).collect();
+        assert_eq!(
+            declared, expected,
+            "gradiance-{name}'s dependency edges drifted from the architecture \
+             (CLAUDE.md layer diagram); change this table only as a deliberate \
+             architecture decision"
+        );
+    }
+}
+
+#[test]
+fn ui_and_script_stacks_stay_confined_in_manifests() {
+    // The source-text scans above catch imports; this catches the manifest
+    // half — declaring the dependency at all. The root manifest is exempt:
+    // its [workspace.dependencies] table *defines* the pins, and its
+    // dev-dependencies drive the whole app in the integration suite.
+    let confined: &[(&str, &str)] = &[
+        ("bevy_egui", "gradiance-ui"),
+        ("egui-snarl", "gradiance-ui"),
+        ("egui_tiles", "gradiance-ui"),
+        ("egui_kittest", "gradiance-ui"),
+        ("steel-core", "gradiance-script"),
+    ];
+    let crates_dir = repo_root().join("crates");
+    for entry in std::fs::read_dir(&crates_dir).expect("read crates/") {
+        let dir = entry.expect("dir entry").path();
+        let name = dir
+            .file_name()
+            .expect("crate dir")
+            .to_string_lossy()
+            .into_owned();
+        let manifest = std::fs::read_to_string(dir.join("Cargo.toml"))
+            .unwrap_or_else(|e| panic!("read {name}/Cargo.toml: {e}"));
+        for (dep, home) in confined {
+            if name != *home {
+                let declares = manifest.lines().any(|l| {
+                    let l = l.trim_start();
+                    l.starts_with(&format!("{dep} "))
+                        || l.starts_with(&format!("{dep}."))
+                        || l.starts_with(&format!("{dep}="))
+                });
+                assert!(
+                    !declares,
+                    "{name} declares `{dep}` — that stack is confined to {home}"
+                );
+            }
+        }
+    }
+}

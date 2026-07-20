@@ -159,7 +159,25 @@ kept-uncovered rationale are logged in `docs/desmell-log.md`.
 
 ## Verification
 
-The gate is unchanged: `cargo fmt --all -- --check`,
-`cargo clippy --all-targets -- -D warnings`, `cargo test`
-(workspace-wide), `cargo doc` with `-D warnings`. The integration suite
-runs against the root package exactly as before the split.
+The local gate is unchanged: `cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo test --workspace`, `cargo doc` with `-D warnings`. The integration
+suite runs against the root package exactly as before the split.
+
+CI additionally enforces what agents should not attempt locally:
+
+- **Crate DAG as data** — `tests/boundaries.rs` asserts every member's
+  `gradiance-*` dependency set against the architecture table, so a
+  legal-but-unwanted edge (one that would compile fine) still fails CI
+  until the table row is changed deliberately.
+- **Coverage floor** — the `coverage` job runs `cargo llvm-cov --workspace
+  --profile coverage --fail-under-lines 50` and publishes the lcov
+  artifact + summary. Instrumented builds roughly double artifact size;
+  they belong on CI runners, not in agent containers (tarpaulin
+  specifically cannot be used: it force-appends `-Cdebuginfo=2` to the
+  whole dependency graph).
+- **Coupling report** — an informational `cargo coupling --ai` job writes
+  the module-level report to the run summary; drift is reviewed, not
+  gated (the enforced boundary is the crate DAG).
+- **`--locked` everywhere** — lockfile drift fails loudly instead of
+  resolving silently mid-session.
