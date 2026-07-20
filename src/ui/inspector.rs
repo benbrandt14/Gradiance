@@ -2,10 +2,10 @@
 //!
 //! **Context-menu-first** (feedback 2.8): the property sections below are
 //! host-agnostic renderers shared by the right-click context menu (the
-//! primary editing surface) and the *Properties* pop-out window, which is
-//! closed by default and opened from the menu's "Properties…" command (or
-//! the toolbar toggle). One implementation, two hosts — the seam stays a
-//! typed intent either way.
+//! primary editing surface) and the *Properties* right-dock pane
+//! (`inspector_pane`), closed by default and toggled from the menu's
+//! "Properties…" command (or the View menu). One implementation, two hosts —
+//! the seam stays a typed intent either way.
 //!
 //! Every numeric field is a committing precision widget (scientific
 //! notation, middle-click default reset, one undo step per gesture).
@@ -27,17 +27,17 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
 
-/// Whether the *Properties* pop-out is showing. Closed by default —
+/// Whether the *Properties* dock pane is showing. Closed by default —
 /// the context menu is the first-line editing surface (feedback 2.8).
 #[derive(Resource, Default, Debug)]
 pub struct InspectorPanel {
-    /// Show the pop-out window.
+    /// Show the Properties dock pane.
     pub open: bool,
 }
 
 /// Everything the body-property sections read and write, bundled as one
-/// `SystemParam` so both hosts (context menu, pop-out) stay under Bevy's
-/// system-parameter limit.
+/// `SystemParam` so both hosts (context menu, Properties dock pane) stay under
+/// Bevy's system-parameter limit.
 #[derive(SystemParam)]
 pub struct BodyProps<'w, 's> {
     /// `StableId` lookup for intent targets (shared with the menu's own
@@ -71,7 +71,7 @@ pub struct BodyProps<'w, 's> {
     body_transforms: Query<'w, 's, &'static Transform, With<Body>>,
     /// Fixed timestep, for the impulse→force sensor readout.
     fixed: Res<'w, Time<Fixed>>,
-    /// Behavior-node kinds, so the pop-out edits a selected node instead of
+    /// Behavior-node kinds, so the Properties pane edits a selected node instead of
     /// rendering dead body-section headers (the freeze fix for nodes).
     node_kinds: Query<
         'w,
@@ -94,7 +94,7 @@ impl BodyProps<'_, '_> {
     }
 
     /// Renders `entity`'s live sensor-port readouts + plot toggles (shared by
-    /// the pop-out and the context menu). Encapsulates the read facade so hosts
+    /// the Properties pane and the context menu). Encapsulates the read facade so hosts
     /// don't touch the private query fields. No-op for an entity without a
     /// `StableId`.
     pub fn sensors(&mut self, ui: &mut egui::Ui, entity: Entity) {
@@ -643,7 +643,7 @@ pub(crate) fn inspector_pane(ui: &mut egui::Ui, selection: &Selection, props: &m
     inspector_body(ui, selection, props);
 }
 
-/// The pop-out's body, rendered per the *primary's* kind so a non-body
+/// The Properties body, rendered per the *primary's* kind so a non-body
 /// selection never shows dead section headers (the freeze fix): a rigid body
 /// gets the sensor readouts + property sections; a behavior node gets its kind
 /// editor; anything else gets a note rather than empty headers.
@@ -671,7 +671,7 @@ fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProp
         return;
     }
     // A behavior node: edit its kind here too (previously only reachable from
-    // the Signals dock / context menu — the pop-out showed dead headers).
+    // the Signals dock / context menu — the pane showed dead headers).
     if let Some((id, kind)) = props
         .ids
         .get(primary)

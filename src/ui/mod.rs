@@ -312,6 +312,42 @@ mod tests {
     }
 
     #[test]
+    fn empty_panels_leave_the_scene_rect_at_the_full_viewport() {
+        // No docks pushed → every inset falls back to the viewport edge, so the
+        // scene is the whole window (and scene_viewport is the full window).
+        let viewport = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(800.0, 600.0));
+        let panels = PanelRects::default();
+        assert_eq!(panels.scene_rect(viewport), viewport);
+    }
+
+    #[test]
+    fn the_insets_ignore_panels_on_the_wrong_edge() {
+        // Each inset only counts a panel actually docked to its edge: a
+        // full-height right dock must not be read as a bottom dock, and a small
+        // interior overlay (the view cube) must not inset any edge.
+        let viewport = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(800.0, 600.0));
+        let mut panels = PanelRects::default();
+        let right_dock = Rect::from_min_max(Pos2::new(560.0, 0.0), Pos2::new(800.0, 600.0));
+        let view_cube = Rect::from_min_max(Pos2::new(480.0, 30.0), Pos2::new(540.0, 90.0));
+        panels.push(right_dock);
+        panels.push(view_cube);
+        // The right dock touches the bottom edge but sits in the upper half →
+        // not a bottom dock; the view cube is interior → insets nothing.
+        assert!(
+            (panels.right_inset(viewport) - 560.0).abs() < 1e-4,
+            "right dock recognized"
+        );
+        assert!(
+            (panels.bottom_inset(viewport) - 600.0).abs() < 1e-4,
+            "full-height right dock is not a bottom dock"
+        );
+        assert!(
+            panels.top_inset(viewport).abs() < 1e-4,
+            "no top-docked panel"
+        );
+    }
+
+    #[test]
     fn scene_viewport_scales_to_physical_and_rejects_degenerate() {
         let scene = Rect::from_min_max(Pos2::new(0.0, 24.0), Pos2::new(560.0, 400.0));
         // scale_factor 2 → physical is doubled; position and size in px.

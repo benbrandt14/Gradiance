@@ -396,7 +396,7 @@ pub fn context_menu(
                 }
 
                 // Context-menu-first property editing (feedback 2.8):
-                // the everyday sections live here; the full pop-out is a
+                // the everyday sections live here; the full Properties pane is a
                 // command away.
                 if !selected_ids.is_empty() {
                     if ui.button("Properties…").clicked() {
