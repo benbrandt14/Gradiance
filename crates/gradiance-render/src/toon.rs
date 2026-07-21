@@ -102,11 +102,6 @@ mod tests {
         });
         assert_eq!(params.x, 1.0, "clamped to one band, not divide-by-zero");
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TOON_SHADER_PATH;
 
     /// The `ShaderRef` string and the `embedded_asset!` registration must
     /// agree; the registration path is derived from `module_path!()` (crate
