@@ -121,10 +121,12 @@ jobs:
           RUSTFLAGS: -C link-arg=-fuse-ld=lld
 
       - name: Coverage summary
+        # `report` reuses the profdata from the run above — it must name the
+        # same profile, or it searches the wrong target subdirectory.
         run: |
           echo '## Coverage' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cargo llvm-cov report --summary-only >> "$GITHUB_STEP_SUMMARY"
+          cargo llvm-cov report --profile coverage --summary-only >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
