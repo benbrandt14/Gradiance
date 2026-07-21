@@ -15,6 +15,11 @@ use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 use gradiance_domain::settings::RenderSettings;
 
+/// Where the [`install`]ed `embedded_asset!` registration puts the shader:
+/// `embedded://<crate underscore name>/<path from src/>`. Asserted against
+/// the macro's own computation in this file's tests.
+const TOON_SHADER_PATH: &str = "embedded://gradiance_render/toon.wgsl";
+
 /// The material every body renders with.
 pub type ToonMaterial = ExtendedMaterial<StandardMaterial, ToonExtension>;
 
@@ -29,7 +34,7 @@ pub struct ToonExtension {
 
 impl MaterialExtension for ToonExtension {
     fn fragment_shader() -> ShaderRef {
-        "embedded://gradiance-render/toon.wgsl".into()
+        TOON_SHADER_PATH.into()
     }
 }
 
@@ -96,5 +101,25 @@ mod tests {
             ..RenderSettings::default()
         });
         assert_eq!(params.x, 1.0, "clamped to one band, not divide-by-zero");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TOON_SHADER_PATH;
+
+    /// The `ShaderRef` string and the `embedded_asset!` registration must
+    /// agree; the registration path is derived from `module_path!()` (crate
+    /// name with underscores) + the file's location under `src/`, so a crate
+    /// rename or file move silently breaks the reference at runtime unless
+    /// this pins them together. Must live in this file (same `file!()` as
+    /// the registration in [`super::install`]).
+    #[test]
+    fn shader_ref_matches_the_embedded_registration() {
+        let registered = bevy::asset::embedded_path!("toon.wgsl");
+        assert_eq!(
+            format!("embedded://{}", registered.display()),
+            TOON_SHADER_PATH
+        );
     }
 }

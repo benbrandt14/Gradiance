@@ -25,6 +25,10 @@ use gradiance_domain::appearance::Appearance;
 use gradiance_domain::settings::ScenerySettings;
 use gradiance_domain::shape::ShapeDef;
 
+/// Where the `embedded_asset!` registration puts the shader (see
+/// `toon.rs::TOON_SHADER_PATH` for the derivation); asserted in tests.
+const PLANE_SHADER_PATH: &str = "embedded://gradiance_render/plane.wgsl";
+
 /// Half-extent of the plane quads — far beyond any navigable range; the
 /// shader's horizon fog ends the surface long before geometry does, and
 /// the camera's depth slab ([`DEPTH_SLAB`](gradiance_interaction::camera))
@@ -70,7 +74,7 @@ impl PlaneExtension {
 
 impl MaterialExtension for PlaneExtension {
     fn fragment_shader() -> ShaderRef {
-        "embedded://gradiance-render/plane.wgsl".into()
+        PLANE_SHADER_PATH.into()
     }
 }
 
@@ -175,5 +179,21 @@ pub fn sync_ground_planes(
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PLANE_SHADER_PATH;
+
+    /// Same pin as `toon.rs`: the `ShaderRef` string must match the path
+    /// the `embedded_asset!` registration in this file derives.
+    #[test]
+    fn shader_ref_matches_the_embedded_registration() {
+        let registered = bevy::asset::embedded_path!("plane.wgsl");
+        assert_eq!(
+            format!("embedded://{}", registered.display()),
+            PLANE_SHADER_PATH
+        );
     }
 }
