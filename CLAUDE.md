@@ -13,14 +13,20 @@ before the split. Dependency edges point strictly downward — a boundary
 violation is a **compile error**, not a review comment:
 
 ```text
-kernel → (nothing)                  core → bevy
-geometry → core                     domain → core, geometry
-scene → core, domain                physics → core, domain, geometry
+kernel → (nothing)                  units → (nothing, +bevy for Reflect)
+core → bevy                         geometry → core
+domain → core, geometry             scene → core, domain
+physics → core, domain, geometry, units
 signal → kernel, domain, physics    command → scene, signal (+ lower)
 persist → scene, command            interaction → command, persist (+ lower)
-render → interaction (+ lower)      script → command, signal (+ lower)
+render → interaction, units (+ lower)   script → command, signal (+ lower)
 ui → everything except render
 ```
+
+`gradiance-units` is the typed-SI-quantity crate (`docs/units-decision.md`):
+a bottom node with no `gradiance-*` deps but a minimal `bevy` surface (its
+quantity newtypes derive `Reflect`, like the geometry shape tree). It owns
+the single px↔SI seam `units::world` (`PIXELS_PER_METER`).
 
 Rationale, coupling data, and the roadmap→package feature tree:
 `docs/workspace-plan.md`.

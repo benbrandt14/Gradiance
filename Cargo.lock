@@ -3647,6 +3647,7 @@ dependencies = [
  "gradiance-script",
  "gradiance-signal",
  "gradiance-ui",
+ "gradiance-units",
  "mimalloc",
  "proptest",
  "uuid",
@@ -3749,6 +3750,7 @@ dependencies = [
  "gradiance-core",
  "gradiance-domain",
  "gradiance-geometry",
+ "gradiance-units",
 ]
 
 [[package]]
@@ -3763,6 +3765,7 @@ dependencies = [
  "gradiance-interaction",
  "gradiance-physics",
  "gradiance-signal",
+ "gradiance-units",
 ]
 
 [[package]]
@@ -3827,6 +3830,16 @@ dependencies = [
  "gradiance-scene",
  "gradiance-script",
  "gradiance-signal",
+]
+
+[[package]]
+name = "gradiance-units"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "glam 0.32.1",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

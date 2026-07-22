@@ -23,12 +23,12 @@ use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use gradiance_core::constants::PIXELS_PER_METER;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
 use gradiance_domain::field::{FieldFalloff, FieldSource};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::sdf;
+use gradiance_units::world::PIXELS_PER_METER;
 
 /// Acceleration magnitude clamp (keeps zero-distance fields sane).
 const MAX_FIELD_ACCEL: f32 = 5.0e4;

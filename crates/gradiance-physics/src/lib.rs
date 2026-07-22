@@ -19,8 +19,9 @@ pub mod queries;
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
-use gradiance_core::constants::{GRAVITY, PIXELS_PER_METER};
+use gradiance_core::constants::GRAVITY;
 use gradiance_core::states::GameState;
+use gradiance_units::world::PIXELS_PER_METER;
 
 /// Installs avian, maps app state to the physics clock, and registers the
 /// authored→engine sync systems.

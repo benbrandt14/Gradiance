@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 gradiance-core.workspace = true
+gradiance-units.workspace = true
 gradiance-domain.workspace = true
 gradiance-geometry.workspace = true
 avian2d.workspace = true

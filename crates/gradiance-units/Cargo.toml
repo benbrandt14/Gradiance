@@ -1,0 +1,20 @@
+[package]
+name = "gradiance-units"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance engineering units: typed SI quantities and the world-scale seam"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Minimal bevy surface (like gradiance-geometry): the quantity newtypes derive
+# `Reflect` so they are first-class authored-component values and read through
+# the scripting reflection bridge. No gradiance dependencies -- this is a
+# bottom-of-the-graph crate.
+bevy.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+# Features-only: serde impls for the bevy math types the vector quantities wrap.
+glam.workspace = true

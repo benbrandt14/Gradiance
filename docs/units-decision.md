@@ -52,8 +52,12 @@ cleanly along one line — **what gets stored/reflected vs. what does
 conversion math.**
 
 Stored/queried/catalog quantities are our own `#[repr(transparent)]`
-newtypes over `f32`, holding a **base-SI** value, in a new pure crate
-`gradiance-units` (no bevy; sits beside `gradiance-kernel`). Examples:
+newtypes over `f32`, holding a **base-SI** value, in a new crate
+`gradiance-units`. It is a bottom node with no `gradiance-*` deps, but —
+unlike `gradiance-kernel` — carries a **minimal `bevy` surface** so the
+quantities can `#[derive(Reflect)]` and live in authored components (the
+same rationale as `gradiance-geometry`'s shape tree); `kernel` stays the
+only fully-pure crate. Examples:
 `Length`, `Area`, `Angle`, `Mass`, `Density`, `Velocity`, `Acceleration`,
 `Force`, `Torque`, `Stiffness`, `Damping`, `Frequency`, plus `Vec2`-shaped
 `Displacement`/`Velocity2`/`Force2`. Arithmetic relations we actually use
@@ -155,11 +159,12 @@ dedicated path — keep the door open.* So this pass includes:
 ## Architecture
 
 ```text
-gradiance-units  (NEW, pure — beside gradiance-kernel at the bottom)
-  ├─ quantity.rs   typed newtypes (base-SI f32) + the arithmetic we use
+gradiance-units  (NEW — bottom node, no gradiance deps, minimal bevy)
+  ├─ quantity.rs   typed newtypes (base-SI f32/Vec2) + the arithmetic we use
   ├─ dimension.rs  Dimension enum → canonical unit + formatter/parser
   ├─ mass.rs       mass_of(Density, Area) — the ONE density×geometry seam
-  └─ catalog.rs    PhysicalQuantity registry (name·dimension·reader-key)
+  ├─ world.rs      PIXELS_PER_METER + SI⇄px conversions (the one scale seam)
+  └─ catalog.rs    PhysicalQuantity registry (name·dimension·reader) — P3
 
 gradiance-core
   └─ world.rs      WorldScale (PIXELS_PER_METER) — the ONE px↔SI seam.

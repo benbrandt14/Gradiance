@@ -156,7 +156,7 @@ pub fn sync_ground_planes(
             normal.extend(0.0),
             normal.dot(pose.pos),
             clear.0,
-            gradiance_core::constants::PIXELS_PER_METER,
+            gradiance_units::world::PIXELS_PER_METER,
         ));
         // Grounds render through this material, not the body toon material.
         commands

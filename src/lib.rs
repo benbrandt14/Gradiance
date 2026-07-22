@@ -92,6 +92,7 @@ pub use gradiance_scene as scene;
 pub use gradiance_script as script;
 pub use gradiance_signal as signal;
 pub use gradiance_ui as ui;
+pub use gradiance_units as units;
 
 pub mod prelude;
 

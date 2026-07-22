@@ -4,8 +4,8 @@
 //! implementation — scenes, physics feel, and the 2.5D depth mapping all
 //! depend on them. Change them only as a deliberate, versioned decision.
 
-/// World-space pixels per simulated meter.
-pub const PIXELS_PER_METER: f32 = 100.0;
+// `PIXELS_PER_METER` moved to `gradiance_units::world` — the pixel↔SI scale
+// is a units concern and is confined to that one seam (tests/boundaries.rs).
 
 /// Default gravity in world units (pixels) per second squared.
 pub const GRAVITY: bevy::math::Vec2 = bevy::math::Vec2::new(0.0, -1000.0);
