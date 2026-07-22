@@ -94,6 +94,22 @@ never `signal → script`).
 - [ ] Autosave-on-interval (only exit autosave today)
 - [ ] Scene thumbnails / metadata for a future open-dialog gallery
 
+## Cross-cutting: engineering units (SI) — `docs/units-decision.md`
+
+A workspace-wide pass making every physical quantity a typed SI value
+(`gradiance-units` crate), with a single px↔SI seam and a
+`PhysicalQuantity` catalog that sensors, plotters, and scripts share.
+Sequenced P1–P5 in the decision doc; the sensor/plotter quantity catalog
+and UI SI display ride along, and it unblocks the units-aware pieces of
+material-property editing (§1), plotters (§3), and the parameter-linking
+DSL (§4).
+
+- [ ] P1 `gradiance-units` + `core::world` seam (confine `PIXELS_PER_METER`)
+- [ ] P2 retype geometry/physics/domain (typed, pixel-stored)
+- [ ] P3 `PhysicalQuantity` catalog + signal/plotter binding
+- [ ] P4 inspector/settings SI display + input
+- [ ] P5 scene format v6 (SI-stored) + true-3D density (depth ⇒ mass)
+
 ## Maintenance
 
 - Architecture contract: `CLAUDE.md` (package-fenced invariants).
