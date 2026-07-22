@@ -134,7 +134,11 @@ dedicated path — keep the door open.* So this pass includes:
   extensibility keystone: adding a quantity is one row, like the
   `command_intents!` table and the scripting operation registry. Units, P2
   sensors, and plotter/tracer axes all bind to it; `SignalSource`'s variants
-  become catalog lookups.
+  become catalog lookups. **Readers take a *set* of `StableId`s** (0/1/2/N),
+  not a fixed arity — so single-body (`Speed`), pair (`Distance`), and future
+  **grouped-node aggregates** (average/min/max over a selection — a horizon
+  item) are all the same shape. Building this set-capable now avoids a
+  single-body-only rework later.
 - **UI SI display + input** — inspector/settings render unit-labelled SI and
   parse SI input, via `units::format`/`parse`. A workstation unit-system
   display toggle (SI ⇄ alias) is a display resource, not authored state.
@@ -191,6 +195,25 @@ check that `PIXELS_PER_METER` is named only in `core::world`.
 - **Never** reintroduce a bare `f32` for a dimensional value in authored or
   UI-facing code — a boundary test scans `domain` records for non-allowlisted
   `f32` fields, mirroring the serde-confinement test.
+
+## Forward compatibility — horizon items this pass must not wall off
+
+Three larger directions are on the roadmap horizon (unscheduled, `ROADMAP.md`
+§ Horizon). This pass is planned so each lands as an extension, not a rewrite:
+
+- **Full 3D / multiple simulation planes.** The `units::mass_of(Density,
+  Area)` seam is the density-dimension cut-point (2D→3D is one function + one
+  `dimension.rs` line), and `core::world::WorldScale` is where per-plane
+  transforms compose. Typed quantities are already dimension-only, not
+  plane-bound, so a second plane adds a frame at the seam, not new scalar
+  types.
+- **Grouped node behaviors.** Handled by the set-valued catalog readers
+  above; an aggregate is a reader over a `SelectionGroup`'s ids, its result
+  carrying the member quantity's dimension.
+- **CAD kernel front-end.** Dimensioned constraints are unit-bearing, so
+  typed `Length`/`Angle` and the DSL parse layer (P6, external crate behind
+  the API) are direct enablers; a CAD front end *produces* `ShapeDef` geometry
+  above `gradiance-geometry` and shares the coordinate-frames path.
 
 ## Phasing (each phase leaves fmt+clippy+test green)
 

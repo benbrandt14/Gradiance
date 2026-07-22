@@ -114,6 +114,31 @@ units-aware pieces of material-property editing (§1) and plotters (§3).
 - [ ] (dedicated path) arbitrary coordinate frames — `docs/frames-decision.md`,
       door held open by the frame-agnostic catalog + `WorldScale` seam
 
+## Horizon — larger directions (design goals, not scheduled)
+
+Not planned for a near milestone; recorded so current work doesn't foreclose
+them and cross-cutting passes leave the right seams.
+
+- **CAD kernel front-end.** A parametric / constraint-based modeling front end
+  that *produces* `ShapeDef` geometry (extends the sketch + constraint items in
+  §2; builds on `docs/sdf-geometry-decision.md`). Dimensioned constraints are
+  unit-bearing, so the engineering-units pass (typed `Length`/`Angle`, the DSL
+  parse layer) is a direct enabler; sketch planes/datums tie into coordinate
+  frames.
+- **Grouped node behaviors.** Behavior nodes that reduce over a selection/group
+  — average / min / max / sum of a quantity across bodies (extends §3 signals +
+  the behavior-node model). Consumes the `PhysicalQuantity` catalog: an
+  aggregate is a catalog reader over a *set* of `StableId`s — the catalog is
+  built set-capable for exactly this (`docs/units-decision.md`) — bound to the
+  existing `SelectionGroup`.
+- **Full 3D (multiple simulation planes).** Generalizes the 2.5D model (one XY
+  avian world + `DepthBand` / `INTERACTION_PLANE_Z`) to multiple simulation
+  planes and, ultimately, real 3D. The largest structural item: it swaps the
+  physics layer (avian2d → 3D), generalizes depth→volume, and is the consumer
+  of the units pass's 3D-ready seams (`units::mass_of`, `core::world::
+  WorldScale`) and the coordinate-frames path. `INTERACTION_PLANE_Z` and the
+  `mass_of` density seam are deliberately the parameterization points.
+
 ## Maintenance
 
 - Architecture contract: `CLAUDE.md` (package-fenced invariants).
