@@ -12,7 +12,7 @@
 //! seam that dispatches through intents/settings resources builds on top of
 //! it.
 
-use bevy::reflect::{GetPath, PartialReflect, Reflect, ReflectRef};
+use bevy::reflect::{GetPath, PartialReflect, Reflect, ReflectMut, ReflectRef};
 use steel::rvals::SteelVal;
 
 /// Why a reflect-path write could not be applied.
@@ -26,10 +26,28 @@ pub enum BridgeError {
     UnsupportedLeaf(String),
 }
 
+/// Unwraps a dimensional newtype — a single-field tuple struct like
+/// `Mass(f32)`, the shape every `gradiance-units` quantity takes — to its
+/// inner value, recursively (nested newtypes), so the read/write paths treat
+/// a typed quantity as the scalar it wraps. Non-newtypes (named structs,
+/// multi-/zero-field tuple structs, and `#[reflect(opaque)]` handles like
+/// `StableId`/`ShapeDef`) are returned unchanged, so opaque handles still
+/// degrade to `Void` by design.
+fn unwrap_newtype(value: &dyn PartialReflect) -> &dyn PartialReflect {
+    if let ReflectRef::TupleStruct(ts) = value.reflect_ref()
+        && ts.field_len() == 1
+        && let Some(inner) = ts.field(0)
+    {
+        return unwrap_newtype(inner);
+    }
+    value
+}
+
 /// A reflected leaf scalar -> a steel value, if it is a supported scalar
-/// (`f32`, `f64`, `u32`, `i32`, `bool`).
+/// (`f32`, `f64`, `u32`, `i32`, `bool`) — unwrapping a dimensional newtype
+/// wrapper first.
 pub fn scalar_to_steel(leaf: &dyn PartialReflect) -> Option<SteelVal> {
-    let any = leaf.try_as_reflect()?.as_any();
+    let any = unwrap_newtype(leaf).try_as_reflect()?.as_any();
     any.downcast_ref::<f32>()
         .map(|v| SteelVal::NumV(f64::from(*v)))
         .or_else(|| any.downcast_ref::<f64>().map(|v| SteelVal::NumV(*v)))
@@ -49,6 +67,7 @@ pub fn scalar_to_steel(leaf: &dyn PartialReflect) -> Option<SteelVal> {
 /// plotter or script uses. Unsupported leaves become `Void` rather than
 /// failing the whole read.
 pub fn reflect_to_steel(value: &dyn PartialReflect) -> SteelVal {
+    let value = unwrap_newtype(value);
     match value.reflect_ref() {
         ReflectRef::Struct(s) => {
             let pairs: Vec<SteelVal> = (0..s.field_len())
@@ -73,7 +92,8 @@ pub fn reflect_to_steel(value: &dyn PartialReflect) -> SteelVal {
 /// satisfy it). Returns `None` if the path is missing or the leaf is not a
 /// numeric scalar.
 pub fn read_path<T: Reflect>(root: &T, path: &str) -> Option<f64> {
-    let any = root.reflect_path(path).ok()?.try_as_reflect()?.as_any();
+    let leaf = unwrap_newtype(root.reflect_path(path).ok()?);
+    let any = leaf.try_as_reflect()?.as_any();
     any.downcast_ref::<f32>()
         .map(|v| f64::from(*v))
         .or_else(|| any.downcast_ref::<f64>().copied())
@@ -82,22 +102,38 @@ pub fn read_path<T: Reflect>(root: &T, path: &str) -> Option<f64> {
 }
 
 /// Write an `f64` onto the scalar at a reflect path, coercing to the leaf's
-/// concrete type (`f32`/`f64`/`u32`/`i32`/`bool`) by trying each candidate
-/// apply. Never names a field, so it works for any reflected type.
+/// concrete type (`f32`/`f64`/`u32`/`i32`/`bool`) and descending through a
+/// dimensional newtype wrapper (`Mass(f32)`) to its inner scalar. Never names
+/// a field, so it works for any reflected type.
 pub fn write_path<T: Reflect>(root: &mut T, path: &str, val: f64) -> Result<(), BridgeError> {
     let leaf = root
         .reflect_path_mut(path)
         .map_err(|_| BridgeError::Path(path.to_string()))?;
-    if leaf.try_apply(&(val as f32) as &dyn PartialReflect).is_ok()
+    apply_scalar(leaf, val).map_err(|()| BridgeError::UnsupportedLeaf(path.to_string()))
+}
+
+/// Applies `val` to a scalar leaf, or descends one level into a single-field
+/// tuple-struct newtype and applies to its inner field (recursively).
+fn apply_scalar(leaf: &mut dyn PartialReflect, val: f64) -> Result<(), ()> {
+    if try_apply_scalar(leaf, val) {
+        return Ok(());
+    }
+    if let ReflectMut::TupleStruct(ts) = leaf.reflect_mut()
+        && ts.field_len() == 1
+        && let Some(inner) = ts.field_mut(0)
+    {
+        return apply_scalar(inner, val);
+    }
+    Err(())
+}
+
+/// Tries each supported scalar type in turn; `true` if one applied.
+fn try_apply_scalar(leaf: &mut dyn PartialReflect, val: f64) -> bool {
+    leaf.try_apply(&(val as f32) as &dyn PartialReflect).is_ok()
         || leaf.try_apply(&val as &dyn PartialReflect).is_ok()
         || leaf.try_apply(&(val as u32) as &dyn PartialReflect).is_ok()
         || leaf.try_apply(&(val as i32) as &dyn PartialReflect).is_ok()
         || leaf.try_apply(&(val != 0.0) as &dyn PartialReflect).is_ok()
-    {
-        Ok(())
-    } else {
-        Err(BridgeError::UnsupportedLeaf(path.to_string()))
-    }
 }
 
 /// Coerce a numeric-ish steel value to `f64` (integer, float, or boolean).
@@ -119,6 +155,48 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use steel::steel_vm::engine::Engine;
     use steel::steel_vm::register_fn::RegisterFn;
+
+    /// A dimensional-newtype stand-in — the exact shape every `gradiance-units`
+    /// quantity (`Length`, `Mass`, …) will take: a `#[derive(Reflect)]` newtype
+    /// over `f32`.
+    #[derive(bevy::reflect::Reflect, Clone, Copy, PartialEq, Debug)]
+    struct SpikeMass(f32);
+
+    #[derive(bevy::reflect::Reflect, Clone, Debug)]
+    struct SpikeBody {
+        mass: SpikeMass,
+        count: u32,
+    }
+
+    #[test]
+    fn dimensional_newtypes_read_and_write_as_scalars() {
+        // P0 of the engineering-units pass: a typed quantity newtype must be
+        // read-total-native — read, written, and dumped as a plain number, by
+        // its field name (no `.0` suffix) and never as `Void`. This is what
+        // keeps typed quantities from fighting the scripting reflection bridge.
+        let mut body = SpikeBody {
+            mass: SpikeMass(2.5),
+            count: 3,
+        };
+
+        // Read the newtype by plain field name; a bare scalar still reads too.
+        assert_eq!(read_path(&body, "mass"), Some(2.5));
+        assert_eq!(read_path(&body, "count"), Some(3.0));
+
+        // Write descends through the newtype wrapper.
+        write_path(&mut body, "mass", 4.0).expect("newtype writable");
+        assert_eq!(body.mass, SpikeMass(4.0));
+
+        // The newtype dumps as its number, not `Void`.
+        assert!(matches!(
+            reflect_to_steel(&body.mass as &dyn PartialReflect),
+            SteelVal::NumV(v) if (v - 4.0).abs() < 1e-9
+        ));
+        assert!(matches!(
+            scalar_to_steel(&body.mass as &dyn PartialReflect),
+            Some(SteelVal::NumV(v)) if (v - 4.0).abs() < 1e-9
+        ));
+    }
 
     #[test]
     fn steel_drives_real_sim_settings_through_reflection() {
