@@ -97,18 +97,22 @@ never `signal → script`).
 ## Cross-cutting: engineering units (SI) — `docs/units-decision.md`
 
 A workspace-wide pass making every physical quantity a typed SI value
-(`gradiance-units` crate), with a single px↔SI seam and a
-`PhysicalQuantity` catalog that sensors, plotters, and scripts share.
-Sequenced P1–P5 in the decision doc; the sensor/plotter quantity catalog
-and UI SI display ride along, and it unblocks the units-aware pieces of
-material-property editing (§1), plotters (§3), and the parameter-linking
-DSL (§4).
+(reflection-native newtypes in a new `gradiance-units` crate), with a
+single px↔SI seam (`core::world`) and a `PhysicalQuantity` catalog that
+sensors, plotters, and scripts share. Persistence revs to **v6** to store
+SI. Density stays **2D areal** (kg/m²) — built for a future 3D jump behind
+one `mass_of` seam, but no physics-behaviour change now. Unblocks the
+units-aware pieces of material-property editing (§1) and plotters (§3).
 
+- [ ] P0 reflection spike + bridge newtype-unwrap (settles reflection first)
 - [ ] P1 `gradiance-units` + `core::world` seam (confine `PIXELS_PER_METER`)
-- [ ] P2 retype geometry/physics/domain (typed, pixel-stored)
-- [ ] P3 `PhysicalQuantity` catalog + signal/plotter binding
+- [ ] P2 retype geometry/physics/domain; `physics::queries` returns quantities
+- [ ] P3 `PhysicalQuantity` catalog + signal/plotter binding (unit axes)
 - [ ] P4 inspector/settings SI display + input
-- [ ] P5 scene format v6 (SI-stored) + true-3D density (depth ⇒ mass)
+- [ ] P5 scene format v6 (SI-stored) + units-only v5→v6 migration
+- [ ] P6 units in the parameter-linking / expression DSL
+- [ ] (dedicated path) arbitrary coordinate frames — `docs/frames-decision.md`,
+      door held open by the frame-agnostic catalog + `WorldScale` seam
 
 ## Maintenance
 

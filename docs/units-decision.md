@@ -1,9 +1,10 @@
 # Engineering units — design decision & phased plan
 
-Status: **proposed** (planning artifact for the units pass). The four
-shaping decisions below were chosen as recommended defaults in the absence
-of a ruling; each is marked **(revisable)** and can be flipped without
-rewriting the whole plan — the phasing isolates the risky ones.
+Status: **accepted (directional)**. The four shaping decisions below were
+ruled by the owner; this revision records them and the evidence behind the
+representation choice. Physics-behaviour is deliberately held constant this
+pass (2D density), so the only behaviour-adjacent step is a units-only save
+migration.
 
 ## Why now
 
@@ -19,16 +20,12 @@ quantity is a bare `f32`/`Vec2` whose unit lives only in a doc comment:
   `−1000` px/s²), but `PIXELS_PER_METER` also appears inside force/field
   math (`REFERENCE_FIELD_MASS = PIXELS_PER_METER²`, falloff divides by it).
   The scale is not confined to a seam.
-- **Depth is physically inert.** Bodies carry a real thickness
-  (`DepthBand{near,far}`) but `ColliderDensity` is treated as 2D areal, so
-  a thicker body does not weigh more.
-- **The roadmap needs it.** Sensors ("proximity and force"), plotters
-  (axes need units), parameter-linking ("restitution based on proximity …
-  math/functional notation in menus"), and material-property editing all
-  consume physical quantities. Built ad-hoc, each re-invents unit handling;
-  built once, they share a substrate.
+- **The roadmap needs it.** Sensors ("proximity and force"), plotters (axes
+  need units), parameter-linking ("restitution based on proximity … math
+  in menus"), and material-property editing all consume physical
+  quantities. Built once, they share a substrate.
 
-## Current unit inventory (what exists, implicitly)
+## Current unit inventory
 
 | Quantity | Today | SI target |
 |---|---|---|
@@ -37,176 +34,199 @@ quantity is a bare `f32`/`Vec2` whose unit lives only in a doc comment:
 | linear velocity | px/s | m/s |
 | angular velocity | rad/s | rad/s |
 | acceleration, gravity | px/s² | m/s² |
-| mass | kg·(px-based) via density×area | kilogram (kg) |
-| density (`ColliderDensity`) | mass / px² | kg/m³ (see decision 3) |
+| mass | derived: density × area | kilogram (kg) |
+| density (`ColliderDensity`) | mass / px² | **kg/m² (areal — decision 3)** |
 | force (`ContactForce`) | impulse/dt, px-mass units | newton (N) |
-| torque | — (implicit) | N·m |
+| torque | implicit | N·m |
 | friction, restitution, gravity_scale, `speed` | dimensionless | dimensionless |
 | timestep (`timestep_hz`) | Hz | Hz (1/s) |
 | spring stiffness / damping (M20 struts) | avian compliance/damping | N/m, N·s/m |
 
-## The four shaping decisions
+## The four rulings
 
-### 1. Representation → **hand-rolled typed quantities** (revisable)
+### 1. Representation → **reflection-native newtypes; external crate stays behind the API**
 
-A curated set of `#[repr(transparent)]` newtypes over `f32`, each storing a
-**base SI value**, in a new pure crate `gradiance-units` (no bevy; sits
-beside `gradiance-kernel` at the bottom of the graph). Examples: `Length`,
-`Area`, `Volume`, `Angle`, `Mass`, `Density`, `Velocity`, `AngularVelocity`,
-`Acceleration`, `Force`, `Torque`, `Stiffness`, `Damping`, `Frequency`,
-plus `Vec2`-shaped `Displacement`/`Velocity2`/`Accel2`/`Force2`.
+Owner intent: *use external crates as building blocks, but nothing may
+fight the reflection features.* The evidence says those two goals split
+cleanly along one line — **what gets stored/reflected vs. what does
+conversion math.**
 
-Arithmetic relations we actually use get explicit operator impls
-(`Force = Mass * Acceleration`, `Area = Length * Length`,
-`Mass = Density * Volume`), so the common paths are dimension-checked
-without needing nightly `generic_const_exprs`.
+Stored/queried/catalog quantities are our own `#[repr(transparent)]`
+newtypes over `f32`, holding a **base-SI** value, in a new pure crate
+`gradiance-units` (no bevy; sits beside `gradiance-kernel`). Examples:
+`Length`, `Area`, `Angle`, `Mass`, `Density`, `Velocity`, `Acceleration`,
+`Force`, `Torque`, `Stiffness`, `Damping`, `Frequency`, plus `Vec2`-shaped
+`Displacement`/`Velocity2`/`Force2`. Arithmetic relations we actually use
+get explicit operator impls (`Force = Mass * Acceleration`,
+`Area = Length * Length`) — dimension-checked on the common paths without
+nightly `generic_const_exprs`.
 
-- **Rejected: `uom`.** Its generic `Quantity<Dimension, Units, V>` is
-  powerful but fights the three seams this codebase is built on —
-  `bevy_reflect` derives (authored components must reflect), serde/RON
-  persistence, and the scripting reflection bridge (spike 1). The
-  integration tax outweighs the dimensional-analysis win for our finite
-  quantity set.
-- **Rejected: runtime-metadata-only.** Keeps bare `f32`; no compile-time
-  safety — the exact failure mode we're removing.
+**Why not store an external crate's quantity directly — the reflection
+evidence.** The scripting bridge (`gradiance-script/reflect_bridge.rs`,
+the "reads are total" path) reads values by `downcast`/`try_apply` against
+concrete `f32`/`f64`/`u32`/`i32`/`bool`, and `reflect_to_steel` recurses
+only into `ReflectRef::Struct`. Two consequences, read straight from that
+code:
 
-Each newtype derives `Clone, Copy, PartialEq, Serialize, Deserialize,
-Reflect` (opaque where needed) so it drops into authored components and
-records unchanged.
+- A `uom`-style `Quantity<…>` is not `Reflect` at all → can't be an
+  authored field, and would degrade to `Void` for scripts/plotters. This is
+  exactly the reflection fight to avoid, so the crate is **excluded from
+  reflected/persisted types.**
+- Even our own newtype is a **tuple struct**, which today falls through
+  `reflect_to_steel` to `Void`, and `read_path("mass")` misses unless you
+  write `"mass.0"`. So newtypes need a **small, one-file bridge change**:
+  teach `scalar_to_steel`/`read_path`/`write_path`/`reflect_to_steel` to
+  unwrap a single-field tuple struct to its inner scalar. After that,
+  newtypes read as plain numbers — full strong typing, no permanent fight.
+  This change is part of the pass (P0).
 
-### 2. Source of truth → **SI-authored, reached in two phases** (revisable)
+An external units crate is **welcomed as an internal building block** for
+the parse/format/dimensional-conversion layer — user unit entry ("3 cm",
+"5 lb/ft") and future dimensional-heavy derivations — used *behind* the
+`gradiance-units` API and never appearing in a reflected or serialized
+field. It is adopted when the in-scope DSL-units work (P6) needs
+multi-unit parsing, not pulled in speculatively; base-SI-only conversions
+until then are trivial and hand-written. (Candidate crates evaluated at
+that point; the API is designed so the choice is swappable.)
 
-End-state: **save files store base SI** (m, kg, N); pixels are a
-render/pick concern only. This is the principled target — "authored state
-*is* the save file," so the save file should be in engineering units, and
-the DSL/scripts then see SI natively.
+### 2. Source of truth → **SI-authored; persistence revved (format v6)**
 
-But flipping storage is a scene-format break, so we **stage** it to keep
-each step green:
+Owner intent: *take advantage of the strong typing, which means revving
+persistence to accommodate.* So the typed quantities are the **stored**
+representation — records serialize each newtype as its base-SI scalar — and
+the scene format revs to **v6**. Pixels become a render/pick concern,
+reached only through the one conversion seam.
 
-- **Phase A — typed, still pixel-stored.** Introduce `gradiance-units` and
-  retype the code paths; the stored/authored numbers stay world-units, with
-  a single conversion seam (`world::WorldScale`) at the avian boundary and
-  at UI/script/IO edges. Zero format change; fully reversible.
-- **Phase B — flip storage to SI.** Scene format **v6**: records store SI;
-  a v5→v6 migration multiplies stored lengths by `1/PIXELS_PER_METER`, etc.
-  The conversion seam moves to *only* the avian boundary (render reads SI
-  and scales for draw). This is the one migration-bearing step and is
-  isolated so it can be scheduled/deferred independently.
+- `core::world::WorldScale` (`PIXELS_PER_METER`) is the **single** px↔SI
+  seam: `to_world(Length) -> f32 px` / `from_world(px) -> Length`.
+  `PIXELS_PER_METER` is removed from physics/field math and made reachable
+  only through `core::world` (enforced like `CommandStack` confinement).
+- **v5→v6 migration** is units-only: stored lengths ×`1/PIXELS_PER_METER`,
+  velocities likewise, gravity px/s²→m/s², density px→areal-SI
+  (× `PIXELS_PER_METER²`, see decision 3). No topology or component change,
+  so it is low-risk and fully round-trip testable.
 
-This ordering means the risky part (a) is opt-in and (b) lands after the
-typed layer has proven itself against the test suite.
+The rollout is still incremental (each phase green), but unlike the earlier
+draft there is **no interim pixel-stored phase** — the persistence rev is
+committed, because the strong typing is the point.
 
-### 3. 2.5D density → **true 3D density, mass-preserving migration** (revisable)
+### 3. Density → **2D areal (kg/m²) now; built to jump to 3D later**
 
-Density becomes **kg/m³** and `mass = density × area × thickness`, where
-`thickness = (far − near)` from the `DepthBand`. Depth stops being inert —
-a deeper body weighs more, which is what "engineering units" should mean
-for a 2.5D tool and unlocks realistic buoyancy/pressure later.
+Owner ruling: *2D density only; be broadly prepared for a future 3D jump,
+but we're not there yet.* Density stays **areal, kg/m²**, and the depth
+band stays inert for mass — **no physics-behaviour change** this pass.
 
-Behaviour-change guard: the v5→v6 migration is **mass-preserving** —
-each body's new `density_3d` is back-computed so its effective mass equals
-what the old areal density produced, so existing scenes feel identical
-until a user deliberately edits depth or density. New-body defaults are
-retuned to sensible real materials (≈ water, 1000 kg/m³, as the `1.0`
-analogue).
+The single future-proofing requirement: mass is computed in **one place**,
+`units::mass_of(density: Density, area: Area) -> Mass`, and nothing else
+multiplies density by geometry. A future 3D jump is then a localized edit —
+change that one function to `density_3d × area × thickness(DepthBand)` and
+swap the `Density` dimension kg/m²→kg/m³ — without touching call sites.
+`Density`'s dimension is defined so that swap is a one-line change in
+`dimension.rs`.
 
-- **Rejected: keep 2D areal (kg/m²).** Simpler and no behaviour change, but
-  wastes the depth band and leaves mass disconnected from the 2.5D model
-  the whole tool is built around.
+### 4. Cross-cutting bundle → **all four; coordinate frames on its own path**
 
-### 4. Cross-cutting bundle (revisable)
+Owner ruling: *do all four, but coordinate frames is important enough for a
+dedicated path — keep the door open.* So this pass includes:
 
-Ride-along items, chosen by shared-substrate synergy:
-
-- **✅ Core — `PhysicalQuantity` catalog.** One registry: each measurable
-  quantity = `{ name, dimension (→ display unit), reader over
-  physics::queries }`. This *is* the extensibility mechanism — adding a
-  quantity is one row, mirroring the `command_intents!` table and the
-  scripting operation registry. Units, the P2 sensor/actuator work, and
-  plotter/tracer axes all bind to it, so building it here prevents three
-  future re-inventions. `SignalSource`'s variants become catalog lookups.
-- **✅ Core — UI SI display + input.** Inspector/settings render
-  unit-labelled SI (`1.20 m`, `2.5 kg`, `9.81 m/s²`) and parse SI input,
-  via `units::format`/`parse` helpers. A workstation-level unit-system
-  toggle (SI ⇄ a display alias, e.g. cm/g) is a display resource, not
-  authored state.
-- **◻ Stretch — units in the expression DSL.** Dimensional quantities in
-  the parameter-linking / functional-notation menus ("restitution ∝
-  proximity"). Depends on the DSL work; designed-for now (the catalog +
-  typed quantities are what it would bind to), built later.
-- **◻ Separate pass — arbitrary coordinate frames.** Length-unit-aware
-  plot/measurement frames. Related but sizeable; noted as a downstream
-  consumer, not in this pass.
+- **PhysicalQuantity catalog** — one registry: each measurable quantity =
+  `{ name, dimension (→ display unit), reader over physics::queries }`. The
+  extensibility keystone: adding a quantity is one row, like the
+  `command_intents!` table and the scripting operation registry. Units, P2
+  sensors, and plotter/tracer axes all bind to it; `SignalSource`'s variants
+  become catalog lookups.
+- **UI SI display + input** — inspector/settings render unit-labelled SI and
+  parse SI input, via `units::format`/`parse`. A workstation unit-system
+  display toggle (SI ⇄ alias) is a display resource, not authored state.
+- **Units in the expression DSL** — dimensional quantities in the
+  parameter-linking / functional-notation menus ("restitution ∝ proximity").
+  This is where an external parse crate may be adopted (behind the units
+  API). Binds to the catalog + typed quantities.
+- **Coordinate frames** — a **dedicated separate path**, not built here, but
+  the door is held open: the quantity catalog and typed lengths are
+  **frame-agnostic** (values carry dimension, not a frame), and the
+  `WorldScale` seam is where a frame transform later composes. Nothing in
+  this pass forecloses frames; a `docs/frames-decision.md` follows.
 
 ## Architecture
 
 ```text
 gradiance-units  (NEW, pure — beside gradiance-kernel at the bottom)
-  ├─ quantity.rs   typed newtypes + the arithmetic relations we use
+  ├─ quantity.rs   typed newtypes (base-SI f32) + the arithmetic we use
   ├─ dimension.rs  Dimension enum → canonical unit + formatter/parser
+  ├─ mass.rs       mass_of(Density, Area) — the ONE density×geometry seam
   └─ catalog.rs    PhysicalQuantity registry (name·dimension·reader-key)
 
 gradiance-core
-  └─ world.rs      WorldScale (PIXELS_PER_METER) — the ONE px↔SI seam;
-                   to_world(Length)->f32 px / from_world(px)->Length.
-                   Removes PIXELS_PER_METER from physics/field math.
+  └─ world.rs      WorldScale (PIXELS_PER_METER) — the ONE px↔SI seam.
+
+gradiance-script
+  └─ reflect_bridge.rs  extended to unwrap single-field newtypes → scalar
+                        (P0; makes typed quantities read-total-native).
 
 domain / scene     authored components carry typed quantities;
-                   records serialize base SI (Phase B).
-physics            reads/writes avian in world-units *only* through
-                   world::WorldScale; queries.rs returns typed quantities;
-                   catalog readers live here.
+                   records serialize base-SI scalars; format v6.
+physics            touches avian world-units ONLY through core::world;
+                   queries.rs returns typed quantities; catalog readers here.
 signal             SignalSource → catalog quantity; values carry dimension.
-render             converts SI→px for draw at the seam (never mid-shader).
+render             SI→px for draw at the seam (never mid-shader).
 ui                 units::format/parse; unit-system display toggle.
 ```
 
-The crate DAG test (`tests/boundaries.rs`) gains `gradiance-units` as a new
-bottom node with no `gradiance-*` deps; every layer may depend on it (like
-`kernel`). `PIXELS_PER_METER` becomes `pub(crate)`-reachable only through
-`core::world`, enforced the same way `CommandStack` confinement is.
+`tests/boundaries.rs` gains `gradiance-units` as a new bottom DAG node (no
+`gradiance-*` deps; every layer may depend on it, like `kernel`), and a
+check that `PIXELS_PER_METER` is named only in `core::world`.
 
 ## Extensibility contract (the point of the pass)
 
-- **New measurable quantity** → one `PhysicalQuantity` catalog row (name +
-  dimension + reader). Sensors, plotters, and scripts pick it up with no
-  further code — the same "one row" ergonomics as adding a command intent.
-- **New authored physical field** → give it a typed quantity; it formats,
-  parses, persists (SI), and reflects for scripting for free.
-- **New unit dimension** → one `Dimension` variant + its canonical unit and
-  formatter; the newtype that needs it references the variant.
+- **New measurable quantity** → one `PhysicalQuantity` catalog row. Sensors,
+  plotters, scripts pick it up with no further code.
+- **New authored physical field** → give it a typed quantity; formatting,
+  parsing, SI persistence, and script reflection come for free.
+- **New unit dimension** → one `Dimension` variant + canonical unit +
+  formatter.
+- **2D→3D density** → edit `units::mass_of` + one `dimension.rs` line.
+- **Coordinate frames** → compose a transform at the `WorldScale` seam; the
+  catalog is already frame-agnostic.
 - **Never** reintroduce a bare `f32` for a dimensional value in authored or
-  UI-facing code — a clippy-style boundary check can scan for `f32` fields
-  in `domain` records outside an allowlist, mirroring the serde-confinement
-  test.
+  UI-facing code — a boundary test scans `domain` records for non-allowlisted
+  `f32` fields, mirroring the serde-confinement test.
 
 ## Phasing (each phase leaves fmt+clippy+test green)
 
+0. **P0 — reflection spike + bridge unwrap.** A throwaway `Mass(f32)`
+   newtype: prove it reflects, and extend `reflect_bridge.rs` so
+   `read_path`/`write_path`/`reflect_to_steel`/`scalar_to_steel` unwrap a
+   single-field tuple struct to its inner scalar. Lock it with a test
+   (`(mass . 2.5)`, not `Void`). De-risks the owner's #1 concern first.
 1. **P1 — `gradiance-units` crate + `core::world` seam.** Newtypes,
-   dimensions, formatter/parser, `WorldScale`. Confine `PIXELS_PER_METER`
-   to the seam; delete its appearances in field/force math (replace with
-   typed conversions). No behaviour change. DAG test updated.
-2. **P2 — retype geometry/physics/domain (Phase A, pixel-stored).** Thread
-   typed quantities through the pure layers and the physics boundary;
-   `physics::queries` returns typed quantities. Save format unchanged.
+   dimensions, formatter/parser, `mass_of`, `WorldScale`. Confine
+   `PIXELS_PER_METER`; delete it from field/force math. No behaviour change.
+   DAG test updated.
+2. **P2 — retype geometry/physics/domain.** Thread typed quantities through
+   the pure layers and the physics boundary; `physics::queries` returns
+   typed quantities. Save format still v5 here (values still pixel on disk
+   until P5) — or fold P5 in if the retype naturally reaches records.
 3. **P3 — `PhysicalQuantity` catalog + signal/plotter binding.** Catalog in
-   `gradiance-units`, readers in `physics`; `SignalSource` and the plot/probe
+   `gradiance-units`, readers in `physics`; `SignalSource` and plot/probe
    panels bind to it; axes get unit labels.
 4. **P4 — UI SI display + input.** Inspector/settings format & parse SI;
    unit-system display toggle.
-5. **P5 — scene format v6 (Phase B) + true-3D density.** Flip records to SI;
-   mass-preserving v5→v6 migration; density becomes kg/m³. The single
-   migration-bearing, behaviour-adjacent step — schedulable independently of
-   P1–P4.
-6. **(later) DSL units; coordinate frames** — designed-for, out of this pass.
+5. **P5 — scene format v6 (SI-stored).** Records serialize base-SI; units-only
+   v5→v6 migration; round-trip + value-preservation tests. (2D density; the
+   `mass_of` seam is the 3D-ready cut-point.)
+6. **P6 — units in the expression DSL.** Dimensional quantities in
+   parameter-linking menus; adopt an external parse crate behind the units
+   API if multi-unit entry is wanted.
+- **(dedicated later) coordinate frames** — `docs/frames-decision.md`;
+  door held open by the frame-agnostic catalog + `WorldScale` seam.
 
 ## Verification & risk
 
-- The existing suite pins physics behaviour; P1–P4 must not move any
-  assertion. P5's migration gets a dedicated round-trip + mass-preservation
-  test (old v5 scene → v6 → identical simulated masses).
-- Coverage/coupling CI (just landed) tracks the new crate automatically.
-- Biggest risk is P5 (format break + physics feel). It is deliberately last
-  and self-contained, so P1–P4 deliver typed-unit safety and the
-  sensor/plotter/UI wins even if P5 is deferred.
+- The existing suite pins physics behaviour; because density stays 2D,
+  **no physics assertion should move** in P0–P6. P5's migration gets a
+  dedicated v5→v6 round-trip + value-equivalence test.
+- Coverage/coupling CI (already landed) tracks the new crate automatically.
+- Lowest-risk ordering: P0 settles the reflection question with a test
+  before any breadth; the only format break (P5) is a pure units conversion,
+  not a topology or behaviour change.
