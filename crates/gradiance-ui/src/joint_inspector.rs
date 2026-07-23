@@ -6,7 +6,7 @@
 //! carrying [`PropertyValue::Joint`] — the same undoable path body edits
 //! use, so joint configuration composes with undo/redo for free.
 
-use crate::widgets::{Commit, precise_drag};
+use crate::widgets::{Commit, precise_drag, precise_drag_unit};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_command::intent::{DeleteJointIntent, PropertyEditIntent};
@@ -17,6 +17,7 @@ use gradiance_domain::joint::{
     DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind, MotorDef,
 };
 use gradiance_interaction::selection::SelectedJoint;
+use gradiance_units::Dimension;
 
 /// Renders the joint inspector for the currently selected joint.
 pub fn joint_inspector(
@@ -60,7 +61,7 @@ pub fn joint_inspector(
                 ui.label(egui::RichText::new("Sensors").strong());
                 ui.horizontal(|ui| {
                     ui.label("length");
-                    ui.monospace(format!("{length:.1} px"));
+                    ui.monospace(format!("{length:.2} {}", Dimension::Length.symbol()));
                 });
                 if matches!(def.kind, JointKind::Hinge { .. }) {
                     ui.horizontal(|ui| {
@@ -161,7 +162,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
             limits,
             motor,
         } => {
-            if let Some(k) = limit_section(ui, *limits, "travel limits (px)", false) {
+            if let Some(k) = limit_section(ui, *limits, "travel limits (m)", false) {
                 next.kind = JointKind::Slider {
                     axis: *axis,
                     limits: k,
@@ -169,7 +170,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 };
                 changed = true;
             }
-            if let Some(m) = motor_section(ui, *motor, "px/s", "force") {
+            if let Some(m) = motor_section(ui, *motor, "m/s", "force") {
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
                     axis: *axis,
@@ -229,7 +230,8 @@ fn limit_section(
             Some(if degrees {
                 [-90_f32.to_radians(), 90_f32.to_radians()]
             } else {
-                [-100.0, 100.0]
+                // Travel limits are metres now (was a ±100 px default).
+                [-1.0, 1.0]
             })
         } else {
             None
@@ -237,12 +239,19 @@ fn limit_section(
     }
     if let Some([min, max]) = current {
         let scale = if degrees { 1_f32.to_degrees() } else { 1.0 };
+        // Angle limits display in degrees (fine at 1°/px); travel limits are
+        // metres and need the metre-scale sensitivity + unit.
+        let (speed, unit) = if degrees {
+            (1.0, "°")
+        } else {
+            (0.01, Dimension::Length.symbol())
+        };
         let (mut lo, mut hi) = (min * scale, max * scale);
         ui.horizontal(|ui| {
             ui.label("min");
-            let clo = precise_drag(ui, egui::Id::new("jlim-lo"), &mut lo, 0.0, 1.0);
+            let clo = precise_drag_unit(ui, egui::Id::new("jlim-lo"), &mut lo, 0.0, speed, unit);
             ui.label("max");
-            let chi = precise_drag(ui, egui::Id::new("jlim-hi"), &mut hi, 0.0, 1.0);
+            let chi = precise_drag_unit(ui, egui::Id::new("jlim-hi"), &mut hi, 0.0, speed, unit);
             if matches!(clo, Commit::Done(..)) || matches!(chi, Commit::Done(..)) {
                 result = Some(Some([lo / scale, hi / scale]));
             }
@@ -325,36 +334,39 @@ fn spring_section(
 
     ui.horizontal(|ui| {
         ui.label("rest length");
-        if let Commit::Done(..) = precise_drag(
+        if let Commit::Done(..) = precise_drag_unit(
             ui,
             egui::Id::new("spring-rest"),
             &mut rest,
             rest_length,
-            1.0,
+            0.01,
+            Dimension::Length.symbol(),
         ) {
             edited = true;
         }
     });
     ui.horizontal(|ui| {
         ui.label("stiffness");
-        if let Commit::Done(..) = precise_drag(
+        if let Commit::Done(..) = precise_drag_unit(
             ui,
             egui::Id::new("spring-k"),
             &mut k,
             DEFAULT_SPRING_STIFFNESS,
-            50.0,
+            0.01,
+            Dimension::Stiffness.symbol(),
         ) {
             edited = true;
         }
     });
     ui.horizontal(|ui| {
         ui.label("damping");
-        if let Commit::Done(..) = precise_drag(
+        if let Commit::Done(..) = precise_drag_unit(
             ui,
             egui::Id::new("spring-c"),
             &mut c,
             DEFAULT_SPRING_DAMPING,
-            0.5,
+            0.01,
+            Dimension::Damping.symbol(),
         ) {
             edited = true;
         }
@@ -363,24 +375,26 @@ fn spring_section(
     // Optional hard length clamp; off by default (unbounded travel).
     let mut clamped = new_range.is_some();
     if ui.checkbox(&mut clamped, "clamp length range").changed() {
-        new_range = clamped.then(|| [0.0, (rest_length * 2.0).max(10.0)]);
+        new_range = clamped.then(|| [0.0, (rest_length * 2.0).max(0.1)]);
         edited = true;
     }
     if let Some(bounds) = new_range.as_mut() {
+        let m = Dimension::Length.symbol();
         ui.horizontal(|ui| {
             ui.label("min");
             if let Commit::Done(..) =
-                precise_drag(ui, egui::Id::new("spring-lo"), &mut bounds[0], 0.0, 1.0)
+                precise_drag_unit(ui, egui::Id::new("spring-lo"), &mut bounds[0], 0.0, 0.01, m)
             {
                 edited = true;
             }
             ui.label("max");
-            if let Commit::Done(..) = precise_drag(
+            if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("spring-hi"),
                 &mut bounds[1],
                 rest_length,
-                1.0,
+                0.01,
+                m,
             ) {
                 edited = true;
             }
