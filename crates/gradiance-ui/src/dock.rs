@@ -105,7 +105,7 @@ struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss> {
     outliner_click: &'a mut Option<OutlinerClick>,
     show_signals: bool,
     show_plot: bool,
-    plottable: &'a [(&'a str, &'a VecDeque<f32>)],
+    plottable: &'a [(&'a str, &'static str, &'a VecDeque<f32>)],
     plot_config: &'a mut PlotConfig,
     console: &'a mut ScriptConsole,
     inputs: &'a mut ScriptInputs,
@@ -266,7 +266,7 @@ pub fn right_dock(
         .filter_map(|e| ids.get(e).ok().copied())
         .collect();
     // The plot pane's series list, computed from the bus.
-    let plottable = plot::plottable_series(&plot.bus);
+    let plottable = plot::plottable_series(&plot.bus, &props.bindings);
     // The outliner snapshot (empty when the pane is closed).
     let outliner_model = if op.panel.is_open() {
         outliner::build_model(&op, &selection)
