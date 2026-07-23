@@ -212,6 +212,10 @@ scalar_quantity! {
     /// contact's `normal_impulse`).
     Impulse, newton_seconds, "N·s"
 }
+scalar_quantity! {
+    /// Energy (kinetic / potential / work), in joules.
+    Energy, joules, "J"
+}
 
 vector_quantity! {
     /// A planar displacement / position, in metres.
