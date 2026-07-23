@@ -13,9 +13,6 @@
 //! - `gradiance <scene.ron>` loads a scene at startup, so a snapshot
 //!   reproduces a session in one command.
 
-#[cfg(feature = "dev")]
-pub mod flight;
-
 use bevy::prelude::*;
 use gradiance_command::intent::LoadSceneIntent;
 use gradiance_core::messages::drain;
@@ -82,9 +79,6 @@ impl Plugin for PersistPlugin {
             handle_persist_requests.before(gradiance_command::CommandDispatchSet),
         );
         app.add_systems(Last, autosave_on_exit);
-        // Dev-only: F9 dumps the flight recorder ring buffer to RON.
-        #[cfg(feature = "dev")]
-        app.add_systems(Update, flight::dump_flight_recorder);
     }
 }
 

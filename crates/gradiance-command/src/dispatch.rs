@@ -27,31 +27,18 @@ use bevy::prelude::*;
 
 fn drain<M: Message + Reflect + bevy::reflect::TypePath>(world: &mut World) -> Vec<M> {
     let drained: Vec<M> = gradiance_core::messages::drain(world);
-    // Flight recorder (dev): every drained intent is recorded via reflection —
-    // one generic hook, zero per-intent code.
-    #[cfg(feature = "dev")]
-    if !drained.is_empty()
-        && let Some(mut recorder) =
-            world.get_resource_mut::<crate::flight_recorder::FlightRecorder>()
-    {
-        for message in &drained {
-            recorder.record_intent(M::type_path(), message.as_partial_reflect());
-        }
+    // Structured trace of the drained intent surface — the deferred pipeline's
+    // cause end. Always compiled, `RUST_LOG`-controlled; one generic hook,
+    // zero per-intent code.
+    if !drained.is_empty() {
+        trace!(
+            target: "gradiance_command::intent",
+            intent = M::type_path(),
+            count = drained.len() as u64,
+            "drained"
+        );
     }
     drained
-}
-
-/// Records one executed command's outcome into the dev flight recorder.
-#[cfg(feature = "dev")]
-fn record_command(
-    world: &mut World,
-    name: &'static str,
-    detail: String,
-    outcome: Result<(), String>,
-) {
-    if let Some(mut recorder) = world.get_resource_mut::<crate::flight_recorder::FlightRecorder>() {
-        recorder.record_command(name, detail, outcome);
-    }
 }
 
 /// The intent table: one row per intent/command pair, in dispatch order.
@@ -129,8 +116,9 @@ pub fn dispatch_intents(world: &mut World) {
     });
 }
 
-/// Applies the batch through the stack (and, under `dev`, records each
-/// executed command's outcome into the flight recorder).
+/// Applies the batch through the stack. `CommandStack` logs each applied /
+/// undone / redone command; explicit undo/redo additionally trace their
+/// meta-op (`RUST_LOG=gradiance_command=trace`).
 fn execute(
     stack: &mut CommandStack,
     world: &mut World,
@@ -139,32 +127,18 @@ fn execute(
     redos: usize,
 ) {
     for command in commands {
-        #[cfg(feature = "dev")]
-        let (name, detail) = (command.name(), format!("{command:?}"));
-        // Errors are already logged by push_apply; a failed intent is
+        // push_apply logs the applied/failed command; a failed intent is
         // consumed without corrupting history.
-        let result = stack.push_apply(command, world);
-        #[cfg(feature = "dev")]
-        record_command(world, name, detail, result.map_err(|e| e.to_string()));
-        #[cfg(not(feature = "dev"))]
-        let _ = result;
+        let _ = stack.push_apply(command, world);
     }
     for _ in 0..undos {
-        let undone = stack.undo(world);
-        #[cfg(feature = "dev")]
-        if let Some(name) = undone {
-            record_command(world, name::UNDO, format!("undo {name}"), Ok(()));
+        if let Some(name) = stack.undo(world) {
+            trace!(target: "gradiance_command::command", op = name::UNDO, command = name, "reverted");
         }
-        #[cfg(not(feature = "dev"))]
-        let _ = undone;
     }
     for _ in 0..redos {
-        let redone = stack.redo(world);
-        #[cfg(feature = "dev")]
-        if let Some(name) = redone {
-            record_command(world, name::REDO, format!("redo {name}"), Ok(()));
+        if let Some(name) = stack.redo(world) {
+            trace!(target: "gradiance_command::command", op = name::REDO, command = name, "reapplied");
         }
-        #[cfg(not(feature = "dev"))]
-        let _ = redone;
     }
 }

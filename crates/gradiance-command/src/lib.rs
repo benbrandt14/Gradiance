@@ -48,9 +48,9 @@
 
 pub mod array_cmd;
 pub mod cut_cmd;
-pub mod dispatch;
 #[cfg(feature = "dev")]
-pub mod flight_recorder;
+pub mod diagnostics;
+pub mod dispatch;
 pub mod group_cmd;
 pub mod intent;
 pub mod joint_cmd;
@@ -226,9 +226,10 @@ impl Plugin for CommandPlugin {
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),
         );
-        // Dev-only observability: the flight recorder ring buffer
-        // (`docs/architecture.md` § debugging the deferred pipeline).
+        // Dev-only observability: trace the per-frame Changed<> sync-match
+        // counts (the deferred pipeline's cause→symptom gap; see
+        // `docs/architecture.md`). Intents and commands trace from `dispatch`.
         #[cfg(feature = "dev")]
-        flight_recorder::install(app);
+        diagnostics::install(app);
     }
 }

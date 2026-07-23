@@ -64,7 +64,7 @@ production-dead).
 - `reflect_bridge::{scalar_to_steel, reflect_to_steel}`: production-unused
   today but the spike-1-validated "reads are total" conversion the P2
   plotter/driver work binds to (`docs/script-spike-findings.md`); tested.
-- `intent::name::{UNDO, REDO}`: used by the dev-gated flight recorder (a
+- `intent::name::{UNDO, REDO}`: used by the command-dispatch undo/redo trace (a
   featureless probe run flags them — false positive).
 - UI/render draw paths (185 uncovered fns): gizmo/egui code needs a
   windowed session; not reachable from the headless suite.
