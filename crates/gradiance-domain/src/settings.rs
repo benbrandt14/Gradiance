@@ -307,7 +307,7 @@ pub struct LightingSettings {
     /// Shadow-map resolution per cascade (power of two; higher = harder,
     /// crisper shadow edges — the scene is simple prisms, so go high).
     pub shadow_map_size: u32,
-    /// How far from the camera shadows stay valid, world pixels. Smaller =
+    /// How far from the camera shadows stay valid, world metres. Smaller =
     /// denser shadow texels (crisper); too small clips shadows when the
     /// view orbits.
     pub shadow_distance: f32,
@@ -323,7 +323,7 @@ impl Default for LightingSettings {
             ssao: false,
             contact_shadows: true,
             shadow_map_size: 4096,
-            shadow_distance: 8_000.0,
+            shadow_distance: 80.0,
         }
     }
 }

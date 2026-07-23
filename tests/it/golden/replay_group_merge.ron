@@ -218,7 +218,7 @@
             ssao: false,
             contact_shadows: true,
             shadow_map_size: 4096,
-            shadow_distance: 8000.0,
+            shadow_distance: 80.0,
         ),
         scenery: (
             back_offset: 0.2,

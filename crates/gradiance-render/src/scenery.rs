@@ -73,10 +73,13 @@ pub fn apply_lighting(
     for entity in &existing {
         commands.entity(entity).despawn();
     }
+    // Cascade near/far are absolute world metres (SI): sized to the scene so
+    // the shadow map's texels stay small relative to metre-scale bodies —
+    // an oversized cascade spreads texels out and acnes the catcher plane.
     let cascade = CascadeShadowConfigBuilder {
         num_cascades: 1,
-        minimum_distance: 1.0,
-        maximum_distance: settings.shadow_distance.max(100.0),
+        minimum_distance: 0.01,
+        maximum_distance: settings.shadow_distance.max(1.0),
         ..default()
     }
     .build();

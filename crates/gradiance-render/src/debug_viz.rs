@@ -49,99 +49,8 @@ pub fn draw_debug_overlays(
     // derived from real geometry (rings, AABBs) and vectors proportional to a
     // physical quantity (velocity/field arrows) are already world-consistent.
     let px = scale.0;
-    for (entity, shape, transform, band) in &bodies {
-        let infinite = shape.contains_half_plane();
-
-        // Collision-set visualization: outline in the front-most derived
-        // layer's hue, matching the depth panel's gridline swatches.
-        if debug.show_layers && !infinite {
-            let color = Color::hsl(layer_hue(band.bits().trailing_zeros()), 0.75, 0.55);
-            for ring in polygonize(shape).rings() {
-                let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
-                if let Some(first) = pts.first().copied() {
-                    pts.push(first);
-                }
-                gizmos.linestrip_2d(pts, color);
-            }
-        }
-
-        if debug.show_colliders && !infinite {
-            let contours = polygonize(shape);
-            for ring in contours.rings() {
-                let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
-                if let Some(first) = pts.first().copied() {
-                    pts.push(first);
-                }
-                gizmos.linestrip_2d(pts, css::SPRING_GREEN);
-            }
-        }
-
-        if debug.show_aabbs && !infinite {
-            let (min, max) = sdf::aabb(shape);
-            let corners = [
-                Vec2::new(min.x, min.y),
-                Vec2::new(max.x, min.y),
-                Vec2::new(max.x, max.y),
-                Vec2::new(min.x, max.y),
-            ]
-            .map(|c| world_point(transform, c));
-            let (mut wmin, mut wmax) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
-            for c in corners {
-                wmin = wmin.min(c);
-                wmax = wmax.max(c);
-            }
-            gizmos.rect_2d(
-                Isometry2d::from_translation((wmin + wmax) / 2.0),
-                wmax - wmin,
-                css::DARK_KHAKI,
-            );
-        }
-
-        if debug.show_origins {
-            let origin = transform.translation.truncate();
-            gizmos.line_2d(
-                origin - Vec2::X * 6.0 * px,
-                origin + Vec2::X * 6.0 * px,
-                css::WHITE,
-            );
-            gizmos.line_2d(
-                origin - Vec2::Y * 6.0 * px,
-                origin + Vec2::Y * 6.0 * px,
-                css::WHITE,
-            );
-            if !infinite {
-                // Centroid may sit off-origin after CSG reshapes.
-                let centroid = world_point(transform, polygonize(shape).centroid());
-                gizmos.circle_2d(
-                    Isometry2d::from_translation(centroid),
-                    3.0 * px,
-                    css::HOT_PINK,
-                );
-            }
-        }
-
-        if debug.show_velocities
-            && let Some((lin, ang)) = physics.velocity_of(entity)
-        {
-            let origin = transform.translation.truncate();
-            if physics.is_sleeping(entity) {
-                gizmos.circle_2d(Isometry2d::from_translation(origin), 8.0 * px, css::GRAY);
-            } else {
-                // Velocity arrow is a world-space vector (both world and
-                // velocity flipped by the same factor, so its screen size is
-                // preserved).
-                gizmos.arrow_2d(origin, origin + lin * 0.25, css::YELLOW);
-                if ang.abs() > 0.05 {
-                    // Angular velocity (rad/s, scale-invariant): an arc-ish
-                    // tick whose pixel radius grows with spin.
-                    gizmos.circle_2d(
-                        Isometry2d::from_translation(origin),
-                        (4.0 + ang.abs().min(20.0)) * px,
-                        css::ORANGE,
-                    );
-                }
-            }
-        }
+    for body in &bodies {
+        draw_body_overlays(&debug, &physics, &mut gizmos, body, px);
     }
 
     if debug.show_joint_anchors {
@@ -173,6 +82,111 @@ pub fn draw_debug_overlays(
 
     if debug.show_contacts {
         draw_contacts(&physics, &mut gizmos, px);
+    }
+}
+
+/// Per-body debug glyphs: collision set, collider contours, AABB, origin
+/// cross/centroid, and velocity arrows. `px` is world-per-pixel so pixel-
+/// sized markers stay a fixed on-screen size (geometry-derived outlines and
+/// the quantity-proportional velocity arrow are already world-consistent).
+fn draw_body_overlays(
+    debug: &DebugSettings,
+    physics: &PhysicsQueries,
+    gizmos: &mut Gizmos<OverlayGizmos>,
+    body: (Entity, &ShapeDef, &Transform, &DepthBand),
+    px: f32,
+) {
+    let (entity, shape, transform, band) = body;
+    let infinite = shape.contains_half_plane();
+
+    // Collision-set visualization: outline in the front-most derived
+    // layer's hue, matching the depth panel's gridline swatches.
+    if debug.show_layers && !infinite {
+        let color = Color::hsl(layer_hue(band.bits().trailing_zeros()), 0.75, 0.55);
+        for ring in polygonize(shape).rings() {
+            let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
+            if let Some(first) = pts.first().copied() {
+                pts.push(first);
+            }
+            gizmos.linestrip_2d(pts, color);
+        }
+    }
+
+    if debug.show_colliders && !infinite {
+        let contours = polygonize(shape);
+        for ring in contours.rings() {
+            let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
+            if let Some(first) = pts.first().copied() {
+                pts.push(first);
+            }
+            gizmos.linestrip_2d(pts, css::SPRING_GREEN);
+        }
+    }
+
+    if debug.show_aabbs && !infinite {
+        let (min, max) = sdf::aabb(shape);
+        let corners = [
+            Vec2::new(min.x, min.y),
+            Vec2::new(max.x, min.y),
+            Vec2::new(max.x, max.y),
+            Vec2::new(min.x, max.y),
+        ]
+        .map(|c| world_point(transform, c));
+        let (mut wmin, mut wmax) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+        for c in corners {
+            wmin = wmin.min(c);
+            wmax = wmax.max(c);
+        }
+        gizmos.rect_2d(
+            Isometry2d::from_translation((wmin + wmax) / 2.0),
+            wmax - wmin,
+            css::DARK_KHAKI,
+        );
+    }
+
+    if debug.show_origins {
+        let origin = transform.translation.truncate();
+        gizmos.line_2d(
+            origin - Vec2::X * 6.0 * px,
+            origin + Vec2::X * 6.0 * px,
+            css::WHITE,
+        );
+        gizmos.line_2d(
+            origin - Vec2::Y * 6.0 * px,
+            origin + Vec2::Y * 6.0 * px,
+            css::WHITE,
+        );
+        if !infinite {
+            // Centroid may sit off-origin after CSG reshapes.
+            let centroid = world_point(transform, polygonize(shape).centroid());
+            gizmos.circle_2d(
+                Isometry2d::from_translation(centroid),
+                3.0 * px,
+                css::HOT_PINK,
+            );
+        }
+    }
+
+    if debug.show_velocities
+        && let Some((lin, ang)) = physics.velocity_of(entity)
+    {
+        let origin = transform.translation.truncate();
+        if physics.is_sleeping(entity) {
+            gizmos.circle_2d(Isometry2d::from_translation(origin), 8.0 * px, css::GRAY);
+        } else {
+            // Velocity arrow is a world-space vector (both world and velocity
+            // flipped by the same factor, so its screen size is preserved).
+            gizmos.arrow_2d(origin, origin + lin * 0.25, css::YELLOW);
+            if ang.abs() > 0.05 {
+                // Angular velocity (rad/s, scale-invariant): an arc-ish tick
+                // whose pixel radius grows with spin.
+                gizmos.circle_2d(
+                    Isometry2d::from_translation(origin),
+                    (4.0 + ang.abs().min(20.0)) * px,
+                    css::ORANGE,
+                );
+            }
+        }
     }
 }
 
