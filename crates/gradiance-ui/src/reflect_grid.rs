@@ -13,6 +13,18 @@ use bevy_egui::egui::{self, Ui};
 /// Renders editable widgets for every reflected field of `value`.
 /// Returns true if anything changed.
 pub fn reflect_grid(ui: &mut Ui, id: egui::Id, value: &mut dyn Reflect) -> bool {
+    reflect_grid_units(ui, id, value, &[])
+}
+
+/// [`reflect_grid`] with per-field SI unit labels — `units` maps a field name
+/// to its unit symbol (from the `Dimension` catalog, so labels can't drift).
+/// Fields not in the map render label-only, so partial coverage is fine.
+pub fn reflect_grid_units(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut dyn Reflect,
+    units: &[(&str, &str)],
+) -> bool {
     let mut changed = false;
     let ReflectMut::Struct(s) = value.reflect_mut() else {
         return false;
@@ -25,7 +37,16 @@ pub fn reflect_grid(ui: &mut Ui, id: egui::Id, value: &mut dyn Reflect) -> bool 
             let Some(field) = s.field_mut(name) else {
                 continue;
             };
-            ui.label(name.replace('_', " "));
+            let unit = units
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map_or("", |(_, u)| *u);
+            let pretty = name.replace('_', " ");
+            if unit.is_empty() {
+                ui.label(pretty);
+            } else {
+                ui.label(format!("{pretty}  ({unit})"));
+            }
             changed |= leaf_widget(ui, id.with(name), field);
             ui.end_row();
         }
