@@ -4,7 +4,7 @@
 //! the UI automatically. Enums (not reflect-derivable into widgets) get
 //! explicit rows; that is the sanctioned escape hatch.
 
-use crate::reflect_grid::reflect_grid;
+use crate::reflect_grid::{reflect_grid, reflect_grid_units};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -17,6 +17,7 @@ use gradiance_domain::settings::{
     ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
 };
 use gradiance_domain::shape::ShapeDef;
+use gradiance_units::Dimension;
 
 /// Which settings tab is open.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +91,15 @@ pub fn settings_window(
             ui.separator();
             match window.tab {
                 SettingsTab::Simulation => {
-                    reflect_grid(ui, egui::Id::new("sim"), sim.bypass_change_detection());
+                    reflect_grid_units(
+                        ui,
+                        egui::Id::new("sim"),
+                        sim.bypass_change_detection(),
+                        &[
+                            ("gravity", Dimension::Acceleration.symbol()),
+                            ("timestep_hz", Dimension::Frequency.symbol()),
+                        ],
+                    );
                     // Only flag the resource changed when egui actually
                     // edited something is overkill here; mark it touched.
                     sim.set_changed();
