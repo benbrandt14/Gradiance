@@ -209,8 +209,9 @@ check that `PIXELS_PER_METER` is named only in `core::world`.
 
 ## Forward compatibility — horizon items this pass must not wall off
 
-Three larger directions are on the roadmap horizon (unscheduled, `ROADMAP.md`
-§ Horizon). This pass is planned so each lands as an extension, not a rewrite:
+Three larger directions are on the roadmap horizon (unscheduled,
+`docs/roadmap.md` § Horizon). This pass is planned so each lands as an
+extension, not a rewrite:
 
 - **Full 3D / multiple simulation planes.** The `units::mass_of(Density,
   Area)` seam is the density-dimension cut-point (2D→3D is one function + one
