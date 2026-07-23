@@ -18,7 +18,7 @@ use gradiance_interaction::tools::topmost_body_at;
 use gradiance_physics::queries::PhysicsQueries;
 // `Time` stays fully-qualified at its one use site — bevy's `Time` (in the
 // prelude) shares the name.
-use gradiance_units::{AngularVelocity, Energy, Force, Mass, Velocity, Velocity2};
+use gradiance_units::{AngularVelocity, Energy, Force, Mass, Momentum, Velocity, Velocity2};
 
 /// Probe window state: pinned bodies plus the hover-probe toggle.
 #[derive(Resource, Default)]
@@ -88,6 +88,9 @@ pub fn probe_summary(
             translational + rotational,
             Energy::UNIT
         );
+        // Linear momentum |p| = m·|v|, the other conserved quantity.
+        let p = m.value() * v.magnitude().value();
+        let _ = write!(out, "\np {p:.2} {}", Momentum::UNIT);
     }
     let _ = write!(
         out,
@@ -207,6 +210,8 @@ mod tests {
         assert!(text.contains("mass 400.0 kg"));
         // ½mv² + ½Iω² = ½·400·5² + ½·8·1.5² = 5000 + 9 = 5009 J.
         assert!(text.contains("KE 5009.000 J"), "{text}");
+        // |p| = m·|v| = 400·5 = 2000 kg·m/s.
+        assert!(text.contains("p 2000.00 kg·m/s"), "{text}");
         assert!(text.contains("contact 980 N"));
         assert!(text.contains("sleeping"));
 

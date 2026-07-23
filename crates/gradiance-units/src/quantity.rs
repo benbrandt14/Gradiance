@@ -216,6 +216,10 @@ scalar_quantity! {
     /// Energy (kinetic / potential / work), in joules.
     Energy, joules, "J"
 }
+scalar_quantity! {
+    /// Linear momentum (mass · velocity), in kilogram-metres per second.
+    Momentum, kilogram_metres_per_second, "kg·m/s"
+}
 
 vector_quantity! {
     /// A planar displacement / position, in metres.
