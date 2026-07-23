@@ -30,7 +30,7 @@ use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_scene::JointRecord;
 
 /// Below this drag length a slider uses the body's local X axis.
-const AXIS_THRESHOLD: f32 = 5.0;
+const AXIS_THRESHOLD: f32 = 0.05;
 
 /// In-progress connector gesture (anchor point).
 #[derive(Resource, Default, Debug)]

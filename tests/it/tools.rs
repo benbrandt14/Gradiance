@@ -336,8 +336,8 @@ fn polygon_tool_clicks_close_into_a_ccw_centroid_relative_polygon() {
 
     for p in [
         Vec2::new(0.0, 0.0),
-        Vec2::new(60.0, 0.0),
-        Vec2::new(30.0, 60.0),
+        Vec2::new(0.6, 0.0),
+        Vec2::new(0.3, 0.6),
     ] {
         set_cursor(&mut app, p);
         mouse(&mut app, MouseButton::Left, true);
@@ -346,7 +346,7 @@ fn polygon_tool_clicks_close_into_a_ccw_centroid_relative_polygon() {
         app.update();
     }
     // Close by clicking near the first vertex.
-    set_cursor(&mut app, Vec2::new(2.0, 2.0));
+    set_cursor(&mut app, Vec2::new(0.02, 0.02));
     mouse(&mut app, MouseButton::Left, true);
     app.update();
     mouse(&mut app, MouseButton::Left, false);

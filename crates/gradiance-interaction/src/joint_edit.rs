@@ -37,7 +37,7 @@ use gradiance_geometry::snapping::project_on_segment;
 /// the context menu so left-click picking and right-click config agree.
 pub const ANCHOR_PICK_PX: f32 = 12.0;
 /// World-space deadzone before an anchor drag engages.
-const DRAG_DEADZONE: f32 = 4.0;
+const DRAG_DEADZONE: f32 = 0.04;
 /// Hinge glyph ring radius (logical px) — shared with `render::joint_viz`.
 pub const HINGE_RING_PX: f32 = 6.0;
 /// Hinge limit-arc radius (logical px) — shared with `render::joint_viz`.

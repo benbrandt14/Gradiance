@@ -9,10 +9,10 @@ use gradiance::prelude::*;
 #[test]
 fn spawned_body_gains_engine_components() {
     let mut app = headless_app();
-    let mut record = box_record(Vec2::ZERO, 40.0, 20.0);
+    let mut record = box_record(Vec2::ZERO, 0.4, 0.2);
     record.depth = DepthBand {
-        near: 10.0,
-        far: 30.0, // layers 1..=2
+        near: 0.1,
+        far: 0.3, // layers 1..=2
     };
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
@@ -99,9 +99,9 @@ fn sensor_and_rotation_lock_follow_props() {
 
 /// Spawns a dynamic box above a static floor and returns `(box id, floor id)`.
 fn falling_box_scene(app: &mut App) -> (StableId, StableId) {
-    let falling = box_record(Vec2::new(0.0, 200.0), 20.0, 20.0);
+    let falling = box_record(Vec2::new(0.0, 2.0), 0.2, 0.2);
     let falling_id = falling.id;
-    let mut floor = box_record(Vec2::new(0.0, -100.0), 1000.0, 20.0);
+    let mut floor = box_record(Vec2::new(0.0, -1.0), 10.0, 0.2);
     floor.physics.rigid_body = RigidBody::Static;
     let floor_id = floor.id;
     app.world_mut()
@@ -121,10 +121,10 @@ fn dynamic_bodies_fall_and_rest_on_static_ground() {
 
     let entity = entity_of(&app, falling_id).unwrap();
     let y = app.world().get::<Transform>(entity).unwrap().translation.y;
-    // Floor top is at -90, box half-height is 10 → rest around y = -80.
-    assert!(y < 100.0, "box fell (y = {y})");
+    // Floor top is at -0.9, box half-height is 0.1 → rest around y = -0.8.
+    assert!(y < 1.0, "box fell (y = {y})");
     assert!(
-        (-95.0..=-60.0).contains(&y),
+        (-0.95..=-0.60).contains(&y),
         "box rests on the floor (y = {y})"
     );
 }
@@ -155,9 +155,9 @@ fn resting_bodies_report_contacts_through_the_facade() {
         !contacts.is_empty(),
         "a box resting on the floor generates contacts"
     );
-    // Floor top is at y = -90; a contact lives near that interface.
+    // Floor top is at y = -0.9; a contact lives near that interface.
     assert!(
-        contacts.iter().any(|c| (c.point.y - (-90.0)).abs() < 30.0),
+        contacts.iter().any(|c| (c.point.y - (-0.9)).abs() < 0.3),
         "a contact sits near the box-floor interface: {contacts:?}"
     );
 }
@@ -762,8 +762,8 @@ fn net_contact_impulse_reads_a_resting_bodys_weight() {
         .timestep()
         .as_secs_f32();
     let force = impulse.y / dt;
-    // Weight = area x density x |g| = 20*20*1 * 1000.
-    let weight = 400.0 * 1000.0;
+    // Weight = area x density x |g| = 0.2*0.2*1 * 10.
+    let weight = 0.04 * 10.0;
     assert!(
         (force - weight).abs() < 0.3 * weight,
         "contact force approximates the weight ({force} vs {weight})"

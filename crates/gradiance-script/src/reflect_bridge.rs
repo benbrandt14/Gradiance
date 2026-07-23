@@ -294,7 +294,12 @@ mod tests {
         // Reflect-path reads reach the numeric leaves of a real intent,
         // never naming a field on the Rust side.
         assert_eq!(read_path(&intent, "record.pose.pos.x"), Some(12.0));
-        assert_eq!(read_path(&intent, "record.depth.far"), Some(10.0));
+        // `DepthBand::default().far` is `LAYER_HEIGHT` (0.1 m); the f32 leaf
+        // widens to f64 exactly as stored.
+        assert_eq!(
+            read_path(&intent, "record.depth.far"),
+            Some(f64::from(0.1_f32))
+        );
 
         // The whole value converts to steel struct data. Opaque handles
         // (`StableId`, `ShapeDef`) degrade to `Void` by design — they are

@@ -157,9 +157,9 @@ fn distance_and_named_sources_publish_and_drive() {
 #[test]
 fn contact_count_source_reads_the_facade() {
     let mut app = headless_app();
-    let falling = box_record(Vec2::new(0.0, 120.0), 20.0, 20.0);
+    let falling = box_record(Vec2::new(0.0, 1.2), 0.2, 0.2);
     let falling_id = falling.id;
-    let mut floor = box_record(Vec2::new(0.0, -100.0), 1000.0, 20.0);
+    let mut floor = box_record(Vec2::new(0.0, -1.0), 10.0, 0.2);
     floor.physics.rigid_body = RigidBody::Static;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: falling });

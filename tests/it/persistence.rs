@@ -493,37 +493,27 @@ fn pre_field_files_still_parse() {
 }
 
 #[test]
-fn v4_layer_masks_migrate_to_depth_bands() {
-    // A v4 file authors `layers: LayerMask32`; loading maps each mask's
-    // occupied bit range to the equivalent band (bits 1..=2 → 10..30) and
-    // drops custom filters (collision is depth overlap in v5). The fixture
-    // serializes the legacy carrier field directly, so it is immune to
-    // RON formatting drift.
-    let mut record = box_record(Vec2::ZERO, 10.0, 10.0);
-    record.layers = Some(gradiance::domain::layers::LayerMask32 {
-        memberships: 0b0110,
-        filters: 0xFF,
-    });
+fn pre_si_files_are_rejected() {
+    // v6 flipped the world to SI (metres/kg/N); older pixel-scale files are
+    // not migrated (a units-only v5→v6 migration is a planned follow-up —
+    // `docs/units-decision.md`). A v5 file is rejected with a version error
+    // rather than silently loaded at the wrong scale.
     let scene = SceneRecord {
-        version: 4,
+        version: 5,
         app_version: String::new(),
-        bodies: vec![record],
+        bodies: vec![box_record(Vec2::ZERO, 0.1, 0.1)],
         joints: vec![],
         nodes: vec![],
         environment: EnvironmentRecord::default(),
     };
     let text = to_ron(&scene).unwrap();
-    let parsed = from_ron(&text).expect("v4 file migrates");
-    assert_eq!(parsed.version, gradiance::scene::FORMAT_VERSION);
-    assert_eq!(
-        parsed.bodies[0].depth,
-        DepthBand {
-            near: 10.0,
-            far: 30.0
-        },
-        "mask bits 1..=2 become the 10..30 band"
+    assert!(
+        matches!(
+            from_ron(&text),
+            Err(gradiance::scene::PersistError::Version(5))
+        ),
+        "pre-SI (v5) files are rejected, not silently loaded"
     );
-    assert_eq!(parsed.bodies[0].layers, None, "carrier cleared");
 }
 
 #[test]

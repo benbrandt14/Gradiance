@@ -29,9 +29,9 @@ use std::collections::VecDeque;
 /// Hard cap on samples per trail (a slow-fading fast body can't grow
 /// unbounded).
 const MAX_TRAIL_SAMPLES: usize = 2048;
-/// Minimum movement (world px) between samples — a resting body keeps a
+/// Minimum movement (world metres) between samples — a resting body keeps a
 /// point, not a pile.
-const MIN_SAMPLE_STEP: f32 = 1.0;
+const MIN_SAMPLE_STEP: f32 = 0.01;
 
 /// Derived trail of a traced body: `(physics-clock timestamp, position)`
 /// samples, oldest first.

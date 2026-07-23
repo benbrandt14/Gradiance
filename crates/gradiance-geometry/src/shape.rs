@@ -14,7 +14,7 @@ use bevy::reflect::{ReflectDeserialize, ReflectSerialize};
 use serde::{Deserialize, Serialize};
 
 /// Minimum linear dimension accepted for authored shapes, in world pixels.
-pub const MIN_SHAPE_SIZE: f32 = 0.01;
+pub const MIN_SHAPE_SIZE: f32 = 0.0001;
 
 /// Maximum CSG tree depth before commands must bake results to a
 /// [`ShapeDef::Polygon`] leaf (bounds evaluation cost under repeated cuts).
@@ -104,7 +104,7 @@ pub enum ShapeDef {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ShapeError {
     /// A box dimension or circle radius was non-positive or too small.
-    #[error("shape dimensions must be at least {MIN_SHAPE_SIZE} px")]
+    #[error("shape dimensions must be at least {MIN_SHAPE_SIZE} m")]
     Degenerate,
     /// A polygon outline had fewer than three vertices.
     #[error("polygon needs at least 3 vertices, got {0}")]

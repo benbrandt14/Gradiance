@@ -3,8 +3,8 @@
 Status: **accepted (directional)**. The four shaping decisions below were
 ruled by the owner; this revision records them and the evidence behind the
 representation choice. Physics-behaviour is deliberately held constant this
-pass (2D density), so the only behaviour-adjacent step is a units-only save
-migration.
+pass (2D density), so the only behaviour-adjacent step is the units rebase
+of the save format (v6, with older files rejected — decision 2).
 
 ## Why now
 
@@ -105,10 +105,16 @@ reached only through the one conversion seam.
   seam: `to_world(Length) -> f32 px` / `from_world(px) -> Length`.
   `PIXELS_PER_METER` is removed from physics/field math and made reachable
   only through `core::world` (enforced like `CommandStack` confinement).
-- **v5→v6 migration** is units-only: stored lengths ×`1/PIXELS_PER_METER`,
-  velocities likewise, gravity px/s²→m/s², density px→areal-SI
-  (× `PIXELS_PER_METER²`, see decision 3). No topology or component change,
-  so it is low-risk and fully round-trip testable.
+- **v6 is a hard break: v5 (and older) files are rejected**, not migrated
+  (`from_ron` returns `PersistError::Version` for anything but 6). This
+  follows the project's persistence-debt stance — the same pass that landed
+  the flip also *removed* the surviving v4→v5 layer migration: pre-release,
+  there are no persisted scenes worth preserving, and a units-only migration
+  would still have to enumerate every length-typed field (poses, shape
+  dims, joint anchors, rest lengths, depth bands) at the RON level, which is
+  exactly the fiddly, bug-prone work the rev exists to retire. A real
+  migration path can be reintroduced once the format stabilizes for release;
+  until then, revving the version is the whole contract.
 
 The rollout is still incremental (each phase green), but unlike the earlier
 draft there is **no interim pixel-stored phase** — the persistence rev is
@@ -231,18 +237,24 @@ Three larger directions are on the roadmap horizon (unscheduled, `ROADMAP.md`
    dimensions, formatter/parser, `mass_of`, `WorldScale`. Confine
    `PIXELS_PER_METER`; delete it from field/force math. No behaviour change.
    DAG test updated.
-2. **P2 — retype geometry/physics/domain.** Thread typed quantities through
-   the pure layers and the physics boundary; `physics::queries` returns
-   typed quantities. Save format still v5 here (values still pixel on disk
-   until P5) — or fold P5 in if the retype naturally reaches records.
-3. **P3 — `PhysicalQuantity` catalog + signal/plotter binding.** Catalog in
+2. **P2·flip — atomic SI value + format rebase (landed).** Rather than
+   thread newtypes first and keep pixel values on disk, the world was
+   rebased to SI in one atomic numeric conversion: constants, physics, and
+   authored records now carry base-SI values, the render camera absorbs the
+   ×`PIXELS_PER_METER` render factor (orthographic scale `1/PPM`), and the
+   scene format revs to **v6 with v5 rejected** (decision 2). No newtype
+   threading yet — signatures stay `f32`-SI; the newtypes remain available
+   for the retype below. Physics behaviour is preserved up to the unit
+   relabel (world ÷100 × camera ×100 = identical pixels).
+3. **P2·types — retype geometry/physics/domain.** Thread the `gradiance-units`
+   newtypes through the pure layers and the physics boundary so
+   `physics::queries` returns typed quantities. Pure refactor over the
+   already-SI values from the flip — no value or format change.
+4. **P3 — `PhysicalQuantity` catalog + signal/plotter binding.** Catalog in
    `gradiance-units`, readers in `physics`; `SignalSource` and plot/probe
    panels bind to it; axes get unit labels.
-4. **P4 — UI SI display + input.** Inspector/settings format & parse SI;
+5. **P4 — UI SI display + input.** Inspector/settings format & parse SI;
    unit-system display toggle.
-5. **P5 — scene format v6 (SI-stored).** Records serialize base-SI; units-only
-   v5→v6 migration; round-trip + value-preservation tests. (2D density; the
-   `mass_of` seam is the 3D-ready cut-point.)
 6. **P6 — units in the expression DSL.** Dimensional quantities in
    parameter-linking menus; adopt an external parse crate behind the units
    API if multi-unit entry is wanted.
@@ -251,10 +263,13 @@ Three larger directions are on the roadmap horizon (unscheduled, `ROADMAP.md`
 
 ## Verification & risk
 
-- The existing suite pins physics behaviour; because density stays 2D,
-  **no physics assertion should move** in P0–P6. P5's migration gets a
-  dedicated v5→v6 round-trip + value-equivalence test.
+- The existing suite pins physics behaviour; because density stays 2D and
+  the flip is a pure unit relabel, **no physics *behaviour* moves** — the
+  test values that changed are the authored-magnitude literals and golden
+  snapshots, rescaled ÷`PIXELS_PER_METER` alongside the source, plus the
+  format break covered by a v5-rejection test (`pre_si_files_are_rejected`)
+  and the replay golden round-trips.
 - Coverage/coupling CI (already landed) tracks the new crate automatically.
 - Lowest-risk ordering: P0 settles the reflection question with a test
-  before any breadth; the only format break (P5) is a pure units conversion,
-  not a topology or behaviour change.
+  before any breadth; the one format break (the P2·flip → v6) is a pure
+  units rebase, not a topology or behaviour change.

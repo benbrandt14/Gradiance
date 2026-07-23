@@ -21,7 +21,6 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use gradiance_core::constants::GRAVITY;
 use gradiance_core::states::GameState;
-use gradiance_units::world::PIXELS_PER_METER;
 
 /// Installs avian, maps app state to the physics clock, and registers the
 /// authored→engine sync systems.
@@ -37,7 +36,10 @@ impl Plugin for GradiancePhysicsPlugin {
         // plugin as safely omittable.
         app.add_plugins(
             PhysicsPlugins::default()
-                .with_length_unit(PIXELS_PER_METER)
+                // The world is SI: 1 world unit = 1 metre, so avian's
+                // length-based tolerances need no scaling (pixels live only at
+                // the render/pick seam).
+                .with_length_unit(1.0)
                 .build()
                 .disable::<IslandPlugin>(),
         );

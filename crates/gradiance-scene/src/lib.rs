@@ -15,8 +15,6 @@ pub use records::{
     AuthoredRecord, BodyRecord, EnvironmentRecord, JointRecord, NodeRecord, SceneRecord,
 };
 
-use bevy::prelude::*;
-
 /// Scene format version accepted by this build.
 ///
 /// v2: the de-adapter collapse — authored physics is now avian components
@@ -32,11 +30,14 @@ use bevy::prelude::*;
 /// struts do not load.
 ///
 /// v5: continuous depth (V3) — bodies author a `DepthBand` instead of a
-/// `LayerMask32`. v4 files migrate on load: each mask's occupied bit range
-/// maps to the equivalent band; non-default *filters* are dropped with a
-/// warning (checkbox filter art is unrepresentable by design — collision
-/// is depth overlap).
-pub const FORMAT_VERSION: u32 = 5;
+/// `LayerMask32`.
+///
+/// v6: **SI units** — the world is now metres/kilograms/newtons and stored
+/// values are SI (positions, sizes, gravity, spacing all ÷100 from the prior
+/// pixel world at 100 px/m). Older files are not loaded; a units-only v5→v6
+/// migration (÷100, with `ShapeDef` tree scaling) is a planned follow-up
+/// (`docs/units-decision.md`).
+pub const FORMAT_VERSION: u32 = 6;
 
 /// What went wrong while serializing, parsing, or migrating a scene.
 #[derive(Debug, thiserror::Error)]
@@ -63,39 +64,14 @@ pub fn to_ron(scene: &SceneRecord) -> Result<String, PersistError> {
     )?)
 }
 
-/// Parses and version-checks a scene, migrating supported old versions.
+/// Parses and version-checks a scene. Only the current [`FORMAT_VERSION`] is
+/// accepted; older files are rejected (a units-only v5→v6 migration is a
+/// planned follow-up — see the version history above).
 pub fn from_ron(text: &str) -> Result<SceneRecord, PersistError> {
-    let mut scene: SceneRecord = ron::from_str(text)?;
-    match scene.version {
-        FORMAT_VERSION => Ok(scene),
-        4 => {
-            migrate_v4_layers(&mut scene);
-            Ok(scene)
-        }
-        v => Err(PersistError::Version(v)),
+    let scene: SceneRecord = ron::from_str(text)?;
+    if scene.version == FORMAT_VERSION {
+        Ok(scene)
+    } else {
+        Err(PersistError::Version(scene.version))
     }
-}
-
-/// v4 → v5: each body's legacy layer mask becomes the equivalent depth
-/// band. Custom filter masks cannot be represented (collision is depth
-/// overlap now) and are dropped with a warning.
-fn migrate_v4_layers(scene: &mut SceneRecord) {
-    use gradiance_domain::depth::DepthBand;
-    for body in &mut scene.bodies {
-        if let Some(mask) = body.layers.take() {
-            body.depth = mask
-                .occupied_range()
-                .map_or_else(DepthBand::default, |(min, max)| {
-                    DepthBand::from_bit_range(min, max)
-                });
-            if mask.filters != u32::MAX {
-                warn!(
-                    id = %body.id.0,
-                    "v4 custom collision filters dropped on migration \
-                     (collision is depth overlap in v5)"
-                );
-            }
-        }
-    }
-    scene.version = FORMAT_VERSION;
 }

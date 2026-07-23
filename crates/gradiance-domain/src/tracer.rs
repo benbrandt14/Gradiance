@@ -44,9 +44,9 @@ pub struct Tracer {
     pub pattern: TracePattern,
 }
 
-/// Default trail size (world px) — for `serde` on pre-config saves.
+/// Default trail size (world metres) — for `serde` on pre-config saves.
 fn default_size() -> f32 {
-    2.0
+    0.02
 }
 
 impl Default for Tracer {

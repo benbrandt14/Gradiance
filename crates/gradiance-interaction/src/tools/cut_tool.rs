@@ -9,8 +9,8 @@ use bevy::prelude::*;
 /// always looks and behaves like a thin slit at any magnification).
 const CUT_SCREEN_WIDTH: f32 = 3.0;
 
-/// Minimum stroke length (world px) to commit a cut.
-const MIN_STROKE: f32 = 1.0;
+/// Minimum stroke length (world metres) to commit a cut.
+const MIN_STROKE: f32 = 0.01;
 
 /// In-progress cut stroke (anchor point).
 #[derive(Resource, Default, Debug)]

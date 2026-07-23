@@ -83,9 +83,9 @@ impl DepthBand {
     /// ```
     /// use gradiance_domain::depth::DepthBand;
     ///
-    /// assert_eq!(DepthBand { near: 0.0, far: 10.0 }.bits(), 0b0001);
-    /// assert_eq!(DepthBand { near: 5.0, far: 15.0 }.bits(), 0b0011);
-    /// assert_eq!(DepthBand { near: 10.0, far: 20.0 }.bits(), 0b0010);
+    /// assert_eq!(DepthBand { near: 0.0, far: 0.1 }.bits(), 0b0001);
+    /// assert_eq!(DepthBand { near: 0.05, far: 0.15 }.bits(), 0b0011);
+    /// assert_eq!(DepthBand { near: 0.1, far: 0.2 }.bits(), 0b0010);
     /// ```
     pub fn bits(&self) -> u32 {
         let band = self.sanitized();
@@ -130,27 +130,28 @@ mod tests {
 
     #[test]
     fn bits_cover_exactly_the_overlapped_layers() {
+        // Bands are metres; one layer is `LAYER_HEIGHT` (0.1 m) thick.
         // Whole layers map to their own bit.
         assert_eq!(
             DepthBand {
                 near: 0.0,
-                far: 10.0
+                far: 0.1
             }
             .bits(),
             1
         );
         assert_eq!(
             DepthBand {
-                near: 10.0,
-                far: 20.0
+                near: 0.1,
+                far: 0.2
             }
             .bits(),
             0b10
         );
         assert_eq!(
             DepthBand {
-                near: 30.0,
-                far: 60.0
+                near: 0.3,
+                far: 0.6
             }
             .bits(),
             0b11_1000
@@ -158,16 +159,16 @@ mod tests {
         // Fractional bands cover every touched layer.
         assert_eq!(
             DepthBand {
-                near: 2.5,
-                far: 7.5
+                near: 0.025,
+                far: 0.075
             }
             .bits(),
             1
         );
         assert_eq!(
             DepthBand {
-                near: 7.5,
-                far: 12.5
+                near: 0.075,
+                far: 0.125
             }
             .bits(),
             0b11
@@ -176,15 +177,15 @@ mod tests {
         assert_eq!(
             DepthBand {
                 near: 0.0,
-                far: 10.0005
+                far: 0.100_005
             }
             .bits(),
             1
         );
         assert_eq!(
             DepthBand {
-                near: 9.9995,
-                far: 20.0
+                near: 0.099_995,
+                far: 0.2
             }
             .bits(),
             0b10
@@ -238,12 +239,12 @@ mod tests {
     #[test]
     fn snapping_rounds_to_quarter_layers() {
         let band = DepthBand {
-            near: 1.4,
-            far: 13.7,
+            near: 0.014,
+            far: 0.137,
         }
         .snapped();
-        assert!((band.near - 2.5).abs() < 1e-6);
-        assert!((band.far - 12.5).abs() < 1e-6);
+        assert!((band.near - 0.025).abs() < 1e-6);
+        assert!((band.far - 0.125).abs() < 1e-6);
     }
 
     #[test]
@@ -267,15 +268,15 @@ mod tests {
             DepthBand::from_bit_range(0, 0),
             DepthBand {
                 near: 0.0,
-                far: 10.0
+                far: 0.1
             }
         );
         let band = DepthBand::from_bit_range(1, 3);
         assert_eq!(
             band,
             DepthBand {
-                near: 10.0,
-                far: 40.0
+                near: 0.1,
+                far: 0.4
             }
         );
         assert_eq!(band.bits(), 0b1110, "round-trips through the bit view");

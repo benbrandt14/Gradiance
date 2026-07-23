@@ -104,8 +104,12 @@ fn setup_scene(mut commands: Commands) {
         Projection::Orthographic(OrthographicProjection {
             near: -gradiance_interaction::camera::DEPTH_SLAB,
             far: gradiance_interaction::camera::DEPTH_SLAB,
+            // The world is SI (metres); render `PIXELS_PER_METER` screen
+            // pixels per metre. This world-per-pixel scale is the single
+            // render seam between SI world space and screen space.
+            scale: 1.0 / gradiance_units::world::PIXELS_PER_METER,
             ..OrthographicProjection::default_3d()
         }),
-        Transform::from_xyz(0.0, 0.0, 600.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0.0, 0.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }

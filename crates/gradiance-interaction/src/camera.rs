@@ -24,13 +24,13 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use gradiance_domain::settings::ScenerySettings;
 
-/// Keyboard pan speed in world pixels per second (at scale 1).
-const KEY_PAN_SPEED: f32 = 600.0;
+/// Keyboard pan speed in metres per second (at scale 1).
+const KEY_PAN_SPEED: f32 = 6.0;
 /// Zoom multiplier per scroll notch (closer to 1 = gentler).
 const ZOOM_STEP: f32 = 0.94;
 /// World-units-per-pixel zoom limits (both projections).
-const MIN_SCALE: f32 = 0.05;
-const MAX_SCALE: f32 = 20.0;
+const MIN_SCALE: f32 = 0.0005;
+const MAX_SCALE: f32 = 0.2;
 /// Orbit sensitivity, radians per screen pixel.
 const ORBIT_SPEED: f32 = 0.005;
 /// Exponential rate of the glide toward a view target (per second).
@@ -40,7 +40,7 @@ const GLIDE_RATE: f32 = 8.0;
 /// infinite-plane quad corners (`PLANE_EXTENT`·√2 ≈ 707k) so the frustum
 /// never cuts the megaquads as the view orbits — orthographic near/far
 /// only define a depth range, so the large slab costs nothing.
-pub const DEPTH_SLAB: f32 = 800_000.0;
+pub const DEPTH_SLAB: f32 = 8_000.0;
 
 /// The authoritative camera state; the `Transform` is derived from it.
 #[derive(Resource, Debug, Clone, Copy)]
@@ -66,7 +66,7 @@ impl Default for CameraRig {
     fn default() -> Self {
         Self {
             focus: Vec3::ZERO,
-            distance: 600.0,
+            distance: 6.0,
             yaw: 0.0,
             pitch: 0.0,
             roll: 0.0,

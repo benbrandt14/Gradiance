@@ -21,14 +21,14 @@ use gradiance_domain::joint::{DEFAULT_SPRING_DAMPING, JointCommon, JointDef, Joi
 use gradiance_domain::shape::ShapeDef;
 use gradiance_scene::JointRecord;
 
-/// Shortest strut that will commit (world px); a near-zero drag is a no-op.
-const MIN_STRUT_LENGTH: f32 = 5.0;
+/// Shortest strut that will commit (world metres); a near-zero drag is a no-op.
+const MIN_STRUT_LENGTH: f32 = 0.05;
 /// Spring stiffness per unit mass proxy (AABB area, px²). Tuned so a typical
 /// body sags ~10 px under the default gravity (|g| ≈ 1000): `k ≈ m·g / sag`, so
 /// heavier bodies get proportionally stiffer struts instead of drooping.
 const SPRING_STIFFNESS_PER_MASS: f32 = 100.0;
 /// Floor for the mass-based stiffness so tiny bodies still get a firm strut.
-const MIN_SPRING_STIFFNESS: f32 = 100.0;
+const MIN_SPRING_STIFFNESS: f32 = 0.01;
 
 /// In-progress strut gesture (the first anchor).
 #[derive(Resource, Default, Debug)]

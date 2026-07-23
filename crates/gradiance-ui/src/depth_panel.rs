@@ -260,8 +260,8 @@ mod tests {
             current: DepthBand::default(),
             offset: 0.0,
         };
-        let band = dragged_band(&drag, 23.4);
-        assert!((band.far - 22.5).abs() < 1e-4, "snaps to quarter layers");
+        let band = dragged_band(&drag, 0.234);
+        assert!((band.far - 0.225).abs() < 1e-4, "snaps to quarter layers");
         assert!((band.near - 0.0).abs() < 1e-6, "near end untouched");
     }
 
@@ -272,15 +272,15 @@ mod tests {
             grab: Grab::Near,
             start: DepthBand {
                 near: 0.0,
-                far: 10.0,
+                far: 0.1,
             },
             current: DepthBand {
                 near: 0.0,
-                far: 10.0,
+                far: 0.1,
             },
             offset: 0.0,
         };
-        let band = dragged_band(&drag, 50.0);
+        let band = dragged_band(&drag, 0.5);
         assert!(band.near < band.far);
         assert!(band.thickness() >= DepthBand::MIN_THICKNESS - 1e-4);
     }
@@ -288,19 +288,19 @@ mod tests {
     #[test]
     fn whole_drag_preserves_thickness_and_clamps_front() {
         let start = DepthBand {
-            near: 10.0,
-            far: 25.0,
+            near: 0.1,
+            far: 0.25,
         };
         let drag = BandDrag {
             id: StableId::new(),
             grab: Grab::Whole,
             start,
             current: start,
-            offset: 5.0, // grabbed 5 units below the front face
+            offset: 0.05, // grabbed 0.05 m below the front face
         };
-        let moved = dragged_band(&drag, 42.5);
+        let moved = dragged_band(&drag, 0.425);
         assert!((moved.thickness() - start.thickness()).abs() < 1e-4);
-        let clamped = dragged_band(&drag, -100.0);
+        let clamped = dragged_band(&drag, -1.0);
         assert!(
             (clamped.near - 0.0).abs() < 1e-6,
             "cannot go in front of the plane"

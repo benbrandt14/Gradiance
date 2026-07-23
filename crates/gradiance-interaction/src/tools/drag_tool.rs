@@ -20,8 +20,8 @@ use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_physics::grab::Grab;
 
-/// Minimum move distance (world px) before a paused drag commits.
-const MOVE_EPSILON: f32 = 0.5;
+/// Minimum move distance (world metres) before a paused drag commits.
+const MOVE_EPSILON: f32 = 0.005;
 
 /// The drag tool's gesture state.
 #[derive(Resource, Default, Debug)]

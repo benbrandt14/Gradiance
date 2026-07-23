@@ -67,7 +67,7 @@ pub fn draw_constraint_guides(
     snapped: Res<SnappedCursor>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
-    const LEN: f32 = 100_000.0;
+    const LEN: f32 = 1_000.0;
     let Some(pos) = snapped.effective() else {
         return;
     };

@@ -1,5 +1,5 @@
 (
-    version: 5,
+    version: 6,
     app_version: "golden",
     bodies: [
         (
@@ -54,7 +54,7 @@
             ),
             depth: (
                 near: 0.0,
-                far: 10.0,
+                far: 0.1,
             ),
             groups: [],
             field: None,
@@ -100,7 +100,7 @@
             ),
             depth: (
                 near: 0.0,
-                far: 10.0,
+                far: 0.1,
             ),
             groups: [],
             field: None,
@@ -158,7 +158,7 @@
             ),
             depth: (
                 near: 0.0,
-                far: 10.0,
+                far: 0.1,
             ),
             groups: [],
             field: None,
@@ -206,7 +206,7 @@
             ),
             depth: (
                 near: 0.0,
-                far: 10.0,
+                far: 0.1,
             ),
             groups: [],
             field: None,
@@ -217,7 +217,7 @@
     nodes: [],
     environment: (
         sim: (
-            gravity: (0.0, -1000.0),
+            gravity: (0.0, -10.0),
             speed: 1.0,
             substeps: 6,
             plane_friction: 0.0,
@@ -227,7 +227,7 @@
             visible: true,
             snap_enabled: false,
             system: Cartesian,
-            spacing: 100.0,
+            spacing: 1.0,
             origin: (0.0, 0.0),
             rotation: 0.0,
         ),
@@ -271,7 +271,7 @@
             shadow_distance: 8000.0,
         ),
         scenery: (
-            back_offset: 20.0,
+            back_offset: 0.2,
             back_color: (
                 r: 0.82,
                 g: 0.83,

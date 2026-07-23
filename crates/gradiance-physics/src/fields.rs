@@ -28,19 +28,19 @@ use gradiance_domain::Body;
 use gradiance_domain::field::{FieldFalloff, FieldSource};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::sdf;
-use gradiance_units::world::PIXELS_PER_METER;
 
-/// Acceleration magnitude clamp (keeps zero-distance fields sane).
-const MAX_FIELD_ACCEL: f32 = 5.0e4;
-/// Below this magnitude a contribution is skipped (implicit range cutoff).
-const MIN_FIELD_ACCEL: f32 = 0.01;
-/// Finite-difference step for the SDF gradient (world px).
-const GRADIENT_EPS: f32 = 0.5;
+/// Acceleration magnitude clamp (m/s²; keeps zero-distance fields sane).
+const MAX_FIELD_ACCEL: f32 = 500.0;
+/// Below this magnitude (m/s²) a contribution is skipped (implicit range cutoff).
+const MIN_FIELD_ACCEL: f32 = 1.0e-4;
+/// Finite-difference step for the SDF gradient (world metres).
+const GRADIENT_EPS: f32 = 0.005;
 /// The field mass at which a source's strength knob applies verbatim:
-/// a 1 m² body at density 1. Bigger/denser sources couple proportionally
-/// harder, smaller ones softer — so cutting a source splits its pull
-/// instead of doubling it.
-pub const REFERENCE_FIELD_MASS: f32 = PIXELS_PER_METER * PIXELS_PER_METER;
+/// a 1 m² body at density 1 — i.e. `1.0` now that the world is SI (this was
+/// `PIXELS_PER_METER²` when area was measured in px²). Bigger/denser sources
+/// couple proportionally harder, smaller ones softer — so cutting a source
+/// splits its pull instead of doubling it.
+pub const REFERENCE_FIELD_MASS: f32 = 1.0;
 
 /// Derived field-coupling mass of a source: shape area × density. Rebuilt
 /// by [`sync_field_mass`] on shape/density edits; never serialized, never
@@ -72,9 +72,9 @@ pub fn sync_field_mass(
     }
 }
 
-/// Falloff factor over surface distance `d` (px) — pure, unit-testable.
+/// Falloff factor over surface distance `d` (metres) — pure, unit-testable.
 pub fn falloff_factor(falloff: FieldFalloff, d: f32) -> f32 {
-    let x = 1.0 + d.max(0.0) / PIXELS_PER_METER;
+    let x = 1.0 + d.max(0.0);
     match falloff {
         FieldFalloff::Linear => 1.0 / x,
         FieldFalloff::Quadratic => 1.0 / (x * x),
@@ -234,9 +234,9 @@ pub fn set_in_orbit(
     }
 }
 
-/// Below this speed the plane friction lets the solver's sleeping take
+/// Below this speed (m/s) the plane friction lets the solver's sleeping take
 /// over instead of jittering around zero.
-const FRICTION_REST_SPEED: f32 = 2.0;
+const FRICTION_REST_SPEED: f32 = 0.02;
 
 /// Coulomb friction against the back plane (top-down mode).
 ///
@@ -267,7 +267,7 @@ pub fn apply_plane_friction(
             forces.apply_force(-velocity / speed * mu * m * g);
         }
         let spin = forces.angular_velocity();
-        if spin.abs() > FRICTION_REST_SPEED / PIXELS_PER_METER {
+        if spin.abs() > FRICTION_REST_SPEED {
             // Gyration radius: the lever arm the surface rubs at.
             let k = (inertia.value() / m).max(0.0).sqrt();
             forces.apply_torque(-spin.signum() * mu * m * g * k);
@@ -285,7 +285,7 @@ mod tests {
         // quarters.
         assert!((falloff_factor(FieldFalloff::Linear, 0.0) - 1.0).abs() < 1e-6);
         assert!((falloff_factor(FieldFalloff::Quadratic, 0.0) - 1.0).abs() < 1e-6);
-        let m = PIXELS_PER_METER;
+        let m = 1.0;
         assert!((falloff_factor(FieldFalloff::Linear, m) - 0.5).abs() < 1e-6);
         assert!((falloff_factor(FieldFalloff::Quadratic, m) - 0.25).abs() < 1e-6);
     }

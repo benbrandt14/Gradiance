@@ -9,7 +9,7 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::contours::{ring_centroid, ring_signed_area};
 
 /// Clicking within this distance of the first vertex closes the loop.
-const CLOSE_RADIUS: f32 = 8.0;
+const CLOSE_RADIUS: f32 = 0.08;
 
 /// In-progress polygon vertices (world space).
 #[derive(Resource, Default, Debug)]

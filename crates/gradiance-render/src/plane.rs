@@ -33,10 +33,10 @@ const PLANE_SHADER_PATH: &str = "embedded://gradiance_render/plane.wgsl";
 /// shader's horizon fog ends the surface long before geometry does, and
 /// the camera's depth slab ([`DEPTH_SLAB`](gradiance_interaction::camera))
 /// is sized past the quad corners so the frustum never cuts them.
-pub const PLANE_EXTENT: f32 = 500_000.0;
+pub const PLANE_EXTENT: f32 = 5_000.0;
 
-/// Horizon fade band, world pixels (distance from the eye).
-pub const HORIZON_FADE: (f32, f32) = (60_000.0, 400_000.0);
+/// Horizon fade band, world metres (distance from the eye).
+pub const HORIZON_FADE: (f32, f32) = (600.0, 4_000.0);
 
 /// The material infinite planes render with.
 pub type InfinitePlaneMaterial = ExtendedMaterial<StandardMaterial, PlaneExtension>;
@@ -60,7 +60,7 @@ pub struct PlaneExtension {
 
 impl PlaneExtension {
     /// Standard fade parameters for a plane with the given world equation.
-    /// `dot_spacing` is the ground dot-grid pitch in world px (0 = no dots,
+    /// `dot_spacing` is the ground dot-grid pitch in world metres (0 = no dots,
     /// e.g. the vertical back plane).
     pub fn for_plane(normal: Vec3, offset: f32, horizon: Color, dot_spacing: f32) -> Self {
         let h = horizon.to_linear();
@@ -79,7 +79,7 @@ impl MaterialExtension for PlaneExtension {
 }
 
 /// A matte plane material in the given color, fogging toward `horizon`.
-/// `dot_spacing` sets the ground dot-grid pitch in world px (0 = no dots).
+/// `dot_spacing` sets the ground dot-grid pitch in world metres (0 = no dots).
 pub fn plane_material(
     color: Color,
     normal: Vec3,
@@ -156,7 +156,8 @@ pub fn sync_ground_planes(
             normal.extend(0.0),
             normal.dot(pose.pos),
             clear.0,
-            gradiance_units::world::PIXELS_PER_METER,
+            // One ground dot per metre (the world is SI).
+            1.0,
         ));
         // Grounds render through this material, not the body toon material.
         commands

@@ -284,8 +284,8 @@ fn a_script_drives_color_from_touch_count() {
     run(
         &mut app,
         "(begin
-            (spawn-box 0 120 20 20)
-            (spawn-ground 0 -100 0))",
+            (spawn-box 0 1.2 0.2 0.2)
+            (spawn-ground 0 -1 0))",
     );
     let boxes: Vec<gradiance::core::ids::StableId> = app
         .world_mut()

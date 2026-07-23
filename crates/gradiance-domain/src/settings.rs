@@ -51,7 +51,7 @@ impl Default for GridSettings {
             visible: true,
             snap_enabled: false,
             system: GridSystem::Cartesian,
-            spacing: 100.0,
+            spacing: 1.0,
             origin: Vec2::ZERO,
             rotation: 0.0,
         }
@@ -163,7 +163,7 @@ fn default_timestep_hz() -> f32 {
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
-            gravity: Vec2::new(0.0, -1000.0),
+            gravity: Vec2::new(0.0, -10.0),
             speed: 1.0,
             plane_friction: 0.0,
             substeps: 6,
@@ -353,7 +353,7 @@ pub struct ScenerySettings {
 impl Default for ScenerySettings {
     fn default() -> Self {
         Self {
-            back_offset: 20.0,
+            back_offset: 0.2,
             back_color: crate::appearance::Rgba::rgb(0.82, 0.83, 0.85),
             back_visible: true,
             ground_visible: true,

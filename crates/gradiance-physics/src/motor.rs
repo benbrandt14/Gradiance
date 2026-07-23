@@ -12,7 +12,7 @@ use gradiance_domain::joint::{JointDef, JointKind};
 
 /// Angular/linear buffer before a limit at which the motor reverses.
 const ANGLE_BUFFER: f32 = 0.05;
-const TRANSLATION_BUFFER: f32 = 2.0;
+const TRANSLATION_BUFFER: f32 = 0.02;
 
 /// Reverses oscillating motors at their limits.
 pub fn drive_oscillating_motors(

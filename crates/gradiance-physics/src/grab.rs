@@ -9,8 +9,8 @@ use bevy::prelude::*;
 
 /// Velocity gain toward the target (per second).
 const SPRING_GAIN: f32 = 12.0;
-/// Maximum induced speed (px/s).
-const MAX_SPEED: f32 = 6_000.0;
+/// Maximum induced speed (m/s).
+const MAX_SPEED: f32 = 60.0;
 /// Angular velocity damping factor per update while grabbed.
 const ANGULAR_DAMP: f32 = 0.98;
 
