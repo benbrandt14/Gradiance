@@ -137,6 +137,16 @@ dev = [
     "bevy/file_watcher",
     "gradiance-command/dev",
 ]
+# On-demand developer diagnostics overlay: `cargo run --features diagnostics`.
+# Bevy's own dev-tools/diagnostic plugins — on-screen FPS + frame-time graph,
+# entity-count and CPU/memory diagnostics, a periodic terminal dump, and
+# change-detection caller tracking (`track_location`). Additive; never in
+# release/CI. Intent/command/sync tracing is always on via `RUST_LOG`.
+diagnostics = [
+    "bevy/bevy_dev_tools",
+    "bevy/sysinfo_plugin",
+    "bevy/track_location",
+]
 
 [dev-dependencies]
 avian2d.workspace = true

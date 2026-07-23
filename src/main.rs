@@ -13,6 +13,10 @@ fn main() {
     app.add_plugins(DefaultPlugins)
         .add_plugins(GradiancePlugins);
 
+    // Opt-in developer diagnostics overlay (`cargo run --features diagnostics`).
+    #[cfg(feature = "diagnostics")]
+    app.add_plugins(gradiance::diagnostics::DiagnosticsPlugin);
+
     // CLI:
     //   `gradiance <scene.ron>`         opens a scene (e.g. a debug snapshot);
     //   `gradiance --script foo.scm …`  runs one or more `.scm` files at
