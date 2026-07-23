@@ -19,5 +19,7 @@ bevy.workspace = true
 thiserror.workspace = true
 
 [features]
-# Dev-only observability: the intent/command flight recorder ring buffer.
+# Dev-only observability: traces the per-frame `Changed<>` sync-match counts
+# (the deferred pipeline's cause→symptom gap). Intents and commands trace from
+# `dispatch` unconditionally, so the default build keeps that structured trace.
 dev = []

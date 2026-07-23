@@ -16,7 +16,3 @@ bevy.workspace = true
 rfd.workspace = true
 ron.workspace = true
 serde.workspace = true
-
-[features]
-# Dev-only: the F9 flight-recorder dump (reads the command crate's recorder).
-dev = ["gradiance-command/dev"]

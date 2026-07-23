@@ -91,7 +91,6 @@ bottom — no unclassified state.
 |---|---|---|
 | `CommandStack` | the undo history itself | neither authored nor derived: it *produces* authored state. Private to `command/`; lost on exit by design (history is session state) |
 | `PlotHistory` | derived-but-accumulating | a pure read of physics state, but it accumulates samples over time, so it can't be rebuilt from the current frame. Still never persisted/undone; cleared on retarget |
-| `FlightRecorder` (dev) | diagnostic accumulator | pure reader of the dispatch/sync pipeline; ring-bounded, dev-feature-gated, dumped on F9 |
 
 ## The one-way dataflow
 
