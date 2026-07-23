@@ -834,9 +834,10 @@ impl GraphViewer {
 }
 
 /// Appends a live value readout to a pin label (Simulink's on-wire value).
-fn pin_label(name: &str, value: Option<f32>) -> String {
+fn pin_label(name: &str, value: Option<f32>, unit: &str) -> String {
     match value {
-        Some(v) => format!("{name}  {v:.2}"),
+        Some(v) if unit.is_empty() => format!("{name}  {v:.2}"),
+        Some(v) => format!("{name}  {v:.2} {unit}"),
         None => name.to_owned(),
     }
 }
@@ -970,7 +971,8 @@ impl SnarlViewer<NodeData> for GraphViewer {
         let value = key
             .as_ref()
             .and_then(|k| Self::value_at(&self.input_values, k, pin.id.input));
-        ui.label(pin_label(&name, value));
+        // Actuator inputs (fill/tracer colour channels) are dimensionless.
+        ui.label(pin_label(&name, value, ""));
         PinInfo::circle().with_fill(egui::Color32::from_rgb(210, 170, 120))
     }
 
@@ -980,18 +982,20 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
-        let name = match snarl.get_node(pin.id.node) {
-            Some(NodeData::Body { id, .. }) => body_sensors(*id)
-                .get(pin.id.output)
-                .map_or_else(String::new, |(l, _)| (*l).to_owned()),
-            Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => name.clone(),
-            Some(NodeData::Scope) | None => String::new(),
+        // Sensor output ports carry the SI unit of their quantity (P3 catalog).
+        let (name, unit) = match snarl.get_node(pin.id.node) {
+            Some(NodeData::Body { id, .. }) => body_sensors(*id).get(pin.id.output).map_or_else(
+                || (String::new(), ""),
+                |(l, s)| ((*l).to_owned(), s.dimension().symbol()),
+            ),
+            Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => (name.clone(), ""),
+            Some(NodeData::Scope) | None => (String::new(), ""),
         };
         let key = snarl.get_node(pin.id.node).map(NodeData::key);
         let value = key
             .as_ref()
             .and_then(|k| Self::value_at(&self.output_values, k, pin.id.output));
-        ui.label(pin_label(&name, value));
+        ui.label(pin_label(&name, value, unit));
         PinInfo::circle().with_fill(egui::Color32::from_rgb(140, 220, 150))
     }
 
