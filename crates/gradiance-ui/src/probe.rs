@@ -55,6 +55,7 @@ pub fn probe_summary(
     pos: Vec2,
     velocity: Option<(Velocity2, AngularVelocity)>,
     mass: Option<Mass>,
+    angular_inertia: Option<f32>,
     contact_force: Force,
     sleeping: bool,
 ) -> String {
@@ -76,11 +77,17 @@ pub fn probe_summary(
     if let Some(m) = mass {
         let _ = write!(out, "\nmass {:.1} {}", m.value(), Mass::UNIT);
     }
-    // Translational kinetic energy ½mv² — a derived quantity assembled from the
-    // typed facade reads (mass · velocity²), shown in joules.
-    if let (Some((v, _)), Some(m)) = (velocity, mass) {
-        let ke = 0.5 * m.value() * v.magnitude().value().powi(2);
-        let _ = write!(out, "\nKE {:.3} {}", ke, Energy::UNIT);
+    // Total kinetic energy ½mv² + ½Iω² — a derived quantity assembled from the
+    // typed facade reads (mass, velocity, angular inertia), shown in joules.
+    if let (Some((v, omega)), Some(m)) = (velocity, mass) {
+        let translational = 0.5 * m.value() * v.magnitude().value().powi(2);
+        let rotational = angular_inertia.map_or(0.0, |i| 0.5 * i * omega.value().powi(2));
+        let _ = write!(
+            out,
+            "\nKE {:.3} {}",
+            translational + rotational,
+            Energy::UNIT
+        );
     }
     let _ = write!(
         out,
@@ -115,6 +122,7 @@ pub fn probe_panel(
             pos,
             physics.velocity_of(entity),
             physics.mass_of(entity),
+            physics.angular_inertia_of(entity),
             // Impulse ÷ dt is the contact force (typed relation).
             physics.net_contact_impulse(entity).magnitude() / gradiance_units::Time::seconds(dt),
             physics.is_sleeping(entity),
@@ -188,6 +196,7 @@ mod tests {
             Vec2::new(10.0, -2.5),
             Some((Velocity2::new(Vec2::new(3.0, 4.0)), AngularVelocity(1.5))),
             Some(Mass(400.0)),
+            Some(8.0),
             Force(980.0),
             true,
         );
@@ -196,13 +205,13 @@ mod tests {
         assert!(text.contains("v 5.0 m/s"), "{text}");
         assert!(text.contains("ω 1.50 rad/s"));
         assert!(text.contains("mass 400.0 kg"));
-        // ½·m·v² = ½·400·5² = 5000 J.
-        assert!(text.contains("KE 5000.000 J"), "{text}");
+        // ½mv² + ½Iω² = ½·400·5² + ½·8·1.5² = 5000 + 9 = 5009 J.
+        assert!(text.contains("KE 5009.000 J"), "{text}");
         assert!(text.contains("contact 980 N"));
         assert!(text.contains("sleeping"));
 
         // A static body (no velocity) still probes.
-        let text = probe_summary(Vec2::ZERO, None, None, Force(0.0), false);
+        let text = probe_summary(Vec2::ZERO, None, None, None, Force(0.0), false);
         assert!(text.contains("pos (0.0, 0.0)"));
         assert!(!text.contains("sleeping"));
     }
