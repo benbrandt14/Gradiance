@@ -45,6 +45,7 @@ pub struct PhysicsQueries<'w, 's> {
         ),
     >,
     masses: Query<'w, 's, &'static ComputedMass>,
+    inertias: Query<'w, 's, &'static ComputedAngularInertia>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
     contacts: Res<'w, ContactGraph>,
 }
@@ -128,6 +129,13 @@ impl PhysicsQueries<'_, '_> {
     /// The solver's computed mass, if the body simulates.
     pub fn mass_of(&self, entity: Entity) -> Option<Mass> {
         self.masses.get(entity).ok().map(|m| Mass(m.value()))
+    }
+
+    /// The solver's computed angular inertia (moment of inertia, kg·m²), if the
+    /// body simulates — the rotational analogue of [`mass_of`](Self::mass_of),
+    /// for rotational kinetic energy `½Iω²`.
+    pub fn angular_inertia_of(&self, entity: Entity) -> Option<f32> {
+        self.inertias.get(entity).ok().map(|i| i.value())
     }
 
     /// How many distinct bodies `entity` is currently touching (contact
