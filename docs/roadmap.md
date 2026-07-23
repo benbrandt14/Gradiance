@@ -702,6 +702,54 @@ Large; sequenced last.
 and is not in the repo docs; nothing was cross-checked against it. If avoiding
 re-proposals matters, capture prior crate rejections here.
 
+## Cross-cutting: engineering units (SI) — `docs/units-decision.md`
+
+A workspace-wide pass making every physical quantity a typed SI value
+(reflection-native newtypes in `gradiance-units`), with a single px↔SI seam
+(`units::world`) and a `PhysicalQuantity` catalog that sensors, plotters, and
+scripts share. Density stays **2D areal** (kg/m²) — built for a future 3D jump
+behind one `mass_of` seam, no physics-behaviour change now. Detailed phasing
+and rulings live in `docs/units-decision.md`; status:
+
+- [x] **P0** reflection bridge unwraps single-field newtypes to scalars.
+- [x] **P1** `gradiance-units` crate + `units::world` seam (`PIXELS_PER_METER`
+      confined).
+- [x] **P2·flip** atomic SI value + format rebase — world is metres, camera
+      absorbs the ×PPM render factor, scene format **v6** (older files
+      rejected; no migration). Merged.
+- [ ] **P2·types** thread the newtypes through geometry/physics/domain (by
+      accretion). *In progress:* `physics::queries` returns typed quantities
+      (`Velocity2`/`Mass`/`Impulse2`/…) and the probe/plot UI reads unit labels
+      off the types (caught the post-flip "px/s" label drift).
+- [ ] **P3** `PhysicalQuantity` catalog + signal/plotter binding (unit axes).
+- [ ] **P4** inspector/settings SI display + input.
+- [ ] **P6** units in the parameter-linking / expression DSL.
+- [ ] *(dedicated path)* arbitrary coordinate frames — `docs/frames-decision.md`,
+      door held open by the frame-agnostic catalog + `WorldScale` seam.
+
+## Horizon — larger directions (design goals, not scheduled)
+
+Not planned for a near milestone; recorded so current work doesn't foreclose
+them and cross-cutting passes leave the right seams.
+
+- **CAD kernel front-end.** A parametric / constraint-based modeling front end
+  that *produces* `ShapeDef` geometry (extends the sketch + constraint items in
+  M18/M21; builds on `docs/sdf-geometry-decision.md`). Dimensioned constraints
+  are unit-bearing, so the engineering-units pass (typed `Length`/`Angle`, the
+  DSL parse layer) is a direct enabler; sketch planes/datums tie into
+  coordinate frames.
+- **Grouped node behaviors.** Behavior nodes that reduce over a selection/group
+  — average / min / max / sum of a quantity across bodies (extends the signals
+  + behavior-node model). Consumes the `PhysicalQuantity` catalog: an aggregate
+  is a catalog reader over a *set* of `StableId`s, bound to the existing
+  `SelectionGroup`.
+- **Full 3D (multiple simulation planes).** Generalizes the 2.5D model (one XY
+  avian world + `DepthBand` / `INTERACTION_PLANE_Z`) to multiple simulation
+  planes and, ultimately, real 3D. The largest structural item: swaps the
+  physics layer (avian2d → 3D), generalizes depth→volume, and consumes the
+  units pass's 3D-ready seams (`units::mass_of`, `units::world`) and the
+  coordinate-frames path.
+
 ## Backlog / later
 
 - Curve pickers (lightroom-style) — now a planned milestone item, see "UI
