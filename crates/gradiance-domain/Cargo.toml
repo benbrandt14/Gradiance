@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 gradiance-core.workspace = true
 gradiance-geometry.workspace = true
+gradiance-units.workspace = true
 avian2d.workspace = true
 bevy.workspace = true
 colorgrad.workspace = true
