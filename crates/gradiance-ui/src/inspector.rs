@@ -13,7 +13,7 @@
 //! body — each target's own prior value is captured for undo.
 
 use crate::ports;
-use crate::widgets::{Commit, precise_drag};
+use crate::widgets::{Commit, precise_drag, precise_drag_unit};
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -26,6 +26,7 @@ use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::selection::Selection;
+use gradiance_units::Dimension;
 
 /// Whether the *Properties* dock pane is showing. Closed by default —
 /// the context menu is the first-line editing surface (feedback 2.8).
@@ -206,9 +207,14 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     let mut density = props.density_q.get(primary).map_or(1.0, |d| d.0);
     ui.horizontal(|ui| {
         ui.label("density");
-        if let Commit::Done(_, new) =
-            precise_drag(ui, ui.id().with("density"), &mut density, 1.0, 0.01)
-        {
+        if let Commit::Done(_, new) = precise_drag_unit(
+            ui,
+            ui.id().with("density"),
+            &mut density,
+            1.0,
+            0.01,
+            Dimension::Density.symbol(),
+        ) {
             commit_to_selection(
                 selection,
                 &props.ids,
@@ -478,9 +484,10 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
         } => {
             ui.horizontal(|ui| {
                 ui.label("w");
-                let cw = precise_drag(ui, ui.id().with("shape-w"), &mut width, 100.0, 0.5);
+                let m = Dimension::Length.symbol();
+                let cw = precise_drag_unit(ui, ui.id().with("shape-w"), &mut width, 1.0, 0.01, m);
                 ui.label("h");
-                let ch = precise_drag(ui, ui.id().with("shape-h"), &mut height, 100.0, 0.5);
+                let ch = precise_drag_unit(ui, ui.id().with("shape-h"), &mut height, 1.0, 0.01, m);
                 if matches!(cw, Commit::Done(..)) || matches!(ch, Commit::Done(..)) {
                     commit_to_selection(
                         selection,
@@ -499,9 +506,14 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
         ShapeDef::Circle { mut radius } => {
             ui.horizontal(|ui| {
                 ui.label("radius");
-                if let Commit::Done(..) =
-                    precise_drag(ui, ui.id().with("shape-r"), &mut radius, 50.0, 0.5)
-                {
+                if let Commit::Done(..) = precise_drag_unit(
+                    ui,
+                    ui.id().with("shape-r"),
+                    &mut radius,
+                    0.5,
+                    0.01,
+                    Dimension::Length.symbol(),
+                ) {
                     commit_to_selection(
                         selection,
                         &props.ids,
@@ -598,15 +610,17 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
     ui.horizontal(|ui| {
         ui.label("front")
             .on_hover_text("depth of the front face (0 = the interaction plane)");
-        let cn = precise_drag(ui, ui.id().with("depth-near"), &mut near, 0.0, 0.5);
+        let m = Dimension::Length.symbol();
+        let cn = precise_drag_unit(ui, ui.id().with("depth-near"), &mut near, 0.0, 0.01, m);
         ui.label("back")
             .on_hover_text("depth of the back face (thicker = spans more layers)");
-        let cf = precise_drag(
+        let cf = precise_drag_unit(
             ui,
             ui.id().with("depth-far"),
             &mut far,
             gradiance_core::constants::LAYER_HEIGHT,
-            0.5,
+            0.01,
+            m,
         );
         if matches!(cn, Commit::Done(..)) || matches!(cf, Commit::Done(..)) {
             commit_to_selection(

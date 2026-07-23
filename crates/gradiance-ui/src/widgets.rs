@@ -27,6 +27,20 @@ pub fn precise_drag(
     default: f32,
     speed: f32,
 ) -> Commit<f32> {
+    precise_drag_unit(ui, id, value, default, speed, "")
+}
+
+/// [`precise_drag`] with a trailing SI unit shown inside the field (e.g.
+/// `0.20 m`). Pass `""` for a dimensionless value. The unit is display-only —
+/// the stored value is always the base-SI magnitude.
+pub fn precise_drag_unit(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut f32,
+    default: f32,
+    speed: f32,
+    unit: &str,
+) -> Commit<f32> {
     let start_id = id.with("gesture-start");
     let active_id = id.with("gesture-active");
 
@@ -40,9 +54,15 @@ pub fn precise_drag(
         *value = active;
     }
 
+    let suffix = if unit.is_empty() {
+        String::new()
+    } else {
+        format!(" {unit}")
+    };
     let response = ui.add(
         egui::DragValue::new(value)
             .speed(speed)
+            .suffix(suffix)
             .custom_parser(|text| text.trim().parse::<f64>().ok()),
     );
 
