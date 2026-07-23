@@ -250,7 +250,11 @@ fn lighting_tab(
     ui.horizontal(|ui| {
         ui.label("shadow reach");
         changed |= ui
-            .add(egui::DragValue::new(&mut settings.shadow_distance).speed(100.0))
+            .add(
+                egui::DragValue::new(&mut settings.shadow_distance)
+                    .speed(2.0)
+                    .suffix(" m"),
+            )
             .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
             .changed();
     });
