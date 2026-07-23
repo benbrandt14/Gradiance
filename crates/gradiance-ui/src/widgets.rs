@@ -59,11 +59,15 @@ pub fn precise_drag_unit(
     } else {
         format!(" {unit}")
     };
+    // Typed input tolerates the shown unit (`0.2 m`, `0.2m`, or `0.2`) — the
+    // canonical-unit contract of `units::Dimension::parse`. The value stored is
+    // always the base-SI magnitude.
+    let unit_owned = unit.to_owned();
     let response = ui.add(
         egui::DragValue::new(value)
             .speed(speed)
             .suffix(suffix)
-            .custom_parser(|text| text.trim().parse::<f64>().ok()),
+            .custom_parser(move |text| parse_with_unit(text, &unit_owned)),
     );
 
     // Middle-click: reset to default, committed immediately.
@@ -99,4 +103,33 @@ pub fn precise_drag_unit(
         }
     }
     Commit::None
+}
+
+/// Parses a number that may carry the field's own SI unit suffix (`"0.2 m"`,
+/// `"0.2m"`, or `"0.2"`). A wrong or partial unit makes the parse fail, so the
+/// widget keeps its previous value. Pure — unit-tested below.
+fn parse_with_unit(text: &str, unit: &str) -> Option<f64> {
+    let t = text.trim();
+    let t = t.strip_suffix(unit).unwrap_or(t).trim_end();
+    t.parse::<f64>().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_with_unit;
+
+    #[test]
+    fn typed_input_tolerates_the_field_unit() {
+        // Bare number, with-space unit, and no-space unit all parse.
+        assert_eq!(parse_with_unit("0.2", "m"), Some(0.2));
+        assert_eq!(parse_with_unit("0.2 m", "m"), Some(0.2));
+        assert_eq!(parse_with_unit("0.2m", "m"), Some(0.2));
+        assert_eq!(parse_with_unit("1.5 m/s", "m/s"), Some(1.5));
+        assert_eq!(parse_with_unit("2.5 kg/m²", "kg/m²"), Some(2.5));
+        // A dimensionless field (empty unit) still parses a bare number.
+        assert_eq!(parse_with_unit("0.5", ""), Some(0.5));
+        // Garbage or a mismatched unit fails (widget keeps its value).
+        assert_eq!(parse_with_unit("abc", "m"), None);
+        assert_eq!(parse_with_unit("1.5 m/s", "m"), None);
+    }
 }
