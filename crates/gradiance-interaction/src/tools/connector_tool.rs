@@ -88,13 +88,20 @@ impl ManipTool for ConnectorDraft {
         let Some(anchor) = self.0 else {
             return;
         };
-        out.circle(anchor, 5.0, css::VIOLET);
+        // Screen-sized markers: radii/lengths are in pixels, scaled to world
+        // by `cam_scale` (world-per-pixel) so they stay constant on screen.
+        let px = ctx.cam_scale;
+        out.circle(anchor, 5.0 * px, css::VIOLET);
         if ctx.tool == ToolState::Slider
             && let Some(p) = ctx.cursor
             && anchor.distance(p) > AXIS_THRESHOLD
         {
             let dir = (p - anchor).normalize();
-            out.line(anchor - dir * 200.0, anchor + dir * 200.0, css::VIOLET);
+            out.line(
+                anchor - dir * 200.0 * px,
+                anchor + dir * 200.0 * px,
+                css::VIOLET,
+            );
         }
     }
 }

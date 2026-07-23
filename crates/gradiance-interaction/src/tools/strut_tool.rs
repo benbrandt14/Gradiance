@@ -67,10 +67,12 @@ impl ManipTool for StrutDraft {
         let Some(anchor) = self.0 else {
             return;
         };
-        out.circle(anchor, 4.0, css::SPRING_GREEN);
+        // Screen-sized handle dots: 4 px, scaled to world by `cam_scale`.
+        let r = 4.0 * ctx.cam_scale;
+        out.circle(anchor, r, css::SPRING_GREEN);
         if let Some(p) = ctx.cursor {
             out.line(anchor, p, css::SPRING_GREEN);
-            out.circle(p, 4.0, css::SPRING_GREEN);
+            out.circle(p, r, css::SPRING_GREEN);
         }
     }
 }

@@ -52,12 +52,20 @@ impl DraftTool for GroundTool {
             } else {
                 drag.normalize()
             };
+            // The surface line reads as infinite; the hatch marks are
+            // screen-sized (pixels × `cam_scale` world-per-pixel) so they
+            // stay a fixed size near the drag instead of scaling with zoom.
             out.line(anchor - dir * 10_000.0, anchor + dir * 10_000.0, css::OLIVE);
             // Hatch the solid side (local −Y of the surface).
             let down = -dir.perp();
+            let px = ctx.cam_scale;
             for i in -5..=5 {
-                let base = anchor + dir * (i as f32 * 40.0);
-                out.line(base, base + (down - dir) * 15.0, css::OLIVE.with_alpha(0.6));
+                let base = anchor + dir * (i as f32 * 40.0 * px);
+                out.line(
+                    base,
+                    base + (down - dir) * 15.0 * px,
+                    css::OLIVE.with_alpha(0.6),
+                );
             }
         }
     }

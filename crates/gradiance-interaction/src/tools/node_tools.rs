@@ -52,7 +52,8 @@ fn place_node(ctx: &ManipContext, world: &ToolWorld, kind: NodeKind) -> ManipOut
 /// Ghost ring at the cursor — shared node-placement preview.
 fn ghost(ctx: &ManipContext, out: &mut ToolPreview) {
     if let Some(p) = ctx.cursor {
-        out.circle(p, 6.0, css::AQUAMARINE);
+        // Screen-sized ghost dot: 6 px, scaled to world by `cam_scale`.
+        out.circle(p, 6.0 * ctx.cam_scale, css::AQUAMARINE);
     }
 }
 

@@ -31,6 +31,7 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 /// Draws the enabled debug overlays.
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
+    scale: Res<gradiance_interaction::camera::CameraScale>,
     bodies: Query<(Entity, &ShapeDef, &Transform, &DepthBand), With<Body>>,
     field_sources: Query<(&Transform, &FieldSource), With<Body>>,
     fields: Fields,
@@ -43,6 +44,11 @@ pub fn draw_debug_overlays(
     physics: PhysicsQueries,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
+    // Marker glyphs are sized in pixels; `px` (world-per-pixel) converts them
+    // to world units so they stay a fixed on-screen size at any zoom. Sizes
+    // derived from real geometry (rings, AABBs) and vectors proportional to a
+    // physical quantity (velocity/field arrows) are already world-consistent.
+    let px = scale.0;
     for (entity, shape, transform, band) in &bodies {
         let infinite = shape.contains_half_plane();
 
@@ -93,12 +99,24 @@ pub fn draw_debug_overlays(
 
         if debug.show_origins {
             let origin = transform.translation.truncate();
-            gizmos.line_2d(origin - Vec2::X * 6.0, origin + Vec2::X * 6.0, css::WHITE);
-            gizmos.line_2d(origin - Vec2::Y * 6.0, origin + Vec2::Y * 6.0, css::WHITE);
+            gizmos.line_2d(
+                origin - Vec2::X * 6.0 * px,
+                origin + Vec2::X * 6.0 * px,
+                css::WHITE,
+            );
+            gizmos.line_2d(
+                origin - Vec2::Y * 6.0 * px,
+                origin + Vec2::Y * 6.0 * px,
+                css::WHITE,
+            );
             if !infinite {
                 // Centroid may sit off-origin after CSG reshapes.
                 let centroid = world_point(transform, polygonize(shape).centroid());
-                gizmos.circle_2d(Isometry2d::from_translation(centroid), 3.0, css::HOT_PINK);
+                gizmos.circle_2d(
+                    Isometry2d::from_translation(centroid),
+                    3.0 * px,
+                    css::HOT_PINK,
+                );
             }
         }
 
@@ -107,14 +125,18 @@ pub fn draw_debug_overlays(
         {
             let origin = transform.translation.truncate();
             if physics.is_sleeping(entity) {
-                gizmos.circle_2d(Isometry2d::from_translation(origin), 8.0, css::GRAY);
+                gizmos.circle_2d(Isometry2d::from_translation(origin), 8.0 * px, css::GRAY);
             } else {
+                // Velocity arrow is a world-space vector (both world and
+                // velocity flipped by the same factor, so its screen size is
+                // preserved).
                 gizmos.arrow_2d(origin, origin + lin * 0.25, css::YELLOW);
                 if ang.abs() > 0.05 {
-                    // Angular velocity: an arc-ish tick, radius ∝ spin.
+                    // Angular velocity (rad/s, scale-invariant): an arc-ish
+                    // tick whose pixel radius grows with spin.
                     gizmos.circle_2d(
                         Isometry2d::from_translation(origin),
-                        4.0 + ang.abs().min(20.0),
+                        (4.0 + ang.abs().min(20.0)) * px,
                         css::ORANGE,
                     );
                 }
@@ -123,11 +145,11 @@ pub fn draw_debug_overlays(
     }
 
     if debug.show_joint_anchors {
-        draw_joint_anchors(&joints, &index, &poses, &mut gizmos);
+        draw_joint_anchors(&joints, &index, &poses, &mut gizmos, px);
     }
 
     for (transform, source) in &field_sources {
-        draw_field_marker(transform, *source, &mut gizmos);
+        draw_field_marker(transform, *source, &mut gizmos, px);
     }
 
     if debug.show_fields
@@ -144,13 +166,13 @@ pub fn draw_debug_overlays(
             let alpha = 0.25 + 0.75 * ((i + 1) as f32 / n);
             let color = css::MEDIUM_ORCHID.with_alpha(alpha);
             for pos in frame {
-                gizmos.circle_2d(Isometry2d::from_translation(*pos), 2.5, color);
+                gizmos.circle_2d(Isometry2d::from_translation(*pos), 2.5 * px, color);
             }
         }
     }
 
     if debug.show_contacts {
-        draw_contacts(&physics, &mut gizmos);
+        draw_contacts(&physics, &mut gizmos, px);
     }
 }
 
@@ -160,6 +182,7 @@ fn draw_joint_anchors(
     index: &IdIndex,
     poses: &Query<&Transform, With<Body>>,
     gizmos: &mut Gizmos<OverlayGizmos>,
+    px: f32,
 ) {
     for def in joints {
         let color = match def.kind {
@@ -179,13 +202,14 @@ fn draw_joint_anchors(
             None => Some(def.anchor_b), // world pin
         };
         if let Some(a) = world_a {
-            gizmos.circle_2d(Isometry2d::from_translation(a), 4.0, color);
+            gizmos.circle_2d(Isometry2d::from_translation(a), 4.0 * px, color);
         }
         if let Some(b) = world_b {
-            gizmos.circle_2d(Isometry2d::from_translation(b), 6.0, color);
+            gizmos.circle_2d(Isometry2d::from_translation(b), 6.0 * px, color);
             if def.body_b.is_none() {
-                gizmos.line_2d(b - Vec2::splat(4.0), b + Vec2::splat(4.0), color);
-                gizmos.line_2d(b + Vec2::new(-4.0, 4.0), b + Vec2::new(4.0, -4.0), color);
+                let d = 4.0 * px;
+                gizmos.line_2d(b - Vec2::splat(d), b + Vec2::splat(d), color);
+                gizmos.line_2d(b + Vec2::new(-d, d), b + Vec2::new(d, -d), color);
             }
         }
         if let (Some(a), Some(b)) = (world_a, world_b) {
@@ -195,16 +219,17 @@ fn draw_joint_anchors(
 }
 
 /// Draws every touching contact point and its impulse-scaled normal.
-fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>) {
+fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>, px: f32) {
     for contact in physics.contact_points() {
         gizmos.circle_2d(
             Isometry2d::from_translation(contact.point),
-            2.5,
+            2.5 * px,
             css::MAGENTA,
         );
-        // Normal length grows with the contact impulse (clamped so hard hits
-        // stay on-screen).
-        let length = 8.0 + contact.normal_impulse.min(1000.0) * 0.03;
+        // Screen-sized base plus a term growing with the contact impulse
+        // (N·s, SI — clamped so hard hits stay on-screen). The impulse gain
+        // is approximate; this is a dev overlay, not a visually pinned value.
+        let length = (8.0 + contact.normal_impulse.min(2.0) * 12.0) * px;
         gizmos.arrow_2d(
             contact.point,
             contact.point + contact.normal * length,
@@ -243,14 +268,16 @@ fn draw_field_overlay(
             let p = center + Vec2::new(gx as f32, gy as f32) * spacing;
             let a = fields.accel_at(p, None);
             let mag = a.length();
-            if mag < 1.0 {
+            // Acceleration is m/s² (SI); the skip floor and saturation knees
+            // are ÷100 from the former px/s² values.
+            if mag < 0.01 {
                 continue;
             }
             // Saturating arrow length; warmth ramps with magnitude.
-            let len = spacing * 0.42 * (mag / (mag + 800.0));
+            let len = spacing * 0.42 * (mag / (mag + 8.0));
             let dir = a / mag;
             let tip = p + dir * len;
-            let heat = (mag / (mag + 2000.0)).clamp(0.0, 1.0);
+            let heat = (mag / (mag + 20.0)).clamp(0.0, 1.0);
             let color = css::STEEL_BLUE.mix(&css::ORANGE_RED, heat);
             gizmos.line_2d(p, tip, color);
             let perp = Vec2::new(-dir.y, dir.x);
@@ -267,6 +294,7 @@ fn draw_field_marker(
     transform: &Transform,
     source: FieldSource,
     gizmos: &mut Gizmos<OverlayGizmos>,
+    px: f32,
 ) {
     let p = transform.translation.truncate();
     let color = if source.strength < 0.0 {
@@ -274,6 +302,11 @@ fn draw_field_marker(
     } else {
         css::INDIAN_RED
     };
-    gizmos.circle_2d(Isometry2d::from_translation(p), 5.0, color);
-    gizmos.circle_2d(Isometry2d::from_translation(p), 8.0, color.with_alpha(0.5));
+    // Screen-sized double ring (5 px / 8 px).
+    gizmos.circle_2d(Isometry2d::from_translation(p), 5.0 * px, color);
+    gizmos.circle_2d(
+        Isometry2d::from_translation(p),
+        8.0 * px,
+        color.with_alpha(0.5),
+    );
 }
