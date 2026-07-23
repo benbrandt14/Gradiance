@@ -135,7 +135,7 @@ impl Default for ToolDefaults {
 /// the engine (`Gravity`, physics clock speed) — UI never touches avian.
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct SimSettings {
-    /// World gravity, px/s².
+    /// World gravity, m/s².
     pub gravity: Vec2,
     /// Simulation speed multiplier (1 = realtime).
     pub speed: f32,

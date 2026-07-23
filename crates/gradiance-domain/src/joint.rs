@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 /// acceleration-based model (`stiffness = 0`, `damping` as configured).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct MotorDef {
-    /// Target velocity (rad/s for hinges, px/s for sliders).
+    /// Target velocity (rad/s for hinges, m/s for sliders).
     pub target_velocity: f32,
     /// Maximum torque (hinge) or force (slider) the motor may exert.
     pub max_force: f32,
@@ -104,9 +104,9 @@ pub enum JointKind {
     /// unbounded the distance limit pins to `rest_length` (a pure spring), and
     /// when a [`range`](Self::Spring::range) is set the limit becomes that band.
     Spring {
-        /// The length the spring relaxes to (px) — the creation distance.
+        /// The length the spring relaxes to (m) — the creation distance.
         rest_length: f32,
-        /// Spring constant (stiffness, N/px); the joint's compliance is
+        /// Spring constant (stiffness, N/m); the joint's compliance is
         /// `1 / stiffness`, and `<= 0` is treated as rigid. Set from the
         /// connected mass at creation so the strut isn't too soft. The scalar a
         /// future curve editor would generalize to a nonlinear
