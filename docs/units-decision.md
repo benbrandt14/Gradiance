@@ -258,10 +258,20 @@ extension, not a rewrite:
    (`Velocity::UNIT`, …) instead of hard-coded strings — which is how the
    post-flip "px/s" label drift was caught and fixed. The `ui → units` DAG
    edge was added for it (reviewed in `tests/boundaries.rs`).
-4. **P3 — `PhysicalQuantity` catalog + signal/plotter binding.** Catalog in
-   `gradiance-units`, readers in `physics`; `SignalSource` and plot/probe
-   panels bind to it; axes get unit labels.
-5. **P4 — UI SI display + input.** Inspector/settings format & parse SI;
+4. **P3 — `PhysicalQuantity` catalog + signal/plotter binding** (first slice
+   landed). The `Dimension` enum is the catalog's runtime face;
+   `SignalSource::dimension()` binds each sensor variant to it (adding the
+   `domain → units` edge). Consumers read unit labels off the catalog instead
+   of hard-coded strings: the inspector sensor readouts (`ports::unit`) and
+   the live plot's series labels now show SI and can't drift. *Remaining:* a
+   fuller catalog keyed by name (readers over `physics::queries`) for
+   node-graph ports and set-aggregate readers.
+5. **P4 — UI SI display + input** (display slice landed). Inspector shape /
+   depth / density, the joint inspector (travel limits, rest length,
+   stiffness, damping, range), and settings (shadow reach) format SI with a
+   `precise_drag_unit` suffix and use metre-scale reset/sensitivity — fixing
+   pixel-era drag scales the flip missed (a width reset gave a 100 m box).
+   *Remaining:* unit-aware *input* parsing (`Dimension::parse`) and a
    unit-system display toggle.
 6. **P6 — units in the expression DSL.** Dimensional quantities in
    parameter-linking menus; adopt an external parse crate behind the units

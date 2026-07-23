@@ -87,10 +87,23 @@ const SIGNAL_COLORS: [egui::Color32; 4] = [
 /// for modulation operands are internal plumbing, not user-chosen series, so
 /// `is_plottable` drops them. The dock host computes this from the bus and hands
 /// it to [`plot_section`].
-pub fn plottable_series(bus: &gradiance_signal::SignalBus) -> Vec<(&str, &VecDeque<f32>)> {
+/// The plottable series as `(name, unit, history)`. The unit is the SI symbol
+/// of the series' binding source dimension (the P3 catalog) — empty for params,
+/// computed signals, and anything without a dimensioned source.
+pub fn plottable_series<'a>(
+    bus: &'a gradiance_signal::SignalBus,
+    bindings: &gradiance_domain::signal::SignalBindings,
+) -> Vec<(&'a str, &'static str, &'a VecDeque<f32>)> {
     bus.entries()
         .filter(|(name, e)| e.history().len() >= 2 && is_plottable(name))
-        .map(|(name, e)| (name, e.history()))
+        .map(|(name, e)| {
+            let unit = bindings
+                .0
+                .iter()
+                .find(|b| b.name == name)
+                .map_or("", |b| b.source.dimension().symbol());
+            (name, unit, e.history())
+        })
         .collect()
 }
 
@@ -101,7 +114,7 @@ pub fn plottable_series(bus: &gradiance_signal::SignalBus) -> Vec<(&str, &VecDeq
 /// bottom-dock host.
 pub fn plot_section(
     ui: &mut egui::Ui,
-    plottable: &[(&str, &VecDeque<f32>)],
+    plottable: &[(&str, &'static str, &VecDeque<f32>)],
     config: &mut PlotConfig,
 ) {
     if plottable.is_empty() {
@@ -113,7 +126,7 @@ pub fn plot_section(
     }
     signal_picker(ui, plottable, config);
 
-    let visible = visible_series(plottable.iter().map(|(n, _)| *n), &config.hidden);
+    let visible = visible_series(plottable.iter().map(|(n, _, _)| *n), &config.hidden);
     if visible.is_empty() {
         ui.weak("No series selected — pick one above.");
         return;
@@ -122,8 +135,14 @@ pub fn plot_section(
         if i > 0 {
             ui.add_space(4.0);
         }
-        if let Some((_, samples)) = plottable.iter().find(|(n, _)| n == name) {
-            draw_series(ui, name, samples, SIGNAL_COLORS[i % SIGNAL_COLORS.len()]);
+        if let Some((_, unit, samples)) = plottable.iter().find(|(n, _, _)| n == name) {
+            // Append the SI unit (from the catalog) when the series has one.
+            let label = if unit.is_empty() {
+                (*name).to_string()
+            } else {
+                format!("{name}  [{unit}]")
+            };
+            draw_series(ui, &label, samples, SIGNAL_COLORS[i % SIGNAL_COLORS.len()]);
         }
     }
     ui.add_space(2.0);
@@ -132,9 +151,13 @@ pub fn plot_section(
 
 /// A collapsible list of the plottable signals, each a checkbox that hides or
 /// shows its series (unchecking adds the name to [`PlotConfig::hidden`]).
-fn signal_picker(ui: &mut egui::Ui, plottable: &[(&str, &VecDeque<f32>)], config: &mut PlotConfig) {
+fn signal_picker(
+    ui: &mut egui::Ui,
+    plottable: &[(&str, &'static str, &VecDeque<f32>)],
+    config: &mut PlotConfig,
+) {
     ui.collapsing("signals", |ui| {
-        for (name, _) in plottable {
+        for (name, _, _) in plottable {
             let mut shown = !config.hidden.contains(*name);
             if ui.checkbox(&mut shown, *name).changed() {
                 if shown {
