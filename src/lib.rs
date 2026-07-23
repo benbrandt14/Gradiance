@@ -96,6 +96,10 @@ pub use gradiance_units as units;
 
 pub mod prelude;
 
+/// Optional Bevy dev-tools diagnostics overlay (`--features diagnostics`).
+#[cfg(feature = "diagnostics")]
+pub mod diagnostics;
+
 use bevy::app::plugin_group;
 
 plugin_group! {
