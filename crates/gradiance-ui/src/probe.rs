@@ -18,7 +18,7 @@ use gradiance_interaction::tools::topmost_body_at;
 use gradiance_physics::queries::PhysicsQueries;
 // `Time` stays fully-qualified at its one use site — bevy's `Time` (in the
 // prelude) shares the name.
-use gradiance_units::{AngularVelocity, Force, Mass, Velocity, Velocity2};
+use gradiance_units::{AngularVelocity, Energy, Force, Mass, Velocity, Velocity2};
 
 /// Probe window state: pinned bodies plus the hover-probe toggle.
 #[derive(Resource, Default)]
@@ -75,6 +75,12 @@ pub fn probe_summary(
     }
     if let Some(m) = mass {
         let _ = write!(out, "\nmass {:.1} {}", m.value(), Mass::UNIT);
+    }
+    // Translational kinetic energy ½mv² — a derived quantity assembled from the
+    // typed facade reads (mass · velocity²), shown in joules.
+    if let (Some((v, _)), Some(m)) = (velocity, mass) {
+        let ke = 0.5 * m.value() * v.magnitude().value().powi(2);
+        let _ = write!(out, "\nKE {:.3} {}", ke, Energy::UNIT);
     }
     let _ = write!(
         out,
@@ -190,6 +196,8 @@ mod tests {
         assert!(text.contains("v 5.0 m/s"), "{text}");
         assert!(text.contains("ω 1.50 rad/s"));
         assert!(text.contains("mass 400.0 kg"));
+        // ½·m·v² = ½·400·5² = 5000 J.
+        assert!(text.contains("KE 5000.000 J"), "{text}");
         assert!(text.contains("contact 980 N"));
         assert!(text.contains("sleeping"));
 
