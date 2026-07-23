@@ -19,7 +19,7 @@ struct PlaneData {
     data: vec4<f32>,
 }
 struct FadeData {
-    // x = dot-grid spacing in world px (0 = no dots), y/z = horizon fade
+    // x = dot-grid spacing in world metres (0 = no dots), y/z = horizon fade
     // start/end distance from the eye.
     data: vec4<f32>,
 }
@@ -34,8 +34,8 @@ struct HorizonData {
 @group(#{MATERIAL_BIND_GROUP}) @binding(102) var<uniform> horizon: HorizonData;
 
 // 4x4 Bayer threshold — the opaque pass has no blending, so the inside
-// reveal is a screen-door dissolve (brief: the band is ~50 world px of
-// camera travel).
+// reveal is a screen-door dissolve (brief: the band is ~0.5 m of camera
+// travel through the plane).
 fn bayer4(p: vec2<f32>) -> f32 {
     var thresholds = array<f32, 16>(
         0.03125, 0.53125, 0.15625, 0.65625,
@@ -56,7 +56,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // camera crosses into the solid half-space the surface dissolves so
     // the scene stays visible instead of becoming a wall.
     let side = dot(eye, plane.data.xyz) - plane.data.w;
-    let reveal = smoothstep(-40.0, 10.0, side);
+    let reveal = smoothstep(-0.4, 0.1, side);
     if reveal < bayer4(in.position.xy) {
         discard;
     }
@@ -85,7 +85,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let g = (fract(uv / spacing + 0.5) - 0.5) * spacing;
         let d = length(g);
         let aa = fwidth(uv.x) + fwidth(uv.y) + 1e-3;
-        let dot_mask = 1.0 - smoothstep(2.0, 2.0 + aa, d);
+        // Dot radius in world metres (~2 cm on the 1 m lattice).
+        let dot_mask = 1.0 - smoothstep(0.02, 0.02 + aa, d);
         let near = 1.0 - smoothstep(spacing * 8.0, spacing * 40.0, length(in.world_position.xyz - eye));
         let lit = dot(out.color.rgb, vec3(0.2126, 0.7152, 0.0722));
         // Dots read as a subtle punch toward the opposite value.

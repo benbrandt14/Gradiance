@@ -8,9 +8,12 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::polygonize::polygonize;
 use gradiance_interaction::overlay::OverlayGizmos;
 
-/// Depth just in front of a body's front cap.
+/// Depth just in front of a body's front cap: a 5 mm world lift, enough to
+/// clear the fill face's depth without the outline visibly floating in
+/// front (the world is SI metres — a larger lift parallaxes off the body
+/// when the view tilts).
 fn front_z(band: DepthBand) -> f32 {
-    band.z_front() + 0.5
+    band.z_front() + 0.005
 }
 
 /// Draws each body's authored border outline (alpha 0 hides it).
