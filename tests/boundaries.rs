@@ -190,7 +190,7 @@ fn the_crate_dag_matches_the_architecture() {
             &["core", "domain", "geometry", "scene", "signal"],
         ),
         ("core", &[]),
-        ("domain", &["core", "geometry"]),
+        ("domain", &["core", "geometry", "units"]),
         ("geometry", &["core"]),
         (
             "interaction",

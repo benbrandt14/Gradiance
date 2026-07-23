@@ -22,15 +22,15 @@ const GRADIENT_BANDS: f32 = 48.0;
 /// simply produces no sample this frame.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub enum SignalSource {
-    /// Linear speed of a body (px/s).
+    /// Linear speed of a body (m/s).
     Speed(StableId),
     /// Angular speed of a body (rad/s, absolute).
     Spin(StableId),
-    /// A body's height (world y, px).
+    /// A body's height (world y, m).
     Height(StableId),
-    /// A body's horizontal position (world x, px).
+    /// A body's horizontal position (world x, m).
     PosX(StableId),
-    /// Centre-to-centre distance between two bodies (px).
+    /// Centre-to-centre distance between two bodies (m).
     Distance(StableId, StableId),
     /// Net normal contact force on a body (impulse / fixed dt).
     ContactForce(StableId),
@@ -291,6 +291,22 @@ impl SignalSource {
             Self::Distance(..) | Self::Named(_) => return None,
         };
         Some(format!("{tag}@{}", id.0))
+    }
+
+    /// The physical [`Dimension`](gradiance_units::Dimension) this source
+    /// reads — the P3 catalog binding (`docs/units-decision.md`) that gives
+    /// every plot axis, port readout, and inspector row its unit label from
+    /// one place instead of a hard-coded string per call site. `ContactCount`
+    /// and a `Named` script value carry no declared dimension.
+    pub fn dimension(&self) -> gradiance_units::Dimension {
+        use gradiance_units::Dimension;
+        match self {
+            Self::Speed(_) => Dimension::Velocity,
+            Self::Spin(_) => Dimension::AngularVelocity,
+            Self::Height(_) | Self::PosX(_) | Self::Distance(..) => Dimension::Length,
+            Self::ContactForce(_) => Dimension::Force,
+            Self::ContactCount(_) | Self::Named(_) => Dimension::Dimensionless,
+        }
     }
 
     /// Parses a canonical sensor bus name back to its source (inverse of
@@ -885,6 +901,31 @@ mod tests {
         // Non-body sources have no canonical name.
         assert_eq!(SignalSource::Named("x".into()).bus_name(), None);
         assert_eq!(SignalSource::from_bus_name("nonsense"), None);
+    }
+
+    #[test]
+    fn source_dimensions_carry_si_units() {
+        use gradiance_units::Dimension;
+        let id = StableId::new();
+        // The catalog binding: each source's unit label comes from its
+        // dimension (SI now — never "px/s"/"px" again).
+        assert_eq!(SignalSource::Speed(id).dimension(), Dimension::Velocity);
+        assert_eq!(SignalSource::Speed(id).dimension().symbol(), "m/s");
+        assert_eq!(
+            SignalSource::Spin(id).dimension(),
+            Dimension::AngularVelocity
+        );
+        assert_eq!(SignalSource::Height(id).dimension().symbol(), "m");
+        assert_eq!(SignalSource::PosX(id).dimension().symbol(), "m");
+        assert_eq!(
+            SignalSource::Distance(id, id).dimension().symbol(),
+            "m",
+            "distance is a length"
+        );
+        assert_eq!(SignalSource::ContactForce(id).dimension().symbol(), "N");
+        // A count and an unlabelled script value have no unit.
+        assert_eq!(SignalSource::ContactCount(id).dimension().symbol(), "");
+        assert_eq!(SignalSource::Named("x".into()).dimension().symbol(), "");
     }
 
     #[test]

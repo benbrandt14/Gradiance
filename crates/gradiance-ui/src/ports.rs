@@ -43,15 +43,11 @@ pub fn body_actuators(id: StableId) -> [(&'static str, SignalSink); 2] {
     ]
 }
 
-/// A short unit label for a sensor source's readout.
+/// A short unit label for a sensor source's readout — the catalog dimension's
+/// SI symbol, so the label can never drift from the value (this used to be a
+/// hard-coded table and still said "px/s"/"px" after the SI flip).
 pub fn unit(source: &SignalSource) -> &'static str {
-    match source {
-        SignalSource::Speed(_) => "px/s",
-        SignalSource::Spin(_) => "rad/s",
-        SignalSource::Height(_) | SignalSource::PosX(_) | SignalSource::Distance(..) => "px",
-        SignalSource::ContactForce(_) => "N",
-        SignalSource::ContactCount(_) | SignalSource::Named(_) => "",
-    }
+    source.dimension().symbol()
 }
 
 /// Renders a body's sensor ports as live read-only rows (name → value → a
