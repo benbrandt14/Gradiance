@@ -11,7 +11,7 @@ use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use gradiance_core::units::PosRot;
-use gradiance_units::{AngularVelocity, Impulse, Impulse2, Mass, Velocity2};
+use gradiance_units::{AngularVelocity, Energy, Impulse, Impulse2, Mass, Momentum, Velocity2};
 
 /// A world-space contact sample: the point, its unit normal, and the normal
 /// impulse. Divide the impulse by the timestep for the contact force.
@@ -136,6 +136,29 @@ impl PhysicsQueries<'_, '_> {
     /// for rotational kinetic energy `½Iω²`.
     pub fn angular_inertia_of(&self, entity: Entity) -> Option<f32> {
         self.inertias.get(entity).ok().map(|i| i.value())
+    }
+
+    /// Total kinetic energy `½mv² + ½Iω²` of a simulating body — a derived read
+    /// on the query surface, so probes, plotters, and scripts share one
+    /// definition (`docs/units-decision.md`).
+    pub fn kinetic_energy_of(&self, entity: Entity) -> Option<Energy> {
+        let mass = self.masses.get(entity).ok()?;
+        let (lin, ang) = self.velocities.get(entity).ok()?;
+        let translational = 0.5 * mass.value() * lin.0.length_squared();
+        let rotational = self
+            .inertias
+            .get(entity)
+            .ok()
+            .map_or(0.0, |i| 0.5 * i.value() * ang.0.powi(2));
+        Some(Energy(translational + rotational))
+    }
+
+    /// Linear momentum magnitude `m·|v|` of a simulating body (the other
+    /// conserved quantity beside [`kinetic_energy_of`](Self::kinetic_energy_of)).
+    pub fn momentum_of(&self, entity: Entity) -> Option<Momentum> {
+        let mass = self.masses.get(entity).ok()?;
+        let (lin, _) = self.velocities.get(entity).ok()?;
+        Some(Momentum(mass.value() * lin.0.length()))
     }
 
     /// How many distinct bodies `entity` is currently touching (contact
