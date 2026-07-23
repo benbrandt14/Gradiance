@@ -207,6 +207,11 @@ scalar_quantity! {
     /// A frequency, in hertz.
     Frequency, hertz, "Hz"
 }
+scalar_quantity! {
+    /// A linear impulse, in newton-seconds (force integrated over time; a
+    /// contact's `normal_impulse`).
+    Impulse, newton_seconds, "N·s"
+}
 
 vector_quantity! {
     /// A planar displacement / position, in metres.
@@ -223,6 +228,10 @@ vector_quantity! {
 vector_quantity! {
     /// A planar force, in newtons.
     Force2, Force, "N"
+}
+vector_quantity! {
+    /// A planar impulse, in newton-seconds (a net contact impulse).
+    Impulse2, Impulse, "N·s"
 }
 
 // --- cross-dimension relations (only those the tool uses) ---
@@ -265,5 +274,14 @@ impl core::ops::Mul<Acceleration2> for Mass {
     /// Newton's second law, planar: `Mass · Acceleration2 = Force2`.
     fn mul(self, rhs: Acceleration2) -> Force2 {
         Force2(rhs.0 * self.0)
+    }
+}
+
+impl core::ops::Div<Time> for Impulse {
+    type Output = Force;
+    /// Impulse over the timestep is force: `Impulse / Time = Force` (a
+    /// contact impulse ÷ fixed dt reads as the contact force).
+    fn div(self, rhs: Time) -> Force {
+        Force(self.0 / rhs.0)
     }
 }

@@ -3853,6 +3853,7 @@ dependencies = [
  "gradiance-scene",
  "gradiance-script",
  "gradiance-signal",
+ "gradiance-units",
 ]
 
 [[package]]

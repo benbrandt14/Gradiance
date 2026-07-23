@@ -170,6 +170,7 @@ fn draw_body_overlays(
     if debug.show_velocities
         && let Some((lin, ang)) = physics.velocity_of(entity)
     {
+        let (lin, ang) = (lin.value(), ang.value());
         let origin = transform.translation.truncate();
         if physics.is_sleeping(entity) {
             gizmos.circle_2d(Isometry2d::from_translation(origin), 8.0 * px, css::GRAY);
@@ -243,7 +244,7 @@ fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>, p
         // Screen-sized base plus a term growing with the contact impulse
         // (N·s, SI — clamped so hard hits stay on-screen). The impulse gain
         // is approximate; this is a dev overlay, not a visually pinned value.
-        let length = (8.0 + contact.normal_impulse.min(2.0) * 12.0) * px;
+        let length = (8.0 + contact.normal_impulse.value().min(2.0) * 12.0) * px;
         gizmos.arrow_2d(
             contact.point,
             contact.point + contact.normal * length,

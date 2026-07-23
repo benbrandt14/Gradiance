@@ -232,6 +232,7 @@ fn the_crate_dag_matches_the_architecture() {
                 "scene",
                 "script",
                 "signal",
+                "units",
             ],
         ),
         ("units", &[]),

@@ -248,11 +248,11 @@ pub fn read_source(
         SignalSource::Speed(id) => index
             .entity(*id)
             .and_then(|e| physics.velocity_of(e))
-            .map(|(v, _)| v.length()),
+            .map(|(v, _)| v.magnitude().value()),
         SignalSource::Spin(id) => index
             .entity(*id)
             .and_then(|e| physics.velocity_of(e))
-            .map(|(_, w)| w.abs()),
+            .map(|(_, w)| w.value().abs()),
         SignalSource::Height(id) => pos_of(*id).map(|p| p.y),
         SignalSource::PosX(id) => pos_of(*id).map(|p| p.x),
         SignalSource::Distance(a, b) => match (pos_of(*a), pos_of(*b)) {
@@ -261,7 +261,7 @@ pub fn read_source(
         },
         SignalSource::ContactForce(id) => index
             .entity(*id)
-            .map(|e| physics.net_contact_impulse(e).length() / dt),
+            .map(|e| physics.net_contact_impulse(e).magnitude().value() / dt),
         SignalSource::ContactCount(id) => {
             index.entity(*id).map(|e| physics.touching_count(e) as f32)
         }

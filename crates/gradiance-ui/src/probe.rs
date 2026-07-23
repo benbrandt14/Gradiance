@@ -16,6 +16,9 @@ use gradiance_interaction::PointerOverUi;
 use gradiance_interaction::cursor::CursorWorldPos;
 use gradiance_interaction::tools::topmost_body_at;
 use gradiance_physics::queries::PhysicsQueries;
+// `Time` stays fully-qualified at its one use site — bevy's `Time` (in the
+// prelude) shares the name.
+use gradiance_units::{AngularVelocity, Force, Mass, Velocity, Velocity2};
 
 /// Probe window state: pinned bodies plus the hover-probe toggle.
 #[derive(Resource, Default)]
@@ -50,20 +53,35 @@ impl ProbePanel {
 /// One body's live readout, formatted. Pure (unit-tested below).
 pub fn probe_summary(
     pos: Vec2,
-    velocity: Option<(Vec2, f32)>,
-    mass: Option<f32>,
-    contact_force: f32,
+    velocity: Option<(Velocity2, AngularVelocity)>,
+    mass: Option<Mass>,
+    contact_force: Force,
     sleeping: bool,
 ) -> String {
     use std::fmt::Write;
+    // Unit labels come from the quantity types, so they cannot drift from the
+    // values (before P2·types this line read a hard-coded "px/s" — stale after
+    // the SI flip).
     let mut out = format!("pos ({:.1}, {:.1})", pos.x, pos.y);
     if let Some((v, omega)) = velocity {
-        let _ = write!(out, "\nv {:.1} px/s  ω {:.2} rad/s", v.length(), omega);
+        let _ = write!(
+            out,
+            "\nv {:.1} {}  ω {:.2} {}",
+            v.magnitude().value(),
+            Velocity::UNIT,
+            omega.value(),
+            AngularVelocity::UNIT,
+        );
     }
     if let Some(m) = mass {
-        let _ = write!(out, "\nmass {m:.1}");
+        let _ = write!(out, "\nmass {:.1} {}", m.value(), Mass::UNIT);
     }
-    let _ = write!(out, "\ncontact {contact_force:.0}");
+    let _ = write!(
+        out,
+        "\ncontact {:.0} {}",
+        contact_force.value(),
+        Force::UNIT
+    );
     if sleeping {
         out.push_str("\nsleeping");
     }
@@ -91,7 +109,8 @@ pub fn probe_panel(
             pos,
             physics.velocity_of(entity),
             physics.mass_of(entity),
-            physics.net_contact_impulse(entity).length() / dt,
+            // Impulse ÷ dt is the contact force (typed relation).
+            physics.net_contact_impulse(entity).magnitude() / gradiance_units::Time::seconds(dt),
             physics.is_sleeping(entity),
         ))
     };
@@ -161,20 +180,21 @@ mod tests {
     fn probe_summary_reports_the_read_facade_facts() {
         let text = probe_summary(
             Vec2::new(10.0, -2.5),
-            Some((Vec2::new(3.0, 4.0), 1.5)),
-            Some(400.0),
-            980.0,
+            Some((Velocity2::new(Vec2::new(3.0, 4.0)), AngularVelocity(1.5))),
+            Some(Mass(400.0)),
+            Force(980.0),
             true,
         );
         assert!(text.contains("pos (10.0, -2.5)"));
-        assert!(text.contains("v 5.0 px/s"), "{text}");
+        // Units read off the quantity type — SI now, and can't drift.
+        assert!(text.contains("v 5.0 m/s"), "{text}");
         assert!(text.contains("ω 1.50 rad/s"));
-        assert!(text.contains("mass 400.0"));
-        assert!(text.contains("contact 980"));
+        assert!(text.contains("mass 400.0 kg"));
+        assert!(text.contains("contact 980 N"));
         assert!(text.contains("sleeping"));
 
         // A static body (no velocity) still probes.
-        let text = probe_summary(Vec2::ZERO, None, None, 0.0, false);
+        let text = probe_summary(Vec2::ZERO, None, None, Force(0.0), false);
         assert!(text.contains("pos (0.0, 0.0)"));
         assert!(!text.contains("sleeping"));
     }

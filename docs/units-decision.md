@@ -246,10 +246,17 @@ Three larger directions are on the roadmap horizon (unscheduled, `ROADMAP.md`
    threading yet — signatures stay `f32`-SI; the newtypes remain available
    for the retype below. Physics behaviour is preserved up to the unit
    relabel (world ÷100 × camera ×100 = identical pixels).
-3. **P2·types — retype geometry/physics/domain.** Thread the `gradiance-units`
-   newtypes through the pure layers and the physics boundary so
-   `physics::queries` returns typed quantities. Pure refactor over the
-   already-SI values from the flip — no value or format change.
+3. **P2·types — retype geometry/physics/domain** (in progress, by accretion).
+   Thread the `gradiance-units` newtypes through the pure layers and the
+   physics boundary so `physics::queries` returns typed quantities. Pure
+   refactor over the already-SI values from the flip — no value or format
+   change. *Landed:* the `physics::queries` read facade returns typed
+   quantities (`velocity_of → (Velocity2, AngularVelocity)`, `mass_of → Mass`,
+   `net_contact_impulse → Impulse2`, `ContactSample::normal_impulse →
+   Impulse`); the probe/plot UI reads unit labels off the quantity types
+   (`Velocity::UNIT`, …) instead of hard-coded strings — which is how the
+   post-flip "px/s" label drift was caught and fixed. The `ui → units` DAG
+   edge was added for it (reviewed in `tests/boundaries.rs`).
 4. **P3 — `PhysicalQuantity` catalog + signal/plotter binding.** Catalog in
    `gradiance-units`, readers in `physics`; `SignalSource` and plot/probe
    panels bind to it; axes get unit labels.
