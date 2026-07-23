@@ -738,7 +738,7 @@ fn capture_impulse(
     mut out: ResMut<CapturedImpulse>,
 ) {
     if let Some(entity) = target.and_then(|t| index.entity(t.0)) {
-        out.0 = physics.net_contact_impulse(entity);
+        out.0 = physics.net_contact_impulse(entity).value();
     }
 }
 

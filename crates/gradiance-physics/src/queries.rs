@@ -11,6 +11,7 @@ use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use gradiance_core::units::PosRot;
+use gradiance_units::{AngularVelocity, Impulse, Impulse2, Mass, Velocity2};
 
 /// A world-space contact sample: the point, its unit normal, and the normal
 /// impulse. Divide the impulse by the timestep for the contact force.
@@ -18,10 +19,11 @@ use gradiance_core::units::PosRot;
 pub struct ContactSample {
     /// World-space contact point.
     pub point: Vec2,
-    /// Unit contact normal (world space, from the first shape toward the second).
+    /// Unit contact normal (world space, from the first shape toward the
+    /// second) — a dimensionless direction, so it stays a bare `Vec2`.
     pub normal: Vec2,
-    /// Normal impulse magnitude (N·s); force ≈ impulse / dt.
-    pub normal_impulse: f32,
+    /// Normal impulse magnitude; force ≈ impulse / dt.
+    pub normal_impulse: Impulse,
 }
 
 /// Read-only spatial queries against the physics world.
@@ -31,7 +33,17 @@ pub struct PhysicsQueries<'w, 's> {
     /// facade reads these directly rather than avian's spatial BVH, which is
     /// frozen while the sim is paused (see [`bodies_at_point`](Self::bodies_at_point)).
     colliders: Query<'w, 's, (Entity, &'static Transform, &'static Collider)>,
-    velocities: Query<'w, 's, (&'static LinearVelocity, &'static AngularVelocity)>,
+    // avian's `AngularVelocity` (the component) is name-shadowed by the units
+    // quantity imported above, so qualify it here; the read returns the typed
+    // quantity, not the component.
+    velocities: Query<
+        'w,
+        's,
+        (
+            &'static LinearVelocity,
+            &'static avian2d::prelude::AngularVelocity,
+        ),
+    >,
     masses: Query<'w, 's, &'static ComputedMass>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
     contacts: Res<'w, ContactGraph>,
@@ -54,7 +66,7 @@ impl PhysicsQueries<'_, '_> {
                     samples.push(ContactSample {
                         point: point.point,
                         normal: manifold.normal,
-                        normal_impulse: point.normal_impulse,
+                        normal_impulse: Impulse(point.normal_impulse),
                     });
                 }
             }
@@ -101,11 +113,11 @@ impl PhysicsQueries<'_, '_> {
     }
 
     /// The entity's `(linear, angular)` velocity, if it simulates.
-    pub fn velocity_of(&self, entity: Entity) -> Option<(Vec2, f32)> {
+    pub fn velocity_of(&self, entity: Entity) -> Option<(Velocity2, AngularVelocity)> {
         self.velocities
             .get(entity)
             .ok()
-            .map(|(lin, ang)| (lin.0, ang.0))
+            .map(|(lin, ang)| (Velocity2::new(lin.0), AngularVelocity(ang.0)))
     }
 
     /// Whether the body is asleep (solver has parked it).
@@ -114,8 +126,8 @@ impl PhysicsQueries<'_, '_> {
     }
 
     /// The solver's computed mass, if the body simulates.
-    pub fn mass_of(&self, entity: Entity) -> Option<f32> {
-        self.masses.get(entity).ok().map(|m| m.value())
+    pub fn mass_of(&self, entity: Entity) -> Option<Mass> {
+        self.masses.get(entity).ok().map(|m| Mass(m.value()))
     }
 
     /// How many distinct bodies `entity` is currently touching (contact
@@ -144,7 +156,7 @@ impl PhysicsQueries<'_, '_> {
     /// impulse once per solver pass (bias solve + relaxation), which is 2×
     /// the physical step impulse at steady state — halved here so the read
     /// is in real N·s (a resting body reports ≈ its weight × dt).
-    pub fn net_contact_impulse(&self, entity: Entity) -> Vec2 {
+    pub fn net_contact_impulse(&self, entity: Entity) -> Impulse2 {
         const SOLVER_PASSES: f32 = 2.0;
         let mut total = Vec2::ZERO;
         for pair in self
@@ -167,6 +179,6 @@ impl PhysicsQueries<'_, '_> {
                 }
             }
         }
-        total / SOLVER_PASSES
+        Impulse2::new(total / SOLVER_PASSES)
     }
 }

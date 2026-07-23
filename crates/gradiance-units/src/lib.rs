@@ -38,5 +38,6 @@ pub use dimension::Dimension;
 pub use mass::mass_of;
 pub use quantity::{
     Acceleration, Acceleration2, Angle, AngularVelocity, Area, Damping, Density, Displacement,
-    Force, Force2, Frequency, Length, Mass, Stiffness, Time, Torque, Velocity, Velocity2,
+    Force, Force2, Frequency, Impulse, Impulse2, Length, Mass, Stiffness, Time, Torque, Velocity,
+    Velocity2,
 };

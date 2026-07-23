@@ -18,6 +18,7 @@ use gradiance_domain::signal::{
     GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource,
 };
 use gradiance_physics::queries::PhysicsQueries;
+use gradiance_units::Mass;
 
 /// A body's **sensor ports** as `(label, source)` — the read-only scene reads
 /// it publishes. The single catalog behind the inspector readouts and the
@@ -99,7 +100,7 @@ pub fn sensor_readouts(
     ui.horizontal(|ui| {
         ui.label("mass");
         match index.entity(id).and_then(|e| physics.mass_of(e)) {
-            Some(mass) => ui.monospace(format!("{mass:.2}")),
+            Some(mass) => ui.monospace(format!("{:.2} {}", mass.value(), Mass::UNIT)),
             None => ui.weak("—"),
         };
     });
