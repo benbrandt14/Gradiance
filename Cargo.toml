@@ -130,13 +130,12 @@ mimalloc.workspace = true
 # Dev-only inner loop: `cargo run --features dev`.
 # - dynamic_linking: links Bevy as a dylib, cutting incremental link time.
 # - file_watcher: asset hot-reload (and the hook for future .scm hot-reload).
-# - the member `dev` features light up the intent/command flight recorder.
+# - gradiance-command/dev: the per-frame Changed<> sync-count trace.
 # Never enable for release/CI builds; the default build stays fully static.
 dev = [
     "bevy/dynamic_linking",
     "bevy/file_watcher",
     "gradiance-command/dev",
-    "gradiance-persist/dev",
 ]
 
 [dev-dependencies]
