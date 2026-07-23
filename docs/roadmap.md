@@ -592,6 +592,116 @@ a normal dependency, not a cargo feature — see the decision doc's
 
 The former backlog lines below are now subsumed by that record:
 
+## External-crate adoption audit (2026-07-23)
+
+A scan of the (post crate-split) codebase against a 26-candidate crate-adoption
+table. **Directive (external-first):** prefer well-documented external crates
+over homegrown code **unless there is an overwhelming reason not to** — accepting
+a LOC *increase* now in feature-light areas the roadmap will grow, because a
+maintained crate carries considered features we would otherwise hand-roll
+poorly. The original "net LOC must decrease" bar is superseded by this. Two pains
+set priority: undo/redo is edge-case-riddled and can't undo a sim start (a "less
+smart" snapshot-reload is wanted), and the flight recorder should be replaced by
+a crisp, easy on/off diagnostics stack that makes debugging a dream.
+
+**Decisions:** undo **and** on-disk persistence move onto `bevy_save`
+(`World::checkpoint`/`rollback`, reflection snapshots), retiring the bespoke
+`gradiance-scene` records/format and the per-command `undo()` bodies — a
+checkpoint at sim-start makes "undo the sim start" fall out. The authored/derived
+split (invariant #5) stands; only its *format* changes.
+
+**Recon.** Per-module SLOC (tokei, code lines): `ui` 6103 · `interaction` 3826 ·
+`command` 1934 · `script` 1601 · `domain` 1573 · `geometry` 1447 · `render` 1446
+· `physics` 832 · rest ≤ 349. Biggest hand-rolled surfaces are `ui`/
+`interaction`, not the geometry/physics/render crates the "L" rows named.
+`cargo-machete` surfaces no removable dep (the `glam` hits are the load-bearing
+features-only serde seam that unifies with bevy_math's glam 0.32.1; `steel-core`
+is a crate-rename false positive; the `gradiance-units`-in-`physics` hit is left
+as-is — that crate is being built out separately). `cargo tree -d` duplicates are
+all unavoidable transitive versions. egui-family crates below must pin the egui
+version `bevy_egui = 0.41` uses (CI verifies) — the coupling to watch.
+
+### A. Persistence & undo on `bevy_save` (rows 1, 2)
+
+Adopt `bevy_save`; undo/redo = `checkpoint()` per committed command +
+`rollback()` (reflection-driven, auto-captures authored components), and save/
+load use its RON pathway — retiring `gradiance-scene`'s bespoke records and the
+~150 LOC of per-command `undo()` bodies. Only authored components are captured;
+derived state (`Collider`, meshes, avian joints) still rebuilds via `Changed<>`
+sync. **Prerequisite (row 2):** move `Selection.entities` / `SelectedJoint` (and
+any cross-frame `Entity` holder — `interaction/selection.rs:40,114`) to
+`StableId`, since restore re-mints `Entity`. Tests via **insta** (row 11) over
+serialized snapshots + intent-replay.
+
+### B. Diagnostics & dev-tools — "debugging is a dream" (rows 3, 4, 10, 14, 16, 23)
+
+One easy `dev`/`diagnostics` feature lighting up a maintained stack, replacing
+the hand-rolled flight recorder (`command/flight_recorder.rs` +
+`persist/flight.rs`, delete):
+- `bevy/trace` + `trace_tracy` (Tracy profiler) + `track_location` (change-
+  detection caller tracking) + `bevy_debug_stepping` (single-step the schedule)
+  for the intent/command timeline the recorder gave.
+- `bevy_dev_tools` (built-in) FPS/diagnostics overlay + `iyes_perf_ui` +
+  `bevy::diagnostic` `EntityCount`/`FrameCount`/`SystemInformation` (row 23).
+- `bevy-inspector-egui` dev world/entity inspector (row 10; can retire
+  `ui/reflect_grid.rs` in dev panels, keep the styled user-facing inspector).
+- `bevy_mod_debugdump` schedule graphs (row 14) — attacks the deferred-pipeline
+  opacity at its root (the reason the recorder existed).
+- avian `PhysicsDebugPlugin`/`PhysicsGizmos` (row 4) behind `GizmoConfigStore`
+  toggles (row 16, config-toggle part only; retained-buffer part skipped —
+  glyphs track moving bodies/zoom so re-emit anyway).
+- Residue: the `Changed<>` sync-count fact has no direct Bevy metric — a tiny
+  dispatch ring or `track_location`, not a bespoke recorder.
+
+### C. Incremental external adoptions (rows 7, 8, 9, 12, 13, 15, 17, 19, 21, 22, 24)
+
+Land as each seam is touched:
+- **egui_plot** (row 9): replace the hand-drawn painter plot (`ui/plot.rs`) —
+  axes/zoom/pan/legend/cursor; the curve-editor substrate.
+- **miette** (row 19): diagnostic renderer for `thiserror` enums **across
+  crates**, wiring steel's spans in.
+- **insta + approx + proptest** (rows 11, 15): golden/replay snapshots, kill
+  float_cmp friction, polygonize round-trip proptests (area/winding/self-
+  intersection post-CSG).
+- **bevy-persistent** (row 8): debounced workstation-prefs persistence
+  (`ToolDefaults`/`DebugSettings`/dock layout); scene-level settings ride
+  `bevy_save`.
+- **reflect_functions + curated BRP** (rows 7, 17, one workstream): adopt
+  `bevy/reflect_functions` + reflected docs for registry introspection + a CI
+  test that every op resolves in `FunctionRegistry` (keep intent dispatch —
+  steel builtins take `SteelVal`); expose an app-level `bevy_remote` seam (read
+  methods + `trigger_event` + `gradiance.op.*`; exclude insert/mutate/despawn).
+- **bevy_math::curve / bounding** (rows 12, 24): curve sampling infra for the
+  editor (keep the custom monotone eval `domain/signal.rs`); `Aabb2d` for point-
+  cloud bounds/future broadphase (keep CSG-tree `sdf::aabb` custom).
+- **clipboard** (row 13): copy = serialize selection → RON text; paste = fresh
+  `StableId`s → one spawn intent (out of `ui/`).
+- **egui_extras::TableBuilder / egui_code_editor** (rows 21, 22): tabular lists;
+  bracket-matching + editor UX for the console (keep registry-driven coloring).
+
+### D. Interaction rework — `bevy_picking` (row 26, own milestone)
+
+Port tool gestures from polling `PointerButtons`/`SnappedCursor` to first-party
+`bevy_picking` observers with a custom SDF backend — already the roadmap's
+deferred Bevy-audit intent; retires a large chunk of the `interaction` crate.
+Large; sequenced last.
+
+### Already covered / hold
+
+- **Already covered (external):** lyon fill tessellation (row 6), `egui_tiles`
+  docking (row 18 — the "planned" note in the UI-shell section below is stale;
+  both docks run on it), `rfd` file dialog (row 20), `FrameTimeDiagnosticsPlugin`
+  (FPS). The response-curve **math** already exists (`domain/signal.rs`
+  monotone-cubic; bevy_math has no non-overshooting monotone variant).
+- **Hold (overwhelming reason):** direct `parry2d` (row 5 — avian already wraps
+  parry and derives colliders/mass/point-queries/BVH; revisit only if CSG
+  geometry growth wants parry decomposition on discretized polygons);
+  `hotpatching` (row 25 — experimental, won't survive type-layout changes).
+
+*Open item:* the task referenced a "rejected-items table" that was not supplied
+and is not in the repo docs; nothing was cross-checked against it. If avoiding
+re-proposals matters, capture prior crate rejections here.
+
 ## Backlog / later
 
 - Curve pickers (lightroom-style) — now a planned milestone item, see "UI
