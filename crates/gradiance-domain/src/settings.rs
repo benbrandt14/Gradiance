@@ -37,7 +37,7 @@ pub struct GridSettings {
     pub snap_enabled: bool,
     /// Grid geometry family.
     pub system: GridSystem,
-    /// Base cell size in world pixels (display adapts by powers of two).
+    /// Base cell size in metres (display adapts by powers of two).
     pub spacing: f32,
     /// Grid origin in world space.
     pub origin: Vec2,
@@ -336,7 +336,7 @@ impl Default for LightingSettings {
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct ScenerySettings {
     /// Gap between the deepest occupied layer's back face and the back
-    /// plane, world pixels (0 = touching).
+    /// plane, metres (0 = touching).
     pub back_offset: f32,
     /// Back plane color.
     pub back_color: crate::appearance::Rgba,
