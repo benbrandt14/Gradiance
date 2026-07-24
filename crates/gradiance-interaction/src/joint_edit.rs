@@ -35,14 +35,14 @@ use gradiance_geometry::snapping::project_on_segment;
 
 /// Screen-space radius (logical px) for clicking a joint glyph. Shared with
 /// the context menu so left-click picking and right-click config agree.
-pub const ANCHOR_PICK_PX: f32 = 15.0;
+pub const ANCHOR_PICK_PX: f32 = 18.0;
 /// World-space deadzone before an anchor drag engages.
 const DRAG_DEADZONE: f32 = 0.04;
 /// Hinge glyph ring radius (logical px) — shared with `render::joint_viz`.
-/// Sized to read next to the ~10 px selection handles (was a cramped 6 px).
-pub const HINGE_RING_PX: f32 = 9.0;
+/// Sized to read clearly next to the ~10 px selection handles.
+pub const HINGE_RING_PX: f32 = 12.0;
 /// Hinge limit-arc radius (logical px) — shared with `render::joint_viz`.
-pub const HINGE_LIMIT_RADIUS_PX: f32 = 18.0;
+pub const HINGE_LIMIT_RADIUS_PX: f32 = 22.0;
 /// Reference half-length (logical px) of an unlimited prismatic's axis line.
 pub const SLIDER_REF_HALF_PX: f32 = 40.0;
 
