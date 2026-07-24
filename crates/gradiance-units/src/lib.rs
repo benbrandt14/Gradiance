@@ -37,7 +37,7 @@ pub mod world;
 pub use dimension::Dimension;
 pub use mass::mass_of;
 pub use quantity::{
-    Acceleration, Acceleration2, Angle, AngularVelocity, Area, Damping, Density, Displacement,
-    Energy, Force, Force2, Frequency, Impulse, Impulse2, Length, Mass, Momentum, Stiffness, Time,
-    Torque, Velocity, Velocity2,
+    Acceleration, Acceleration2, Angle, AngularMomentum, AngularVelocity, Area, Damping, Density,
+    Displacement, Energy, Force, Force2, Frequency, Impulse, Impulse2, Length, Mass, Momentum,
+    Stiffness, Time, Torque, Velocity, Velocity2,
 };

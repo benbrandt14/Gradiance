@@ -18,7 +18,9 @@ use gradiance_interaction::tools::topmost_body_at;
 use gradiance_physics::queries::PhysicsQueries;
 // `Time` stays fully-qualified at its one use site — bevy's `Time` (in the
 // prelude) shares the name.
-use gradiance_units::{AngularVelocity, Energy, Force, Mass, Momentum, Velocity, Velocity2};
+use gradiance_units::{
+    AngularMomentum, AngularVelocity, Energy, Force, Mass, Momentum, Velocity, Velocity2,
+};
 
 /// Probe window state: pinned bodies plus the hover-probe toggle.
 #[derive(Resource, Default)]
@@ -51,12 +53,14 @@ impl ProbePanel {
 }
 
 /// One body's live readout, formatted. Pure (unit-tested below).
+#[expect(clippy::too_many_arguments)] // read-only feeds, one per fact
 pub fn probe_summary(
     pos: Vec2,
     velocity: Option<(Velocity2, AngularVelocity)>,
     mass: Option<Mass>,
     energy: Option<Energy>,
     momentum: Option<Momentum>,
+    angular_momentum: Option<AngularMomentum>,
     contact_force: Force,
     sleeping: bool,
 ) -> String {
@@ -85,6 +89,9 @@ pub fn probe_summary(
     }
     if let Some(p) = momentum {
         let _ = write!(out, "\np {:.2} {}", p.value(), Momentum::UNIT);
+    }
+    if let Some(l) = angular_momentum {
+        let _ = write!(out, "\nL {:.3} {}", l.value(), AngularMomentum::UNIT);
     }
     let _ = write!(
         out,
@@ -121,6 +128,7 @@ pub fn probe_panel(
             physics.mass_of(entity),
             physics.kinetic_energy_of(entity),
             physics.momentum_of(entity),
+            physics.angular_momentum_of(entity),
             // Impulse ÷ dt is the contact force (typed relation).
             physics.net_contact_impulse(entity).magnitude() / gradiance_units::Time::seconds(dt),
             physics.is_sleeping(entity),
@@ -196,6 +204,7 @@ mod tests {
             Some(Mass(400.0)),
             Some(Energy(5009.0)),
             Some(Momentum(2000.0)),
+            Some(AngularMomentum(12.0)),
             Force(980.0),
             true,
         );
@@ -206,11 +215,12 @@ mod tests {
         assert!(text.contains("mass 400.0 kg"));
         assert!(text.contains("KE 5009.000 J"), "{text}");
         assert!(text.contains("p 2000.00 kg·m/s"), "{text}");
+        assert!(text.contains("L 12.000 kg·m²/s"), "{text}");
         assert!(text.contains("contact 980 N"));
         assert!(text.contains("sleeping"));
 
         // A static body (no velocity) still probes.
-        let text = probe_summary(Vec2::ZERO, None, None, None, None, Force(0.0), false);
+        let text = probe_summary(Vec2::ZERO, None, None, None, None, None, Force(0.0), false);
         assert!(text.contains("pos (0.0, 0.0)"));
         assert!(!text.contains("sleeping"));
     }

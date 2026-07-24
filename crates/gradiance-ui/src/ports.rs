@@ -23,7 +23,7 @@ use gradiance_units::Mass;
 /// A body's **sensor ports** as `(label, source)` — the read-only scene reads
 /// it publishes. The single catalog behind the inspector readouts and the
 /// canvas output pins.
-pub fn body_sensors(id: StableId) -> [(&'static str, SignalSource); 8] {
+pub fn body_sensors(id: StableId) -> [(&'static str, SignalSource); 9] {
     [
         ("speed", SignalSource::Speed(id)),
         ("spin", SignalSource::Spin(id)),
@@ -33,6 +33,7 @@ pub fn body_sensors(id: StableId) -> [(&'static str, SignalSource); 8] {
         ("contacts", SignalSource::ContactCount(id)),
         ("energy", SignalSource::KineticEnergy(id)),
         ("momentum", SignalSource::Momentum(id)),
+        ("ang mom", SignalSource::AngularMomentum(id)),
     ]
 }
 

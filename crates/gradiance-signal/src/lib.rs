@@ -271,6 +271,9 @@ pub fn read_source(
         SignalSource::Momentum(id) => index
             .entity(*id)
             .and_then(|e| Some(physics.momentum_of(e)?.value())),
+        SignalSource::AngularMomentum(id) => index
+            .entity(*id)
+            .and_then(|e| Some(physics.angular_momentum_of(e)?.value())),
         SignalSource::Named(_) => None,
     }
 }

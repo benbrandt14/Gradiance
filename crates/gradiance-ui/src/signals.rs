@@ -273,6 +273,7 @@ fn source_label(source: &SignalSource) -> &'static str {
         SignalSource::ContactCount(_) => "contact count",
         SignalSource::KineticEnergy(_) => "energy",
         SignalSource::Momentum(_) => "momentum",
+        SignalSource::AngularMomentum(_) => "ang mom",
         SignalSource::Named(_) => "named",
     }
 }
@@ -307,6 +308,7 @@ fn add_buttons(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[Sta
         add("contact count", first.map(SignalSource::ContactCount));
         add("energy", first.map(SignalSource::KineticEnergy));
         add("momentum", first.map(SignalSource::Momentum));
+        add("ang mom", first.map(SignalSource::AngularMomentum));
         add(
             "distance",
             match selected {
@@ -372,6 +374,7 @@ fn binding_row(
                         | SignalSource::ContactCount(id)
                         | SignalSource::KineticEnergy(id)
                         | SignalSource::Momentum(id)
+                        | SignalSource::AngularMomentum(id)
                         | SignalSource::Distance(id, _) => Some(*id),
                         SignalSource::Named(_) => None,
                     },

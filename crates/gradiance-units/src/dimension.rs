@@ -44,6 +44,8 @@ pub enum Dimension {
     Energy,
     /// Linear momentum (`kg·m/s`).
     Momentum,
+    /// Angular momentum (`kg·m²/s`).
+    AngularMomentum,
     /// A pure ratio or count — no unit.
     Dimensionless,
 }
@@ -77,6 +79,7 @@ impl Dimension {
             Self::Frequency => "Hz",
             Self::Energy => "J",
             Self::Momentum => "kg·m/s",
+            Self::AngularMomentum => "kg·m²/s",
             Self::Dimensionless => "",
         }
     }
