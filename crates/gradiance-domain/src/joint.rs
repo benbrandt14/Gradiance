@@ -135,29 +135,34 @@ pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;
 // --- Mass-aware motor defaults -------------------------------------------
 //
 // A motor's `max_force` is a *torque/force ceiling*: avian clamps each
-// substep's corrective impulse to `max_force · dt²`. Under the
-// acceleration-based model the impulse a body needs to reach its target
-// velocity scales with that body's **inertia** (angular) or **mass**
-// (linear), so a *fixed* ceiling (the old `1.0e7`) does the wrong thing at
-// both ends: a heavy/large body's need exceeds the ceiling and the motor
-// reads as weak ("negligible torque"), while a light body's need is a tiny
-// fraction of it, leaving the impulse effectively unbounded ("the body just
-// clips around"). Scaling the default ceiling with the connected body makes
-// it track the need, so the motor feels the same across sizes.
+// substep's corrective impulse to `max_force · dt²`. The ceiling has a stable
+// band, both ends of which the old fixed `1.0e7` fell outside of:
 //
-// The constants are calibrated to reproduce the historical `1.0e7` ceiling
-// for a unit-density 1 m box (mass 1 kg, inertia (1²+1²)/12 kg·m²) and scale
-// from there; the exact feel is empirical, so treat them as the one knob to
-// nudge in-app.
+//   * Too LOW (below the load): the motor can't overcome gravity/contact and
+//     reads as weak — a heavy body's need is `~m·g·r`, which exceeded the
+//     fixed ceiling ("negligible torque").
+//   * Too HIGH (above the acceleration model's engagement impulse, which is
+//     `~ damping · target_velocity / dt · I` per unit inertia): the ceiling
+//     never bites, so the first substep dumps a huge impulse into the joint
+//     that the *rigid* point constraint can't absorb in one step — the pivot
+//     visibly drifts ("the rotation point becomes offset, as if too
+//     compliant"), and light bodies get flung.
+//
+// Scaling the ceiling with the connected body's **inertia** (angular) or
+// **mass** (linear) keeps it inside that band across sizes: comfortably above
+// the load, but below the spike threshold so the impulse stays bounded and
+// the pivot holds. The coefficients are empirical (feel) — the one knob to
+// nudge in-app — but sit ~1-2 orders under the spike threshold on purpose.
 
-/// Default hinge-motor **max torque** per unit inertia proxy (`1.0e7` /
-/// `(1 m box inertia = 1/6)`).
-pub const MOTOR_TORQUE_PER_INERTIA: f32 = 6.0e7;
-/// Default slider-motor **max force** per unit mass proxy (`1.0e7` /
-/// `(1 m box mass = 1)`).
-pub const MOTOR_FORCE_PER_MASS: f32 = 1.0e7;
-/// Floor so a tiny body still gets a usable motor ceiling.
-pub const MIN_MOTOR_EFFORT: f32 = 1.0e3;
+/// Default hinge-motor **max torque** per unit inertia proxy (N·m per kg·m²).
+/// A 1 m unit-density box (inertia 1/6 kg·m²) gets ~330 N·m — dozens of times
+/// its ~5 N·m gravity load, yet well under the drift-inducing spike ceiling.
+pub const MOTOR_TORQUE_PER_INERTIA: f32 = 2.0e3;
+/// Default slider-motor **max force** per unit mass proxy (N per kg). A 1 m
+/// unit-density box (mass 1 kg) gets ~500 N vs its ~10 N weight.
+pub const MOTOR_FORCE_PER_MASS: f32 = 5.0e2;
+/// Nonzero floor so a tiny body still gets a usable motor ceiling.
+pub const MIN_MOTOR_EFFORT: f32 = 1.0;
 
 /// The mass-aware default **max torque** (N·m) for a hinge motor driving a
 /// body of the given `shape` — see the module notes above.
@@ -284,12 +289,17 @@ mod tests {
         let torque_ratio = default_motor_max_torque(&big) / default_motor_max_torque(&small);
         let force_ratio = default_motor_max_force(&big) / default_motor_max_force(&small);
         assert!(torque_ratio > force_ratio);
-        // The unit-density 1 m box reproduces the historical ~1e7 ceiling.
+        // The unit-density 1 m box (mass 1 kg) gets FORCE_PER_MASS newtons —
+        // strong vs its ~10 N weight, but far below the old 1e7 spike ceiling.
         let unit = ShapeDef::Box {
             width: 1.0,
             height: 1.0,
         };
-        assert!((default_motor_max_force(&unit) - 1.0e7).abs() < 1.0);
+        assert!((default_motor_max_force(&unit) - MOTOR_FORCE_PER_MASS).abs() < 1.0);
+        assert!(
+            default_motor_max_force(&unit) < 1.0e5,
+            "well under the old 1e7"
+        );
         // A ground half-plane is never motored; it still returns a usable,
         // finite ceiling rather than zero or a NaN.
         assert!(default_motor_max_torque(&ShapeDef::HalfPlane) >= MIN_MOTOR_EFFORT);

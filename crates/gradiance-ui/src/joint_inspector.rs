@@ -21,6 +21,10 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_units::Dimension;
 
+/// Hinge motor speeds are authored in rad/s (SI) but shown in **rpm**, the
+/// familiar motor unit: `rpm = rad/s · 60 / 2π`.
+const RAD_PER_S_TO_RPM: f32 = 60.0 / std::f32::consts::TAU;
+
 /// Renders the joint inspector for the currently selected joint.
 pub fn joint_inspector(
     mut contexts: EguiContexts,
@@ -166,7 +170,8 @@ fn configure_kind(
             if let Some(m) = motor_section(
                 ui,
                 *motor,
-                Dimension::AngularVelocity.symbol(),
+                "rpm",
+                RAD_PER_S_TO_RPM,
                 "torque",
                 Dimension::Torque.symbol(),
                 torque_default,
@@ -197,6 +202,7 @@ fn configure_kind(
                 ui,
                 *motor,
                 Dimension::Velocity.symbol(),
+                1.0,
                 "force",
                 Dimension::Force.symbol(),
                 force_default,
@@ -299,6 +305,7 @@ fn motor_section(
     ui: &mut egui::Ui,
     current: Option<MotorDef>,
     vel_unit: &str,
+    vel_scale: f32,
     effort_word: &str,
     effort_unit: &str,
     default_effort: f32,
@@ -315,14 +322,18 @@ fn motor_section(
     if let Some(mut m) = current {
         ui.horizontal(|ui| {
             ui.label("target");
+            // `target_velocity` is stored in SI (rad/s or m/s); `vel_scale`
+            // converts to the shown unit (e.g. rpm for hinges) and back.
+            let mut shown = m.target_velocity * vel_scale;
             if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("jm-vel"),
-                &mut m.target_velocity,
-                2.0,
-                0.1,
+                &mut shown,
+                MotorDef::default().target_velocity * vel_scale,
+                0.1 * vel_scale,
                 vel_unit,
             ) {
+                m.target_velocity = shown / vel_scale;
                 result = Some(Some(m));
             }
         });
@@ -332,8 +343,8 @@ fn motor_section(
                 ui,
                 egui::Id::new("jm-force"),
                 &mut m.max_force,
-                1.0e7,
-                1.0e5,
+                default_effort,
+                (default_effort * 0.1).max(1.0),
                 effort_unit,
             ) {
                 result = Some(Some(m));

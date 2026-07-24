@@ -51,7 +51,7 @@ pub fn draw_joints(
                 let r = HINGE_RING_PX * s;
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), r * 1.1, OUTLINE);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), r, color);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 2.2 * s, color);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 3.0 * s, color);
                 // Exact allowed-rotation range (relative to body A), with
                 // grab handles at the ends when the joint is selected. A
                 // live handle drag previews its tentative range instead.
