@@ -7,8 +7,11 @@ use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
 
-/// Below this drag length the ground is horizontal.
-const FLAT_THRESHOLD: f32 = 5.0;
+/// Below this drag length (world metres, ~5 px) the ground is horizontal.
+/// The SI flip left this at its pixel-era `5.0`, i.e. a 5 m (500 px) dead
+/// zone, so the plane snapped flat until a very long drag and its tilt
+/// jumped in abruptly.
+const FLAT_THRESHOLD: f32 = 0.05;
 
 /// In-progress ground draft (surface anchor point).
 #[derive(Resource, Default, Debug)]
