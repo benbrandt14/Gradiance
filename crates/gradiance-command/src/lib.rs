@@ -91,17 +91,19 @@ pub enum CommandError {
     NoEffect,
 }
 
-/// An undoable world mutation.
+/// A forward world mutation.
 ///
-/// `apply` must either fully succeed or leave the world untouched and
-/// return an error; failed commands are never recorded. `undo` reverses a
-/// previously successful `apply`. Commands reference bodies by
-/// [`StableId`] and resolve entities at execution time, so they stay valid
-/// across undo/redo cycles that respawn entities.
+/// `apply` must either fully succeed or leave the world untouched and return
+/// an error; failed commands are never recorded. Reversal is not a command's
+/// concern — the [`CommandStack`] snapshots authored state around each apply
+/// and restores it on undo/redo — so `undo` is dead (a follow-up removes it
+/// and each command's now-redundant apply-time capture). Commands reference
+/// bodies by [`StableId`] and resolve entities at execution time.
 pub trait GameCommand: Send + Sync + std::fmt::Debug {
     /// Applies the mutation.
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError>;
-    /// Reverses a successful [`apply`](GameCommand::apply).
+    /// Dead: reversal is handled by [`CommandStack`] snapshots. Kept until the
+    /// follow-up cleanup removes it from every command.
     fn undo(&mut self, world: &mut World) -> Result<(), CommandError>;
     /// Short human-readable name (for logs and UI).
     fn name(&self) -> &'static str;
