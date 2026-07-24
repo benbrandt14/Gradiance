@@ -125,10 +125,12 @@ pub enum JointKind {
 
 /// Fallback spring constant (N/m) for the inspector's reset (the strut tool
 /// computes a mass-based value at creation; see
-/// `interaction::tools::strut_tool`). SI: rescaled ÷`PIXELS_PER_METER²` from
-/// the pre-flip pixel value, preserving its ratio to the tool's typical
-/// mass-based stiffness (~a few N/m).
-pub const DEFAULT_SPRING_STIFFNESS: f32 = 0.1;
+/// `interaction::tools::strut_tool`). Sized for a typical ~1 kg body: at
+/// `k = m·g / sag` with `g ≈ 10` and a ~0.1 m sag this is ~100 N/m, matching
+/// the tool's `SPRING_STIFFNESS_PER_MASS · mass`. (The earlier `0.1` was a
+/// mechanical ÷`PIXELS_PER_METER²` rescale of the pixel-era value — three
+/// orders too soft, so a reset strut drooped ~100 m.)
+pub const DEFAULT_SPRING_STIFFNESS: f32 = 100.0;
 /// Default linear damping for a freshly authored strut.
 pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;
 

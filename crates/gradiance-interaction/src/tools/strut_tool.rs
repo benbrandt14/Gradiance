@@ -23,9 +23,10 @@ use gradiance_scene::JointRecord;
 
 /// Shortest strut that will commit (world metres); a near-zero drag is a no-op.
 const MIN_STRUT_LENGTH: f32 = 0.05;
-/// Spring stiffness per unit mass proxy (AABB area, px²). Tuned so a typical
-/// body sags ~10 px under the default gravity (|g| ≈ 1000): `k ≈ m·g / sag`, so
-/// heavier bodies get proportionally stiffer struts instead of drooping.
+/// Spring stiffness per unit mass proxy (AABB area × unit density = kg).
+/// Tuned so a body sags ~0.1 m under the default gravity (|g| ≈ 10): from
+/// `k ≈ m·g / sag`, `k ≈ 100·m`, so heavier bodies get proportionally
+/// stiffer struts instead of drooping.
 const SPRING_STIFFNESS_PER_MASS: f32 = 100.0;
 /// Floor for the mass-based stiffness so tiny bodies still get a firm strut.
 const MIN_SPRING_STIFFNESS: f32 = 0.01;
@@ -135,14 +136,16 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
 }
 
 /// A body's mass proxy for the default strut stiffness: its AABB area (× unit
-/// density), or 0 for a ground half-plane (statics don't sag, so they never set
-/// the stiffness).
+/// density), in kg, or 0 for a ground half-plane (statics don't sag, so they
+/// never set the stiffness). The area is *not* floored — in SI a small body is
+/// legitimately < 1 m²; the pixel-era `.max(1.0)` floor over-stiffened
+/// anything under a metre (`MIN_SPRING_STIFFNESS` guards the low end instead).
 fn mass_proxy(shape: &ShapeDef) -> f32 {
     if shape.contains_half_plane() {
         return 0.0;
     }
     let (min, max) = gradiance_geometry::sdf::aabb(shape);
-    ((max.x - min.x) * (max.y - min.y)).max(1.0)
+    ((max.x - min.x) * (max.y - min.y)).max(f32::EPSILON)
 }
 
 #[cfg(test)]
@@ -151,22 +154,23 @@ mod tests {
 
     #[test]
     fn mass_proxy_scales_with_area_and_ignores_ground() {
+        // SI sizes: a sub-metre body is legitimately < 1 m² (no floor).
         let small = ShapeDef::Box {
-            width: 10.0,
-            height: 10.0,
+            width: 0.5,
+            height: 0.5,
         };
         let big = ShapeDef::Box {
-            width: 40.0,
-            height: 20.0,
+            width: 4.0,
+            height: 2.0,
         };
         assert!(
             mass_proxy(&big) > mass_proxy(&small),
             "bigger body = more mass"
         );
-        assert!(
-            mass_proxy(&small) >= 1.0,
-            "a floor keeps struts from being zero-stiffness"
-        );
+        // Area is the real m² now, not floored to 1 — a 0.5 m box is 0.25 kg.
+        assert!((mass_proxy(&small) - 0.25).abs() < 1e-4, "unfloored area");
+        // The stiffness itself keeps a usable floor via MIN_SPRING_STIFFNESS.
+        assert!((SPRING_STIFFNESS_PER_MASS * mass_proxy(&small)).max(MIN_SPRING_STIFFNESS) > 0.0);
         assert!(
             mass_proxy(&ShapeDef::HalfPlane).abs() < f32::EPSILON,
             "ground doesn't sag"
