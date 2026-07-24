@@ -132,11 +132,26 @@ pub fn settings_window(
                                 );
                             });
                     });
-                    reflect_grid(ui, egui::Id::new("grid"), grid.bypass_change_detection());
+                    reflect_grid_units(
+                        ui,
+                        egui::Id::new("grid"),
+                        grid.bypass_change_detection(),
+                        &[
+                            ("spacing", Dimension::Length.symbol()),
+                            ("origin", Dimension::Length.symbol()),
+                        ],
+                    );
                     grid.set_changed();
                     ui.separator();
                     ui.label(egui::RichText::new("Snapping").strong());
-                    reflect_grid(ui, egui::Id::new("snap"), snap.bypass_change_detection());
+                    // `max_screen_distance` is a screen-pixel capture radius, not
+                    // a world length — deliberately unlabelled.
+                    reflect_grid_units(
+                        ui,
+                        egui::Id::new("snap"),
+                        snap.bypass_change_detection(),
+                        &[("rotation_step_deg", "°")],
+                    );
                     snap.set_changed();
                     ui.separator();
                     ui.label(egui::RichText::new("Tools").strong());
@@ -278,10 +293,14 @@ fn lighting_tab(
         "back plane color",
         &mut scenery.bypass_change_detection().back_color,
     );
-    reflect_grid(
+    reflect_grid_units(
         ui,
         egui::Id::new("scenery"),
         scenery.bypass_change_detection(),
+        &[
+            ("back_offset", Dimension::Length.symbol()),
+            ("perspective_deg", "°"),
+        ],
     );
     // reflect_grid edits aren't reported; conservatively mark touched.
     scenery.set_changed();

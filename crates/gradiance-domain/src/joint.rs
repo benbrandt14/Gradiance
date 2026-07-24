@@ -93,7 +93,7 @@ pub enum JointKind {
     Slider {
         /// Slide axis in body-A local space (unit length).
         axis: Vec2,
-        /// Optional `[min, max]` translation limits (pixels).
+        /// Optional `[min, max]` translation limits (m).
         limits: Option<[f32; 2]>,
         /// Optional linear motor.
         motor: Option<MotorDef>,
@@ -115,7 +115,7 @@ pub enum JointKind {
         /// Linear velocity damping applied by the joint (default 0). The scalar
         /// a future curve editor would generalize to a nonlinear damping curve.
         damping: f32,
-        /// Optional hard length clamp `[min, max]` in pixels; `None` (the
+        /// Optional hard length clamp `[min, max]` in metres; `None` (the
         /// default) leaves travel unbounded, so the spring is the only
         /// restoring force. When set, the strut floats freely within the band
         /// and springs back past either end.
@@ -148,7 +148,7 @@ pub struct JointDef {
     pub body_a: StableId,
     /// Second connected body, or `None` to pin to the world.
     pub body_b: Option<StableId>,
-    /// Anchor in body-A local space (pixels).
+    /// Anchor in body-A local space (m).
     pub anchor_a: Vec2,
     /// Anchor in body-B local space — or world space for world pins.
     pub anchor_b: Vec2,
