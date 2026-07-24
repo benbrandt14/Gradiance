@@ -15,7 +15,9 @@ use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{
     DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind, MotorDef,
+    default_motor_max_force, default_motor_max_torque,
 };
+use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_units::Dimension;
 
@@ -25,6 +27,7 @@ pub fn joint_inspector(
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform>,
+    shapes: Query<&ShapeDef>,
     index: Res<IdIndex>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
@@ -36,6 +39,13 @@ pub fn joint_inspector(
     let Ok((&id, def)) = joints.get(entity) else {
         return Ok(());
     };
+
+    // A freshly toggled motor's ceiling scales with the driven body (body A),
+    // so it feels the same across sizes; fall back to the fixed default when
+    // the shape can't be resolved this frame.
+    let shape_a = index.entity(def.body_a).and_then(|e| shapes.get(e).ok());
+    let torque_default = shape_a.map_or(MotorDef::default().max_force, default_motor_max_torque);
+    let force_default = shape_a.map_or(MotorDef::default().max_force, default_motor_max_force);
 
     // Edits accumulate into `next`; a single change emits one intent.
     let old = def.clone();
@@ -85,7 +95,7 @@ pub fn joint_inspector(
                 }
             }
 
-            changed |= configure_kind(ui, &def.kind, &mut next);
+            changed |= configure_kind(ui, &def.kind, &mut next, torque_default, force_default);
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -136,7 +146,13 @@ fn joint_geometry(
 
 /// Renders the kind-specific config controls, writing any edit into `next.kind`.
 /// Returns whether something changed.
-fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> bool {
+fn configure_kind(
+    ui: &mut egui::Ui,
+    kind: &JointKind,
+    next: &mut JointDef,
+    torque_default: f32,
+    force_default: f32,
+) -> bool {
     let mut changed = false;
     match kind {
         JointKind::Hinge { limits, motor } => {
@@ -153,6 +169,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 Dimension::AngularVelocity.symbol(),
                 "torque",
                 Dimension::Torque.symbol(),
+                torque_default,
             ) {
                 // Re-read limits from `next` in case both changed.
                 let cur_limits = current_limits(&next.kind);
@@ -182,6 +199,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 Dimension::Velocity.symbol(),
                 "force",
                 Dimension::Force.symbol(),
+                force_default,
             ) {
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
@@ -283,11 +301,16 @@ fn motor_section(
     vel_unit: &str,
     effort_word: &str,
     effort_unit: &str,
+    default_effort: f32,
 ) -> Option<Option<MotorDef>> {
     let mut enabled = current.is_some();
     let mut result = None;
     if ui.checkbox(&mut enabled, "motor").changed() {
-        result = Some(enabled.then(MotorDef::default));
+        // A new motor's torque/force ceiling is scaled to the driven body.
+        result = Some(enabled.then(|| MotorDef {
+            max_force: default_effort,
+            ..MotorDef::default()
+        }));
     }
     if let Some(mut m) = current {
         ui.horizontal(|ui| {
