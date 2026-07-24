@@ -6,7 +6,7 @@
 //! carrying [`PropertyValue::Joint`] — the same undoable path body edits
 //! use, so joint configuration composes with undo/redo for free.
 
-use crate::widgets::{Commit, precise_drag, precise_drag_unit};
+use crate::widgets::{Commit, precise_drag_unit};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_command::intent::{DeleteJointIntent, PropertyEditIntent};
@@ -147,7 +147,13 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 };
                 changed = true;
             }
-            if let Some(m) = motor_section(ui, *motor, "rad/s", "torque") {
+            if let Some(m) = motor_section(
+                ui,
+                *motor,
+                Dimension::AngularVelocity.symbol(),
+                "torque",
+                Dimension::Torque.symbol(),
+            ) {
                 // Re-read limits from `next` in case both changed.
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Hinge {
@@ -170,7 +176,13 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 };
                 changed = true;
             }
-            if let Some(m) = motor_section(ui, *motor, "m/s", "force") {
+            if let Some(m) = motor_section(
+                ui,
+                *motor,
+                Dimension::Velocity.symbol(),
+                "force",
+                Dimension::Force.symbol(),
+            ) {
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
                     axis: *axis,
@@ -269,7 +281,8 @@ fn motor_section(
     ui: &mut egui::Ui,
     current: Option<MotorDef>,
     vel_unit: &str,
-    effort_label: &str,
+    effort_word: &str,
+    effort_unit: &str,
 ) -> Option<Option<MotorDef>> {
     let mut enabled = current.is_some();
     let mut result = None;
@@ -278,25 +291,27 @@ fn motor_section(
     }
     if let Some(mut m) = current {
         ui.horizontal(|ui| {
-            ui.label(format!("target {vel_unit}"));
-            if let Commit::Done(..) = precise_drag(
+            ui.label("target");
+            if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("jm-vel"),
                 &mut m.target_velocity,
                 2.0,
                 0.1,
+                vel_unit,
             ) {
                 result = Some(Some(m));
             }
         });
         ui.horizontal(|ui| {
-            ui.label(format!("max {effort_label}"));
-            if let Commit::Done(..) = precise_drag(
+            ui.label(format!("max {effort_word}"));
+            if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("jm-force"),
                 &mut m.max_force,
                 1.0e7,
                 1.0e5,
+                effort_unit,
             ) {
                 result = Some(Some(m));
             }

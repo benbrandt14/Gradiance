@@ -79,8 +79,10 @@ fn selected_joint(app: &App) -> Option<Entity> {
 #[test]
 fn clicking_an_anchor_selects_the_joint_and_clears_body_selection() {
     let mut app = paused_app();
-    let body = spawn_box_at(&mut app, Vec2::ZERO, 40.0, 40.0);
-    // Pin anchored at the body's right edge, world (20,0), body-local (20,0).
+    // A wide body so a body-click well away from the anchor lands clearly
+    // outside the anchor glyph's (screen-scaled) pick radius.
+    let body = spawn_box_at(&mut app, Vec2::ZERO, 120.0, 40.0);
+    // Pin anchored at world (20,0), body-local (20,0).
     let joint = spawn_joint(
         &mut app,
         hinge_pin(body, Vec2::new(20.0, 0.0), Vec2::new(20.0, 0.0)),
@@ -104,8 +106,8 @@ fn clicking_an_anchor_selects_the_joint_and_clears_body_selection() {
         "body selection cleared by the joint pick"
     );
 
-    // Clicking the body (away from the anchor) deselects the joint.
-    click_at(&mut app, Vec2::new(-10.0, 0.0));
+    // Clicking the body (well away from the anchor) deselects the joint.
+    click_at(&mut app, Vec2::new(-50.0, 0.0));
     assert_eq!(selected_joint(&app), None, "joint deselected by body click");
 }
 

@@ -51,7 +51,7 @@ pub fn draw_joints(
                 let r = HINGE_RING_PX * s;
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), r * 1.1, OUTLINE);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), r, color);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 1.5 * s, color);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 2.2 * s, color);
                 // Exact allowed-rotation range (relative to body A), with
                 // grab handles at the ends when the joint is selected. A
                 // live handle drag previews its tentative range instead.
@@ -96,12 +96,12 @@ pub fn draw_joints(
                     gizmos.line_2d(to - perp, to + perp, span_color);
                     if selected.0 == Some(entity) {
                         // Grab handles on the travel caps.
-                        gizmos.circle_2d(Isometry2d::from_translation(from), 3.0 * s, css::GOLD);
-                        gizmos.circle_2d(Isometry2d::from_translation(to), 3.0 * s, css::GOLD);
+                        gizmos.circle_2d(Isometry2d::from_translation(from), 4.0 * s, css::GOLD);
+                        gizmos.circle_2d(Isometry2d::from_translation(to), 4.0 * s, css::GOLD);
                     }
                 }
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.4 * s, OUTLINE);
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 4.0 * s, color);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.6 * s, OUTLINE);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.0 * s, color);
                 if let Some(m) = motor {
                     draw_linear_motor(&mut gizmos, anchor, dir, *m, s);
                 }
@@ -263,8 +263,12 @@ fn draw_linear_motor(
         return;
     }
     let d = dir * motor.target_velocity.signum();
-    // Arrow length grows with drive speed (16..34 px at screen scale).
-    let tip = anchor + d * (16.0 + motor.target_velocity.abs().min(600.0) * 0.03) * s;
+    // Arrow length grows with drive speed (16..34 px at screen scale). The
+    // speed→length map is in SI now: target_velocity is m/s (was px/s before
+    // the flip), so the cap is 6 m/s and the gain 3 px per m/s — the SI flip
+    // left this at the pixel-era `.min(600.0) * 0.03`, which never grew for a
+    // real m/s slider, so the arrow read as a dead stub.
+    let tip = anchor + d * (16.0 + motor.target_velocity.abs().min(6.0) * 3.0) * s;
     gizmos.line_2d(anchor, tip, css::GOLD);
     let back = -d;
     let perp = Vec2::new(-d.y, d.x);
