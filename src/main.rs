@@ -5,6 +5,10 @@ use gradiance::GradiancePlugins;
 use gradiance::script::bridge::StartupScripts;
 use std::path::PathBuf;
 
+// Under the `tracy` feature, `bevy_log`'s `trace_tracy_memory` installs a
+// Tracy-tracking global allocator for live allocation profiling, so we yield
+// the global allocator to it; every other build uses mimalloc.
+#[cfg(not(feature = "tracy"))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

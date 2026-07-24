@@ -4,20 +4,27 @@
 //! A maintained, delete-nothing stack built entirely on Bevy's own dev-tools
 //! and diagnostic plugins — no bespoke overlays:
 //!
-//! - an on-screen FPS + frame-time-graph overlay ([`FpsOverlayPlugin`]),
-//! - entity-count and CPU/memory diagnostics feeding it and the log,
-//! - a periodic terminal dump of every registered diagnostic, and
+//! - an on-screen overlay ([`DiagnosticsOverlayPlugin`]) showing FPS, frame
+//!   time, entity count, and **process CPU / memory** — so live memory use is
+//!   visible while authoring,
+//! - a periodic terminal dump of every registered diagnostic
+//!   ([`LogDiagnosticsPlugin`]), and
 //! - (via the feature's `bevy/track_location`) caller `#[track_caller]`
 //!   locations on change detection, so a mutation's *origin* is inspectable.
 //!
+//! For deep runtime profiling — per-system spans and allocation memory —
+//! build with the separate `tracy` feature and connect the Tracy profiler;
+//! the intent/command/sync `trace!`s emitted by [`command`](gradiance_command)
+//! show up there as events.
+//!
 //! Additive and read-only: it never mutates authored state, has no default
 //! build cost, and is never compiled into release or CI builds. Added from
-//! `main` under the feature. Intent/command/sync tracing lives in
-//! [`command`](gradiance_command) and is always on via `RUST_LOG`.
+//! `main` under the feature.
 
-use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
+use bevy::dev_tools::diagnostics_overlay::{DiagnosticsOverlay, DiagnosticsOverlayPlugin};
 use bevy::diagnostic::{
-    EntityCountDiagnosticsPlugin, LogDiagnosticsPlugin, SystemInformationDiagnosticsPlugin,
+    EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin,
+    SystemInformationDiagnosticsPlugin,
 };
 use bevy::prelude::*;
 
@@ -27,14 +34,30 @@ pub struct DiagnosticsPlugin;
 impl Plugin for DiagnosticsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            // On-screen FPS + frame-time graph. Self-adds `FrameTimeDiagnosticsPlugin`
-            // only if absent — `render` already adds it, so this reuses it.
-            FpsOverlayPlugin::default(),
-            // Extra data sources for the overlay and the terminal dump.
+            // On-screen overlay; the entities it draws are spawned below.
+            DiagnosticsOverlayPlugin,
+            // Data sources for the overlay and the terminal dump. (FPS /
+            // frame time are already registered by `render`.)
             EntityCountDiagnosticsPlugin::default(),
             SystemInformationDiagnosticsPlugin,
             // Periodic terminal dump of every registered diagnostic.
             LogDiagnosticsPlugin::default(),
-        ));
+        ))
+        .add_systems(Startup, spawn_overlay);
     }
+}
+
+/// Spawns the on-screen overlay: FPS, frame time, entity count, and process
+/// CPU / memory — memory use foremost, since it grows with scene complexity.
+fn spawn_overlay(mut commands: Commands) {
+    commands.spawn(DiagnosticsOverlay::new(
+        "Gradiance",
+        vec![
+            FrameTimeDiagnosticsPlugin::FPS.into(),
+            FrameTimeDiagnosticsPlugin::FRAME_TIME.into(),
+            EntityCountDiagnosticsPlugin::ENTITY_COUNT.into(),
+            SystemInformationDiagnosticsPlugin::PROCESS_CPU_USAGE.into(),
+            SystemInformationDiagnosticsPlugin::PROCESS_MEM_USAGE.into(),
+        ],
+    ));
 }
