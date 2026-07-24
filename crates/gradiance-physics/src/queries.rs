@@ -11,7 +11,9 @@ use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use gradiance_core::units::PosRot;
-use gradiance_units::{AngularVelocity, Energy, Impulse, Impulse2, Mass, Momentum, Velocity2};
+use gradiance_units::{
+    AngularMomentum, AngularVelocity, Energy, Impulse, Impulse2, Mass, Momentum, Velocity2,
+};
 
 /// A world-space contact sample: the point, its unit normal, and the normal
 /// impulse. Divide the impulse by the timestep for the contact force.
@@ -159,6 +161,15 @@ impl PhysicsQueries<'_, '_> {
         let mass = self.masses.get(entity).ok()?;
         let (lin, _) = self.velocities.get(entity).ok()?;
         Some(Momentum(mass.value() * lin.0.length()))
+    }
+
+    /// Angular momentum `I·ω` of a simulating body — the rotational conserved
+    /// quantity completing the trio with [`kinetic_energy_of`](Self::kinetic_energy_of)
+    /// and [`momentum_of`](Self::momentum_of). Signed by `ω` (CCW positive).
+    pub fn angular_momentum_of(&self, entity: Entity) -> Option<AngularMomentum> {
+        let inertia = self.inertias.get(entity).ok()?;
+        let (_, ang) = self.velocities.get(entity).ok()?;
+        Some(AngularMomentum(inertia.value() * ang.0))
     }
 
     /// How many distinct bodies `entity` is currently touching (contact

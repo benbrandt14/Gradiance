@@ -220,6 +220,11 @@ scalar_quantity! {
     /// Linear momentum (mass · velocity), in kilogram-metres per second.
     Momentum, kilogram_metres_per_second, "kg·m/s"
 }
+scalar_quantity! {
+    /// Angular momentum (moment of inertia · angular velocity), in
+    /// kilogram-metres-squared per second.
+    AngularMomentum, kilogram_metres_squared_per_second, "kg·m²/s"
+}
 
 vector_quantity! {
     /// A planar displacement / position, in metres.
