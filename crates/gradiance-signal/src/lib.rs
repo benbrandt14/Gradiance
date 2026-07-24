@@ -265,6 +265,12 @@ pub fn read_source(
         SignalSource::ContactCount(id) => {
             index.entity(*id).map(|e| physics.touching_count(e) as f32)
         }
+        SignalSource::KineticEnergy(id) => index
+            .entity(*id)
+            .and_then(|e| Some(physics.kinetic_energy_of(e)?.value())),
+        SignalSource::Momentum(id) => index
+            .entity(*id)
+            .and_then(|e| Some(physics.momentum_of(e)?.value())),
         SignalSource::Named(_) => None,
     }
 }

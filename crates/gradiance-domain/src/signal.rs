@@ -36,6 +36,10 @@ pub enum SignalSource {
     ContactForce(StableId),
     /// Number of bodies a body is currently touching.
     ContactCount(StableId),
+    /// Total kinetic energy of a body (½mv² + ½Iω², J).
+    KineticEnergy(StableId),
+    /// Linear momentum magnitude of a body (m·|v|, kg·m/s).
+    Momentum(StableId),
     /// A named value published on the `SignalBus` (in the `signal` layer)
     /// — by a script
     /// (`signal-set`), a future node, or another binding.
@@ -288,6 +292,8 @@ impl SignalSource {
             Self::PosX(id) => ("posx", id),
             Self::ContactForce(id) => ("force", id),
             Self::ContactCount(id) => ("contacts", id),
+            Self::KineticEnergy(id) => ("energy", id),
+            Self::Momentum(id) => ("momentum", id),
             Self::Distance(..) | Self::Named(_) => return None,
         };
         Some(format!("{tag}@{}", id.0))
@@ -305,6 +311,8 @@ impl SignalSource {
             Self::Spin(_) => Dimension::AngularVelocity,
             Self::Height(_) | Self::PosX(_) | Self::Distance(..) => Dimension::Length,
             Self::ContactForce(_) => Dimension::Force,
+            Self::KineticEnergy(_) => Dimension::Energy,
+            Self::Momentum(_) => Dimension::Momentum,
             Self::ContactCount(_) | Self::Named(_) => Dimension::Dimensionless,
         }
     }
@@ -321,6 +329,8 @@ impl SignalSource {
             "posx" => Self::PosX(sid),
             "force" => Self::ContactForce(sid),
             "contacts" => Self::ContactCount(sid),
+            "energy" => Self::KineticEnergy(sid),
+            "momentum" => Self::Momentum(sid),
             _ => return None,
         })
     }
@@ -336,6 +346,8 @@ impl SignalSource {
             Self::PosX(a) => (Self::PosX(one(*a).0), one(*a).1),
             Self::ContactForce(a) => (Self::ContactForce(one(*a).0), one(*a).1),
             Self::ContactCount(a) => (Self::ContactCount(one(*a).0), one(*a).1),
+            Self::KineticEnergy(a) => (Self::KineticEnergy(one(*a).0), one(*a).1),
+            Self::Momentum(a) => (Self::Momentum(one(*a).0), one(*a).1),
             Self::Distance(a, b) => {
                 let (ra, ta) = one(*a);
                 let (rb, tb) = one(*b);
@@ -894,6 +906,8 @@ mod tests {
             SignalSource::PosX(id),
             SignalSource::ContactForce(id),
             SignalSource::ContactCount(id),
+            SignalSource::KineticEnergy(id),
+            SignalSource::Momentum(id),
         ] {
             let name = source.bus_name().expect("has a bus name");
             assert_eq!(SignalSource::from_bus_name(&name), Some(source));
@@ -923,6 +937,8 @@ mod tests {
             "distance is a length"
         );
         assert_eq!(SignalSource::ContactForce(id).dimension().symbol(), "N");
+        assert_eq!(SignalSource::KineticEnergy(id).dimension().symbol(), "J");
+        assert_eq!(SignalSource::Momentum(id).dimension().symbol(), "kg·m/s");
         // A count and an unlabelled script value have no unit.
         assert_eq!(SignalSource::ContactCount(id).dimension().symbol(), "");
         assert_eq!(SignalSource::Named("x".into()).dimension().symbol(), "");
