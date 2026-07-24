@@ -50,7 +50,17 @@ pub fn drive_oscillating_motors(
                     continue;
                 };
                 let rot_b = def.body_b.and_then(|id| index.entity(id)).map_or(0.0, rot);
-                let rel = gradiance_geometry::wrap_angle(rot_b - rot(a));
+                // Measure the relative angle in avian's constraint frame: the
+                // rest basis (`rest_rot_a - rest_rot_b`, the value handed to
+                // `with_local_basis2`) is what `with_angle_limits` is relative
+                // to, and makes `rel == 0` at the creation pose. The old code
+                // omitted it, so the reversal never lined up with the actual
+                // limit — the motor just drove into the stop and stalled
+                // ("oscillate does nothing"). `+target_velocity` drives
+                // body B positively relative to body A, i.e. increases `rel`,
+                // so reversing at each bound heads back toward the interior.
+                let basis = def.rest_rot_a - def.rest_rot_b;
+                let rel = gradiance_geometry::wrap_angle((rot_b - rot(a)) + basis);
                 let speed = m.target_velocity.abs();
                 if rel >= max - ANGLE_BUFFER {
                     joint.motor.target_velocity = -speed;
