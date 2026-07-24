@@ -6,8 +6,10 @@ use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
 
-/// Minimum accepted radius, world pixels.
-const MIN_RADIUS: f32 = 0.5;
+/// Minimum accepted radius, world metres (~0.5 px on screen). The SI flip
+/// left this at its pixel-era `0.5`, which demanded a 0.5 m (50 px) minimum
+/// radius and silently swallowed small draws.
+const MIN_RADIUS: f32 = 0.005;
 
 /// In-progress circle draft (center).
 #[derive(Resource, Default, Debug)]

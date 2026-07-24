@@ -6,8 +6,10 @@ use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
 
-/// Minimum accepted box side, world pixels.
-const MIN_SIDE: f32 = 1.0;
+/// Minimum accepted box side, world metres (~1 px on screen). The SI flip
+/// left this at its pixel-era `1.0`, which demanded a 1 m (100 px) minimum
+/// side and silently swallowed small draws.
+const MIN_SIDE: f32 = 0.01;
 
 /// In-progress box draft (anchor corner).
 #[derive(Resource, Default, Debug)]

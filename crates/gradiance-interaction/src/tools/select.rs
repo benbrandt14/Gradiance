@@ -24,8 +24,11 @@ use gradiance_geometry::polygonize::polygonize;
 use gradiance_geometry::scale::scale_point;
 use gradiance_physics::grab::Twist;
 
-/// Minimum world-space delta before a click becomes a move/duplicate commit.
-const MOVE_EPSILON: f32 = 0.5;
+/// Minimum world-space delta (metres, ~0.5 px) before a click becomes a
+/// move/duplicate commit. The SI flip left this at its pixel-era `0.5`,
+/// i.e. a 0.5 m (50 px) dead zone that swallowed small moves (cf. the
+/// paused-drag `MOVE_EPSILON` in `drag_tool`, correctly `0.005`).
+const MOVE_EPSILON: f32 = 0.005;
 /// Screen-space handle capture radius (logical px).
 const HANDLE_RADIUS_PX: f32 = 10.0;
 /// Right-drag deadzone (logical px) before rotation engages.
