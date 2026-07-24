@@ -633,6 +633,22 @@ any cross-frame `Entity` holder — `interaction/selection.rs:40,114`) to
 `StableId`, since restore re-mints `Entity`. Tests via **insta** (row 11) over
 serialized snapshots + intent-replay.
 
+> **BLOCKED — upstream Bevy-version gap (2026-07-24).** `bevy_save`'s latest
+> release (2.0.1+4, Aug 2025) and its `main` branch (3.0.0+4) both require
+> `bevy ^0.16.1`; this workspace is hard-pinned to `bevy = "=0.19.0"`. The crate
+> is ~three Bevy releases behind us and has not published a 0.16→0.19 update, so
+> the reflection/`Scene` APIs it builds on don't match. Adopting the *published*
+> crate is not possible today. Options, in preference order: **(a)** wait for /
+> nudge an upstream 0.19 release; **(b)** vendor-and-port `bevy_save` to 0.19
+> (a real fork with its own maintenance cost — cuts against the external-first
+> directive, so a deliberate decision); **(c)** defer §A and keep the bespoke
+> `gradiance-scene` format until upstream lands. The **prerequisite** (cross-frame
+> `Entity` → `StableId`) is independently valid under invariant #3 but its only
+> payoff is restore-safety, which is gated on this milestone — so it is *not*
+> worth the 25-file, ~74-site reversal (and the per-frame `IdIndex` resolution
+> cost) until a path above is chosen. `Selection` documents holding `Entity` as a
+> sanctioned ergonomic choice today, so this is a design reversal, not a bugfix.
+
 ### B. Diagnostics & dev-tools — "debugging is a dream" (rows 3, 4, 10, 14, 16, 23)
 
 One easy `dev`/`diagnostics` feature lighting up a maintained stack, replacing
