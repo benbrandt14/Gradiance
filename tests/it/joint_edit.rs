@@ -146,6 +146,7 @@ fn editing_a_selected_joint_adds_a_motor_and_undoes() {
 
     app.world_mut().write_message(UndoIntent);
     app.update();
+    let entity = entity_of(&app, joint).unwrap();
     assert_eq!(
         app.world().get::<JointDef>(entity).unwrap().clone(),
         old,
@@ -245,6 +246,7 @@ fn dragging_a_travel_cap_resizes_prismatic_limits() {
     );
 
     undo(&mut app);
+    let entity = entity_of(&app, joint).unwrap();
     let def = app.world().get::<JointDef>(entity).unwrap();
     let JointKind::Slider { limits, .. } = def.kind else {
         panic!("kind changed: {:?}", def.kind);

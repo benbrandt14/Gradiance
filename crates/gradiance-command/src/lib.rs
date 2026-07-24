@@ -64,6 +64,8 @@ pub mod transform_cmd;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::shape::ShapeError;
+use gradiance_scene::SceneRecord;
+use std::collections::VecDeque;
 
 /// Resolves a stable id to its live entity — the standard first step of
 /// every command's `apply`/`undo` (shared so the `MissingEntity` mapping
@@ -105,27 +107,60 @@ pub trait GameCommand: Send + Sync + std::fmt::Debug {
     fn name(&self) -> &'static str;
 }
 
-/// The application-wide undo/redo history.
+/// The application-wide undo/redo history — a bounded timeline of
+/// authored-state snapshots.
+///
+/// Every committed command captures a [`SceneRecord`] of the resulting authored
+/// world; undo/redo move a cursor along that timeline and restore the snapshot
+/// there (authored entities only — config-seam settings are never rolled back,
+/// via [`SceneRecord::apply_authored`]). This makes reversal uniform and robust:
+/// a command only has to *apply* its forward edit, so there is no per-command
+/// `undo()` logic to get wrong, and even a mid-play edit reverts cleanly.
+/// Entities are respawned on restore (same [`StableId`], fresh `Entity`), so
+/// callers must hold `StableId`, never a raw `Entity`, across an undo.
 #[derive(Resource, Default)]
 pub struct CommandStack {
-    undo: Vec<Box<dyn GameCommand>>,
-    redo: Vec<Box<dyn GameCommand>>,
+    /// Authored-state snapshots, oldest first. `states[cursor]` is the current
+    /// world; earlier entries are undo targets, later entries redo targets.
+    states: VecDeque<SceneRecord>,
+    /// `labels[i]` names the command that produced `states[i]`; `labels[0]` is
+    /// the pre-history baseline and is unnamed.
+    labels: VecDeque<&'static str>,
+    /// Index of the current authored state within `states`.
+    cursor: usize,
 }
 
 impl CommandStack {
-    /// Applies `command`; on success records it and clears the redo branch.
-    ///
-    /// On failure the command is dropped and the history is unchanged.
+    /// Maximum undo depth retained; older snapshots are evicted to bound memory
+    /// (each snapshot is a full authored-scene capture).
+    pub const CAP: usize = 256;
+
+    /// Applies `command`; on success captures the resulting snapshot and drops
+    /// the redo branch. On failure the command is dropped and history is
+    /// unchanged.
     pub fn push_apply(
         &mut self,
         mut command: Box<dyn GameCommand>,
         world: &mut World,
     ) -> Result<(), CommandError> {
+        // Baseline: capture the pre-edit world once so the first command is
+        // undoable. A failed first command leaves only this invisible baseline
+        // (undo_len stays 0).
+        if self.states.is_empty() {
+            self.states.push_back(SceneRecord::capture(world));
+            self.labels.push_back("");
+            self.cursor = 0;
+        }
         match command.apply(world) {
             Ok(()) => {
                 debug!(name = command.name(), "command applied");
-                self.undo.push(command);
-                self.redo.clear();
+                // Drop any redo branch, then record the new state.
+                self.states.truncate(self.cursor + 1);
+                self.labels.truncate(self.cursor + 1);
+                self.states.push_back(SceneRecord::capture(world));
+                self.labels.push_back(command.name());
+                self.cursor += 1;
+                self.evict_to_cap();
                 Ok(())
             }
             Err(e) => {
@@ -135,52 +170,52 @@ impl CommandStack {
         }
     }
 
-    /// Undoes the most recent command, if any; returns the undone command's
-    /// name on success.
+    /// Undoes the most recent command, restoring the previous authored
+    /// snapshot; returns the undone command's name, or `None` at the baseline.
     pub fn undo(&mut self, world: &mut World) -> Option<&'static str> {
-        let mut command = self.undo.pop()?;
-        match command.undo(world) {
-            Ok(()) => {
-                debug!(name = command.name(), "command undone");
-                let name = command.name();
-                self.redo.push(command);
-                Some(name)
-            }
-            Err(e) => {
-                // An un-undoable command is a bug; drop it rather than
-                // corrupt the history with a half-reversed entry.
-                error!(name = command.name(), error = %e, "undo failed; dropping entry");
-                None
-            }
+        if self.cursor == 0 {
+            return None;
         }
+        let undone = self.labels[self.cursor];
+        self.cursor -= 1;
+        self.states[self.cursor].apply_authored(world);
+        debug!(name = undone, "command undone");
+        Some(undone)
     }
 
-    /// Re-applies the most recently undone command, if any; returns the
-    /// redone command's name on success.
+    /// Re-applies the most recently undone command, restoring the next
+    /// snapshot; returns the redone command's name, or `None` at the tip.
     pub fn redo(&mut self, world: &mut World) -> Option<&'static str> {
-        let mut command = self.redo.pop()?;
-        match command.apply(world) {
-            Ok(()) => {
-                debug!(name = command.name(), "command redone");
-                let name = command.name();
-                self.undo.push(command);
-                Some(name)
-            }
-            Err(e) => {
-                error!(name = command.name(), error = %e, "redo failed; dropping entry");
-                None
-            }
+        if self.cursor + 1 >= self.states.len() {
+            return None;
         }
+        self.cursor += 1;
+        self.states[self.cursor].apply_authored(world);
+        let redone = self.labels[self.cursor];
+        debug!(name = redone, "command redone");
+        Some(redone)
     }
 
     /// Number of commands available to undo.
     pub fn undo_len(&self) -> usize {
-        self.undo.len()
+        self.cursor
     }
 
     /// Number of commands available to redo.
     pub fn redo_len(&self) -> usize {
-        self.redo.len()
+        // `saturating_sub` guards the pre-history state (empty `states`), where
+        // `len() - 1` would underflow.
+        self.states.len().saturating_sub(1 + self.cursor)
+    }
+
+    /// Evicts oldest snapshots beyond [`CAP`] undo steps, keeping the cursor on
+    /// the current state.
+    fn evict_to_cap(&mut self) {
+        while self.cursor > Self::CAP {
+            self.states.pop_front();
+            self.labels.pop_front();
+            self.cursor -= 1;
+        }
     }
 }
 

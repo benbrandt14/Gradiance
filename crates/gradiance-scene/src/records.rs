@@ -300,6 +300,19 @@ macro_rules! environment_record {
     };
 }
 
+impl EnvironmentRecord {
+    /// Restores only the signal-dataflow resources — the `StableId`-keyed scene
+    /// graph (bindings, `defparam` knobs, `defsignal` modulators) that commands
+    /// mutate as scene *content* — while leaving the config/workstation settings
+    /// (grid, snap, sim tuning, rendering) untouched. Used by undo/redo, which
+    /// reverts what the scene contains but never how the editor is configured.
+    pub fn apply_signals(&self, world: &mut World) {
+        world.insert_resource(self.signals.clone());
+        world.insert_resource(self.params.clone());
+        world.insert_resource(self.computed.clone());
+    }
+}
+
 environment_record! {
     /// Simulation tuning.
     sim: gradiance_domain::settings::SimSettings,
@@ -370,8 +383,18 @@ impl SceneRecord {
     /// Despawns every authored entity, then spawns this scene and applies
     /// its environment. Derived state (colliders, meshes, engine joints)
     /// rebuilds through the ordinary sync systems — loading has no
-    /// special cases.
+    /// special cases. This is the full **load** restore (scene file / autosave).
     pub fn apply(&self, world: &mut World) {
+        self.apply_authored(world);
+        self.environment.apply(world);
+    }
+
+    /// Restores only the authored entities (bodies, joints, nodes) — despawn
+    /// all, respawn from records — **without** touching the config-seam
+    /// environment settings. This is the **undo/redo** restore: settings are
+    /// not authored state (invariant #4), so reverting to a prior snapshot must
+    /// not roll them back. Derived state rebuilds through the sync systems.
+    pub fn apply_authored(&self, world: &mut World) {
         let existing: Vec<Entity> = {
             let mut query = world.query_filtered::<Entity, With<StableId>>();
             query.iter(world).collect()
@@ -390,6 +413,8 @@ impl SceneRecord {
         for record in &self.nodes {
             record.spawn(world);
         }
-        self.environment.apply(world);
+        // Signal-dataflow graph is scene content (StableId-keyed), so it is
+        // reverted by undo — unlike the config-seam settings.
+        self.environment.apply_signals(world);
     }
 }
