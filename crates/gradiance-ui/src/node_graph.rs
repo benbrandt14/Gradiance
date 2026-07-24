@@ -217,6 +217,8 @@ fn sensor_index(source: &SignalSource) -> Option<usize> {
         SignalSource::PosX(_) => Some(3),
         SignalSource::ContactForce(_) => Some(4),
         SignalSource::ContactCount(_) => Some(5),
+        SignalSource::KineticEnergy(_) => Some(6),
+        SignalSource::Momentum(_) => Some(7),
         SignalSource::Distance(..) | SignalSource::Named(_) => None,
     }
 }
@@ -234,7 +236,9 @@ fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
                 | SignalSource::Height(id)
                 | SignalSource::PosX(id)
                 | SignalSource::ContactForce(id)
-                | SignalSource::ContactCount(id) => id,
+                | SignalSource::ContactCount(id)
+                | SignalSource::KineticEnergy(id)
+                | SignalSource::Momentum(id) => id,
                 _ => return None,
             };
             Some((GraphKey::Body(id), sensor_index(other)?))
@@ -654,7 +658,9 @@ fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
         | SignalSource::Height(id)
         | SignalSource::PosX(id)
         | SignalSource::ContactForce(id)
-        | SignalSource::ContactCount(id) => ids.push(*id),
+        | SignalSource::ContactCount(id)
+        | SignalSource::KineticEnergy(id)
+        | SignalSource::Momentum(id) => ids.push(*id),
         SignalSource::Distance(a, b) => {
             ids.push(*a);
             ids.push(*b);
