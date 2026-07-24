@@ -138,14 +138,24 @@ dev = [
     "gradiance-command/dev",
 ]
 # On-demand developer diagnostics overlay: `cargo run --features diagnostics`.
-# Bevy's own dev-tools/diagnostic plugins — on-screen FPS + frame-time graph,
-# entity-count and CPU/memory diagnostics, a periodic terminal dump, and
-# change-detection caller tracking (`track_location`). Additive; never in
+# Bevy's own dev-tools/diagnostic plugins — an on-screen overlay with FPS,
+# frame time, entity count, and process CPU/memory; a periodic terminal dump;
+# and change-detection caller tracking (`track_location`). Additive; never in
 # release/CI. Intent/command/sync tracing is always on via `RUST_LOG`.
 diagnostics = [
     "bevy/bevy_dev_tools",
     "bevy/sysinfo_plugin",
     "bevy/track_location",
+]
+# Runtime profiling via the Tracy profiler: `cargo run --features tracy`, then
+# connect Tracy. Instruments every system with a span (the intent/command/sync
+# `trace!`s appear as events) and tracks allocations for live memory profiling
+# (`trace_tracy_memory`). Separate from the on-screen `diagnostics` overlay;
+# never in release/CI.
+tracy = [
+    "bevy/trace",
+    "bevy/trace_tracy",
+    "bevy/trace_tracy_memory",
 ]
 
 [dev-dependencies]
