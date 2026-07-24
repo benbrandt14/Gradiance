@@ -105,62 +105,7 @@ pub fn settings_window(
                     sim.set_changed();
                 }
                 SettingsTab::GridSnap => {
-                    ui.label(egui::RichText::new("Grid").strong());
-                    // Enum escape hatch: explicit variant picker.
-                    ui.horizontal(|ui| {
-                        ui.label("system");
-                        let current = grid.system;
-                        egui::ComboBox::from_id_salt("grid-system")
-                            .selected_text(format!("{current:?}"))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut grid.system,
-                                    GridSystem::Cartesian,
-                                    "Cartesian",
-                                );
-                                ui.selectable_value(
-                                    &mut grid.system,
-                                    GridSystem::Isometric,
-                                    "Isometric",
-                                );
-                                ui.selectable_value(
-                                    &mut grid.system,
-                                    GridSystem::Polar {
-                                        angular_divisions: 12,
-                                    },
-                                    "Polar",
-                                );
-                            });
-                    });
-                    reflect_grid_units(
-                        ui,
-                        egui::Id::new("grid"),
-                        grid.bypass_change_detection(),
-                        &[
-                            ("spacing", Dimension::Length.symbol()),
-                            ("origin", Dimension::Length.symbol()),
-                        ],
-                    );
-                    grid.set_changed();
-                    ui.separator();
-                    ui.label(egui::RichText::new("Snapping").strong());
-                    // `max_screen_distance` is a screen-pixel capture radius, not
-                    // a world length — deliberately unlabelled.
-                    reflect_grid_units(
-                        ui,
-                        egui::Id::new("snap"),
-                        snap.bypass_change_detection(),
-                        &[("rotation_step_deg", "°")],
-                    );
-                    snap.set_changed();
-                    ui.separator();
-                    ui.label(egui::RichText::new("Tools").strong());
-                    reflect_grid(
-                        ui,
-                        egui::Id::new("tool-defaults"),
-                        tool_defaults.bypass_change_detection(),
-                    );
-                    tool_defaults.set_changed();
+                    grid_snap_tab(ui, &mut grid, &mut snap, &mut tool_defaults);
                 }
                 SettingsTab::Rendering => {
                     reflect_grid(
@@ -189,6 +134,64 @@ pub fn settings_window(
         });
     window.open = open;
     Ok(())
+}
+
+/// The Grid & Snap tab: the grid-system picker (an enum escape hatch) plus
+/// the grid, snapping, and tool-default reflect grids with SI unit labels.
+fn grid_snap_tab(
+    ui: &mut egui::Ui,
+    grid: &mut ResMut<GridSettings>,
+    snap: &mut ResMut<SnapConfig>,
+    tool_defaults: &mut ResMut<ToolDefaults>,
+) {
+    ui.label(egui::RichText::new("Grid").strong());
+    // Enum escape hatch: explicit variant picker.
+    ui.horizontal(|ui| {
+        ui.label("system");
+        let current = grid.system;
+        egui::ComboBox::from_id_salt("grid-system")
+            .selected_text(format!("{current:?}"))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut grid.system, GridSystem::Cartesian, "Cartesian");
+                ui.selectable_value(&mut grid.system, GridSystem::Isometric, "Isometric");
+                ui.selectable_value(
+                    &mut grid.system,
+                    GridSystem::Polar {
+                        angular_divisions: 12,
+                    },
+                    "Polar",
+                );
+            });
+    });
+    reflect_grid_units(
+        ui,
+        egui::Id::new("grid"),
+        grid.bypass_change_detection(),
+        &[
+            ("spacing", Dimension::Length.symbol()),
+            ("origin", Dimension::Length.symbol()),
+        ],
+    );
+    grid.set_changed();
+    ui.separator();
+    ui.label(egui::RichText::new("Snapping").strong());
+    // `max_screen_distance` is a screen-pixel capture radius, not a world
+    // length — deliberately unlabelled.
+    reflect_grid_units(
+        ui,
+        egui::Id::new("snap"),
+        snap.bypass_change_detection(),
+        &[("rotation_step_deg", "°")],
+    );
+    snap.set_changed();
+    ui.separator();
+    ui.label(egui::RichText::new("Tools").strong());
+    reflect_grid(
+        ui,
+        egui::Id::new("tool-defaults"),
+        tool_defaults.bypass_change_detection(),
+    );
+    tool_defaults.set_changed();
 }
 
 /// The Lighting tab: per-light rows (sun gadget, color, strength,
