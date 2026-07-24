@@ -5,6 +5,10 @@ use gradiance::GradiancePlugins;
 use gradiance::script::bridge::StartupScripts;
 use std::path::PathBuf;
 
+// Under the `tracy` feature, `bevy_log`'s `trace_tracy_memory` installs a
+// Tracy-tracking global allocator for live allocation profiling, so we yield
+// the global allocator to it; every other build uses mimalloc.
+#[cfg(not(feature = "tracy"))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -12,6 +16,10 @@ fn main() {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(GradiancePlugins);
+
+    // Opt-in developer diagnostics overlay (`cargo run --features diagnostics`).
+    #[cfg(feature = "diagnostics")]
+    app.add_plugins(gradiance::diagnostics::DiagnosticsPlugin);
 
     // CLI:
     //   `gradiance <scene.ron>`         opens a scene (e.g. a debug snapshot);
