@@ -132,6 +132,69 @@ pub const DEFAULT_SPRING_STIFFNESS: f32 = 0.1;
 /// Default linear damping for a freshly authored strut.
 pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;
 
+// --- Mass-aware motor defaults -------------------------------------------
+//
+// A motor's `max_force` is a *torque/force ceiling*: avian clamps each
+// substep's corrective impulse to `max_force · dt²`. Under the
+// acceleration-based model the impulse a body needs to reach its target
+// velocity scales with that body's **inertia** (angular) or **mass**
+// (linear), so a *fixed* ceiling (the old `1.0e7`) does the wrong thing at
+// both ends: a heavy/large body's need exceeds the ceiling and the motor
+// reads as weak ("negligible torque"), while a light body's need is a tiny
+// fraction of it, leaving the impulse effectively unbounded ("the body just
+// clips around"). Scaling the default ceiling with the connected body makes
+// it track the need, so the motor feels the same across sizes.
+//
+// The constants are calibrated to reproduce the historical `1.0e7` ceiling
+// for a unit-density 1 m box (mass 1 kg, inertia (1²+1²)/12 kg·m²) and scale
+// from there; the exact feel is empirical, so treat them as the one knob to
+// nudge in-app.
+
+/// Default hinge-motor **max torque** per unit inertia proxy (`1.0e7` /
+/// `(1 m box inertia = 1/6)`).
+pub const MOTOR_TORQUE_PER_INERTIA: f32 = 6.0e7;
+/// Default slider-motor **max force** per unit mass proxy (`1.0e7` /
+/// `(1 m box mass = 1)`).
+pub const MOTOR_FORCE_PER_MASS: f32 = 1.0e7;
+/// Floor so a tiny body still gets a usable motor ceiling.
+pub const MIN_MOTOR_EFFORT: f32 = 1.0e3;
+
+/// The mass-aware default **max torque** (N·m) for a hinge motor driving a
+/// body of the given `shape` — see the module notes above.
+#[must_use]
+pub fn default_motor_max_torque(shape: &crate::shape::ShapeDef) -> f32 {
+    (MOTOR_TORQUE_PER_INERTIA * shape_inertia_proxy(shape)).max(MIN_MOTOR_EFFORT)
+}
+
+/// The mass-aware default **max force** (N) for a slider motor driving a body
+/// of the given `shape`.
+#[must_use]
+pub fn default_motor_max_force(shape: &crate::shape::ShapeDef) -> f32 {
+    (MOTOR_FORCE_PER_MASS * shape_mass_proxy(shape)).max(MIN_MOTOR_EFFORT)
+}
+
+/// A body's geometric **mass proxy**: its AABB area at unit density. A ground
+/// half-plane is static (never motored), so it gets a unit area.
+fn shape_mass_proxy(shape: &crate::shape::ShapeDef) -> f32 {
+    if shape.contains_half_plane() {
+        return 1.0;
+    }
+    let (min, max) = gradiance_geometry::sdf::aabb(shape);
+    ((max.x - min.x) * (max.y - min.y)).max(f32::EPSILON)
+}
+
+/// A body's geometric **inertia proxy**: a uniform rectangular plate spanning
+/// the AABB, `m·(w² + h²)/12` about its centre (mass = area at unit density).
+fn shape_inertia_proxy(shape: &crate::shape::ShapeDef) -> f32 {
+    if shape.contains_half_plane() {
+        return 1.0;
+    }
+    let (min, max) = gradiance_geometry::sdf::aabb(shape);
+    let (w, h) = (max.x - min.x, max.y - min.y);
+    let area = (w * h).max(f32::EPSILON);
+    area * (w * w + h * h) / 12.0
+}
+
 /// The authored definition of one constraint between two bodies (or one
 /// body and the world).
 ///
@@ -202,6 +265,35 @@ impl JointDef {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shape::ShapeDef;
+
+    #[test]
+    fn motor_default_effort_scales_with_body_size() {
+        let small = ShapeDef::Box {
+            width: 0.5,
+            height: 0.5,
+        };
+        let big = ShapeDef::Box {
+            width: 4.0,
+            height: 2.0,
+        };
+        // A larger body needs (and gets) a higher torque/force ceiling.
+        assert!(default_motor_max_torque(&big) > default_motor_max_torque(&small));
+        assert!(default_motor_max_force(&big) > default_motor_max_force(&small));
+        // Torque grows faster than force with size (inertia ~ mass · r²).
+        let torque_ratio = default_motor_max_torque(&big) / default_motor_max_torque(&small);
+        let force_ratio = default_motor_max_force(&big) / default_motor_max_force(&small);
+        assert!(torque_ratio > force_ratio);
+        // The unit-density 1 m box reproduces the historical ~1e7 ceiling.
+        let unit = ShapeDef::Box {
+            width: 1.0,
+            height: 1.0,
+        };
+        assert!((default_motor_max_force(&unit) - 1.0e7).abs() < 1.0);
+        // A ground half-plane is never motored; it still returns a usable,
+        // finite ceiling rather than zero or a NaN.
+        assert!(default_motor_max_torque(&ShapeDef::HalfPlane) >= MIN_MOTOR_EFFORT);
+    }
 
     fn hinge(body_b: Option<StableId>, rest_rot_a: f32) -> JointDef {
         JointDef {
