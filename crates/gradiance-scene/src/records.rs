@@ -510,6 +510,12 @@ impl SceneRecord {
         self.environment.apply_signals(world);
     }
 
+    /// Whether the authored *content* matches, ignoring the config-seam
+    /// environment settings (which undo never reverts).
+    pub fn authored_eq(&self, other: &Self) -> bool {
+        self.bodies == other.bodies && self.joints == other.joints && self.nodes == other.nodes
+    }
+
     /// Restores `self` over the live world, writing **only what differs** from
     /// `from` — the snapshot being left behind.
     ///
