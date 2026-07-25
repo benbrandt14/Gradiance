@@ -56,20 +56,12 @@ pub struct CutCommand {
     pub b: Vec2,
     /// Stroke width, world pixels.
     pub width: f32,
-    outcomes: Vec<CutOutcome>,
-    staged: bool,
 }
 
 impl CutCommand {
     /// Builds a cut along the world-space segment `a`→`b`.
     pub fn new(a: Vec2, b: Vec2, width: f32) -> Self {
-        Self {
-            a,
-            b,
-            width,
-            outcomes: Vec::new(),
-            staged: false,
-        }
+        Self { a, b, width }
     }
 
     /// The cutting strip in a body's local frame: a box along the stroke,
@@ -91,8 +83,9 @@ impl CutCommand {
         }
     }
 
-    /// Computes all outcomes (runs once; redo replays the staged data).
-    fn stage(&mut self, world: &mut World) {
+    /// Computes what the stroke does to every body it crosses.
+    fn stage(&self, world: &mut World) -> Vec<CutOutcome> {
+        let mut outcomes = Vec::new();
         let bodies: Vec<Entity> = {
             let mut query = world.query_filtered::<Entity, With<Body>>();
             query.iter(world).collect()
@@ -163,12 +156,13 @@ impl CutCommand {
                 Replacement::Split { pieces } => rewire_joints(world, &original, pieces),
             };
 
-            self.outcomes.push(CutOutcome {
+            outcomes.push(CutOutcome {
                 original,
                 joint_changes,
                 replacement,
             });
         }
+        outcomes
     }
 }
 
@@ -234,14 +228,11 @@ fn aabbs_overlap(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
 
 impl GameCommand for CutCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        if !self.staged {
-            self.stage(world);
-            self.staged = true;
-        }
-        if self.outcomes.is_empty() {
+        let outcomes = self.stage(world);
+        if outcomes.is_empty() {
             return Err(CommandError::NoEffect);
         }
-        for outcome in &self.outcomes {
+        for outcome in &outcomes {
             match &outcome.replacement {
                 Replacement::Split { pieces } => {
                     let entity = resolve(world, outcome.original.id)?;

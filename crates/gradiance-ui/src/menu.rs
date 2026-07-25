@@ -67,6 +67,7 @@ pub fn menu_bar(
     mut panel_rects: ResMut<PanelRects>,
     selection: Res<Selection>,
     ids: Query<&StableId, With<Body>>,
+    history: Res<gradiance_command::HistoryInfo>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let selected_ids: Vec<StableId> = selection
@@ -85,7 +86,7 @@ pub fn menu_bar(
     let bar = egui::Panel::top("menu-bar").show(&mut root, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             file_menu(ui, &mut writers);
-            edit_menu(ui, &mut writers, has_selection, &selected_ids);
+            edit_menu(ui, &mut writers, has_selection, &selected_ids, &history);
             view_menu(ui, &mut panels, &mut grid);
             help_menu(ui, &mut about);
         });
@@ -135,18 +136,53 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
     });
 }
 
+/// Builds an Edit-menu label like `Undo Spawn Body` from a verb and the
+/// pending step's kebab-case name (`intent::name`), falling back to the bare
+/// verb when there is nothing to undo.
+fn step_label(verb: &str, step: Option<&'static str>) -> String {
+    let Some(step) = step.filter(|s| !s.is_empty()) else {
+        return verb.to_owned();
+    };
+    let mut out = String::from(verb);
+    for word in step.split('-') {
+        out.push(' ');
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            out.extend(first.to_uppercase());
+            out.push_str(chars.as_str());
+        }
+    }
+    out
+}
+
 fn edit_menu(
     ui: &mut egui::Ui,
     writers: &mut MenuWriters,
     has_selection: bool,
     selected_ids: &[StableId],
+    history: &gradiance_command::HistoryInfo,
 ) {
     ui.menu_button("Edit", |ui| {
-        if ui.button("Undo").clicked() {
+        // Naming the pending step matters mid-run: a simulation run is one
+        // undo step, so the first press after playing reads "Undo Simulate"
+        // instead of appearing to ignore the edit the user has in mind.
+        if ui
+            .add_enabled(
+                history.undo_depth > 0,
+                egui::Button::new(step_label("Undo", history.undo_label)),
+            )
+            .clicked()
+        {
             writers.undo.write(UndoIntent);
             ui.close();
         }
-        if ui.button("Redo").clicked() {
+        if ui
+            .add_enabled(
+                history.redo_depth > 0,
+                egui::Button::new(step_label("Redo", history.redo_label)),
+            )
+            .clicked()
+        {
             writers.redo.write(RedoIntent);
             ui.close();
         }

@@ -72,22 +72,21 @@ impl GameCommand for SpawnJointCommand {
 pub struct DeleteJointCommand {
     /// The joint to delete.
     pub id: StableId,
-    /// Captured state for undo; filled during `apply`.
-    record: Option<JointRecord>,
 }
 
 impl DeleteJointCommand {
     /// Builds a delete command for one joint.
     pub fn new(id: StableId) -> Self {
-        Self { id, record: None }
+        Self { id }
     }
 }
 
 impl GameCommand for DeleteJointCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         let entity = resolve(world, self.id)?;
-        self.record = JointRecord::capture(world, entity);
-        if self.record.is_none() {
+        // Capture only to confirm this really is a joint; the stack owns the
+        // state needed to bring it back.
+        if JointRecord::capture(world, entity).is_none() {
             return Err(CommandError::NoEffect);
         }
         world.despawn(entity);
