@@ -11,6 +11,7 @@ use gradiance_domain::layers::LayerMask32;
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::shape::{ShapeDef, ShapeError};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// The shared contract of every authored-entity record: capture from a live
 /// entity, spawn back into a world, keyed by [`StableId`].
@@ -117,6 +118,64 @@ impl BodyRecord {
             entity.insert(tracer);
         }
         entity.id()
+    }
+
+    /// Writes back **only the fields that differ** from `prev` — the state
+    /// being left behind — onto the live `entity`.
+    ///
+    /// This is what keeps undo from clobbering simulation: a field the undone
+    /// command never changed is never written, so a body that has settled
+    /// under physics keeps its live pose when an unrelated edit is undone.
+    /// It also bounds the derived-state rebuild (colliders, meshes) to the
+    /// components that actually changed.
+    pub fn restore_fields_over(&self, prev: &Self, world: &mut World, entity: Entity) {
+        let Ok(mut entity) = world.get_entity_mut(entity) else {
+            return;
+        };
+        if self.pose != prev.pose {
+            let mut transform = entity.get::<Transform>().copied().unwrap_or_default();
+            self.pose.apply_to(&mut transform);
+            entity.insert(transform);
+        }
+        if self.shape != prev.shape {
+            entity.insert(self.shape.clone());
+        }
+        if self.appearance != prev.appearance {
+            entity.insert(self.appearance);
+        }
+        if self.depth != prev.depth {
+            entity.insert(self.depth.sanitized());
+        }
+        if self.physics != prev.physics {
+            self.physics.insert_into(&mut entity);
+        }
+        if self.groups != prev.groups {
+            if self.groups.is_empty() {
+                entity.remove::<SelectionGroup>();
+            } else {
+                entity.insert(SelectionGroup(self.groups.clone()));
+            }
+        }
+        if self.field != prev.field {
+            match self.field {
+                Some(field) => {
+                    entity.insert(field);
+                }
+                None => {
+                    entity.remove::<gradiance_domain::field::FieldSource>();
+                }
+            }
+        }
+        if self.tracer != prev.tracer {
+            match self.tracer {
+                Some(tracer) => {
+                    entity.insert(tracer);
+                }
+                None => {
+                    entity.remove::<gradiance_domain::tracer::Tracer>();
+                }
+            }
+        }
     }
 }
 
@@ -355,6 +414,39 @@ pub struct SceneRecord {
     pub environment: EnvironmentRecord,
 }
 
+/// Resolves a stable id to its live entity.
+fn entity_for(world: &World, id: StableId) -> Option<Entity> {
+    world.resource::<gradiance_core::ids::IdIndex>().entity(id)
+}
+
+/// Restores records whose entities carry no simulation-evolved authored state,
+/// so any difference is resolved by replacing the entity: despawns the ones the
+/// undone command created, and re-spawns the ones it deleted or changed.
+fn restore_replaceable<R: AuthoredRecord + PartialEq>(target: &[R], from: &[R], world: &mut World) {
+    let target_ids: HashMap<StableId, &R> = target.iter().map(|r| (r.id(), r)).collect();
+    let from_ids: HashMap<StableId, &R> = from.iter().map(|r| (r.id(), r)).collect();
+    for prev in from {
+        if !target_ids.contains_key(&prev.id())
+            && let Some(entity) = entity_for(world, prev.id())
+        {
+            world.despawn(entity);
+        }
+    }
+    for record in target {
+        match from_ids.get(&record.id()) {
+            Some(prev) if *prev == record => {}
+            existed => {
+                if existed.is_some()
+                    && let Some(entity) = entity_for(world, record.id())
+                {
+                    world.despawn(entity);
+                }
+                record.spawn_into(world);
+            }
+        }
+    }
+}
+
 /// Captures every authored entity matching `F` as records, sorted by id.
 fn capture_all<R: AuthoredRecord, F: bevy::ecs::query::QueryFilter>(world: &mut World) -> Vec<R> {
     let mut query = world.query_filtered::<Entity, F>();
@@ -416,5 +508,57 @@ impl SceneRecord {
         // Signal-dataflow graph is scene content (StableId-keyed), so it is
         // reverted by undo — unlike the config-seam settings.
         self.environment.apply_signals(world);
+    }
+
+    /// Restores `self` over the live world, writing **only what differs** from
+    /// `from` — the snapshot being left behind.
+    ///
+    /// This is the undo/redo restore for ordinary edits, and it is what makes
+    /// undo safe during a run: entities the undone command never touched are
+    /// not written at all, so bodies that have settled under simulation keep
+    /// their live poses when an unrelated edit is reverted. It is also the
+    /// fast path — the derived-state rebuild is bounded by what actually
+    /// changed instead of despawning and respawning the whole scene.
+    ///
+    /// Use [`apply_authored`](Self::apply_authored) instead when the whole
+    /// authored world must be restored wholesale (a sim-run boundary, a load).
+    pub fn restore_diff(&self, from: &Self, world: &mut World) {
+        let target_bodies: HashMap<StableId, &BodyRecord> =
+            self.bodies.iter().map(|b| (b.id, b)).collect();
+        let from_bodies: HashMap<StableId, &BodyRecord> =
+            from.bodies.iter().map(|b| (b.id, b)).collect();
+        // Bodies the command created: remove them.
+        for prev in &from.bodies {
+            if !target_bodies.contains_key(&prev.id)
+                && let Some(entity) = entity_for(world, prev.id)
+            {
+                world.despawn(entity);
+            }
+        }
+        // Bodies the command deleted or changed: restore them.
+        for target in &self.bodies {
+            match from_bodies.get(&target.id) {
+                Some(prev) if *prev == target => {}
+                Some(prev) => match entity_for(world, target.id) {
+                    Some(entity) => target.restore_fields_over(prev, world, entity),
+                    None => {
+                        target.spawn(world);
+                    }
+                },
+                None => {
+                    target.spawn(world);
+                }
+            }
+        }
+        // Joints and nodes are light and have no simulation-evolved authored
+        // state, so any difference is restored by replacing the entity.
+        restore_replaceable(&self.joints, &from.joints, world);
+        restore_replaceable(&self.nodes, &from.nodes, world);
+        if self.environment.signals != from.environment.signals
+            || self.environment.params != from.environment.params
+            || self.environment.computed != from.environment.computed
+        {
+            self.environment.apply_signals(world);
+        }
     }
 }

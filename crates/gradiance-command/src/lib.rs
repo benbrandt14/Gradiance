@@ -179,8 +179,11 @@ impl CommandStack {
             return None;
         }
         let undone = self.labels[self.cursor];
-        self.cursor -= 1;
-        self.states[self.cursor].apply_authored(world);
+        let (from, to) = (self.cursor, self.cursor - 1);
+        // Differential restore: only what this command changed is written, so
+        // bodies that have settled under simulation keep their live poses.
+        self.states[to].restore_diff(&self.states[from], world);
+        self.cursor = to;
         debug!(name = undone, "command undone");
         Some(undone)
     }
@@ -191,9 +194,10 @@ impl CommandStack {
         if self.cursor + 1 >= self.states.len() {
             return None;
         }
-        self.cursor += 1;
-        self.states[self.cursor].apply_authored(world);
-        let redone = self.labels[self.cursor];
+        let (from, to) = (self.cursor, self.cursor + 1);
+        self.states[to].restore_diff(&self.states[from], world);
+        self.cursor = to;
+        let redone = self.labels[to];
         debug!(name = redone, "command redone");
         Some(redone)
     }
