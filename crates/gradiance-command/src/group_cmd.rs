@@ -22,21 +22,6 @@ fn prior_groups(
         .collect()
 }
 
-fn restore_groups(world: &mut World, prior: &[(StableId, Option<SelectionGroup>)]) {
-    for (id, group) in prior {
-        if let Some(entity) = world.resource::<IdIndex>().entity(*id) {
-            match group {
-                Some(g) => {
-                    world.entity_mut(entity).insert(g.clone());
-                }
-                None => {
-                    world.entity_mut(entity).remove::<SelectionGroup>();
-                }
-            }
-        }
-    }
-}
-
 /// The next unused group id across every stack in the world.
 fn fresh_group_id(world: &mut World) -> u32 {
     let mut query = world.query::<&SelectionGroup>();
@@ -89,11 +74,6 @@ impl GameCommand for GroupCommand {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        restore_groups(world, &self.prior);
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::GROUP
     }
@@ -141,11 +121,6 @@ impl GameCommand for UngroupCommand {
         if self.prior.is_empty() {
             self.prior = prior;
         }
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        restore_groups(world, &self.prior);
         Ok(())
     }
 

@@ -90,20 +90,6 @@ impl GameCommand for ScaleCommand {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        for (id, shape, pose) in &self.old {
-            let entity = resolve(world, *id)?;
-            let mut entity_mut = world.entity_mut(entity);
-            if let Some(mut s) = entity_mut.get_mut::<ShapeDef>() {
-                *s = shape.clone();
-            }
-            if let Some(mut t) = entity_mut.get_mut::<Transform>() {
-                pose.apply_to(&mut t);
-            }
-        }
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::SCALE
     }

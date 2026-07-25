@@ -280,26 +280,6 @@ impl GameCommand for CutCommand {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        for outcome in self.outcomes.iter().rev() {
-            match &outcome.replacement {
-                Replacement::Split { pieces } => {
-                    for piece in pieces {
-                        let entity = resolve(world, piece.id)?;
-                        world.despawn(entity);
-                    }
-                    outcome.original.spawn(world);
-                    revert_joint_changes(world, &outcome.joint_changes)?;
-                }
-                Replacement::Destroy => {
-                    outcome.original.spawn(world);
-                    revert_joint_changes(world, &outcome.joint_changes)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::CUT
     }
@@ -319,26 +299,6 @@ pub(crate) fn apply_joint_changes(
             }
             None => {
                 world.despawn(entity);
-            }
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn revert_joint_changes(
-    world: &mut World,
-    changes: &[(JointRecord, Option<JointDef>)],
-) -> Result<(), CommandError> {
-    for (record, new_def) in changes {
-        match new_def {
-            Some(_) => {
-                let entity = resolve(world, record.id)?;
-                if let Some(mut live) = world.get_mut::<JointDef>(entity) {
-                    *live = record.def.clone();
-                }
-            }
-            None => {
-                record.spawn(world);
             }
         }
     }

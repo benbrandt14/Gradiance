@@ -62,18 +62,6 @@ impl GameCommand for SpawnJointCommand {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let entity = resolve(world, self.record.id)?;
-        world.despawn(entity);
-        if self.locked_before == Some(false)
-            && let Ok(body) = resolve(world, self.record.def.body_a)
-            && let Ok(mut body_mut) = world.get_entity_mut(body)
-        {
-            body_mut.remove::<avian2d::prelude::LockedAxes>();
-        }
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::SPAWN_JOINT
     }
@@ -103,13 +91,6 @@ impl GameCommand for DeleteJointCommand {
             return Err(CommandError::NoEffect);
         }
         world.despawn(entity);
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        if let Some(record) = &self.record {
-            record.spawn(world);
-        }
         Ok(())
     }
 
