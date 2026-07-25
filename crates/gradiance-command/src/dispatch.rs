@@ -24,6 +24,7 @@ use crate::spawn::{DeleteCommand, DuplicateCommand, SpawnCommand};
 use crate::transform_cmd::CommitTransformCommand;
 use crate::{CommandStack, GameCommand};
 use bevy::prelude::*;
+use gradiance_core::states::GameState;
 
 fn drain<M: Message + Reflect + bevy::reflect::TypePath>(world: &mut World) -> Vec<M> {
     let drained: Vec<M> = gradiance_core::messages::drain(world);
@@ -107,7 +108,24 @@ pub fn dispatch_intents(world: &mut World) {
     let undos = drain::<UndoIntent>(world).len();
     let redos = drain::<RedoIntent>(world).len();
 
+    // Navigating history during a live run implies editing, not running, so
+    // undo/redo auto-pauses. Undo additionally closes the run as one step
+    // first, which is what makes the *first* press revert the run rather than
+    // chase a world that is still moving under it. Redo must not push a
+    // boundary: that would truncate the very redo branch it is about to walk
+    // into.
+    let live_run = (undos > 0 || redos > 0)
+        && *world.resource::<State<GameState>>().get() == GameState::Playing;
+    if live_run {
+        world
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::Paused);
+    }
+
     world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+        if live_run && undos > 0 {
+            stack.push_boundary(world);
+        }
         execute(&mut stack, world, commands, undos, redos);
         world.insert_resource(crate::HistoryInfo {
             undo_depth: stack.undo_len(),

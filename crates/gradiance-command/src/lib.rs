@@ -183,17 +183,47 @@ impl CommandStack {
         if self.states.is_empty() {
             return;
         }
+        if self.push_snapshot(world, intent::name::SIMULATE) {
+            debug!("simulation run recorded as one undo step");
+        }
+    }
+
+    /// Records a settled scene-settings edit as **one** undo step.
+    ///
+    /// Settings resources are written directly by the UI (invariant 4) rather
+    /// than through intents, so nothing else would snapshot them; the caller
+    /// ([`commit_settings_edits`]) debounces so a whole slider drag collapses
+    /// into a single step. Unlike [`push_boundary`](Self::push_boundary) this
+    /// seeds the baseline when the stack is empty, so a settings edit made
+    /// before any command still leaves later edits undoable — the very first
+    /// one establishes the baseline rather than being reversible.
+    pub fn push_settings_boundary(&mut self, world: &mut World) {
+        if self.states.is_empty() {
+            self.states.push_back(SceneRecord::capture(world));
+            self.labels.push_back("");
+            self.cursor = 0;
+            return;
+        }
+        if self.push_snapshot(world, intent::name::SETTINGS) {
+            debug!("settings edit recorded as one undo step");
+        }
+    }
+
+    /// Captures the live world as a new tip labelled `label`, dropping any
+    /// redo branch. Returns `false` (recording nothing) when the world already
+    /// matches the current snapshot.
+    fn push_snapshot(&mut self, world: &mut World, label: &'static str) -> bool {
         let live = SceneRecord::capture(world);
         if live.authored_eq(&self.states[self.cursor]) {
-            return;
+            return false;
         }
         self.states.truncate(self.cursor + 1);
         self.labels.truncate(self.cursor + 1);
         self.states.push_back(live);
-        self.labels.push_back(intent::name::SIMULATE);
+        self.labels.push_back(label);
         self.cursor += 1;
         self.evict_to_cap();
-        debug!("simulation run recorded as one undo step");
+        true
     }
 
     /// Undoes the most recent command, restoring the previous authored
@@ -201,9 +231,9 @@ impl CommandStack {
     ///
     /// Pausing records the run as its own step (see
     /// [`push_boundary`](Self::push_boundary)), so undoing after a run returns
-    /// to the pre-run layout. Undo *during* a live run currently steps through
-    /// edit history — see the open question in `docs/roadmap.md` about whether
-    /// the first press should instead revert the run.
+    /// to the pre-run layout. Undo *during* a live run behaves the same way:
+    /// the dispatcher auto-pauses and closes the run first, so the first press
+    /// reverts the run instead of chasing a world that is still moving.
     pub fn undo(&mut self, world: &mut World) -> Option<&'static str> {
         if self.cursor == 0 {
             return None;
@@ -275,6 +305,91 @@ fn close_sim_run(world: &mut World) {
     });
 }
 
+/// Records a settled scene-settings edit as one undo step.
+///
+/// The settings panels write their resources directly — the sanctioned
+/// config-seam exception to invariant 4 — so no intent and no command ever
+/// carries these edits, and nothing else would snapshot them. Rather than
+/// plumbing commit-on-release through the reflection-driven settings grid,
+/// this commits on the frame *after* the last change: dragging a gravity
+/// slider marks dirty every frame and snapshots once, when it settles. The
+/// one-frame latency is invisible, and a whole gesture collapses into a
+/// single undo step.
+///
+/// Only *scene-content* settings count (see
+/// [`EnvironmentRecord::scene_content_eq`](gradiance_scene::records::EnvironmentRecord::scene_content_eq));
+/// grid and snap are workstation config and never enter history.
+fn commit_settings_edits(
+    world: &mut World,
+    mut seen: Local<Option<SceneSettings>>,
+    mut dirty: Local<bool>,
+) {
+    let Some(previous) = seen.as_ref() else {
+        // First frame: establish the reference without recording anything.
+        *seen = Some(SceneSettings::capture(world));
+        return;
+    };
+    if !previous.matches(world) {
+        *seen = Some(SceneSettings::capture(world));
+        *dirty = true;
+        return;
+    }
+    if !*dirty {
+        return;
+    }
+    *dirty = false;
+    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+        stack.push_settings_boundary(world);
+        world.insert_resource(HistoryInfo {
+            undo_depth: stack.undo_len(),
+            redo_depth: stack.redo_len(),
+        });
+    });
+}
+
+/// The scene-content settings resources, tracked **by value**.
+///
+/// Bevy's change flags are not usable here: the settings window calls
+/// `set_changed()` unconditionally while a tab is open and writes its fields
+/// through `bypass_change_detection`, so the flags read "changed" every frame
+/// the panel is visible and stay silent for some edits entirely. Comparing
+/// values is the only honest signal, and it costs four equality checks per
+/// frame — nothing is cloned until something actually moves.
+#[derive(Clone, PartialEq)]
+struct SceneSettings {
+    sim: gradiance_domain::settings::SimSettings,
+    render: gradiance_domain::settings::RenderSettings,
+    lighting: gradiance_domain::settings::LightingSettings,
+    scenery: gradiance_domain::settings::ScenerySettings,
+}
+
+impl SceneSettings {
+    fn capture(world: &World) -> Self {
+        fn get<R: Resource + Clone + Default>(world: &World) -> R {
+            world.get_resource::<R>().cloned().unwrap_or_default()
+        }
+        Self {
+            sim: get(world),
+            render: get(world),
+            lighting: get(world),
+            scenery: get(world),
+        }
+    }
+
+    /// True when every tracked resource still holds the recorded value.
+    fn matches(&self, world: &World) -> bool {
+        fn eq<R: Resource + PartialEq + Default>(world: &World, mine: &R) -> bool {
+            world
+                .get_resource::<R>()
+                .map_or_else(|| *mine == R::default(), |live| live == mine)
+        }
+        eq(world, &self.sim)
+            && eq(world, &self.render)
+            && eq(world, &self.lighting)
+            && eq(world, &self.scenery)
+    }
+}
+
 /// System set containing the intent dispatcher; producers of intents must
 /// schedule `.before(CommandDispatchSet)` (or rely on the default: the
 /// dispatcher runs late in `Update`).
@@ -305,6 +420,11 @@ impl Plugin for CommandPlugin {
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),
         );
+        // Settings panels bypass the intent seam by design (config-seam
+        // exception), so scene-content settings get their own debounced
+        // snapshot. After the dispatcher, so a command and a settings edit in
+        // the same frame record in the order they happened.
+        app.add_systems(Update, commit_settings_edits.after(CommandDispatchSet));
         // Pausing closes a simulation run: record it as one undo step so the
         // pre-run layout stays reachable and later edits diff against the
         // settled poses.

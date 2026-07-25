@@ -360,12 +360,35 @@ macro_rules! environment_record {
 }
 
 impl EnvironmentRecord {
-    /// Restores only the signal-dataflow resources — the `StableId`-keyed scene
-    /// graph (bindings, `defparam` knobs, `defsignal` modulators) that commands
-    /// mutate as scene *content* — while leaving the config/workstation settings
-    /// (grid, snap, sim tuning, rendering) untouched. Used by undo/redo, which
-    /// reverts what the scene contains but never how the editor is configured.
-    pub fn apply_signals(&self, world: &mut World) {
+    /// True when two records agree on every **scene-content** setting.
+    ///
+    /// The environment splits in two, and the line is what the setting
+    /// describes rather than where it is edited:
+    ///
+    /// - *scene content* — gravity and sim tuning, render style, lighting,
+    ///   scenery, and the signal-dataflow graph. These describe the scene
+    ///   itself: change one and the picture or the physics changes. Undo
+    ///   covers them.
+    /// - *workstation config* — grid and snap. Authoring aids that belong to
+    ///   the person, not the document. Undo never touches these, so reverting
+    ///   an edit cannot silently move your grid out from under you.
+    pub fn scene_content_eq(&self, other: &Self) -> bool {
+        self.sim == other.sim
+            && self.render == other.render
+            && self.lighting == other.lighting
+            && self.scenery == other.scenery
+            && self.signals == other.signals
+            && self.params == other.params
+            && self.computed == other.computed
+    }
+
+    /// Restores the scene-content settings, leaving workstation config alone
+    /// (see [`scene_content_eq`](Self::scene_content_eq)). Used by undo/redo.
+    pub fn apply_scene_content(&self, world: &mut World) {
+        world.insert_resource(self.sim.clone());
+        world.insert_resource(self.render.clone());
+        world.insert_resource(self.lighting.clone());
+        world.insert_resource(self.scenery.clone());
         world.insert_resource(self.signals.clone());
         world.insert_resource(self.params.clone());
         world.insert_resource(self.computed.clone());
@@ -505,15 +528,19 @@ impl SceneRecord {
         for record in &self.nodes {
             record.spawn(world);
         }
-        // Signal-dataflow graph is scene content (StableId-keyed), so it is
-        // reverted by undo — unlike the config-seam settings.
-        self.environment.apply_signals(world);
+        // Scene-content settings (sim tuning, look, lighting, scenery, and the
+        // StableId-keyed signal graph) are reverted by undo; workstation
+        // config (grid, snap) is not.
+        self.environment.apply_scene_content(world);
     }
 
     /// Whether the authored *content* matches, ignoring the config-seam
     /// environment settings (which undo never reverts).
     pub fn authored_eq(&self, other: &Self) -> bool {
-        self.bodies == other.bodies && self.joints == other.joints && self.nodes == other.nodes
+        self.bodies == other.bodies
+            && self.joints == other.joints
+            && self.nodes == other.nodes
+            && self.environment.scene_content_eq(&other.environment)
     }
 
     /// Restores `self` over the live world, writing **only what differs** from
@@ -560,11 +587,8 @@ impl SceneRecord {
         // state, so any difference is restored by replacing the entity.
         restore_replaceable(&self.joints, &from.joints, world);
         restore_replaceable(&self.nodes, &from.nodes, world);
-        if self.environment.signals != from.environment.signals
-            || self.environment.params != from.environment.params
-            || self.environment.computed != from.environment.computed
-        {
-            self.environment.apply_signals(world);
+        if !self.environment.scene_content_eq(&from.environment) {
+            self.environment.apply_scene_content(world);
         }
     }
 }
