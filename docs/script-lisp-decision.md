@@ -51,9 +51,32 @@ by the time we arrive.
 | Fork | Decision | Rationale |
 |---|---|---|
 | **Scene model** | **RON of materialized state stays canonical and is the only on-disk format; the operation registry is runtime-only** | Prioritizes maintainability over representational purity: exactly one save format, so two representations can never diverge. The homoiconic registry still gives scripting / undo / node-editor their shared runtime seam; parametric replay, if ever wanted, is an *optional authored script* that regenerates state — not a second canonical save. |
-| **Modeling style** | **Imperative + physics solver (floor); constraints deferred behind a declarative interface** | A constraint solver is real subsystem risk and Rust's 2D-constraint ecosystem is thin. Keep it a named escalation path (CAD kernel / Wolfram / `argmin`), not a foundation. "Expose avian internals that make sense" = the reflect registry, grown incrementally. |
+| **Modeling style** | **Imperative + physics solver (floor); constraints deferred behind a declarative interface** — *escalation taken, see below* | A constraint solver is real subsystem risk and Rust's 2D-constraint ecosystem is thin. Keep it a named escalation path (CAD kernel / Wolfram / `argmin`), not a foundation. "Expose avian internals that make sense" = the reflect registry, grown incrementally. |
 | **Experiments** | **Live probes / tracers / plots; no headless batch — but don't preclude it** | Keep scope tight. Deterministic stepping + a data-out (`measure`) seam are designed now so a batch runner is additive later. |
 | **Units / frames** | **Raw engine-native numbers now; values shaped so unit-typing is additive** | Lightest weight wins today; a tagged-quantity layer can wrap numbers later without rewriting scripts. Frames named explicitly at each builtin. |
+
+### Amendment: the constraint-solver escalation was taken
+
+The "Modeling style" row above deferred constraints as *a named escalation path
+(CAD kernel / …), not a foundation*. That escalation has since been taken, on
+purpose and with the row's reasoning intact:
+
+- It arrived as a **separate sketch mode**, not as a replacement for the
+  imperative tools. The twelve direct `ToolState` tools are unchanged and are
+  gated to `EditorMode::Direct`; constrained sketching lives beside them.
+- The "Rust's 2D-constraint ecosystem is thin" concern was the accurate read,
+  and the resolution was to stop looking for a Rust-native one: Gradiance links
+  **SolveSpace's** solver through the `slvs` bindings
+  (`third_party/rust_slvs`, `crates/gradiance-sketch`).
+- The subsystem risk is contained by the package graph rather than by
+  intention. `gradiance-sketch` depends on `core` and `geometry` only — no
+  physics, no avian — so the solver cannot reach simulation state, and sketch
+  mode runs with the simulation paused.
+- Sketches are retained **only** for bodies authored in sketch mode; a body
+  drawn with the direct tools carries no `SketchDoc`.
+
+The consequence to record: linking SolveSpace makes the distributed binary
+**GPL-3.0**.
 
 ## The spine: a governed, homoiconic operation registry
 

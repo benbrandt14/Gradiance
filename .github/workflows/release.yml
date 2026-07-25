@@ -35,7 +35,18 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
+
+      # `slvs` builds SolveSpace with `cc` and generates its bindings with
+      # bindgen, which needs libclang. macOS runners supply it through the Xcode
+      # command line tools; Windows needs LLVM installed and pointed at
+      # explicitly. See third_party/rust_slvs/PATCH.md.
+      - name: Install LLVM (Windows)
+        if: matrix.target == 'windows'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18"
+          env: true
 
       - uses: dtolnay/rust-toolchain@stable
 

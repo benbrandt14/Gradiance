@@ -151,12 +151,18 @@ fn serialization_is_confined_to_authored_data() {
         "crates/gradiance-units/src/",
         "crates/gradiance-scene/src/",
         "crates/gradiance-persist/src/",
+        // The sketch document is authored state: it is what the person drew
+        // plus the relationships they asked for, and it rides in the save file
+        // alongside the body it produced. The solver's own handles are
+        // ephemeral and never serialized.
+        "crates/gradiance-sketch/src/doc.rs",
     ];
     let v = violations("Serialize", &allowed);
     assert!(
         v.is_empty(),
         "Serde derives are only allowed on authored/persisted data \
-         (domain, core, the shape tree, typed quantities, scene records, persist):\n{}",
+         (domain, core, the shape tree, typed quantities, scene records, \
+         persist, the sketch document):\n{}",
         v.join("\n")
     );
 }
@@ -219,6 +225,11 @@ fn the_crate_dag_matches_the_architecture() {
             &["command", "core", "domain", "geometry", "scene", "signal"],
         ),
         ("signal", &["core", "domain", "kernel", "physics"]),
+        // Sketching is an authoring-time subsystem: geometry in, geometry out.
+        // The absence of `physics` here is the point — the constraint solver
+        // must never reach a `Transform`, a joint, or an avian component, and
+        // that stays a compile error rather than a review note.
+        ("sketch", &["core", "geometry"]),
         (
             "ui",
             &[

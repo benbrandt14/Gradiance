@@ -1,0 +1,22 @@
+[package]
+name = "gradiance-sketch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance sketching: the constrained sketch document and its SolveSpace bridge"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-geometry.workspace = true
+bevy.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+# Features-only: serde impls for the bevy math types the document serializes.
+glam.workspace = true
+# SolveSpace's geometric constraint solver. Vendored (and workspace-excluded)
+# because the crates.io release does not build against a modern libclang —
+# see third_party/rust_slvs/PATCH.md.
+slvs = { path = "../../third_party/rust_slvs" }

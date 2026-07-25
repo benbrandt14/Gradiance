@@ -16,12 +16,21 @@ violation is a **compile error**, not a review comment:
 kernel → (nothing)                  units → (nothing, +bevy for Reflect)
 core → bevy                         geometry → core
 domain → core, geometry             scene → core, domain
-physics → core, domain, geometry, units
+sketch → core, geometry             physics → core, domain, geometry, units
 signal → kernel, domain, physics    command → scene, signal (+ lower)
 persist → scene, command            interaction → command, persist (+ lower)
 render → interaction, units (+ lower)   script → command, signal (+ lower)
 ui → everything except render
 ```
+
+`gradiance-sketch` is the constrained-sketching crate: the authored sketch
+document, the SolveSpace bridge (`third_party/rust_slvs`), and lowering to a
+`ShapeDef`. The **absence of a `physics` edge is the design**, not an
+oversight — sketching is an authoring-time subsystem and the solver must never
+reach a `Transform`, a joint, or an avian component. `doc`/`solve` stay
+dimension-agnostic (SolveSpace is natively 3D and the bridge builds a real
+workplane); `lower` is the only 2D-specific module, so a 3D backend — or the
+eventual rapier3d move — adds a sibling rather than a rewrite.
 
 `gradiance-units` is the typed-SI-quantity crate (`docs/units-decision.md`):
 a bottom node with no `gradiance-*` deps but a minimal `bevy` surface (its

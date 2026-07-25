@@ -1,10 +1,18 @@
 [workspace]
 members = ["crates/*"]
+# Vendored third-party source. `exclude` is load-bearing, not cosmetic: a path
+# dependency living inside the workspace directory otherwise becomes an
+# *implicit* member, which would subject GPL upstream code to `[workspace.lints]`
+# (it does emit warnings that `-D warnings` would turn into CI failures) and pull
+# it into `cargo test --workspace`.
+exclude = ["third_party/rust_slvs"]
 
 [workspace.package]
 version = "0.2.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+# Gradiance links SolveSpace's constraint solver (GPL-3.0) via `slvs`, so the
+# distributed binary is GPL-3.0. See third_party/rust_slvs/PATCH.md.
+license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
 # Engine + physics. Versions are exact-pinned: agent sessions must not drift
@@ -60,6 +68,7 @@ gradiance-units = { path = "crates/gradiance-units" }
 gradiance-geometry = { path = "crates/gradiance-geometry" }
 gradiance-domain = { path = "crates/gradiance-domain" }
 gradiance-scene = { path = "crates/gradiance-scene" }
+gradiance-sketch = { path = "crates/gradiance-sketch" }
 gradiance-physics = { path = "crates/gradiance-physics" }
 gradiance-signal = { path = "crates/gradiance-signal" }
 gradiance-command = { path = "crates/gradiance-command" }
@@ -115,6 +124,7 @@ gradiance-units.workspace = true
 gradiance-geometry.workspace = true
 gradiance-domain.workspace = true
 gradiance-scene.workspace = true
+gradiance-sketch.workspace = true
 gradiance-physics.workspace = true
 gradiance-signal.workspace = true
 gradiance-command.workspace = true
