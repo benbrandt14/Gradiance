@@ -12,7 +12,7 @@
 //! - sketch mode runs with the simulation paused, so solving and stepping never
 //!   interleave.
 //!
-//! [`doc`] is the authored document, [`solve`] is the SolveSpace bridge, and
+//! [`doc`] is the authored document, [`solve`](mod@solve) is the SolveSpace bridge, and
 //! [`lower`] turns a settled sketch into a [`ShapeDef`](gradiance_geometry::shape::ShapeDef).
 //! Only `lower` is 2D-specific: `doc` and `solve` speak SolveSpace's native 3D
 //! workplane, so a future 3D construction plane is a new workplane rather than

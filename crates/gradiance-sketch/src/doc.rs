@@ -7,7 +7,7 @@
 //! a separate derived copy.
 //!
 //! This module is deliberately **dimension-agnostic**. SolveSpace is a 3D
-//! solver and the bridge in [`crate::solve`] builds a real workplane, so a
+//! solver and the bridge in [`crate::solve`](mod@crate::solve) builds a real workplane, so a
 //! future 3D construction plane is a different workplane rather than a
 //! different document format. Nothing here mentions `ShapeDef`; the only
 //! 2D-specific step lives in [`crate::lower`].
@@ -94,7 +94,7 @@ impl SketchEntity {
 /// A relationship the solver must satisfy.
 ///
 /// Each variant maps onto exactly one SolveSpace constraint; the mapping lives
-/// in [`crate::solve`].
+/// in [`crate::solve`](mod@crate::solve).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Reflect)]
 pub enum SketchConstraint {
     /// Two points occupy the same location.

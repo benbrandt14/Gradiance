@@ -1,7 +1,7 @@
 //! Turn a settled sketch into authored body geometry.
 //!
 //! This is the **only** 2D-specific module in the crate. [`crate::doc`] and
-//! [`crate::solve`] speak SolveSpace's native 3D workplane; lowering is where a
+//! [`crate::solve`](mod@crate::solve) speak SolveSpace's native 3D workplane; lowering is where a
 //! sketch becomes a flat [`ShapeDef`]. A future 3D backend adds a sibling here
 //! rather than changing anything upstream of it.
 //!
