@@ -102,9 +102,6 @@ pub enum CommandError {
 pub trait GameCommand: Send + Sync + std::fmt::Debug {
     /// Applies the mutation.
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError>;
-    /// Dead: reversal is handled by [`CommandStack`] snapshots. Kept until the
-    /// follow-up cleanup removes it from every command.
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError>;
     /// Short human-readable name (for logs and UI).
     fn name(&self) -> &'static str;
 }

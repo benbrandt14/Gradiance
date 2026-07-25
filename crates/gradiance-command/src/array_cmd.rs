@@ -130,18 +130,6 @@ impl GameCommand for ArrayCommand {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        for record in &self.joint_clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        for record in &self.clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::ARRAY
     }

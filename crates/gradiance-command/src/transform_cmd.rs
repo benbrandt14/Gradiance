@@ -35,10 +35,6 @@ impl GameCommand for CommitTransformCommand {
         self.set_poses(world, true)
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        self.set_poses(world, false)
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::COMMIT_TRANSFORM
     }

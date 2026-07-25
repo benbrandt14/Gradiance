@@ -34,12 +34,6 @@ impl<R: AuthoredRecord> GameCommand for SpawnCommand<R> {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let entity = resolve(world, self.record.id())?;
-        world.despawn(entity);
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         self.name
     }
@@ -126,19 +120,6 @@ impl GameCommand for DeleteCommand {
         }
         for (entity, _) in node_pairs {
             world.despawn(entity);
-        }
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        for record in &self.records {
-            record.spawn(world);
-        }
-        for record in &self.joint_records {
-            record.spawn(world);
-        }
-        for record in &self.node_records {
-            record.spawn(world);
         }
         Ok(())
     }
@@ -291,30 +272,6 @@ impl GameCommand for DuplicateCommand {
         }
         for record in &self.node_clones {
             record.spawn(world);
-        }
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        for record in &self.node_clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        for record in &self.joint_clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        for record in &self.clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        // Remove the binding clones this command added (config seam).
-        if !self.binding_clones.is_empty()
-            && let Some(mut bindings) = world.get_resource_mut::<gradiance_signal::SignalBindings>()
-        {
-            bindings
-                .0
-                .retain(|b| !self.binding_clones.contains(&b.name));
         }
         Ok(())
     }

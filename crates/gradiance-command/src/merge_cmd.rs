@@ -12,7 +12,7 @@
 //! joints *between* merged bodies become internal and are deleted. Trees
 //! deeper than [`MAX_CSG_DEPTH`] bake to a polygon leaf.
 
-use crate::cut_cmd::{apply_joint_changes, revert_joint_changes};
+use crate::cut_cmd::apply_joint_changes;
 use crate::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
@@ -165,21 +165,6 @@ impl GameCommand for MergeCommand {
             *shape = staged.merged_shape.clone();
         }
         apply_joint_changes(world, &staged.joint_changes)?;
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let Some(staged) = &self.staged else {
-            return Err(CommandError::NoEffect);
-        };
-        let host = resolve(world, staged.originals[0].id)?;
-        if let Some(mut shape) = world.get_mut::<ShapeDef>(host) {
-            *shape = staged.originals[0].shape.clone();
-        }
-        for absorbed in &staged.originals[1..] {
-            absorbed.spawn(world);
-        }
-        revert_joint_changes(world, &staged.joint_changes)?;
         Ok(())
     }
 

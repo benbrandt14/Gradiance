@@ -37,13 +37,6 @@ impl GameCommand for LoadSceneCommand {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        if let Some(previous) = &self.previous {
-            previous.apply(world);
-        }
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::LOAD_SCENE
     }
