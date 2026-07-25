@@ -37,8 +37,6 @@ pub struct ArrayCommand {
     pub count: u32,
     /// Placement rule.
     pub mode: ArrayMode,
-    clones: Vec<BodyRecord>,
-    joint_clones: Vec<gradiance_scene::JointRecord>,
 }
 
 impl ArrayCommand {
@@ -48,8 +46,6 @@ impl ArrayCommand {
             sources,
             count,
             mode,
-            clones: Vec::new(),
-            joint_clones: Vec::new(),
         }
     }
 }
@@ -69,62 +65,58 @@ impl GameCommand for ArrayCommand {
         if self.count == 0 || self.sources.is_empty() {
             return Err(CommandError::NoEffect);
         }
-        if self.clones.is_empty() {
-            let mut clones = Vec::with_capacity(self.sources.len() * self.count as usize);
-            let mut joint_clones = Vec::new();
-            let mut next_group = crate::spawn::next_group_id(world);
-            for k in 1..=self.count {
-                let copy_start = clones.len();
-                let mut id_map = Vec::with_capacity(self.sources.len());
-                for &id in &self.sources {
-                    let entity = resolve(world, id)?;
-                    let mut clone = BodyRecord::capture(world, entity)
-                        .ok_or(CommandError::MissingEntity(id))?;
-                    clone.id = StableId::new();
-                    match self.mode {
-                        ArrayMode::Linear { offset } => {
-                            clone.pose.pos += offset * k as f32;
-                        }
-                        ArrayMode::Radial {
-                            pivot,
-                            angle_step,
-                            rotate_items,
-                        } => {
-                            let angle = angle_step * k as f32;
-                            let rel = clone.pose.pos - pivot;
-                            clone.pose.pos = pivot + Vec2::from_angle(angle).rotate(rel);
-                            if rotate_items {
-                                clone.pose.rot += angle;
-                            }
+        let mut clones = Vec::with_capacity(self.sources.len() * self.count as usize);
+        let mut joint_clones = Vec::new();
+        let mut next_group = crate::spawn::next_group_id(world);
+        for k in 1..=self.count {
+            let copy_start = clones.len();
+            let mut id_map = Vec::with_capacity(self.sources.len());
+            for &id in &self.sources {
+                let entity = resolve(world, id)?;
+                let mut clone =
+                    BodyRecord::capture(world, entity).ok_or(CommandError::MissingEntity(id))?;
+                clone.id = StableId::new();
+                match self.mode {
+                    ArrayMode::Linear { offset } => {
+                        clone.pose.pos += offset * k as f32;
+                    }
+                    ArrayMode::Radial {
+                        pivot,
+                        angle_step,
+                        rotate_items,
+                    } => {
+                        let angle = angle_step * k as f32;
+                        let rel = clone.pose.pos - pivot;
+                        clone.pose.pos = pivot + Vec2::from_angle(angle).rotate(rel);
+                        if rotate_items {
+                            clone.pose.rot += angle;
                         }
                     }
-                    id_map.push((id, clone.id));
-                    clones.push(clone);
                 }
-                let rot_offset = match self.mode {
-                    ArrayMode::Radial {
-                        angle_step,
-                        rotate_items: true,
-                        ..
-                    } => angle_step * k as f32,
-                    _ => 0.0,
-                };
-                joint_clones.extend(crate::spawn::clone_internal_joints(
-                    world,
-                    &id_map,
-                    copy_map(self.mode, k),
-                    rot_offset,
-                ));
-                // Each copy gets its own selection groups.
-                crate::spawn::remap_clone_groups(&mut clones[copy_start..], &mut next_group);
+                id_map.push((id, clone.id));
+                clones.push(clone);
             }
-            self.clones = clones;
-            self.joint_clones = joint_clones;
+            let rot_offset = match self.mode {
+                ArrayMode::Radial {
+                    angle_step,
+                    rotate_items: true,
+                    ..
+                } => angle_step * k as f32,
+                _ => 0.0,
+            };
+            joint_clones.extend(crate::spawn::clone_internal_joints(
+                world,
+                &id_map,
+                copy_map(self.mode, k),
+                rot_offset,
+            ));
+            // Each copy gets its own selection groups.
+            crate::spawn::remap_clone_groups(&mut clones[copy_start..], &mut next_group);
         }
-        for record in &self.clones {
+        for record in &clones {
             record.spawn(world);
         }
-        for record in &self.joint_clones {
+        for record in &joint_clones {
             record.spawn(world);
         }
         Ok(())

@@ -38,16 +38,12 @@ fn fresh_group_id(world: &mut World) -> u32 {
 pub struct GroupCommand {
     /// Bodies to group.
     pub targets: Vec<StableId>,
-    prior: Vec<(StableId, Option<SelectionGroup>)>,
 }
 
 impl GroupCommand {
     /// Builds a group command.
     pub fn new(targets: Vec<StableId>) -> Self {
-        Self {
-            targets,
-            prior: Vec::new(),
-        }
+        Self { targets }
     }
 }
 
@@ -56,7 +52,8 @@ impl GameCommand for GroupCommand {
         if self.targets.len() < 2 {
             return Err(CommandError::NoEffect);
         }
-        let prior = prior_groups(world, &self.targets)?;
+        // Called for the `?`: every target must resolve before we touch any.
+        prior_groups(world, &self.targets)?;
         let next = fresh_group_id(world);
         for &id in &self.targets {
             if let Some(entity) = world.resource::<IdIndex>().entity(id) {
@@ -67,9 +64,6 @@ impl GameCommand for GroupCommand {
                 stack.0.push(next);
                 world.entity_mut(entity).insert(stack);
             }
-        }
-        if self.prior.is_empty() {
-            self.prior = prior;
         }
         Ok(())
     }
@@ -84,16 +78,12 @@ impl GameCommand for GroupCommand {
 pub struct UngroupCommand {
     /// Bodies to ungroup.
     pub targets: Vec<StableId>,
-    prior: Vec<(StableId, Option<SelectionGroup>)>,
 }
 
 impl UngroupCommand {
     /// Builds an ungroup command.
     pub fn new(targets: Vec<StableId>) -> Self {
-        Self {
-            targets,
-            prior: Vec::new(),
-        }
+        Self { targets }
     }
 }
 
@@ -117,9 +107,6 @@ impl GameCommand for UngroupCommand {
             if now_empty {
                 world.entity_mut(entity).remove::<SelectionGroup>();
             }
-        }
-        if self.prior.is_empty() {
-            self.prior = prior;
         }
         Ok(())
     }

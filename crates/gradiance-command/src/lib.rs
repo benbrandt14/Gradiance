@@ -17,26 +17,26 @@
 //!                    │ apply() ── Ok ─▶ pushed to undo    │
 //!                    │           └ Err ▶ dropped, no trace│
 //!                    └───────────────────────────────────┘
-//!   Ctrl+Z ─▶ UndoIntent ─▶ stack.undo() ─▶ cmd.undo(world) ─▶ redo stack
+//!   Ctrl+Z ─▶ UndoIntent ─▶ stack.undo() ─▶ restore previous snapshot
 //! ```
 //!
 //! # Why a trait object per edit
 //!
-//! Each [`GameCommand`] captures exactly what it needs to reverse itself
-//! (a spawn remembers its id; a delete captures the full records it
-//! removed). Because commands resolve entities by
-//! [`StableId`] at execution time — never by
-//! holding a raw `Entity` — they stay valid across undo/redo cycles that
-//! despawn and respawn the same logical body.
+//! A [`GameCommand`] describes one *forward* edit and nothing else —
+//! reversal belongs to the [`CommandStack`], which snapshots authored state
+//! around every apply. Because commands resolve entities by [`StableId`] at
+//! execution time — never by holding a raw `Entity` — they stay valid across
+//! undo/redo cycles that despawn and respawn the same logical body.
 //!
 //! # Adding a command (the extension recipe)
 //!
 //! 1. Add an intent struct in [`intent`] (`#[derive(Message, Reflect)]`),
 //!    a kebab-case constant in [`intent::name`], and a `// Trace:` line
 //!    naming the command and the sync systems it triggers.
-//! 2. Add a `struct MyCommand` implementing [`GameCommand`] (stage on
-//!    first `apply`, replay on redo — see [`spawn`] for the pattern);
-//!    its `name()` returns the shared [`intent::name`] constant.
+//! 2. Add a `struct MyCommand` implementing [`GameCommand`]. It holds only
+//!    the *inputs* of the edit — do not capture prior state or stage data
+//!    for redo, since `apply` runs exactly once and the stack owns
+//!    reversal. Its `name()` returns the shared [`intent::name`] constant.
 //! 3. Add one row to the `command_intents!` table in [`dispatch`] —
 //!    that single row registers the message, registers the reflected type
 //!    (the scripting registry binds by reflection), and dispatches the
@@ -96,9 +96,10 @@ pub enum CommandError {
 /// `apply` must either fully succeed or leave the world untouched and return
 /// an error; failed commands are never recorded. Reversal is not a command's
 /// concern — the [`CommandStack`] snapshots authored state around each apply
-/// and restores it on undo/redo — so `undo` is dead (a follow-up removes it
-/// and each command's now-redundant apply-time capture). Commands reference
-/// bodies by [`StableId`] and resolve entities at execution time.
+/// and restores it on undo/redo — and `apply` runs **exactly once**, so a
+/// command carries no captured prior state and nothing staged for redo.
+/// Commands reference bodies by [`StableId`] and resolve entities at
+/// execution time.
 pub trait GameCommand: Send + Sync + std::fmt::Debug {
     /// Applies the mutation.
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError>;
@@ -111,8 +112,9 @@ pub trait GameCommand: Send + Sync + std::fmt::Debug {
 ///
 /// Every committed command captures a [`SceneRecord`] of the resulting authored
 /// world; undo/redo move a cursor along that timeline and restore the snapshot
-/// there (authored entities only — config-seam settings are never rolled back,
-/// via [`SceneRecord::apply_authored`]). This makes reversal uniform and robust:
+/// there (authored entities plus the *scene-content* settings — workstation
+/// config like grid and snap is never rolled back). This makes reversal
+/// uniform and robust:
 /// a command only has to *apply* its forward edit, so there is no per-command
 /// `undo()` logic to get wrong, and even a mid-play edit reverts cleanly.
 /// Entities are respawned on restore (same [`StableId`], fresh `Entity`), so
@@ -267,6 +269,22 @@ impl CommandStack {
         self.cursor
     }
 
+    /// Name of the step the next undo would revert, or `None` at the baseline.
+    ///
+    /// Surfaced so the Edit menu can say *what* it is about to undo. That
+    /// matters most mid-run: the run itself is one step
+    /// ([`push_boundary`](Self::push_boundary)), so the first press after
+    /// simulating reads "Undo Simulate" rather than silently not reverting
+    /// the edit the user has in mind.
+    pub fn peek_undo(&self) -> Option<&'static str> {
+        (self.cursor > 0).then(|| self.labels[self.cursor])
+    }
+
+    /// Name of the step the next redo would re-apply, or `None` at the tip.
+    pub fn peek_redo(&self) -> Option<&'static str> {
+        self.labels.get(self.cursor + 1).copied()
+    }
+
     /// Number of commands available to redo.
     pub fn redo_len(&self) -> usize {
         // `saturating_sub` guards the pre-history state (empty `states`), where
@@ -295,6 +313,10 @@ pub struct HistoryInfo {
     pub undo_depth: usize,
     /// Commands available to redo.
     pub redo_depth: usize,
+    /// What the next undo would revert (see [`CommandStack::peek_undo`]).
+    pub undo_label: Option<&'static str>,
+    /// What the next redo would re-apply.
+    pub redo_label: Option<&'static str>,
 }
 
 /// Records the just-finished simulation run as one undo step (see
@@ -343,6 +365,8 @@ fn commit_settings_edits(
         world.insert_resource(HistoryInfo {
             undo_depth: stack.undo_len(),
             redo_depth: stack.redo_len(),
+            undo_label: stack.peek_undo(),
+            redo_label: stack.peek_redo(),
         });
     });
 }

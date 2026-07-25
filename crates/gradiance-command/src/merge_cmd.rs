@@ -38,16 +38,12 @@ struct Staged {
 pub struct MergeCommand {
     /// Bodies to merge; the first is the host that survives.
     pub targets: Vec<StableId>,
-    staged: Option<Staged>,
 }
 
 impl MergeCommand {
     /// Builds a merge of `targets` into `targets[0]`.
     pub fn new(targets: Vec<StableId>) -> Self {
-        Self {
-            targets,
-            staged: None,
-        }
+        Self { targets }
     }
 
     fn stage(&mut self, world: &mut World) -> Result<Staged, CommandError> {
@@ -150,12 +146,7 @@ impl MergeCommand {
 
 impl GameCommand for MergeCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        if self.staged.is_none() {
-            self.staged = Some(self.stage(world)?);
-        }
-        let Some(staged) = &self.staged else {
-            return Err(CommandError::NoEffect);
-        };
+        let staged = self.stage(world)?;
         for absorbed in &staged.originals[1..] {
             let entity = resolve(world, absorbed.id)?;
             world.despawn(entity);

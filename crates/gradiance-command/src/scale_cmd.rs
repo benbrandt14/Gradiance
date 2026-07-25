@@ -24,8 +24,6 @@ pub struct ScaleCommand {
     pub frame_rot: f32,
     /// Per-axis scale factors in the frame.
     pub factors: Vec2,
-    /// Captured `(shape, pose)` per target for undo; filled on first apply.
-    old: Vec<(StableId, ShapeDef, PosRot)>,
 }
 
 impl ScaleCommand {
@@ -36,7 +34,6 @@ impl ScaleCommand {
             pivot,
             frame_rot,
             factors,
-            old: Vec::new(),
         }
     }
 }
@@ -66,12 +63,10 @@ impl GameCommand for ScaleCommand {
             let new_shape = scale_shape(&shape, m);
             new_shape.validate()?;
             let new_pos = scale_point(pose.pos, self.pivot, self.frame_rot, self.factors);
-            staged.push((entity, id, shape, pose, new_shape, new_pos));
+            staged.push((entity, pose, new_shape, new_pos));
         }
 
-        let mut old = Vec::with_capacity(staged.len());
-        for (entity, id, shape, pose, new_shape, new_pos) in staged {
-            old.push((id, shape, pose));
+        for (entity, pose, new_shape, new_pos) in staged {
             let mut entity_mut = world.entity_mut(entity);
             if let Some(mut s) = entity_mut.get_mut::<ShapeDef>() {
                 *s = new_shape;
@@ -83,9 +78,6 @@ impl GameCommand for ScaleCommand {
                 }
                 .apply_to(&mut t);
             }
-        }
-        if self.old.is_empty() {
-            self.old = old;
         }
         Ok(())
     }

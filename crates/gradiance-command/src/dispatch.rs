@@ -130,6 +130,8 @@ pub fn dispatch_intents(world: &mut World) {
         world.insert_resource(crate::HistoryInfo {
             undo_depth: stack.undo_len(),
             redo_depth: stack.redo_len(),
+            undo_label: stack.peek_undo(),
+            redo_label: stack.peek_redo(),
         });
     });
 }
