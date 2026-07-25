@@ -172,8 +172,41 @@ impl CommandStack {
         }
     }
 
+    /// Records a completed simulation run as **one** undo step, at a
+    /// play/pause boundary.
+    ///
+    /// If the run moved authored state, the settled state is pushed as a
+    /// snapshot. That does two things: undoing from here returns to the
+    /// pre-run layout, and subsequent edits diff against the *settled* poses
+    /// rather than stale pre-run ones — so undoing a later edit never yanks a
+    /// resting body back to where it was drawn. Only these boundaries snapshot;
+    /// bodies going to sleep never do, so a scene with many sleeping islands
+    /// does not flood the history.
+    pub fn push_boundary(&mut self, world: &mut World) {
+        if self.states.is_empty() {
+            return;
+        }
+        let live = SceneRecord::capture(world);
+        if live.authored_eq(&self.states[self.cursor]) {
+            return;
+        }
+        self.states.truncate(self.cursor + 1);
+        self.labels.truncate(self.cursor + 1);
+        self.states.push_back(live);
+        self.labels.push_back(intent::name::SIMULATE);
+        self.cursor += 1;
+        self.evict_to_cap();
+        debug!("simulation run recorded as one undo step");
+    }
+
     /// Undoes the most recent command, restoring the previous authored
     /// snapshot; returns the undone command's name, or `None` at the baseline.
+    ///
+    /// Pausing records the run as its own step (see
+    /// [`push_boundary`](Self::push_boundary)), so undoing after a run returns
+    /// to the pre-run layout. Undo *during* a live run currently steps through
+    /// edit history — see the open question in `docs/roadmap.md` about whether
+    /// the first press should instead revert the run.
     pub fn undo(&mut self, world: &mut World) -> Option<&'static str> {
         if self.cursor == 0 {
             return None;
@@ -237,6 +270,14 @@ pub struct HistoryInfo {
     pub redo_depth: usize,
 }
 
+/// Records the just-finished simulation run as one undo step (see
+/// [`CommandStack::push_boundary`]). Runs when the sim pauses.
+fn close_sim_run(world: &mut World) {
+    world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+        stack.push_boundary(world);
+    });
+}
+
 /// System set containing the intent dispatcher; producers of intents must
 /// schedule `.before(CommandDispatchSet)` (or rely on the default: the
 /// dispatcher runs late in `Update`).
@@ -266,6 +307,13 @@ impl Plugin for CommandPlugin {
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),
+        );
+        // Pausing closes a simulation run: record it as one undo step so the
+        // pre-run layout stays reachable and later edits diff against the
+        // settled poses.
+        app.add_systems(
+            OnEnter(gradiance_core::states::GameState::Paused),
+            close_sim_run,
         );
         // Dev-only observability: trace the per-frame Changed<> sync-match
         // counts (the deferred pipeline's cause→symptom gap; see
