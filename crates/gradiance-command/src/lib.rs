@@ -192,7 +192,7 @@ impl CommandStack {
     ///
     /// Settings resources are written directly by the UI (invariant 4) rather
     /// than through intents, so nothing else would snapshot them; the caller
-    /// ([`commit_settings_edits`]) debounces so a whole slider drag collapses
+    /// (`commit_settings_edits`) debounces so a whole slider drag collapses
     /// into a single step. Unlike [`push_boundary`](Self::push_boundary) this
     /// seeds the baseline when the stack is empty, so a settings edit made
     /// before any command still leaves later edits undoable — the very first

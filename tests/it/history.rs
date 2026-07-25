@@ -49,8 +49,11 @@ fn undo_during_a_live_run_pauses_and_reverts_the_run() {
         "sanity: the run should have moved the body ({drawn} -> {fallen})"
     );
 
-    // One undo press, mid-run.
+    // One undo press, mid-run. The pause is a state transition, so it lands
+    // at the start of the next frame (before physics, which is why nothing
+    // drifts in between).
     undo(&mut app);
+    app.update();
 
     assert_eq!(
         state(&app),
@@ -135,6 +138,7 @@ fn redo_during_a_live_run_pauses_without_losing_the_branch() {
         .set(GameState::Playing);
     step(&mut app, 30);
     redo(&mut app);
+    app.update(); // let the pause transition land
 
     assert_eq!(
         state(&app),
