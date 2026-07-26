@@ -927,3 +927,53 @@ fn angular_velocity(app: &App, id: StableId) -> f32 {
         .and_then(|e| app.world().get::<avian2d::prelude::AngularVelocity>(e))
         .map_or(0.0, |w| w.0)
 }
+
+/// A strut's stiffness must be scaled for SI: a body hung from a world-pinned
+/// spring sags only ~0.1 m (`sag = m·g / k` with `k ≈ 100·m`), not the ~100 m
+/// the pre-audit `0.1 N/m` fallback gave. Undamped, it oscillates about that
+/// equilibrium, so a generous < 1 m bound distinguishes the two without needing
+/// the spring to settle.
+#[test]
+fn strut_stiffness_keeps_a_hung_body_from_drooping() {
+    let mut app = headless_app();
+    // A 10x10 body (area 100 => mass 100 at unit density) hanging below a
+    // world anchor at the origin; the strut spans the 50-unit gap, relaxed.
+    let body = box_record(Vec2::new(0.0, -50.0), 10.0, 10.0);
+    let body_id = spawn_body(&mut app, body);
+    let stiffness = 100.0 * (10.0 * 10.0); // SPRING_STIFFNESS_PER_MASS * mass
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Spring {
+                rest_length: 50.0,
+                stiffness,
+                damping: 0.0,
+                range: None,
+            },
+            common: JointCommon::default(),
+            body_a: body_id,
+            body_b: None,
+            anchor_a: Vec2::ZERO, // body centre
+            anchor_b: Vec2::ZERO, // world anchor
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+
+    let mut max_droop = 0.0_f32;
+    for _ in 0..240 {
+        step(&mut app, 1);
+        // How far the body fell below its rest position (-50).
+        let droop = -50.0 - pose_of(&app, body_id).pos.y;
+        max_droop = max_droop.max(droop);
+    }
+    assert!(
+        max_droop < 1.0,
+        "SI stiffness must hold the body up (drooped {max_droop:.2} m; the old \
+         0.1 N/m fallback would droop ~100 m)"
+    );
+    assert!(
+        max_droop > 1e-3,
+        "the strut is a spring, not rigid (droop {max_droop})"
+    );
+}
