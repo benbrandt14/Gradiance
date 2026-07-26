@@ -14,10 +14,9 @@ use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{
-    DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind, MotorDef,
-    default_motor_max_force, default_motor_max_torque,
+    AngularMotorDef, DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind,
+    LinearMotorDef,
 };
-use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_units::Dimension;
 
@@ -31,7 +30,6 @@ pub fn joint_inspector(
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform>,
-    shapes: Query<&ShapeDef>,
     index: Res<IdIndex>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
@@ -43,13 +41,6 @@ pub fn joint_inspector(
     let Ok((&id, def)) = joints.get(entity) else {
         return Ok(());
     };
-
-    // A freshly toggled motor's ceiling scales with the driven body (body A),
-    // so it feels the same across sizes; fall back to the fixed default when
-    // the shape can't be resolved this frame.
-    let shape_a = index.entity(def.body_a).and_then(|e| shapes.get(e).ok());
-    let torque_default = shape_a.map_or(MotorDef::default().max_force, default_motor_max_torque);
-    let force_default = shape_a.map_or(MotorDef::default().max_force, default_motor_max_force);
 
     // Edits accumulate into `next`; a single change emits one intent.
     let old = def.clone();
@@ -99,7 +90,7 @@ pub fn joint_inspector(
                 }
             }
 
-            changed |= configure_kind(ui, &def.kind, &mut next, torque_default, force_default);
+            changed |= configure_kind(ui, &def.kind, &mut next);
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -150,13 +141,7 @@ fn joint_geometry(
 
 /// Renders the kind-specific config controls, writing any edit into `next.kind`.
 /// Returns whether something changed.
-fn configure_kind(
-    ui: &mut egui::Ui,
-    kind: &JointKind,
-    next: &mut JointDef,
-    torque_default: f32,
-    force_default: f32,
-) -> bool {
+fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> bool {
     let mut changed = false;
     match kind {
         JointKind::Hinge { limits, motor } => {
@@ -169,18 +154,17 @@ fn configure_kind(
             }
             if let Some(m) = motor_section(
                 ui,
-                *motor,
+                motor.map(MotorView::from),
                 "rpm",
                 RAD_PER_S_TO_RPM,
                 "torque",
                 Dimension::Torque.symbol(),
-                torque_default,
             ) {
                 // Re-read limits from `next` in case both changed.
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Hinge {
                     limits: cur_limits,
-                    motor: m,
+                    motor: m.map(MotorView::into_angular),
                 };
                 changed = true;
             }
@@ -200,18 +184,17 @@ fn configure_kind(
             }
             if let Some(m) = motor_section(
                 ui,
-                *motor,
+                motor.map(MotorView::from),
                 Dimension::Velocity.symbol(),
                 1.0,
                 "force",
                 Dimension::Force.symbol(),
-                force_default,
             ) {
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
                     axis: *axis,
                     limits: cur_limits,
-                    motor: m,
+                    motor: m.map(MotorView::into_linear),
                 };
                 changed = true;
             }
@@ -296,6 +279,73 @@ fn limit_section(
     result
 }
 
+/// A motor's editable scalars in unit-agnostic form.
+///
+/// The angular and linear motors are deliberately distinct domain types (they
+/// carry different quantities), but their *widget* is identical — only the unit
+/// labels differ. This view is the one place the two meet, so `motor_section`
+/// stays a single implementation instead of a copy per kind.
+#[derive(Clone, Copy)]
+struct MotorView {
+    /// Base-SI magnitude (rad/s or m/s).
+    target_velocity: f32,
+    /// Base-SI magnitude (N·m or N); `<= 0` = auto.
+    max_effort: f32,
+    damping: f32,
+    oscillate: bool,
+    enabled: bool,
+}
+
+impl MotorView {
+    /// The reset value for a fresh motor. Both domain motors share these
+    /// numbers (see the `DEFAULT_MOTOR_*` consts), so one default is honest.
+    const DEFAULT_VELOCITY: f32 = gradiance_domain::joint::DEFAULT_MOTOR_ANGULAR_VELOCITY;
+
+    fn into_angular(self) -> AngularMotorDef {
+        AngularMotorDef {
+            target_velocity: gradiance_units::AngularVelocity(self.target_velocity),
+            max_torque: gradiance_units::Torque(self.max_effort),
+            damping: self.damping,
+            oscillate: self.oscillate,
+            enabled: self.enabled,
+        }
+    }
+
+    fn into_linear(self) -> LinearMotorDef {
+        LinearMotorDef {
+            target_velocity: gradiance_units::Velocity(self.target_velocity),
+            max_force: gradiance_units::Force(self.max_effort),
+            damping: self.damping,
+            oscillate: self.oscillate,
+            enabled: self.enabled,
+        }
+    }
+}
+
+impl From<AngularMotorDef> for MotorView {
+    fn from(m: AngularMotorDef) -> Self {
+        Self {
+            target_velocity: m.target_velocity.value(),
+            max_effort: m.max_torque.value(),
+            damping: m.damping,
+            oscillate: m.oscillate,
+            enabled: m.enabled,
+        }
+    }
+}
+
+impl From<LinearMotorDef> for MotorView {
+    fn from(m: LinearMotorDef) -> Self {
+        Self {
+            target_velocity: m.target_velocity.value(),
+            max_effort: m.max_force.value(),
+            damping: m.damping,
+            oscillate: m.oscillate,
+            enabled: m.enabled,
+        }
+    }
+}
+
 /// Motor UI: toggle plus parameters.
 ///
 /// Returns `Some(new)` only on the frame something changed; the inner
@@ -303,21 +353,18 @@ fn limit_section(
 #[allow(clippy::option_option)]
 fn motor_section(
     ui: &mut egui::Ui,
-    current: Option<MotorDef>,
+    current: Option<MotorView>,
     vel_unit: &str,
     vel_scale: f32,
     effort_word: &str,
     effort_unit: &str,
-    default_effort: f32,
-) -> Option<Option<MotorDef>> {
+) -> Option<Option<MotorView>> {
     let mut enabled = current.is_some();
     let mut result = None;
     if ui.checkbox(&mut enabled, "motor").changed() {
-        // A new motor's torque/force ceiling is scaled to the driven body.
-        result = Some(enabled.then(|| MotorDef {
-            max_force: default_effort,
-            ..MotorDef::default()
-        }));
+        // A new motor is "auto": the physics seam sizes its ceiling to the
+        // driven body's real inertia/mass (`max_effort <= 0`).
+        result = Some(enabled.then(|| MotorView::from(AngularMotorDef::default())));
     }
     if let Some(mut m) = current {
         ui.horizontal(|ui| {
@@ -329,7 +376,7 @@ fn motor_section(
                 ui,
                 egui::Id::new("jm-vel"),
                 &mut shown,
-                MotorDef::default().target_velocity * vel_scale,
+                MotorView::DEFAULT_VELOCITY * vel_scale,
                 0.1 * vel_scale,
                 vel_unit,
             ) {
@@ -338,13 +385,20 @@ fn motor_section(
             }
         });
         ui.horizontal(|ui| {
-            ui.label(format!("max {effort_word}"));
+            // `max_effort <= 0` = auto (physics scales it to the body); drag it
+            // up to pin an explicit cap, reset to 0 for auto again.
+            let auto = m.max_effort <= 0.0;
+            ui.label(if auto {
+                format!("max {effort_word} (auto)")
+            } else {
+                format!("max {effort_word}")
+            });
             if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("jm-force"),
-                &mut m.max_force,
-                default_effort,
-                (default_effort * 0.1).max(1.0),
+                &mut m.max_effort,
+                0.0,
+                10.0,
                 effort_unit,
             ) {
                 result = Some(Some(m));

@@ -134,7 +134,13 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
         )
 }
 
-fn motor_strategy() -> impl Strategy<Value = MotorDef> {
+/// Raw motor scalars: `(target velocity, max effort, damping, oscillate,
+/// enabled)`. The joint *kind* decides whether these become an angular
+/// (rad/s, N·m) or a linear (m/s, N) motor — the two are distinct types now,
+/// so the seed stays unit-agnostic and is converted at construction.
+type MotorSeed = (f32, f32, f32, bool, bool);
+
+fn motor_strategy() -> impl Strategy<Value = MotorSeed> {
     (
         -10.0f32..10.0,
         1.0f32..1.0e8,
@@ -142,19 +148,36 @@ fn motor_strategy() -> impl Strategy<Value = MotorDef> {
         any::<bool>(),
         any::<bool>(),
     )
-        .prop_map(
-            |(target_velocity, max_force, damping, oscillate, enabled)| MotorDef {
-                target_velocity,
-                max_force,
-                damping,
-                oscillate,
-                enabled,
-            },
-        )
+}
+
+fn seed_angular_motor((v, effort, damping, oscillate, enabled): MotorSeed) -> AngularMotorDef {
+    AngularMotorDef {
+        target_velocity: gradiance::units::AngularVelocity(v),
+        max_torque: gradiance::units::Torque(effort),
+        damping,
+        oscillate,
+        enabled,
+    }
+}
+
+fn seed_linear_motor((v, effort, damping, oscillate, enabled): MotorSeed) -> LinearMotorDef {
+    LinearMotorDef {
+        target_velocity: gradiance::units::Velocity(v),
+        max_force: gradiance::units::Force(effort),
+        damping,
+        oscillate,
+        enabled,
+    }
 }
 
 /// Joint blueprint by body index (resolved against the generated bodies).
-type JointSeed = (usize, Option<usize>, u8, Option<[f32; 2]>, Option<MotorDef>);
+type JointSeed = (
+    usize,
+    Option<usize>,
+    u8,
+    Option<[f32; 2]>,
+    Option<MotorSeed>,
+);
 
 fn joint_seed_strategy() -> impl Strategy<Value = JointSeed> {
     (
@@ -190,16 +213,19 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                         None => None,
                     };
                     let kind = match kind {
-                        0 => JointKind::Hinge { limits, motor },
+                        0 => JointKind::Hinge {
+                            limits,
+                            motor: motor.map(seed_angular_motor),
+                        },
                         1 => JointKind::Slider {
                             axis: Vec2::Y,
                             limits,
-                            motor,
+                            motor: motor.map(seed_linear_motor),
                         },
                         _ => JointKind::Slider {
                             axis: Vec2::X,
                             limits,
-                            motor,
+                            motor: motor.map(seed_linear_motor),
                         },
                     };
                     Some(JointRecord {
@@ -437,7 +463,7 @@ fn joints_survive_files_and_resolve_after_load() {
             def: JointDef {
                 kind: JointKind::Hinge {
                     limits: Some([-1.0, 1.0]),
-                    motor: Some(MotorDef::default()),
+                    motor: Some(AngularMotorDef::default()),
                 },
                 common: JointCommon::default(),
                 body_a: a,

@@ -31,22 +31,44 @@ use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
 use serde::{Deserialize, Serialize};
 
-/// Motor settings shared by hinge (angular) and slider (linear) joints.
+// --- Motors ---------------------------------------------------------------
+//
+// A hinge motor and a slider motor are *different physical things*: one drives
+// an angular velocity (rad/s) capped by a torque (N·m), the other a linear
+// velocity (m/s) capped by a force (N). They used to share a single `MotorDef`
+// whose `target_velocity` and `max_force` silently meant one or the other
+// depending on the joint kind — the union behind the rad/s-vs-rpm and
+// torque-vs-force mix-ups. Two types with typed quantities make that
+// unrepresentable: the compiler now rejects a slider motor on a hinge, and the
+// units come from `gradiance-units` so a label can't drift from its value.
+
+/// The velocity-tracking gain (1/s) of the acceleration-based motor model: the
+/// acceleration applied per unit of velocity error. It sets how firmly a motor
+/// holds its target — too low and any load stalls it (the classic "weak
+/// motor"). Instability in this model comes from high *stiffness*, not this
+/// gain, so a firm value is safe.
+pub const DEFAULT_MOTOR_DAMPING: f32 = 30.0;
+/// Default hinge drive speed (rad/s ≈ 19 rpm).
+pub const DEFAULT_MOTOR_ANGULAR_VELOCITY: f32 = 2.0;
+/// Default slider drive speed (m/s).
+pub const DEFAULT_MOTOR_LINEAR_VELOCITY: f32 = 2.0;
+
+/// A **hinge** (revolute) motor: drives toward a target *angular* velocity,
+/// capped by a maximum *torque*.
 ///
-/// Maps onto the engine's native velocity-controlled motor with an
+/// Maps onto avian's native velocity-controlled `AngularMotor` with an
 /// acceleration-based model (`stiffness = 0`, `damping` as configured).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
-pub struct MotorDef {
-    /// Target velocity (rad/s for hinges, m/s for sliders).
-    pub target_velocity: f32,
-    /// Maximum torque (hinge) or force (slider) the motor may exert.
-    pub max_force: f32,
-    /// Velocity-tracking gain of the acceleration-based motor model: the
-    /// angular/linear acceleration applied per unit of velocity error
-    /// (units 1/s). It sets how firmly the motor holds its target velocity —
-    /// too low and any load stalls it (the classic "weak motor"). Instability
-    /// in this model comes from high *stiffness*, not this gain, so a firm
-    /// value is safe.
+pub struct AngularMotorDef {
+    /// Target angular velocity (rad/s; the inspector shows it in rpm).
+    pub target_velocity: gradiance_units::AngularVelocity,
+    /// Maximum torque the motor may exert. `<= 0` means **auto**: the physics
+    /// seam derives the ceiling from the driven body's real angular inertia
+    /// (see [`motor_ceiling`]), so the motor holds firm across body sizes
+    /// without the old fixed `1e7` — which sat above the solver's engagement
+    /// impulse and spiked the rigid pivot off its pin.
+    pub max_torque: gradiance_units::Torque,
+    /// Velocity-tracking gain — see [`DEFAULT_MOTOR_DAMPING`].
     pub damping: f32,
     /// Reverse direction at the joint limits (requires limits).
     pub oscillate: bool,
@@ -54,15 +76,44 @@ pub struct MotorDef {
     pub enabled: bool,
 }
 
-impl Default for MotorDef {
+impl Default for AngularMotorDef {
     fn default() -> Self {
         Self {
-            target_velocity: 2.0,
-            max_force: 1.0e7,
-            // A firm velocity gain: ~2-frame time constant at 60 fps, so the
-            // motor actually holds its target under load instead of drifting
-            // (the earlier default of 1.0 read as "motors are very weak").
-            damping: 30.0,
+            target_velocity: gradiance_units::AngularVelocity(DEFAULT_MOTOR_ANGULAR_VELOCITY),
+            max_torque: gradiance_units::Torque(0.0), // auto
+            damping: DEFAULT_MOTOR_DAMPING,
+            oscillate: false,
+            enabled: true,
+        }
+    }
+}
+
+/// A **slider** (prismatic) motor: drives toward a target *linear* velocity,
+/// capped by a maximum *force*.
+///
+/// Maps onto avian's native velocity-controlled `LinearMotor`, same model as
+/// [`AngularMotorDef`].
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct LinearMotorDef {
+    /// Target linear velocity (m/s).
+    pub target_velocity: gradiance_units::Velocity,
+    /// Maximum force the motor may exert; `<= 0` = **auto** (scaled from the
+    /// driven body's mass — see [`AngularMotorDef::max_torque`]).
+    pub max_force: gradiance_units::Force,
+    /// Velocity-tracking gain — see [`DEFAULT_MOTOR_DAMPING`].
+    pub damping: f32,
+    /// Reverse direction at the joint limits (requires limits).
+    pub oscillate: bool,
+    /// Whether the motor is powered.
+    pub enabled: bool,
+}
+
+impl Default for LinearMotorDef {
+    fn default() -> Self {
+        Self {
+            target_velocity: gradiance_units::Velocity(DEFAULT_MOTOR_LINEAR_VELOCITY),
+            max_force: gradiance_units::Force(0.0), // auto
+            damping: DEFAULT_MOTOR_DAMPING,
             oscillate: false,
             enabled: true,
         }
@@ -86,8 +137,8 @@ pub enum JointKind {
     Hinge {
         /// Optional `[min, max]` relative-angle limits (radians).
         limits: Option<[f32; 2]>,
-        /// Optional angular motor.
-        motor: Option<MotorDef>,
+        /// Optional angular motor (rad/s driven, torque capped).
+        motor: Option<AngularMotorDef>,
     },
     /// Prismatic: bodies slide along `axis` through the anchor.
     Slider {
@@ -95,8 +146,8 @@ pub enum JointKind {
         axis: Vec2,
         /// Optional `[min, max]` translation limits (m).
         limits: Option<[f32; 2]>,
-        /// Optional linear motor.
-        motor: Option<MotorDef>,
+        /// Optional linear motor (m/s driven, force capped).
+        motor: Option<LinearMotorDef>,
     },
     /// Spring-damper strut: a soft distance constraint between the two
     /// anchors, drawn as a coil. Maps onto avian's `DistanceJoint`
@@ -125,10 +176,12 @@ pub enum JointKind {
 
 /// Fallback spring constant (N/m) for the inspector's reset (the strut tool
 /// computes a mass-based value at creation; see
-/// `interaction::tools::strut_tool`). SI: rescaled ÷`PIXELS_PER_METER²` from
-/// the pre-flip pixel value, preserving its ratio to the tool's typical
-/// mass-based stiffness (~a few N/m).
-pub const DEFAULT_SPRING_STIFFNESS: f32 = 0.1;
+/// `interaction::tools::strut_tool`). Sized for a typical ~1 kg body: at
+/// `k = m·g / sag` with `g ≈ 10` and a ~0.1 m sag this is ~100 N/m, matching
+/// the tool's `SPRING_STIFFNESS_PER_MASS · mass`. (The earlier `0.1` was a
+/// mechanical ÷`PIXELS_PER_METER²` rescale of the pixel-era value — three
+/// orders too soft, so a reset strut drooped ~100 m.)
+pub const DEFAULT_SPRING_STIFFNESS: f32 = 100.0;
 /// Default linear damping for a freshly authored strut.
 pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;
 
@@ -164,40 +217,47 @@ pub const MOTOR_FORCE_PER_MASS: f32 = 5.0e2;
 /// Nonzero floor so a tiny body still gets a usable motor ceiling.
 pub const MIN_MOTOR_EFFORT: f32 = 1.0;
 
-/// The mass-aware default **max torque** (N·m) for a hinge motor driving a
-/// body of the given `shape` — see the module notes above.
+/// The motor's effective torque/force ceiling. An **explicit** authored
+/// `max_force` (`> 0`) is used as-is; otherwise it is **auto** and scales with
+/// the connected body's real `inertia_or_mass` (angular inertia for a hinge,
+/// mass for a slider) via `per` (`MOTOR_TORQUE_PER_INERTIA` /
+/// `MOTOR_FORCE_PER_MASS`), floored. The physics seam calls this at apply time
+/// with the body's `Computed*` value, so every motor — authored in the UI,
+/// spawned programmatically, or loaded from a scene — lands in the stable band.
 #[must_use]
-pub fn default_motor_max_torque(shape: &crate::shape::ShapeDef) -> f32 {
-    (MOTOR_TORQUE_PER_INERTIA * shape_inertia_proxy(shape)).max(MIN_MOTOR_EFFORT)
+pub fn motor_ceiling(authored_max: f32, inertia_or_mass: f32, per: f32) -> f32 {
+    if authored_max > 0.0 {
+        authored_max
+    } else {
+        (per * inertia_or_mass).max(MIN_MOTOR_EFFORT)
+    }
 }
 
-/// The mass-aware default **max force** (N) for a slider motor driving a body
-/// of the given `shape`.
+/// A hinge's relative angle **in avian's constraint frame** — the deviation of
+/// body B from body A relative to the joint's creation pose, which is what
+/// `with_angle_limits` (and the rest basis handed to `with_local_basis2`)
+/// measures. Returns `0` at the creation pose, so the authored `[min, max]`
+/// limits apply directly. Pure so the oscillate seam (`physics::motor`) stays
+/// testable without a running solver.
 #[must_use]
-pub fn default_motor_max_force(shape: &crate::shape::ShapeDef) -> f32 {
-    (MOTOR_FORCE_PER_MASS * shape_mass_proxy(shape)).max(MIN_MOTOR_EFFORT)
+pub fn hinge_limit_angle(rot_a: f32, rot_b: f32, rest_rot_a: f32, rest_rot_b: f32) -> f32 {
+    gradiance_geometry::wrap_angle((rot_b - rot_a) + (rest_rot_a - rest_rot_b))
 }
 
-/// A body's geometric **mass proxy**: its AABB area at unit density. A ground
-/// half-plane is static (never motored), so it gets a unit area.
-fn shape_mass_proxy(shape: &crate::shape::ShapeDef) -> f32 {
-    if shape.contains_half_plane() {
-        return 1.0;
+/// The target velocity an oscillating motor should hold given its current
+/// limit-frame angle `rel` (see [`hinge_limit_angle`]) — reverse toward the
+/// interior once within `buffer` of either bound, otherwise keep driving
+/// (`None`). `+velocity` drives `rel` upward, so the max bound reverses to
+/// `-speed` and the min bound to `+speed`. Pure and unit-tested.
+#[must_use]
+pub fn oscillate_target(rel: f32, min: f32, max: f32, speed: f32, buffer: f32) -> Option<f32> {
+    if rel >= max - buffer {
+        Some(-speed.abs())
+    } else if rel <= min + buffer {
+        Some(speed.abs())
+    } else {
+        None
     }
-    let (min, max) = gradiance_geometry::sdf::aabb(shape);
-    ((max.x - min.x) * (max.y - min.y)).max(f32::EPSILON)
-}
-
-/// A body's geometric **inertia proxy**: a uniform rectangular plate spanning
-/// the AABB, `m·(w² + h²)/12` about its centre (mass = area at unit density).
-fn shape_inertia_proxy(shape: &crate::shape::ShapeDef) -> f32 {
-    if shape.contains_half_plane() {
-        return 1.0;
-    }
-    let (min, max) = gradiance_geometry::sdf::aabb(shape);
-    let (w, h) = (max.x - min.x, max.y - min.y);
-    let area = (w * h).max(f32::EPSILON);
-    area * (w * w + h * h) / 12.0
 }
 
 /// The authored definition of one constraint between two bodies (or one
@@ -270,39 +330,44 @@ impl JointDef {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shape::ShapeDef;
 
     #[test]
-    fn motor_default_effort_scales_with_body_size() {
-        let small = ShapeDef::Box {
-            width: 0.5,
-            height: 0.5,
-        };
-        let big = ShapeDef::Box {
-            width: 4.0,
-            height: 2.0,
-        };
-        // A larger body needs (and gets) a higher torque/force ceiling.
-        assert!(default_motor_max_torque(&big) > default_motor_max_torque(&small));
-        assert!(default_motor_max_force(&big) > default_motor_max_force(&small));
-        // Torque grows faster than force with size (inertia ~ mass · r²).
-        let torque_ratio = default_motor_max_torque(&big) / default_motor_max_torque(&small);
-        let force_ratio = default_motor_max_force(&big) / default_motor_max_force(&small);
-        assert!(torque_ratio > force_ratio);
-        // The unit-density 1 m box (mass 1 kg) gets FORCE_PER_MASS newtons —
-        // strong vs its ~10 N weight, but far below the old 1e7 spike ceiling.
-        let unit = ShapeDef::Box {
-            width: 1.0,
-            height: 1.0,
-        };
-        assert!((default_motor_max_force(&unit) - MOTOR_FORCE_PER_MASS).abs() < 1.0);
+    fn motor_ceiling_auto_scales_with_body_and_respects_overrides() {
+        // Auto (authored <= 0): scales with the connected body's inertia/mass.
+        let small = motor_ceiling(0.0, 0.1, MOTOR_TORQUE_PER_INERTIA);
+        let big = motor_ceiling(0.0, 5.0, MOTOR_TORQUE_PER_INERTIA);
+        assert!(big > small, "heavier body -> higher ceiling");
+        assert!((big - MOTOR_TORQUE_PER_INERTIA * 5.0).abs() < 1e-3);
+        // A near-zero body still gets the usable floor, never zero/NaN.
         assert!(
-            default_motor_max_force(&unit) < 1.0e5,
-            "well under the old 1e7"
+            (motor_ceiling(0.0, 0.0, MOTOR_TORQUE_PER_INERTIA) - MIN_MOTOR_EFFORT).abs() < 1e-6
         );
-        // A ground half-plane is never motored; it still returns a usable,
-        // finite ceiling rather than zero or a NaN.
-        assert!(default_motor_max_torque(&ShapeDef::HalfPlane) >= MIN_MOTOR_EFFORT);
+        // An explicit authored cap wins over the auto scaling.
+        assert!((motor_ceiling(42.0, 5.0, MOTOR_TORQUE_PER_INERTIA) - 42.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hinge_limit_angle_is_zero_at_creation() {
+        // At the creation pose the limit-frame angle must be 0 so authored
+        // [min, max] apply directly.
+        assert!(hinge_limit_angle(0.7, 0.2, 0.7, 0.2).abs() < 1e-6);
+        assert!(hinge_limit_angle(-1.3, 2.4, -1.3, 2.4).abs() < 1e-6);
+        // A world pin (body B is the static anchor at rot 0, rest 0): the
+        // angle is body A's deviation from its authored rest.
+        let rest_a = 0.5;
+        assert!((hinge_limit_angle(0.5 + 0.3, 0.0, rest_a, 0.0) - (-0.3)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn oscillate_reverses_at_each_bound() {
+        let (min, max, speed, buf) = (-0.5, 0.5, 2.0, 0.05);
+        // Interior: keep driving (no change).
+        assert_eq!(oscillate_target(0.0, min, max, speed, buf), None);
+        // Past the max bound: reverse to negative; past min: reverse to positive.
+        assert_eq!(oscillate_target(0.48, min, max, speed, buf), Some(-2.0));
+        assert_eq!(oscillate_target(-0.48, min, max, speed, buf), Some(2.0));
+        // Sign of the input speed doesn't matter — direction comes from the bound.
+        assert_eq!(oscillate_target(0.48, min, max, -2.0, buf), Some(-2.0));
     }
 
     fn hinge(body_b: Option<StableId>, rest_rot_a: f32) -> JointDef {

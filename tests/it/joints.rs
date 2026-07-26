@@ -74,8 +74,8 @@ fn motorized_hinge_oscillates_between_its_limits() {
         JointDef {
             kind: JointKind::Hinge {
                 limits: Some(limits),
-                motor: Some(MotorDef {
-                    target_velocity: 3.0,
+                motor: Some(AngularMotorDef {
+                    target_velocity: gradiance::units::AngularVelocity(3.0),
                     oscillate: true,
                     ..default()
                 }),
@@ -806,5 +806,220 @@ fn prismatic_locks_rotation_under_torque_load() {
     assert!(
         rot.abs() < 0.05,
         "prismatic-jointed arm must not rotate (rot {rot})"
+    );
+}
+
+// ---------- World-pin oscillation with a non-zero rest basis ----------
+
+/// Oscillating motor on a **world pin authored at a tilt**, pinned at the
+/// rod's centre so gravity exerts no torque about the pivot. This exercises
+/// the rest-basis term of the reversal frame that the zero-basis body-body
+/// test above misses: with the pre-audit code the reversal angle omitted the
+/// basis, so it lined up with only one bound and the motor stalled into the
+/// other instead of sweeping back and forth.
+#[test]
+fn world_pinned_tilted_motor_oscillates() {
+    let mut app = headless_app();
+    let mut rod = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
+    rod.pose.rot = 0.3; // authored tilt => non-zero rest basis
+    let rod_id = spawn_body(&mut app, rod);
+    let limits = [-0.5_f32, 0.5];
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: Some(limits),
+                motor: Some(AngularMotorDef {
+                    target_velocity: gradiance::units::AngularVelocity(3.0),
+                    oscillate: true,
+                    ..default()
+                }),
+            },
+            common: JointCommon::default(),
+            body_a: rod_id,
+            body_b: None,
+            anchor_a: Vec2::ZERO,           // rod centre (local)
+            anchor_b: Vec2::new(40.0, 0.0), // world point == rod centre
+            rest_rot_a: 0.3,
+            rest_rot_b: 0.0,
+        },
+    );
+
+    let rod_entity = entity_of(&app, rod_id).unwrap();
+    let mut direction_changes = 0;
+    let (mut last_angle, mut last_delta) = (0.3_f32, 0.0_f32);
+    let (mut min_seen, mut max_seen) = (f32::MAX, f32::MIN);
+    for _ in 0..360 {
+        step(&mut app, 1);
+        let angle = PosRot::from_transform(app.world().get::<Transform>(rod_entity).unwrap()).rot;
+        let delta = angle - last_angle;
+        if delta * last_delta < -1e-6 {
+            direction_changes += 1;
+        }
+        if delta.abs() > 1e-6 {
+            last_delta = delta;
+        }
+        last_angle = angle;
+        min_seen = min_seen.min(angle);
+        max_seen = max_seen.max(angle);
+    }
+
+    assert!(
+        direction_changes >= 2,
+        "tilted world-pin motor must reverse at both bounds (changes = {direction_changes}, \
+         swept {min_seen:.2}..{max_seen:.2})"
+    );
+    assert!(
+        max_seen - min_seen > 0.5,
+        "rod actually swept a range ({min_seen:.2}..{max_seen:.2})"
+    );
+}
+
+/// A continuous motor must not shove the hinge pivot off its pin: the point
+/// constraint is rigid, so the driven arm's anchored end stays coincident with
+/// the fixed anchor. (With the old fixed 1e7 ceiling the engagement impulse
+/// spiked above what the point constraint could absorb in a substep and the
+/// pivot drifted; the auto, inertia-scaled ceiling keeps the impulse bounded.)
+#[test]
+fn motorized_hinge_holds_its_pivot() {
+    let mut app = headless_app();
+    let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
+    anchor.physics.rigid_body = RigidBody::Static;
+    let anchor_id = spawn_body(&mut app, anchor);
+    let arm = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
+    let arm_id = spawn_body(&mut app, arm);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: None,
+                motor: Some(AngularMotorDef {
+                    target_velocity: gradiance::units::AngularVelocity(6.0), // auto ceiling (max_torque = 0)
+                    ..default()
+                }),
+            },
+            common: JointCommon::default(),
+            body_a: anchor_id,
+            body_b: Some(arm_id),
+            anchor_a: Vec2::ZERO, // anchor-body centre == world origin
+            anchor_b: Vec2::new(-40.0, 0.0), // arm's left end (local)
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    step(&mut app, 240);
+    // The arm's anchored end must still sit on the pin at the world origin.
+    let arm_pose = pose_of(&app, arm_id);
+    let anchored_end = arm_pose.pos + Vec2::from_angle(arm_pose.rot).rotate(Vec2::new(-40.0, 0.0));
+    assert!(
+        anchored_end.length() < 1.0,
+        "pivot drifted to {anchored_end:?} (len {})",
+        anchored_end.length()
+    );
+    // And the motor actually drove the arm (it isn't just stuck).
+    let spun = angular_velocity(&app, arm_id).abs();
+    assert!(spun > 0.5, "motor should spin the arm (w = {spun})");
+}
+
+/// Reads a body's avian angular velocity (rad/s), or 0 before the solver runs.
+fn angular_velocity(app: &App, id: StableId) -> f32 {
+    entity_of(app, id)
+        .and_then(|e| app.world().get::<avian2d::prelude::AngularVelocity>(e))
+        .map_or(0.0, |w| w.0)
+}
+
+/// A strut's stiffness must be scaled for SI: a body hung from a world-pinned
+/// spring sags only ~0.1 m (`sag = m·g / k` with `k ≈ 100·m`), not the ~100 m
+/// the pre-audit `0.1 N/m` fallback gave. Undamped, it oscillates about that
+/// equilibrium, so a generous < 1 m bound distinguishes the two without needing
+/// the spring to settle.
+#[test]
+fn strut_stiffness_keeps_a_hung_body_from_drooping() {
+    let mut app = headless_app();
+    // A 10x10 body (area 100 => mass 100 at unit density) hanging below a
+    // world anchor at the origin; the strut spans the 50-unit gap, relaxed.
+    let body = box_record(Vec2::new(0.0, -50.0), 10.0, 10.0);
+    let body_id = spawn_body(&mut app, body);
+    let stiffness = 100.0 * (10.0 * 10.0); // SPRING_STIFFNESS_PER_MASS * mass
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Spring {
+                rest_length: 50.0,
+                stiffness,
+                damping: 0.0,
+                range: None,
+            },
+            common: JointCommon::default(),
+            body_a: body_id,
+            body_b: None,
+            anchor_a: Vec2::ZERO, // body centre
+            anchor_b: Vec2::ZERO, // world anchor
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+
+    let mut max_droop = 0.0_f32;
+    for _ in 0..240 {
+        step(&mut app, 1);
+        // How far the body fell below its rest position (-50).
+        let droop = -50.0 - pose_of(&app, body_id).pos.y;
+        max_droop = max_droop.max(droop);
+    }
+    assert!(
+        max_droop < 1.0,
+        "SI stiffness must hold the body up (drooped {max_droop:.2} m; the old \
+         0.1 N/m fallback would droop ~100 m)"
+    );
+    assert!(
+        max_droop > 1e-3,
+        "the strut is a spring, not rigid (droop {max_droop})"
+    );
+}
+
+/// A slider (prismatic) motor with an auto ceiling drives its body along the
+/// axis — covers the `linear_motor` path, whose force cap now scales with the
+/// body's real mass (`motor_ceiling`) rather than a fixed default.
+#[test]
+fn motorized_slider_drives_body_along_its_axis() {
+    let mut app = headless_app();
+    let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
+    anchor.physics.rigid_body = RigidBody::Static;
+    let anchor_id = spawn_body(&mut app, anchor);
+    let slider = box_record(Vec2::new(0.0, 0.0), 20.0, 20.0);
+    let slider_id = spawn_body(&mut app, slider);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Slider {
+                axis: Vec2::X,
+                limits: Some([0.0, 200.0]),
+                motor: Some(LinearMotorDef {
+                    target_velocity: gradiance::units::Velocity(30.0), // along +X; auto ceiling (max_force = 0)
+                    ..default()
+                }),
+            },
+            common: JointCommon::default(),
+            body_a: anchor_id,
+            body_b: Some(slider_id),
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    let start_x = pose_of(&app, slider_id).pos.x;
+    step(&mut app, 120);
+    let moved = pose_of(&app, slider_id).pos.x - start_x;
+    assert!(
+        moved > 10.0,
+        "auto-ceiling slider motor must drive the body along +X (moved {moved:.2})"
+    );
+    // And it stays on the axis (no vertical wander from the constraint).
+    assert!(
+        pose_of(&app, slider_id).pos.y.abs() < 1.0,
+        "slider stays on its axis (y = {})",
+        pose_of(&app, slider_id).pos.y
     );
 }

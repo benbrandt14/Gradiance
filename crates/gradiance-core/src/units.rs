@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct PosRot {
-    /// World-space translation in pixels.
+    /// World-space translation in metres.
     pub pos: Vec2,
     /// Rotation around +Z in radians.
     pub rot: f32,
