@@ -11,7 +11,7 @@ use avian2d::prelude::*;
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
-use gradiance_domain::joint::{JointDef, JointKind, MotorDef};
+use gradiance_domain::joint::{AngularMotorDef, JointDef, JointKind, LinearMotorDef};
 
 /// Marker: this joint's referenced bodies were not all alive at last
 /// sync; retried every frame until they are (makes spawn order — e.g.
@@ -23,14 +23,14 @@ pub struct JointUnresolved;
 #[derive(Component, Debug)]
 pub struct PinAnchor(pub Entity);
 
-fn angular_motor(m: &MotorDef, inertia: f32) -> AngularMotor {
+fn angular_motor(m: &AngularMotorDef, inertia: f32) -> AngularMotor {
     AngularMotor {
         enabled: m.enabled,
-        target_velocity: m.target_velocity,
-        // Auto (`max_force <= 0`) scales with the driven body's real angular
+        target_velocity: m.target_velocity.value(),
+        // Auto (`max_torque <= 0`) scales with the driven body's real angular
         // inertia; an explicit authored cap is used as-is.
         max_torque: gradiance_domain::joint::motor_ceiling(
-            m.max_force,
+            m.max_torque.value(),
             inertia,
             gradiance_domain::joint::MOTOR_TORQUE_PER_INERTIA,
         ),
@@ -42,12 +42,12 @@ fn angular_motor(m: &MotorDef, inertia: f32) -> AngularMotor {
     }
 }
 
-fn linear_motor(m: &MotorDef, mass: f32) -> LinearMotor {
+fn linear_motor(m: &LinearMotorDef, mass: f32) -> LinearMotor {
     LinearMotor {
         enabled: m.enabled,
-        target_velocity: m.target_velocity,
+        target_velocity: m.target_velocity.value(),
         max_force: gradiance_domain::joint::motor_ceiling(
-            m.max_force,
+            m.max_force.value(),
             mass,
             gradiance_domain::joint::MOTOR_FORCE_PER_MASS,
         ),
@@ -108,11 +108,11 @@ pub fn sync_joints(
         // driven body's computed mass properties. avian fills those in a frame
         // or two after the body spawns, so if they aren't ready yet, retry —
         // exactly like an unresolved endpoint — rather than bake the floor.
-        let auto_motor = matches!(
-            &def.kind,
-            JointKind::Hinge { motor: Some(m), .. } | JointKind::Slider { motor: Some(m), .. }
-                if m.max_force <= 0.0
-        );
+        let auto_motor = match &def.kind {
+            JointKind::Hinge { motor: Some(m), .. } => m.max_torque.value() <= 0.0,
+            JointKind::Slider { motor: Some(m), .. } => m.max_force.value() <= 0.0,
+            _ => false,
+        };
         if auto_motor && inertias.get(body_a).is_err() {
             commands.entity(entity).insert(JointUnresolved);
             continue;
