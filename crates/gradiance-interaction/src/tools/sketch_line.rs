@@ -16,6 +16,7 @@ use crate::tools::new_body_record;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_sketch::doc::{SketchConstraint, SketchDoc, SketchId};
+use gradiance_sketch::pick::{self, SketchTarget, SnapKind};
 use gradiance_sketch::{lower, solve};
 
 /// Clicking within this distance of the first point closes the loop.
@@ -26,6 +27,10 @@ const CLOSE_RADIUS: f32 = 0.08;
 /// straight. Matches the inference tolerance CAD sketchers expect.
 const AXIS_SNAP_DEGREES: f32 = 5.0;
 
+/// Snap radius in logical screen pixels, converted to world units with the
+/// camera scale so snapping feels the same at every zoom level.
+const SNAP_PIXELS: f32 = 10.0;
+
 /// An in-progress constrained sketch.
 #[derive(Resource, Default, Debug)]
 pub struct SketchLineTool {
@@ -35,6 +40,9 @@ pub struct SketchLineTool {
     chain: Vec<SketchId>,
     /// Remaining degrees of freedom from the last solve, for the readout.
     dof: Option<i32>,
+    /// The snap candidate under the cursor as of the last frame, so the
+    /// preview can show what a click would attach to.
+    hover: Option<pick::PickHit>,
 }
 
 impl SketchLineTool {
@@ -62,6 +70,50 @@ impl SketchLineTool {
         self.doc = SketchDoc::new();
         self.chain.clear();
         self.dof = None;
+        self.hover = None;
+    }
+
+    /// The snap candidate under the cursor, if any.
+    pub fn hover(&self) -> Option<pick::PickHit> {
+        self.hover
+    }
+
+    /// Resolve a click into a point to chain from, attaching whatever
+    /// constraint the snap implies.
+    ///
+    /// This is where snapping becomes *parametric*: landing on an existing
+    /// point reuses its identity (so the join is structural and the solver
+    /// never has to satisfy a redundant coincidence), and landing along an
+    /// existing line adds a real `PointOnLine` constraint, so the new vertex
+    /// keeps sliding on that line as the sketch is re-solved rather than
+    /// merely starting out near it.
+    fn point_for_click(&mut self, cursor: Vec2, tol: f32) -> SketchId {
+        match pick::pick(&self.doc, cursor, tol) {
+            Some(hit) => match hit.target {
+                // Reuse the identity outright — a shared point beats a
+                // coincidence constraint between two coincident points.
+                SketchTarget::Point(id) => id,
+                SketchTarget::Entity(entity) => {
+                    let id = self.doc.add_point(hit.at);
+                    match hit.kind {
+                        SnapKind::Midpoint => self.doc.constrain(SketchConstraint::Midpoint {
+                            point: id,
+                            line: entity,
+                        }),
+                        // A centre snap resolved to an entity means the centre
+                        // point itself was not the nearest feature; treat it as
+                        // a plain placement rather than inventing a relation.
+                        SnapKind::Center | SnapKind::Point => {}
+                        SnapKind::OnEntity => self.doc.constrain(SketchConstraint::PointOnLine {
+                            point: id,
+                            line: entity,
+                        }),
+                    }
+                    id
+                }
+            },
+            None => self.doc.add_point(cursor),
+        }
     }
 
     /// World position of a chain point after the last solve.
@@ -148,6 +200,12 @@ impl DraftTool for SketchLineTool {
         if ctx.confirm && self.chain.len() >= 3 {
             return self.finish();
         }
+        // Hover tracking runs every frame, not just on press, so the preview
+        // can show what a click would snap to before it happens.
+        self.hover = ctx
+            .cursor
+            .and_then(|c| pick::pick(&self.doc, c, SNAP_PIXELS * ctx.cam_scale));
+
         if ctx.phase != GesturePhase::Pressed {
             return None;
         }
@@ -163,7 +221,13 @@ impl DraftTool for SketchLineTool {
             return self.finish();
         }
 
-        let id = self.doc.add_point(p);
+        let id = self.point_for_click(p, SNAP_PIXELS * ctx.cam_scale);
+        // Clicking the point we are already chaining from would make a
+        // zero-length segment; ignore it rather than feeding the solver a
+        // degenerate line.
+        if self.chain.last() == Some(&id) {
+            return None;
+        }
         if let Some(&prev) = self.chain.last() {
             let line = self.doc.add_line(prev, id);
             if let Some(c) = self.infer_axis(prev, id, line) {
@@ -201,6 +265,17 @@ impl DraftTool for SketchLineTool {
         {
             out.line(a, p, css::AQUAMARINE.with_alpha(0.5));
         }
+        // The snap marker: what a click would attach to.
+        if let Some(hit) = self.hover {
+            let color = match hit.kind {
+                SnapKind::Point => css::ORANGE,
+                SnapKind::Midpoint => css::YELLOW,
+                SnapKind::Center => css::MAGENTA,
+                SnapKind::OnEntity => css::AQUA,
+            };
+            out.circle(hit.at, ctx.cam_scale * 5.0, color);
+        }
+
         // The closing hint, so it is obvious where the loop completes.
         if pts.len() >= 3
             && let (Some(first), Some(p)) = (pts.first().copied(), ctx.cursor)
@@ -232,7 +307,11 @@ mod tests {
             cancel: false,
             constraints,
             snap,
-            cam_scale: 1.0,
+            // World units per logical pixel. At PIXELS_PER_METER = 100 a 1:1
+            // view is 0.01, which puts the snap radius at a realistic 0.1 m.
+            // Leaving this at 1.0 would give a ten-metre snap radius and make
+            // every click land on the previous point.
+            cam_scale: 0.01,
         }
     }
 
@@ -309,6 +388,128 @@ mod tests {
         );
         // The draft is reset so the next gesture starts clean.
         assert!(!t.drafting());
+    }
+
+    #[test]
+    fn clicking_an_existing_point_reuses_its_identity() {
+        let mut t = SketchLineTool::default();
+        // Only two points: short of the three that would make a click near the
+        // start close the loop instead, so this exercises identity reuse
+        // rather than the closing path.
+        click_all(&mut t, &[Vec2::new(0.0, 0.0), Vec2::new(2.0, 0.0)]);
+        let first = t.chain[0];
+        let before = t.doc().points.len();
+
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        assert!(
+            t.update(&ctx(
+                GesturePhase::Pressed,
+                Some(Vec2::new(0.002, 0.001)),
+                &gc,
+                &sc,
+            ))
+            .is_none(),
+            "two segments cannot enclose an area yet"
+        );
+
+        assert_eq!(
+            t.doc().points.len(),
+            before,
+            "snapping to a point must reuse it, not mint a coincident duplicate"
+        );
+        assert_eq!(
+            t.chain.last(),
+            Some(&first),
+            "the new segment should terminate on the original point"
+        );
+    }
+
+    #[test]
+    fn clicking_along_an_existing_line_records_point_on_line() {
+        let mut t = SketchLineTool::default();
+        // A horizontal segment from (0,0) to (4,0).
+        click_all(&mut t, &[Vec2::new(0.0, 0.0), Vec2::new(4.0, 0.0)]);
+        let constraints_before = t.doc().constraints.len();
+
+        // Click just off the middle-ish of that line, but not its midpoint.
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        t.update(&ctx(
+            GesturePhase::Pressed,
+            Some(Vec2::new(3.0, 0.004)),
+            &gc,
+            &sc,
+        ));
+
+        let added: Vec<_> = t.doc().constraints[constraints_before..].to_vec();
+        assert!(
+            added
+                .iter()
+                .any(|c| matches!(c, SketchConstraint::PointOnLine { .. })),
+            "landing on a line should pin the new point to it, got {added:?}"
+        );
+    }
+
+    #[test]
+    fn clicking_a_line_midpoint_records_a_midpoint_constraint() {
+        let mut t = SketchLineTool::default();
+        click_all(&mut t, &[Vec2::new(0.0, 0.0), Vec2::new(4.0, 0.0)]);
+        let before = t.doc().constraints.len();
+
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        t.update(&ctx(
+            GesturePhase::Pressed,
+            Some(Vec2::new(2.001, 0.001)),
+            &gc,
+            &sc,
+        ));
+
+        let added: Vec<_> = t.doc().constraints[before..].to_vec();
+        assert!(
+            added
+                .iter()
+                .any(|c| matches!(c, SketchConstraint::Midpoint { .. })),
+            "the midpoint snap should say midpoint, not just point-on-line: {added:?}"
+        );
+    }
+
+    #[test]
+    fn a_click_far_from_anything_snaps_to_nothing() {
+        let mut t = SketchLineTool::default();
+        click_all(&mut t, &[Vec2::new(0.0, 0.0), Vec2::new(4.0, 0.0)]);
+        let before = t.doc().constraints.len();
+
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        t.update(&ctx(
+            GesturePhase::Pressed,
+            Some(Vec2::new(3.0, 9.0)),
+            &gc,
+            &sc,
+        ));
+        assert_eq!(
+            t.doc().constraints.len(),
+            before,
+            "an unsnapped click must not invent a relationship"
+        );
+    }
+
+    #[test]
+    fn hover_reports_a_snap_candidate_without_clicking() {
+        let mut t = SketchLineTool::default();
+        click_all(&mut t, &[Vec2::new(0.0, 0.0), Vec2::new(4.0, 0.0)]);
+
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        assert!(
+            t.update(&ctx(
+                GesturePhase::Idle,
+                Some(Vec2::new(2.0, 0.002)),
+                &gc,
+                &sc
+            ))
+            .is_none(),
+            "hovering must not commit anything"
+        );
+        let hit = t.hover().expect("hovering near the midpoint should snap");
+        assert_eq!(hit.kind, gradiance_sketch::pick::SnapKind::Midpoint);
     }
 
     #[test]

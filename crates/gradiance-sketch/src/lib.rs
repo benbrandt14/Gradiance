@@ -19,8 +19,12 @@
 //! a redesign.
 
 pub mod doc;
+pub mod edit;
 pub mod lower;
+pub mod pick;
 pub mod solve;
 
 pub use doc::{SketchConstraint, SketchDoc, SketchEntity, SketchId, SketchPoint};
+pub use edit::{ConstraintKind, EditError, SketchSelection};
+pub use pick::{PickHit, SketchTarget, SnapKind};
 pub use solve::{SketchError, SolveOutcome, SolveStatus, solve};
