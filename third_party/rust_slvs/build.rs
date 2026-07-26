@@ -91,6 +91,39 @@ fn main() {
         )
         .compile("mimalloc");
 
+    // Tell the linker where the C++ standard library actually lives.
+    //
+    // `cc` emits `cargo:rustc-link-lib=stdc++`, but on most Linux distributions
+    // the *dev* symlink `libstdc++.so` sits in GCC's private directory
+    // (/usr/lib/gcc/<triple>/<version>/) rather than in the default library
+    // path, which holds only the runtime `libstdc++.so.6`. The GCC driver knows
+    // about its own directory implicitly; `lld` does not, and this workspace
+    // pins `linker = "clang"` with `-fuse-ld=lld` in .cargo/config.toml. When
+    // clang fails to detect the GCC installation the link dies with
+    // `ld.lld: error: unable to find library -lstdc++`.
+    //
+    // Asking the compiler itself is the portable answer — it reports the path
+    // for whatever toolchain is actually in use, on any distribution.
+    if !target.contains("windows") && !target.contains("apple") {
+        let cxx = env::var("CXX").unwrap_or_else(|_| "c++".to_string());
+        if let Ok(out) = std::process::Command::new(&cxx)
+            .arg("-print-file-name=libstdc++.so")
+            .output()
+        {
+            if out.status.success() {
+                let reported = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let path = PathBuf::from(&reported);
+                // A compiler that cannot locate the library echoes the bare
+                // name back; only a resolved absolute path is worth emitting.
+                if path.is_absolute() {
+                    if let Some(dir) = path.parent() {
+                        println!("cargo:rustc-link-search=native={}", dir.display());
+                    }
+                }
+            }
+        }
+    }
+
     // Generate bindings to library header
     let bindings = bindgen::Builder::default()
         .opaque_type("std::.*")

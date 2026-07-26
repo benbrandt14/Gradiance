@@ -36,6 +36,7 @@ Two lines in the build setup, plus one visibility change in `src/`.
    brings in. The warning is confined to this excluded crate's build script and does
    not reach the workspace lint gate.)
 3. `src/lib.rs` — `mod element;` → `pub mod element;`
+4. `build.rs` — emit a `rustc-link-search` for the C++ standard library
 
 Change 3 is not about the build. `ConstraintHandle` exposes its `handle` as a
 public field, but `SolveResult::Fail::failed_constraints` hands back
@@ -45,6 +46,25 @@ downstream crate could attribute a failure to a specific constraint. Publishing
 the module is additive (it removes no API and changes no behaviour) and is what
 lets `gradiance-sketch` report *which* constraint the solver could not satisfy
 instead of only that the system was inconsistent.
+
+Change 4 fixes a link failure on Linux hosts where clang does not auto-detect
+the GCC installation:
+
+```
+ld.lld: error: unable to find library -lstdc++
+```
+
+`cc` emits `cargo:rustc-link-lib=stdc++`, but on most distributions the *dev*
+symlink `libstdc++.so` lives in GCC's private directory
+(`/usr/lib/gcc/<triple>/<version>/`) while the default library path holds only
+the runtime `libstdc++.so.6`. The GCC driver knows its own directory
+implicitly; `lld` does not, and this workspace pins `linker = "clang"` with
+`-fuse-ld=lld` in `.cargo/config.toml`. `slvs` is the first C++ dependency in
+the workspace, so it is the first thing to expose the gap.
+
+The patch asks the compiler itself (`c++ -print-file-name=libstdc++.so`) and
+emits the parent directory, so it adapts to whatever toolchain is installed
+rather than hardcoding a path. Note this crate is edition 2021 — no let-chains.
 
 Regenerate the diff against a pristine copy with:
 
