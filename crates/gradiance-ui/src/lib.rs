@@ -19,6 +19,7 @@ pub mod joint_inspector;
 pub mod labels;
 pub mod menu;
 pub mod node_graph;
+pub mod optimizer;
 pub mod outliner;
 pub mod plot;
 pub mod ports;
@@ -170,6 +171,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<signals::SignalsPanel>();
         app.init_resource::<node_graph::NodeGraph>();
         app.init_resource::<outliner::ObjectTreePanel>();
+        app.init_resource::<optimizer::OptimizerExpanded>();
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
         app.init_resource::<dock::RightDock>();

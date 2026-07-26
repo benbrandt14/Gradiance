@@ -14,6 +14,7 @@ gradiance-command.workspace = true
 gradiance-domain.workspace = true
 gradiance-geometry.workspace = true
 gradiance-interaction.workspace = true
+gradiance-optimize.workspace = true
 gradiance-persist.workspace = true
 gradiance-physics.workspace = true
 gradiance-scene.workspace = true

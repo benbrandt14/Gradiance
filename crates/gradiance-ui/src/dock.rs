@@ -91,13 +91,14 @@ pub struct RightDock {
 /// Routes each `egui_tiles` pane to its section renderer, holding the state the
 /// renderers need for this frame. The writer and the signals bundle carry
 /// independent system lifetimes, so each gets its own.
-struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss> {
+struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss, 'wo> {
     depth: &'a mut DepthPanel,
     rows: &'a [(StableId, DepthBand, egui::Color32)],
     /// The property inspector's read/write bundle — also the single
     /// `PropertyEditIntent` writer and `SignalBindings` the Depth and Signals
     /// sections edit through (so the dock host holds exactly one of each).
     props: &'a mut BodyProps<'wp, 'sp>,
+    optimizer: &'a mut crate::optimizer::OptimizerPanel<'wo>,
     signals: &'a mut SignalsDock<'ws, 'ss>,
     selected: &'a [StableId],
     selection: &'a Selection,
@@ -113,7 +114,7 @@ struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss> {
     log: &'a ScriptLog,
 }
 
-impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_> {
+impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_, '_> {
     fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
         pane.title().into()
     }
@@ -159,7 +160,7 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_> {
                 }
             }
             Pane::Properties => {
-                inspector::inspector_pane(ui, self.selection, self.props);
+                inspector::inspector_pane(ui, self.selection, self.props, self.optimizer);
             }
             Pane::Console => {
                 console::console_section(ui, self.console, self.inputs, self.registry, self.log);
@@ -196,6 +197,15 @@ fn depth_rows(
         .collect()
 }
 
+/// The Properties pane's own parameters: whether it is open, and the
+/// optimizer it hosts. Bundled to keep [`right_dock`] under Bevy's
+/// system-parameter count limit.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct PropertiesParams<'w> {
+    panel: Res<'w, InspectorPanel>,
+    optimizer: crate::optimizer::OptimizerPanel<'w>,
+}
+
 /// Renders the dock when any section is open, as an `egui_tiles` tab workspace.
 /// The backquote key toggles the console and `\` the plot (unless something is
 /// capturing keyboard input).
@@ -210,7 +220,7 @@ pub fn right_dock(
     bands: Query<&DepthBand, With<Body>>,
     appearances: Query<&Appearance, With<Body>>,
     mut props: BodyProps,
-    inspector_panel: Res<InspectorPanel>,
+    mut properties: PropertiesParams,
     mut plot: PlotParams,
     mut console: ConsoleParams,
     mut op: OutlinerParams,
@@ -236,7 +246,7 @@ pub fn right_dock(
         op.panel.is_open().then_some(Pane::Tree),
         panel.open.then_some(Pane::Depth),
         (signals_panel.is_open() || plot.panel.is_open()).then_some(Pane::Signals),
-        inspector_panel.open.then_some(Pane::Properties),
+        properties.panel.open.then_some(Pane::Properties),
         console.console.is_open().then_some(Pane::Console),
     ]
     .into_iter()
@@ -282,6 +292,7 @@ pub fn right_dock(
             depth: &mut panel,
             rows: &rows,
             props: &mut props,
+            optimizer: &mut properties.optimizer,
             signals: &mut signals,
             selected: &selected,
             selection: &selection,

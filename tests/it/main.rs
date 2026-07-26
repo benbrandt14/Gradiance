@@ -18,6 +18,7 @@ mod interaction;
 mod joint_edit;
 mod joints;
 mod nodes;
+mod packing;
 mod persistence;
 mod physics_sync;
 mod reflect_intents;
