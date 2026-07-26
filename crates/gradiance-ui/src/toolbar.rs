@@ -4,8 +4,9 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use gradiance_core::states::{GameState, ToolState};
+use gradiance_core::states::{EditorMode, GameState, SketchTool, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
+use gradiance_interaction::tools::sketch_line::SketchLineTool;
 
 /// The editor panels the transport strip toggles, bundled so the toolbar
 /// system stays under Bevy's system-parameter limit.
@@ -96,6 +97,31 @@ pub fn load_tool_icons(
     }
 }
 
+/// Sketch-mode state, bundled so `toolbar` stays under Bevy's
+/// system-parameter limit (it already carries nine).
+#[derive(SystemParam)]
+pub struct SketchControls<'w> {
+    /// Which authoring surface is active.
+    pub mode: Res<'w, State<EditorMode>>,
+    /// Mode changes requested this frame.
+    pub next_mode: ResMut<'w, NextState<EditorMode>>,
+    /// Active tool within sketch mode.
+    pub tool: Res<'w, State<SketchTool>>,
+    /// Sketch-tool changes requested this frame.
+    pub next_tool: ResMut<'w, NextState<SketchTool>>,
+    /// The in-progress sketch, read for the degrees-of-freedom readout.
+    pub draft: Res<'w, SketchLineTool>,
+}
+
+/// What the sketch palette is asking for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SketchAction {
+    /// Enter or leave sketch mode.
+    SetMode(EditorMode),
+    /// Switch the active sketch tool.
+    SetTool(SketchTool),
+}
+
 /// Left tool palette and top transport strip.
 pub fn toolbar(
     mut contexts: EguiContexts,
@@ -107,6 +133,7 @@ pub fn toolbar(
     mut rig: ResMut<gradiance_interaction::camera::CameraRig>,
     panel_rects: Res<crate::PanelRects>,
     tool_icons: Res<ToolIcons>,
+    mut sketch: SketchControls,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -172,8 +199,19 @@ pub fn toolbar(
             // A single column about twice the icon width (icons ~26px), so each
             // sits in a roomy cell — a compact Blender-style T-panel strip.
             ui.set_max_width(52.0);
-            if let Some(state) = tools_palette_ui(ui, *tool.get(), Some(&tool_icons)) {
+            let mode = *sketch.mode.get();
+            // The direct tools are meaningless while sketching, so the palette
+            // hides rather than showing a strip of dead buttons.
+            if mode == EditorMode::Direct
+                && let Some(state) = tools_palette_ui(ui, *tool.get(), Some(&tool_icons))
+            {
                 next_tool.set(state);
+            }
+            ui.separator();
+            match sketch_palette_ui(ui, mode, *sketch.tool.get(), sketch.draft.dof()) {
+                Some(SketchAction::SetMode(m)) => sketch.next_mode.set(m),
+                Some(SketchAction::SetTool(t)) => sketch.next_tool.set(t),
+                None => {}
             }
         });
     Ok(())
@@ -214,4 +252,66 @@ pub fn tools_palette_ui(
         });
     }
     clicked
+}
+
+/// Sketch-mode entry point and, once inside, the sketch tool strip plus the
+/// degrees-of-freedom readout.
+///
+/// Host-agnostic (pure `Ui` in, choice out) for the same reason
+/// [`tools_palette_ui`] is: `tests/it/ui_panels.rs` can drive it headlessly.
+///
+/// The DOF readout is the number CAD users actually steer by — it counts how
+/// much freedom the sketch still has, so reaching zero is the signal that the
+/// geometry is pinned down rather than merely looking right.
+pub fn sketch_palette_ui(
+    ui: &mut egui::Ui,
+    mode: EditorMode,
+    tool: SketchTool,
+    dof: Option<i32>,
+) -> Option<SketchAction> {
+    let sketching = mode == EditorMode::Sketch;
+    let mut action = None;
+
+    if ui
+        .selectable_label(sketching, "✏ Sketch")
+        .on_hover_text(if sketching {
+            "leave sketch mode and return to the direct tools"
+        } else {
+            "enter constraint-based sketch mode (pauses the simulation)"
+        })
+        .clicked()
+    {
+        action = Some(SketchAction::SetMode(if sketching {
+            EditorMode::Direct
+        } else {
+            EditorMode::Sketch
+        }));
+    }
+    if !sketching {
+        return action;
+    }
+
+    ui.separator();
+    for (state, name, key) in [
+        (SketchTool::Select, "Select", "S"),
+        (SketchTool::Line, "Line", "L"),
+        (SketchTool::Circle, "Circle", "C"),
+        (SketchTool::Constrain, "Constrain", "X"),
+    ] {
+        if ui
+            .selectable_label(tool == state, name)
+            .on_hover_text(format!("{name} ({key})"))
+            .clicked()
+        {
+            action = Some(SketchAction::SetTool(state));
+        }
+    }
+
+    ui.separator();
+    match dof {
+        None => ui.weak("no sketch"),
+        Some(0) => ui.colored_label(egui::Color32::LIGHT_GREEN, "fully constrained"),
+        Some(n) => ui.label(format!("{n} DOF")),
+    };
+    action
 }

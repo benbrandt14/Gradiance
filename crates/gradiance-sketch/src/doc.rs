@@ -150,6 +150,69 @@ pub enum SketchConstraint {
         /// Required angle in degrees.
         degrees: f32,
     },
+    /// A point lies on a circle or arc.
+    PointOnCircle {
+        /// The point.
+        point: SketchId,
+        /// The circle or arc it lies on.
+        circle: SketchId,
+    },
+    /// A point sits a fixed distance from a line.
+    PointLineDistance {
+        /// The point.
+        point: SketchId,
+        /// The line measured from.
+        line: SketchId,
+        /// Required distance in metres.
+        d: f32,
+    },
+    /// An arc meets a line tangentially.
+    ArcLineTangent {
+        /// The arc.
+        arc: SketchId,
+        /// The line it is tangent to.
+        line: SketchId,
+        /// Whether the tangency is at the arc's end rather than its start.
+        at_end: bool,
+    },
+    /// Two points are mirror images about a line.
+    SymmetricAboutLine {
+        /// First point.
+        a: SketchId,
+        /// Second point.
+        b: SketchId,
+        /// The mirror line.
+        line: SketchId,
+    },
+    /// Two lines' lengths hold a fixed ratio (`a` / `b`).
+    LengthRatio {
+        /// Numerator line.
+        a: SketchId,
+        /// Denominator line.
+        b: SketchId,
+        /// Required ratio.
+        ratio: f32,
+    },
+    /// Two lines' lengths differ by a fixed amount (`a` - `b`).
+    LengthDifference {
+        /// First line.
+        a: SketchId,
+        /// Second line.
+        b: SketchId,
+        /// Required difference in metres.
+        difference: f32,
+    },
+    /// The angle between `a` and `b` equals the angle between `c` and `d`.
+    EqualAngle {
+        /// First line of the first pair.
+        a: SketchId,
+        /// Second line of the first pair.
+        b: SketchId,
+        /// First line of the second pair.
+        c: SketchId,
+        /// Second line of the second pair.
+        d: SketchId,
+    },
 }
 
 /// A constrained 2D sketch.

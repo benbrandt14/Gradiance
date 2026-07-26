@@ -50,6 +50,14 @@ impl SketchLineTool {
         &self.doc
     }
 
+    /// Discard any in-progress draft.
+    ///
+    /// Leaving sketch mode must not leave a half-drawn chain waiting to
+    /// reappear the next time the mode is entered.
+    pub fn abandon(&mut self) {
+        self.clear();
+    }
+
     fn clear(&mut self) {
         self.doc = SketchDoc::new();
         self.chain.clear();

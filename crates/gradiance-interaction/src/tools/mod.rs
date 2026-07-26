@@ -23,6 +23,7 @@ pub mod handles;
 pub mod node_tools;
 pub mod polygon_tool;
 pub mod select;
+pub mod sketch_circle;
 pub mod sketch_line;
 pub mod strut_tool;
 
@@ -30,7 +31,7 @@ use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_
 
 use crate::InteractionSet;
 use bevy::prelude::*;
-use gradiance_core::states::{EditorMode, SketchTool, ToolState};
+use gradiance_core::states::{EditorMode, GameState, SketchTool, ToolState};
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::shape::ShapeDef;
@@ -65,6 +66,10 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<strut_tool::StrutDraft>();
         app.init_resource::<node_tools::TracerTool>();
         app.init_resource::<sketch_line::SketchLineTool>();
+        app.init_resource::<sketch_circle::SketchCircleTool>();
+        app.init_resource::<ResumeAfterSketch>();
+        app.add_systems(OnEnter(EditorMode::Sketch), pause_for_sketch);
+        app.add_systems(OnExit(EditorMode::Sketch), resume_after_sketch);
 
         app.add_systems(
             Update,
@@ -107,7 +112,11 @@ impl Plugin for ToolsPlugin {
         );
         app.add_systems(
             Update,
-            (run_draft_tool::<sketch_line::SketchLineTool>.run_if(in_state(SketchTool::Line)),)
+            (
+                run_draft_tool::<sketch_line::SketchLineTool>.run_if(in_state(SketchTool::Line)),
+                run_draft_tool::<sketch_circle::SketchCircleTool>
+                    .run_if(in_state(SketchTool::Circle)),
+            )
                 .run_if(in_state(EditorMode::Sketch))
                 .in_set(ToolDriverSet)
                 .in_set(InteractionSet)
@@ -146,8 +155,12 @@ impl Plugin for ToolsPlugin {
             );
             app.add_systems(
                 Update,
-                (draw_draft_preview::<sketch_line::SketchLineTool>
-                    .run_if(in_state(SketchTool::Line)),)
+                (
+                    draw_draft_preview::<sketch_line::SketchLineTool>
+                        .run_if(in_state(SketchTool::Line)),
+                    draw_draft_preview::<sketch_circle::SketchCircleTool>
+                        .run_if(in_state(SketchTool::Circle)),
+                )
                     .run_if(in_state(EditorMode::Sketch)),
             );
         }
@@ -218,5 +231,35 @@ pub fn new_body_record(shape: ShapeDef, pos: Vec2, rot: f32) -> gradiance_scene:
         field: None,
         tracer: None,
         sketch: None,
+    }
+}
+
+/// The run state to restore when sketch mode is left.
+///
+/// Sketching pauses the simulation — solving geometry against a running sim is
+/// meaningless — but it should not silently *stop* a simulation the author had
+/// running, so the previous state is remembered rather than assumed.
+#[derive(Resource, Default, Debug)]
+pub struct ResumeAfterSketch(Option<GameState>);
+
+/// Pause the simulation on entering sketch mode, remembering what to restore.
+fn pause_for_sketch(
+    game: Res<State<GameState>>,
+    mut next: ResMut<NextState<GameState>>,
+    mut resume: ResMut<ResumeAfterSketch>,
+) {
+    resume.0 = Some(*game.get());
+    next.set(GameState::Paused);
+}
+
+/// Restore the pre-sketch run state and drop any unfinished draft.
+fn resume_after_sketch(
+    mut next: ResMut<NextState<GameState>>,
+    mut resume: ResMut<ResumeAfterSketch>,
+    mut draft: ResMut<sketch_line::SketchLineTool>,
+) {
+    draft.abandon();
+    if let Some(prev) = resume.0.take() {
+        next.set(prev);
     }
 }

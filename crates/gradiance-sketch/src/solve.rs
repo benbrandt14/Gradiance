@@ -361,6 +361,13 @@ fn add_constraint(
             .map_err(rejected("angle"))?
             .handle
         }
+        SketchConstraint::PointOnCircle { .. }
+        | SketchConstraint::PointLineDistance { .. }
+        | SketchConstraint::ArcLineTangent { .. }
+        | SketchConstraint::SymmetricAboutLine { .. }
+        | SketchConstraint::LengthRatio { .. }
+        | SketchConstraint::LengthDifference { .. }
+        | SketchConstraint::EqualAngle { .. } => add_extended_constraint(sys, b, g, wp, c)?,
         SketchConstraint::Diameter { .. } | SketchConstraint::EqualRadius(..) => {
             add_radial_constraint(sys, b, g, c)?
         }
@@ -495,6 +502,126 @@ fn write_back(sys: &System, doc: &mut SketchDoc, built: &Built) {
             }
         }
     }
+}
+
+/// The constraints added after the initial vocabulary.
+///
+/// Split out purely to keep [`add_constraint`] within the line budget; the
+/// dispatch arm there lists these explicitly rather than using a catch-all, so
+/// adding a constraint variant still fails to compile until it is mapped here.
+fn add_extended_constraint(
+    sys: &mut System,
+    b: &Built,
+    g: Group,
+    wp: EntityHandle<Workplane>,
+    c: SketchConstraint,
+) -> Result<u32, SketchError> {
+    let plane = Some(wp);
+    let handle = match c {
+        SketchConstraint::PointOnCircle { point, circle } => {
+            let p = b.point(point)?;
+            // Radius constraints are generic over "arc or circle", but the two
+            // live in different handle maps, so either may answer.
+            if let Some(h) = b.circles.get(&circle) {
+                sys.constrain(sc::PtOnCircle::new(g, p, *h))
+                    .map_err(rejected("point on circle"))?
+                    .handle
+            } else if let Some(h) = b.arcs.get(&circle) {
+                sys.constrain(sc::PtOnCircle::new(g, p, *h))
+                    .map_err(rejected("point on circle"))?
+                    .handle
+            } else {
+                return Err(SketchError::UnknownArc(circle));
+            }
+        }
+        SketchConstraint::PointLineDistance { point, line, d } => {
+            sys.constrain(sc::PtLineDistance::new(
+                g,
+                b.point(point)?,
+                b.line(line)?,
+                f64::from(d),
+                plane,
+            ))
+            .map_err(rejected("point-line distance"))?
+            .handle
+        }
+        SketchConstraint::ArcLineTangent { arc, line, at_end } => {
+            // Tangency needs a real arc: a full circle has no endpoint for the
+            // tangency to attach to.
+            let Some(h) = b.arcs.get(&arc) else {
+                return Err(SketchError::UnknownArc(arc));
+            };
+            sys.constrain(sc::ArcLineTangent::new(g, wp, *h, b.line(line)?, at_end))
+                .map_err(rejected("arc-line tangent"))?
+                .handle
+        }
+        SketchConstraint::SymmetricAboutLine { a, b: bb, line } => {
+            sys.constrain(sc::SymmetricLine::new(
+                g,
+                wp,
+                b.point(a)?,
+                b.point(bb)?,
+                b.line(line)?,
+            ))
+            .map_err(rejected("symmetric about line"))?
+            .handle
+        }
+        SketchConstraint::LengthRatio { a, b: bb, ratio } => {
+            sys.constrain(sc::LengthRatio::new(
+                g,
+                b.line(a)?,
+                b.line(bb)?,
+                f64::from(ratio),
+                plane,
+            ))
+            .map_err(rejected("length ratio"))?
+            .handle
+        }
+        SketchConstraint::LengthDifference {
+            a,
+            b: bb,
+            difference,
+        } => {
+            sys.constrain(sc::LengthDifference::new(
+                g,
+                b.line(a)?,
+                b.line(bb)?,
+                f64::from(difference),
+                plane,
+            ))
+            .map_err(rejected("length difference"))?
+            .handle
+        }
+        SketchConstraint::EqualAngle {
+            a,
+            b: bb,
+            c: cc,
+            d: dd,
+        } => {
+            sys.constrain(sc::EqualAngle::new(
+                g,
+                b.line(a)?,
+                b.line(bb)?,
+                b.line(cc)?,
+                b.line(dd)?,
+                plane,
+                false,
+            ))
+            .map_err(rejected("equal angle"))?
+            .handle
+        }
+        // Unreachable via `add_constraint`, which dispatches only the variants
+        // above. Reported as an error rather than a panic: the workspace bans
+        // panics in product code, and a wrong call site should surface as a
+        // rejected constraint, not a crash.
+        other => {
+            return Err(SketchError::Rejected {
+                what: "extended constraint",
+                detail: format!("{other:?} is not dispatched here"),
+            });
+        }
+    };
+    Ok(handle)
 }
 
 #[cfg(test)]
@@ -643,6 +770,121 @@ mod tests {
             Err(SketchError::UnknownPoint(ghost)),
             "a dangling reference must be reported, not silently dropped"
         );
+    }
+
+    #[test]
+    fn point_line_distance_is_satisfied() {
+        let mut d = SketchDoc::new();
+        let a = d.add_point(Vec2::new(0.0, 0.0));
+        let b = d.add_point(Vec2::new(4.0, 0.0));
+        d.point_mut(a).unwrap().fixed = true;
+        d.point_mut(b).unwrap().fixed = true;
+        let line = d.add_line(a, b);
+        let p = d.add_point(Vec2::new(2.0, 0.5));
+        d.constrain(SketchConstraint::PointLineDistance {
+            point: p,
+            line,
+            d: 3.0,
+        });
+
+        let out = solve(&mut d, None).unwrap();
+        assert!(out.is_solved(), "solver failed: {out:?}");
+        // The line lies on y = 0, so the distance is just |y|.
+        let y = d.point(p).unwrap().at.y;
+        assert!((y.abs() - 3.0).abs() < 1e-4, "point sits at y = {y}");
+    }
+
+    #[test]
+    fn length_ratio_ties_two_lines_together() {
+        let mut d = SketchDoc::new();
+        let o = d.add_point(Vec2::ZERO);
+        d.point_mut(o).unwrap().fixed = true;
+        let a1 = d.add_point(Vec2::new(2.0, 0.0));
+        let l1 = d.add_line(o, a1);
+        let b0 = d.add_point(Vec2::new(0.0, 1.0));
+        let b1 = d.add_point(Vec2::new(1.0, 1.0));
+        d.point_mut(b0).unwrap().fixed = true;
+        let l2 = d.add_line(b0, b1);
+
+        d.constrain(SketchConstraint::Distance {
+            a: o,
+            b: a1,
+            d: 6.0,
+        });
+        d.constrain(SketchConstraint::LengthRatio {
+            a: l1,
+            b: l2,
+            ratio: 3.0,
+        });
+
+        let out = solve(&mut d, None).unwrap();
+        assert!(out.is_solved(), "solver failed: {out:?}");
+        let len1 = d.point(o).unwrap().at.distance(d.point(a1).unwrap().at);
+        let len2 = d.point(b0).unwrap().at.distance(d.point(b1).unwrap().at);
+        assert!((len1 - 6.0).abs() < 1e-4, "first line is {len1}");
+        assert!((len1 / len2 - 3.0).abs() < 1e-3, "ratio is {}", len1 / len2);
+    }
+
+    #[test]
+    fn symmetry_about_a_line_mirrors_a_pair() {
+        let mut d = SketchDoc::new();
+        // A vertical mirror line on x = 0.
+        let m0 = d.add_point(Vec2::new(0.0, -1.0));
+        let m1 = d.add_point(Vec2::new(0.0, 1.0));
+        d.point_mut(m0).unwrap().fixed = true;
+        d.point_mut(m1).unwrap().fixed = true;
+        let mirror = d.add_line(m0, m1);
+
+        let a = d.add_point(Vec2::new(2.0, 0.5));
+        let b = d.add_point(Vec2::new(-1.4, 0.9));
+        d.point_mut(a).unwrap().fixed = true;
+        d.constrain(SketchConstraint::SymmetricAboutLine { a, b, line: mirror });
+
+        let out = solve(&mut d, None).unwrap();
+        assert!(out.is_solved(), "solver failed: {out:?}");
+        let (pa, pb) = (d.point(a).unwrap().at, d.point(b).unwrap().at);
+        assert!(
+            (pa.x + pb.x).abs() < 1e-4,
+            "not mirrored in x: {pa:?} {pb:?}"
+        );
+        assert!((pa.y - pb.y).abs() < 1e-4, "y should match: {pa:?} {pb:?}");
+    }
+
+    #[test]
+    fn a_point_can_be_pinned_to_a_circle() {
+        let mut d = SketchDoc::new();
+        let c = d.add_point(Vec2::ZERO);
+        d.point_mut(c).unwrap().fixed = true;
+        let circle = d.add_circle(c, 2.0);
+        d.constrain(SketchConstraint::Diameter {
+            entity: circle,
+            d: 4.0,
+        });
+        let p = d.add_point(Vec2::new(5.0, 0.0));
+        d.constrain(SketchConstraint::PointOnCircle { point: p, circle });
+
+        let out = solve(&mut d, None).unwrap();
+        assert!(out.is_solved(), "solver failed: {out:?}");
+        let r = d.point(p).unwrap().at.length();
+        assert!((r - 2.0).abs() < 1e-3, "point sits at radius {r}, want 2");
+    }
+
+    #[test]
+    fn tangency_needs_a_real_arc_not_a_full_circle() {
+        let mut d = SketchDoc::new();
+        let c = d.add_point(Vec2::ZERO);
+        let circle = d.add_circle(c, 1.0);
+        let a = d.add_point(Vec2::new(1.0, 0.0));
+        let b = d.add_point(Vec2::new(1.0, 2.0));
+        let line = d.add_line(a, b);
+        d.constrain(SketchConstraint::ArcLineTangent {
+            arc: circle,
+            line,
+            at_end: false,
+        });
+        // A full circle has no endpoint for the tangency to attach to, so this
+        // is a structural error rather than a solver failure.
+        assert_eq!(solve(&mut d, None), Err(SketchError::UnknownArc(circle)));
     }
 
     #[test]
