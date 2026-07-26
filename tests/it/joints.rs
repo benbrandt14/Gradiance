@@ -977,3 +977,49 @@ fn strut_stiffness_keeps_a_hung_body_from_drooping() {
         "the strut is a spring, not rigid (droop {max_droop})"
     );
 }
+
+/// A slider (prismatic) motor with an auto ceiling drives its body along the
+/// axis — covers the `linear_motor` path, whose force cap now scales with the
+/// body's real mass (`motor_ceiling`) rather than a fixed default.
+#[test]
+fn motorized_slider_drives_body_along_its_axis() {
+    let mut app = headless_app();
+    let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
+    anchor.physics.rigid_body = RigidBody::Static;
+    let anchor_id = spawn_body(&mut app, anchor);
+    let slider = box_record(Vec2::new(0.0, 0.0), 20.0, 20.0);
+    let slider_id = spawn_body(&mut app, slider);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Slider {
+                axis: Vec2::X,
+                limits: Some([0.0, 200.0]),
+                motor: Some(MotorDef {
+                    target_velocity: 30.0, // along +X; auto ceiling (max_force = 0)
+                    ..default()
+                }),
+            },
+            common: JointCommon::default(),
+            body_a: anchor_id,
+            body_b: Some(slider_id),
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    let start_x = pose_of(&app, slider_id).pos.x;
+    step(&mut app, 120);
+    let moved = pose_of(&app, slider_id).pos.x - start_x;
+    assert!(
+        moved > 10.0,
+        "auto-ceiling slider motor must drive the body along +X (moved {moved:.2})"
+    );
+    // And it stays on the axis (no vertical wander from the constraint).
+    assert!(
+        pose_of(&app, slider_id).pos.y.abs() < 1.0,
+        "slider stays on its axis (y = {})",
+        pose_of(&app, slider_id).pos.y
+    );
+}
