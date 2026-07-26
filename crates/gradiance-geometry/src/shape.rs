@@ -13,7 +13,7 @@ use bevy::prelude::Component;
 use bevy::reflect::{ReflectDeserialize, ReflectSerialize};
 use serde::{Deserialize, Serialize};
 
-/// Minimum linear dimension accepted for authored shapes, in world pixels.
+/// Minimum linear dimension accepted for authored shapes, in metres.
 pub const MIN_SHAPE_SIZE: f32 = 0.0001;
 
 /// Maximum CSG tree depth before commands must bake results to a
@@ -32,7 +32,7 @@ pub enum CsgOp {
     /// Union with a fillet of the given radius (polynomial smooth-min) —
     /// blends the operands where they meet.
     SmoothUnion {
-        /// Blend radius in world pixels (> 0).
+        /// Blend radius in metres (> 0).
         radius: f32,
     },
 }
@@ -56,14 +56,14 @@ pub enum CsgOp {
 pub enum ShapeDef {
     /// An axis-aligned rectangle (before body rotation).
     Box {
-        /// Full width in world pixels.
+        /// Full width in metres.
         width: f32,
-        /// Full height in world pixels.
+        /// Full height in metres.
         height: f32,
     },
     /// A circle.
     Circle {
-        /// Radius in world pixels.
+        /// Radius in metres.
         radius: f32,
     },
     /// An arbitrary simple polygon, possibly with holes.
