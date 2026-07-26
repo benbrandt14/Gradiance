@@ -808,3 +808,122 @@ fn prismatic_locks_rotation_under_torque_load() {
         "prismatic-jointed arm must not rotate (rot {rot})"
     );
 }
+
+// ---------- World-pin oscillation with a non-zero rest basis ----------
+
+/// Oscillating motor on a **world pin authored at a tilt**, pinned at the
+/// rod's centre so gravity exerts no torque about the pivot. This exercises
+/// the rest-basis term of the reversal frame that the zero-basis body-body
+/// test above misses: with the pre-audit code the reversal angle omitted the
+/// basis, so it lined up with only one bound and the motor stalled into the
+/// other instead of sweeping back and forth.
+#[test]
+fn world_pinned_tilted_motor_oscillates() {
+    let mut app = headless_app();
+    let mut rod = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
+    rod.pose.rot = 0.3; // authored tilt => non-zero rest basis
+    let rod_id = spawn_body(&mut app, rod);
+    let limits = [-0.5_f32, 0.5];
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: Some(limits),
+                motor: Some(MotorDef {
+                    target_velocity: 3.0,
+                    oscillate: true,
+                    ..default()
+                }),
+            },
+            common: JointCommon::default(),
+            body_a: rod_id,
+            body_b: None,
+            anchor_a: Vec2::ZERO,           // rod centre (local)
+            anchor_b: Vec2::new(40.0, 0.0), // world point == rod centre
+            rest_rot_a: 0.3,
+            rest_rot_b: 0.0,
+        },
+    );
+
+    let rod_entity = entity_of(&app, rod_id).unwrap();
+    let mut direction_changes = 0;
+    let (mut last_angle, mut last_delta) = (0.3_f32, 0.0_f32);
+    let (mut min_seen, mut max_seen) = (f32::MAX, f32::MIN);
+    for _ in 0..360 {
+        step(&mut app, 1);
+        let angle = PosRot::from_transform(app.world().get::<Transform>(rod_entity).unwrap()).rot;
+        let delta = angle - last_angle;
+        if delta * last_delta < -1e-6 {
+            direction_changes += 1;
+        }
+        if delta.abs() > 1e-6 {
+            last_delta = delta;
+        }
+        last_angle = angle;
+        min_seen = min_seen.min(angle);
+        max_seen = max_seen.max(angle);
+    }
+
+    assert!(
+        direction_changes >= 2,
+        "tilted world-pin motor must reverse at both bounds (changes = {direction_changes}, \
+         swept {min_seen:.2}..{max_seen:.2})"
+    );
+    assert!(
+        max_seen - min_seen > 0.5,
+        "rod actually swept a range ({min_seen:.2}..{max_seen:.2})"
+    );
+}
+
+/// A continuous motor must not shove the hinge pivot off its pin: the point
+/// constraint is rigid, so the driven arm's anchored end stays coincident with
+/// the fixed anchor. (With the old fixed 1e7 ceiling the engagement impulse
+/// spiked above what the point constraint could absorb in a substep and the
+/// pivot drifted; the auto, inertia-scaled ceiling keeps the impulse bounded.)
+#[test]
+fn motorized_hinge_holds_its_pivot() {
+    let mut app = headless_app();
+    let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
+    anchor.physics.rigid_body = RigidBody::Static;
+    let anchor_id = spawn_body(&mut app, anchor);
+    let arm = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
+    let arm_id = spawn_body(&mut app, arm);
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: None,
+                motor: Some(MotorDef {
+                    target_velocity: 6.0, // auto ceiling (max_force = 0)
+                    ..default()
+                }),
+            },
+            common: JointCommon::default(),
+            body_a: anchor_id,
+            body_b: Some(arm_id),
+            anchor_a: Vec2::ZERO, // anchor-body centre == world origin
+            anchor_b: Vec2::new(-40.0, 0.0), // arm's left end (local)
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    step(&mut app, 240);
+    // The arm's anchored end must still sit on the pin at the world origin.
+    let arm_pose = pose_of(&app, arm_id);
+    let anchored_end = arm_pose.pos + Vec2::from_angle(arm_pose.rot).rotate(Vec2::new(-40.0, 0.0));
+    assert!(
+        anchored_end.length() < 1.0,
+        "pivot drifted to {anchored_end:?} (len {})",
+        anchored_end.length()
+    );
+    // And the motor actually drove the arm (it isn't just stuck).
+    let spun = angular_velocity(&app, arm_id).abs();
+    assert!(spun > 0.5, "motor should spin the arm (w = {spun})");
+}
+
+/// Reads a body's avian angular velocity (rad/s), or 0 before the solver runs.
+fn angular_velocity(app: &App, id: StableId) -> f32 {
+    entity_of(app, id)
+        .and_then(|e| app.world().get::<avian2d::prelude::AngularVelocity>(e))
+        .map_or(0.0, |w| w.0)
+}
