@@ -15,9 +15,7 @@ use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{
     DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind, MotorDef,
-    default_motor_max_force, default_motor_max_torque,
 };
-use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_units::Dimension;
 
@@ -31,7 +29,6 @@ pub fn joint_inspector(
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform>,
-    shapes: Query<&ShapeDef>,
     index: Res<IdIndex>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
@@ -43,13 +40,6 @@ pub fn joint_inspector(
     let Ok((&id, def)) = joints.get(entity) else {
         return Ok(());
     };
-
-    // A freshly toggled motor's ceiling scales with the driven body (body A),
-    // so it feels the same across sizes; fall back to the fixed default when
-    // the shape can't be resolved this frame.
-    let shape_a = index.entity(def.body_a).and_then(|e| shapes.get(e).ok());
-    let torque_default = shape_a.map_or(MotorDef::default().max_force, default_motor_max_torque);
-    let force_default = shape_a.map_or(MotorDef::default().max_force, default_motor_max_force);
 
     // Edits accumulate into `next`; a single change emits one intent.
     let old = def.clone();
@@ -99,7 +89,7 @@ pub fn joint_inspector(
                 }
             }
 
-            changed |= configure_kind(ui, &def.kind, &mut next, torque_default, force_default);
+            changed |= configure_kind(ui, &def.kind, &mut next);
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -150,13 +140,7 @@ fn joint_geometry(
 
 /// Renders the kind-specific config controls, writing any edit into `next.kind`.
 /// Returns whether something changed.
-fn configure_kind(
-    ui: &mut egui::Ui,
-    kind: &JointKind,
-    next: &mut JointDef,
-    torque_default: f32,
-    force_default: f32,
-) -> bool {
+fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> bool {
     let mut changed = false;
     match kind {
         JointKind::Hinge { limits, motor } => {
@@ -174,7 +158,6 @@ fn configure_kind(
                 RAD_PER_S_TO_RPM,
                 "torque",
                 Dimension::Torque.symbol(),
-                torque_default,
             ) {
                 // Re-read limits from `next` in case both changed.
                 let cur_limits = current_limits(&next.kind);
@@ -205,7 +188,6 @@ fn configure_kind(
                 1.0,
                 "force",
                 Dimension::Force.symbol(),
-                force_default,
             ) {
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
@@ -308,16 +290,13 @@ fn motor_section(
     vel_scale: f32,
     effort_word: &str,
     effort_unit: &str,
-    default_effort: f32,
 ) -> Option<Option<MotorDef>> {
     let mut enabled = current.is_some();
     let mut result = None;
     if ui.checkbox(&mut enabled, "motor").changed() {
-        // A new motor's torque/force ceiling is scaled to the driven body.
-        result = Some(enabled.then(|| MotorDef {
-            max_force: default_effort,
-            ..MotorDef::default()
-        }));
+        // A new motor is "auto": the physics seam sizes its ceiling to the
+        // driven body's real inertia/mass (`MotorDef::default().max_force <= 0`).
+        result = Some(enabled.then(MotorDef::default));
     }
     if let Some(mut m) = current {
         ui.horizontal(|ui| {
@@ -338,13 +317,20 @@ fn motor_section(
             }
         });
         ui.horizontal(|ui| {
-            ui.label(format!("max {effort_word}"));
+            // `max_force <= 0` = auto (physics scales it to the body); drag it
+            // up to pin an explicit cap, reset to 0 for auto again.
+            let auto = m.max_force <= 0.0;
+            ui.label(if auto {
+                format!("max {effort_word} (auto)")
+            } else {
+                format!("max {effort_word}")
+            });
             if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("jm-force"),
                 &mut m.max_force,
-                default_effort,
-                (default_effort * 0.1).max(1.0),
+                0.0,
+                10.0,
                 effort_unit,
             ) {
                 result = Some(Some(m));

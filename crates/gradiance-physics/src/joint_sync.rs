@@ -23,11 +23,17 @@ pub struct JointUnresolved;
 #[derive(Component, Debug)]
 pub struct PinAnchor(pub Entity);
 
-fn angular_motor(m: &MotorDef) -> AngularMotor {
+fn angular_motor(m: &MotorDef, inertia: f32) -> AngularMotor {
     AngularMotor {
         enabled: m.enabled,
         target_velocity: m.target_velocity,
-        max_torque: m.max_force,
+        // Auto (`max_force <= 0`) scales with the driven body's real angular
+        // inertia; an explicit authored cap is used as-is.
+        max_torque: gradiance_domain::joint::motor_ceiling(
+            m.max_force,
+            inertia,
+            gradiance_domain::joint::MOTOR_TORQUE_PER_INERTIA,
+        ),
         motor_model: MotorModel::AccelerationBased {
             stiffness: 0.0,
             damping: m.damping,
@@ -36,11 +42,15 @@ fn angular_motor(m: &MotorDef) -> AngularMotor {
     }
 }
 
-fn linear_motor(m: &MotorDef) -> LinearMotor {
+fn linear_motor(m: &MotorDef, mass: f32) -> LinearMotor {
     LinearMotor {
         enabled: m.enabled,
         target_velocity: m.target_velocity,
-        max_force: m.max_force,
+        max_force: gradiance_domain::joint::motor_ceiling(
+            m.max_force,
+            mass,
+            gradiance_domain::joint::MOTOR_FORCE_PER_MASS,
+        ),
         motor_model: MotorModel::AccelerationBased {
             stiffness: 0.0,
             damping: m.damping,
@@ -58,6 +68,8 @@ pub fn sync_joints(
         (Entity, &JointDef, Option<&PinAnchor>),
         Or<(Changed<JointDef>, With<JointUnresolved>)>,
     >,
+    masses: Query<&ComputedMass>,
+    inertias: Query<&ComputedAngularInertia>,
 ) {
     for (entity, def, old_pin) in &changed {
         // Drop any previously derived state (kind may have changed).
@@ -92,6 +104,22 @@ pub fn sync_joints(
             commands.entity(entity).insert(PinAnchor(pin));
             (pin, Vec2::ZERO)
         };
+        // An **auto** motor (`max_force <= 0`) scales its ceiling with the
+        // driven body's computed mass properties. avian fills those in a frame
+        // or two after the body spawns, so if they aren't ready yet, retry —
+        // exactly like an unresolved endpoint — rather than bake the floor.
+        let auto_motor = matches!(
+            &def.kind,
+            JointKind::Hinge { motor: Some(m), .. } | JointKind::Slider { motor: Some(m), .. }
+                if m.max_force <= 0.0
+        );
+        if auto_motor && inertias.get(body_a).is_err() {
+            commands.entity(entity).insert(JointUnresolved);
+            continue;
+        }
+        let inertia = inertias.get(body_a).map_or(0.0, |i| i.value());
+        let mass = masses.get(body_a).map_or(0.0, |m| m.value());
+
         let mut entity_commands = commands.entity(entity);
         entity_commands.remove::<JointUnresolved>();
 
@@ -102,7 +130,16 @@ pub fn sync_joints(
         // it, hinge limits measure from it — instead of snapping rotated
         // bodies into alignment.
         let basis_b = def.rest_rot_a - def.rest_rot_b;
-        insert_derived_joint(&mut entity_commands, def, body_a, body_b, anchor_b, basis_b);
+        insert_derived_joint(
+            &mut entity_commands,
+            def,
+            body_a,
+            body_b,
+            anchor_b,
+            basis_b,
+            inertia,
+            mass,
+        );
 
         if def.common.collide_connected {
             entity_commands.remove::<JointCollisionDisabled>();
@@ -114,7 +151,9 @@ pub fn sync_joints(
 
 /// Inserts the engine joint (and, for a strut, its damping) for `def`'s kind.
 /// `anchor_b` is body-B local (or `Vec2::ZERO` for a world pin); `basis_b`
-/// carries the authored rest orientation.
+/// carries the authored rest orientation; `inertia`/`mass` are body A's
+/// computed mass properties, used to size an auto motor's ceiling.
+#[expect(clippy::too_many_arguments, reason = "one value per derived field")]
 fn insert_derived_joint(
     entity_commands: &mut EntityCommands,
     def: &JointDef,
@@ -122,6 +161,8 @@ fn insert_derived_joint(
     body_b: Entity,
     anchor_b: Vec2,
     basis_b: f32,
+    inertia: f32,
+    mass: f32,
 ) {
     match &def.kind {
         JointKind::Hinge { limits, motor } => {
@@ -133,7 +174,7 @@ fn insert_derived_joint(
                 joint = joint.with_angle_limits(*min, *max);
             }
             if let Some(m) = motor {
-                joint = joint.with_motor(angular_motor(m));
+                joint = joint.with_motor(angular_motor(m, inertia));
             }
             entity_commands.insert(joint);
         }
@@ -151,7 +192,7 @@ fn insert_derived_joint(
                 joint = joint.with_limits(*min, *max);
             }
             if let Some(m) = motor {
-                joint = joint.with_motor(linear_motor(m));
+                joint = joint.with_motor(linear_motor(m, mass));
             }
             entity_commands.insert(joint);
         }
