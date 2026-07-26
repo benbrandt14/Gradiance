@@ -16,9 +16,10 @@ violation is a **compile error**, not a review comment:
 kernel → (nothing)                  units → (nothing, +bevy for Reflect)
 core → bevy                         geometry → core
 domain → core, geometry             scene → core, domain
+optimize → core, geometry (+bevy for Reflect)
 physics → core, domain, geometry, units
 signal → kernel, domain, physics    command → scene, signal (+ lower)
-persist → scene, command            interaction → command, persist (+ lower)
+persist → scene, command            interaction → command, optimize, persist (+ lower)
 render → interaction, units (+ lower)   script → command, signal (+ lower)
 ui → everything except render
 ```
@@ -27,6 +28,16 @@ ui → everything except render
 a bottom node with no `gradiance-*` deps but a minimal `bevy` surface (its
 quantity newtypes derive `Reflect`, like the geometry shape tree). It owns
 the single px↔SI seam `units::world` (`PIXELS_PER_METER`).
+
+`gradiance-optimize` is the layout-solver crate (`docs/optimize-decision.md`):
+a pure geometric search over poses — convex hulls, SAT, an objective, and a
+`Solver` trait with three interchangeable strategies. Like `geometry` it has
+no systems and no queries; its only bevy surface is `Resource`/`Reflect` on
+the `PackConfig` rulebook. **It never touches the physics engine** — packing
+is an optimization with an objective, not a simulation (see the crate docs
+for why that distinction is load-bearing). The ECS half — gathering a
+selection, stepping the run across frames, drawing the ghost, committing one
+transform command — is `interaction::pack`.
 
 Rationale, coupling data, and the roadmap→package feature tree:
 `docs/workspace-plan.md`.

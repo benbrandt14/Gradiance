@@ -195,10 +195,11 @@ fn the_crate_dag_matches_the_architecture() {
         (
             "interaction",
             &[
-                "command", "core", "domain", "geometry", "persist", "physics", "scene",
+                "command", "core", "domain", "geometry", "optimize", "persist", "physics", "scene",
             ],
         ),
         ("kernel", &[]),
+        ("optimize", &["core", "geometry"]),
         ("persist", &["command", "core", "scene"]),
         ("physics", &["core", "domain", "geometry", "units"]),
         (
@@ -227,6 +228,7 @@ fn the_crate_dag_matches_the_architecture() {
                 "domain",
                 "geometry",
                 "interaction",
+                "optimize",
                 "persist",
                 "physics",
                 "scene",

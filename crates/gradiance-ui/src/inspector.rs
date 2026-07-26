@@ -647,7 +647,12 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
 /// Renders the *Properties* section into a dock `ui` (a right-dock pane): the
 /// selection heading plus the per-kind property body. Empty selection shows a
 /// hint rather than dead headers.
-pub(crate) fn inspector_pane(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps) {
+pub(crate) fn inspector_pane(
+    ui: &mut egui::Ui,
+    selection: &Selection,
+    props: &mut BodyProps,
+    optimizer: &mut crate::optimizer::OptimizerPanel,
+) {
     if selection.is_empty() {
         ui.weak("Nothing selected — pick a body to edit its properties.");
         return;
@@ -655,6 +660,12 @@ pub(crate) fn inspector_pane(ui: &mut egui::Ui, selection: &Selection, props: &m
     ui.heading(format!("Selection ({})", selection.len()));
     ui.separator();
     inspector_body(ui, selection, props);
+    // Multi-body operations live below the per-body sections: the optimizer
+    // acts on the selection as a whole, not on the primary.
+    if selection.len() >= 2 || optimizer.session.is_active() {
+        ui.separator();
+        crate::optimizer::optimizer_section(ui, selection, optimizer);
+    }
 }
 
 /// The Properties body, rendered per the *primary's* kind so a non-body

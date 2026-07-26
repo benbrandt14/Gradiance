@@ -124,6 +124,16 @@ impl BackgroundMenu<'_> {
     }
 }
 
+/// The editor panels the menu can open, plus the optimizer it hosts.
+/// Bundled into one `SystemParam` to keep `context_menu` under Bevy's
+/// system-parameter count limit.
+#[derive(SystemParam)]
+pub struct PanelMenu<'w> {
+    inspector: ResMut<'w, crate::inspector::InspectorPanel>,
+    depth: ResMut<'w, crate::depth_panel::DepthPanel>,
+    optimizer: crate::optimizer::OptimizerPanel<'w>,
+}
+
 /// The body-scoped intent writers, bundled into one `SystemParam` to keep
 /// `context_menu` under Bevy's system-parameter count limit.
 #[derive(SystemParam)]
@@ -271,7 +281,7 @@ pub fn context_menu(
     mut selected_joint: ResMut<SelectedJoint>,
     index: Res<IdIndex>,
     mut props: crate::inspector::BodyProps,
-    mut inspector: ResMut<crate::inspector::InspectorPanel>,
+    mut panels: PanelMenu,
     groups: Query<(Entity, &gradiance_domain::group::SelectionGroup), With<Body>>,
     bodies_q: Query<(&ShapeDef, &Transform, &Appearance), With<Body>>,
     joints: Query<&JointDef>,
@@ -280,7 +290,6 @@ pub fn context_menu(
     mut node_menu: NodeMenu,
     mut script: ScriptMenu,
     mut background: BackgroundMenu,
-    mut depth_panel: ResMut<crate::depth_panel::DepthPanel>,
 ) -> Result {
     if !menu.open {
         return Ok(());
@@ -400,7 +409,7 @@ pub fn context_menu(
                 // command away.
                 if !selected_ids.is_empty() {
                     if ui.button("Properties…").clicked() {
-                        inspector.open = true;
+                        panels.inspector.open = true;
                         close = true;
                     }
                     egui::CollapsingHeader::new("Material")
@@ -538,6 +547,20 @@ pub fn context_menu(
                     ui.separator();
                 }
 
+                // Close packing: rearrange the selection into the smallest
+                // area. Also shown while a run is live, so the menu can accept
+                // or cancel one started from anywhere.
+                if selected_ids.len() >= 2 || panels.optimizer.session.is_active() {
+                    close |=
+                        crate::optimizer::context_menu_entry(ui, &selection, &mut panels.optimizer);
+                    // "Pack options…" only sets the expand flag; the pane it
+                    // expands into has to be open for that to mean anything.
+                    if panels.optimizer.expanded.0 {
+                        panels.inspector.open = true;
+                    }
+                    ui.separator();
+                }
+
                 // Empty-canvas click: the scene/background actions.
                 if menu.under.is_empty() && menu.joint.is_none() {
                     close |= background.section(ui);
@@ -604,7 +627,7 @@ pub fn context_menu(
                     }
                 });
                 if ui.button("Depth panel…").clicked() {
-                    depth_panel.open = true;
+                    panels.depth.open = true;
                     close = true;
                 }
                 // Local-frame grid: adopt the primary body's pose as the

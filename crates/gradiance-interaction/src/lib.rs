@@ -26,6 +26,7 @@ pub mod input;
 pub mod joint_edit;
 pub mod node_edit;
 pub mod overlay;
+pub mod pack;
 pub mod pointer;
 pub mod selection;
 pub mod snap;
@@ -78,6 +79,14 @@ impl Plugin for InteractionPlugin {
         app.register_type::<gradiance_domain::settings::SnapConfig>();
         app.register_type::<gradiance_domain::settings::DebugSettings>();
         app.register_type::<gradiance_domain::settings::ToolDefaults>();
+        // The layout optimizer: its config is a settings-style resource (the
+        // Config seam — UI edits it directly), its session is transient editor
+        // state, and its two request messages are not command intents.
+        app.init_resource::<gradiance_optimize::PackConfig>();
+        app.register_type::<gradiance_optimize::PackConfig>();
+        app.init_resource::<pack::PackSession>();
+        app.add_message::<pack::StartPackRequest>();
+        app.add_message::<pack::PackControl>();
         app.init_resource::<camera::CameraRig>();
         app.init_resource::<camera::CameraScale>();
 
@@ -104,6 +113,11 @@ impl Plugin for InteractionPlugin {
                 input::apply_shortcuts,
                 selection::prune_dead_selection,
                 joint_edit::clear_joint_on_tool_change,
+                // The pack session: gather → iterate → commit, all before
+                // dispatch so its single intent lands this frame.
+                pack::start_pack,
+                pack::step_pack,
+                pack::finish_pack,
             )
                 .chain()
                 .in_set(InteractionSet)
@@ -118,6 +132,7 @@ impl Plugin for InteractionPlugin {
                     indicators::draw_snap_indicator,
                     indicators::draw_constraint_guides,
                     indicators::draw_selection_outlines,
+                    pack::draw_pack_preview,
                 ),
             );
         }
