@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// Identity of a point, entity, or constraint *within* one sketch.
 ///
 /// Stable across edits and solves, so tools and undo records can name a vertex
-/// over time. Deliberately **not** the solver's handle: `slvs` handles are
+/// over time. Deliberately **not** the solver's handle: SolveSpace handles are
 /// ephemeral, minted fresh on every solve and never stored (the same reasoning
 /// that keeps `StableId` rather than `Entity` in save files).
 #[derive(

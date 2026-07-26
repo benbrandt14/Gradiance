@@ -16,7 +16,6 @@ serde.workspace = true
 thiserror.workspace = true
 # Features-only: serde impls for the bevy math types the document serializes.
 glam.workspace = true
-# SolveSpace's geometric constraint solver. Vendored (and workspace-excluded)
-# because the crates.io release does not build against a modern libclang —
-# see third_party/rust_slvs/PATCH.md.
-slvs = { path = "../../third_party/rust_slvs" }
+# SolveSpace's geometric constraint solver, behind the workspace's own
+# bindings. That crate is the only place unsafe or C++ appears.
+gradiance-slvs-sys.workspace = true

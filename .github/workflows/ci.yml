@@ -40,7 +40,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld libeigen3-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -95,7 +95,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld libeigen3-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:

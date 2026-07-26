@@ -49,8 +49,11 @@ accept scientific notation.
 ## Building
 
 ```sh
-# Linux build dependencies (clang+lld: fast linking, see .cargo/config.toml)
-sudo apt-get install libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
+# Linux build dependencies. clang+lld give fast linking (.cargo/config.toml);
+# libeigen3-dev is used by SolveSpace's constraint solver, which the sketch
+# mode links (see third_party/solvespace/SOURCE.md). On macOS use
+# `brew install eigen`, on Windows `vcpkg install eigen3`.
+sudo apt-get install libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld libeigen3-dev
 
 cargo run --release
 

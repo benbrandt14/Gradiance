@@ -66,8 +66,9 @@ purpose and with the row's reasoning intact:
   gated to `EditorMode::Direct`; constrained sketching lives beside them.
 - The "Rust's 2D-constraint ecosystem is thin" concern was the accurate read,
   and the resolution was to stop looking for a Rust-native one: Gradiance links
-  **SolveSpace's** solver through the `slvs` bindings
-  (`third_party/rust_slvs`, `crates/gradiance-sketch`).
+  **SolveSpace's** solver through the workspace's own hand-written bindings
+  (`crates/gradiance-slvs-sys` over the pristine vendored subset in
+  `third_party/solvespace`, consumed by `crates/gradiance-sketch`).
 - The subsystem risk is contained by the package graph rather than by
   intention. `gradiance-sketch` depends on `core` and `geometry` only — no
   physics, no avian — so the solver cannot reach simulation state, and sketch

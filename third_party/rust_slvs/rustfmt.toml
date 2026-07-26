@@ -1,5 +1,0 @@
-# Vendored upstream source: keep it byte-identical to the release so the
-# local patch stays reviewable (see PATCH.md). CI runs `cargo fmt --all`, which
-# reaches path dependencies, so formatting is disabled here rather than in the
-# workspace root.
-disable_all_formatting = true

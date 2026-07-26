@@ -1,4 +1,4 @@
-//! The SolveSpace bridge: compile a [`SketchDoc`] into an `slvs` system, solve
+//! The SolveSpace bridge: compile a [`SketchDoc`] into a solver system, solve
 //! it, and write the settled geometry back into the document.
 //!
 //! # Handles are ephemeral
@@ -17,16 +17,7 @@
 
 use std::collections::HashMap;
 
-use slvs::{
-    System, constraint as sc,
-    element::AsHandle,
-    entity::{
-        ArcOfCircle, Circle, Cubic, Distance, EntityHandle, LineSegment, Normal, Point, Workplane,
-    },
-    group::Group,
-    system::{FailReason, SolveResult},
-    utils::make_quaternion,
-};
+use gradiance_slvs_sys::{ConstraintDef, Entity, Group, Status, System, constraint as sc};
 use thiserror::Error;
 
 use crate::doc::{SketchConstraint, SketchDoc, SketchEntity, SketchId};
@@ -45,17 +36,10 @@ pub enum SketchError {
     /// A constraint referenced a line that is not in the document.
     #[error("sketch references unknown line {0:?}")]
     UnknownLine(SketchId),
-    /// A constraint referenced a circle or arc that is not in the document.
+    /// A constraint referenced a circle or arc that is not in the document,
+    /// or named geometry of a kind the constraint cannot accept.
     #[error("sketch references unknown arc or circle {0:?}")]
     UnknownArc(SketchId),
-    /// The solver rejected an element the document considered well-formed.
-    #[error("solver rejected {what}: {detail}")]
-    Rejected {
-        /// The kind of element being added when the solver objected.
-        what: &'static str,
-        /// The solver's complaint.
-        detail: String,
-    },
 }
 
 /// Whether the solver satisfied the system.
@@ -101,41 +85,78 @@ impl SolveOutcome {
     }
 }
 
+/// What kind of geometry a document id names.
+///
+/// The solver's handles are untyped, so the kind travels alongside them. This
+/// is what lets [`Built`] reject "tangent to a full circle" — which has no
+/// endpoint to attach to — as a structural error rather than passing nonsense
+/// to the solver.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Line,
+    Arc,
+    Circle,
+    Cubic,
+}
+
 /// Handle bookkeeping for one compile-and-solve pass.
 #[derive(Default)]
 struct Built {
-    points: HashMap<SketchId, EntityHandle<Point>>,
-    lines: HashMap<SketchId, EntityHandle<LineSegment>>,
-    arcs: HashMap<SketchId, EntityHandle<ArcOfCircle>>,
-    circles: HashMap<SketchId, EntityHandle<Circle>>,
-    cubics: HashMap<SketchId, EntityHandle<Cubic>>,
+    points: HashMap<SketchId, Entity>,
+    entities: HashMap<SketchId, (Entity, Kind)>,
     /// Radius parameter backing each circle, so solved radii can be read back.
-    radii: HashMap<SketchId, EntityHandle<Distance>>,
-    /// slvs constraint handle -> index into [`SketchDoc::constraints`].
+    radii: HashMap<SketchId, Entity>,
+    /// Solver constraint handle -> index into [`SketchDoc::constraints`].
     constraint_index: HashMap<u32, usize>,
 }
 
 impl Built {
-    fn point(&self, id: SketchId) -> Result<EntityHandle<Point>, SketchError> {
+    fn point(&self, id: SketchId) -> Result<Entity, SketchError> {
         self.points
             .get(&id)
             .copied()
             .ok_or(SketchError::UnknownPoint(id))
     }
 
-    fn line(&self, id: SketchId) -> Result<EntityHandle<LineSegment>, SketchError> {
-        self.lines
+    /// Resolve `id`, requiring it to name one of `allowed`.
+    ///
+    /// Several constraints are generic over a *set* of kinds — equal-radius
+    /// takes an arc or a circle, tangency takes an arc or a bezier — so the
+    /// admissible set is the parameter rather than a single kind.
+    fn of_kind(&self, id: SketchId, allowed: &[Kind]) -> Option<Entity> {
+        self.entities
             .get(&id)
-            .copied()
+            .filter(|(_, k)| allowed.contains(k))
+            .map(|(e, _)| *e)
+    }
+
+    fn line(&self, id: SketchId) -> Result<Entity, SketchError> {
+        self.of_kind(id, &[Kind::Line])
             .ok_or(SketchError::UnknownLine(id))
     }
-}
 
-/// Build a `map_err` closure that reports a solver rejection.
-fn rejected<E: std::fmt::Debug>(what: &'static str) -> impl Fn(E) -> SketchError {
-    move |e| SketchError::Rejected {
-        what,
-        detail: format!("{e:?}"),
+    /// An arc specifically — not a full circle.
+    fn arc(&self, id: SketchId) -> Result<Entity, SketchError> {
+        self.of_kind(id, &[Kind::Arc])
+            .ok_or(SketchError::UnknownArc(id))
+    }
+
+    fn cubic(&self, id: SketchId) -> Result<Entity, SketchError> {
+        self.of_kind(id, &[Kind::Cubic])
+            .ok_or(SketchError::UnknownArc(id))
+    }
+
+    /// Anything with a radius: an arc or a full circle.
+    fn radial(&self, id: SketchId) -> Result<Entity, SketchError> {
+        self.of_kind(id, &[Kind::Arc, Kind::Circle])
+            .ok_or(SketchError::UnknownArc(id))
+    }
+
+    /// Anything with two endpoints and a tangent direction at each: an arc or
+    /// a bezier.
+    fn curve(&self, id: SketchId) -> Result<Entity, SketchError> {
+        self.of_kind(id, &[Kind::Arc, Kind::Cubic])
+            .ok_or(SketchError::UnknownArc(id))
     }
 }
 
@@ -162,24 +183,18 @@ pub fn solve(doc: &mut SketchDoc, drag: Option<SketchId>) -> Result<SolveOutcome
 
     // Group 1 holds the workplane and is never solved, so it stays a fixed
     // reference frame for everything built into group 2.
-    let g_frame = sys.add_group();
-    let origin = sys
-        .sketch(Point::new_in_3d(g_frame, [0.0, 0.0, 0.0]))
-        .map_err(rejected("workplane origin"))?;
-    let normal = sys
-        .sketch(Normal::new_in_3d(
-            g_frame,
-            make_quaternion([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
-        ))
-        .map_err(rejected("workplane normal"))?;
-    let wp = sys
-        .sketch(Workplane::new(g_frame, origin, normal))
-        .map_err(rejected("workplane"))?;
+    let g_frame = sys.group();
+    let origin = sys.add_point_3d(g_frame, [0.0, 0.0, 0.0]);
+    let normal = sys.add_normal_3d(
+        g_frame,
+        System::quaternion([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+    );
+    let wp = sys.add_workplane(g_frame, origin, normal);
 
-    let g = sys.add_group();
+    let g = sys.group();
     let built = build(&mut sys, doc, g, wp, drag)?;
 
-    let outcome = interpret(&sys.solve(&g), &built);
+    let outcome = interpret(&sys.solve(g), &built);
     if outcome.is_solved() {
         write_back(&sys, doc, &built);
     }
@@ -191,35 +206,27 @@ fn build(
     sys: &mut System,
     doc: &SketchDoc,
     g: Group,
-    wp: EntityHandle<Workplane>,
+    wp: Entity,
     drag: Option<SketchId>,
 ) -> Result<Built, SketchError> {
     let mut b = Built::default();
 
     for p in &doc.points {
-        let h = sys
-            .sketch(Point::new_on_workplane(
-                g,
-                wp,
-                [f64::from(p.at.x), f64::from(p.at.y)],
-            ))
-            .map_err(rejected("point"))?;
+        let h = sys.add_point_2d(g, wp, [f64::from(p.at.x), f64::from(p.at.y)]);
         b.points.insert(p.id, h);
     }
 
     // Circles need a normal lying *on* the workplane so the solver knows they
     // are in the plane rather than merely parallel to it. Built lazily, since a
     // sketch with no circles should not carry a spare entity.
-    let mut plane_normal: Option<EntityHandle<Normal>> = None;
+    let mut plane_normal: Option<Entity> = None;
 
     for e in &doc.entities {
         match *e {
             SketchEntity::Line { id, a, b: b_id } => {
                 let (pa, pb) = (b.point(a)?, b.point(b_id)?);
-                let h = sys
-                    .sketch(LineSegment::new(g, pa, pb))
-                    .map_err(rejected("line"))?;
-                b.lines.insert(id, h);
+                let h = sys.add_line_2d(g, wp, pa, pb);
+                b.entities.insert(id, (h, Kind::Line));
             }
             SketchEntity::Arc {
                 id,
@@ -228,10 +235,9 @@ fn build(
                 end,
             } => {
                 let (pc, ps, pe) = (b.point(center)?, b.point(start)?, b.point(end)?);
-                let h = sys
-                    .sketch(ArcOfCircle::new(g, wp, pc, ps, pe))
-                    .map_err(rejected("arc"))?;
-                b.arcs.insert(id, h);
+                let n = *plane_normal.get_or_insert_with(|| sys.add_normal_2d(g, wp));
+                let h = sys.add_arc(g, wp, n, pc, ps, pe);
+                b.entities.insert(id, (h, Kind::Arc));
             }
             SketchEntity::Cubic {
                 id,
@@ -240,259 +246,241 @@ fn build(
                 end_control,
                 end,
             } => {
-                let h = sys
-                    .sketch(Cubic::new(
-                        g,
-                        b.point(start)?,
-                        b.point(start_control)?,
-                        b.point(end_control)?,
-                        b.point(end)?,
-                    ))
-                    .map_err(rejected("cubic"))?;
-                b.cubics.insert(id, h);
+                let pts = [
+                    b.point(start)?,
+                    b.point(start_control)?,
+                    b.point(end_control)?,
+                    b.point(end)?,
+                ];
+                let h = sys.add_cubic(g, wp, pts);
+                b.entities.insert(id, (h, Kind::Cubic));
             }
             SketchEntity::Circle { id, center, radius } => {
                 let pc = b.point(center)?;
-                let n = match plane_normal {
-                    Some(n) => n,
-                    None => *plane_normal.insert(
-                        sys.sketch(Normal::new_on_workplane(g, wp))
-                            .map_err(rejected("workplane normal"))?,
-                    ),
-                };
-                let r = sys
-                    .sketch(Distance::new(g, f64::from(radius)))
-                    .map_err(rejected("circle radius"))?;
-                let h = sys
-                    .sketch(Circle::new(g, n, pc, r))
-                    .map_err(rejected("circle"))?;
-                b.circles.insert(id, h);
+                let n = *plane_normal.get_or_insert_with(|| sys.add_normal_2d(g, wp));
+                let r = sys.add_distance(g, wp, f64::from(radius));
+                let h = sys.add_circle(g, wp, n, pc, r);
+                b.entities.insert(id, (h, Kind::Circle));
                 b.radii.insert(id, r);
             }
         }
     }
 
     for (index, c) in doc.constraints.iter().enumerate() {
-        let handle = add_constraint(sys, &b, g, wp, *c)?;
-        b.constraint_index.insert(handle, index);
+        let (plane, def) = constraint_def(&b, *c)?;
+        let handle = sys.constrain(g, plane.unwrap_or(wp), def);
+        b.constraint_index.insert(handle.handle(), index);
     }
 
     // Authored anchors are a hard constraint: the point stays where it is.
     for p in doc.points.iter().filter(|p| p.fixed) {
         let h = b.point(p.id)?;
-        sys.constrain(sc::WhereDragged::new(g, h, Some(wp)))
-            .map_err(rejected("fixed point"))?;
+        sys.constrain(
+            g,
+            wp,
+            ConstraintDef {
+                kind: sc::WHERE_DRAGGED,
+                pt_a: h,
+                ..Default::default()
+            },
+        );
     }
 
     // The drag hint is deliberately *not* a constraint. SolveSpace takes it as
     // a solver preference — "favour this parameter, change it as little as
     // possible even if that means moving others more" — so a drag steers the
     // solution without ever being able to contradict a real constraint. Using
-    // `WhereDragged` here instead would make dragging a constrained point
+    // `WHERE_DRAGGED` here instead would make dragging a constrained point
     // report an inconsistent system rather than sliding the geometry.
     if let Some(id) = drag {
-        let h = b.point(id)?;
-        sys.set_dragged(&h).map_err(rejected("drag hint"))?;
+        sys.drag(b.point(id)?);
     }
 
     Ok(b)
 }
 
-/// Translate one document constraint into its SolveSpace counterpart,
-/// returning the solver handle so failures can be attributed back.
-fn add_constraint(
-    sys: &mut System,
-    b: &Built,
-    g: Group,
-    wp: EntityHandle<Workplane>,
-    c: SketchConstraint,
-) -> Result<u32, SketchError> {
-    let plane = Some(wp);
-    let handle = match c {
-        SketchConstraint::Coincident(a, bb) => {
-            sys.constrain(sc::PointsCoincident::new(
-                g,
-                b.point(a)?,
-                b.point(bb)?,
-                plane,
-            ))
-            .map_err(rejected("coincident"))?
-            .handle
-        }
-        SketchConstraint::Distance { a, b: bb, d } => {
-            sys.constrain(sc::PtPtDistance::new(
-                g,
-                b.point(a)?,
-                b.point(bb)?,
-                f64::from(d),
-                plane,
-            ))
-            .map_err(rejected("distance"))?
-            .handle
-        }
-        SketchConstraint::Horizontal(l) => {
-            sys.constrain(sc::Horizontal::from_line(g, wp, b.line(l)?))
-                .map_err(rejected("horizontal"))?
-                .handle
-        }
-        SketchConstraint::Vertical(l) => {
-            sys.constrain(sc::Vertical::from_line(g, wp, b.line(l)?))
-                .map_err(rejected("vertical"))?
-                .handle
-        }
-        SketchConstraint::Parallel(a, bb) => {
-            sys.constrain(sc::Parallel::new(g, b.line(a)?, b.line(bb)?, plane))
-                .map_err(rejected("parallel"))?
-                .handle
-        }
-        SketchConstraint::Perpendicular(a, bb) => {
-            sys.constrain(sc::Perpendicular::new(g, b.line(a)?, b.line(bb)?, plane))
-                .map_err(rejected("perpendicular"))?
-                .handle
-        }
-        SketchConstraint::EqualLength(a, bb) => {
-            sys.constrain(sc::EqualLengthLines::new(g, b.line(a)?, b.line(bb)?, plane))
-                .map_err(rejected("equal length"))?
-                .handle
-        }
-        SketchConstraint::PointOnLine { point, line } => {
-            sys.constrain(sc::PtOnLine::new(g, b.point(point)?, b.line(line)?, plane))
-                .map_err(rejected("point on line"))?
-                .handle
-        }
-        SketchConstraint::Midpoint { point, line } => {
-            sys.constrain(sc::AtMidpoint::new(
-                g,
-                b.point(point)?,
-                b.line(line)?,
-                plane,
-            ))
-            .map_err(rejected("midpoint"))?
-            .handle
-        }
-        SketchConstraint::Angle { a, b: bb, degrees } => {
-            sys.constrain(sc::Angle::new(
-                g,
-                b.line(a)?,
-                b.line(bb)?,
-                f64::from(degrees),
-                plane,
-                false,
-            ))
-            .map_err(rejected("angle"))?
-            .handle
-        }
-        SketchConstraint::PointOnCircle { .. }
-        | SketchConstraint::PointLineDistance { .. }
-        | SketchConstraint::ArcLineTangent { .. }
-        | SketchConstraint::SymmetricAboutLine { .. }
-        | SketchConstraint::LengthRatio { .. }
-        | SketchConstraint::LengthDifference { .. }
-        | SketchConstraint::EqualAngle { .. } => add_extended_constraint(sys, b, g, wp, c)?,
-        SketchConstraint::CubicLineTangent { .. } | SketchConstraint::CurveCurveTangent { .. } => {
-            add_tangent_constraint(sys, b, g, wp, c)?
-        }
-        SketchConstraint::Diameter { .. } | SketchConstraint::EqualRadius(..) => {
-            add_radial_constraint(sys, b, g, c)?
-        }
-    };
-    Ok(handle)
+/// A constraint over two points.
+fn pp(kind: i32, value: f64, a: Entity, b: Entity) -> ConstraintDef {
+    ConstraintDef {
+        kind,
+        value,
+        pt_a: a,
+        pt_b: b,
+        ..Default::default()
+    }
 }
 
-/// The constraints that accept *either* an arc or a full circle.
-///
-/// SolveSpace models these over an `AsArc` bound, so each document id has to be
-/// resolved against both handle maps and the call made at the concrete type.
-/// Split out of [`add_constraint`] because the four-way arc/circle pairing for
-/// equal-radius dominates the function otherwise.
-fn add_radial_constraint(
-    sys: &mut System,
-    b: &Built,
-    g: Group,
-    c: SketchConstraint,
-) -> Result<u32, SketchError> {
-    match c {
-        SketchConstraint::Diameter { entity, d } => {
-            let d = f64::from(d);
-            if let Some(h) = b.circles.get(&entity) {
-                Ok(sys
-                    .constrain(sc::Diameter::new(g, *h, d))
-                    .map_err(rejected("diameter"))?
-                    .handle)
-            } else if let Some(h) = b.arcs.get(&entity) {
-                Ok(sys
-                    .constrain(sc::Diameter::new(g, *h, d))
-                    .map_err(rejected("diameter"))?
-                    .handle)
-            } else {
-                Err(SketchError::UnknownArc(entity))
-            }
-        }
-        SketchConstraint::EqualRadius(a, bb) => {
-            let fail = |id: SketchId| SketchError::UnknownArc(id);
-            match (b.circles.get(&a), b.arcs.get(&a)) {
-                (Some(x), _) => match (b.circles.get(&bb), b.arcs.get(&bb)) {
-                    (Some(y), _) => Ok(sys
-                        .constrain(sc::EqualRadius::new(g, *x, *y))
-                        .map_err(rejected("equal radius"))?
-                        .handle),
-                    (_, Some(y)) => Ok(sys
-                        .constrain(sc::EqualRadius::new(g, *x, *y))
-                        .map_err(rejected("equal radius"))?
-                        .handle),
-                    _ => Err(fail(bb)),
-                },
-                (_, Some(x)) => match (b.circles.get(&bb), b.arcs.get(&bb)) {
-                    (Some(y), _) => Ok(sys
-                        .constrain(sc::EqualRadius::new(g, *x, *y))
-                        .map_err(rejected("equal radius"))?
-                        .handle),
-                    (_, Some(y)) => Ok(sys
-                        .constrain(sc::EqualRadius::new(g, *x, *y))
-                        .map_err(rejected("equal radius"))?
-                        .handle),
-                    _ => Err(fail(bb)),
-                },
-                _ => Err(fail(a)),
-            }
-        }
-        // `add_constraint` routes only the two radial variants here.
-        _ => Err(SketchError::Rejected {
-            what: "radial constraint",
-            detail: format!("{c:?} is not arc/circle-generic"),
-        }),
+/// A constraint relating a point to an entity — on-line, on-circle, midpoint.
+fn pe(kind: i32, value: f64, point: Entity, entity: Entity) -> ConstraintDef {
+    ConstraintDef {
+        kind,
+        value,
+        pt_a: point,
+        entity_a: entity,
+        ..Default::default()
     }
+}
+
+/// A constraint over one entity — horizontal, vertical, diameter.
+fn e1(kind: i32, value: f64, a: Entity) -> ConstraintDef {
+    ConstraintDef {
+        kind,
+        value,
+        entity_a: a,
+        ..Default::default()
+    }
+}
+
+/// A constraint over two entities — parallel, equal-length, tangent.
+fn ee(kind: i32, value: f64, a: Entity, b: Entity) -> ConstraintDef {
+    ConstraintDef {
+        kind,
+        value,
+        entity_a: a,
+        entity_b: b,
+        ..Default::default()
+    }
+}
+
+/// Translate one document constraint into solver operands.
+///
+/// Returns the workplane to measure in alongside the definition: almost
+/// everything is measured in the sketch plane, but a few constraints
+/// (diameter, notably) are inherently planar and upstream passes
+/// `SLVS_FREE_IN_3D` for them. `None` means "the sketch plane".
+///
+/// Pure: it resolves handles and fills in operand slots, and touches no solver
+/// state, which is what makes the whole constraint vocabulary testable without
+/// running a solve.
+///
+/// The match is exhaustive by design — adding a [`SketchConstraint`] variant
+/// must fail to compile until it is given solver operands here, rather than
+/// being silently dropped at runtime.
+fn constraint_def(
+    b: &Built,
+    c: SketchConstraint,
+) -> Result<(Option<Entity>, ConstraintDef), SketchError> {
+    use SketchConstraint as K;
+
+    // The slot assignments below mirror upstream's own convenience
+    // constructors in `src/slvs/lib.cpp` — that file is the authority on which
+    // of ptA/ptB/entityA..D each constraint type reads.
+    let def = match c {
+        K::Coincident(a, bb) => pp(sc::POINTS_COINCIDENT, 0.0, b.point(a)?, b.point(bb)?),
+        K::Distance { a, b: bb, d } => {
+            pp(sc::PT_PT_DISTANCE, f64::from(d), b.point(a)?, b.point(bb)?)
+        }
+        K::PointOnLine { point, line } => pe(sc::PT_ON_LINE, 0.0, b.point(point)?, b.line(line)?),
+        K::Midpoint { point, line } => pe(sc::AT_MIDPOINT, 0.0, b.point(point)?, b.line(line)?),
+        K::PointLineDistance { point, line, d } => pe(
+            sc::PT_LINE_DISTANCE,
+            f64::from(d),
+            b.point(point)?,
+            b.line(line)?,
+        ),
+        // Generic over arc or full circle: both have a rim to sit on.
+        K::PointOnCircle { point, circle } => {
+            pe(sc::PT_ON_CIRCLE, 0.0, b.point(point)?, b.radial(circle)?)
+        }
+        K::SymmetricAboutLine { a, b: bb, line } => ConstraintDef {
+            entity_a: b.line(line)?,
+            ..pp(sc::SYMMETRIC_LINE, 0.0, b.point(a)?, b.point(bb)?)
+        },
+
+        K::Horizontal(l) => e1(sc::HORIZONTAL, 0.0, b.line(l)?),
+        K::Vertical(l) => e1(sc::VERTICAL, 0.0, b.line(l)?),
+        K::Parallel(a, bb) => ee(sc::PARALLEL, 0.0, b.line(a)?, b.line(bb)?),
+        K::Perpendicular(a, bb) => ee(sc::PERPENDICULAR, 0.0, b.line(a)?, b.line(bb)?),
+        K::EqualLength(a, bb) => ee(sc::EQUAL_LENGTH_LINES, 0.0, b.line(a)?, b.line(bb)?),
+        K::Angle { a, b: bb, degrees } => {
+            ee(sc::ANGLE, f64::from(degrees), b.line(a)?, b.line(bb)?)
+        }
+        K::LengthRatio { a, b: bb, ratio } => {
+            ee(sc::LENGTH_RATIO, f64::from(ratio), b.line(a)?, b.line(bb)?)
+        }
+        K::LengthDifference {
+            a,
+            b: bb,
+            difference,
+        } => ee(
+            sc::LENGTH_DIFFERENCE,
+            f64::from(difference),
+            b.line(a)?,
+            b.line(bb)?,
+        ),
+        K::EqualAngle {
+            a,
+            b: bb,
+            c: cc,
+            d: dd,
+        } => ConstraintDef {
+            entity_c: b.line(cc)?,
+            entity_d: b.line(dd)?,
+            ..ee(sc::EQUAL_ANGLE, 0.0, b.line(a)?, b.line(bb)?)
+        },
+
+        // Diameter is a property of the circle itself rather than something
+        // measured in a plane; upstream's `Slvs_Diameter` passes
+        // SLVS_FREE_IN_3D, and so must we.
+        K::Diameter { entity, d } => {
+            return Ok((
+                Some(Entity::NONE),
+                e1(sc::DIAMETER, f64::from(d), b.radial(entity)?),
+            ));
+        }
+        K::EqualRadius(a, bb) => ee(sc::EQUAL_RADIUS, 0.0, b.radial(a)?, b.radial(bb)?),
+        // Tangency needs a real arc: a full circle has no endpoint for the
+        // tangency to attach to. `other` picks which endpoint.
+        K::ArcLineTangent { arc, line, at_end } => ConstraintDef {
+            other: at_end,
+            ..ee(sc::ARC_LINE_TANGENT, 0.0, b.arc(arc)?, b.line(line)?)
+        },
+        K::CubicLineTangent {
+            cubic,
+            line,
+            at_end,
+        } => ConstraintDef {
+            other: at_end,
+            ..ee(sc::CUBIC_LINE_TANGENT, 0.0, b.cubic(cubic)?, b.line(line)?)
+        },
+        K::CurveCurveTangent {
+            a,
+            b: bb,
+            a_at_end,
+            b_at_end,
+        } => ConstraintDef {
+            other: a_at_end,
+            other2: b_at_end,
+            ..ee(sc::CURVE_CURVE_TANGENT, 0.0, b.curve(a)?, b.curve(bb)?)
+        },
+    };
+    Ok((None, def))
 }
 
 /// Fold the solver's verdict into a [`SolveOutcome`], attributing any failed
 /// constraints back to their document indices.
-fn interpret(result: &SolveResult, built: &Built) -> SolveOutcome {
-    match result {
-        SolveResult::Ok { dof } => SolveOutcome {
-            status: SolveStatus::Solved,
-            dof: *dof,
-            failed: Vec::new(),
-        },
-        SolveResult::Fail {
-            dof,
-            reason,
-            failed_constraints,
-        } => {
-            let mut failed: Vec<usize> = failed_constraints
-                .iter()
-                .filter_map(|c| built.constraint_index.get(&c.handle()).copied())
-                .collect();
-            failed.sort_unstable();
-            SolveOutcome {
-                status: match reason {
-                    FailReason::Inconsistent => SolveStatus::Inconsistent,
-                    FailReason::DidntConverge => SolveStatus::DidntConverge,
-                    FailReason::TooManyUnknowns => SolveStatus::TooManyUnknowns,
-                },
-                dof: *dof,
-                failed,
-            }
-        }
+fn interpret(solution: &gradiance_slvs_sys::Solution, built: &Built) -> SolveOutcome {
+    let status = match solution.status {
+        // A redundant-but-satisfiable system is still solved geometry. The
+        // redundancy is worth surfacing eventually, but it is not a failure and
+        // must not discard the solution.
+        Status::Okay | Status::RedundantOkay => SolveStatus::Solved,
+        Status::Inconsistent => SolveStatus::Inconsistent,
+        Status::DidntConverge => SolveStatus::DidntConverge,
+        Status::TooManyUnknowns => SolveStatus::TooManyUnknowns,
+    };
+
+    let mut failed: Vec<usize> = solution
+        .failed
+        .iter()
+        .filter_map(|c| built.constraint_index.get(&c.handle()).copied())
+        .collect();
+    failed.sort_unstable();
+
+    SolveOutcome {
+        status,
+        dof: solution.dof,
+        failed,
     }
 }
 
@@ -510,9 +498,9 @@ fn write_back(sys: &System, doc: &mut SketchDoc, built: &Built) {
         let Some(h) = built.points.get(&p.id) else {
             continue;
         };
-        if let Ok(Point::OnWorkplane { coords, .. }) = sys.entity_data(h) {
-            p.at.x = coords[0] as f32;
-            p.at.y = coords[1] as f32;
+        if let Some([u, v]) = sys.point_2d(*h) {
+            p.at.x = u as f32;
+            p.at.y = v as f32;
         }
     }
 
@@ -521,212 +509,12 @@ fn write_back(sys: &System, doc: &mut SketchDoc, built: &Built) {
             let Some(h) = built.radii.get(id) else {
                 continue;
             };
-            if let Ok(d) = sys.entity_data(h) {
-                *radius = d.val as f32;
+            if let Some(r) = sys.distance_value(*h) {
+                *radius = r as f32;
             }
         }
     }
 }
-
-/// The constraints added after the initial vocabulary.
-///
-/// Split out purely to keep [`add_constraint`] within the line budget; the
-/// dispatch arm there lists these explicitly rather than using a catch-all, so
-/// adding a constraint variant still fails to compile until it is mapped here.
-/// The tangency constraints, split out because they resolve across two handle
-/// maps and would otherwise push `add_constraint` past its line budget.
-fn add_tangent_constraint(
-    sys: &mut System,
-    b: &Built,
-    g: Group,
-    wp: EntityHandle<Workplane>,
-    c: SketchConstraint,
-) -> Result<u32, SketchError> {
-    let handle = match c {
-        SketchConstraint::CubicLineTangent {
-            cubic,
-            line,
-            at_end,
-        } => {
-            let Some(h) = b.cubics.get(&cubic) else {
-                return Err(SketchError::UnknownArc(cubic));
-            };
-            sys.constrain(sc::CubicLineTangent::new(
-                g,
-                *h,
-                b.line(line)?,
-                at_end,
-                Some(wp),
-            ))
-            .map_err(rejected("cubic-line tangent"))?
-            .handle
-        }
-        SketchConstraint::CurveCurveTangent {
-            a,
-            b: bb,
-            a_at_end,
-            b_at_end,
-        } => {
-            // Tangency is generic over "arc or bezier", but the two live in
-            // different handle maps, so each side is resolved independently
-            // and the four combinations are spelled out rather than erased.
-            let arc_a = b.arcs.get(&a).copied();
-            let cub_a = b.cubics.get(&a).copied();
-            let arc_b = b.arcs.get(&bb).copied();
-            let cub_b = b.cubics.get(&bb).copied();
-            match (arc_a, cub_a, arc_b, cub_b) {
-                (Some(x), _, Some(y), _) => {
-                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
-                        .map_err(rejected("curve tangent"))?
-                        .handle
-                }
-                (Some(x), _, _, Some(y)) => {
-                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
-                        .map_err(rejected("curve tangent"))?
-                        .handle
-                }
-                (_, Some(x), Some(y), _) => {
-                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
-                        .map_err(rejected("curve tangent"))?
-                        .handle
-                }
-                (_, Some(x), _, Some(y)) => {
-                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
-                        .map_err(rejected("curve tangent"))?
-                        .handle
-                }
-                _ => {
-                    return Err(SketchError::UnknownArc(
-                        if arc_a.is_some() || cub_a.is_some() {
-                            bb
-                        } else {
-                            a
-                        },
-                    ));
-                }
-            }
-        }
-        // `add_constraint` only routes the two tangency variants here.
-        _ => return Err(SketchError::UnknownArc(SketchId(u32::MAX))),
-    };
-    Ok(handle)
-}
-
-fn add_extended_constraint(
-    sys: &mut System,
-    b: &Built,
-    g: Group,
-    wp: EntityHandle<Workplane>,
-    c: SketchConstraint,
-) -> Result<u32, SketchError> {
-    let plane = Some(wp);
-    let handle = match c {
-        SketchConstraint::PointOnCircle { point, circle } => {
-            let p = b.point(point)?;
-            // Radius constraints are generic over "arc or circle", but the two
-            // live in different handle maps, so either may answer.
-            if let Some(h) = b.circles.get(&circle) {
-                sys.constrain(sc::PtOnCircle::new(g, p, *h))
-                    .map_err(rejected("point on circle"))?
-                    .handle
-            } else if let Some(h) = b.arcs.get(&circle) {
-                sys.constrain(sc::PtOnCircle::new(g, p, *h))
-                    .map_err(rejected("point on circle"))?
-                    .handle
-            } else {
-                return Err(SketchError::UnknownArc(circle));
-            }
-        }
-        SketchConstraint::PointLineDistance { point, line, d } => {
-            sys.constrain(sc::PtLineDistance::new(
-                g,
-                b.point(point)?,
-                b.line(line)?,
-                f64::from(d),
-                plane,
-            ))
-            .map_err(rejected("point-line distance"))?
-            .handle
-        }
-        SketchConstraint::ArcLineTangent { arc, line, at_end } => {
-            // Tangency needs a real arc: a full circle has no endpoint for the
-            // tangency to attach to.
-            let Some(h) = b.arcs.get(&arc) else {
-                return Err(SketchError::UnknownArc(arc));
-            };
-            sys.constrain(sc::ArcLineTangent::new(g, wp, *h, b.line(line)?, at_end))
-                .map_err(rejected("arc-line tangent"))?
-                .handle
-        }
-        SketchConstraint::SymmetricAboutLine { a, b: bb, line } => {
-            sys.constrain(sc::SymmetricLine::new(
-                g,
-                wp,
-                b.point(a)?,
-                b.point(bb)?,
-                b.line(line)?,
-            ))
-            .map_err(rejected("symmetric about line"))?
-            .handle
-        }
-        SketchConstraint::LengthRatio { a, b: bb, ratio } => {
-            sys.constrain(sc::LengthRatio::new(
-                g,
-                b.line(a)?,
-                b.line(bb)?,
-                f64::from(ratio),
-                plane,
-            ))
-            .map_err(rejected("length ratio"))?
-            .handle
-        }
-        SketchConstraint::LengthDifference {
-            a,
-            b: bb,
-            difference,
-        } => {
-            sys.constrain(sc::LengthDifference::new(
-                g,
-                b.line(a)?,
-                b.line(bb)?,
-                f64::from(difference),
-                plane,
-            ))
-            .map_err(rejected("length difference"))?
-            .handle
-        }
-        SketchConstraint::EqualAngle {
-            a,
-            b: bb,
-            c: cc,
-            d: dd,
-        } => {
-            sys.constrain(sc::EqualAngle::new(
-                g,
-                b.line(a)?,
-                b.line(bb)?,
-                b.line(cc)?,
-                b.line(dd)?,
-                plane,
-                false,
-            ))
-            .map_err(rejected("equal angle"))?
-            .handle
-        }
-        // Unreachable via `add_constraint`, which dispatches only the variants
-        // above. Reported as an error rather than a panic: the workspace bans
-        // panics in product code, and a wrong call site should surface as a
-        // rejected constraint, not a crash.
-        other => {
-            return Err(SketchError::Rejected {
-                what: "extended constraint",
-                detail: format!("{other:?} is not dispatched here"),
-            });
-        }
-    };
-    Ok(handle)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -16,7 +16,8 @@ violation is a **compile error**, not a review comment:
 kernel → (nothing)                  units → (nothing, +bevy for Reflect)
 core → bevy                         geometry → core
 domain → core, geometry             scene → core, domain
-sketch → core, geometry             physics → core, domain, geometry, units
+sketch → core, geometry, slvs-sys   physics → core, domain, geometry, units
+slvs-sys → (nothing; FFI floor)
 signal → kernel, domain, physics    command → scene, signal (+ lower)
 persist → scene, command            interaction → command, persist (+ lower)
 render → interaction, units (+ lower)   script → command, signal (+ lower)
@@ -24,13 +25,25 @@ ui → everything except render
 ```
 
 `gradiance-sketch` is the constrained-sketching crate: the authored sketch
-document, the SolveSpace bridge (`third_party/rust_slvs`), and lowering to a
-`ShapeDef`. The **absence of a `physics` edge is the design**, not an
+document, the SolveSpace bridge, and lowering to a `ShapeDef`. The **absence
+of a `physics` edge is the design**, not an
 oversight — sketching is an authoring-time subsystem and the solver must never
 reach a `Transform`, a joint, or an avian component. `doc`/`solve` stay
 dimension-agnostic (SolveSpace is natively 3D and the bridge builds a real
 workplane); `lower` is the only 2D-specific module, so a 3D backend — or the
 eventual rapier3d move — adds a sibling rather than a rewrite.
+
+`gradiance-slvs-sys` is the FFI floor: hand-written bindings over the
+SolveSpace constraint solver, compiled from `third_party/solvespace/` — a
+**pristine, unmodified** copy of upstream v3.2 (23 files, ~12k lines; see
+`SOURCE.md` and `vendor.sh` there). It is the **only** crate permitted to write
+`unsafe` or link C++, which is why it is its own layer rather than a module of
+`sketch`; `tests/boundaries.rs` enforces both that confinement and the vendored
+tree's pristineness. Local adaptation — the platform shim that replaces
+upstream's mimalloc arena, the layout guard — lives on our side of the line, so
+re-vendoring a newer upstream tag is an overwrite, never a merge. There is no
+fork and no submodule. Rationale, and why Eigen is a system dependency while
+mimalloc was dropped: `docs/solvespace-sourcing-decision.md`.
 
 `gradiance-units` is the typed-SI-quantity crate (`docs/units-decision.md`):
 a bottom node with no `gradiance-*` deps but a minimal `bevy` surface (its
@@ -146,14 +159,18 @@ REPL console + `--script` loader (`crates/gradiance-script/src/bridge.rs`,
 ## Build & test
 
 Toolchain: **rustc ≥ 1.95.0** (Bevy 0.19's floor; CI uses `@stable`). Native
-builds also need `libasound2-dev libudev-dev`.
+builds also need `libasound2-dev libudev-dev`, plus **Eigen**
+(`libeigen3-dev` / `brew install eigen` / `vcpkg install eigen3`), which
+SolveSpace's solver uses for its sparse QR factorisation. Eigen is header-only
+and the only system dependency the solver adds — there is no CMake, bindgen or
+libclang anywhere in the build.
 
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings   # lint gate == CI
 cargo test --workspace                       # includes tests/boundaries.rs (layer rules)
-cargo run                                    # native app; needs libasound2-dev libudev-dev
+cargo run                                    # native app; needs libasound2-dev libudev-dev libeigen3-dev
 cargo run --features dev                     # dev inner loop: dynamic linking + asset hot-reload
 ```
 

@@ -1,17 +1,15 @@
 [workspace]
 members = ["crates/*"]
-# Vendored third-party source. `exclude` is load-bearing, not cosmetic: a path
-# dependency living inside the workspace directory otherwise becomes an
-# *implicit* member, which would subject GPL upstream code to `[workspace.lints]`
-# (it does emit warnings that `-D warnings` would turn into CI failures) and pull
-# it into `cargo test --workspace`.
-exclude = ["third_party/rust_slvs"]
+# `third_party/solvespace/` needs no `exclude`: it is plain C++ source compiled
+# by `gradiance-slvs-sys`'s build script, not a cargo package, so it can never
+# become an implicit workspace member or reach `[workspace.lints]`.
 
 [workspace.package]
 version = "0.2.0"
 edition = "2024"
-# Gradiance links SolveSpace's constraint solver (GPL-3.0) via `slvs`, so the
-# distributed binary is GPL-3.0. See third_party/rust_slvs/PATCH.md.
+# Gradiance links SolveSpace's constraint solver (GPL-3.0) via
+# `gradiance-slvs-sys`, so the distributed binary is GPL-3.0.
+# See third_party/solvespace/SOURCE.md.
 license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
@@ -45,6 +43,9 @@ rfd = "0.17"
 
 # Utilities
 thiserror = "2"
+# Drives the C++ build of the vendored SolveSpace solver
+# (crates/gradiance-slvs-sys/build.rs). No CMake, no bindgen, no libclang.
+cc = "1"
 mimalloc = "0.1"
 
 # Scripting (Tier-A authoring engine): the Lisp control plane is a first-class
@@ -69,6 +70,7 @@ gradiance-geometry = { path = "crates/gradiance-geometry" }
 gradiance-domain = { path = "crates/gradiance-domain" }
 gradiance-scene = { path = "crates/gradiance-scene" }
 gradiance-sketch = { path = "crates/gradiance-sketch" }
+gradiance-slvs-sys = { path = "crates/gradiance-slvs-sys" }
 gradiance-physics = { path = "crates/gradiance-physics" }
 gradiance-signal = { path = "crates/gradiance-signal" }
 gradiance-command = { path = "crates/gradiance-command" }

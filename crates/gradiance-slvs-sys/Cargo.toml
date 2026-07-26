@@ -1,0 +1,16 @@
+[package]
+name = "gradiance-slvs-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Safe bindings for SolveSpace's geometric constraint solver, over the vendored subset in third_party/solvespace"
+# The build script compiles the vendored C++ from outside this package
+# directory, which `cargo package` would not carry. Publishing is not a goal.
+publish = false
+links = "gradiance_slvs"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+cc.workspace = true
