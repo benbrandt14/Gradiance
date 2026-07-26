@@ -71,6 +71,35 @@ MIN_STRUT_LENGTH 0.05`, oscillate `ANGLE_BUFFER 0.05 rad` / `TRANSLATION_BUFFER
 0.02 m`. All metre-scale (~0.5–8 px on screen); screen-space picks
 (`*_PX * cam_scale`) are unaffected by the flip and stay in pixels.
 
+## Force fields — one miss
+
+- `MAX_FIELD_ACCEL` (500 m/s²), `MIN_FIELD_ACCEL`, `GRADIENT_EPS` (0.005 m) and
+  `REFERENCE_FIELD_MASS` (1.0) were all correctly flipped — their comments say
+  so explicitly.
+- **`orbit_speed` floored the radius at `1.0`** — a bare pixel-era guard (1 px)
+  the flip missed. At metre scale it substituted `r = 1 m` into `v = √(a·r)` for
+  *every* orbit set inside a metre, overstating `v` so the body flew off instead
+  of circling. **Fixed** to a hair above zero; the existing test used `r = 160`
+  so it never caught this — a sub-metre case now covers it.
+- Plane friction is correct: it reads the `GRAVITY` constant (not a hard-coded
+  magnitude), and force `μ·m·g` / torque `μ·m·g·k` with `k = √(I/m)` are sound.
+  (Minor: `FRICTION_REST_SPEED` is documented in m/s but also compared against
+  a rad/s spin. Both thresholds are sane, so behavior is fine — noted, not
+  changed.)
+
+## Camera / projection — one miss
+
+- `DEPTH_SLAB` was correctly flipped (`800_000` → `8_000`), and the zoom clamps
+  `MIN_SCALE`/`MAX_SCALE` (0.0005–0.2 m/px) are the flipped ÷100 values.
+- **The perspective near plane stayed at `1.0`** (and so did the matching floor
+  on the rig distance). It was `1.0` *pixel* pre-flip; post-flip that is a **1 m**
+  near plane, so with `perspective_deg > 0` the camera could not approach within
+  a metre and everything nearer was clipped. **Fixed** to `PERSPECTIVE_NEAR =
+  0.01 m` (the pre-flip pixel equivalent). Orthographic mode — the default —
+  uses `±DEPTH_SLAB` and was never affected, which is why this went unnoticed.
+- Grab/hold: `SPRING_GAIN`, `TWIST_KP/KD`, `ANGULAR_DAMP` are scale-invariant
+  gains; `MAX_SPEED` was correctly rescaled (`6000 px/s` → `60 m/s`).
+
 ## avian API usage — OK
 
 - `RevoluteJoint`/`PrismaticJoint` point compliance defaults to `0` (rigid) —

@@ -42,6 +42,13 @@ const GLIDE_RATE: f32 = 8.0;
 /// only define a depth range, so the large slab costs nothing.
 pub const DEPTH_SLAB: f32 = 8_000.0;
 
+/// Perspective near-clip distance (world metres) and the matching floor on the
+/// rig distance. This is ~1 screen pixel at a deep zoom — it was literally
+/// `1.0` *pixel* before the SI flip and the flip missed it, leaving a **1 m**
+/// near plane: in perspective mode (`perspective_deg > 0`) the camera could not
+/// approach within a metre and anything nearer was clipped away.
+const PERSPECTIVE_NEAR: f32 = 0.01;
+
 /// The authoritative camera state; the `Transform` is derived from it.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct CameraRig {
@@ -145,10 +152,10 @@ pub fn apply_projection(
     } else {
         let fov = fov_deg.to_radians();
         // Same world-per-pixel at the focus plane as before the switch.
-        rig.distance = (wpp * viewport_height / (2.0 * (fov * 0.5).tan())).max(1.0);
+        rig.distance = (wpp * viewport_height / (2.0 * (fov * 0.5).tan())).max(PERSPECTIVE_NEAR);
         *projection = Projection::Perspective(PerspectiveProjection {
             fov,
-            near: 1.0,
+            near: PERSPECTIVE_NEAR,
             far: 4.0 * DEPTH_SLAB,
             ..default()
         });
