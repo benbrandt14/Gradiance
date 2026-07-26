@@ -31,22 +31,44 @@ use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
 use serde::{Deserialize, Serialize};
 
-/// Motor settings shared by hinge (angular) and slider (linear) joints.
+// --- Motors ---------------------------------------------------------------
+//
+// A hinge motor and a slider motor are *different physical things*: one drives
+// an angular velocity (rad/s) capped by a torque (N·m), the other a linear
+// velocity (m/s) capped by a force (N). They used to share a single `MotorDef`
+// whose `target_velocity` and `max_force` silently meant one or the other
+// depending on the joint kind — the union behind the rad/s-vs-rpm and
+// torque-vs-force mix-ups. Two types with typed quantities make that
+// unrepresentable: the compiler now rejects a slider motor on a hinge, and the
+// units come from `gradiance-units` so a label can't drift from its value.
+
+/// The velocity-tracking gain (1/s) of the acceleration-based motor model: the
+/// acceleration applied per unit of velocity error. It sets how firmly a motor
+/// holds its target — too low and any load stalls it (the classic "weak
+/// motor"). Instability in this model comes from high *stiffness*, not this
+/// gain, so a firm value is safe.
+pub const DEFAULT_MOTOR_DAMPING: f32 = 30.0;
+/// Default hinge drive speed (rad/s ≈ 19 rpm).
+pub const DEFAULT_MOTOR_ANGULAR_VELOCITY: f32 = 2.0;
+/// Default slider drive speed (m/s).
+pub const DEFAULT_MOTOR_LINEAR_VELOCITY: f32 = 2.0;
+
+/// A **hinge** (revolute) motor: drives toward a target *angular* velocity,
+/// capped by a maximum *torque*.
 ///
-/// Maps onto the engine's native velocity-controlled motor with an
+/// Maps onto avian's native velocity-controlled `AngularMotor` with an
 /// acceleration-based model (`stiffness = 0`, `damping` as configured).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
-pub struct MotorDef {
-    /// Target velocity (rad/s for hinges, m/s for sliders).
-    pub target_velocity: f32,
-    /// Maximum torque (hinge) or force (slider) the motor may exert.
-    pub max_force: f32,
-    /// Velocity-tracking gain of the acceleration-based motor model: the
-    /// angular/linear acceleration applied per unit of velocity error
-    /// (units 1/s). It sets how firmly the motor holds its target velocity —
-    /// too low and any load stalls it (the classic "weak motor"). Instability
-    /// in this model comes from high *stiffness*, not this gain, so a firm
-    /// value is safe.
+pub struct AngularMotorDef {
+    /// Target angular velocity (rad/s; the inspector shows it in rpm).
+    pub target_velocity: gradiance_units::AngularVelocity,
+    /// Maximum torque the motor may exert. `<= 0` means **auto**: the physics
+    /// seam derives the ceiling from the driven body's real angular inertia
+    /// (see [`motor_ceiling`]), so the motor holds firm across body sizes
+    /// without the old fixed `1e7` — which sat above the solver's engagement
+    /// impulse and spiked the rigid pivot off its pin.
+    pub max_torque: gradiance_units::Torque,
+    /// Velocity-tracking gain — see [`DEFAULT_MOTOR_DAMPING`].
     pub damping: f32,
     /// Reverse direction at the joint limits (requires limits).
     pub oscillate: bool,
@@ -54,20 +76,44 @@ pub struct MotorDef {
     pub enabled: bool,
 }
 
-impl Default for MotorDef {
+impl Default for AngularMotorDef {
     fn default() -> Self {
         Self {
-            target_velocity: 2.0,
-            // `<= 0` means **auto**: the physics seam derives the ceiling from
-            // the connected body's real inertia/mass at apply time (see
-            // `motor_ceiling`), so a motor holds firm across body sizes without
-            // the old fixed `1e7` — which was above the solver's engagement
-            // impulse and spiked the rigid pivot off its pin.
-            max_force: 0.0,
-            // A firm velocity gain: ~2-frame time constant at 60 fps, so the
-            // motor actually holds its target under load instead of drifting
-            // (the earlier default of 1.0 read as "motors are very weak").
-            damping: 30.0,
+            target_velocity: gradiance_units::AngularVelocity(DEFAULT_MOTOR_ANGULAR_VELOCITY),
+            max_torque: gradiance_units::Torque(0.0), // auto
+            damping: DEFAULT_MOTOR_DAMPING,
+            oscillate: false,
+            enabled: true,
+        }
+    }
+}
+
+/// A **slider** (prismatic) motor: drives toward a target *linear* velocity,
+/// capped by a maximum *force*.
+///
+/// Maps onto avian's native velocity-controlled `LinearMotor`, same model as
+/// [`AngularMotorDef`].
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+pub struct LinearMotorDef {
+    /// Target linear velocity (m/s).
+    pub target_velocity: gradiance_units::Velocity,
+    /// Maximum force the motor may exert; `<= 0` = **auto** (scaled from the
+    /// driven body's mass — see [`AngularMotorDef::max_torque`]).
+    pub max_force: gradiance_units::Force,
+    /// Velocity-tracking gain — see [`DEFAULT_MOTOR_DAMPING`].
+    pub damping: f32,
+    /// Reverse direction at the joint limits (requires limits).
+    pub oscillate: bool,
+    /// Whether the motor is powered.
+    pub enabled: bool,
+}
+
+impl Default for LinearMotorDef {
+    fn default() -> Self {
+        Self {
+            target_velocity: gradiance_units::Velocity(DEFAULT_MOTOR_LINEAR_VELOCITY),
+            max_force: gradiance_units::Force(0.0), // auto
+            damping: DEFAULT_MOTOR_DAMPING,
             oscillate: false,
             enabled: true,
         }
@@ -91,8 +137,8 @@ pub enum JointKind {
     Hinge {
         /// Optional `[min, max]` relative-angle limits (radians).
         limits: Option<[f32; 2]>,
-        /// Optional angular motor.
-        motor: Option<MotorDef>,
+        /// Optional angular motor (rad/s driven, torque capped).
+        motor: Option<AngularMotorDef>,
     },
     /// Prismatic: bodies slide along `axis` through the anchor.
     Slider {
@@ -100,8 +146,8 @@ pub enum JointKind {
         axis: Vec2,
         /// Optional `[min, max]` translation limits (m).
         limits: Option<[f32; 2]>,
-        /// Optional linear motor.
-        motor: Option<MotorDef>,
+        /// Optional linear motor (m/s driven, force capped).
+        motor: Option<LinearMotorDef>,
     },
     /// Spring-damper strut: a soft distance constraint between the two
     /// anchors, drawn as a coil. Maps onto avian's `DistanceJoint`

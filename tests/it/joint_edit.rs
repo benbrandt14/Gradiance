@@ -7,7 +7,7 @@
 use crate::harness::{box_record, entity_of, paused_app, undo};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
-use gradiance::domain::joint::MotorDef;
+use gradiance::domain::joint::AngularMotorDef;
 use gradiance::interaction::selection::{SelectedJoint, Selection};
 use gradiance::prelude::*;
 
@@ -127,7 +127,7 @@ fn editing_a_selected_joint_adds_a_motor_and_undoes() {
     let mut new = old.clone();
     new.kind = JointKind::Hinge {
         limits: None,
-        motor: Some(MotorDef::default()),
+        motor: Some(AngularMotorDef::default()),
     };
     app.world_mut().write_message(PropertyEditIntent {
         changes: vec![PropertyChange {

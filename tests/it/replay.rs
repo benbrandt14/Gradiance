@@ -115,7 +115,7 @@ fn hinge(a: StableId, b: StableId, anchor_a: Vec2, anchor_b: Vec2) -> JointDef {
     JointDef {
         kind: JointKind::Hinge {
             limits: Some([-1.0, 1.0]),
-            motor: Some(MotorDef::default()),
+            motor: Some(AngularMotorDef::default()),
         },
         common: JointCommon::default(),
         body_a: a,

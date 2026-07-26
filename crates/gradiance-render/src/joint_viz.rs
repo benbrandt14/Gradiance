@@ -9,7 +9,7 @@ use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
 use gradiance_core::units::PosRot;
-use gradiance_domain::joint::{JointDef, JointKind, MotorDef};
+use gradiance_domain::joint::{AngularMotorDef, JointDef, JointKind, LinearMotorDef};
 use gradiance_interaction::joint_edit::{
     HINGE_LIMIT_RADIUS_PX, HINGE_RING_PX, JointLimitDrag, slider_span,
 };
@@ -185,15 +185,20 @@ fn draw_limit_arc(
 }
 
 /// A curved arrow around the hinge showing spin direction & strength.
-fn draw_angular_motor(gizmos: &mut Gizmos<OverlayGizmos>, anchor: Vec2, motor: MotorDef, s: f32) {
-    if !motor.enabled || motor.target_velocity.abs() < 1e-3 {
+fn draw_angular_motor(
+    gizmos: &mut Gizmos<OverlayGizmos>,
+    anchor: Vec2,
+    motor: AngularMotorDef,
+    s: f32,
+) {
+    if !motor.enabled || motor.target_velocity.value().abs() < 1e-3 {
         return;
     }
     let radius = 14.0 * s;
     // Sweep grows with drive speed: direction *and* magnitude at a glance
     // (feedback 4.1 "visually indicate motor state").
-    let sweep =
-        motor.target_velocity.signum() * (1.2 + motor.target_velocity.abs().min(10.0) * 0.16); // 1.2..2.8 rad
+    let sweep = motor.target_velocity.value().signum()
+        * (1.2 + motor.target_velocity.value().abs().min(10.0) * 0.16); // 1.2..2.8 rad
     let steps = 10;
     let mut prev = anchor + Vec2::from_angle(0.0) * radius;
     for i in 1..=steps {
@@ -256,19 +261,19 @@ fn draw_linear_motor(
     gizmos: &mut Gizmos<OverlayGizmos>,
     anchor: Vec2,
     dir: Vec2,
-    motor: MotorDef,
+    motor: LinearMotorDef,
     s: f32,
 ) {
-    if !motor.enabled || motor.target_velocity.abs() < 1e-3 {
+    if !motor.enabled || motor.target_velocity.value().abs() < 1e-3 {
         return;
     }
-    let d = dir * motor.target_velocity.signum();
+    let d = dir * motor.target_velocity.value().signum();
     // Arrow length grows with drive speed (16..34 px at screen scale). The
     // speed→length map is in SI now: target_velocity is m/s (was px/s before
     // the flip), so the cap is 6 m/s and the gain 3 px per m/s — the SI flip
     // left this at the pixel-era `.min(600.0) * 0.03`, which never grew for a
     // real m/s slider, so the arrow read as a dead stub.
-    let tip = anchor + d * (16.0 + motor.target_velocity.abs().min(6.0) * 3.0) * s;
+    let tip = anchor + d * (16.0 + motor.target_velocity.value().abs().min(6.0) * 3.0) * s;
     gizmos.line_2d(anchor, tip, css::GOLD);
     let back = -d;
     let perp = Vec2::new(-d.y, d.x);

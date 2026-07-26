@@ -113,7 +113,14 @@ fn intent_registration_pulls_in_transitive_types() {
     assert!(has(std::any::TypeId::of::<ShapeDef>()), "ShapeDef");
     assert!(has(std::any::TypeId::of::<BodyPhysics>()), "BodyPhysics");
     assert!(has(std::any::TypeId::of::<JointDef>()), "JointDef");
-    assert!(has(std::any::TypeId::of::<MotorDef>()), "MotorDef");
+    assert!(
+        has(std::any::TypeId::of::<AngularMotorDef>()),
+        "AngularMotorDef"
+    );
+    assert!(
+        has(std::any::TypeId::of::<LinearMotorDef>()),
+        "LinearMotorDef"
+    );
     assert!(
         has(std::any::TypeId::of::<avian2d::prelude::RigidBody>()),
         "avian RigidBody (transitive, read-total path)"
@@ -170,7 +177,7 @@ fn spawn_joint_intent_round_trips_through_reflection() {
         def: JointDef {
             kind: JointKind::Hinge {
                 limits: Some([-1.0, 1.0]),
-                motor: Some(MotorDef::default()),
+                motor: Some(AngularMotorDef::default()),
             },
             common: JointCommon {
                 collide_connected: true,

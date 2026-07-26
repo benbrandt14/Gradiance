@@ -74,8 +74,8 @@ fn motorized_hinge_oscillates_between_its_limits() {
         JointDef {
             kind: JointKind::Hinge {
                 limits: Some(limits),
-                motor: Some(MotorDef {
-                    target_velocity: 3.0,
+                motor: Some(AngularMotorDef {
+                    target_velocity: gradiance::units::AngularVelocity(3.0),
                     oscillate: true,
                     ..default()
                 }),
@@ -829,8 +829,8 @@ fn world_pinned_tilted_motor_oscillates() {
         JointDef {
             kind: JointKind::Hinge {
                 limits: Some(limits),
-                motor: Some(MotorDef {
-                    target_velocity: 3.0,
+                motor: Some(AngularMotorDef {
+                    target_velocity: gradiance::units::AngularVelocity(3.0),
                     oscillate: true,
                     ..default()
                 }),
@@ -893,8 +893,8 @@ fn motorized_hinge_holds_its_pivot() {
         JointDef {
             kind: JointKind::Hinge {
                 limits: None,
-                motor: Some(MotorDef {
-                    target_velocity: 6.0, // auto ceiling (max_force = 0)
+                motor: Some(AngularMotorDef {
+                    target_velocity: gradiance::units::AngularVelocity(6.0), // auto ceiling (max_torque = 0)
                     ..default()
                 }),
             },
@@ -995,8 +995,8 @@ fn motorized_slider_drives_body_along_its_axis() {
             kind: JointKind::Slider {
                 axis: Vec2::X,
                 limits: Some([0.0, 200.0]),
-                motor: Some(MotorDef {
-                    target_velocity: 30.0, // along +X; auto ceiling (max_force = 0)
+                motor: Some(LinearMotorDef {
+                    target_velocity: gradiance::units::Velocity(30.0), // along +X; auto ceiling (max_force = 0)
                     ..default()
                 }),
             },

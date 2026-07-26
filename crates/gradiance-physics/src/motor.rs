@@ -65,7 +65,7 @@ pub fn drive_oscillating_motors(
                     rel,
                     *min,
                     *max,
-                    m.target_velocity,
+                    m.target_velocity.value(),
                     ANGLE_BUFFER,
                 ) {
                     joint.motor.target_velocity = v;
@@ -90,7 +90,7 @@ pub fn drive_oscillating_motors(
                     t,
                     *min,
                     *max,
-                    m.target_velocity,
+                    m.target_velocity.value(),
                     TRANSLATION_BUFFER,
                 ) {
                     joint.motor.target_velocity = v;
