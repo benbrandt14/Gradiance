@@ -36,7 +36,7 @@ pub struct Tracer {
     /// How long a sample stays visible, in simulated seconds (the trail
     /// ages on the physics clock, so pausing freezes it).
     pub fade_secs: f32,
-    /// Trail thickness: dot radius (`Dots`) / point size (world px).
+    /// Trail thickness: dot radius (`Dots`) / point size (world metres).
     #[serde(default = "default_size")]
     pub size: f32,
     /// How the trail is rendered.

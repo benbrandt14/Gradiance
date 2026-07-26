@@ -50,22 +50,25 @@ pub fn drive_oscillating_motors(
                     continue;
                 };
                 let rot_b = def.body_b.and_then(|id| index.entity(id)).map_or(0.0, rot);
-                // Measure the relative angle in avian's constraint frame: the
-                // rest basis (`rest_rot_a - rest_rot_b`, the value handed to
-                // `with_local_basis2`) is what `with_angle_limits` is relative
-                // to, and makes `rel == 0` at the creation pose. The old code
-                // omitted it, so the reversal never lined up with the actual
-                // limit — the motor just drove into the stop and stalled
-                // ("oscillate does nothing"). `+target_velocity` drives
-                // body B positively relative to body A, i.e. increases `rel`,
-                // so reversing at each bound heads back toward the interior.
-                let basis = def.rest_rot_a - def.rest_rot_b;
-                let rel = gradiance_geometry::wrap_angle((rot_b - rot(a)) + basis);
-                let speed = m.target_velocity.abs();
-                if rel >= max - ANGLE_BUFFER {
-                    joint.motor.target_velocity = -speed;
-                } else if rel <= min + ANGLE_BUFFER {
-                    joint.motor.target_velocity = speed;
+                // Reverse in avian's constraint frame (rest basis included, so
+                // the reversal lines up with the real limit — the old code
+                // omitted the basis and the motor just drove into the stop).
+                // Both the angle and the reversal decision are pure, tested
+                // domain functions.
+                let rel = gradiance_domain::joint::hinge_limit_angle(
+                    rot(a),
+                    rot_b,
+                    def.rest_rot_a,
+                    def.rest_rot_b,
+                );
+                if let Some(v) = gradiance_domain::joint::oscillate_target(
+                    rel,
+                    *min,
+                    *max,
+                    m.target_velocity,
+                    ANGLE_BUFFER,
+                ) {
+                    joint.motor.target_velocity = v;
                 }
             }
             JointKind::Slider {
@@ -83,11 +86,14 @@ pub fn drive_oscillating_motors(
                 let anchor_a_world = pos(a) + Vec2::from_angle(rot(a)).rotate(def.anchor_a);
                 let anchor_b_world = pos(b) + Vec2::from_angle(rot(b)).rotate(def.anchor_b);
                 let t = (anchor_b_world - anchor_a_world).dot(dir);
-                let speed = m.target_velocity.abs();
-                if t >= max - TRANSLATION_BUFFER {
-                    joint.motor.target_velocity = -speed;
-                } else if t <= min + TRANSLATION_BUFFER {
-                    joint.motor.target_velocity = speed;
+                if let Some(v) = gradiance_domain::joint::oscillate_target(
+                    t,
+                    *min,
+                    *max,
+                    m.target_velocity,
+                    TRANSLATION_BUFFER,
+                ) {
+                    joint.motor.target_velocity = v;
                 }
             }
             _ => {}

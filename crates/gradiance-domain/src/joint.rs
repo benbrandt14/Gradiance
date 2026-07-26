@@ -202,6 +202,33 @@ fn shape_inertia_proxy(shape: &crate::shape::ShapeDef) -> f32 {
     area * (w * w + h * h) / 12.0
 }
 
+/// A hinge's relative angle **in avian's constraint frame** — the deviation of
+/// body B from body A relative to the joint's creation pose, which is what
+/// `with_angle_limits` (and the rest basis handed to `with_local_basis2`)
+/// measures. Returns `0` at the creation pose, so the authored `[min, max]`
+/// limits apply directly. Pure so the oscillate seam (`physics::motor`) stays
+/// testable without a running solver.
+#[must_use]
+pub fn hinge_limit_angle(rot_a: f32, rot_b: f32, rest_rot_a: f32, rest_rot_b: f32) -> f32 {
+    gradiance_geometry::wrap_angle((rot_b - rot_a) + (rest_rot_a - rest_rot_b))
+}
+
+/// The target velocity an oscillating motor should hold given its current
+/// limit-frame angle `rel` (see [`hinge_limit_angle`]) — reverse toward the
+/// interior once within `buffer` of either bound, otherwise keep driving
+/// (`None`). `+velocity` drives `rel` upward, so the max bound reverses to
+/// `-speed` and the min bound to `+speed`. Pure and unit-tested.
+#[must_use]
+pub fn oscillate_target(rel: f32, min: f32, max: f32, speed: f32, buffer: f32) -> Option<f32> {
+    if rel >= max - buffer {
+        Some(-speed.abs())
+    } else if rel <= min + buffer {
+        Some(speed.abs())
+    } else {
+        None
+    }
+}
+
 /// The authored definition of one constraint between two bodies (or one
 /// body and the world).
 ///
@@ -305,6 +332,30 @@ mod tests {
         // A ground half-plane is never motored; it still returns a usable,
         // finite ceiling rather than zero or a NaN.
         assert!(default_motor_max_torque(&ShapeDef::HalfPlane) >= MIN_MOTOR_EFFORT);
+    }
+
+    #[test]
+    fn hinge_limit_angle_is_zero_at_creation() {
+        // At the creation pose the limit-frame angle must be 0 so authored
+        // [min, max] apply directly.
+        assert!(hinge_limit_angle(0.7, 0.2, 0.7, 0.2).abs() < 1e-6);
+        assert!(hinge_limit_angle(-1.3, 2.4, -1.3, 2.4).abs() < 1e-6);
+        // A world pin (body B is the static anchor at rot 0, rest 0): the
+        // angle is body A's deviation from its authored rest.
+        let rest_a = 0.5;
+        assert!((hinge_limit_angle(0.5 + 0.3, 0.0, rest_a, 0.0) - (-0.3)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn oscillate_reverses_at_each_bound() {
+        let (min, max, speed, buf) = (-0.5, 0.5, 2.0, 0.05);
+        // Interior: keep driving (no change).
+        assert_eq!(oscillate_target(0.0, min, max, speed, buf), None);
+        // Past the max bound: reverse to negative; past min: reverse to positive.
+        assert_eq!(oscillate_target(0.48, min, max, speed, buf), Some(-2.0));
+        assert_eq!(oscillate_target(-0.48, min, max, speed, buf), Some(2.0));
+        // Sign of the input speed doesn't matter — direction comes from the bound.
+        assert_eq!(oscillate_target(0.48, min, max, -2.0, buf), Some(-2.0));
     }
 
     fn hinge(body_b: Option<StableId>, rest_rot_a: f32) -> JointDef {

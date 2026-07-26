@@ -203,7 +203,7 @@ pub struct CutIntent {
     pub a: Vec2,
     /// Stroke end, world space.
     pub b: Vec2,
-    /// Stroke width, world pixels.
+    /// Stroke width, world metres.
     pub width: f32,
 }
 
