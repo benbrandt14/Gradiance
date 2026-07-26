@@ -83,8 +83,14 @@ pub fn falloff_factor(falloff: FieldFalloff, d: f32) -> f32 {
 
 /// The circular-orbit speed for field acceleration `a` at radius `r` —
 /// `v = √(a·r)`, the limit-cycle condition `a = v²/r`. Pure.
+///
+/// The radius is floored just above zero purely to keep a degenerate
+/// zero-radius orbit defined. It used to be floored at `1.0` — a pixel-era
+/// guard (1 px) the SI flip missed: at metre scale that silently substituted
+/// `r = 1 m` for every orbit set inside a metre, overstating `v` so the body
+/// flew off instead of circling.
 pub fn orbit_speed(accel: f32, radius: f32) -> f32 {
-    (accel.abs() * radius.max(1.0)).sqrt()
+    (accel.abs() * radius.max(f32::EPSILON)).sqrt()
 }
 
 /// **The sampling cut-point.** Superposed field acceleration at any world
@@ -295,5 +301,17 @@ mod tests {
         let (a, r) = (250.0, 160.0);
         let v = orbit_speed(a, r);
         assert!((v * v / r - a).abs() < 1e-3, "a = v²/r");
+    }
+
+    #[test]
+    fn orbit_speed_holds_at_sub_metre_radii() {
+        // SI scale: bodies orbit at tens of centimetres. The old pixel-era
+        // `radius.max(1.0)` floor substituted 1 m here and overstated v by 2x.
+        let (a, r) = (20.0, 0.25);
+        let v = orbit_speed(a, r);
+        assert!(
+            (v * v / r - a).abs() < 1e-3,
+            "a = v²/r must hold inside 1 m (v = {v})"
+        );
     }
 }
