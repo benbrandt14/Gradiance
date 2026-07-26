@@ -20,7 +20,9 @@ use std::collections::HashMap;
 use slvs::{
     System, constraint as sc,
     element::AsHandle,
-    entity::{ArcOfCircle, Circle, Distance, EntityHandle, LineSegment, Normal, Point, Workplane},
+    entity::{
+        ArcOfCircle, Circle, Cubic, Distance, EntityHandle, LineSegment, Normal, Point, Workplane,
+    },
     group::Group,
     system::{FailReason, SolveResult},
     utils::make_quaternion,
@@ -106,6 +108,7 @@ struct Built {
     lines: HashMap<SketchId, EntityHandle<LineSegment>>,
     arcs: HashMap<SketchId, EntityHandle<ArcOfCircle>>,
     circles: HashMap<SketchId, EntityHandle<Circle>>,
+    cubics: HashMap<SketchId, EntityHandle<Cubic>>,
     /// Radius parameter backing each circle, so solved radii can be read back.
     radii: HashMap<SketchId, EntityHandle<Distance>>,
     /// slvs constraint handle -> index into [`SketchDoc::constraints`].
@@ -229,6 +232,24 @@ fn build(
                     .sketch(ArcOfCircle::new(g, wp, pc, ps, pe))
                     .map_err(rejected("arc"))?;
                 b.arcs.insert(id, h);
+            }
+            SketchEntity::Cubic {
+                id,
+                start,
+                start_control,
+                end_control,
+                end,
+            } => {
+                let h = sys
+                    .sketch(Cubic::new(
+                        g,
+                        b.point(start)?,
+                        b.point(start_control)?,
+                        b.point(end_control)?,
+                        b.point(end)?,
+                    ))
+                    .map_err(rejected("cubic"))?;
+                b.cubics.insert(id, h);
             }
             SketchEntity::Circle { id, center, radius } => {
                 let pc = b.point(center)?;
@@ -368,6 +389,9 @@ fn add_constraint(
         | SketchConstraint::LengthRatio { .. }
         | SketchConstraint::LengthDifference { .. }
         | SketchConstraint::EqualAngle { .. } => add_extended_constraint(sys, b, g, wp, c)?,
+        SketchConstraint::CubicLineTangent { .. } | SketchConstraint::CurveCurveTangent { .. } => {
+            add_tangent_constraint(sys, b, g, wp, c)?
+        }
         SketchConstraint::Diameter { .. } | SketchConstraint::EqualRadius(..) => {
             add_radial_constraint(sys, b, g, c)?
         }
@@ -509,6 +533,85 @@ fn write_back(sys: &System, doc: &mut SketchDoc, built: &Built) {
 /// Split out purely to keep [`add_constraint`] within the line budget; the
 /// dispatch arm there lists these explicitly rather than using a catch-all, so
 /// adding a constraint variant still fails to compile until it is mapped here.
+/// The tangency constraints, split out because they resolve across two handle
+/// maps and would otherwise push `add_constraint` past its line budget.
+fn add_tangent_constraint(
+    sys: &mut System,
+    b: &Built,
+    g: Group,
+    wp: EntityHandle<Workplane>,
+    c: SketchConstraint,
+) -> Result<u32, SketchError> {
+    let handle = match c {
+        SketchConstraint::CubicLineTangent {
+            cubic,
+            line,
+            at_end,
+        } => {
+            let Some(h) = b.cubics.get(&cubic) else {
+                return Err(SketchError::UnknownArc(cubic));
+            };
+            sys.constrain(sc::CubicLineTangent::new(
+                g,
+                *h,
+                b.line(line)?,
+                at_end,
+                Some(wp),
+            ))
+            .map_err(rejected("cubic-line tangent"))?
+            .handle
+        }
+        SketchConstraint::CurveCurveTangent {
+            a,
+            b: bb,
+            a_at_end,
+            b_at_end,
+        } => {
+            // Tangency is generic over "arc or bezier", but the two live in
+            // different handle maps, so each side is resolved independently
+            // and the four combinations are spelled out rather than erased.
+            let arc_a = b.arcs.get(&a).copied();
+            let cub_a = b.cubics.get(&a).copied();
+            let arc_b = b.arcs.get(&bb).copied();
+            let cub_b = b.cubics.get(&bb).copied();
+            match (arc_a, cub_a, arc_b, cub_b) {
+                (Some(x), _, Some(y), _) => {
+                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
+                        .map_err(rejected("curve tangent"))?
+                        .handle
+                }
+                (Some(x), _, _, Some(y)) => {
+                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
+                        .map_err(rejected("curve tangent"))?
+                        .handle
+                }
+                (_, Some(x), Some(y), _) => {
+                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
+                        .map_err(rejected("curve tangent"))?
+                        .handle
+                }
+                (_, Some(x), _, Some(y)) => {
+                    sys.constrain(sc::CurveCurveTangent::new(g, wp, x, y, a_at_end, b_at_end))
+                        .map_err(rejected("curve tangent"))?
+                        .handle
+                }
+                _ => {
+                    return Err(SketchError::UnknownArc(
+                        if arc_a.is_some() || cub_a.is_some() {
+                            bb
+                        } else {
+                            a
+                        },
+                    ));
+                }
+            }
+        }
+        // `add_constraint` only routes the two tangency variants here.
+        _ => return Err(SketchError::UnknownArc(SketchId(u32::MAX))),
+    };
+    Ok(handle)
+}
+
 fn add_extended_constraint(
     sys: &mut System,
     b: &Built,
@@ -885,6 +988,55 @@ mod tests {
         // A full circle has no endpoint for the tangency to attach to, so this
         // is a structural error rather than a solver failure.
         assert_eq!(solve(&mut d, None), Err(SketchError::UnknownArc(circle)));
+    }
+
+    #[test]
+    fn a_bezier_survives_a_solve_and_keeps_its_endpoints() {
+        let mut d = SketchDoc::new();
+        let s0 = d.add_point(Vec2::new(0.0, 0.0));
+        let c0 = d.add_point(Vec2::new(1.0, 2.0));
+        let c1 = d.add_point(Vec2::new(3.0, 2.0));
+        let s1 = d.add_point(Vec2::new(4.0, 0.0));
+        d.point_mut(s0).unwrap().fixed = true;
+        d.point_mut(s1).unwrap().fixed = true;
+        d.add_cubic(s0, c0, c1, s1);
+
+        let out = solve(&mut d, None).unwrap();
+        assert!(out.is_solved(), "solver failed on a bezier: {out:?}");
+        assert!((d.point(s0).unwrap().at - Vec2::ZERO).length() < 1e-4);
+        assert!((d.point(s1).unwrap().at - Vec2::new(4.0, 0.0)).length() < 1e-4);
+    }
+
+    #[test]
+    fn a_bezier_can_be_held_tangent_to_a_line() {
+        let mut d = SketchDoc::new();
+        // A horizontal line the bezier must leave smoothly.
+        let la = d.add_point(Vec2::new(-2.0, 0.0));
+        let lb = d.add_point(Vec2::new(0.0, 0.0));
+        d.point_mut(la).unwrap().fixed = true;
+        d.point_mut(lb).unwrap().fixed = true;
+        let line = d.add_line(la, lb);
+
+        let c0 = d.add_point(Vec2::new(1.0, 1.5));
+        let c1 = d.add_point(Vec2::new(3.0, 2.0));
+        let s1 = d.add_point(Vec2::new(4.0, 0.0));
+        d.point_mut(s1).unwrap().fixed = true;
+        let cubic = d.add_cubic(lb, c0, c1, s1);
+        d.constrain(SketchConstraint::CubicLineTangent {
+            cubic,
+            line,
+            at_end: false,
+        });
+
+        let out = solve(&mut d, None).unwrap();
+        assert!(out.is_solved(), "tangency solve failed: {out:?}");
+        // Leaving the joint tangent to a horizontal line means the first
+        // control point must sit level with it.
+        let y = d.point(c0).unwrap().at.y;
+        assert!(
+            y.abs() < 1e-3,
+            "the outgoing control point should be level with the line, got y = {y}"
+        );
     }
 
     #[test]

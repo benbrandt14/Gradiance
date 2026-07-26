@@ -65,6 +65,23 @@ pub enum SketchEntity {
         /// End point.
         end: SketchId,
     },
+    /// Cubic bezier: two endpoints with a control point apiece.
+    ///
+    /// SolveSpace's `Cubic` is a single bezier segment rather than a general
+    /// NURBS, so tangency is the strongest continuity available — enough for
+    /// smooth joins, short of curvature matching.
+    Cubic {
+        /// Identity within the sketch.
+        id: SketchId,
+        /// Start point.
+        start: SketchId,
+        /// Control point leaving `start`.
+        start_control: SketchId,
+        /// Control point entering `end`.
+        end_control: SketchId,
+        /// End point.
+        end: SketchId,
+    },
     /// Full circle about `center`.
     ///
     /// The radius is a solver parameter, so it can be driven by a
@@ -86,10 +103,25 @@ impl SketchEntity {
         match *self {
             SketchEntity::Line { id, .. }
             | SketchEntity::Arc { id, .. }
+            | SketchEntity::Cubic { id, .. }
             | SketchEntity::Circle { id, .. } => id,
         }
     }
 }
+
+/// Evaluate a cubic bezier at `t` in `[0, 1]`.
+///
+/// Shared by lowering and hit-testing so a bezier is discretized the same way
+/// wherever it is consumed — a curve that picks differently from how it draws
+/// is a curve users cannot click.
+#[must_use]
+pub fn cubic_at(p0: Vec2, c0: Vec2, c1: Vec2, p1: Vec2, t: f32) -> Vec2 {
+    let u = 1.0 - t;
+    p0 * (u * u * u) + c0 * (3.0 * u * u * t) + c1 * (3.0 * u * t * t) + p1 * (t * t * t)
+}
+
+/// Samples used to discretize one bezier segment.
+pub const CUBIC_SEGMENTS: usize = 24;
 
 /// A relationship the solver must satisfy.
 ///
@@ -174,6 +206,29 @@ pub enum SketchConstraint {
         line: SketchId,
         /// Whether the tangency is at the arc's end rather than its start.
         at_end: bool,
+    },
+    /// A cubic bezier meets a line tangentially.
+    CubicLineTangent {
+        /// The bezier.
+        cubic: SketchId,
+        /// The line it is tangent to.
+        line: SketchId,
+        /// Whether the tangency is at the bezier's end rather than its start.
+        at_end: bool,
+    },
+    /// Two curves (arc or bezier) meet tangentially.
+    ///
+    /// This is the smooth-join condition between spline segments — the
+    /// strongest continuity SolveSpace offers, short of curvature matching.
+    CurveCurveTangent {
+        /// First curve.
+        a: SketchId,
+        /// Second curve.
+        b: SketchId,
+        /// Whether the first curve joins at its end rather than its start.
+        a_at_end: bool,
+        /// Whether the second curve joins at its end rather than its start.
+        b_at_end: bool,
     },
     /// Two points are mirror images about a line.
     SymmetricAboutLine {
@@ -277,6 +332,25 @@ impl SketchDoc {
             id,
             center,
             start,
+            end,
+        });
+        id
+    }
+
+    /// Add a cubic bezier, returning its identity.
+    pub fn add_cubic(
+        &mut self,
+        start: SketchId,
+        start_control: SketchId,
+        end_control: SketchId,
+        end: SketchId,
+    ) -> SketchId {
+        let id = self.fresh_id();
+        self.entities.push(SketchEntity::Cubic {
+            id,
+            start,
+            start_control,
+            end_control,
             end,
         });
         id

@@ -163,6 +163,7 @@ enum Kind {
     Line,
     Arc,
     Circle,
+    Cubic,
 }
 
 fn kind_of(doc: &SketchDoc, id: SketchId) -> Option<Kind> {
@@ -170,6 +171,7 @@ fn kind_of(doc: &SketchDoc, id: SketchId) -> Option<Kind> {
         SketchEntity::Line { .. } => Some(Kind::Line),
         SketchEntity::Arc { .. } => Some(Kind::Arc),
         SketchEntity::Circle { .. } => Some(Kind::Circle),
+        SketchEntity::Cubic { .. } => Some(Kind::Cubic),
     }
 }
 
@@ -178,10 +180,12 @@ fn kind_of(doc: &SketchDoc, id: SketchId) -> Option<Kind> {
 struct Shape {
     points: usize,
     lines: usize,
-    /// Arcs and circles together — most radius/tangency constraints accept
-    /// either.
+    /// Arcs and circles together — the things that have a radius.
     curves: usize,
     arcs: usize,
+    /// Beziers. Tangency accepts them; radius constraints do not, since a
+    /// bezier has no single radius to dimension.
+    cubics: usize,
 }
 
 fn shape_of(doc: &SketchDoc, sel: &SketchSelection) -> Shape {
@@ -190,6 +194,7 @@ fn shape_of(doc: &SketchDoc, sel: &SketchSelection) -> Shape {
         lines: 0,
         curves: 0,
         arcs: 0,
+        cubics: 0,
     };
     for e in &sel.entities {
         match kind_of(doc, *e) {
@@ -199,6 +204,7 @@ fn shape_of(doc: &SketchDoc, sel: &SketchSelection) -> Shape {
                 s.arcs += 1;
             }
             Some(Kind::Circle) => s.curves += 1,
+            Some(Kind::Cubic) => s.cubics += 1,
             None => {}
         }
     }
@@ -217,30 +223,37 @@ pub fn applicable(doc: &SketchDoc, sel: &SketchSelection) -> Vec<ConstraintKind>
     let s = shape_of(doc, sel);
     let mut out = Vec::new();
 
-    match (s.points, s.lines, s.curves) {
+    // Tangency is the one rule that spans several shapes, so it is decided
+    // once here rather than repeated across arms: a line pairs with an arc or
+    // a bezier, and two curves pair with each other.
+    let tangentable = s.arcs + s.cubics;
+    match (s.points, s.lines, s.curves, s.cubics) {
         // Two points: coincide them, or dimension the gap.
-        (2, 0, 0) => out.extend([K::Coincident, K::Distance]),
+        (2, 0, 0, 0) => out.extend([K::Coincident, K::Distance]),
         // A point and a line.
-        (1, 1, 0) => out.extend([K::PointOnLine, K::Midpoint, K::PointLineDistance]),
-        // A point and a curve.
-        (1, 0, 1) => out.push(K::PointOnCircle),
+        (1, 1, 0, 0) => out.extend([K::PointOnLine, K::Midpoint, K::PointLineDistance]),
+        // A point and a circle or arc.
+        (1, 0, 1, 0) => out.push(K::PointOnCircle),
         // Two points and a line: mirror the pair about it.
-        (2, 1, 0) => out.push(K::Symmetric),
+        (2, 1, 0, 0) => out.push(K::Symmetric),
         // One line on its own.
-        (0, 1, 0) => out.extend([K::Horizontal, K::Vertical]),
+        (0, 1, 0, 0) => out.extend([K::Horizontal, K::Vertical]),
         // Two lines.
-        (0, 2, 0) => out.extend([K::Parallel, K::Perpendicular, K::EqualLength, K::Angle]),
-        // A line and a curve: tangency needs a real arc, not a full circle,
-        // because a circle has no endpoint for the tangency to attach to.
-        (0, 1, 1) => {
-            if s.arcs == 1 {
+        (0, 2, 0, 0) => out.extend([K::Parallel, K::Perpendicular, K::EqualLength, K::Angle]),
+        // A line and one curve. Tangency needs a real arc or a bezier — a full
+        // circle has no endpoint for the tangency to attach to.
+        (0, 1, _, _) if tangentable == 1 => out.push(K::Tangent),
+        // One circle or arc.
+        (0, 0, 1, 0) => out.push(K::Diameter),
+        // Two circles or arcs: equal radius, and tangency when both are arcs.
+        (0, 0, 2, 0) => {
+            out.push(K::EqualRadius);
+            if s.arcs == 2 {
                 out.push(K::Tangent);
             }
         }
-        // One curve.
-        (0, 0, 1) => out.push(K::Diameter),
-        // Two curves.
-        (0, 0, 2) => out.push(K::EqualRadius),
+        // Any two tangentable curves that are not two radius-bearing circles.
+        (0, 0, _, _) if tangentable == 2 => out.push(K::Tangent),
         _ => {}
     }
 
@@ -344,11 +357,7 @@ pub fn apply(
             b: line_at(1).ok_or_else(miss)?,
             degrees: need(value)?,
         },
-        K::Tangent => SketchConstraint::ArcLineTangent {
-            arc: curve_at(0).ok_or_else(miss)?,
-            line: line_at(0).ok_or_else(miss)?,
-            at_end: false,
-        },
+        K::Tangent => tangent_constraint(doc, sel).ok_or_else(miss)?,
         K::EqualRadius => SketchConstraint::EqualRadius(
             curve_at(0).ok_or_else(miss)?,
             curve_at(1).ok_or_else(miss)?,
@@ -360,6 +369,49 @@ pub fn apply(
     };
     doc.constrain(c);
     Ok(c)
+}
+
+/// Resolve "make these touch smoothly" into the specific SolveSpace constraint
+/// the selection calls for.
+///
+/// Three different constraints wear one name in the UI, because to a user they
+/// are the same request: a bezier against a line, an arc against a line, or two
+/// curves against each other.
+fn tangent_constraint(doc: &SketchDoc, sel: &SketchSelection) -> Option<SketchConstraint> {
+    let of_kind = |k: Kind| -> Vec<SketchId> {
+        sel.entities
+            .iter()
+            .filter(|e| kind_of(doc, **e) == Some(k))
+            .copied()
+            .collect()
+    };
+    let lines = of_kind(Kind::Line);
+    let arcs = of_kind(Kind::Arc);
+    let cubics = of_kind(Kind::Cubic);
+
+    match (lines.first(), arcs.first(), cubics.first()) {
+        (Some(&line), _, Some(&cubic)) => Some(SketchConstraint::CubicLineTangent {
+            cubic,
+            line,
+            at_end: false,
+        }),
+        (Some(&line), Some(&arc), None) => Some(SketchConstraint::ArcLineTangent {
+            arc,
+            line,
+            at_end: false,
+        }),
+        _ => {
+            let mut curves = arcs;
+            curves.extend(cubics);
+            let (&a, &b) = (curves.first()?, curves.get(1)?);
+            Some(SketchConstraint::CurveCurveTangent {
+                a,
+                b,
+                a_at_end: true,
+                b_at_end: false,
+            })
+        }
+    }
 }
 
 /// Remove the constraint at `index`, if it exists.
@@ -457,6 +509,77 @@ mod tests {
         let arc = d.add_arc(c, s, t);
         let got = applicable(&d, &sel(&[], &[e[0], arc]));
         assert!(got.contains(&ConstraintKind::Tangent), "got {got:?}");
+    }
+
+    /// A bezier plus the points it needs.
+    fn add_cubic(d: &mut SketchDoc, at: Vec2) -> SketchId {
+        let s0 = d.add_point(at);
+        let c0 = d.add_point(at + Vec2::new(1.0, 2.0));
+        let c1 = d.add_point(at + Vec2::new(3.0, 2.0));
+        let s1 = d.add_point(at + Vec2::new(4.0, 0.0));
+        d.add_cubic(s0, c0, c1, s1)
+    }
+
+    #[test]
+    fn a_line_and_a_bezier_offer_tangency_not_the_lone_line_menu() {
+        let (mut d, _, e) = scene();
+        let cubic = add_cubic(&mut d, Vec2::new(40.0, 40.0));
+        let got = applicable(&d, &sel(&[], &[e[0], cubic]));
+        assert!(got.contains(&ConstraintKind::Tangent), "got {got:?}");
+        assert!(
+            !got.contains(&ConstraintKind::Horizontal),
+            "a two-entity selection must not fall through to the lone-line menu: {got:?}"
+        );
+    }
+
+    #[test]
+    fn two_beziers_offer_tangency_but_not_equal_radius() {
+        let (mut d, _, _) = scene();
+        let a = add_cubic(&mut d, Vec2::new(40.0, 40.0));
+        let b = add_cubic(&mut d, Vec2::new(60.0, 60.0));
+        let got = applicable(&d, &sel(&[], &[a, b]));
+        assert!(got.contains(&ConstraintKind::Tangent), "got {got:?}");
+        assert!(
+            !got.contains(&ConstraintKind::EqualRadius),
+            "a bezier has no radius to equate: {got:?}"
+        );
+        assert!(
+            !got.contains(&ConstraintKind::Diameter),
+            "nor a diameter to dimension: {got:?}"
+        );
+    }
+
+    #[test]
+    fn tangency_picks_the_constraint_that_matches_the_shapes() {
+        let (mut d, _, e) = scene();
+        let cubic = add_cubic(&mut d, Vec2::new(40.0, 40.0));
+
+        // Line + bezier -> the cubic-specific constraint.
+        let c = apply(
+            &mut d,
+            ConstraintKind::Tangent,
+            &sel(&[], &[e[0], cubic]),
+            None,
+        )
+        .unwrap();
+        assert!(
+            matches!(c, SketchConstraint::CubicLineTangent { .. }),
+            "{c:?}"
+        );
+
+        // Two curves -> the curve-to-curve constraint.
+        let other = add_cubic(&mut d, Vec2::new(70.0, 70.0));
+        let c = apply(
+            &mut d,
+            ConstraintKind::Tangent,
+            &sel(&[], &[cubic, other]),
+            None,
+        )
+        .unwrap();
+        assert!(
+            matches!(c, SketchConstraint::CurveCurveTangent { .. }),
+            "{c:?}"
+        );
     }
 
     #[test]

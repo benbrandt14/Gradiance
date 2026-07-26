@@ -12,7 +12,7 @@
 
 use bevy::math::Vec2;
 
-use crate::doc::{SketchDoc, SketchEntity, SketchId};
+use crate::doc::{CUBIC_SEGMENTS, SketchDoc, SketchEntity, SketchId, cubic_at};
 
 /// What a hover landed on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,102 +74,145 @@ pub fn closest_on_segment(p: Vec2, a: Vec2, b: Vec2) -> (Vec2, f32) {
 /// can snap to them.
 #[must_use]
 pub fn pick(doc: &SketchDoc, cursor: Vec2, tol: f32) -> Option<PickHit> {
-    let mut best: Option<PickHit> = None;
-    let mut consider = |hit: PickHit| {
-        if hit.distance > tol {
-            return;
-        }
-        // Stronger kinds win outright; ties break on proximity. This is why
-        // an endpoint beats the line under the same cursor.
-        let better = match &best {
-            None => true,
-            Some(b) => (hit.kind, hit.distance) < (b.kind, b.distance),
-        };
-        if better {
-            best = Some(hit);
-        }
-    };
-
-    for p in &doc.points {
-        consider(PickHit {
+    let mut hits: Vec<PickHit> = doc
+        .points
+        .iter()
+        .map(|p| PickHit {
             target: SketchTarget::Point(p.id),
             kind: SnapKind::Point,
             at: p.at,
             distance: cursor.distance(p.at),
-        });
-    }
+        })
+        .collect();
 
     for e in &doc.entities {
         match *e {
-            SketchEntity::Line { id, a, b } => {
-                let (Some(pa), Some(pb)) = (doc.point(a), doc.point(b)) else {
-                    continue;
-                };
-                let mid = (pa.at + pb.at) * 0.5;
-                consider(PickHit {
-                    target: SketchTarget::Entity(id),
-                    kind: SnapKind::Midpoint,
-                    at: mid,
-                    distance: cursor.distance(mid),
-                });
-                let (q, d) = closest_on_segment(cursor, pa.at, pb.at);
-                consider(PickHit {
-                    target: SketchTarget::Entity(id),
-                    kind: SnapKind::OnEntity,
-                    at: q,
-                    distance: d,
-                });
-            }
+            SketchEntity::Line { id, a, b } => line_hits(doc, id, a, b, cursor, &mut hits),
             SketchEntity::Circle { id, center, radius } => {
-                let Some(c) = doc.point(center) else { continue };
-                consider(PickHit {
-                    target: SketchTarget::Entity(id),
-                    kind: SnapKind::Center,
-                    at: c.at,
-                    distance: cursor.distance(c.at),
-                });
-                // Nearest point on the rim, along the centre-to-cursor ray.
-                let away = cursor - c.at;
-                if away.length_squared() > f32::EPSILON {
-                    let q = c.at + away.normalize() * radius;
-                    consider(PickHit {
-                        target: SketchTarget::Entity(id),
-                        kind: SnapKind::OnEntity,
-                        at: q,
-                        distance: cursor.distance(q),
-                    });
-                }
+                round_hits(doc, id, center, radius, cursor, &mut hits);
             }
             SketchEntity::Arc {
-                id,
-                center,
-                start,
-                end: _,
+                id, center, start, ..
             } => {
-                let (Some(c), Some(s)) = (doc.point(center), doc.point(start)) else {
-                    continue;
-                };
-                consider(PickHit {
-                    target: SketchTarget::Entity(id),
-                    kind: SnapKind::Center,
-                    at: c.at,
-                    distance: cursor.distance(c.at),
-                });
-                let radius = s.at.distance(c.at);
-                let away = cursor - c.at;
-                if away.length_squared() > f32::EPSILON {
-                    let q = c.at + away.normalize() * radius;
-                    consider(PickHit {
-                        target: SketchTarget::Entity(id),
-                        kind: SnapKind::OnEntity,
-                        at: q,
-                        distance: cursor.distance(q),
-                    });
+                if let Some(s) = doc.point(start)
+                    && let Some(c) = doc.point(center)
+                {
+                    round_hits(doc, id, center, s.at.distance(c.at), cursor, &mut hits);
                 }
             }
+            SketchEntity::Cubic {
+                id,
+                start,
+                start_control,
+                end_control,
+                end,
+            } => cubic_hits(
+                doc,
+                id,
+                [start, start_control, end_control, end],
+                cursor,
+                &mut hits,
+            ),
         }
     }
-    best
+
+    // Stronger kinds win outright; ties break on proximity. This is why an
+    // endpoint beats the line it sits on under the same cursor.
+    hits.into_iter()
+        .filter(|h| h.distance <= tol)
+        .min_by(|x, y| {
+            (x.kind, x.distance)
+                .partial_cmp(&(y.kind, y.distance))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+}
+
+/// A line offers its midpoint and the projection onto it.
+fn line_hits(
+    doc: &SketchDoc,
+    id: SketchId,
+    a: SketchId,
+    b: SketchId,
+    cursor: Vec2,
+    out: &mut Vec<PickHit>,
+) {
+    let (Some(pa), Some(pb)) = (doc.point(a), doc.point(b)) else {
+        return;
+    };
+    let mid = (pa.at + pb.at) * 0.5;
+    out.push(PickHit {
+        target: SketchTarget::Entity(id),
+        kind: SnapKind::Midpoint,
+        at: mid,
+        distance: cursor.distance(mid),
+    });
+    let (q, d) = closest_on_segment(cursor, pa.at, pb.at);
+    out.push(PickHit {
+        target: SketchTarget::Entity(id),
+        kind: SnapKind::OnEntity,
+        at: q,
+        distance: d,
+    });
+}
+
+/// A circle or arc offers its centre and the nearest point on its rim.
+fn round_hits(
+    doc: &SketchDoc,
+    id: SketchId,
+    center: SketchId,
+    radius: f32,
+    cursor: Vec2,
+    out: &mut Vec<PickHit>,
+) {
+    let Some(c) = doc.point(center) else { return };
+    out.push(PickHit {
+        target: SketchTarget::Entity(id),
+        kind: SnapKind::Center,
+        at: c.at,
+        distance: cursor.distance(c.at),
+    });
+    let away = cursor - c.at;
+    if away.length_squared() > f32::EPSILON {
+        let q = c.at + away.normalize() * radius;
+        out.push(PickHit {
+            target: SketchTarget::Entity(id),
+            kind: SnapKind::OnEntity,
+            at: q,
+            distance: cursor.distance(q),
+        });
+    }
+}
+
+/// A bezier is hit-tested against the same discretization lowering uses, so
+/// what you can click matches what gets built.
+fn cubic_hits(
+    doc: &SketchDoc,
+    id: SketchId,
+    pts: [SketchId; 4],
+    cursor: Vec2,
+    out: &mut Vec<PickHit>,
+) {
+    let Some([p0, c0, c1, p1]) = pts
+        .iter()
+        .map(|i| doc.point(*i).map(|p| p.at))
+        .collect::<Option<Vec<_>>>()
+        .and_then(|v| <[Vec2; 4]>::try_from(v).ok())
+    else {
+        return;
+    };
+    let mut prev = p0;
+    for i in 1..=CUBIC_SEGMENTS {
+        let t = (i as f32) / (CUBIC_SEGMENTS as f32);
+        let next = cubic_at(p0, c0, c1, p1, t);
+        let (q, d) = closest_on_segment(cursor, prev, next);
+        out.push(PickHit {
+            target: SketchTarget::Entity(id),
+            kind: SnapKind::OnEntity,
+            at: q,
+            distance: d,
+        });
+        prev = next;
+    }
 }
 
 #[cfg(test)]

@@ -16,7 +16,7 @@ use gradiance_geometry::shape::ShapeDef;
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::doc::{SketchDoc, SketchEntity, SketchId};
+use crate::doc::{CUBIC_SEGMENTS, SketchDoc, SketchEntity, SketchId, cubic_at};
 
 /// Why a sketch could not be turned into body geometry.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -217,7 +217,11 @@ fn trace_loops(
 fn endpoints(e: &SketchEntity) -> (SketchId, SketchId) {
     match *e {
         SketchEntity::Line { a, b, .. } => (a, b),
-        SketchEntity::Arc { start, end, .. } => (start, end),
+        // An arc and a bezier are both "a curve between two endpoints" as far
+        // as loop tracing is concerned; only sampling differs.
+        SketchEntity::Arc { start, end, .. } | SketchEntity::Cubic { start, end, .. } => {
+            (start, end)
+        }
         // Circles are never chained; they are emitted as whole rings.
         SketchEntity::Circle { center, .. } => (center, center),
     }
@@ -242,6 +246,26 @@ fn sample(
             // The document stores arcs counter-clockwise from `start`; a walk
             // may traverse them either way.
             let mut pts = sample_arc(c, radius, a - c, b - c);
+            if from != start {
+                pts.reverse();
+            }
+            pts.pop();
+            Ok(pts)
+        }
+        SketchEntity::Cubic {
+            start,
+            start_control,
+            end_control,
+            end,
+            ..
+        } => {
+            let (p0, c0, c1, p1) = (at(start)?, at(start_control)?, at(end_control)?, at(end)?);
+            let mut pts: Vec<Vec2> = (0..=CUBIC_SEGMENTS)
+                .map(|i| {
+                    let t = (i as f32) / (CUBIC_SEGMENTS as f32);
+                    cubic_at(p0, c0, c1, p1, t)
+                })
+                .collect();
             if from != start {
                 pts.reverse();
             }
