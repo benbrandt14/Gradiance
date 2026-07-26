@@ -15,6 +15,7 @@ pub mod node;
 pub mod props;
 pub mod settings;
 pub use gradiance_geometry::shape;
+pub use gradiance_sketch::doc as sketch;
 pub mod signal;
 pub mod tracer;
 

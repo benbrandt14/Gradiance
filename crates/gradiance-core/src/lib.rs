@@ -18,6 +18,8 @@ impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<states::GameState>();
         app.init_state::<states::ToolState>();
+        app.init_state::<states::EditorMode>();
+        app.init_state::<states::SketchTool>();
         app.init_resource::<ids::IdIndex>();
     }
 }

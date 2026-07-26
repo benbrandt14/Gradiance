@@ -23,13 +23,14 @@ pub mod handles;
 pub mod node_tools;
 pub mod polygon_tool;
 pub mod select;
+pub mod sketch_line;
 pub mod strut_tool;
 
 use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_tool};
 
 use crate::InteractionSet;
 use bevy::prelude::*;
-use gradiance_core::states::ToolState;
+use gradiance_core::states::{EditorMode, SketchTool, ToolState};
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::shape::ShapeDef;
@@ -63,6 +64,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<polygon_tool::PolygonTool>();
         app.init_resource::<strut_tool::StrutDraft>();
         app.init_resource::<node_tools::TracerTool>();
+        app.init_resource::<sketch_line::SketchLineTool>();
 
         app.add_systems(
             Update,
@@ -94,6 +96,19 @@ impl Plugin for ToolsPlugin {
                 run_manip_tool::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
                 run_manip_tool::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
             )
+                // Every direct tool is inert outside Direct mode. Gating the
+                // whole tuple once is what makes "sketch mode does not replace
+                // the existing tools" mechanical rather than a convention each
+                // new tool has to remember.
+                .run_if(in_state(EditorMode::Direct))
+                .in_set(ToolDriverSet)
+                .in_set(InteractionSet)
+                .before(gradiance_command::CommandDispatchSet),
+        );
+        app.add_systems(
+            Update,
+            (run_draft_tool::<sketch_line::SketchLineTool>.run_if(in_state(SketchTool::Line)),)
+                .run_if(in_state(EditorMode::Sketch))
                 .in_set(ToolDriverSet)
                 .in_set(InteractionSet)
                 .before(gradiance_command::CommandDispatchSet),
@@ -126,7 +141,14 @@ impl Plugin for ToolsPlugin {
                     draw_manip_preview::<strut_tool::StrutDraft>.run_if(in_state(ToolState::Strut)),
                     draw_manip_preview::<node_tools::TracerTool>
                         .run_if(in_state(ToolState::Tracer)),
-                ),
+                )
+                    .run_if(in_state(EditorMode::Direct)),
+            );
+            app.add_systems(
+                Update,
+                (draw_draft_preview::<sketch_line::SketchLineTool>
+                    .run_if(in_state(SketchTool::Line)),)
+                    .run_if(in_state(EditorMode::Sketch)),
             );
         }
     }
@@ -195,5 +217,6 @@ pub fn new_body_record(shape: ShapeDef, pos: Vec2, rot: f32) -> gradiance_scene:
         groups: Vec::new(),
         field: None,
         tracer: None,
+        sketch: None,
     }
 }

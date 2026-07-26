@@ -16,6 +16,7 @@ gradiance-geometry.workspace = true
 gradiance-persist.workspace = true
 gradiance-physics.workspace = true
 gradiance-scene.workspace = true
+gradiance-sketch.workspace = true
 avian2d.workspace = true
 bevy.workspace = true
 leafwing-input-manager.workspace = true

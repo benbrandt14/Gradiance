@@ -137,6 +137,12 @@ impl CutCommand {
                             appearance: original.appearance,
                             depth: original.depth,
                             layers: None,
+                            // A severed fragment is no longer the profile the
+                            // sketch described, so its constraints would name
+                            // geometry that no longer exists. Cutting a
+                            // sketched body deliberately drops the sketch and
+                            // leaves a plain polygon body.
+                            sketch: None,
                             groups: original.groups.clone(),
                             // Cut pieces inherit the parent's field source
                             // and tracer.

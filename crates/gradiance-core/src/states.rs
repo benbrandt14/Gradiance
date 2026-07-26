@@ -50,3 +50,41 @@ pub enum ToolState {
     /// under the cursor, else free).
     Tracer,
 }
+
+/// Which authoring surface is active.
+///
+/// Sketch mode is **additive**: it does not replace or reimplement any of the
+/// [`ToolState`] tools. Those are gated to [`EditorMode::Direct`], so they keep
+/// working exactly as before and are simply inert while sketching — the
+/// separation is mechanical rather than a matter of care.
+///
+/// Bodies drawn by the direct tools are conceptually unconstrained sketches
+/// with a creation shortcut, but they carry no sketch document; only bodies
+/// authored in [`EditorMode::Sketch`] retain one.
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
+pub enum EditorMode {
+    /// Direct manipulation: the twelve `ToolState` tools.
+    #[default]
+    Direct,
+    /// Constrained sketching, solved by SolveSpace.
+    ///
+    /// The simulation is paused on entry — solving geometry against a running
+    /// sim is meaningless — and the previous run state is restored on exit.
+    Sketch,
+}
+
+/// The active tool *within* sketch mode.
+///
+/// Gated on [`EditorMode::Sketch`]; meaningless in [`EditorMode::Direct`].
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
+pub enum SketchTool {
+    /// Select and drag sketch geometry, re-solving live.
+    #[default]
+    Select,
+    /// Chain line segments, inferring constraints as you draw.
+    Line,
+    /// Place circles.
+    Circle,
+    /// Apply an explicit constraint to the current sketch selection.
+    Constrain,
+}

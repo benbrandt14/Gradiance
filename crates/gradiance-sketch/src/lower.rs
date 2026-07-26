@@ -50,6 +50,21 @@ pub enum LowerError {
 /// Returns [`LowerError`] if the profile is empty, open, degenerate, or refers
 /// to missing points.
 pub fn to_contours(doc: &SketchDoc) -> Result<Contours, LowerError> {
+    let mut contours = raw_contours(doc)?;
+    // Body-local space is centroid-relative.
+    let c = contours.centroid();
+    for v in contours
+        .outline
+        .iter_mut()
+        .chain(contours.holes.iter_mut().flatten())
+    {
+        *v -= c;
+    }
+    Ok(contours)
+}
+
+/// Trace the profile into wound rings, still in sketch space.
+fn raw_contours(doc: &SketchDoc) -> Result<Contours, LowerError> {
     let pos: HashMap<SketchId, Vec2> = doc.points.iter().map(|p| (p.id, p.at)).collect();
 
     let profile: Vec<&SketchEntity> = doc
@@ -95,21 +110,10 @@ pub fn to_contours(doc: &SketchDoc) -> Result<Contours, LowerError> {
         return Err(LowerError::Degenerate);
     };
 
-    let mut contours = Contours {
+    Ok(Contours {
         outline: wind(outline, true),
         holes: iter.map(|r| wind(r, false)).collect(),
-    };
-
-    // Body-local space is centroid-relative.
-    let c = contours.centroid();
-    for v in contours
-        .outline
-        .iter_mut()
-        .chain(contours.holes.iter_mut().flatten())
-    {
-        *v -= c;
-    }
-    Ok(contours)
+    })
 }
 
 /// Lower a solved sketch straight to a [`ShapeDef`].
@@ -118,11 +122,30 @@ pub fn to_contours(doc: &SketchDoc) -> Result<Contours, LowerError> {
 ///
 /// As [`to_contours`].
 pub fn to_shape(doc: &SketchDoc) -> Result<ShapeDef, LowerError> {
+    Ok(to_shape_with_origin(doc)?.0)
+}
+
+/// Lower a solved sketch, also reporting where the body belongs.
+///
+/// [`to_contours`] returns geometry in body-local (centroid-relative) space,
+/// which on its own loses track of where in the world the sketch was drawn.
+/// This returns both halves: the shape, and the sketch-space centroid that
+/// becomes the body's pose. A caller that spawns a body needs both.
+///
+/// # Errors
+///
+/// As [`to_contours`].
+pub fn to_shape_with_origin(doc: &SketchDoc) -> Result<(ShapeDef, Vec2), LowerError> {
+    let raw = raw_contours(doc)?;
+    let origin = raw.centroid();
     let c = to_contours(doc)?;
-    Ok(ShapeDef::Polygon {
-        outline: c.outline,
-        holes: c.holes,
-    })
+    Ok((
+        ShapeDef::Polygon {
+            outline: c.outline,
+            holes: c.holes,
+        },
+        origin,
+    ))
 }
 
 /// Force a ring's winding: counter-clockwise when `ccw`, clockwise otherwise.

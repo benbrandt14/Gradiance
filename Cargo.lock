@@ -3757,6 +3757,7 @@ dependencies = [
  "glam 0.32.1",
  "gradiance-core",
  "gradiance-geometry",
+ "gradiance-sketch",
  "gradiance-units",
  "serde",
  "thiserror 2.0.18",
@@ -3788,6 +3789,7 @@ dependencies = [
  "gradiance-persist",
  "gradiance-physics",
  "gradiance-scene",
+ "gradiance-sketch",
  "leafwing-input-manager",
 ]
 

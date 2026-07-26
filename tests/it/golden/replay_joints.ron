@@ -50,6 +50,7 @@
             groups: [],
             field: None,
             tracer: None,
+            sketch: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000002"),
@@ -99,6 +100,7 @@
             groups: [],
             field: None,
             tracer: None,
+            sketch: None,
         ),
     ],
     joints: [
