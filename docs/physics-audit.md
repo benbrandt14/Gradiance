@@ -79,11 +79,27 @@ MIN_STRUT_LENGTH 0.05`, oscillate `ANGLE_BUFFER 0.05 rad` / `TRANSLATION_BUFFER
 - Derived state (`Collider`, `Mass`, avian joint entities) is rebuilt by
   `Changed<>` sync and never serialized — matches invariant #5.
 
-## Needs in-app validation (can't run the app headless here)
+## Validated headless (avian steps in the `tests/it/` harness)
 
-1. **Motor pivot drift / launching** — the recalibrated ceiling should resolve
-   both; the earlier reports predate it. Re-test.
-2. **Oscillate reversal sign** — the basis term is `0` at creation and matches
-   avian's documented "+velocity drives body B positively relative to A"; if a
-   world-pin hinge reverses at the wrong end, the basis sign is the one knob.
-3. **Motor feel** — `damping` and the ceiling coefficients are the tuning knobs.
+avian runs without a window, so the motor fixes are covered in CI, not just
+"tested in-app":
+
+1. **Pivot stability** (`motorized_hinge_holds_its_pivot`) — a strong motor
+   spins a large arm without shoving the pivot off its pin, and actually spins
+   it (guards against both the old drift *and* the "negligible torque" end).
+2. **Oscillation with a rest basis** (`world_pinned_tilted_motor_oscillates`) —
+   a world-pin hinge authored at a tilt reverses at *both* bounds, the case the
+   zero-basis body-body test missed. Confirms the basis-inclusive reversal
+   frame (and its sign).
+3. The auto ceiling is derived from real `ComputedAngularInertia`/`ComputedMass`
+   in `joint_sync`, so it applies to authored, programmatic, and loaded motors
+   alike.
+
+## Still feel-dependent (nudge in-app)
+
+- **Motor feel** — `damping = 30` (gain) and the ceiling coefficients
+  (`MOTOR_TORQUE_PER_INERTIA` / `MOTOR_FORCE_PER_MASS`) are the tuning knobs;
+  the stable-band structure is fixed, the absolute feel is taste.
+- **Contact "launch"** — the bounded ceiling removes the impulse spike a
+  dropped body used to get; a rotating surface still imparts its tangential
+  surface velocity (expected). Re-check the magnitude in-app.
