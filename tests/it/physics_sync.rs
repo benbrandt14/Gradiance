@@ -491,7 +491,9 @@ fn world_pin_prismatic_locks_rotation_by_default() {
         "the guided plank never twists (rot after 5s = {rot})"
     );
 
-    // Undoing the joint spawn removes the lock it added.
+    // Undoing the joint spawn removes the lock it added. The 5s run above is
+    // its own undo step, so it takes the first press.
+    undo(&mut app);
     undo(&mut app);
     let plank_entity = entity_of(&app, plank_id).unwrap();
     assert!(
@@ -658,6 +660,9 @@ fn tracers_sample_fading_trails_and_toggle_undoably() {
         "the derived trail is removed with its marker"
     );
 
+    // The sim is running here, so the first press rewinds the run (one undo
+    // step, exactly as pause-then-undo would); the second reverts the edit.
+    undo(&mut app);
     undo(&mut app);
     let entity = entity_of(&app, id).unwrap();
     assert_eq!(app.world().get::<Tracer>(entity), Some(&tracer));
@@ -719,6 +724,8 @@ fn box_size_density_and_restitution_edits_apply_and_undo() {
         "restitution applied"
     );
 
+    // Running sim: first press rewinds the run, second reverts the edit.
+    undo(&mut app);
     undo(&mut app);
     let entity = entity_of(&app, id).unwrap();
     assert_eq!(app.world().get::<ShapeDef>(entity).unwrap(), &old_shape);

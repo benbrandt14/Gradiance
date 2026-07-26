@@ -34,12 +34,6 @@ impl<R: AuthoredRecord> GameCommand for SpawnCommand<R> {
         Ok(())
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let entity = resolve(world, self.record.id())?;
-        world.despawn(entity);
-        Ok(())
-    }
-
     fn name(&self) -> &'static str {
         self.name
     }
@@ -51,23 +45,12 @@ impl<R: AuthoredRecord> GameCommand for SpawnCommand<R> {
 pub struct DeleteCommand {
     /// Bodies and/or behavior nodes to delete.
     pub targets: Vec<StableId>,
-    /// Captured body state for undo; filled during `apply`.
-    records: Vec<BodyRecord>,
-    /// Captured joints (targeted or cascaded); filled during `apply`.
-    joint_records: Vec<gradiance_scene::JointRecord>,
-    /// Captured behavior nodes among the targets; filled during `apply`.
-    node_records: Vec<NodeRecord>,
 }
 
 impl DeleteCommand {
     /// Builds a delete command for `targets` (bodies and/or nodes).
     pub fn new(targets: Vec<StableId>) -> Self {
-        Self {
-            targets,
-            records: Vec::new(),
-            joint_records: Vec::new(),
-            node_records: Vec::new(),
-        }
+        Self { targets }
     }
 }
 
@@ -115,9 +98,6 @@ impl GameCommand for DeleteCommand {
                 node_pairs.push((entity, record));
             }
         }
-        self.records = body_pairs.iter().map(|(_, r)| r.clone()).collect();
-        self.joint_records = joints.iter().map(|(_, r)| r.clone()).collect();
-        self.node_records = node_pairs.iter().map(|(_, r)| r.clone()).collect();
         for (entity, _) in joints {
             world.despawn(entity);
         }
@@ -126,19 +106,6 @@ impl GameCommand for DeleteCommand {
         }
         for (entity, _) in node_pairs {
             world.despawn(entity);
-        }
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        for record in &self.records {
-            record.spawn(world);
-        }
-        for record in &self.joint_records {
-            record.spawn(world);
-        }
-        for record in &self.node_records {
-            record.spawn(world);
         }
         Ok(())
     }
@@ -225,96 +192,55 @@ pub(crate) fn clone_internal_joints(
 /// Duplicates a set of bodies at an offset, including the joints internal
 /// to the set (a duplicated hinge assembly stays hinged).
 ///
-/// Clone ids are generated once on first apply and reused on redo, so
-/// later commands referencing the clones stay valid across undo/redo.
+/// Clone ids are minted fresh on the single apply; the stack snapshots the
+/// result, so nothing has to be replayed.
 #[derive(Debug)]
 pub struct DuplicateCommand {
     /// Bodies to clone.
     pub sources: Vec<StableId>,
     /// World-space offset applied to each clone.
     pub offset: Vec2,
-    clones: Vec<BodyRecord>,
-    joint_clones: Vec<gradiance_scene::JointRecord>,
-    /// Behavior nodes attached to a duplicated body, cloned and remapped.
-    node_clones: Vec<NodeRecord>,
-    /// Signal bindings referencing a duplicated body, cloned and remapped
-    /// (names captured so undo removes exactly them). "Behavior copies with
-    /// the base object" (`docs/signal-dataflow.md`).
-    binding_clones: Vec<String>,
 }
 
 impl DuplicateCommand {
     /// Builds a duplicate command for `sources` offset by `offset`.
     pub fn new(sources: Vec<StableId>, offset: Vec2) -> Self {
-        Self {
-            sources,
-            offset,
-            clones: Vec::new(),
-            joint_clones: Vec::new(),
-            node_clones: Vec::new(),
-            binding_clones: Vec::new(),
-        }
+        Self { sources, offset }
     }
 }
 
 impl GameCommand for DuplicateCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        if self.clones.is_empty() {
-            // First application: capture sources and mint clone records.
-            let mut clones = Vec::with_capacity(self.sources.len());
-            let mut id_map = Vec::with_capacity(self.sources.len());
-            for &id in &self.sources {
-                let entity = resolve(world, id)?;
-                let mut record =
-                    BodyRecord::capture(world, entity).ok_or(CommandError::MissingEntity(id))?;
-                record.id = StableId::new();
-                record.pose.pos += self.offset;
-                id_map.push((id, record.id));
-                clones.push(record);
-            }
-            if clones.is_empty() {
-                return Err(CommandError::NoEffect);
-            }
-            let offset = self.offset;
-            self.joint_clones = clone_internal_joints(world, &id_map, |p| p + offset, 0.0);
-            self.node_clones = clone_attached_nodes(world, &id_map, offset);
-            self.binding_clones = clone_bindings(world, &id_map);
-            let mut next_group = next_group_id(world);
-            remap_clone_groups(&mut clones, &mut next_group);
-            self.clones = clones;
+        let mut clones = Vec::with_capacity(self.sources.len());
+        let mut id_map = Vec::with_capacity(self.sources.len());
+        for &id in &self.sources {
+            let entity = resolve(world, id)?;
+            let mut record =
+                BodyRecord::capture(world, entity).ok_or(CommandError::MissingEntity(id))?;
+            record.id = StableId::new();
+            record.pose.pos += self.offset;
+            id_map.push((id, record.id));
+            clones.push(record);
         }
-        for record in &self.clones {
+        if clones.is_empty() {
+            return Err(CommandError::NoEffect);
+        }
+        let offset = self.offset;
+        let joint_clones = clone_internal_joints(world, &id_map, |p| p + offset, 0.0);
+        let node_clones = clone_attached_nodes(world, &id_map, offset);
+        // Installs the cloned bindings into `SignalBindings` (the returned
+        // names were only ever needed to undo them).
+        clone_bindings(world, &id_map);
+        let mut next_group = next_group_id(world);
+        remap_clone_groups(&mut clones, &mut next_group);
+        for record in &clones {
             record.spawn(world);
         }
-        for record in &self.joint_clones {
+        for record in &joint_clones {
             record.spawn(world);
         }
-        for record in &self.node_clones {
+        for record in &node_clones {
             record.spawn(world);
-        }
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        for record in &self.node_clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        for record in &self.joint_clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        for record in &self.clones {
-            let entity = resolve(world, record.id)?;
-            world.despawn(entity);
-        }
-        // Remove the binding clones this command added (config seam).
-        if !self.binding_clones.is_empty()
-            && let Some(mut bindings) = world.get_resource_mut::<gradiance_signal::SignalBindings>()
-        {
-            bindings
-                .0
-                .retain(|b| !self.binding_clones.contains(&b.name));
         }
         Ok(())
     }

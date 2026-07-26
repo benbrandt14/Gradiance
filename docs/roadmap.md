@@ -621,33 +621,57 @@ as-is — that crate is being built out separately). `cargo tree -d` duplicates 
 all unavoidable transitive versions. egui-family crates below must pin the egui
 version `bevy_egui = 0.41` uses (CI verifies) — the coupling to watch.
 
-### A. Persistence & undo on `bevy_save` (rows 1, 2)
+### A. Persistence & undo — *delivered without `bevy_save`* (rows 1, 2)
 
-Adopt `bevy_save`; undo/redo = `checkpoint()` per committed command +
-`rollback()` (reflection-driven, auto-captures authored components), and save/
-load use its RON pathway — retiring `gradiance-scene`'s bespoke records and the
-~150 LOC of per-command `undo()` bodies. Only authored components are captured;
-derived state (`Collider`, meshes, avian joints) still rebuilds via `Changed<>`
-sync. **Prerequisite (row 2):** move `Selection.entities` / `SelectedJoint` (and
-any cross-frame `Entity` holder — `interaction/selection.rs:40,114`) to
-`StableId`, since restore re-mints `Entity`. Tests via **insta** (row 11) over
-serialized snapshots + intent-replay.
+**Status: done (2026-07-25).** The goals of this row — snapshot-based reversal,
+"undo the sim start", and the removal of per-command `undo()` bodies — landed on
+the bespoke `gradiance-scene` records instead of `bevy_save`, which stays blocked
+upstream (see the note below). What shipped:
 
-> **BLOCKED — upstream Bevy-version gap (2026-07-24).** `bevy_save`'s latest
-> release (2.0.1+4, Aug 2025) and its `main` branch (3.0.0+4) both require
-> `bevy ^0.16.1`; this workspace is hard-pinned to `bevy = "=0.19.0"`. The crate
-> is ~three Bevy releases behind us and has not published a 0.16→0.19 update, so
-> the reflection/`Scene` APIs it builds on don't match. Adopting the *published*
-> crate is not possible today. Options, in preference order: **(a)** wait for /
-> nudge an upstream 0.19 release; **(b)** vendor-and-port `bevy_save` to 0.19
-> (a real fork with its own maintenance cost — cuts against the external-first
-> directive, so a deliberate decision); **(c)** defer §A and keep the bespoke
-> `gradiance-scene` format until upstream lands. The **prerequisite** (cross-frame
-> `Entity` → `StableId`) is independently valid under invariant #3 but its only
-> payoff is restore-safety, which is gated on this milestone — so it is *not*
-> worth the 25-file, ~74-site reversal (and the per-frame `IdIndex` resolution
-> cost) until a path above is chosen. `Selection` documents holding `Entity` as a
-> sanctioned ergonomic choice today, so this is a design reversal, not a bugfix.
+- **`CommandStack` is a snapshot timeline** (#202): every committed command
+  captures a `SceneRecord`, and undo/redo move a cursor and restore it. This is
+  `checkpoint()`/`rollback()` in all but name.
+- **Differential restore** (#202): a restore writes only what the step changed,
+  so undoing an edit never clobbers bodies that have settled under simulation,
+  and the derived rebuild stays bounded by the diff.
+- **A simulation run is one undo step** (#202), recorded at the play/pause
+  boundary — this is the "checkpoint at sim-start makes undoing the sim start
+  fall out" payoff the row was written for.
+- **Undo mid-run auto-pauses** and closes the run first (#203), so the first
+  press reverts the run rather than chasing a moving world.
+- **Scene-content settings are undoable** (#203) — sim, render, lighting,
+  scenery; grid/snap stay workstation config. `EnvironmentRecord::scene_content_eq`
+  is the single classification point.
+- **~270 LOC of reversal code deleted** (#203 + follow-up): the 14 per-command
+  `undo()` bodies, the `GameCommand::undo` trait method, and every command's
+  apply-time capture / redo staging. A command now holds only the *inputs* of its
+  edit.
+
+Only authored components are captured; derived state (`Collider`, meshes, avian
+joints) still rebuilds via `Changed<>` sync — unchanged.
+
+**What this row no longer needs.** The **prerequisite** (`Selection.entities` /
+`SelectedJoint` → `StableId`) turned out narrower than feared: `restore_diff`
+writes surviving entities *in place*, so selection only breaks when undoing a
+delete, where the entity is genuinely respawned — and `prune_dead_selection`
+already handles that case coherently. It remains independently valid under
+invariant #3, but it is not a blocker for anything and does not justify the
+25-file, ~74-site reversal.
+
+**Remaining, optional:** `insta` (row 11) golden snapshots over the serialized
+format + intent-replay would still strengthen the suite; that is a testing win,
+not a persistence one.
+
+> **`bevy_save` itself: still BLOCKED, now moot for this row (2026-07-24).**
+> `bevy_save`'s latest release (2.0.1+4, Aug 2025) and its `main` branch
+> (3.0.0+4) both require `bevy ^0.16.1`; this workspace is hard-pinned to
+> `bevy = "=0.19.0"`. The crate is ~three Bevy releases behind and has not
+> published a 0.16→0.19 update, so the reflection/`Scene` APIs it builds on don't
+> match. Since the row's goals are met, option **(c)** — keep the bespoke
+> `gradiance-scene` format — is now the *chosen* answer rather than a deferral.
+> Revisit only if a future need (multi-format saves, prefab libraries) makes the
+> external crate pay for itself; adopting it purely to swap out a working
+> timeline would be churn.
 
 ### B. Diagnostics & dev-tools — "debugging is a dream" (rows 3, 4, 10, 14, 16, 23)
 

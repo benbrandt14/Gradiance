@@ -490,6 +490,8 @@ fn merging_overlapping_boxes_makes_one_union_body() {
     undo(&mut app);
     assert_eq!(body_count(&mut app), 2, "undo restores both bodies");
     assert!(entity_of(&app, absorbed).is_some());
+    // Snapshot-undo respawns bodies (same StableId, fresh Entity) — re-resolve.
+    let entity = entity_of(&app, host).expect("host restored under its id");
     let shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
     assert!(matches!(shape, ShapeDef::Box { .. }), "host shape restored");
 

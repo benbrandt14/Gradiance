@@ -160,10 +160,6 @@ impl GameCommand for PropertyEditCommand {
         self.write_all(world, true)
     }
 
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        self.write_all(world, false)
-    }
-
     fn name(&self) -> &'static str {
         crate::intent::name::PROPERTY_EDIT
     }

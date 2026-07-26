@@ -121,6 +121,7 @@ fn depth_band_edit_round_trips_and_undoes() {
     assert_eq!(*app.world().get::<DepthBand>(entity).unwrap(), new_band);
 
     undo(&mut app);
+    let entity = entity_of(&app, a).unwrap();
     assert_eq!(
         *app.world().get::<DepthBand>(entity).unwrap(),
         old_band,
@@ -221,6 +222,7 @@ fn grouping_makes_click_select_the_whole_group_and_undoes() {
     app.update();
     assert!(app.world().get::<SelectionGroup>(ea).is_none());
     undo(&mut app);
+    let ea = entity_of(&app, a).unwrap();
     assert!(app.world().get::<SelectionGroup>(ea).is_some());
 }
 

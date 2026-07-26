@@ -51,9 +51,23 @@ Rationale, coupling data, and the roadmap→package feature tree:
    of `crates/gradiance-script` only) — enforced by the package graph and re-checked
    by `tests/boundaries.rs`. UI reads component copies and emits intents; it never
    mutates authored components directly. Sole exception: editor **settings
-   resources** (`GridSettings`, `SnapConfig`, `SimSettings`) are non-authored
-   configuration and may be written by UI; seams consume them via change
-   detection (physics applies `SimSettings` — UI edits authored state only via intents).
+   resources** may be written by UI directly; seams consume them via change
+   detection (physics applies `SimSettings` — UI edits authored state only via
+   intents). Those resources split by *what they describe*, not where they are
+   edited:
+   - **scene content** (`SimSettings`, `RenderSettings`, `LightingSettings`,
+     `ScenerySettings`, and the signal-graph resources) — part of the document.
+     Saved **and** undoable: `command::commit_settings_edits` watches them by
+     value and records a settled edit as one undo step (a whole slider drag
+     collapses into one). Bevy change flags are *not* usable here — the settings
+     window calls `set_changed()` unconditionally and writes through
+     `bypass_change_detection`.
+   - **workstation config** (`GridSettings`, `SnapConfig`) — authoring aids that
+     belong to the person, not the document. Saved with the scene, never in
+     undo history, so reverting an edit can't move someone's grid.
+
+   The split lives in one place: `scene::records::EnvironmentRecord::scene_content_eq`
+   / `apply_scene_content`. A new settings resource must be classified there.
 5. **Authored vs derived:** components in `gradiance-domain` (+ `StableId`) plus the
    authored avian components (`RigidBody`, `Friction`, `Restitution`, `ColliderDensity`,
    `GravityScale`, `Sensor`, `LockedAxes`) are the save content. The save **format**

@@ -3,7 +3,7 @@
 //! Everything that turns authored geometry + density into a mass goes through
 //! [`mass_of`]. Today density is areal (2D, kg/m²) so mass is `density · area`;
 //! a future volumetric jump (kg/m³, `density · area · thickness`) changes only
-//! this function and the [`Density`](crate::quantity::Density) dimension — no
+//! this function and the [`Density`] dimension — no
 //! call site moves. See `docs/units-decision.md`.
 
 use crate::quantity::{Area, Density, Mass};

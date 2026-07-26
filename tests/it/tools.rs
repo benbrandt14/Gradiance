@@ -72,6 +72,7 @@ fn scale_command_scales_shape_and_position_and_undoes() {
     assert!((pos - Vec2::new(20.0, 0.0)).length() < 1e-4);
 
     undo(&mut app);
+    let entity = entity_of(&app, id).unwrap();
     let shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
     assert_eq!(
         shape,
@@ -237,6 +238,7 @@ fn click_selects_and_drag_commits_one_move_command() {
     assert!((pos - Vec2::new(105.0, 0.0)).length() < 1.0, "{pos}");
 
     undo(&mut app);
+    let entity = entity_of(&app, id).unwrap();
     let pos = app
         .world()
         .get::<Transform>(entity)
@@ -602,6 +604,7 @@ fn weld_tool_pins_a_single_body_by_making_it_static() {
     assert_eq!(stack_undo_len(&app), before + 1);
 
     undo(&mut app);
+    let entity = entity_of(&app, id).unwrap();
     assert_eq!(
         *app.world().get::<RigidBody>(entity).unwrap(),
         RigidBody::Dynamic,

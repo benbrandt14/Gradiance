@@ -12,7 +12,7 @@
 //! joints *between* merged bodies become internal and are deleted. Trees
 //! deeper than [`MAX_CSG_DEPTH`] bake to a polygon leaf.
 
-use crate::cut_cmd::{apply_joint_changes, revert_joint_changes};
+use crate::cut_cmd::apply_joint_changes;
 use crate::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
@@ -38,16 +38,12 @@ struct Staged {
 pub struct MergeCommand {
     /// Bodies to merge; the first is the host that survives.
     pub targets: Vec<StableId>,
-    staged: Option<Staged>,
 }
 
 impl MergeCommand {
     /// Builds a merge of `targets` into `targets[0]`.
     pub fn new(targets: Vec<StableId>) -> Self {
-        Self {
-            targets,
-            staged: None,
-        }
+        Self { targets }
     }
 
     fn stage(&mut self, world: &mut World) -> Result<Staged, CommandError> {
@@ -150,12 +146,7 @@ impl MergeCommand {
 
 impl GameCommand for MergeCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        if self.staged.is_none() {
-            self.staged = Some(self.stage(world)?);
-        }
-        let Some(staged) = &self.staged else {
-            return Err(CommandError::NoEffect);
-        };
+        let staged = self.stage(world)?;
         for absorbed in &staged.originals[1..] {
             let entity = resolve(world, absorbed.id)?;
             world.despawn(entity);
@@ -165,21 +156,6 @@ impl GameCommand for MergeCommand {
             *shape = staged.merged_shape.clone();
         }
         apply_joint_changes(world, &staged.joint_changes)?;
-        Ok(())
-    }
-
-    fn undo(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let Some(staged) = &self.staged else {
-            return Err(CommandError::NoEffect);
-        };
-        let host = resolve(world, staged.originals[0].id)?;
-        if let Some(mut shape) = world.get_mut::<ShapeDef>(host) {
-            *shape = staged.originals[0].shape.clone();
-        }
-        for absorbed in &staged.originals[1..] {
-            absorbed.spawn(world);
-        }
-        revert_joint_changes(world, &staged.joint_changes)?;
         Ok(())
     }
 

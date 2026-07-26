@@ -13,6 +13,7 @@ mod harness;
 
 mod csg;
 mod editor_ops;
+mod history;
 mod interaction;
 mod joint_edit;
 mod joints;

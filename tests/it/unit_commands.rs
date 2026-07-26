@@ -194,6 +194,9 @@ fn transform_commit_moves_and_undo_restores() {
     assert_eq!(t.translation.truncate(), new.pos);
 
     undo(&mut app);
+    // Snapshot-undo respawns the body (same StableId, fresh Entity), so
+    // re-resolve rather than reuse the pre-undo handle.
+    let entity = entity_of(&app, id).expect("same stable id after undo");
     let t = app.world().get::<Transform>(entity).unwrap();
     assert_eq!(t.translation.truncate(), old.pos);
     assert!(t.rotation.angle_between(Quat::IDENTITY) < 1e-5);

@@ -52,6 +52,11 @@ pub mod name {
     pub const UNDO: &str = "undo";
     /// [`RedoIntent`](super::RedoIntent) → `CommandStack::redo`.
     pub const REDO: &str = "redo";
+    /// A simulation run, recorded as one undo step at a play/pause boundary.
+    pub const SIMULATE: &str = "simulate";
+    /// A settled edit to the scene-content settings (gravity, render style,
+    /// lighting, scenery), recorded as one undo step.
+    pub const SETTINGS: &str = "settings";
 }
 
 /// Request to spawn one fully-specified body.
