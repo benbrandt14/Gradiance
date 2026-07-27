@@ -118,8 +118,10 @@ pub enum SelectGesture {
         sbox: SelectionBox,
         /// Press position, world space.
         press: Vec2,
-        /// Contact pitch measured once, at press.
-        metrics: ArrayMetrics,
+        /// Convex outlines of the sources, hulled once at press — the
+        /// expensive half of measuring a pitch, and the selection does not
+        /// change under the pointer.
+        pieces: Vec<Vec<Vec2>>,
         /// The plan the current drag implies (`None` until it is worth one
         /// copy).
         plan: Option<ArrayPlan>,
@@ -226,16 +228,16 @@ impl ManipTool for SelectGesture {
                 // cannot disagree with what release produces.
                 for placement in plan.placements() {
                     for (shape, pose) in ghosts {
-                        let rot = Vec2::from_angle(pose.rot);
-                        let scale = placement.scale;
+                        // The same decomposition the command applies: resize
+                        // in the body's own frame, then turn by the pattern.
+                        let base = Vec2::from_angle(pose.rot);
+                        let resize = placement.body_matrix(pose.rot);
+                        let turn = Vec2::from_angle(placement.body_rotation());
+                        let centre = placement.map_point(pose.pos);
                         for ring in polygonize(shape).rings() {
                             let mut pts: Vec<Vec2> = ring
                                 .iter()
-                                .map(|v| {
-                                    let local = rot.rotate(*v * scale);
-                                    let spun = Vec2::from_angle(placement.spin).rotate(local);
-                                    placement.map_point(pose.pos) + spun
-                                })
+                                .map(|v| centre + turn.rotate(base.rotate(resize * *v)))
                                 .collect();
                             if let Some(first) = pts.first().copied() {
                                 pts.push(first);
@@ -299,16 +301,17 @@ impl SelectGesture {
                 .iter()
                 .filter_map(|e| world.shape_pose(e))
                 .collect();
-            // Alt on a handle means "repeat", not "stretch". Measured once
-            // here: the pitch is a property of the selection as it was
-            // grabbed, and re-measuring mid-drag would make the step wander.
+            // Alt on a handle means "repeat", not "stretch". The hulls are
+            // taken once here — the selection cannot change under the
+            // pointer — but the pitch itself is re-derived each frame, since
+            // the taper it depends on can be edited mid-drag.
             if ctx.alt && !targets.is_empty() {
-                let metrics = ArrayMetrics::measure(&selection_pieces(&ghosts), sbox.rot);
+                let pieces = selection_pieces(&ghosts);
                 *self = SelectGesture::Array {
                     handle,
                     sbox,
                     press: p,
-                    metrics,
+                    pieces,
                     plan: None,
                     targets,
                     ghosts,
@@ -485,7 +488,7 @@ impl SelectGesture {
                 handle,
                 sbox,
                 press,
-                metrics,
+                pieces,
                 plan,
                 ..
             } => {
@@ -494,7 +497,8 @@ impl SelectGesture {
                     // selection arrays along its own axes, exactly as it
                     // scales along them.
                     let delta = sbox.to_frame(p, *press);
-                    *plan = plan_drag(*handle, sbox, metrics, delta, &ctx.array);
+                    let metrics = ArrayMetrics::for_drag(pieces, sbox, &ctx.array);
+                    *plan = plan_drag(*handle, sbox, &metrics, delta, &ctx.array);
                 }
             }
             SelectGesture::Scale {

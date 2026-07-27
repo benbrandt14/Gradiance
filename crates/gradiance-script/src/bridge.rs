@@ -39,7 +39,8 @@
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
 use gradiance_command::CommandDispatchSet;
-use gradiance_command::intent::{CutIntent, SpawnBodyIntent};
+use gradiance_command::array_cmd::{ArrayMode, ArrayTweens, TweenStep};
+use gradiance_command::intent::{ArrayIntent, CutIntent, SpawnBodyIntent};
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
@@ -538,6 +539,7 @@ impl EditBinding {
 pub fn edit_bindings() -> Vec<EditBinding> {
     vec![
         EditBinding::new::<CutIntent>(name::CUT),
+        EditBinding::new::<ArrayIntent>(name::ARRAY_REPEAT),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_CIRCLE),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_GROUND),
@@ -675,6 +677,8 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
         },
     );
 
+    register_array_verb(engine, ops);
+
     // `(spawn-box x y w h)` — author a box body centered at (x, y). Returns
     // the new body's handle (its stable id), so `(define b (spawn-box …))`
     // gives the script a name for it.
@@ -729,6 +733,62 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
             } else {
                 String::new()
             }
+        },
+    );
+}
+
+/// `(array-repeat …)` — the scripted array, split out to keep
+/// [`register_edit_verbs`] readable.
+fn register_array_verb(engine: &mut Engine, ops: &OpQueue) {
+    // `(array-repeat body count dx dy scale-x scale-y)` — the scripted form
+    // of the array drag. `(dx, dy)` is the step to the *first* copy; the size
+    // ratios compound, and the step shrinks with them so a tapered array stays
+    // in contact — the same closed form the tool uses, evaluated once here on
+    // the cold path rather than per copy.
+    let array_ops = Arc::clone(ops);
+    engine.register_fn(
+        name::ARRAY_REPEAT,
+        move |body: String,
+              count: SteelVal,
+              dx: SteelVal,
+              dy: SteelVal,
+              sx: SteelVal,
+              sy: SteelVal| {
+            let (Ok(uuid), Some([count, dx, dy, sx, sy])) = (
+                uuid::Uuid::parse_str(&body),
+                nums([&count, &dx, &dy, &sx, &sy]),
+            ) else {
+                return;
+            };
+            let step = Vec2::new(dx as f32, dy as f32);
+            let scale = Vec2::new(sx as f32, sy as f32);
+            // A column of copies is driven by the Y lane, a row by the X lane,
+            // exactly as in the tool — so the ratio that closes the gaps is
+            // the one measured along the direction the array runs.
+            let axis_y = step.y.abs() > step.x.abs();
+            let lane = TweenStep {
+                scale,
+                ..Default::default()
+            };
+            let mut tweens = ArrayTweens::default();
+            if axis_y {
+                tweens.along_y = lane;
+            } else {
+                tweens.along_x = lane;
+            }
+            emit(
+                &array_ops,
+                Box::new(ArrayIntent {
+                    sources: vec![StableId(uuid)],
+                    count: (count.max(0.0) as u32).min(512),
+                    mode: ArrayMode::Linear {
+                        step,
+                        ratio: if axis_y { scale.y } else { scale.x },
+                        axis_y,
+                    },
+                    tweens: tweens.sanitized(),
+                }),
+            );
         },
     );
 }

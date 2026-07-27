@@ -105,7 +105,11 @@ Rationale, coupling data, and the roadmap→package feature tree:
   convex pieces, via the same SAT axes as overlap). `interaction::tools::array_tool`
   turns a drag into an `ArrayMode`; `command::array_cmd` expands any mode into
   `CopyPlacement`s, so adding a pattern is one match arm and no new cloning
-  logic. See `docs/array-decision.md`.
+  logic. Per-copy change is `ArrayTweens`: **one lane per pattern axis**
+  (`along_x` fires per column, `along_y` per row) and each lane's size is a
+  per-axis `Vec2` ratio. Under contact spacing the pitch tapers with the
+  copies — closed form (`geometric_span`), not a per-copy re-measure. See
+  `docs/array-decision.md`.
 - Geometry: `ShapeDef` is an SDF tree (analytic leaves + `Csg`/`Placed` nodes;
   see `docs/sdf-geometry-decision.md`), owned by `gradiance-geometry` (re-exported
   as `domain::shape`). `geometry::polygonize` is the single
