@@ -78,13 +78,20 @@ pub enum EditorMode {
 /// Gated on [`EditorMode::Sketch`]; meaningless in [`EditorMode::Direct`].
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
 pub enum SketchTool {
-    /// Select and drag sketch geometry, re-solving live.
+    /// Select, drag and dimension existing sketch geometry, re-solving live.
+    ///
+    /// Constraining is *not* a tool: the applicable constraints follow from
+    /// whatever is selected, so the panel offers them from any tool rather
+    /// than making the author switch modes to say "and these are parallel".
     #[default]
     Select,
     /// Chain line segments, inferring constraints as you draw.
     Line,
+    /// Sweep an arc from a centre through a start and end point.
+    Arc,
     /// Place circles.
     Circle,
-    /// Apply an explicit constraint to the current sketch selection.
-    Constrain,
+    /// Trim geometry back to a boundary — or extend it forward to one, which
+    /// is the same gesture.
+    Trim,
 }

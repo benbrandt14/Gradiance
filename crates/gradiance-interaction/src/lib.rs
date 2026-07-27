@@ -102,6 +102,8 @@ impl Plugin for InteractionPlugin {
                 camera::pan_and_zoom_camera,
                 camera::apply_camera_rig,
                 input::apply_shortcuts,
+                input::sketch_shortcuts
+                    .run_if(in_state(gradiance_core::states::EditorMode::Sketch)),
                 selection::prune_dead_selection,
                 joint_edit::clear_joint_on_tool_change,
             )

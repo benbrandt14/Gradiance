@@ -23,8 +23,7 @@ pub mod handles;
 pub mod node_tools;
 pub mod polygon_tool;
 pub mod select;
-pub mod sketch_circle;
-pub mod sketch_line;
+pub mod sketch_session;
 pub mod strut_tool;
 
 use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_tool};
@@ -65,8 +64,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<polygon_tool::PolygonTool>();
         app.init_resource::<strut_tool::StrutDraft>();
         app.init_resource::<node_tools::TracerTool>();
-        app.init_resource::<sketch_line::SketchLineTool>();
-        app.init_resource::<sketch_circle::SketchCircleTool>();
+        app.init_resource::<sketch_session::SketchSession>();
         app.init_resource::<ResumeAfterSketch>();
         app.add_systems(OnEnter(EditorMode::Sketch), pause_for_sketch);
         app.add_systems(OnExit(EditorMode::Sketch), resume_after_sketch);
@@ -113,10 +111,13 @@ impl Plugin for ToolsPlugin {
         app.add_systems(
             Update,
             (
-                run_draft_tool::<sketch_line::SketchLineTool>.run_if(in_state(SketchTool::Line)),
-                run_draft_tool::<sketch_circle::SketchCircleTool>
-                    .run_if(in_state(SketchTool::Circle)),
+                // One driver, not one per tool: sketch mode is modal over a
+                // single document, so the session dispatches internally on the
+                // active tool rather than swapping resources underneath it.
+                sync_sketch_tool,
+                run_draft_tool::<sketch_session::SketchSession>,
             )
+                .chain()
                 .run_if(in_state(EditorMode::Sketch))
                 .in_set(ToolDriverSet)
                 .in_set(InteractionSet)
@@ -155,12 +156,7 @@ impl Plugin for ToolsPlugin {
             );
             app.add_systems(
                 Update,
-                (
-                    draw_draft_preview::<sketch_line::SketchLineTool>
-                        .run_if(in_state(SketchTool::Line)),
-                    draw_draft_preview::<sketch_circle::SketchCircleTool>
-                        .run_if(in_state(SketchTool::Circle)),
-                )
+                (draw_draft_preview::<sketch_session::SketchSession>,)
                     .run_if(in_state(EditorMode::Sketch)),
             );
         }
@@ -252,11 +248,22 @@ fn pause_for_sketch(
     next.set(GameState::Paused);
 }
 
-/// Restore the pre-sketch run state and drop any unfinished draft.
+/// Mirror the `SketchTool` state onto the session.
+///
+/// The session dispatches on its own copy so that `update` stays a pure
+/// `&mut self` step with no ECS access, keeping the `DraftTool` seam intact.
+fn sync_sketch_tool(
+    tool: Res<State<SketchTool>>,
+    mut session: ResMut<sketch_session::SketchSession>,
+) {
+    session.set_tool(*tool.get());
+}
+
+/// Restore the pre-sketch run state and drop any unfinished sketch.
 fn resume_after_sketch(
     mut next: ResMut<NextState<GameState>>,
     mut resume: ResMut<ResumeAfterSketch>,
-    mut draft: ResMut<sketch_line::SketchLineTool>,
+    mut draft: ResMut<sketch_session::SketchSession>,
 ) {
     draft.abandon();
     if let Some(prev) = resume.0.take() {

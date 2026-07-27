@@ -270,6 +270,53 @@ pub enum SketchConstraint {
     },
 }
 
+impl SketchConstraint {
+    /// Every piece of geometry this constraint names.
+    ///
+    /// One place that knows the operand shape of each variant, rather than the
+    /// same match written once for deletion and again for drawing failures.
+    /// The match is exhaustive, so a new constraint variant has to declare what
+    /// it references before it will compile.
+    #[must_use]
+    pub fn operands(&self) -> Vec<SketchId> {
+        use SketchConstraint as K;
+        match *self {
+            K::Horizontal(l) | K::Vertical(l) => vec![l],
+            K::Diameter { entity, .. } => vec![entity],
+            // Every binary constraint, whatever the operands' roles: this
+            // reports *which* geometry is named, and a point-on-line names two
+            // ids exactly as parallel-lines does.
+            K::Coincident(a, b)
+            | K::Parallel(a, b)
+            | K::Perpendicular(a, b)
+            | K::EqualLength(a, b)
+            | K::EqualRadius(a, b)
+            | K::Distance { a, b, .. }
+            | K::LengthRatio { a, b, .. }
+            | K::LengthDifference { a, b, .. }
+            | K::Angle { a, b, .. }
+            | K::CurveCurveTangent { a, b, .. }
+            | K::PointOnLine { point: a, line: b }
+            | K::Midpoint { point: a, line: b }
+            | K::PointLineDistance {
+                point: a, line: b, ..
+            }
+            | K::PointOnCircle {
+                point: a,
+                circle: b,
+            }
+            | K::ArcLineTangent {
+                arc: a, line: b, ..
+            }
+            | K::CubicLineTangent {
+                cubic: a, line: b, ..
+            } => vec![a, b],
+            K::SymmetricAboutLine { a, b, line } => vec![a, b, line],
+            K::EqualAngle { a, b, c, d } => vec![a, b, c, d],
+        }
+    }
+}
+
 /// A constrained 2D sketch.
 ///
 /// Retained **only** for bodies authored in sketch mode. Bodies drawn with the
@@ -398,6 +445,57 @@ impl SketchDoc {
             self.construction.push(id);
         }
     }
+
+    /// Promote reference geometry back to part of the profile.
+    pub fn unmark_construction(&mut self, id: SketchId) {
+        self.construction.retain(|c| *c != id);
+    }
+
+    /// Delete an entity, and any constraint that named it.
+    ///
+    /// Leaving a constraint pointing at deleted geometry would make the next
+    /// solve a structural error, so removal cascades. Points are deliberately
+    /// *not* cascaded: they are shared between entities, and deleting one
+    /// segment of a chain must not dissolve its neighbours' endpoints.
+    pub fn remove_entity(&mut self, id: SketchId) {
+        self.entities.retain(|e| e.id() != id);
+        self.construction.retain(|c| *c != id);
+        self.constraints.retain(|c| !c.operands().contains(&id));
+    }
+
+    /// Delete a point, along with every entity built on it and every
+    /// constraint that named either.
+    pub fn remove_point(&mut self, id: SketchId) {
+        let orphaned: Vec<SketchId> = self
+            .entities
+            .iter()
+            .filter(|e| entity_uses_point(e, id))
+            .map(SketchEntity::id)
+            .collect();
+        for e in orphaned {
+            self.remove_entity(e);
+        }
+        self.points.retain(|p| p.id != id);
+        self.constraints.retain(|c| !c.operands().contains(&id));
+    }
+}
+
+/// Whether `e` is built on point `id`.
+fn entity_uses_point(e: &SketchEntity, id: SketchId) -> bool {
+    match *e {
+        SketchEntity::Line { a, b, .. } => a == id || b == id,
+        SketchEntity::Circle { center, .. } => center == id,
+        SketchEntity::Arc {
+            center, start, end, ..
+        } => center == id || start == id || end == id,
+        SketchEntity::Cubic {
+            start,
+            start_control,
+            end_control,
+            end,
+            ..
+        } => start == id || start_control == id || end_control == id || end == id,
+    }
 }
 
 #[cfg(test)]
@@ -447,5 +545,66 @@ mod tests {
             1,
             "marking twice must not duplicate"
         );
+        doc.unmark_construction(line);
+        assert!(
+            !doc.is_construction(line),
+            "reference geometry promotes back"
+        );
+    }
+
+    #[test]
+    fn removing_an_entity_takes_its_constraints_with_it() {
+        let mut doc = SketchDoc::new();
+        let a = doc.add_point(Vec2::ZERO);
+        let b = doc.add_point(Vec2::X);
+        let line = doc.add_line(a, b);
+        doc.constrain(SketchConstraint::Horizontal(line));
+        doc.mark_construction(line);
+
+        doc.remove_entity(line);
+
+        assert!(doc.entities.is_empty());
+        assert!(
+            doc.constraints.is_empty(),
+            "a constraint naming deleted geometry would be a structural error \
+             on the next solve, so removal has to cascade"
+        );
+        assert!(!doc.is_construction(line));
+        assert_eq!(doc.points.len(), 2, "shared points outlive one segment");
+    }
+
+    #[test]
+    fn removing_a_point_dissolves_what_was_built_on_it() {
+        let mut doc = SketchDoc::new();
+        let a = doc.add_point(Vec2::ZERO);
+        let b = doc.add_point(Vec2::X);
+        let c = doc.add_point(Vec2::Y);
+        let ab = doc.add_line(a, b);
+        let bc = doc.add_line(b, c);
+        doc.constrain(SketchConstraint::Perpendicular(ab, bc));
+
+        doc.remove_point(b);
+
+        assert!(doc.points.iter().all(|p| p.id != b));
+        assert!(
+            doc.entities.is_empty(),
+            "both segments were built on the deleted point"
+        );
+        assert!(doc.constraints.is_empty());
+    }
+
+    #[test]
+    fn removing_a_point_leaves_unrelated_geometry_alone() {
+        let mut doc = SketchDoc::new();
+        let a = doc.add_point(Vec2::ZERO);
+        let b = doc.add_point(Vec2::X);
+        let keep = doc.add_line(a, b);
+        let stray = doc.add_point(Vec2::new(9.0, 9.0));
+
+        doc.remove_point(stray);
+
+        assert_eq!(doc.entities.len(), 1);
+        assert_eq!(doc.entities[0].id(), keep);
+        assert_eq!(doc.points.len(), 2);
     }
 }

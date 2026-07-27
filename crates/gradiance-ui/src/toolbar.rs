@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::states::{EditorMode, GameState, SketchTool, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
-use gradiance_interaction::tools::sketch_line::SketchLineTool;
+use gradiance_interaction::tools::sketch_session::SketchSession;
 
 /// The editor panels the transport strip toggles, bundled so the toolbar
 /// system stays under Bevy's system-parameter limit.
@@ -109,8 +109,9 @@ pub struct SketchControls<'w> {
     pub tool: Res<'w, State<SketchTool>>,
     /// Sketch-tool changes requested this frame.
     pub next_tool: ResMut<'w, NextState<SketchTool>>,
-    /// The in-progress sketch, read for the degrees-of-freedom readout.
-    pub draft: Res<'w, SketchLineTool>,
+    /// The sketch being authored, read for the degrees-of-freedom readout
+    /// and the construction-geometry toggle.
+    pub session: ResMut<'w, SketchSession>,
 }
 
 /// What the sketch palette is asking for.
@@ -120,6 +121,8 @@ pub enum SketchAction {
     SetMode(EditorMode),
     /// Switch the active sketch tool.
     SetTool(SketchTool),
+    /// Draw subsequent geometry as reference-only, or stop doing so.
+    SetConstruction(bool),
 }
 
 /// Left tool palette and top transport strip.
@@ -208,9 +211,17 @@ pub fn toolbar(
                 next_tool.set(state);
             }
             ui.separator();
-            match sketch_palette_ui(ui, mode, *sketch.tool.get(), sketch.draft.dof()) {
+            let palette = sketch_palette_ui(
+                ui,
+                mode,
+                *sketch.tool.get(),
+                sketch.session.dof(),
+                sketch.session.construction(),
+            );
+            match palette {
                 Some(SketchAction::SetMode(m)) => sketch.next_mode.set(m),
                 Some(SketchAction::SetTool(t)) => sketch.next_tool.set(t),
+                Some(SketchAction::SetConstruction(on)) => sketch.session.set_construction(on),
                 None => {}
             }
         });
@@ -268,6 +279,7 @@ pub fn sketch_palette_ui(
     mode: EditorMode,
     tool: SketchTool,
     dof: Option<i32>,
+    construction: bool,
 ) -> Option<SketchAction> {
     let sketching = mode == EditorMode::Sketch;
     let mut action = None;
@@ -292,15 +304,41 @@ pub fn sketch_palette_ui(
     }
 
     ui.separator();
-    for (state, name, key) in [
-        (SketchTool::Select, "Select", "S"),
-        (SketchTool::Line, "Line", "L"),
-        (SketchTool::Circle, "Circle", "C"),
-        (SketchTool::Constrain, "Constrain", "X"),
+    for (state, name, key, hint) in [
+        (
+            SketchTool::Select,
+            "Select",
+            "S",
+            "click to select, drag a point to move it — the solver holds the constraints",
+        ),
+        (
+            SketchTool::Line,
+            "Line",
+            "L",
+            "chain segments; near-axis ones get a real constraint. Enter or click the start to close",
+        ),
+        (
+            SketchTool::Arc,
+            "Arc",
+            "A",
+            "three clicks: centre, start, end",
+        ),
+        (
+            SketchTool::Circle,
+            "Circle",
+            "C",
+            "drag from centre to rim; the radius stays a solver parameter",
+        ),
+        (
+            SketchTool::Trim,
+            "Trim",
+            "T",
+            "click what to cut, then the boundary — extends just as well as it trims",
+        ),
     ] {
         if ui
             .selectable_label(tool == state, name)
-            .on_hover_text(format!("{name} ({key})"))
+            .on_hover_text(format!("{name} ({key}) — {hint}"))
             .clicked()
         {
             action = Some(SketchAction::SetTool(state));
@@ -308,10 +346,38 @@ pub fn sketch_palette_ui(
     }
 
     ui.separator();
-    match dof {
-        None => ui.weak("no sketch"),
-        Some(0) => ui.colored_label(egui::Color32::LIGHT_GREEN, "fully constrained"),
-        Some(n) => ui.label(format!("{n} DOF")),
-    };
+    if ui
+        .selectable_label(construction, "Ref")
+        .on_hover_text(
+            "draw reference geometry: solved and snappable like anything else, \
+             but never part of the committed profile",
+        )
+        .clicked()
+    {
+        action = Some(SketchAction::SetConstruction(!construction));
+    }
+
+    ui.separator();
+    dof_readout(ui, dof);
     action
+}
+
+/// The degrees-of-freedom readout.
+///
+/// Zero is the goal state, so it gets the affirmative colour; anything else is
+/// a count of how much the sketch can still move.
+pub fn dof_readout(ui: &mut egui::Ui, dof: Option<i32>) {
+    match dof {
+        None => {
+            ui.weak("no sketch");
+        }
+        Some(0) => {
+            ui.colored_label(egui::Color32::LIGHT_GREEN, "fully constrained")
+                .on_hover_text("every degree of freedom is pinned down");
+        }
+        Some(n) => {
+            ui.label(format!("{n} DOF"))
+                .on_hover_text(format!("{n} degree(s) of freedom remain unconstrained"));
+        }
+    }
 }

@@ -8,7 +8,7 @@ use crate::selection::{SelectTransition, Selection};
 use bevy::prelude::*;
 use gradiance_command::intent::{DeleteIntent, GroupIntent, RedoIntent, UndoIntent, UngroupIntent};
 use gradiance_core::ids::StableId;
-use gradiance_core::states::{GameState, ToolState};
+use gradiance_core::states::{EditorMode, GameState, SketchTool, ToolState};
 use gradiance_domain::Body;
 use leafwing_input_manager::prelude::*;
 
@@ -138,6 +138,7 @@ pub fn apply_shortcuts(
     game_state: Res<State<GameState>>,
     mut next_game: ResMut<NextState<GameState>>,
     mut next_tool: ResMut<NextState<ToolState>>,
+    editor_mode: Res<State<EditorMode>>,
     mut scale_frame: ResMut<crate::tools::handles::ScaleFrame>,
     mut last_path: ResMut<gradiance_persist::LastScenePath>,
 ) {
@@ -235,9 +236,46 @@ pub fn apply_shortcuts(
     if ctrl {
         return;
     }
+    // Direct-tool letters are inert while sketching: sketch mode rebinds the
+    // same keys to its own tools (`sketch_shortcuts`), and firing both would
+    // switch a tool the author cannot even see.
+    if *editor_mode.get() != EditorMode::Direct {
+        return;
+    }
     for action in actions.get_just_pressed() {
         if let EditorAction::Tool(tool) = action {
             next_tool.set(tool);
+        }
+    }
+}
+
+/// Sketch-mode tool letters.
+///
+/// Deliberately the same physical keys as the direct tools rather than a
+/// second, more awkward set: only one of the two palettes is ever live, so the
+/// letters are free to mean the sketch tool while sketching. Read raw rather
+/// than through the input map because the mapping is mode-dependent, which the
+/// map itself has no way to express.
+pub fn sketch_shortcuts(
+    keys: Res<ButtonInput<KeyCode>>,
+    keyboard_captured: Res<crate::KeyboardCaptured>,
+    mut next: ResMut<NextState<SketchTool>>,
+) {
+    if keyboard_captured.0
+        || keys.pressed(KeyCode::ControlLeft)
+        || keys.pressed(KeyCode::ControlRight)
+    {
+        return;
+    }
+    for (key, tool) in [
+        (KeyCode::KeyS, SketchTool::Select),
+        (KeyCode::KeyL, SketchTool::Line),
+        (KeyCode::KeyA, SketchTool::Arc),
+        (KeyCode::KeyC, SketchTool::Circle),
+        (KeyCode::KeyT, SketchTool::Trim),
+    ] {
+        if keys.just_pressed(key) {
+            next.set(tool);
         }
     }
 }

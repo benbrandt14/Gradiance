@@ -291,9 +291,22 @@ pub trait DraftTool: Resource<Mutability = Mutable> {
     /// gesture completes (otherwise `None`).
     fn update(&mut self, ctx: &ToolContext) -> Option<ToolCommit>;
 
-    /// Whether a draft is currently in progress (drives [`ActiveGesture`]
-    /// and whether the preview draws).
+    /// Whether a draft is currently in progress (drives [`ActiveGesture`]).
+    ///
+    /// This is about the *gesture*, not about having something to show: it
+    /// suppresses camera pan/zoom while a drag is live, so a tool that reports
+    /// `true` whenever it holds state would leave the camera stuck.
     fn drafting(&self) -> bool;
+
+    /// Whether the preview should draw this frame.
+    ///
+    /// Defaults to "only while drafting", which is right for tools whose
+    /// preview *is* the in-progress gesture. A tool that owns persistent
+    /// geometry between gestures — the sketch session — overrides this, or its
+    /// document would blink out of existence the moment a gesture ended.
+    fn wants_preview(&self) -> bool {
+        self.drafting()
+    }
 
     /// Renders the in-progress preview from draft state.
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview);
@@ -434,9 +447,10 @@ pub fn draw_draft_preview<T: DraftTool>(
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
     tool: Res<T>,
+    cam_scale: Res<crate::camera::CameraScale>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
-    if !tool.drafting() {
+    if !tool.wants_preview() {
         return;
     }
     let ctx = ToolContext {
@@ -448,7 +462,11 @@ pub fn draw_draft_preview<T: DraftTool>(
         cancel: false,
         constraints: &constraints,
         snap: &snap,
-        cam_scale: 1.0,
+        // The real scale, matching `run_draft_tool`. Hardcoding 1.0 here made
+        // every pixel-sized preview marker come out in *metres* — a hundred
+        // times too big at PIXELS_PER_METER, which only went unnoticed while
+        // previews were plain polylines that never used it.
+        cam_scale: cam_scale.0,
     };
     let mut preview = ToolPreview::default();
     tool.preview(&ctx, &mut preview);

@@ -145,3 +145,228 @@ fn lighting_and_scenery_settings_render_rows() {
         harness.get_by_label(label);
     }
 }
+
+/// The sketch palette lists every sketch tool and reports a click.
+#[test]
+fn sketch_palette_lists_every_tool() {
+    use gradiance::core::states::{EditorMode, SketchTool};
+    use gradiance::ui::toolbar::{SketchAction, sketch_palette_ui};
+
+    let clicked: Cell<Option<SketchAction>> = Cell::new(None);
+    let mut harness = Harness::new_ui(|ui| {
+        if let Some(a) =
+            sketch_palette_ui(ui, EditorMode::Sketch, SketchTool::Select, Some(3), false)
+        {
+            clicked.set(Some(a));
+        }
+    });
+    harness.run();
+
+    for label in ["Select", "Line", "Arc", "Circle", "Trim", "Ref"] {
+        harness.get_by_label(label);
+    }
+    // The readout CAD users steer by.
+    harness.get_by_label("3 DOF");
+
+    harness.get_by_label("Arc").click();
+    harness.run();
+    assert_eq!(
+        clicked.get(),
+        Some(SketchAction::SetTool(SketchTool::Arc)),
+        "the palette reports which tool was asked for"
+    );
+}
+
+/// A fully constrained sketch says so rather than reporting "0 DOF".
+#[test]
+fn sketch_palette_calls_out_a_fully_constrained_sketch() {
+    use gradiance::core::states::{EditorMode, SketchTool};
+    use gradiance::ui::toolbar::sketch_palette_ui;
+
+    let mut harness = Harness::new_ui(|ui| {
+        sketch_palette_ui(ui, EditorMode::Sketch, SketchTool::Line, Some(0), false);
+    });
+    harness.run();
+    harness.get_by_label("fully constrained");
+}
+
+/// With nothing selected the editor panel offers no constraints, and says why.
+#[test]
+fn sketch_editor_offers_nothing_for_an_empty_selection() {
+    use gradiance::ui::sketch_panel::{SketchPanel, SketchView, sketch_editor_ui};
+
+    let mut panel = SketchPanel::default();
+    let mut harness = Harness::new_ui(move |ui| {
+        let view = SketchView {
+            applicable: &[],
+            constraints: &[],
+            failed: &[],
+            dof: None,
+            status: None,
+            points: 0,
+            entities: 0,
+            can_commit: false,
+        };
+        sketch_editor_ui(ui, &view, &mut panel);
+    });
+    harness.run();
+
+    harness.get_by_label("nothing selected");
+    harness.get_by_label("select geometry to see what can be constrained");
+}
+
+/// The panel offers exactly the constraints that apply to the selection, and
+/// reports which one was asked for.
+#[test]
+fn sketch_editor_offers_applicable_constraints_and_reports_clicks() {
+    use gradiance::sketch::edit::ConstraintKind;
+    use gradiance::ui::sketch_panel::{
+        SketchPanel, SketchPanelAction, SketchView, sketch_editor_ui,
+    };
+
+    let clicked: Cell<Option<SketchPanelAction>> = Cell::new(None);
+    let mut panel = SketchPanel::default();
+    let mut harness = Harness::new_ui(|ui| {
+        let view = SketchView {
+            applicable: &[ConstraintKind::Parallel, ConstraintKind::Perpendicular],
+            constraints: &[],
+            failed: &[],
+            dof: Some(4),
+            status: None,
+            points: 0,
+            entities: 2,
+            can_commit: false,
+        };
+        if let Some(a) = sketch_editor_ui(ui, &view, &mut panel) {
+            clicked.set(Some(a));
+        }
+    });
+    harness.run();
+
+    harness.get_by_label("Parallel");
+    harness.get_by_label("Perpendicular");
+    harness.get_by_label("0 point(s), 2 edge(s)");
+
+    harness.get_by_label("Parallel").click();
+    harness.run();
+    assert_eq!(
+        clicked.get(),
+        Some(SketchPanelAction::Constrain(ConstraintKind::Parallel, None)),
+        "a relational constraint carries no measurement"
+    );
+}
+
+/// A dimension carries the panel's value; a relational constraint does not.
+#[test]
+fn sketch_editor_sends_a_value_with_dimensions_only() {
+    use gradiance::sketch::edit::ConstraintKind;
+    use gradiance::ui::sketch_panel::{
+        SketchPanel, SketchPanelAction, SketchView, sketch_editor_ui,
+    };
+
+    let clicked: Cell<Option<SketchPanelAction>> = Cell::new(None);
+    let mut panel = SketchPanel {
+        value: 2.5,
+        ..SketchPanel::default()
+    };
+    let mut harness = Harness::new_ui(|ui| {
+        let view = SketchView {
+            applicable: &[ConstraintKind::Distance],
+            constraints: &[],
+            failed: &[],
+            dof: Some(2),
+            status: None,
+            points: 2,
+            entities: 0,
+            can_commit: false,
+        };
+        if let Some(a) = sketch_editor_ui(ui, &view, &mut panel) {
+            clicked.set(Some(a));
+        }
+    });
+    harness.run();
+
+    // Dimensions are marked as wanting input rather than applying instantly.
+    harness.get_by_label("Distance …").click();
+    harness.run();
+    assert_eq!(
+        clicked.get(),
+        Some(SketchPanelAction::Constrain(
+            ConstraintKind::Distance,
+            Some(2.5)
+        ))
+    );
+}
+
+/// Constraints the solver rejected are listed and removable, which is the only
+/// way to recover from over-constraining a sketch.
+#[test]
+fn sketch_editor_lists_constraints_and_removes_them() {
+    use gradiance::sketch::doc::{SketchConstraint, SketchId};
+    use gradiance::ui::sketch_panel::{
+        SketchPanel, SketchPanelAction, SketchView, sketch_editor_ui,
+    };
+
+    let clicked: Cell<Option<SketchPanelAction>> = Cell::new(None);
+    let mut panel = SketchPanel::default();
+    let constraints = [
+        SketchConstraint::Horizontal(SketchId(1)),
+        SketchConstraint::Vertical(SketchId(2)),
+    ];
+    let mut harness = Harness::new_ui(|ui| {
+        let view = SketchView {
+            applicable: &[],
+            constraints: &constraints,
+            // The second one is unsatisfiable, and has to say so.
+            failed: &[1],
+            dof: Some(1),
+            status: None,
+            points: 0,
+            entities: 0,
+            can_commit: true,
+        };
+        if let Some(a) = sketch_editor_ui(ui, &view, &mut panel) {
+            clicked.set(Some(a));
+        }
+    });
+    harness.run();
+
+    harness.get_by_label("Constraints (2)");
+    harness.get_by_label("horizontal");
+    harness.get_by_label("vertical");
+
+    harness.get_all_by_label("✕").next().unwrap().click();
+    harness.run();
+    assert_eq!(clicked.get(), Some(SketchPanelAction::RemoveConstraint(0)));
+}
+
+/// Commit is offered only when the profile actually lowers to a body.
+#[test]
+fn sketch_editor_gates_commit_on_a_closed_profile() {
+    use gradiance::ui::sketch_panel::{
+        SketchPanel, SketchPanelAction, SketchView, sketch_editor_ui,
+    };
+
+    let clicked: Cell<Option<SketchPanelAction>> = Cell::new(None);
+    let mut panel = SketchPanel::default();
+    let mut harness = Harness::new_ui(|ui| {
+        let view = SketchView {
+            applicable: &[],
+            constraints: &[],
+            failed: &[],
+            dof: Some(0),
+            status: None,
+            points: 4,
+            entities: 4,
+            can_commit: true,
+        };
+        if let Some(a) = sketch_editor_ui(ui, &view, &mut panel) {
+            clicked.set(Some(a));
+        }
+    });
+    harness.run();
+
+    harness.get_by_label("✔ Commit").click();
+    harness.run();
+    assert_eq!(clicked.get(), Some(SketchPanelAction::Commit));
+}

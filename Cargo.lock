@@ -3877,6 +3877,7 @@ dependencies = [
  "gradiance-scene",
  "gradiance-script",
  "gradiance-signal",
+ "gradiance-sketch",
  "gradiance-units",
 ]
 

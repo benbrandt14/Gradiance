@@ -25,7 +25,12 @@ ui → everything except render
 ```
 
 `gradiance-sketch` is the constrained-sketching crate: the authored sketch
-document, the SolveSpace bridge, and lowering to a `ShapeDef`. The **absence
+document, the SolveSpace bridge, and lowering to a `ShapeDef`. Sketch mode is
+modal over **one** document, held by `interaction::tools::sketch_session`: the
+tools draw into it, the selection drives which constraints `ui::sketch_panel`
+offers, and the whole thing commits as a single `SpawnBody` intent. Per-tool
+documents were the reason most of the constraint vocabulary was unreachable —
+a circle and a line in separate documents can never be named by one constraint. The **absence
 of a `physics` edge is the design**, not an
 oversight — sketching is an authoring-time subsystem and the solver must never
 reach a `Transform`, a joint, or an avian component. `doc`/`solve` stay
