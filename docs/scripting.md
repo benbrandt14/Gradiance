@@ -80,6 +80,9 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (spawn-circle x y r)         ; a circle centred at (x, y) → its handle
 (spawn-ground x y angle)     ; a fixed ground half-plane → its handle
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
+(array-repeat b n dx dy sx sy) ; repeat a body n times stepping (dx, dy), each
+                             ; copy sx/sy the size of the last — the step
+                             ; shrinks with them, so copies stay in contact
 
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path

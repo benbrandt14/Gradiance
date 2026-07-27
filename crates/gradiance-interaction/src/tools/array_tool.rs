@@ -43,7 +43,7 @@ use gradiance_command::array_cmd::{ArrayMode, ArrayTweens, CopyPlacement};
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::shape::ShapeDef;
-use gradiance_geometry::array::contact_pitch_or_extent;
+use gradiance_geometry::array::{copies_within, extent_along, tapered_contact_pitch};
 
 use crate::tools::handles::{HandleKind, SelectionBox};
 
@@ -70,7 +70,8 @@ pub struct ArrayConfig {
     pub rotate_items: bool,
     /// Ignore the drag distance and always make this many copies.
     pub count_override: Option<u32>,
-    /// Per-copy spin / taper / depth step.
+    /// Per-copy parameter change, one lane per pattern axis and each size
+    /// axis specified on its own.
     pub tweens: ArrayTweens,
 }
 
@@ -99,9 +100,7 @@ impl ArrayConfig {
         out.angle_step = finite(out.angle_step, std::f32::consts::TAU / 8.0)
             .clamp(-std::f32::consts::TAU, std::f32::consts::TAU);
         out.count_override = out.count_override.map(|c| c.clamp(1, MAX_COPIES_PER_AXIS));
-        out.tweens.spin = finite(out.tweens.spin, 0.0);
-        out.tweens.scale_ratio = finite(out.tweens.scale_ratio, 1.0).clamp(0.05, 20.0);
-        out.tweens.depth = finite(out.tweens.depth, 0.0).clamp(-100.0, 100.0);
+        out.tweens = out.tweens.sanitized();
         out.spacing = match out.spacing {
             ArraySpacing::Gap(g) => ArraySpacing::Gap(finite(g, 0.0).clamp(-100.0, 100.0)),
             ArraySpacing::Fixed(s) => ArraySpacing::Fixed(finite(s, 1.0).clamp(1e-3, 1000.0)),
@@ -119,33 +118,89 @@ impl ArrayConfig {
 /// thousands of bodies from one flick of the wrist.
 pub const MAX_COPIES_PER_AXIS: u32 = 512;
 
-/// Everything the gesture needs to know about the selection's geometry,
-/// measured once at press time.
-#[derive(Debug, Clone)]
+/// Everything the gesture needs to know about the selection's geometry.
+///
+/// Measured from the selection's hulls (once per drag frame, since the taper
+/// the options panel is showing can change under the pointer).
+#[derive(Debug, Clone, Default)]
 pub struct ArrayMetrics {
-    /// Flush pitch along the frame's +X axis.
+    /// Flush pitch along the frame's +X axis, taper included: the step that
+    /// clears the *first* copy from the original. Later steps shrink from it
+    /// geometrically — see [`gradiance_geometry::array`].
     pub pitch_x: f32,
-    /// Flush pitch along the frame's +Y axis.
+    /// Flush pitch along the frame's +Y axis, taper included.
     pub pitch_y: f32,
+    /// How much each successive column pitch shrinks (1.0 when untapered).
+    pub ratio_x: f32,
+    /// How much each successive row pitch shrinks.
+    pub ratio_y: f32,
 }
 
 impl ArrayMetrics {
-    /// Measures the selection's contact pitch along both frame axes.
+    /// Measures the selection's contact pitch along both frame axes, with no
+    /// per-copy taper.
     ///
     /// `pieces` are world-space convex outlines, one per body.
     pub fn measure(pieces: &[Vec<Vec2>], frame_rot: f32) -> Self {
+        Self::measure_tapered(pieces, frame_rot, Vec2::ZERO, &ArrayTweens::default())
+    }
+
+    /// Measures the pitch a *tapered* array needs so its copies stay flush.
+    ///
+    /// The column lane resizes the columns and the row lane the rows, so each
+    /// axis gets its own first-gap measurement and its own shrink ratio. When
+    /// the taper is inert this reduces exactly to [`measure`](Self::measure).
+    pub fn measure_tapered(
+        pieces: &[Vec<Vec2>],
+        frame_rot: f32,
+        origin: Vec2,
+        tweens: &ArrayTweens,
+    ) -> Self {
         let x = Vec2::from_angle(frame_rot);
         let y = Vec2::from_angle(frame_rot + std::f32::consts::FRAC_PI_2);
+        let pitch = |dir: Vec2, factors: Vec2| -> f32 {
+            match tapered_contact_pitch(pieces, dir, factors, origin, frame_rot) {
+                Some(p) if p > 1e-6 => p,
+                // Same fallback as the untapered path: a set that never
+                // overlaps itself still needs a usable step.
+                _ => extent_along(pieces, dir),
+            }
+        };
         Self {
-            pitch_x: contact_pitch_or_extent(pieces, x),
-            pitch_y: contact_pitch_or_extent(pieces, y),
+            pitch_x: pitch(x, tweens.along_x.scale),
+            pitch_y: pitch(y, tweens.along_y.scale),
+            // The pitch along an axis shrinks with that lane's own ratio for
+            // that axis: a row closes up as its copies narrow, a column as
+            // its copies flatten.
+            ratio_x: tweens.along_x.scale.x,
+            ratio_y: tweens.along_y.scale.y,
         }
     }
 
-    /// The pitch along an axis, with the configured spacing rule applied.
+    /// The step along an axis, with the configured spacing rule applied.
     pub fn step(&self, axis_y: bool, config: &ArrayConfig) -> f32 {
         let contact = if axis_y { self.pitch_y } else { self.pitch_x };
         config.spacing.step(contact)
+    }
+
+    /// Measures for a live drag: the selection's own frame and the taper the
+    /// options panel is currently showing.
+    ///
+    /// Re-measured each frame rather than frozen at press, so turning the
+    /// taper up mid-drag closes the copies up under the pointer instead of
+    /// waiting for the next gesture.
+    pub fn for_drag(pieces: &[Vec<Vec2>], sbox: &SelectionBox, config: &ArrayConfig) -> Self {
+        Self::measure_tapered(pieces, sbox.rot, sbox.center, &config.tweens)
+    }
+
+    /// The pitch shrink along an axis, or 1.0 when the spacing rule does not
+    /// track the geometry (a fixed step stays fixed however the copies grow).
+    pub fn ratio(&self, axis_y: bool, config: &ArrayConfig) -> f32 {
+        if !config.spacing.tracks_contact() {
+            return 1.0;
+        }
+        let r = if axis_y { self.ratio_y } else { self.ratio_x };
+        if r.is_finite() && r > 0.0 { r } else { 1.0 }
     }
 }
 
@@ -182,6 +237,16 @@ impl ArraySpacing {
             Self::Fixed(_) => "Fixed step",
             Self::Multiple(_) => "Multiple of contact",
         }
+    }
+
+    /// Whether the step this rule produces is derived from the selection's
+    /// geometry — and therefore whether it should shrink along with a size
+    /// taper to keep copies flush.
+    ///
+    /// [`Fixed`](Self::Fixed) is the odd one out on purpose: an explicit step
+    /// means an explicit step, even when the copies are changing size.
+    pub fn tracks_contact(self) -> bool {
+        !matches!(self, Self::Fixed(_))
     }
 
     /// The step this rule produces from a measured contact pitch.
@@ -253,25 +318,30 @@ pub fn plan_drag(
     let (uses_x, uses_y) = handle.scales();
     let step_x = metrics.step(false, config);
     let step_y = metrics.step(true, config);
+    let ratio_x = metrics.ratio(false, config);
+    let ratio_y = metrics.ratio(true, config);
 
     // Copies fit along each participating axis, in the handle's outward
-    // direction only.
-    let count_along = |active: bool, sign: f32, delta: f32, step: f32| -> u32 {
+    // direction only. A taper makes the steps a geometric series rather than a
+    // constant, so this is not a plain division — and a converging taper has a
+    // finite reach however far you pull.
+    let count_along = |active: bool, sign: f32, delta: f32, step: f32, ratio: f32| -> u32 {
         if !active || sign == 0.0 || step <= 0.0 {
             return 0;
         }
-        let outward = delta * sign;
-        if outward <= 0.0 {
-            return 0;
-        }
-        ((outward / step).floor() as i64).clamp(0, i64::from(MAX_COPIES_PER_AXIS)) as u32
+        copies_within(delta * sign, step, ratio, MAX_COPIES_PER_AXIS)
     };
-    let n_x = count_along(uses_x, unit.x, delta_frame.x, step_x);
-    let n_y = count_along(uses_y, unit.y, delta_frame.y, step_y);
+    let n_x = count_along(uses_x, unit.x, delta_frame.x, step_x, ratio_x);
+    let n_y = count_along(uses_y, unit.y, delta_frame.y, step_y, ratio_y);
 
     let axis_x = Vec2::from_angle(sbox.rot) * step_x * unit.x.signum();
     let axis_y =
         Vec2::from_angle(sbox.rot + std::f32::consts::FRAC_PI_2) * step_y * unit.y.signum();
+    // The spacing ratios are per-axis because the two lanes resize
+    // independently: a grid column's pitch also follows the *row* lane's
+    // x-shrink, and vice versa.
+    let taper = config.spacing.tracks_contact();
+    let lane = |scale: Vec2| if taper { scale } else { Vec2::ONE };
 
     let mode = match config.pattern {
         ArrayPattern::Repeat if uses_x && uses_y => ArrayMode::Grid {
@@ -279,11 +349,22 @@ pub fn plan_drag(
             cross: axis_y,
             cross_count: n_y,
             stagger: config.stagger,
+            ratio: lane(config.tweens.along_x.scale),
+            cross_ratio: lane(config.tweens.along_y.scale),
         },
         ArrayPattern::Repeat => {
-            // One axis only: whichever the handle owns.
-            let step = if uses_y { axis_y } else { axis_x };
-            ArrayMode::Linear { step }
+            // One axis only: whichever the handle owns, and the lane that
+            // drives it is the one named after that axis.
+            let (step, ratio) = if uses_y {
+                (axis_y, ratio_y)
+            } else {
+                (axis_x, ratio_x)
+            };
+            ArrayMode::Linear {
+                step,
+                ratio,
+                axis_y: uses_y && !uses_x,
+            }
         }
         ArrayPattern::Radial => ArrayMode::Radial {
             pivot: sbox.center,
@@ -312,11 +393,18 @@ pub fn plan_drag(
         0
     };
 
+    // The per-axis tweens are stated in the selection's own frame, so the
+    // frame travels with them into the command — "x" in the options panel
+    // means the selection's x, whichever way it is turned.
+    let mut tweens = config.tweens;
+    tweens.origin = sbox.center;
+    tweens.basis = sbox.rot;
+
     let plan = ArrayPlan {
         count,
         cross_count,
         mode,
-        tweens: config.tweens,
+        tweens,
     };
     (!plan.is_empty()).then_some(plan)
 }
@@ -431,6 +519,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         let config = ArrayConfig::default();
         let plan = plan_drag(
@@ -453,6 +543,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         assert!(
             plan_drag(
@@ -471,6 +563,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         let plan = plan_drag(
             HandleKind::EdgeX(-1),
@@ -490,6 +584,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 2.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         let plan = plan_drag(
             HandleKind::Corner(1, 1),
@@ -533,6 +629,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1e-4,
             pitch_y: 1e-4,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         let plan = plan_drag(
             HandleKind::EdgeX(1),
@@ -550,6 +648,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         let config = ArrayConfig {
             count_override: Some(7),
@@ -571,6 +671,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         let config = ArrayConfig {
             pattern: ArrayPattern::Radial,
@@ -596,6 +698,8 @@ mod tests {
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
         };
         let rotated = SelectionBox {
             center: Vec2::ZERO,
@@ -644,7 +748,7 @@ mod tests {
     #[test]
     fn extent_and_contact_agree_for_a_lone_convex_body() {
         let pieces = vec![unit_square(Vec2::ZERO, 0.75)];
-        let contact = contact_pitch_or_extent(&pieces, Vec2::X);
+        let contact = gradiance_geometry::array::contact_pitch_or_extent(&pieces, Vec2::X);
         let extent = extent_along(&pieces, Vec2::X);
         assert!((contact - extent).abs() < 1e-4);
     }

@@ -10,6 +10,7 @@
 use crate::harness::{body_count, box_record, entity_of, paused_app, step, undo};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
+use gradiance::command::array_cmd::{ArrayTweens, TweenStep};
 use gradiance::interaction::camera::CameraScale;
 use gradiance::interaction::cursor::CursorWorldPos;
 use gradiance::interaction::selection::Selection;
@@ -380,7 +381,10 @@ fn a_depth_step_walks_the_copies_into_the_scene() {
     select(&mut app, &[id]);
     app.world_mut().insert_resource(ArrayConfig {
         tweens: gradiance::command::array_cmd::ArrayTweens {
-            depth: 0.2,
+            along_x: gradiance::command::array_cmd::TweenStep {
+                depth: 0.2,
+                ..Default::default()
+            },
             ..Default::default()
         },
         ..Default::default()
@@ -396,4 +400,177 @@ fn a_depth_step_walks_the_copies_into_the_scene() {
         nears.last().is_some_and(|n| *n > 0.5),
         "the last copy should sit well behind the first: {nears:?}"
     );
+}
+
+/// Sets the per-copy taper on one lane and leaves everything else alone.
+fn taper(app: &mut App, along_x: Vec2, along_y: Vec2) {
+    app.world_mut().insert_resource(ArrayConfig {
+        tweens: ArrayTweens {
+            along_x: TweenStep {
+                scale: along_x,
+                ..Default::default()
+            },
+            along_y: TweenStep {
+                scale: along_y,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+}
+
+#[test]
+fn a_tapering_wall_shrinks_its_copies_and_still_lands_flush() {
+    // The headline of the per-copy parameter change: every copy 80% of the
+    // last, *and* contact spacing keeps up, so the wall closes rather than
+    // developing a widening seam.
+    let mut app = paused_app();
+    let id = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
+    select(&mut app, &[id]);
+    taper(&mut app, Vec2::splat(0.8), Vec2::ONE);
+
+    array_drag(&mut app, HandleKind::EdgeX(1), Vec2::new(3.0, 0.0));
+
+    let boxes = boxes(&mut app);
+    assert!(
+        boxes.len() >= 3,
+        "expected a wall, got {} boxes",
+        boxes.len()
+    );
+    let widths: Vec<f32> = boxes.iter().map(|(lo, hi)| hi.x - lo.x).collect();
+    for pair in widths.windows(2) {
+        assert!(
+            (pair[1] / pair[0] - 0.8).abs() < 0.02,
+            "each copy should be 80% of the last: {widths:?}"
+        );
+    }
+    // Flush: the gap between neighbours never opens up, and they never
+    // interpenetrate. Both matter — a taper that ignored spacing would drift
+    // apart, and one that over-corrected would overlap.
+    for pair in boxes.windows(2) {
+        let gap = pair[1].0.x - pair[0].1.x;
+        assert!(
+            gap.abs() < 2e-2,
+            "copies drifted out of contact by {gap} m: {boxes:?}"
+        );
+    }
+}
+
+#[test]
+fn a_grid_can_narrow_across_and_flatten_down_independently() {
+    // The other user-facing promise: "scale x and y separately if patterning
+    // a grid". The column lane narrows, the row lane flattens, and neither
+    // leaks into the other.
+    let mut app = paused_app();
+    let id = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
+    select(&mut app, &[id]);
+    taper(&mut app, Vec2::new(0.8, 1.0), Vec2::new(1.0, 0.8));
+
+    array_drag(&mut app, HandleKind::Corner(1, 1), Vec2::new(2.5, 2.5));
+
+    let boxes = boxes(&mut app);
+    assert!(
+        boxes.len() >= 4,
+        "expected a grid, got {} boxes",
+        boxes.len()
+    );
+    let size = |p: Vec2| -> Option<(f32, f32)> {
+        boxes
+            .iter()
+            .find(|(lo, hi)| ((*lo + *hi) / 2.0).distance(p) < 0.35)
+            .map(|(lo, hi)| (hi.x - lo.x, hi.y - lo.y))
+    };
+    let origin = size(Vec2::ZERO).expect("the original is still there");
+    assert!((origin.0 - 1.0).abs() < 1e-3 && (origin.1 - 1.0).abs() < 1e-3);
+
+    // One column across: 20% narrower, exactly as tall.
+    let across = boxes
+        .iter()
+        .map(|(lo, hi)| (*lo + *hi) / 2.0)
+        .filter(|c| c.y.abs() < 0.3 && c.x > 0.3)
+        .min_by(|a, b| a.x.total_cmp(&b.x))
+        .and_then(size)
+        .expect("a cell one column across");
+    assert!((across.0 - 0.8).abs() < 0.02, "narrowed: {across:?}");
+    assert!(
+        (across.1 - 1.0).abs() < 0.02,
+        "but not flattened: {across:?}"
+    );
+
+    // One row down: exactly as wide, 20% shorter.
+    let down = boxes
+        .iter()
+        .map(|(lo, hi)| (*lo + *hi) / 2.0)
+        .filter(|c| c.x.abs() < 0.3 && c.y > 0.3)
+        .min_by(|a, b| a.y.total_cmp(&b.y))
+        .and_then(size)
+        .expect("a cell one row down");
+    assert!((down.0 - 1.0).abs() < 0.02, "not narrowed: {down:?}");
+    assert!((down.1 - 0.8).abs() < 0.02, "flattened: {down:?}");
+}
+
+#[test]
+fn a_fixed_step_ignores_the_taper_it_was_told_to_ignore() {
+    // Spacing rules that name an explicit step must keep it, even while the
+    // copies change size — otherwise "fixed" would not mean fixed.
+    let mut app = paused_app();
+    let id = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
+    select(&mut app, &[id]);
+    app.world_mut().insert_resource(ArrayConfig {
+        spacing: ArraySpacing::Fixed(1.5),
+        tweens: ArrayTweens {
+            along_x: TweenStep {
+                scale: Vec2::splat(0.5),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    array_drag(&mut app, HandleKind::EdgeX(1), Vec2::new(4.6, 0.0));
+
+    let centres: Vec<Vec2> = boxes(&mut app)
+        .iter()
+        .map(|(lo, hi)| (*lo + *hi) / 2.0)
+        .collect();
+    assert!(centres.len() >= 3, "got {centres:?}");
+    for pair in centres.windows(2) {
+        let step = pair[1].x - pair[0].x;
+        assert!(
+            (step - 1.5).abs() < 1e-2,
+            "a fixed step must stay fixed: {step} in {centres:?}"
+        );
+    }
+}
+
+#[test]
+fn a_steep_taper_packs_a_short_run_that_is_flush_the_whole_way() {
+    // Halving each copy: the pitches are 0.75, 0.375, 0.1875 … so the run is
+    // short and the gaps have to close by the same factor. A single measured
+    // pitch reused for every copy would leave the second gap twice too wide.
+    let mut app = paused_app();
+    let id = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
+    select(&mut app, &[id]);
+    taper(&mut app, Vec2::splat(0.5), Vec2::ONE);
+
+    // The handle starts at x = 0.5, so this is 1.2 m of pull: 0.75 + 0.375
+    // fits, 0.1875 more does not.
+    array_drag(&mut app, HandleKind::EdgeX(1), Vec2::new(1.7, 0.0));
+
+    assert_eq!(body_count(&mut app), 3, "two copies fit in that pull");
+    let boxes = boxes(&mut app);
+    let widths: Vec<f32> = boxes.iter().map(|(lo, hi)| hi.x - lo.x).collect();
+    assert!(
+        (widths[1] - 0.5).abs() < 0.02 && (widths[2] - 0.25).abs() < 0.02,
+        "each copy halves: {widths:?}"
+    );
+    for pair in boxes.windows(2) {
+        let gap = pair[1].0.x - pair[0].1.x;
+        assert!(
+            gap.abs() < 1e-2,
+            "flush all the way down, but gap was {gap}: {boxes:?}"
+        );
+    }
 }

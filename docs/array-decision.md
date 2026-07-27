@@ -91,6 +91,99 @@ Spacing is a separate dial from the pattern: `Contact` (flush), `Gap` (flush
 plus a distance), `Fixed` (ignore the geometry), or `Multiple` (a factor of
 the flush pitch — 2.0 leaves a body-sized hole, 0.5 interleaves).
 
+## Per-copy change: two lanes, every axis on its own
+
+A pattern that only repeats is a wall. What makes it a *design* is what
+changes from one copy to the next — and the shape of that knob is the whole
+decision here.
+
+**Lanes, not a counter.** The obvious encoding is one running index `k` and
+one tween applied `k` times. It falls apart on grids: cell `(2, 1)` and cell
+`(1, 2)` would get the same treatment, so "narrow as you go right, shorten as
+you go down" is unsayable. `ArrayTweens` therefore carries **one lane per
+pattern axis** — `along_x` indexed by column, `along_y` by row — and a copy
+folds in both. A linear array runs one lane; a grid runs both; the lane that
+drives a row of copies is the one named after the direction the row runs
+(`ArrayMode::Linear::axis_y` records which).
+
+**Sizes are a `Vec2`, inside each lane.** "Which way through the pattern" and
+"which way the body stretches" are different questions, and both need
+answering: `(0.99, 0.99)` on the column lane is the classic taper, `(0.99,
+1.0)` narrows without flattening. Ratios compound (`scale^k`) because "99% of
+the last one" is a multiplication; spin and depth accumulate additively. Every
+field is inert at its default, so a lane nobody touched costs nothing.
+
+**The frame travels with the tween.** `origin` and `basis` pin the axes the
+ratios are measured in to the selection's own centre and rotation at press
+time, so "x" in the options panel means the selection's x however it is
+turned. The tool writes them; the panel never sees them.
+
+## Keeping contact while the copies shrink
+
+The interesting part. Contact spacing measures one pitch and steps by it —
+but if copy `k` is smaller than copy `k−1`, one pitch is wrong for every gap
+but the first, and the wall develops a widening seam exactly where the taper
+bites.
+
+Re-measuring per copy would work and would be slow (the ghost redraws every
+frame of the drag, for up to 512 copies). It is also unnecessary, because the
+answer is closed-form. Writing `H` for the selection's outline about its
+centre and `u` for the per-copy ratio, copy `k` occupies `u^k ⊙ H`. Clearing
+copy `k+1` from copy `k` along a frame axis `d` reduces — by factoring out the
+common `u^k`, which is a disjointness-preserving bijection — to
+
+```text
+t_k = u_d^k · Q,     Q = contact_pitch_between(u ⊙ H, H, d)
+```
+
+So the steps form a **geometric series**: one extra pitch measurement, and
+copy `k` sits at `Q · (1 + u_d + … + u_d^{k−1})`. `geometric_span` is that
+partial sum, taken at the `u → 1` limit directly so an inert taper is exact
+rather than `0/0`.
+
+Three consequences worth stating:
+
+- **It is exact, not an approximation** — but only because handle drags run
+  along the frame axes the ratios are expressed in, which is what makes
+  `u^{-k} ⊙ d` parallel to `d`. An arbitrary diagonal direction would need the
+  per-copy measure.
+- **A grid needs the cross terms.** Column pitch inside row `r` carries the
+  row lane's *x*-shrink, and row pitch in column `c` carries the column lane's
+  *y*-shrink. Without them a doubly-tapered grid is inconsistent — the two
+  ways of walking to a cell disagree. `ArrayMode::Grid` therefore takes both
+  ratios as `Vec2`s.
+- **A converging taper has finite reach.** `0.99^k` sums to a bounded
+  distance, so "how many copies fit in this drag" is no longer a division;
+  `copies_within` solves the geometric sum, and saturates at the cap instead
+  of running away when the drag outruns the limit.
+
+`ArraySpacing::Fixed` opts out on purpose: an explicit step means an explicit
+step even while the copies change size. Every other rule tracks the geometry
+and therefore tracks the taper.
+
+## The Lisp surface
+
+The user-facing ask was to express the per-copy change in the DSL. The
+governing rule (`script-lisp-decision.md`) is that the VM never enters the
+per-frame loop — and the ghost re-expands the whole placement list every frame
+of a drag, so a Scheme lambda evaluated per copy is exactly the thing that is
+forbidden. `gradiance-kernel` exists for cases that genuinely need a compiled
+per-element expression; a taper does not, because the closed form above
+collapses the whole series to two numbers.
+
+So the tween stays plain reflected data, and the Lisp reaches it the way every
+other edit does — through the intent seam, once, on the cold path:
+
+```scheme
+(array-repeat b 20 1.0 0 0.99 0.99)   ; 20 copies, each 99% of the last
+(define (taper b n r) (array-repeat b n 1.0 0 r r))
+```
+
+`array-repeat` is an ordinary Edit verb: it emits one `ArrayIntent` and lands
+as one undoable command. If a future pattern really does need an arbitrary
+`f(k)`, the place for it is a `kernel::Expr` compiled at press time — not a
+VM call per copy.
+
 ## Where the code lives
 
 ```text

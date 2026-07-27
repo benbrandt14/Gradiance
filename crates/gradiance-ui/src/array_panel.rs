@@ -244,13 +244,64 @@ fn count_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
 fn tween_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
     ui.label(egui::RichText::new("Per copy").strong());
     ui.label(
-        egui::RichText::new("changes that accumulate along the pattern")
-            .weak()
-            .small(),
+        egui::RichText::new(
+            "what changes from one copy to the next — one lane per pattern \
+             axis, each size axis on its own",
+        )
+        .weak()
+        .small(),
     );
     let mut t = config.tweens;
     let mut changed = false;
-    egui::Grid::new("array-tweens")
+    // Two lanes, because a grid moves two ways: the X lane fires once per
+    // column, the Y lane once per row. A row or a column only ever drives the
+    // lane named after the direction it runs.
+    changed |= lane_controls(ui, "along X (columns)", "array-tween-x", &mut t.along_x);
+    ui.add_space(4.0);
+    changed |= lane_controls(ui, "along Y (rows)", "array-tween-y", &mut t.along_y);
+
+    if changed {
+        config.tweens = t;
+    }
+    ui.add_space(2.0);
+    if config.spacing.tracks_contact() && !config.tweens.is_identity() {
+        ui.label(
+            egui::RichText::new(
+                "contact spacing follows the size taper: copies close up as \
+                 they shrink",
+            )
+            .weak()
+            .small(),
+        );
+    }
+    ui.horizontal(|ui| {
+        if ui.small_button("reset").clicked() {
+            config.tweens = gradiance_command::array_cmd::ArrayTweens::default();
+        }
+        if ui
+            .small_button("shrink 1%")
+            .on_hover_text("the classic taper: every copy 99% of the last, both axes")
+            .clicked()
+        {
+            config.tweens.along_x.scale = Vec2::splat(0.99);
+        }
+    });
+}
+
+/// One lane of per-copy change: every field for a single pattern axis.
+///
+/// Returns whether anything was edited. Sizes get one control per axis rather
+/// than a single ratio, so "narrow as it goes" and "flatten as it goes" are
+/// separate, sayable things.
+fn lane_controls(
+    ui: &mut egui::Ui,
+    title: &str,
+    salt: &str,
+    lane: &mut gradiance_command::array_cmd::TweenStep,
+) -> bool {
+    let mut changed = false;
+    ui.label(egui::RichText::new(title).small().strong());
+    egui::Grid::new(salt)
         .num_columns(2)
         .spacing([8.0, 2.0])
         .show(ui, |ui| {
@@ -258,7 +309,7 @@ fn tween_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
                 "extra rotation per copy — a fan of blades, or a spiral when \
                  combined with a radial sweep",
             );
-            let mut spin_deg = t.spin.to_degrees();
+            let mut spin_deg = lane.spin.to_degrees();
             if ui
                 .add(
                     egui::DragValue::new(&mut spin_deg)
@@ -268,17 +319,28 @@ fn tween_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
                 )
                 .changed()
             {
-                t.spin = spin_deg.to_radians();
+                lane.spin = spin_deg.to_radians();
                 changed = true;
             }
             ui.end_row();
 
-            ui.label("taper")
-                .on_hover_text("size ratio per copy — 0.9 shrinks each one, 1.1 grows it");
+            ui.label("scale x")
+                .on_hover_text("width ratio per copy — 0.99 narrows each one by a percent");
             changed |= ui
                 .add(
-                    egui::DragValue::new(&mut t.scale_ratio)
-                        .speed(0.01)
+                    egui::DragValue::new(&mut lane.scale.x)
+                        .speed(0.005)
+                        .range(0.05..=20.0),
+                )
+                .changed();
+            ui.end_row();
+
+            ui.label("scale y")
+                .on_hover_text("height ratio per copy — set it apart from x to taper a grid");
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut lane.scale.y)
+                        .speed(0.005)
                         .range(0.05..=20.0),
                 )
                 .changed();
@@ -290,7 +352,7 @@ fn tween_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
             );
             changed |= ui
                 .add(
-                    egui::DragValue::new(&mut t.depth)
+                    egui::DragValue::new(&mut lane.depth)
                         .speed(0.005)
                         .range(-10.0..=10.0)
                         .suffix(" m"),
@@ -298,10 +360,5 @@ fn tween_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
                 .changed();
             ui.end_row();
         });
-    if changed {
-        config.tweens = t;
-    }
-    if ui.small_button("reset").clicked() {
-        config.tweens = gradiance_command::array_cmd::ArrayTweens::default();
-    }
+    changed
 }

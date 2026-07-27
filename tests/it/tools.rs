@@ -154,6 +154,8 @@ fn linear_array_creates_offset_copies_in_one_undo_step() {
         count: 3,
         mode: ArrayMode::Linear {
             step: Vec2::new(50.0, 0.0),
+            ratio: 1.0,
+            axis_y: false,
         },
         tweens: ArrayTweens::default(),
     });
