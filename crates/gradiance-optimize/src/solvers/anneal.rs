@@ -83,6 +83,10 @@ impl Solver for AnnealSolver {
         &self.layout
     }
 
+    fn seed(&mut self, layout: Layout) {
+        self.layout = layout;
+    }
+
     fn step(&mut self, problem: &PackProblem, scratch: &mut Scratch) {
         let params = problem.config.anneal;
         if !self.initialized {
@@ -268,6 +272,9 @@ mod tests {
                 PackConfig {
                     seed,
                     max_iterations: 200,
+                    // Both seeds would otherwise start from the same
+                    // constructive layout and converge to it.
+                    warm_start: false,
                     ..config()
                 },
             ));

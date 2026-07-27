@@ -23,6 +23,17 @@ egui-snarl = "=0.11.0"
 egui_tiles = "=0.16.0"
 leafwing-input-manager = "=0.21.0"
 
+# Numerical optimization (the layout solver family — docs/optimize-decision.md).
+# `argmin` supplies the search algorithms (line search, L-BFGS, Nelder-Mead);
+# `gradiance-optimize` supplies the cost and the analytic gradient. Both are
+# pure Rust with no C toolchain, and default features are off: we want the
+# algorithms, not argmin's serde/rayon/ctrlc extras.
+argmin = { version = "0.11", default-features = false }
+argmin-math = { version = "0.5", default-features = false, features = [
+    "primitives",
+    "vec",
+] }
+
 # Geometry
 lyon = "1.0"
 # Features-only dependency: turns on the serde impls for the bevy math types

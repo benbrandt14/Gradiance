@@ -39,10 +39,10 @@ pub enum SolverKind {
     /// translation vector while pulling everything toward the arrangement
     /// centre.
     ///
-    /// The default. Preserves the rough arrangement the user already has
-    /// (things settle where they were, only tighter), converges smoothly,
-    /// and animates legibly — this is the one whose ghost is worth watching.
-    #[default]
+    /// Preserves the rough arrangement the user already has (things settle
+    /// where they were, only tighter), converges smoothly, and animates
+    /// legibly. Reach for it when *where things are* carries meaning; it is
+    /// measurably less dense than shelf or descent on a scattered pile.
     Relax,
     /// Metropolis simulated annealing over translations, rotations, and
     /// pairwise swaps.
@@ -51,11 +51,40 @@ pub enum SolverKind {
     /// moves early), at the cost of many more iterations and a result that
     /// depends on the seed. Use it when relaxation jams.
     Anneal,
+    /// Quasi-Newton descent on the objective's analytic gradient, driven by
+    /// the `argmin` optimization crate (L-BFGS with a Hager–Zhang line
+    /// search).
+    ///
+    /// The only solver here that uses real curvature information, so it
+    /// converges in far fewer iterations than relaxation once it is near a
+    /// solution — but it follows the gradient into the nearest minimum and
+    /// will not climb out, so it is warm started by default.
+    ///
+    /// The default, on the benchmark's evidence: it matches or beats every
+    /// other strategy on fill ratio across all three reference scenes.
+    #[default]
+    Descent,
+    /// The baseline: attract everything to the centroid and push overlapping
+    /// pairs apart, both on every iteration.
+    ///
+    /// This is deliberately the *naive* method — it is what turning up
+    /// gravity in the physics engine amounts to — and it exists to be
+    /// measured against. It has no objective function, so it stops at a
+    /// force balance rather than at an arrangement, which is exactly the
+    /// failure the rest of this crate is built to avoid. Keep it: a solver
+    /// family with no yardstick has no way to know whether it is any good.
+    Naive,
 }
 
 impl SolverKind {
     /// Every variant, for UI enumeration.
-    pub const ALL: [Self; 3] = [Self::Shelf, Self::Relax, Self::Anneal];
+    pub const ALL: [Self; 5] = [
+        Self::Shelf,
+        Self::Relax,
+        Self::Descent,
+        Self::Anneal,
+        Self::Naive,
+    ];
 
     /// Short human label.
     pub fn label(self) -> &'static str {
@@ -63,7 +92,18 @@ impl SolverKind {
             Self::Shelf => "Shelf (constructive)",
             Self::Relax => "Relaxation",
             Self::Anneal => "Annealing",
+            Self::Descent => "Gradient descent (L-BFGS)",
+            Self::Naive => "Naive attraction (baseline)",
         }
+    }
+
+    /// Whether this strategy benefits from a constructive warm start.
+    ///
+    /// True for both search strategies that begin from wherever they are put:
+    /// descent because it strictly descends, annealing because its budget is
+    /// far better spent refining a decent arrangement than discovering one.
+    pub fn wants_warm_start(self) -> bool {
+        matches!(self, Self::Descent | Self::Anneal)
     }
 
     /// One-line description for a tooltip.
@@ -80,6 +120,16 @@ impl SolverKind {
             Self::Anneal => {
                 "Randomized search that accepts uphill moves early to escape \
                  local minima. Slower; result depends on the seed."
+            }
+            Self::Descent => {
+                "Quasi-Newton descent on the analytic gradient (argmin's \
+                 L-BFGS). Fastest to polish a nearly-good layout; will not \
+                 escape a bad one, so pair it with a warm start."
+            }
+            Self::Naive => {
+                "The yardstick: pull everything together and push overlaps \
+                 apart, with no objective. What a physics settle does. Here \
+                 to be beaten, not used."
             }
         }
     }
@@ -250,6 +300,131 @@ impl LayerRule {
             Self::Solid => true,
         }
     }
+}
+
+/// How edge directions are folded before their alignment is measured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
+pub enum EdgeAlignment {
+    /// Literally parallel: two edges agree when they point the same way or
+    /// exactly opposite. A quarter-turned part is *not* aligned.
+    Parallel,
+    /// Axis-aligned: perpendicular edges count as agreeing too. This is the
+    /// one that makes rectangular parts settle into a grid, because a box
+    /// contributes both of its edge directions no matter how it is turned.
+    #[default]
+    Orthogonal,
+}
+
+impl EdgeAlignment {
+    /// Every variant, for UI enumeration.
+    pub const ALL: [Self; 2] = [Self::Parallel, Self::Orthogonal];
+
+    /// Short human label.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Parallel => "Parallel edges",
+            Self::Orthogonal => "Axis-aligned (grid)",
+        }
+    }
+
+    /// The angular fold factor: directions are compared modulo `2π / fold`.
+    pub fn fold(self) -> u32 {
+        match self {
+            Self::Parallel => 2,
+            Self::Orthogonal => 4,
+        }
+    }
+}
+
+/// How much each objective term counts.
+///
+/// The score is a weighted sum of dimensionless terms (see
+/// [`crate::objective`]), so these are the dial that decides *what kind of
+/// arrangement* is being asked for — not just how hard to look for it.
+/// Setting a weight to zero removes its term entirely, which is also how you
+/// buy back the CPU it costs.
+#[derive(Debug, Clone, Copy, PartialEq, Reflect)]
+pub struct ObjectiveWeights {
+    /// Shrink the overall [`Objective`] measure. The global "make it small"
+    /// term.
+    pub extent: f32,
+    /// Drive the fill ratio (item area ÷ extent area) toward 1. Says the
+    /// same thing as `extent` for a fixed set of bodies, but bounded to
+    /// `0..1`, so it keeps pushing when the extent term has flattened out.
+    pub fill: f32,
+    /// Close the leftover space to each body's `gap_neighbors` nearest
+    /// neighbours.
+    ///
+    /// A *local* measure, where extent is global: a body in the middle of a
+    /// cluster does not move the bounding box at all, so it receives no
+    /// signal from the extent term. Use this to ask for a specific neighbour
+    /// spacing. Benchmarking found it neutral for raw density, so it is off
+    /// by default — it is a goal, not a free win.
+    pub gap: f32,
+    /// Line edges up with each other (see [`EdgeAlignment`]). Turns a pile
+    /// into a tidy block rather than merely a dense one.
+    pub parallel: f32,
+    /// Signed: **positive** minimizes how much boundary bodies share
+    /// (spreads them apart within whatever container they are in),
+    /// **negative** maximizes it (pulls them into flush, interlocked
+    /// contact). Zero ignores contact.
+    pub contact: f32,
+}
+
+impl Default for ObjectiveWeights {
+    fn default() -> Self {
+        Self {
+            extent: 1.0,
+            fill: 1.0,
+            // Zero by default: benchmarking across the three reference scenes
+            // showed the gap term neutral at best for density, and slightly
+            // negative when it steered the relaxation pulse. It stays as a
+            // goal you can ask for — "hold a specific spacing between
+            // neighbours" is a real request — but it does not earn a place in
+            // the default packing.
+            gap: 0.0,
+            parallel: 0.0,
+            contact: 0.0,
+        }
+    }
+}
+
+impl ObjectiveWeights {
+    /// Tightest possible packing: density above all.
+    pub const TIGHT: Self = Self {
+        extent: 1.0,
+        fill: 1.5,
+        gap: 0.5,
+        parallel: 0.0,
+        contact: -0.5,
+    };
+
+    /// A tidy block — dense, but with everything squared up.
+    pub const TIDY: Self = Self {
+        extent: 1.0,
+        fill: 1.0,
+        gap: 0.0,
+        parallel: 3.0,
+        contact: 0.0,
+    };
+
+    /// Spread out inside the container, touching as little as possible.
+    /// Only meaningful with a hard boundary, which is what stops the
+    /// arrangement simply flying apart.
+    pub const SPACED: Self = Self {
+        extent: 0.0,
+        fill: 0.0,
+        gap: -1.0,
+        parallel: 0.0,
+        contact: 1.5,
+    };
+
+    /// The named presets, for UI enumeration.
+    pub const PRESETS: [(&'static str, Self); 3] = [
+        ("Tight", Self::TIGHT),
+        ("Tidy", Self::TIDY),
+        ("Spaced", Self::SPACED),
+    ];
 }
 
 /// Tuning for [`SolverKind::Relax`].
@@ -423,8 +598,29 @@ impl Default for ShelfParams {
 pub struct PackConfig {
     /// Which search strategy runs.
     pub solver: SolverKind,
-    /// The scalar being minimized.
+    /// The extent measure the `extent`/`fill` weights act on.
     pub objective: Objective,
+    /// How much each objective term counts — what kind of arrangement is
+    /// being asked for.
+    pub weights: ObjectiveWeights,
+    /// How edge directions are folded for the `parallel` term.
+    pub alignment: EdgeAlignment,
+    /// Neighbourhood radius for the contact term, as a multiple of the mean
+    /// item radius.
+    ///
+    /// Small values keep the term strictly local (fast, and it only sees
+    /// true neighbours); large values make everything see everything, which
+    /// degenerates into the naive baseline.
+    pub neighborhood: f32,
+    /// How many nearest neighbours each item's gap term considers.
+    ///
+    /// A **count**, not a radius, and that is the whole point. Scoring the
+    /// gap over "every pair within R" has a trivial exploit: move everything
+    /// far apart and no pair is within R, so the term reads zero and the
+    /// solver has discovered that the tightest packing is an explosion.
+    /// A fixed number of nearest neighbours can never empty out, so spreading
+    /// always costs.
+    pub gap_neighbors: u32,
     /// Optional container constraint.
     pub boundary: Boundary,
     /// How much items may turn.
@@ -465,6 +661,18 @@ pub struct PackConfig {
     /// Apply the result automatically on convergence. When off, the run
     /// holds its ghost until the user confirms.
     pub auto_apply: bool,
+    /// Begin the iterative solvers from a constructive shelf packing instead
+    /// of the current arrangement.
+    ///
+    /// Trades one property for another: a warm start reaches a far denser
+    /// result (gradient descent in particular is close to useless without
+    /// one, since it walks downhill from wherever it is told to start), but
+    /// it discards the arrangement the user had.
+    ///
+    /// On by default, because the default solver needs it and density is
+    /// what "pack this" asks for. Turn it off — or pick
+    /// [`SolverKind::Relax`] — when the existing arrangement is meaningful.
+    pub warm_start: bool,
 
     /// [`SolverKind::Relax`] tuning.
     pub relax: RelaxParams,
@@ -479,6 +687,10 @@ impl Default for PackConfig {
         Self {
             solver: SolverKind::default(),
             objective: Objective::default(),
+            weights: ObjectiveWeights::default(),
+            alignment: EdgeAlignment::default(),
+            neighborhood: 1.5,
+            gap_neighbors: 4,
             boundary: Boundary::default(),
             rotation: RotationMode::default(),
             layers: LayerRule::default(),
@@ -494,6 +706,7 @@ impl Default for PackConfig {
             keep_groups: true,
             gravity_bias: Vec2::ZERO,
             auto_apply: true,
+            warm_start: true,
             relax: RelaxParams::default(),
             anneal: AnnealParams::default(),
             shelf: ShelfParams::default(),
@@ -514,6 +727,13 @@ impl PackConfig {
         out.patience = out.patience.clamp(1, out.max_iterations);
         out.iterations_per_frame = out.iterations_per_frame.clamp(1, 10_000);
         out.max_step = finite(out.max_step, 0.25).clamp(1e-4, 1000.0);
+        out.neighborhood = finite(out.neighborhood, 1.5).clamp(0.0, 100.0);
+        out.gap_neighbors = out.gap_neighbors.clamp(1, 64);
+        out.weights.extent = finite(out.weights.extent, 1.0).clamp(0.0, 100.0);
+        out.weights.fill = finite(out.weights.fill, 1.0).clamp(0.0, 100.0);
+        out.weights.gap = finite(out.weights.gap, 1.5).clamp(-100.0, 100.0);
+        out.weights.parallel = finite(out.weights.parallel, 0.0).clamp(0.0, 100.0);
+        out.weights.contact = finite(out.weights.contact, 0.0).clamp(-100.0, 100.0);
         out.restarts = out.restarts.clamp(1, 64);
         if !out.gravity_bias.is_finite() {
             out.gravity_bias = Vec2::ZERO;
@@ -688,6 +908,56 @@ impl PackProblem {
     /// Total hull area of all items — the denominator of the fill ratio.
     pub fn total_area(&self) -> f32 {
         self.items.iter().map(|i| i.area).sum()
+    }
+
+    /// Mean item circumradius — the length scale the neighbourhood cutoff
+    /// for the gap and contact terms is expressed in, so those terms behave
+    /// the same on tiny parts and huge ones.
+    pub fn mean_radius(&self) -> f32 {
+        if self.items.is_empty() {
+            return 0.0;
+        }
+        self.items.iter().map(|i| i.radius).sum::<f32>() / self.items.len() as f32
+    }
+
+    /// Each item's `k` nearest neighbours, as a deduplicated pair list.
+    ///
+    /// Distances are between item centres — a broad-phase proxy, which is
+    /// all the gap term needs to decide *which* pairs to look at (the exact
+    /// separation is measured afterwards). Pairs that cannot collide under
+    /// the layer rule are skipped, so off-layer bodies are never each other's
+    /// neighbours.
+    pub fn nearest_pairs(&self, centers: &[Vec2], k: usize) -> Vec<(usize, usize)> {
+        let n = self.items.len();
+        let mut pairs: Vec<(usize, usize)> = Vec::new();
+        let mut candidates: Vec<(f32, usize)> = Vec::with_capacity(n);
+        for i in 0..n {
+            let Some(&ci) = centers.get(i) else { continue };
+            candidates.clear();
+            for j in 0..n {
+                if i == j || !self.pair_collides(i, j) {
+                    continue;
+                }
+                if !self.movable(i) && !self.movable(j) {
+                    continue;
+                }
+                let Some(&cj) = centers.get(j) else { continue };
+                candidates.push((ci.distance_squared(cj), j));
+            }
+            candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for &(_, j) in candidates.iter().take(k) {
+                let pair = if i < j { (i, j) } else { (j, i) };
+                if !pairs.contains(&pair) {
+                    pairs.push(pair);
+                }
+            }
+        }
+        pairs
+    }
+
+    /// Indices of the items a solver may move, in order.
+    pub fn movable_indices(&self) -> Vec<usize> {
+        (0..self.len()).filter(|i| self.movable(*i)).collect()
     }
 
     /// Centroid of the starting arrangement, area-weighted. Hard boundaries

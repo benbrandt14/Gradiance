@@ -186,6 +186,7 @@ impl Plugin for GradianceUiPlugin {
                 labels::draw_workspace_labels,
                 joint_inspector::joint_inspector,
                 settings::settings_window,
+                optimizer::optimizer_window,
                 bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,

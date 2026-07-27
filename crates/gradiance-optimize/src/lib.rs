@@ -72,6 +72,7 @@
 //! assert!(report.shrinkage() > 0.8, "much smaller than it started");
 //! ```
 
+pub mod gradient;
 pub mod hull;
 pub mod objective;
 pub mod problem;
@@ -82,7 +83,8 @@ pub mod solvers;
 
 pub use objective::{Metrics, Scratch, metrics};
 pub use problem::{
-    AnnealParams, Boundary, LayerRule, Layout, Objective, PackConfig, PackItem, PackProblem,
-    RelaxParams, RotationMode, ShelfOrder, ShelfParams, SolverKind,
+    AnnealParams, Boundary, EdgeAlignment, LayerRule, Layout, Objective, ObjectiveWeights,
+    PackConfig, PackItem, PackProblem, RelaxParams, RotationMode, ShelfOrder, ShelfParams,
+    SolverKind,
 };
 pub use solver::{PackReport, PackRun, RunStatus, Solver};

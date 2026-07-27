@@ -661,7 +661,8 @@ pub(crate) fn inspector_pane(
     ui.separator();
     inspector_body(ui, selection, props);
     // Multi-body operations live below the per-body sections: the optimizer
-    // acts on the selection as a whole, not on the primary.
+    // acts on the selection as a whole, not on the primary. Only the compact
+    // strip goes here — the rulebook is its own window (see `optimizer`).
     if selection.len() >= 2 || optimizer.session.is_active() {
         ui.separator();
         crate::optimizer::optimizer_section(ui, selection, optimizer);

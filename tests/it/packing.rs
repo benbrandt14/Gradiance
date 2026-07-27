@@ -39,6 +39,11 @@ fn configure(app: &mut App, config: PackConfig) {
 }
 
 /// A configuration that finishes quickly and deterministically.
+///
+/// The warm start is off: these tests are about the *session* — its frames,
+/// its preview, its single commit — and a warm start replaces the layout
+/// before any iteration runs, which would mask exactly the mechanics being
+/// checked. Solver quality is measured in `gradiance-optimize`'s own tests.
 fn quick(solver: SolverKind) -> PackConfig {
     PackConfig {
         solver,
@@ -47,6 +52,7 @@ fn quick(solver: SolverKind) -> PackConfig {
         max_iterations: 800,
         patience: 200,
         iterations_per_frame: 400,
+        warm_start: false,
         ..Default::default()
     }
 }
@@ -381,6 +387,49 @@ fn depth_aware_packing_beats_flat_packing_on_the_same_bodies() {
     assert!(
         aware < flat * 0.8,
         "depth-aware packing should be much tighter: {aware:.3} m² vs flat {flat:.3} m²"
+    );
+}
+
+/// The shipped defaults, end to end, on a real scene.
+///
+/// Everything else here pins a mechanism with a deliberately simplified
+/// config; this one checks that what a user actually gets when they press
+/// "Pack selection" is a dense, legal arrangement.
+#[test]
+fn the_default_configuration_packs_a_selection_densely() {
+    let mut app = paused_app();
+    let ids: Vec<StableId> = (0..9)
+        .map(|i| {
+            spawn_box(
+                &mut app,
+                Vec2::new((i % 3) as f32 * 5.0, (i / 3) as f32 * 5.0),
+                0.6,
+                0.6,
+            )
+        })
+        .collect();
+    select(&mut app, &ids);
+    configure(
+        &mut app,
+        PackConfig {
+            iterations_per_frame: 400,
+            ..Default::default()
+        },
+    );
+
+    let before = area(bounds_of(&mut app, &ids));
+    app.world_mut().write_message(StartPackRequest);
+    app.update();
+    run_to_completion(&mut app, 400);
+    step(&mut app, 2);
+
+    let after = area(bounds_of(&mut app, &ids));
+    let body_area = 9.0 * 0.6 * 0.6;
+    let fill = body_area / after;
+    assert!(
+        fill > 0.55,
+        "the default pack should be dense: {fill:.2} fill \
+         ({before:.2} m² -> {after:.2} m²)"
     );
 }
 
