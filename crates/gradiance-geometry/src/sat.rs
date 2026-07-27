@@ -36,7 +36,12 @@ fn project(poly: &[Vec2], n: Vec2) -> (f32, f32) {
 
 /// Pushes each edge normal of `poly` into `axes` (unnormalized edges are
 /// skipped, so a degenerate polygon simply contributes nothing).
-fn edge_normals(poly: &[Vec2], axes: &mut Vec<Vec2>) {
+///
+/// Public because the separating-axis *candidate set* is the shared input to
+/// every query built on SAT — overlap here, and the array pitch in
+/// [`crate::array`] — and the two must agree on it or they will disagree
+/// about whether two shapes touch.
+pub fn axes_of(poly: &[Vec2], axes: &mut Vec<Vec2>) {
     if poly.len() < 2 {
         return;
     }
@@ -77,8 +82,8 @@ pub fn separation(a: &[Vec2], b: &[Vec2]) -> Option<Separation> {
         return None;
     }
     let mut axes: Vec<Vec2> = Vec::with_capacity(a.len() + b.len() + 1);
-    edge_normals(a, &mut axes);
-    edge_normals(b, &mut axes);
+    axes_of(a, &mut axes);
+    axes_of(b, &mut axes);
     if axes.is_empty() {
         // Two degenerate (point/segment-less) hulls: fall back to the axis
         // between them so coincident items still get pushed apart.

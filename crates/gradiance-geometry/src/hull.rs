@@ -12,7 +12,7 @@
 //! own concavity. Results are therefore always collision-free in the real
 //! scene, never tighter than the true optimum. Non-convex nesting would need
 //! a convex *decomposition* per item and a no-fit-polygon inner loop; the
-//! [`Solver`](crate::solver::Solver) trait is the seam where that would
+//! `Solver` trait in `gradiance-optimize` is the seam where that would
 //! arrive, as a new item representation rather than a new mutation path.
 
 use bevy::math::Vec2;

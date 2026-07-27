@@ -5,6 +5,7 @@ use crate::harness::{body_count, box_record, entity_of, paused_app, step, undo};
 use avian2d::prelude::{AngularVelocity, RigidBody};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
+use gradiance::command::array_cmd::ArrayTweens;
 use gradiance::physics::grab::MouseTwist;
 use gradiance::prelude::*;
 
@@ -152,8 +153,9 @@ fn linear_array_creates_offset_copies_in_one_undo_step() {
         sources: vec![id],
         count: 3,
         mode: ArrayMode::Linear {
-            offset: Vec2::new(50.0, 0.0),
+            step: Vec2::new(50.0, 0.0),
         },
+        tweens: ArrayTweens::default(),
     });
     app.update();
     assert_eq!(body_count(&mut app), 4);
@@ -177,6 +179,7 @@ fn radial_array_places_copies_on_the_circle() {
     app.world_mut().write_message(ArrayIntent {
         sources: vec![id],
         count: 3,
+        tweens: ArrayTweens::default(),
         mode: ArrayMode::Radial {
             pivot: Vec2::ZERO,
             angle_step: std::f32::consts::FRAC_PI_2,

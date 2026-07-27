@@ -132,6 +132,7 @@ pub struct PanelMenu<'w> {
     inspector: ResMut<'w, crate::inspector::InspectorPanel>,
     depth: ResMut<'w, crate::depth_panel::DepthPanel>,
     optimizer: crate::optimizer::OptimizerPanel<'w>,
+    array: ResMut<'w, crate::array_panel::ArrayWindow>,
 }
 
 /// The body-scoped intent writers, bundled into one `SystemParam` to keep
@@ -545,6 +546,21 @@ pub fn context_menu(
                         }
                     });
                     ui.separator();
+                }
+
+                // Array repeat: the gesture is alt-drag on a handle, so the
+                // menu entry only opens the rulebook.
+                if !selected_ids.is_empty()
+                    && ui
+                        .button("⧉ Array options…")
+                        .on_hover_text(
+                            "repeat the selection by holding Alt and dragging a \
+                             selection handle",
+                        )
+                        .clicked()
+                {
+                    panels.array.open = true;
+                    close = true;
                 }
 
                 // Close packing: rearrange the selection into the smallest

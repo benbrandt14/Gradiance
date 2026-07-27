@@ -9,6 +9,7 @@
 //! `Changed<>`/`resource_changed` (physics applies `SimSettings`; UI never
 //! touches avian).
 
+pub mod array_panel;
 pub mod bottom_dock;
 pub mod console;
 pub mod context_menu;
@@ -172,6 +173,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<node_graph::NodeGraph>();
         app.init_resource::<outliner::ObjectTreePanel>();
         app.init_resource::<optimizer::OptimizerExpanded>();
+        app.init_resource::<array_panel::ArrayWindow>();
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
         app.init_resource::<dock::RightDock>();
@@ -187,6 +189,7 @@ impl Plugin for GradianceUiPlugin {
                 joint_inspector::joint_inspector,
                 settings::settings_window,
                 optimizer::optimizer_window,
+                array_panel::array_window,
                 bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,

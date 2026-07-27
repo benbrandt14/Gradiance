@@ -31,8 +31,8 @@ use gradiance_core::units::PosRot;
 
 use crate::objective::{Scratch, clamp_to_boundary};
 use crate::problem::{Layout, PackProblem};
-use crate::sat::penetration;
 use crate::solver::Solver;
+use gradiance_geometry::sat::penetration;
 
 /// Attraction-plus-separation with no objective.
 pub struct NaiveSolver {

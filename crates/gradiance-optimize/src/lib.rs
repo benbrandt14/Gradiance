@@ -73,14 +73,13 @@
 //! ```
 
 pub mod gradient;
-pub mod hull;
 pub mod objective;
 pub mod problem;
 pub mod rng;
-pub mod sat;
 pub mod solver;
 pub mod solvers;
 
+pub use gradiance_geometry::{array, hull, sat};
 pub use objective::{Metrics, Scratch, metrics};
 pub use problem::{
     AnnealParams, Boundary, EdgeAlignment, LayerRule, Layout, Objective, ObjectiveWeights,

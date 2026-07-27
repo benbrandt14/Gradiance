@@ -71,7 +71,7 @@ use gradiance_core::units::PosRot;
 
 use crate::objective::{Scratch, clamp_to_boundary};
 use crate::problem::{Layout, PackProblem};
-use crate::sat::separation;
+use gradiance_geometry::sat::separation;
 
 /// Degrees of freedom per movable item: x, y, and rotation.
 pub const DOF: usize = 3;
@@ -369,7 +369,7 @@ impl<'a> PackEnergy<'a> {
     fn for_each_near_pair(
         &self,
         scratch: &Scratch,
-        mut f: impl FnMut(usize, usize, crate::sat::Separation),
+        mut f: impl FnMut(usize, usize, gradiance_geometry::sat::Separation),
     ) {
         let problem = self.problem;
         let cfg = &problem.config;
