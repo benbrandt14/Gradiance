@@ -13,7 +13,8 @@ use crate::intent::name;
 use crate::intent::{
     ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
     DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent, PropertyEditIntent, RedoIntent,
-    ScaleIntent, SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, UndoIntent, UngroupIntent,
+    ReshapeBodyIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, UndoIntent,
+    UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
@@ -90,6 +91,12 @@ command_intents! {
     ScaleIntent => |i| Box::new(ScaleCommand::new(i.targets, i.pivot, i.frame_rot, i.factors)),
     ArrayIntent => |i| Box::new(ArrayCommand::new(i.sources, i.count, i.mode)),
     CutIntent => |i| Box::new(CutCommand::new(i.a, i.b, i.width)),
+    ReshapeBodyIntent => |i| Box::new(crate::reshape_cmd::ReshapeBodyCommand {
+        id: i.id,
+        shape: i.shape,
+        sketch: i.sketch,
+        origin: i.origin,
+    }),
     DeleteJointIntent => |i| Box::new(DeleteJointCommand::new(i.id)),
     MergeIntent => |i| Box::new(MergeCommand::new(i.targets)),
     DuplicateIntent => |i| Box::new(DuplicateCommand::new(i.sources, i.offset)),

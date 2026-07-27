@@ -122,6 +122,20 @@ pub struct ToolContext<'a> {
 pub enum ToolCommit {
     /// Author a new body (box/circle/polygon/ground).
     SpawnBody(Box<BodyRecord>),
+    /// Rewrite a sketched body from its re-solved sketch.
+    ///
+    /// The re-open counterpart of `SpawnBody`: same gesture, same one-commit
+    /// discipline, but the body keeps its identity instead of being replaced.
+    ReshapeBody {
+        /// The body to rewrite.
+        id: gradiance_core::ids::StableId,
+        /// The new centroid-relative geometry.
+        shape: gradiance_domain::shape::ShapeDef,
+        /// The sketch it came from, boxed to keep the enum small.
+        sketch: Box<gradiance_domain::sketch::SketchDoc>,
+        /// Where the new centroid sits in world space.
+        origin: Vec2,
+    },
     /// Sever bodies along a stroke.
     Cut {
         /// Stroke start, world space.
@@ -319,6 +333,7 @@ pub struct ToolCommitWriters<'w> {
     spawn: MessageWriter<'w, SpawnBodyIntent>,
     spawn_node: MessageWriter<'w, gradiance_command::intent::SpawnNodeIntent>,
     cut: MessageWriter<'w, CutIntent>,
+    reshape: MessageWriter<'w, gradiance_command::intent::ReshapeBodyIntent>,
     joint: MessageWriter<'w, SpawnJointIntent>,
     moves: MessageWriter<'w, CommitTransformIntent>,
     scales: MessageWriter<'w, ScaleIntent>,
@@ -338,6 +353,20 @@ impl ToolCommitWriters<'_> {
             ToolCommit::SpawnNode(record) => {
                 self.spawn_node
                     .write(gradiance_command::intent::SpawnNodeIntent { record: *record });
+            }
+            ToolCommit::ReshapeBody {
+                id,
+                shape,
+                sketch,
+                origin,
+            } => {
+                self.reshape
+                    .write(gradiance_command::intent::ReshapeBodyIntent {
+                        id,
+                        shape,
+                        sketch: *sketch,
+                        origin,
+                    });
             }
             ToolCommit::Cut { a, b, width } => {
                 self.cut.write(CutIntent { a, b, width });

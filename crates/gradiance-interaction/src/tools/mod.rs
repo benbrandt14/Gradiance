@@ -115,6 +115,9 @@ impl Plugin for ToolsPlugin {
                 // single document, so the session dispatches internally on the
                 // active tool rather than swapping resources underneath it.
                 sync_sketch_tool,
+                // Before the session sees the click, so re-opening a body does
+                // not also register as a selection gesture inside it.
+                open_sketch_on_click,
                 run_draft_tool::<sketch_session::SketchSession>,
             )
                 .chain()
@@ -246,6 +249,48 @@ fn pause_for_sketch(
 ) {
     resume.0 = Some(*game.get());
     next.set(GameState::Paused);
+}
+
+/// Re-open a committed body's sketch by clicking it.
+///
+/// Without this a sketch is a one-shot recipe and the constraints it carries
+/// are decoration — "make that edge 3 metres" has to be answerable for a body
+/// that already exists, or the solver is only ever paying for itself once.
+///
+/// Deliberately gated on an *empty* session: while a sketch is in progress a
+/// click means "select" or "draw", and quietly swapping the document out from
+/// under a half-drawn chain would be indefensible. Empty sketch plus the Select
+/// tool is the one unambiguous moment where a click on a body can only mean
+/// "edit this".
+fn open_sketch_on_click(
+    buttons: Res<ButtonInput<MouseButton>>,
+    over_ui: Res<crate::PointerOverUi>,
+    cursor: Res<crate::snap::SnappedCursor>,
+    tool: Res<State<SketchTool>>,
+    physics: PhysicsQueries,
+    bodies: Query<(&ShapeDef, &DepthBand), With<Body>>,
+    sketched: Query<(
+        &gradiance_core::ids::StableId,
+        &gradiance_domain::sketch::SketchDoc,
+        &Transform,
+    )>,
+    mut session: ResMut<sketch_session::SketchSession>,
+) {
+    if over_ui.0
+        || *tool.get() != SketchTool::Select
+        || !session.is_empty()
+        || !buttons.just_pressed(MouseButton::Left)
+    {
+        return;
+    }
+    let Some(p) = cursor.effective() else { return };
+
+    for entity in bodies_at_sorted(p, &physics, &bodies) {
+        if let Ok((id, doc, transform)) = sketched.get(entity) {
+            session.open(*id, doc.clone(), transform.translation.truncate());
+            return;
+        }
+    }
 }
 
 /// Mirror the `SketchTool` state onto the session.

@@ -109,6 +109,9 @@ pub struct SketchSession {
     drag: Option<SketchId>,
     /// First pick of a trim gesture — the thing to be cut.
     trim_target: Option<SketchId>,
+    /// The body this sketch was re-opened from, if any. `None` means the
+    /// sketch will commit as a new body.
+    editing: Option<gradiance_core::ids::StableId>,
     /// Set by the panel, consumed by the next `update`.
     commit_requested: bool,
     /// Whether newly drawn geometry is reference-only.
@@ -304,6 +307,28 @@ impl SketchSession {
         Ok(format!("deleted {entities} entity(s), {points} point(s)"))
     }
 
+    /// Load a committed body's sketch back in for editing.
+    ///
+    /// The stored document is in body-local (centroid-relative) space, so it is
+    /// translated into world space on the way in — the sketch tools, snapping
+    /// and the solver all work in world coordinates, and re-centring happens
+    /// again on the way back out.
+    pub fn open(&mut self, id: gradiance_core::ids::StableId, mut doc: SketchDoc, origin: Vec2) {
+        for p in &mut doc.points {
+            p.at += origin;
+        }
+        self.abandon();
+        self.doc = doc;
+        self.editing = Some(id);
+        self.resolve();
+        self.note("editing an existing sketch", false);
+    }
+
+    /// The body being edited, if this sketch was re-opened from one.
+    pub fn editing(&self) -> Option<gradiance_core::ids::StableId> {
+        self.editing
+    }
+
     /// Drop the current selection.
     pub fn clear_selection(&mut self) {
         self.selection.clear();
@@ -453,12 +478,24 @@ impl SketchSession {
     /// Close the profile and hand back a body, clearing the sketch either way.
     fn commit(&mut self) -> Option<ToolCommit> {
         let doc = std::mem::take(&mut self.doc);
+        let editing = self.editing;
         let lowered = lower::to_shape_with_origin(&doc);
         self.abandon();
 
         match lowered {
             Ok((shape, origin)) => {
                 shape.validate().ok()?;
+                // Re-opened sketches rewrite the body they came from rather
+                // than spawning a twin beside it, so the body keeps its
+                // `StableId` — and therefore its joints, groups and history.
+                if let Some(id) = editing {
+                    return Some(ToolCommit::ReshapeBody {
+                        id,
+                        shape,
+                        sketch: Box::new(doc),
+                        origin,
+                    });
+                }
                 let mut record = new_body_record(shape, origin, 0.0);
                 // The sketch rides along with the body: this is what makes the
                 // body re-openable for constraint editing, and it is saved and
@@ -1306,6 +1343,85 @@ mod tests {
             other => panic!("expected a body, got {other:?}"),
         }
         assert!(s.is_empty(), "committing clears the session");
+    }
+
+    #[test]
+    fn a_reopened_sketch_rewrites_its_body_instead_of_spawning_a_twin() {
+        use gradiance_core::ids::StableId;
+
+        // Take a committed sketch back apart: body-local geometry plus the
+        // body's world position, which is what `open` is handed.
+        let mut source = square();
+        let doc = source.doc().clone();
+        let (_, origin) =
+            lower::to_shape_with_origin(&doc).expect("the square lowers to a profile");
+        let mut local = doc.clone();
+        for p in &mut local.points {
+            p.at -= origin;
+        }
+        source.abandon();
+
+        let id = StableId::new();
+        let mut s = SketchSession::default();
+        s.open(id, local, origin);
+
+        assert_eq!(s.editing(), Some(id));
+        // Re-opening must land the geometry back where the body actually is,
+        // not at the origin.
+        let centre = s.doc().points.iter().map(|p| p.at).sum::<Vec2>() / 4.0;
+        assert!(
+            centre.distance(origin) < 1e-4,
+            "expected the sketch to reopen in world space at {origin:?}, got {centre:?}"
+        );
+
+        s.request_commit();
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        match s.update(&ctx(GesturePhase::Idle, None, &gc, &sc)) {
+            Some(ToolCommit::ReshapeBody {
+                id: got, origin: o, ..
+            }) => {
+                assert_eq!(got, id, "the body keeps its identity");
+                assert!(o.distance(origin) < 1e-4, "and its position");
+            }
+            other => panic!("expected a reshape, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_reopened_sketch_can_be_dimensioned_and_recommitted() {
+        use gradiance_core::ids::StableId;
+
+        let doc = square().doc().clone();
+        let id = StableId::new();
+        let mut s = SketchSession::default();
+        s.open(id, doc, Vec2::ZERO);
+
+        // The whole point of storing the sketch: an existing body can still be
+        // told how big to be.
+        let (a, b) = (s.doc.points[0].id, s.doc.points[1].id);
+        s.selection.toggle_point(a);
+        s.selection.toggle_point(b);
+        s.apply_constraint(ConstraintKind::Distance, Some(4.0));
+
+        let (pa, pb) = (s.at(a).expect("a"), s.at(b).expect("b"));
+        assert!(
+            (pa.distance(pb) - 4.0).abs() < 1e-3,
+            "the dimension should have driven the reopened geometry, got {}",
+            pa.distance(pb)
+        );
+        assert_eq!(s.editing(), Some(id), "still editing the same body");
+    }
+
+    #[test]
+    fn a_fresh_sketch_still_spawns_rather_than_reshaping() {
+        let mut s = square();
+        assert_eq!(s.editing(), None);
+        s.request_commit();
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        assert!(matches!(
+            s.update(&ctx(GesturePhase::Idle, None, &gc, &sc)),
+            Some(ToolCommit::SpawnBody(_))
+        ));
     }
 
     #[test]

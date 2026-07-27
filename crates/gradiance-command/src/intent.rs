@@ -42,6 +42,8 @@ pub mod name {
     pub const UNGROUP: &str = "ungroup";
     /// [`CutIntent`](super::CutIntent) → `CutCommand` → script verb `(cut …)`.
     pub const CUT: &str = "cut";
+    /// Rewriting a sketched body from its re-solved sketch.
+    pub const RESHAPE_BODY: &str = "reshape-body";
     /// [`DeleteJointIntent`](super::DeleteJointIntent) → `DeleteJointCommand`.
     pub const DELETE_JOINT: &str = "delete-joint";
     /// [`MergeIntent`](super::MergeIntent) → `MergeCommand`.
@@ -205,6 +207,24 @@ pub struct CutIntent {
     pub b: Vec2,
     /// Stroke width, world metres.
     pub width: f32,
+}
+
+/// Request to rewrite a sketched body from its re-solved sketch.
+///
+/// Emitted when a re-opened sketch is committed. Carries the whole result
+/// rather than a delta because a solve is not incremental — a single dimension
+/// can move every point in the profile.
+// Trace: dispatch.rs → ReshapeBodyCommand (reshape_cmd.rs) → sync_colliders, sync_body_meshes.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct ReshapeBodyIntent {
+    /// The body to rewrite.
+    pub id: StableId,
+    /// The new centroid-relative geometry.
+    pub shape: gradiance_domain::shape::ShapeDef,
+    /// The sketch it came from, so the body stays re-openable.
+    pub sketch: gradiance_domain::sketch::SketchDoc,
+    /// Where the new centroid sits in world space.
+    pub origin: Vec2,
 }
 
 /// Request to merge bodies into one (SDF union; first target hosts).
