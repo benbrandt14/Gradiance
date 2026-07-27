@@ -15,3 +15,5 @@ gradiance-geometry.workspace = true
 # configuration struct only (the same allowance the geometry shape tree has).
 # No systems, no queries, no plugin lives in this crate.
 bevy.workspace = true
+argmin.workspace = true
+argmin-math.workspace = true

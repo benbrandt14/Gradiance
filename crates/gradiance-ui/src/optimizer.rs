@@ -1,10 +1,23 @@
-//! The **Optimizer** panel: start a close-packing run and dial its rules.
+//! The **Optimizer**: start a close-packing run and dial its rules.
 //!
-//! Two hosts render this: the selection context menu (a one-click "Pack
-//! selection", the fast path) and the Properties pane (a collapsing section
-//! with the whole rulebook, the deliberate path). Both write the same two
-//! request messages — the UI never touches the session or the world, it only
-//! asks.
+//! Three surfaces, sized to how much the user wants to think about it:
+//!
+//! - The selection **context menu** — one click to pack, plus accept/cancel
+//!   while a run is live. The fast path.
+//! - The **Properties pane** — a compact status strip and the same buttons,
+//!   so a run is visible and controllable without opening anything.
+//! - A floating **Optimizer window** — the full rulebook, in its own
+//!   scrolling window.
+//!
+//! The rulebook lives in a window rather than in the Properties pane for a
+//! plain reason: it is far too tall. Nested inside a dock pane it pushed the
+//! per-body sections off-screen and needed its own scrollbar inside another
+//! scrollbar. It is also not a per-body property — it describes an operation
+//! over the whole selection — so a modeless window that can sit open next to
+//! the viewport while you watch the ghost is the honest shape for it.
+//!
+//! All three write the same two request messages — the UI never touches the
+//! session or the world, it only asks.
 //!
 //! Every control here edits [`PackConfig`], which is a **settings resource**:
 //! editor configuration rather than authored scene state, so writing it
@@ -18,7 +31,8 @@ use bevy_egui::egui;
 use gradiance_interaction::pack::{PackControl, PackSession, StartPackRequest};
 use gradiance_interaction::selection::Selection;
 use gradiance_optimize::{
-    Boundary, LayerRule, Objective, PackConfig, RotationMode, ShelfOrder, SolverKind,
+    Boundary, EdgeAlignment, LayerRule, Objective, ObjectiveWeights, PackConfig, RotationMode,
+    ShelfOrder, SolverKind,
 };
 
 /// Everything the Optimizer panel reads and writes, bundled so both hosts
@@ -35,9 +49,16 @@ pub struct OptimizerPanel<'w> {
     pub expanded: ResMut<'w, OptimizerExpanded>,
 }
 
-/// Remembers whether the Optimizer section is unfolded, so it survives frames.
+/// Whether the floating Optimizer window is showing.
 #[derive(Resource, Default, Debug)]
 pub struct OptimizerExpanded(pub bool);
+
+impl OptimizerExpanded {
+    /// Flips the window open/closed.
+    pub fn toggle(&mut self) {
+        self.0 = !self.0;
+    }
+}
 
 impl OptimizerPanel<'_> {
     /// Asks for a run over the current selection.
@@ -98,7 +119,7 @@ pub fn context_menu_entry(
     }
     if ui
         .add_enabled(enabled, egui::Button::new("⚙ Pack options…"))
-        .on_hover_text("open the Optimizer section in the Properties pane")
+        .on_hover_text("open the Optimizer window with the full rulebook")
         .clicked()
     {
         opt.expanded.0 = true;
@@ -107,31 +128,195 @@ pub fn context_menu_entry(
     close
 }
 
-/// The full Optimizer section for the Properties pane.
+/// The Properties-pane strip: status, the run buttons, and a way into the
+/// full rulebook. Deliberately short — the pane has per-body sections above
+/// it that must stay reachable.
 pub fn optimizer_section(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPanel) {
-    let expanded = opt.expanded.0;
-    let header = egui::CollapsingHeader::new("Optimizer")
-        .id_salt("optimizer-section")
-        .default_open(false)
-        .open(expanded.then_some(true));
-    let response = header.show(ui, |ui| optimizer_body(ui, selection, opt));
-    // Let the user fold it again after the menu forced it open.
-    if expanded && !response.fully_open() {
-        opt.expanded.0 = false;
-    }
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Optimizer").strong());
+        if ui
+            .small_button("⚙ options…")
+            .on_hover_text("open the full rulebook in its own window")
+            .clicked()
+        {
+            opt.expanded.0 = true;
+        }
+    });
+    run_controls(ui, selection, opt);
 }
 
-/// The section contents.
+/// The floating window: the whole rulebook, scrolling.
+pub fn optimizer_window(
+    mut contexts: bevy_egui::EguiContexts,
+    selection: Res<Selection>,
+    mut opt: OptimizerPanel,
+) -> Result {
+    if !opt.expanded.0 {
+        return Ok(());
+    }
+    let ctx = contexts.ctx_mut()?;
+    let mut open = true;
+    egui::Window::new("Optimizer")
+        .open(&mut open)
+        .default_width(340.0)
+        .default_height(520.0)
+        .resizable(true)
+        .vscroll(false)
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| optimizer_body(ui, &selection, &mut opt));
+        });
+    if !open {
+        opt.expanded.0 = false;
+    }
+    Ok(())
+}
+
+/// The window contents.
 fn optimizer_body(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPanel) {
     run_controls(ui, selection, opt);
     ui.separator();
+    preset_controls(ui, opt);
+    ui.separator();
     solver_controls(ui, opt);
+    ui.separator();
+    goal_controls(ui, opt);
     ui.separator();
     constraint_controls(ui, opt);
     ui.separator();
     convergence_controls(ui, opt);
     ui.separator();
     tuning_controls(ui, opt);
+}
+
+/// One-click weight presets — the fastest way to say what kind of
+/// arrangement is wanted without reading five sliders.
+fn preset_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
+    ui.horizontal(|ui| {
+        ui.label("preset");
+        for (name, weights) in ObjectiveWeights::PRESETS {
+            let active = opt.config.weights == weights;
+            if ui
+                .selectable_label(active, name)
+                .on_hover_text(match name {
+                    "Tight" => "maximum density; bodies pull into flush contact",
+                    "Tidy" => "dense, but squared up — edges line up with each other",
+                    _ => "spread out inside the container, touching as little as possible",
+                })
+                .clicked()
+            {
+                opt.config.weights = weights;
+                // Spreading only means anything against a wall to spread
+                // against; without one the set would simply fly apart.
+                if name == "Spaced" && !opt.config.boundary.is_hard() {
+                    opt.config.boundary = Boundary::Rect {
+                        width: 8.0,
+                        height: 8.0,
+                    };
+                }
+            }
+        }
+    });
+}
+
+/// The objective weights — what "better" means for this run.
+fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
+    ui.label(egui::RichText::new("Goal").strong());
+    let mut w = opt.config.weights;
+    let mut changed = false;
+    egui::Grid::new("pack-weights")
+        .num_columns(2)
+        .spacing([8.0, 2.0])
+        .show(ui, |ui| {
+            changed |= drag_row(
+                ui,
+                "shrink",
+                &mut w.extent,
+                0.0..=10.0,
+                0.05,
+                "make the overall bounding measure smaller",
+            );
+            changed |= drag_row(
+                ui,
+                "fill",
+                &mut w.fill,
+                0.0..=10.0,
+                0.05,
+                "drive the filled-area ÷ bounding-area ratio toward 1",
+            );
+            changed |= drag_row(
+                ui,
+                "close gaps",
+                &mut w.gap,
+                -5.0..=10.0,
+                0.05,
+                "squeeze the leftover space between neighbours (negative pushes them apart)",
+            );
+            changed |= drag_row(
+                ui,
+                "line up",
+                &mut w.parallel,
+                0.0..=10.0,
+                0.05,
+                "reward edges pointing the same way — turns a dense pile into a tidy block",
+            );
+            changed |= drag_row(
+                ui,
+                "contact",
+                &mut w.contact,
+                -5.0..=10.0,
+                0.05,
+                "positive: minimize how much bodies touch. negative: pull them flush",
+            );
+        });
+    if changed {
+        opt.config.weights = w;
+    }
+
+    let mut alignment = opt.config.alignment;
+    egui::ComboBox::from_id_salt("pack-alignment")
+        .selected_text(alignment.label())
+        .show_ui(ui, |ui| {
+            for mode in EdgeAlignment::ALL {
+                ui.selectable_value(&mut alignment, mode, mode.label());
+            }
+        });
+    if alignment != opt.config.alignment {
+        opt.config.alignment = alignment;
+    }
+
+    ui.horizontal(|ui| {
+        let mut neighbors = opt.config.gap_neighbors;
+        if ui
+            .add(
+                egui::DragValue::new(&mut neighbors)
+                    .speed(0.2)
+                    .range(1..=32)
+                    .prefix("gap neighbours "),
+            )
+            .on_hover_text(
+                "how many nearest neighbours the gap term measures against. A count, \
+                 not a radius — a radius can be escaped by spreading out.",
+            )
+            .changed()
+        {
+            opt.config.gap_neighbors = neighbors;
+        }
+        let mut neighborhood = opt.config.neighborhood;
+        if ui
+            .add(
+                egui::DragValue::new(&mut neighborhood)
+                    .speed(0.05)
+                    .range(0.0..=10.0)
+                    .prefix("contact reach ×"),
+            )
+            .on_hover_text("how far the contact term looks, as a multiple of the mean body size")
+            .changed()
+        {
+            opt.config.neighborhood = neighborhood;
+        }
+    });
 }
 
 /// Start/apply/cancel plus the live readout.
@@ -182,6 +367,18 @@ fn run_controls(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPan
             opt.config.auto_apply = auto;
         }
     });
+    let mut warm = opt.config.warm_start;
+    if ui
+        .checkbox(&mut warm, "rebuild from scratch (warm start)")
+        .on_hover_text(
+            "start from a fresh constructive packing instead of the current arrangement. \
+             Much denser, but it discards where things are — turn it off (or use \
+             Relaxation) when the existing layout is meaningful.",
+        )
+        .changed()
+    {
+        opt.config.warm_start = warm;
+    }
 }
 
 /// The live progress block.
@@ -215,7 +412,25 @@ fn run_readout(ui: &mut egui::Ui, opt: &OptimizerPanel) {
             ));
             ui.end_row();
             ui.label("fill");
-            ui.label(format!("{:.1} %", report.best.fill * 100.0));
+            ui.label(egui::RichText::new(format!("{:.1} %", report.best.fill * 100.0)).strong())
+                .on_hover_text("body area ÷ bounding area — 1.0 is a perfect tiling");
+            ui.end_row();
+            ui.label("hull fill");
+            ui.label(format!("{:.1} %", report.best.hull_fill * 100.0));
+            ui.end_row();
+            ui.label("gaps");
+            ui.label(format!(
+                "min {:.3} m, mean {:.3} m",
+                report.best.min_gap, report.best.mean_gap
+            ))
+            .on_hover_text("leftover space to each body's nearest neighbours");
+            ui.end_row();
+            ui.label("aligned");
+            ui.label(format!("{:.0} %", report.best.alignment * 100.0))
+                .on_hover_text("how nearly the hull edges share a direction");
+            ui.end_row();
+            ui.label("contact");
+            ui.label(format!("{:.2} m", report.best.contact));
             ui.end_row();
             ui.label("overlap");
             if report.best.is_feasible() {
@@ -612,9 +827,16 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 fn tuning_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     ui.label(egui::RichText::new("Tuning").strong());
     match opt.config.solver {
-        SolverKind::Relax => relax_tuning(ui, opt),
+        SolverKind::Relax | SolverKind::Naive => relax_tuning(ui, opt),
         SolverKind::Anneal => anneal_tuning(ui, opt),
         SolverKind::Shelf => shelf_tuning(ui, opt),
+        // L-BFGS has no knobs worth exposing: the line search and the
+        // curvature memory are argmin's business, and the iteration budget
+        // and goal weights above already cover everything a user would want
+        // to reach for.
+        SolverKind::Descent => {
+            ui.weak("Gradient descent is tuned by the goal weights and the iteration budget.");
+        }
     }
 }
 

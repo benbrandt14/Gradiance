@@ -66,6 +66,13 @@ pub trait Solver: Send + Sync + 'static {
     /// The current working layout.
     fn layout(&self) -> &Layout;
 
+    /// Replaces the working layout — the warm-start hook.
+    ///
+    /// Default is to ignore it, which is right for the constructive
+    /// strategies: a shelf packing does not care where anything started, so
+    /// seeding one would be a no-op with extra steps.
+    fn seed(&mut self, _layout: Layout) {}
+
     /// True for one-shot constructive strategies, which are complete after
     /// a single step and should not be iterated further.
     fn is_one_shot(&self) -> bool {
@@ -369,6 +376,11 @@ mod tests {
             overlap: 0.0,
             violations: 0,
             fill: 1.0,
+            hull_fill: 1.0,
+            min_gap: 0.0,
+            mean_gap: 0.0,
+            contact: 0.0,
+            alignment: 1.0,
             boundary_error: 0.0,
         };
         let tiny_but_illegal = Metrics {

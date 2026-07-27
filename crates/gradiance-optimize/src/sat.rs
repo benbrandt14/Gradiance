@@ -49,18 +49,33 @@ fn edge_normals(poly: &[Vec2], axes: &mut Vec<Vec2>) {
     }
 }
 
-/// The minimum translation that restores `clearance` between two convex
-/// polygons, or `None` when they are already at least `clearance` apart.
+/// How far apart two convex polygons are, and along which axis.
 ///
-/// Both polygons are in world space. `clearance` may be zero (touching is
-/// allowed) but not negative — a negative request is clamped to zero, since
-/// "allowed to interpenetrate" is not a packing constraint the callers mean.
-pub fn penetration(a: &[Vec2], b: &[Vec2], clearance: f32) -> Option<Mtv> {
+/// This is the primitive everything else here is built from, because
+/// "overlapping by 3 mm" and "20 mm apart" are the same question with
+/// opposite signs — and the objective needs *both*: penetration to reject a
+/// layout, and the gap to know how much slack is left to squeeze out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Separation {
+    /// Unit axis pointing from `a` toward `b`.
+    pub axis: Vec2,
+    /// Signed distance along `axis`: positive is a gap, negative is
+    /// penetration depth.
+    pub distance: f32,
+}
+
+/// The separating-axis distance between two convex polygons.
+///
+/// Returns the axis of **greatest** separation, which is the minimum
+/// translation direction when the pair overlaps and the (conservative)
+/// closest-approach direction when it does not. Face normals only, so for a
+/// vertex-to-vertex configuration the reported gap can understate the true
+/// Euclidean distance; that error is always in the safe direction for
+/// packing (it never claims more room than there is).
+pub fn separation(a: &[Vec2], b: &[Vec2]) -> Option<Separation> {
     if a.is_empty() || b.is_empty() {
         return None;
     }
-    let clearance = clearance.max(0.0);
-
     let mut axes: Vec<Vec2> = Vec::with_capacity(a.len() + b.len() + 1);
     edge_normals(a, &mut axes);
     edge_normals(b, &mut axes);
@@ -73,9 +88,6 @@ pub fn penetration(a: &[Vec2], b: &[Vec2], clearance: f32) -> Option<Mtv> {
         axes.push(axis);
     }
 
-    // The MTV is the axis of *greatest* separation: pushing along it is the
-    // cheapest way out. Anything at or beyond `clearance` proves the pair is
-    // fine and ends the query.
     let mut best_sep = f32::MIN;
     let mut best_axis = Vec2::X;
     for n in axes {
@@ -89,18 +101,45 @@ pub fn penetration(a: &[Vec2], b: &[Vec2], clearance: f32) -> Option<Mtv> {
         } else {
             (gap_neg, -n)
         };
-        if sep >= clearance {
-            return None;
-        }
         if sep > best_sep {
             best_sep = sep;
             best_axis = dir;
         }
     }
 
-    Some(Mtv {
+    Some(Separation {
         axis: best_axis,
-        depth: clearance - best_sep,
+        distance: best_sep,
+    })
+}
+
+/// The length over which two convex polygons face each other across `axis`
+/// — a proxy for how much "contact area" a touching pair has.
+///
+/// Measured by projecting both polygons onto the perpendicular of the
+/// separating axis and taking the overlap of those intervals. For two
+/// rectangles meeting face to face this is exactly the shared edge length;
+/// for a corner touch it collapses toward zero, which is the distinction the
+/// contact objective is trying to express.
+pub fn contact_span(a: &[Vec2], b: &[Vec2], axis: Vec2) -> f32 {
+    let perp = Vec2::new(-axis.y, axis.x);
+    let (a_min, a_max) = project(a, perp);
+    let (b_min, b_max) = project(b, perp);
+    (a_max.min(b_max) - a_min.max(b_min)).max(0.0)
+}
+
+/// The minimum translation that restores `clearance` between two convex
+/// polygons, or `None` when they are already at least `clearance` apart.
+///
+/// Both polygons are in world space. `clearance` may be zero (touching is
+/// allowed) but not negative — a negative request is clamped to zero, since
+/// "allowed to interpenetrate" is not a packing constraint the callers mean.
+pub fn penetration(a: &[Vec2], b: &[Vec2], clearance: f32) -> Option<Mtv> {
+    let clearance = clearance.max(0.0);
+    let sep = separation(a, b)?;
+    (sep.distance < clearance).then_some(Mtv {
+        axis: sep.axis,
+        depth: clearance - sep.distance,
     })
 }
 

@@ -30,8 +30,10 @@ quantity newtypes derive `Reflect`, like the geometry shape tree). It owns
 the single px↔SI seam `units::world` (`PIXELS_PER_METER`).
 
 `gradiance-optimize` is the layout-solver crate (`docs/optimize-decision.md`):
-a pure geometric search over poses — convex hulls, SAT, an objective, and a
-`Solver` trait with three interchangeable strategies. Like `geometry` it has
+a pure geometric search over poses — convex hulls, SAT, a weighted objective,
+and a `Solver` trait with five interchangeable strategies (one of them
+`argmin`-backed L-BFGS over an analytic gradient, one a deliberately naive
+baseline the others are CI-asserted to beat). Like `geometry` it has
 no systems and no queries; its only bevy surface is `Resource`/`Reflect` on
 the `PackConfig` rulebook. **It never touches the physics engine** — packing
 is an optimization with an objective, not a simulation (see the crate docs

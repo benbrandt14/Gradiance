@@ -8,9 +8,10 @@
 //!
 //! Whenever that sweep finds the arrangement **settled** (total overlap
 //! under `settle_epsilon`), it is joined by a **compaction pulse**: every
-//! item is pulled a fraction of its distance toward the arrangement centre,
-//! plus any settling bias and a small random kick to break symmetric
-//! standoffs. Orientation changes ride the same pulse.
+//! item is pulled toward the arrangement centre by a fraction of its
+//! distance, scaled by the `extent + fill` goal weights. Settling bias, a
+//! small random kick (to break symmetric standoffs), and orientation changes
+//! ride the same pulse.
 //!
 //! # Why pulse instead of pulling every iteration
 //!
@@ -43,7 +44,7 @@ use gradiance_core::units::PosRot;
 use crate::objective::{Scratch, clamp_to_boundary};
 use crate::problem::{Layout, PackProblem};
 use crate::rng::Rng;
-use crate::sat::penetration;
+use crate::sat::separation;
 use crate::solver::Solver;
 
 /// Extra separation applied to every violating pair each iteration, in
@@ -55,6 +56,10 @@ use crate::solver::Solver;
 /// a compaction pulse. A fixed absolute nudge on top guarantees each pair
 /// gains real ground every iteration and terminates.
 const SEPARATION_SLOP: f32 = 1e-5;
+
+/// The default `extent + fill`, so default weights reproduce a plain
+/// `attraction` pull and the dial is a multiplier rather than a rescale.
+const WEIGHT_REF: f32 = 2.0;
 
 /// Iterative separation/attraction relaxation.
 pub struct RelaxSolver {
@@ -78,27 +83,16 @@ impl RelaxSolver {
     }
 }
 
-impl Solver for RelaxSolver {
-    fn name(&self) -> &'static str {
-        "relaxation"
-    }
-
-    fn layout(&self) -> &Layout {
-        &self.layout
-    }
-
-    fn step(&mut self, problem: &PackProblem, scratch: &mut Scratch) {
+impl RelaxSolver {
+    /// One pass over every pair that is either overlapping (separate it) or
+    /// merely near (remember the gap). Returns the total penetration, which
+    /// is what gates the next compaction pulse.
+    fn sweep_pairs(&mut self, problem: &PackProblem, scratch: &Scratch) -> f32 {
         let n = problem.items.len();
         let cfg = &problem.config;
         let params = cfg.relax;
-        scratch.refresh(problem, &self.layout);
-
-        self.correction.clear();
-        self.correction.resize(n, Vec2::ZERO);
-        self.velocity.resize(n, Vec2::ZERO);
-
-        // 1. Separation: accumulate every violating pair's share.
         let mut total_overlap = 0.0;
+        // One pass over every pair close enough to matter.
         for i in 0..n {
             for j in (i + 1)..n {
                 if !problem.pair_collides(i, j) {
@@ -115,37 +109,84 @@ impl Solver for RelaxSolver {
                 if scratch.center(i).distance_squared(scratch.center(j)) > reach * reach {
                     continue;
                 }
-                let Some(mtv) = penetration(scratch.placed(i), scratch.placed(j), cfg.clearance)
-                else {
+                let Some(sep) = separation(scratch.placed(i), scratch.placed(j)) else {
                     continue;
                 };
-                total_overlap += mtv.depth;
-                let push = mtv.axis * mtv.depth.mul_add(params.separation_gain, SEPARATION_SLOP);
-                // A pinned partner absorbs none of the correction, so the
-                // movable one takes the whole exit.
-                match (movable_i, movable_j) {
-                    (true, true) => {
-                        self.correction[i] -= push * 0.5;
-                        self.correction[j] += push * 0.5;
+
+                if sep.distance < cfg.clearance {
+                    let depth = cfg.clearance - sep.distance;
+                    total_overlap += depth;
+                    let push = sep.axis * depth.mul_add(params.separation_gain, SEPARATION_SLOP);
+                    // A pinned partner absorbs none of the correction, so the
+                    // movable one takes the whole exit.
+                    match (movable_i, movable_j) {
+                        (true, true) => {
+                            self.correction[i] -= push * 0.5;
+                            self.correction[j] += push * 0.5;
+                        }
+                        (true, false) => self.correction[i] -= push,
+                        (false, true) => self.correction[j] += push,
+                        (false, false) => {}
                     }
-                    (true, false) => self.correction[i] -= push,
-                    (false, true) => self.correction[j] += push,
-                    (false, false) => {}
                 }
             }
         }
+
+        total_overlap
+    }
+}
+
+impl Solver for RelaxSolver {
+    fn name(&self) -> &'static str {
+        "relaxation"
+    }
+
+    fn layout(&self) -> &Layout {
+        &self.layout
+    }
+
+    fn seed(&mut self, layout: Layout) {
+        self.layout = layout;
+    }
+
+    fn step(&mut self, problem: &PackProblem, scratch: &mut Scratch) {
+        let n = problem.items.len();
+        let cfg = &problem.config;
+        let params = cfg.relax;
+        scratch.refresh(problem, &self.layout);
+
+        self.correction.clear();
+        self.correction.resize(n, Vec2::ZERO);
+        self.velocity.resize(n, Vec2::ZERO);
+
+        // The pulse strength, scaled by the goal weights so the dial means
+        // something here and not only in the score.
+        let global_gain =
+            params.attraction * (cfg.weights.extent + cfg.weights.fill).max(0.0) / WEIGHT_REF;
+        // A local, neighbour-directed pull was tried here as well and
+        // measured *worse* on every benchmark scene: it forms tight clumps
+        // that each close their own gaps while the arrangement as a whole
+        // stays loose. The gap weight remains an objective goal — it is how
+        // you ask for a particular neighbour spacing — but it does not steer
+        // this solver's pulse. See `docs/optimize-decision.md`.
+
+        let total_overlap = self.sweep_pairs(problem, scratch);
 
         // 2. The compaction pulse — only once the arrangement has settled, so
         //    every squeeze starts from a legal layout and the iterations in
         //    between are free to drive the overlap to zero (module docs).
         let pulse = total_overlap <= params.settle_epsilon;
+        // The direction every item is asked to line up with, if anyone asked.
+        let dominant = (pulse && cfg.weights.parallel > 0.0)
+            .then(|| dominant_direction(scratch, cfg.alignment))
+            .flatten();
         if pulse {
             for i in 0..n {
                 if !problem.movable(i) {
                     continue;
                 }
                 let pos = self.layout.poses[i].pos;
-                self.correction[i] += (self.target - pos) * params.attraction;
+                self.correction[i] += (self.target - pos) * global_gain;
                 self.correction[i] += cfg.gravity_bias * params.attraction;
                 if params.jitter > 0.0 {
                     self.correction[i] +=
@@ -175,12 +216,96 @@ impl Solver for RelaxSolver {
             // Turning is a compaction-phase decision too: re-orienting during
             // a settle would keep re-creating the overlaps it is clearing.
             if pulse && cfg.rotation.allows_rotation() && params.rotation_gain > 0.0 {
-                pose.rot = relaxed_rotation(problem, i, pose, params.rotation_gain, &mut self.rng);
+                pose.rot = match dominant {
+                    // Someone asked for parallel edges: turn toward the
+                    // arrangement's own dominant direction rather than at the
+                    // tidiest footprint, which is a different goal.
+                    Some(direction) => {
+                        aligned_rotation(problem, i, pose, direction, params.rotation_gain, scratch)
+                    }
+                    None => relaxed_rotation(problem, i, pose, params.rotation_gain, &mut self.rng),
+                };
             }
             pose.pos = clamp_to_boundary(problem, pose, item.radius);
             self.layout.poses[i] = pose;
         }
     }
+}
+
+/// The arrangement's dominant edge direction, as a folded angle.
+///
+/// The circular mean of every hull edge's direction, weighted by edge length
+/// and folded by [`EdgeAlignment`] — the same quantity
+/// [`crate::objective`] scores, so what the solver steers toward and what the
+/// score rewards cannot drift apart. `None` when there are no edges to speak
+/// of.
+fn dominant_direction(scratch: &Scratch, mode: crate::problem::EdgeAlignment) -> Option<f32> {
+    let k = mode.fold() as f32;
+    let mut acc = Vec2::ZERO;
+    let mut total = 0.0;
+    for i in 0..scratch.len() {
+        let poly = scratch.placed(i);
+        if poly.len() < 2 {
+            continue;
+        }
+        for v in 0..poly.len() {
+            let edge = poly[(v + 1) % poly.len()] - poly[v];
+            let len = edge.length();
+            if len < 1e-9 {
+                continue;
+            }
+            let (sin, cos) = (edge.y.atan2(edge.x) * k).sin_cos();
+            acc += Vec2::new(cos, sin) * len;
+            total += len;
+        }
+    }
+    (total > 1e-9 && acc.length() > 1e-9).then(|| acc.y.atan2(acc.x) / k)
+}
+
+/// Turns an item toward `direction`, blended by `gain`.
+///
+/// Both the item's own folded edge direction and the target are compared
+/// modulo the fold, so an item never spins the long way round to reach an
+/// orientation it is already equivalent to.
+fn aligned_rotation(
+    problem: &PackProblem,
+    index: usize,
+    pose: PosRot,
+    direction: f32,
+    gain: f32,
+    scratch: &Scratch,
+) -> f32 {
+    let Some(item) = problem.items.get(index) else {
+        return pose.rot;
+    };
+    let mode = problem.config.rotation;
+    let fold = problem.config.alignment.fold() as f32;
+    let period = std::f32::consts::TAU / fold;
+    let Some(own) = dominant_of(scratch.placed(index), fold) else {
+        return pose.rot;
+    };
+    // Shortest turn that maps this item's edge family onto the target's.
+    let mut delta = direction - own;
+    delta -= (delta / period).round() * period;
+    mode.snap(pose.rot + delta * gain, item.start.rot)
+}
+
+/// One polygon's folded edge direction.
+fn dominant_of(poly: &[Vec2], fold: f32) -> Option<f32> {
+    if poly.len() < 2 {
+        return None;
+    }
+    let mut acc = Vec2::ZERO;
+    for v in 0..poly.len() {
+        let edge = poly[(v + 1) % poly.len()] - poly[v];
+        let len = edge.length();
+        if len < 1e-9 {
+            continue;
+        }
+        let (sin, cos) = (edge.y.atan2(edge.x) * fold).sin_cos();
+        acc += Vec2::new(cos, sin) * len;
+    }
+    (acc.length() > 1e-9).then(|| acc.y.atan2(acc.x) / fold)
 }
 
 /// Nudges an item's orientation toward the allowed angle whose footprint
@@ -448,6 +573,9 @@ mod tests {
             items,
             PackConfig {
                 max_step: 0.05,
+                // The step limit is about what one *iteration* does; a warm
+                // start replaces the layout before any iteration runs.
+                warm_start: false,
                 ..config()
             },
         );

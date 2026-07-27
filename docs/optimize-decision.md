@@ -32,6 +32,7 @@ thing and a worse one for this job:
 | Extra inputs | mass, density, restitution, friction, sleeping, time step | none |
 | Reproducible | no (solver order, substep timing) | yes, from a seed |
 | Escapes a bad local minimum | no | yes (annealing) |
+| Tunable goal | no | parallel edges, contact, density, aspect … |
 | Container / aspect targets | no | yes, hard or soft |
 | Cost of a "what if" | re-simulate | re-solve, interruptibly |
 
@@ -52,9 +53,10 @@ moment it is committed.
 problem.rs    PackItem / PackProblem / PackConfig — what is being arranged, under which rules
 hull.rs       convex hull, area, centroid, placement
 sat.rs        separating-axis overlap → minimum translation vector
-objective.rs  Metrics: extent + overlap + boundary → one comparable scalar
+objective.rs  Metrics: the weighted terms → one comparable scalar
+gradient.rs   PackEnergy: layout ↔ parameter vector, cost and analytic gradient
 solver.rs     the Solver trait and PackRun (convergence, best-so-far, restarts)
-solvers/      shelf.rs, relax.rs, anneal.rs
+solvers/      shelf.rs, relax.rs, descent.rs, anneal.rs, naive.rs
 rng.rs        splitmix64 — reproducibility without a dependency
 ```
 
@@ -63,10 +65,53 @@ best-so-far, restarts from new seeds. A solver only advances its own layout
 by one step. That is why adding a fourth strategy is one file plus one row
 in `solvers::build`, with no stopping logic to re-derive.
 
-## The three solvers
+## The objective is a weighted sum, not one number
 
-They are genuinely different search strategies, not tuning presets — an
-instance one handles badly is usually easy for another.
+`ObjectiveWeights` combines several **dimensionless** terms, which is what
+lets the same machinery express "pack this as tight as possible", "line these
+up", and "spread these out inside a box" without a different solver for each:
+
+| term | what it rewards |
+|---|---|
+| `extent` | a smaller overall bounding measure |
+| `fill` | filled area ÷ bounding area → 1 |
+| `gap` | less leftover space between *neighbours* |
+| `parallel` | edges pointing the same way (or axis-aligned) |
+| `contact` | signed — less touching, or flush interlock |
+
+Two normalization decisions are load-bearing. Terms are scaled against a
+**reference length derived from total item area**, so a weight means the same
+thing in a 10 cm scene and a 40 m one — otherwise weights could not be saved
+settings. And that reference is **constant for the run**, not the current
+extent: normalizing by a quantity that moves as the layout does makes the
+objective non-stationary, and gradient methods chase their own tail.
+
+### The gap term, and what benchmarking actually showed
+
+The gap term was added on a plausible theory: extent is a *global* measure,
+so a body in the middle of a cluster does not move the bounding box at all
+and receives no signal, while a local gap measure would give every body a
+direction. It was expected to be the biggest quality win.
+
+**It was not.** Measured across the three reference scenes it is neutral for
+density at best, and when it was wired into the relaxation solver's
+compaction pulse it was actively worse — a local pull forms tight clumps that
+each close their own gaps while the arrangement as a whole stays loose. That
+wiring was removed and the default weight is **0**. It survives as a *goal*
+you can ask for ("hold this spacing between neighbours"), not as a free win.
+
+It also had a genuine design bug worth recording. Scored over "every pair
+within radius R", the term has a trivial exploit: spread everything far
+enough apart that no pair is within R and the cost reads zero — so exploding
+the arrangement is a global minimum, and a strong weight collapsed fill from
+0.90 to 0.04. It now measures a fixed **count** of nearest neighbours
+(`gap_neighbors`), which can never empty out.
+`a_strong_gap_weight_cannot_be_escaped_by_spreading_out` guards it.
+
+## The solvers
+
+Genuinely different search strategies, not tuning presets — an instance one
+handles badly is usually easy for another.
 
 - **Shelf** (constructive, one-shot). Sort largest-first, lay into rows,
   first fit wins. Instant, deterministic, and it *discards* the current
@@ -76,9 +121,95 @@ instance one handles badly is usually easy for another.
 - **Relaxation** (default). Alternates a Jacobi separation sweep with a
   compaction pulse that squeezes everything toward the centre. Preserves the
   arrangement the user already has and animates legibly.
+- **Descent** — L-BFGS from the `argmin` crate, over an analytic gradient.
+  See below.
 - **Annealing**. Metropolis over nudges, turns, and *position swaps*. The
   only one that can escape a bad local minimum; the swap move is most of why
   it beats relaxation when it does.
+- **Naive** — the baseline. See below.
+
+## Gradient descent: argmin owns the algorithm
+
+`SolverKind::Descent` uses **argmin** (pure Rust, no C toolchain) for the
+L-BFGS two-loop recursion, the curvature history, and the Hager–Zhang line
+search. This crate supplies only the cost and the gradient. That division is
+deliberate: a line search that reliably satisfies the strong Wolfe conditions
+is exactly the kind of numerical code that is easy to get subtly and silently
+wrong, and none of it is packing-specific.
+
+Two things had to be solved to make it fit:
+
+**Stepping.** argmin's usual entry point (`Executor::run()`) iterates to
+completion in one blocking call, which is unusable when the editor is drawing
+the search as it converges. The solver instead drives argmin's `Solver` trait
+manually — `init` once, then `next_iter` per frame — which keeps the
+curvature history alive across frames. Restarting an executor each frame
+would discard it and reduce L-BFGS to plain gradient descent.
+
+**The gradient.** Translation is analytic and nearly free: SAT already
+computes the separating axis `n`, and `∂(separation)/∂posⱼ = +n`, so the
+overlap and gap terms differentiate to a sum of `±n` contributions — the same
+quantity relaxation already uses as a correction. Rotation gets one forward
+difference per item (differentiating through moving witness features is not
+worth the machinery), which is why `RotationMode::Fixed` is dramatically
+cheaper. The extent term gets a *descent direction* rather than its true
+subgradient, because a bounding box's subgradient is supported on a single
+extreme vertex and following it moves one body at a time; the line search
+only needs a direction that goes downhill and verifies that itself.
+
+Descent strictly descends, so it inherits whatever basin it starts in —
+hence `warm_start`, which seeds it from a shelf packing.
+
+## The naive baseline, and why it is in the tree
+
+`SolverKind::Naive` is attraction-to-centroid plus overlap separation, both
+on every iteration — what turning up gravity in the physics engine amounts
+to. It is the most obvious thing to reach for, and it is here **to be
+measured against**.
+
+It is deliberately not a straw man: it gets the same separation quality,
+clearance handling, boundary clamping, per-iteration step limit, and
+best-so-far tracking as the real solvers (a genuine physics settle would not
+even have the last of those). The single difference is that attraction and
+separation act together, so it settles at a *force balance* rather than at an
+arrangement. The equilibrium gap between two bodies ends up set by the ratio
+of two tuning gains instead of by anything about the packing: turn attraction
+up and bodies interpenetrate, turn it down and they stop early with visible
+slack. No setting produces a tight packing, because tightness was never what
+it was computing.
+
+`the_real_solvers_beat_the_naive_baseline_on_density` asserts the real
+solvers beat it on fill ratio across three scenes, in CI. A solver family
+with no yardstick has no way to know whether it is any good.
+
+It is also excluded from the warm start, in code and with a comment: handing
+the baseline a constructive packing to start from would be borrowing the
+answer from the solver it is meant to be compared against.
+
+## Measured quality
+
+Fill ratio (body area ÷ bounding area; 1.0 is a perfect tiling) on the three
+benchmark scenes, at the tuned defaults:
+
+| scene | Shelf | Relax | **Descent** | Anneal | Naive |
+|---|---|---|---|---|---|
+| uniform (12 equal squares) | 1.000 | 0.982 | **1.000** | 1.000 | 0.311 |
+| mixed (14 random sizes) | 0.681 | 0.465 | **0.693** | 0.681 | 0.087 † |
+| bars (long bars + squares) | 0.898 | 0.610 | **0.898** | 0.898 | 0.065 |
+
+† infeasible — the baseline left bodies overlapping.
+
+Two things drove those numbers more than any objective tuning:
+
+- **Warm starting** the search solvers from a shelf packing. Annealing went
+  from 0.33/0.08/0.25 to 1.00/0.68/0.90 on the strength of that one change,
+  and descent cannot work without it on a scattered pile.
+- **Making the overlap penalty steep enough** (see `OVERLAP_DOMINANCE`). A
+  quadratic penalty has a vanishing gradient at contact, so descent settled a
+  hair inside every neighbour — infeasible, rejected wholesale by the run,
+  and indistinguishable from the solver doing nothing at all.
+
+`SolverKind::Descent` is the default on this evidence.
 
 ### Two non-obvious things that had to be got right
 
@@ -134,6 +265,19 @@ same thing in both places by construction.
   which is worse in every way than a tolerance four orders of magnitude
   below the default clearance.
 
+## The UI lives in a window, not the Properties pane
+
+The rulebook started as a collapsing section in the Properties dock pane and
+was moved out. Two reasons, one practical and one conceptual: it is far too
+tall for a dock pane (it pushed the per-body sections off-screen and needed a
+scrollbar inside another scrollbar), and it is not a per-body property — it
+describes an operation over the whole selection. A modeless window can also
+sit open beside the viewport while the ghost converges, which is exactly how
+the settings get tuned.
+
+What stays in the Properties pane is a compact strip: status, Pack /
+Apply / Cancel, and a button into the window.
+
 ## How it reaches the world
 
 Unchanged command discipline. While a run is live it writes **nothing** —
@@ -172,3 +316,15 @@ existing seams without new machinery:
 - **Scripted optimization** — `PackConfig` already derives `Reflect` and is
   addressable by the operation registry; a `(pack! ...)` verb is a registry
   row plus a `StartPackRequest`, not a new mutation path.
+
+More objective terms are the cheapest extension of all: each is a function of
+the placed hulls plus a weight, and `parallel` and `contact` are worked
+examples. Obvious candidates are collinearity of specific edges, a preferred
+gap *distribution* rather than a mean, and symmetry about an axis.
+
+Other argmin solvers are nearly free too — `NelderMead` (derivative-free, for
+when the surrogate is a poor guide), `ParticleSwarm` (global, and it would
+slot in beside annealing). Each is one more row in `solvers::build`. The one
+caveat is the one this crate already learned the hard way: any gradient-based
+addition must be handed a cost and a gradient *of the same function*, or its
+line search will hunt forever.
