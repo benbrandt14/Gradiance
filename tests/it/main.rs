@@ -11,6 +11,7 @@
 
 mod harness;
 
+mod array_drag;
 mod csg;
 mod editor_ops;
 mod history;

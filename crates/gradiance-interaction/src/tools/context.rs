@@ -146,6 +146,17 @@ pub enum ToolCommit {
         /// Per-axis factors along the frame axes.
         factors: Vec2,
     },
+    /// Repeat bodies as an array pattern (alt-drag on a scale handle).
+    Array {
+        /// Bodies to pattern.
+        sources: Vec<StableId>,
+        /// Copies along the pattern's primary axis.
+        count: u32,
+        /// Placement rule.
+        mode: gradiance_command::array_cmd::ArrayMode,
+        /// Per-copy spin / taper / depth step.
+        tweens: gradiance_command::array_cmd::ArrayTweens,
+    },
     /// Pattern-copy bodies at an offset (ctrl-drag duplicate).
     Duplicate {
         /// Bodies to clone.
@@ -310,6 +321,7 @@ pub struct ToolCommitWriters<'w> {
     moves: MessageWriter<'w, CommitTransformIntent>,
     scales: MessageWriter<'w, ScaleIntent>,
     dups: MessageWriter<'w, DuplicateIntent>,
+    arrays: MessageWriter<'w, gradiance_command::intent::ArrayIntent>,
     merges: MessageWriter<'w, MergeIntent>,
     props: MessageWriter<'w, PropertyEditIntent>,
 }
@@ -321,6 +333,19 @@ impl ToolCommitWriters<'_> {
         match commit {
             ToolCommit::SpawnBody(record) => {
                 self.spawn.write(SpawnBodyIntent { record: *record });
+            }
+            ToolCommit::Array {
+                sources,
+                count,
+                mode,
+                tweens,
+            } => {
+                self.arrays.write(gradiance_command::intent::ArrayIntent {
+                    sources,
+                    count,
+                    mode,
+                    tweens,
+                });
             }
             ToolCommit::SpawnNode(record) => {
                 self.spawn_node
@@ -687,6 +712,8 @@ pub struct ManipContext<'a> {
     pub tool: ToolState,
     /// The active scale frame (global/local) for the selection box.
     pub scale_frame: ScaleFrame,
+    /// The array tool's rulebook (Config seam).
+    pub array: crate::tools::array_tool::ArrayConfig,
     /// Axis/rotation gesture constraints.
     pub constraints: &'a GestureConstraints,
     /// Snapping configuration.
@@ -733,6 +760,7 @@ pub struct ManipInputs<'w> {
     constraints: Res<'w, GestureConstraints>,
     snap: Res<'w, SnapConfig>,
     frame: Res<'w, ScaleFrame>,
+    array: Res<'w, crate::tools::array_tool::ArrayConfig>,
     defaults: Res<'w, ToolDefaults>,
     tool_state: Res<'w, State<ToolState>>,
     game_state: Res<'w, State<GameState>>,
@@ -756,6 +784,7 @@ impl ManipInputs<'_> {
             playing: *self.game_state.get() == GameState::Playing,
             tool: *self.tool_state.get(),
             scale_frame: *self.frame,
+            array: self.array.sanitized(),
             constraints: &self.constraints,
             snap: &self.snap,
             defaults: *self.defaults,

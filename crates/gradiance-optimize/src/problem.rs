@@ -19,7 +19,7 @@ use bevy::math::Vec2;
 use bevy::prelude::{Reflect, Resource};
 use gradiance_core::units::PosRot;
 
-use crate::hull::{circumradius, convex_hull, polygon_area, polygon_centroid};
+use gradiance_geometry::hull::{circumradius, convex_hull, polygon_area, polygon_centroid};
 
 /// Which solver runs the arrangement.
 ///
@@ -832,18 +832,18 @@ impl PackItem {
     /// applies the pose's **absolute** angle — placing at
     /// [`start`](Self::start) reproduces the outline the item was built from.
     pub fn placed(&self, pose: PosRot) -> Vec<Vec2> {
-        crate::hull::place(&self.hull, pose.pos, pose.rot)
+        gradiance_geometry::hull::place(&self.hull, pose.pos, pose.rot)
     }
 
     /// Writes the item's hull placed at `pose` into a reused buffer.
     pub fn place_into(&self, pose: PosRot, out: &mut Vec<Vec2>) {
-        crate::hull::place_into(&self.hull, pose.pos, pose.rot, out);
+        gradiance_geometry::hull::place_into(&self.hull, pose.pos, pose.rot, out);
     }
 
     /// The item's axis-aligned footprint when turned to `rot`, as a size.
     pub fn footprint(&self, rot: f32, buf: &mut Vec<Vec2>) -> Vec2 {
-        crate::hull::place_into(&self.hull, Vec2::ZERO, rot, buf);
-        crate::hull::bounds(buf).map_or(Vec2::ZERO, |(min, max)| max - min)
+        gradiance_geometry::hull::place_into(&self.hull, Vec2::ZERO, rot, buf);
+        gradiance_geometry::hull::bounds(buf).map_or(Vec2::ZERO, |(min, max)| max - min)
     }
 }
 
@@ -1011,8 +1011,8 @@ mod tests {
             let outline = square_outline(Vec2::new(-2.0, 3.0), 0.75);
             let item = PackItem::from_world_outline(&outline, rot, 1, false);
             let back = item.placed(item.start);
-            let bounds_in = crate::hull::bounds(&outline).expect("non-empty");
-            let bounds_out = crate::hull::bounds(&back).expect("non-empty");
+            let bounds_in = gradiance_geometry::hull::bounds(&outline).expect("non-empty");
+            let bounds_out = gradiance_geometry::hull::bounds(&back).expect("non-empty");
             assert!(bounds_in.0.distance(bounds_out.0) < 1e-4, "rot {rot}");
             assert!(bounds_in.1.distance(bounds_out.1) < 1e-4, "rot {rot}");
         }

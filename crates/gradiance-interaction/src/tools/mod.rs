@@ -11,6 +11,7 @@
 //! [`GestureConstraints`](crate::gesture::GestureConstraints),
 //! so snapping and axis/rotation constraints work identically everywhere.
 
+pub mod array_tool;
 pub mod box_tool;
 pub mod circle_tool;
 pub mod click_select;
@@ -54,6 +55,8 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<ActiveGesture>();
         app.init_resource::<select::SelectGesture>();
         app.init_resource::<handles::ScaleFrame>();
+        app.init_resource::<array_tool::ArrayConfig>();
+        app.register_type::<array_tool::ArrayConfig>();
         app.init_resource::<connector_tool::ConnectorDraft>();
         app.init_resource::<drag_tool::DragTool>();
         app.init_resource::<box_tool::BoxTool>();

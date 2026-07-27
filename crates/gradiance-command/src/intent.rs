@@ -133,10 +133,12 @@ pub struct ScaleIntent {
 pub struct ArrayIntent {
     /// Bodies to pattern.
     pub sources: Vec<StableId>,
-    /// Number of copies.
+    /// Number of copies along the pattern's primary axis.
     pub count: u32,
     /// Placement rule.
     pub mode: crate::array_cmd::ArrayMode,
+    /// Per-copy spin / taper / depth step.
+    pub tweens: crate::array_cmd::ArrayTweens,
 }
 
 /// Request to create one fully-specified joint.

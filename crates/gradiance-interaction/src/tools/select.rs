@@ -9,6 +9,7 @@
 //! nothing directly, so the one-gesture-one-command contract holds.
 
 use crate::selection::{SelectTransition, Selection, dedup_preserving_order};
+use crate::tools::array_tool::{ArrayMetrics, ArrayPlan, plan_drag, selection_pieces};
 use crate::tools::context::{
     GesturePhase, HoldState, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview,
     ToolWorld, TwistState,
@@ -31,6 +32,9 @@ use gradiance_physics::grab::Twist;
 const MOVE_EPSILON: f32 = 0.005;
 /// Screen-space handle capture radius (logical px).
 const HANDLE_RADIUS_PX: f32 = 10.0;
+/// Smallest pivot-to-grab distance (metres) that yields a usable scale
+/// factor — purely a divide-by-zero guard.
+const SCALE_EPSILON: f32 = 1e-4;
 /// Right-drag deadzone (logical px) before rotation engages.
 const ROTATE_DEADZONE_PX: f32 = 8.0;
 /// Shift-press deadzone (logical px): inside = a toggle click, past it the
@@ -100,6 +104,28 @@ pub enum SelectGesture {
         /// Source body ids.
         sources: Vec<StableId>,
         /// `(shape, pose)` of sources, for ghost outlines.
+        ghosts: Vec<(ShapeDef, PosRot)>,
+    },
+    /// Arraying via a bounding-box handle with `Alt` held: the drag decides
+    /// how many copies fit, the release makes them.
+    ///
+    /// Shares the handles with [`Scale`](Self::Scale) on purpose — see
+    /// [`array_tool`](crate::tools::array_tool) for why.
+    Array {
+        /// The grabbed handle.
+        handle: HandleKind,
+        /// The frozen selection box at press time.
+        sbox: SelectionBox,
+        /// Press position, world space.
+        press: Vec2,
+        /// Contact pitch measured once, at press.
+        metrics: ArrayMetrics,
+        /// The plan the current drag implies (`None` until it is worth one
+        /// copy).
+        plan: Option<ArrayPlan>,
+        /// Source ids.
+        targets: Vec<StableId>,
+        /// `(shape, pose)` of the sources, for ghost outlines.
         ghosts: Vec<(ShapeDef, PosRot)>,
     },
     /// Scaling via a bounding-box handle (gizmo preview only).
@@ -192,6 +218,33 @@ impl ManipTool for SelectGesture {
                     }
                 }
             }
+            SelectGesture::Array { plan, ghosts, .. } => {
+                let Some(plan) = plan else {
+                    return;
+                };
+                // Drawn from the command's own placement list, so the ghost
+                // cannot disagree with what release produces.
+                for placement in plan.placements() {
+                    for (shape, pose) in ghosts {
+                        let rot = Vec2::from_angle(pose.rot);
+                        let scale = placement.scale;
+                        for ring in polygonize(shape).rings() {
+                            let mut pts: Vec<Vec2> = ring
+                                .iter()
+                                .map(|v| {
+                                    let local = rot.rotate(*v * scale);
+                                    let spun = Vec2::from_angle(placement.spin).rotate(local);
+                                    placement.map_point(pose.pos) + spun
+                                })
+                                .collect();
+                            if let Some(first) = pts.first().copied() {
+                                pts.push(first);
+                            }
+                            out.polyline(pts, css::SPRING_GREEN.with_alpha(0.85));
+                        }
+                    }
+                }
+            }
             SelectGesture::Scale {
                 sbox,
                 pivot,
@@ -246,6 +299,22 @@ impl SelectGesture {
                 .iter()
                 .filter_map(|e| world.shape_pose(e))
                 .collect();
+            // Alt on a handle means "repeat", not "stretch". Measured once
+            // here: the pitch is a property of the selection as it was
+            // grabbed, and re-measuring mid-drag would make the step wander.
+            if ctx.alt && !targets.is_empty() {
+                let metrics = ArrayMetrics::measure(&selection_pieces(&ghosts), sbox.rot);
+                *self = SelectGesture::Array {
+                    handle,
+                    sbox,
+                    press: p,
+                    metrics,
+                    plan: None,
+                    targets,
+                    ghosts,
+                };
+                return ManipOutput::default();
+            }
             if !targets.is_empty() {
                 *self = SelectGesture::Scale {
                     handle,
@@ -412,6 +481,22 @@ impl SelectGesture {
             } => {
                 return rotate_drag(ctx, *pivot, *start_angle, *press, engaged, bodies);
             }
+            SelectGesture::Array {
+                handle,
+                sbox,
+                press,
+                metrics,
+                plan,
+                ..
+            } => {
+                if let Some(p) = ctx.cursor {
+                    // The drag is measured in the *frame*, so a local-frame
+                    // selection arrays along its own axes, exactly as it
+                    // scales along them.
+                    let delta = sbox.to_frame(p, *press);
+                    *plan = plan_drag(*handle, sbox, metrics, delta, &ctx.array);
+                }
+            }
             SelectGesture::Scale {
                 handle,
                 sbox,
@@ -424,10 +509,15 @@ impl SelectGesture {
                     let cur_f = sbox.to_frame(p, *pivot);
                     let (sx, sy) = handle.scales();
                     let mut f = Vec2::ONE;
-                    if sx && start_f.x.abs() > 1.0 {
+                    // Guard the division only. This read `> 1.0` before the
+                    // SI flip, where it meant "at least one pixel" from the
+                    // pivot; at metre scale it silently disabled scaling for
+                    // any selection under a metre across — which is most of
+                    // them.
+                    if sx && start_f.x.abs() > SCALE_EPSILON {
                         f.x = cur_f.x / start_f.x;
                     }
-                    if sy && start_f.y.abs() > 1.0 {
+                    if sy && start_f.y.abs() > SCALE_EPSILON {
                         f.y = cur_f.y / start_f.y;
                     }
                     // Shift on a corner = uniform scale (larger magnitude wins).
@@ -512,6 +602,17 @@ impl SelectGesture {
                     ..Default::default()
                 }
             }
+            SelectGesture::Array { plan, targets, .. } if left_up => ManipOutput {
+                // One command for the whole pattern, however many bodies it
+                // creates — the same contract every other gesture keeps.
+                commit: plan.map(|plan| ToolCommit::Array {
+                    sources: targets,
+                    count: plan.count,
+                    mode: plan.mode,
+                    tweens: plan.tweens,
+                }),
+                ..Default::default()
+            },
             SelectGesture::ShiftPick { members, .. } if left_up => ManipOutput {
                 selection: Some(SelectTransition::ToggleBodies(members)),
                 ..Default::default()

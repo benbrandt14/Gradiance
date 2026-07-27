@@ -44,8 +44,8 @@ use gradiance_core::units::PosRot;
 use crate::objective::{Scratch, clamp_to_boundary};
 use crate::problem::{Layout, PackProblem};
 use crate::rng::Rng;
-use crate::sat::separation;
 use crate::solver::Solver;
+use gradiance_geometry::sat::separation;
 
 /// Extra separation applied to every violating pair each iteration, in
 /// metres.

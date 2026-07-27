@@ -24,10 +24,10 @@
 use bevy::math::Vec2;
 use gradiance_core::units::PosRot;
 
-use crate::hull::{bounds, place_into};
 use crate::objective::Scratch;
 use crate::problem::{Boundary, Layout, PackProblem, RotationMode, ShelfOrder};
 use crate::solver::Solver;
+use gradiance_geometry::hull::{bounds, place_into};
 
 /// How many orientations a free-rotation item is sampled at. Free rotation
 /// has no natural discrete choice, so the packer tries a fixed fan over a

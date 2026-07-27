@@ -33,9 +33,9 @@
 use bevy::math::Vec2;
 use gradiance_core::units::PosRot;
 
-use crate::hull::{bounds, convex_hull, polygon_area, polygon_perimeter};
 use crate::problem::{Boundary, EdgeAlignment, Layout, Objective, PackProblem};
-use crate::sat::{contact_span, separation};
+use gradiance_geometry::hull::{bounds, convex_hull, polygon_area, polygon_perimeter};
+use gradiance_geometry::sat::{contact_span, separation};
 
 /// Reusable placement buffers — one world-space hull per item.
 #[derive(Debug, Default, Clone)]
