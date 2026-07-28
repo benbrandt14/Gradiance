@@ -301,6 +301,7 @@ fn set_cursor(app: &mut App, p: Vec2) {
         raw: Some(p),
         position: Some(p),
         kind: None,
+        body: None,
     });
 }
 

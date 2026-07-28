@@ -1,6 +1,6 @@
 # Plan: fold sketch mode into the paused editor
 
-**Status:** stage 0 landed; stages 1-3 proposed. Written after the sketch-mode spike landed
+**Status:** stages 0-3 landed. Remaining open questions are listed under stage 3. Written after the sketch-mode spike landed
 (`docs/solvespace-sourcing-decision.md`, `crates/gradiance-sketch`,
 `interaction::tools::sketch_session`, `ui::sketch_panel`).
 
@@ -135,7 +135,7 @@ case merging cannot serve and a sketched link needs.
 
 ---
 
-## Stage 1 — collapse the mode
+## Stage 1 — collapse the mode — **DONE**
 
 Mechanical once stage 0 is in, and independently shippable.
 
@@ -157,7 +157,7 @@ not scene content.
 
 ---
 
-## Stage 2 — retire the direct draw tools
+## Stage 2 — retire the direct draw tools — **DONE**
 
 With 0a done, `box_tool` / `circle_tool` / `polygon_tool` are strictly worse
 versions of the sketch tools: same output shape, but no constraints, no
@@ -182,7 +182,7 @@ never asked for, and would be wrong the first time they dragged it.
 
 ---
 
-## Stage 3 — a lone line as a link
+## Stage 3 — a lone line as a link — **DONE for the clean case**
 
 The deepest stage, and the one with a real architectural question in it.
 
@@ -213,7 +213,14 @@ Commit then splits by what it finds:
 | a line anchored to one body | that body pinned static, or a weld to the world |
 | an unanchored lone line | nothing, with a status line saying why |
 
-Open questions to settle before writing this, not now:
+*Landed.* `SketchPoint::anchor` is the opaque foreign key described above, set
+when a click lands on a body that the sketch itself did not claim, and carried
+through to `JointKind::Fixed` with `collide_connected: false`. The layer rule
+held: `sketch` still has no physics edge.
+
+Only the clean case ships — one line, two different bodies. A line with a loose
+end, or both ends on the same body, commits nothing and says so. The mixed
+case below is still open:
 
 - What happens to a sketch containing *both* a closed profile and anchored
   lines? Probably one body plus its links, committed together — but that is more

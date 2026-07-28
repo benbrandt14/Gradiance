@@ -110,6 +110,10 @@ pub struct ToolContext<'a> {
     pub snap: &'a SnapConfig,
     /// World units per logical screen pixel at the current zoom.
     pub cam_scale: f32,
+    /// The body the cursor snapped onto, if an object snap won.
+    ///
+    /// Lets a tool anchor to the body rather than only borrow its coordinate.
+    pub snapped_body: Option<StableId>,
 }
 
 /// A completed authoring action in a front-end-agnostic form.
@@ -444,6 +448,7 @@ pub fn run_draft_tool<T: DraftTool>(
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
     cam_scale: Res<crate::camera::CameraScale>,
+    ids: Query<&StableId>,
     mut tool: ResMut<T>,
     mut active: ResMut<ActiveGesture>,
     mut writers: ToolCommitWriters,
@@ -458,6 +463,9 @@ pub fn run_draft_tool<T: DraftTool>(
         constraints: &constraints,
         snap: &snap,
         cam_scale: cam_scale.0,
+        // Resolved here rather than in the tool: `StableId` is what authored
+        // state references, and tools have no ECS access to look it up.
+        snapped_body: snapped.body.and_then(|e| ids.get(e).ok().copied()),
     };
     if let Some(commit) = tool.update(&ctx) {
         writers.emit(commit);
@@ -479,6 +487,7 @@ pub fn draw_draft_preview<T: DraftTool>(
     cam_scale: Res<crate::camera::CameraScale>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
+    let snapped_body = None;
     if !tool.wants_preview() {
         return;
     }
@@ -496,6 +505,8 @@ pub fn draw_draft_preview<T: DraftTool>(
         // times too big at PIXELS_PER_METER, which only went unnoticed while
         // previews were plain polylines that never used it.
         cam_scale: cam_scale.0,
+        // Previews never author anything, so they never need the anchor.
+        snapped_body,
     };
     let mut preview = ToolPreview::default();
     tool.preview(&ctx, &mut preview);

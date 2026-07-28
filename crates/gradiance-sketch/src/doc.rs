@@ -40,6 +40,17 @@ pub struct SketchPoint {
     /// gesture, which only biases the solver.
     #[serde(default)]
     pub fixed: bool,
+    /// The body this point is pinned to, if it was placed on one.
+    ///
+    /// An **opaque foreign key**: this crate never dereferences it, and could
+    /// not — it has no physics edge and no way to reach an entity. To the
+    /// solver an anchored point is just a point. Resolving the id, reading the
+    /// body's pose, and turning an anchored line into a joint all happen in
+    /// `interaction`/`command`, which already depend on both sides. That is
+    /// what lets a sketch reference the world without the sketch layer
+    /// learning what the world is.
+    #[serde(default)]
+    pub anchor: Option<gradiance_core::ids::StableId>,
 }
 
 /// A geometric element, referring to its points by [`SketchId`].
@@ -361,6 +372,7 @@ impl SketchDoc {
             id,
             at,
             fixed: false,
+            anchor: None,
         });
         id
     }

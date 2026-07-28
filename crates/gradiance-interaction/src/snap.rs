@@ -46,6 +46,12 @@ pub struct SnappedCursor {
     pub position: Option<Vec2>,
     /// What was snapped to, if anything.
     pub kind: Option<SnapKind>,
+    /// The body an object snap landed on, if it was an object snap.
+    ///
+    /// Carried so a tool can do more than borrow the coordinate — a sketch
+    /// point that knows *which* body it sits on can become an anchor, which is
+    /// what turns a drawn line into a link between two bodies.
+    pub body: Option<Entity>,
 }
 
 impl SnappedCursor {
@@ -74,6 +80,7 @@ pub fn update_snapped_cursor(
         raw,
         position: raw,
         kind: None,
+        body: None,
     };
     let Some(p) = raw else {
         return;
@@ -84,12 +91,7 @@ pub fn update_snapped_cursor(
 
     // --- Object snaps (CAD priority). ---
     if config.objects_enabled {
-        let mut best: Option<(f32, Vec2, SnapKind)> = None;
-        let mut consider = |dist: f32, pos: Vec2, kind: SnapKind| {
-            if dist <= radius && best.is_none_or(|(d, _, _)| dist < d) {
-                best = Some((dist, pos, kind));
-            }
-        };
+        let mut best: Option<(f32, Vec2, SnapKind, Entity)> = None;
 
         let pad = Vec2::splat(radius);
         for entity in physics.bodies_in_aabb(p - pad * 8.0, p + pad * 8.0) {
@@ -98,6 +100,14 @@ pub fn update_snapped_cursor(
             }
             let Ok((shape, transform)) = bodies.get(entity) else {
                 continue;
+            };
+            // Declared per body so it can record *which* body won, which is
+            // what lets a sketch point anchor to it rather than merely landing
+            // on its coordinate.
+            let mut consider = |dist: f32, pos: Vec2, kind: SnapKind| {
+                if dist <= radius && best.is_none_or(|(d, _, _, _)| dist < d) {
+                    best = Some((dist, pos, kind, entity));
+                }
             };
             if config.sources.centers {
                 let c = transform.translation.truncate();
@@ -129,9 +139,10 @@ pub fn update_snapped_cursor(
             }
         }
 
-        if let Some((_, pos, kind)) = best {
+        if let Some((_, pos, kind, entity)) = best {
             out.position = Some(pos);
             out.kind = Some(kind);
+            out.body = Some(entity);
             return;
         }
     }

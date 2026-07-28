@@ -22,7 +22,10 @@
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
+use gradiance_core::ids::StableId;
 use gradiance_core::states::ToolState;
+use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
+use gradiance_scene::JointRecord;
 use gradiance_sketch::doc::{SketchConstraint, SketchDoc, SketchEntity, SketchId};
 use gradiance_sketch::edit::{self, ConstraintKind, SketchSelection};
 use gradiance_sketch::ops;
@@ -130,7 +133,7 @@ pub struct SketchSession {
     trim_target: Option<SketchId>,
     /// The body this sketch was re-opened from, if any. `None` means the
     /// sketch will commit as a new body.
-    editing: Option<gradiance_core::ids::StableId>,
+    editing: Option<StableId>,
     /// Set by the panel, consumed by the next `update`.
     commit_requested: bool,
     /// Whether newly drawn geometry is reference-only.
@@ -332,7 +335,7 @@ impl SketchSession {
     /// translated into world space on the way in — the sketch tools, snapping
     /// and the solver all work in world coordinates, and re-centring happens
     /// again on the way back out.
-    pub fn open(&mut self, id: gradiance_core::ids::StableId, mut doc: SketchDoc, origin: Vec2) {
+    pub fn open(&mut self, id: StableId, mut doc: SketchDoc, origin: Vec2) {
         for p in &mut doc.points {
             p.at += origin;
         }
@@ -344,7 +347,7 @@ impl SketchSession {
     }
 
     /// The body being edited, if this sketch was re-opened from one.
-    pub fn editing(&self) -> Option<gradiance_core::ids::StableId> {
+    pub fn editing(&self) -> Option<StableId> {
         self.editing
     }
 
@@ -510,7 +513,24 @@ impl SketchSession {
     /// existing line adds a real `PointOnLine` constraint, so the new vertex
     /// keeps sliding on that line as the sketch is re-solved rather than
     /// merely starting out near it.
-    fn point_for_click(&mut self, cursor: Vec2, hit: Option<PickHit>) -> SketchId {
+    fn point_for_click(
+        &mut self,
+        cursor: Vec2,
+        hit: Option<PickHit>,
+        anchor: Option<StableId>,
+    ) -> SketchId {
+        // A click the sketch did not claim, that landed on a body, remembers
+        // that body. That is the whole mechanism behind a drawn line becoming
+        // a link: the endpoint knows what it is attached to.
+        if hit.is_none()
+            && let Some(id) = anchor
+        {
+            let p = self.doc.add_point(cursor);
+            if let Some(point) = self.doc.point_mut(p) {
+                point.anchor = Some(id);
+            }
+            return p;
+        }
         match hit {
             Some(hit) => match hit.target {
                 // Reuse the identity outright — a shared point beats a
@@ -540,9 +560,60 @@ impl SketchSession {
     }
 
     /// Close the profile and hand back a body, clearing the sketch either way.
+    /// The rigid link an anchored line describes, if it describes one.
+    ///
+    /// A line whose two endpoints sit on two *different* bodies is the drawn
+    /// form of "hold these together". Anything else — one end loose, both ends
+    /// on the same body — is not a link, and saying so beats guessing.
+    fn link_from(doc: &SketchDoc) -> Option<JointRecord> {
+        let profile: Vec<&SketchEntity> = doc
+            .entities
+            .iter()
+            .filter(|e| !doc.is_construction(e.id()))
+            .collect();
+        let [SketchEntity::Line { a, b, .. }] = profile[..] else {
+            return None;
+        };
+        let (pa, pb) = (doc.point(*a)?, doc.point(*b)?);
+        let (anchor_a, anchor_b) = (pa.anchor?, pb.anchor?);
+        if anchor_a == anchor_b {
+            return None;
+        }
+        Some(JointRecord {
+            id: StableId::new(),
+            def: JointDef {
+                kind: JointKind::Fixed,
+                // Non-colliding: the link holds the bodies together, it is not
+                // a third object for them to bump into.
+                common: JointCommon {
+                    collide_connected: false,
+                },
+                body_a: anchor_a,
+                body_b: Some(anchor_b),
+                // Anchors are stored body-local; the interaction layer knows
+                // the poses, so the command resolves them on apply.
+                anchor_a: pa.at,
+                anchor_b: pb.at,
+                rest_rot_a: 0.0,
+                rest_rot_b: 0.0,
+            },
+        })
+    }
+
     fn commit(&mut self) -> Option<ToolCommit> {
         let doc = std::mem::take(&mut self.doc);
         let editing = self.editing;
+
+        // A lone anchored line is a link, not a body — it encloses no area, so
+        // lowering would only ever report an empty profile.
+        if editing.is_none()
+            && let Some(record) = Self::link_from(&doc)
+        {
+            self.abandon();
+            self.note("linked two bodies", false);
+            return Some(ToolCommit::SpawnJoint(Box::new(record)));
+        }
+
         let lowered = lower::to_shape_with_origin(&doc);
         self.abandon();
 
@@ -739,7 +810,7 @@ impl SketchSession {
         if self.chain.is_empty() {
             self.arm_auto_commit();
         }
-        let id = self.point_for_click(p, hit);
+        let id = self.point_for_click(p, hit, ctx.snapped_body);
         // Clicking the point we are already chaining from would make a
         // zero-length segment; ignore it rather than feeding the solver a
         // degenerate line.
@@ -789,7 +860,7 @@ impl SketchSession {
         if self.arc.is_empty() {
             self.arm_auto_commit();
         }
-        let id = self.point_for_click(p, hit);
+        let id = self.point_for_click(p, hit, ctx.snapped_body);
         if self.arc.last() == Some(&id) {
             return;
         }
@@ -808,7 +879,7 @@ impl SketchSession {
             GesturePhase::Pressed => {
                 let Some(p) = cursor else { return };
                 self.arm_auto_commit();
-                let center = self.point_for_click(p, hit);
+                let center = self.point_for_click(p, hit, ctx.snapped_body);
                 self.circle = Some((center, 0.0));
             }
             GesturePhase::Held => {
@@ -1163,6 +1234,20 @@ mod tests {
             // Leaving this at 1.0 would give a ten-metre snap radius and make
             // every click land on the previous point.
             cam_scale: 0.01,
+            snapped_body: None,
+        }
+    }
+
+    /// A context where the world snap landed on a specific body.
+    fn on_body<'a>(
+        cursor: Vec2,
+        body: StableId,
+        constraints: &'a GestureConstraints,
+        snap: &'a SnapConfig,
+    ) -> ToolContext<'a> {
+        ToolContext {
+            snapped_body: Some(body),
+            ..ctx(GesturePhase::Pressed, Some(cursor), constraints, snap)
         }
     }
 
@@ -1753,6 +1838,82 @@ mod tests {
             "an edit in progress must wait for an explicit commit"
         );
         assert!(!s.is_empty(), "the geometry stayed in the sketch");
+    }
+
+    #[test]
+    fn a_line_between_two_bodies_commits_as_a_rigid_link() {
+        // The whole point of an open line surviving into play: two bodies
+        // held together, still two bodies.
+        let (a, b) = (StableId::new(), StableId::new());
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        let mut s = session(ToolState::Line);
+
+        s.update(&on_body(Vec2::new(0.0, 0.0), a, &gc, &sc));
+        s.update(&on_body(Vec2::new(3.0, 0.0), b, &gc, &sc));
+        s.request_commit();
+        let commit = s.update(&ctx(GesturePhase::Idle, None, &gc, &sc));
+
+        let Some(ToolCommit::SpawnJoint(record)) = commit else {
+            panic!("expected a link, got {commit:?}")
+        };
+        assert_eq!(record.def.kind, JointKind::Fixed);
+        assert_eq!(record.def.body_a, a);
+        assert_eq!(record.def.body_b, Some(b));
+        assert!(
+            !record.def.common.collide_connected,
+            "a link holds bodies together; it is not a third thing to bump into"
+        );
+    }
+
+    #[test]
+    fn a_line_with_one_loose_end_is_not_a_link() {
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        let mut s = session(ToolState::Line);
+        s.update(&on_body(Vec2::new(0.0, 0.0), StableId::new(), &gc, &sc));
+        // Second click lands on nothing.
+        s.update(&ctx(
+            GesturePhase::Pressed,
+            Some(Vec2::new(3.0, 0.0)),
+            &gc,
+            &sc,
+        ));
+        s.request_commit();
+
+        let commit = s.update(&ctx(GesturePhase::Idle, None, &gc, &sc));
+        assert!(
+            commit.is_none(),
+            "half a link is not a link, and it is not a body either: {commit:?}"
+        );
+    }
+
+    #[test]
+    fn a_line_with_both_ends_on_one_body_is_not_a_link() {
+        let same = StableId::new();
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        let mut s = session(ToolState::Line);
+        s.update(&on_body(Vec2::new(0.0, 0.0), same, &gc, &sc));
+        s.update(&on_body(Vec2::new(3.0, 0.0), same, &gc, &sc));
+        s.request_commit();
+
+        assert!(
+            s.update(&ctx(GesturePhase::Idle, None, &gc, &sc)).is_none(),
+            "welding a body to itself is not a thing"
+        );
+    }
+
+    #[test]
+    fn a_closed_profile_still_commits_as_a_body_even_when_anchored() {
+        // Anchoring must not hijack geometry that encloses area.
+        let mut s = square();
+        for p in &mut s.doc.points {
+            p.anchor = Some(StableId::new());
+        }
+        s.request_commit();
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        assert!(matches!(
+            s.update(&ctx(GesturePhase::Idle, None, &gc, &sc)),
+            Some(ToolCommit::SpawnBody(_))
+        ));
     }
 
     #[test]
