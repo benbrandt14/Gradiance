@@ -22,12 +22,6 @@ pub mod name {
     /// [`intent::name`](gradiance_command::intent::name) so verb, intent, and
     /// command share one greppable constant.
     pub use gradiance_command::intent::name::CUT;
-    /// `(array-repeat body count dx dy scale-x scale-y)` — repeat a body as
-    /// a patterned array. Its own constant rather than a re-export of
-    /// [`intent::name::ARRAY`](gradiance_command::intent::name::ARRAY),
-    /// because the verb takes a body and a step where the command takes a
-    /// resolved pattern.
-    pub const ARRAY_REPEAT: &str = "array-repeat";
     /// `(spawn-box x y w h)` — author a box body.
     pub const SPAWN_BOX: &str = "spawn-box";
     /// `(spawn-circle x y r)` — author a circle body.
@@ -200,16 +194,6 @@ fn edit_specs() -> Vec<OpSpec> {
             doc: "Sever every body crossed by the stroke a→b of the given width.",
             category: Edit,
             args: 5,
-        },
-        OpSpec {
-            name: name::ARRAY_REPEAT,
-            signature: "(array-repeat body count dx dy scale-x scale-y)",
-            doc: "Repeat a body `count` times stepping (dx, dy), each copy \
-                  scale-x/scale-y the size of the last; the step shrinks with \
-                  the copies so they stay in contact. Ratios of 1 leave sizes \
-                  alone.",
-            category: Edit,
-            args: 6,
         },
     ]
 }

@@ -12,36 +12,22 @@ pub mod shelf;
 use crate::problem::{PackProblem, SolverKind};
 use crate::solver::Solver;
 
-/// Instantiates the configured solver, seeded for reproducibility and warm
-/// started if the config asks for it.
+/// Instantiates the configured solver.
+///
+/// Deliberately trivial. An earlier revision seeded the iterative solvers
+/// with a constructive shelf packing, which made their measured numbers much
+/// better and their behaviour much harder to reason about: the result you
+/// got depended on a hidden pre-pass, running a pack twice did not do the
+/// same thing twice, and a solver that was doing nothing at all was
+/// indistinguishable from one that was working. Whatever descent needs, it
+/// is not to be handed the answer by a different solver — so this builds the
+/// solver you asked for and nothing else.
 pub fn build(problem: &PackProblem) -> Box<dyn Solver> {
-    let mut solver: Box<dyn Solver> = match problem.config.solver {
+    match problem.config.solver {
         SolverKind::Shelf => Box::new(shelf::ShelfSolver::new(problem)),
         SolverKind::Descent => Box::new(descent::DescentSolver::new(problem)),
         SolverKind::Naive => Box::new(naive::NaiveSolver::new(problem)),
-    };
-    // The baseline is exempt on purpose. Handing it a constructive packing
-    // to start from would be borrowing the answer from the very solver it is
-    // supposed to be compared against, and the comparison would mean
-    // nothing — a physics settle does not get a warm start either.
-    if problem.config.warm_start && problem.config.solver != SolverKind::Naive {
-        solver.seed(warm_start_layout(problem));
     }
-    solver
-}
-
-/// A constructive shelf packing, used as an iterative solver's starting
-/// point when [`PackConfig::warm_start`](crate::PackConfig::warm_start) is
-/// set.
-///
-/// It matters most for [`SolverKind::Descent`], which strictly descends and
-/// therefore inherits whatever basin it is dropped into — from a scattered
-/// pile it converges to a scattered pile.
-pub fn warm_start_layout(problem: &PackProblem) -> crate::problem::Layout {
-    let mut shelf = shelf::ShelfSolver::new(problem);
-    let mut scratch = crate::objective::Scratch::new(problem.len());
-    shelf.step(problem, &mut scratch);
-    shelf.layout().clone()
 }
 
 #[cfg(test)]
@@ -132,7 +118,6 @@ mod tests {
             patience: 400,
             // Explicit rather than inherited: every comparison here has to
             // control for the warm start, or it is measuring the shelf.
-            warm_start: solver.wants_warm_start(),
             ..Default::default()
         }
     }
@@ -227,47 +212,14 @@ mod tests {
     }
 
     #[test]
-    fn a_warm_start_rescues_gradient_descent() {
-        // Descent strictly descends, so from a scattered pile it converges to
-        // that pile's local minimum. This is the reason `wants_warm_start`
-        // exists, stated as a test.
-        for kind in ["uniform", "mixed", "bars"] {
-            let cold = run(
-                kind,
-                PackConfig {
-                    warm_start: false,
-                    ..base_config(SolverKind::Descent)
-                },
-            )
-            .0;
-            let warm = run(kind, base_config(SolverKind::Descent)).0;
-            assert!(
-                warm >= cold - 1e-3,
-                "{kind}: a warm start must never cost descent density: \
-                 cold {cold:.3} -> warm {warm:.3}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_warm_start_layout_is_itself_a_legal_packing() {
-        let problem = PackProblem::new(
-            scene("mixed"),
-            PackConfig {
-                warm_start: true,
-                ..base_config(SolverKind::Descent)
-            },
-        );
-        let layout = warm_start_layout(&problem);
-        let mut scratch = Scratch::new(problem.len());
-        assert!(metrics(&problem, &layout, &mut scratch).is_feasible());
-    }
-
-    #[test]
     fn seeding_replaces_the_working_layout_for_iterative_solvers() {
+        // `Solver::seed` stays on the trait even with no warm start feeding
+        // it: the next optimizer spike will want to hand descent a starting
+        // arrangement, and this pins the contract it will use.
         let problem = PackProblem::new(scene("uniform"), base_config(SolverKind::Descent));
         let mut solver = build(&problem);
-        let seeded = warm_start_layout(&problem);
+        let mut seeded = solver.layout().clone();
+        seeded.poses[0].pos += Vec2::splat(3.0);
         solver.seed(seeded.clone());
         assert_eq!(solver.layout().poses, seeded.poses);
     }

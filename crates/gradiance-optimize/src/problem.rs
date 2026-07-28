@@ -31,23 +31,25 @@ use gradiance_geometry::hull::{circumradius, convex_hull, polygon_area, polygon_
 pub enum SolverKind {
     /// One-shot constructive placement into rows ("shelves"), largest first.
     ///
-    /// Instant and fully deterministic. Ignores the start poses entirely —
-    /// it *builds* an arrangement rather than improving one — so it is the
-    /// right first press on a scattered pile, and the usual seed for the
-    /// iterative solvers.
+    /// Instant and fully deterministic: same input, same answer, every time.
+    /// It ignores the start poses entirely — it *builds* an arrangement
+    /// rather than improving one — which is exactly what "put these back in
+    /// a grid" asks for.
+    ///
+    /// The default, because it is the only strategy here that reliably
+    /// produces a tidy packing unaided. See `docs/optimize-decision.md`.
+    #[default]
     Shelf,
     /// Quasi-Newton descent on the objective's analytic gradient, driven by
     /// the `argmin` optimization crate (L-BFGS with a Hager–Zhang line
     /// search).
     ///
-    /// The only solver here that uses real curvature information, so it
-    /// converges in far fewer iterations than a first-order scheme near a
-    /// solution — but it follows the gradient into the nearest minimum and
-    /// will not climb out, so it is warm started by default.
-    ///
-    /// The default, on the benchmark's evidence: it matches or beats every
-    /// other strategy on fill ratio across all three reference scenes.
-    #[default]
+    /// It uses real curvature information, so near a solution it converges
+    /// in far fewer iterations than a first-order scheme — but it follows
+    /// the gradient into the nearest minimum and will not climb out. From a
+    /// scattered pile it therefore converges to the scattered pile, which is
+    /// why it is **not** the default and why it is the subject of the next
+    /// optimizer spike.
     Descent,
     /// The baseline: attract everything to the centroid and push overlapping
     /// pairs apart, both on every iteration.
@@ -74,16 +76,6 @@ impl SolverKind {
         }
     }
 
-    /// Whether this strategy benefits from a constructive warm start.
-    ///
-    /// Descent strictly descends, so where it starts decides which minimum it
-    /// finds; the constructive seed was the single largest quality lever the
-    /// benchmark turned up. Shelf builds its own arrangement and the baseline
-    /// is deliberately given no help.
-    pub fn wants_warm_start(self) -> bool {
-        matches!(self, Self::Descent)
-    }
-
     /// One-line description for a tooltip.
     pub fn describe(self) -> &'static str {
         match self {
@@ -93,8 +85,8 @@ impl SolverKind {
             }
             Self::Descent => {
                 "Quasi-Newton descent on the analytic gradient (argmin's \
-                 L-BFGS). Fastest to polish a nearly-good layout; will not \
-                 escape a bad one, so pair it with a warm start."
+                 L-BFGS). Polishes a nearly-good layout; will not escape a \
+                 bad one, so it barely moves a scattered pile."
             }
             Self::Naive => {
                 "The yardstick: pull everything together and push overlaps \
@@ -522,7 +514,6 @@ pub struct PackConfig {
     pub rotation: RotationMode,
     /// Whether disjoint depth bands may share a footprint.
     pub layers: LayerRule,
-
     /// Required gap between items, in metres. Zero packs flush.
     pub clearance: f32,
     /// Relative objective improvement below which the run is called
@@ -550,18 +541,6 @@ pub struct PackConfig {
     /// Apply the result automatically on convergence. When off, the run
     /// holds its ghost until the user confirms.
     pub auto_apply: bool,
-    /// Begin the iterative solvers from a constructive shelf packing instead
-    /// of the current arrangement.
-    ///
-    /// Trades one property for another: a warm start reaches a far denser
-    /// result (gradient descent in particular is close to useless without
-    /// one, since it walks downhill from wherever it is told to start), but
-    /// it discards the arrangement the user had.
-    ///
-    /// On by default, because the default solver needs it and density is
-    /// what "pack this" asks for. Turn it off when the existing arrangement
-    /// carries meaning and you only want it tightened in place.
-    pub warm_start: bool,
     /// Weight of residual overlap in the gradient path's energy.
     ///
     /// Large enough that a violating layout never scores better than a legal
@@ -598,7 +577,6 @@ impl Default for PackConfig {
             keep_groups: true,
             gravity_bias: Vec2::ZERO,
             auto_apply: true,
-            warm_start: true,
             overlap_penalty: 40.0,
             naive: NaiveParams::default(),
             shelf: ShelfParams::default(),

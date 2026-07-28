@@ -127,7 +127,7 @@ pub struct ScaleIntent {
     pub factors: Vec2,
 }
 
-/// Request to pattern-copy bodies (linear or radial array).
+/// Request to pattern-copy bodies (a row, a column, or a grid).
 // Trace: dispatch.rs → ArrayCommand (array_cmd.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_body_materials.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct ArrayIntent {
@@ -137,8 +137,6 @@ pub struct ArrayIntent {
     pub count: u32,
     /// Placement rule.
     pub mode: crate::array_cmd::ArrayMode,
-    /// Per-copy spin / taper / depth step.
-    pub tweens: crate::array_cmd::ArrayTweens,
 }
 
 /// Request to create one fully-specified joint.

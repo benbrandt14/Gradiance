@@ -165,7 +165,6 @@ mod tests {
             rotation: RotationMode::Fixed,
             max_iterations: 3000,
             patience: 300,
-            warm_start: false,
             ..Default::default()
         }
     }

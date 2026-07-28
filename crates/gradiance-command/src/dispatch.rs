@@ -88,7 +88,7 @@ command_intents! {
     GroupIntent => |i| Box::new(GroupCommand::new(i.targets)),
     UngroupIntent => |i| Box::new(UngroupCommand::new(i.targets)),
     ScaleIntent => |i| Box::new(ScaleCommand::new(i.targets, i.pivot, i.frame_rot, i.factors)),
-    ArrayIntent => |i| Box::new(ArrayCommand::with_tweens(i.sources, i.count, i.mode, i.tweens)),
+    ArrayIntent => |i| Box::new(ArrayCommand::new(i.sources, i.count, i.mode)),
     CutIntent => |i| Box::new(CutCommand::new(i.a, i.b, i.width)),
     DeleteJointIntent => |i| Box::new(DeleteJointCommand::new(i.id)),
     MergeIntent => |i| Box::new(MergeCommand::new(i.targets)),

@@ -146,7 +146,7 @@ pub enum ToolCommit {
         /// Per-axis factors along the frame axes.
         factors: Vec2,
     },
-    /// Repeat bodies as an array pattern (alt-drag on a scale handle).
+    /// Repeat bodies as an array pattern (ctrl-drag on a scale handle).
     Array {
         /// Bodies to pattern.
         sources: Vec<StableId>,
@@ -154,8 +154,6 @@ pub enum ToolCommit {
         count: u32,
         /// Placement rule.
         mode: gradiance_command::array_cmd::ArrayMode,
-        /// Per-copy spin / taper / depth step.
-        tweens: gradiance_command::array_cmd::ArrayTweens,
     },
     /// Pattern-copy bodies at an offset (ctrl-drag duplicate).
     Duplicate {
@@ -338,13 +336,11 @@ impl ToolCommitWriters<'_> {
                 sources,
                 count,
                 mode,
-                tweens,
             } => {
                 self.arrays.write(gradiance_command::intent::ArrayIntent {
                     sources,
                     count,
                     mode,
-                    tweens,
                 });
             }
             ToolCommit::SpawnNode(record) => {
