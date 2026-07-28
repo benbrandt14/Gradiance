@@ -240,6 +240,33 @@ Two things drove those numbers more than any objective tuning:
 
 `SolverKind::Descent` is the default on this evidence.
 
+### The bug that made all of this look like nothing
+
+Worth recording, because the symptom was indistinguishable from "the solver
+works and your scene was already optimal".
+
+`solvers::build` seeds an iterative solver with a constructive shelf packing.
+`PackRun::new` scored the *problem's start poses* as best-so-far, and scored
+again only after the first step. So the warm start — a complete, feasible,
+usually excellent candidate layout — was never scored on its own. Descent
+would take it, compact, transiently overlap, be rejected as infeasible by
+`is_better`, and the run would finish reporting the untouched input.
+
+On twelve scattered unit squares: shelf produced a 3×4 grid at fill 0.972,
+and descent — handed exactly that layout — returned the original scatter at
+fill 0.091 across ten "columns" and ten "rows".
+
+The fix is to score the layout the solver *starts from*, not just the one it
+was handed. Four lines, and it is the difference between the crate working
+and the crate appearing to work. `tests/it/packing.rs` now pins the whole
+user-facing scenario: scatter a grid of equal rectangles, pack it, assert
+clean rows and columns, no overlaps, and fill above 0.75.
+
+The general lesson is about *where* a candidate can enter the system. Any
+layout the run can hold — start pose, warm start, solver iterate — has to
+pass through the same scoring gate, or the best answer can be thrown away by
+a code path that never looked at it.
+
 ### Two non-obvious things that had to be got right
 
 **Separation and attraction must not act together.** Applying both on every

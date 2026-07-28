@@ -118,6 +118,22 @@ impl PackRun {
         let start = metrics(&problem, &start_layout, &mut scratch);
         let movable = (0..problem.len()).filter(|i| problem.movable(*i)).count();
         let solver = crate::solvers::build(&problem);
+
+        // Score the layout the solver *starts from*, not just the one it was
+        // handed. A warm start is already a candidate answer, and scoring
+        // only after the first step silently discards it: a descent that
+        // compacts, transiently overlaps, and is rejected as infeasible then
+        // reports the untouched input as its best — the single worst failure
+        // this crate can have, because it looks exactly like the solver
+        // running and deciding nothing could be improved.
+        let seeded_layout = solver.layout().clone();
+        let seeded = metrics(&problem, &seeded_layout, &mut scratch);
+        let (best, best_layout) = if is_better(&seeded, &start) {
+            (seeded, seeded_layout)
+        } else {
+            (start, start_layout)
+        };
+
         let status = if problem.len() < 2 || movable == 0 {
             RunStatus::Empty
         } else {
@@ -127,9 +143,9 @@ impl PackRun {
             solver,
             scratch,
             start,
-            current: start,
-            best_layout: start_layout,
-            best: start,
+            current: best,
+            best_layout,
+            best,
             iteration: 0,
             total_iterations: 0,
             since_improvement: 0,

@@ -111,8 +111,8 @@ fn scales(ratio: Vec2) -> bool {
 /// where the copy sits.
 #[derive(Debug, Clone, Copy, PartialEq, Reflect, Default)]
 pub struct ArrayTweens {
-    /// Applied once per step along the frame's X axis — a row's copies, a
-    /// grid's columns, a radial sweep's copies.
+    /// Applied once per step along the frame's X axis — a row's copies or a
+    /// grid's columns.
     pub along_x: TweenStep,
     /// Applied once per step along the frame's Y axis — a column's copies or
     /// a grid's rows. Inert for patterns that never move that way.
@@ -188,15 +188,6 @@ pub enum ArrayMode {
         /// Per-axis shrink of the row pitch per row (the Y lane's).
         cross_ratio: Vec2,
     },
-    /// Copies rotated about `pivot` by multiples of `angle_step`.
-    Radial {
-        /// Center of the pattern.
-        pivot: Vec2,
-        /// Angle between consecutive copies (radians).
-        angle_step: f32,
-        /// Also rotate each copy's own orientation.
-        rotate_items: bool,
-    },
 }
 
 /// Where one copy goes: a rigid map of the source set, plus its tweens.
@@ -251,12 +242,6 @@ impl CopyPlacement {
     /// exactly what [`gradiance_geometry::scale`] exists to apply exactly.
     pub fn body_matrix(&self, body_rot: f32) -> Mat2 {
         gradiance_geometry::scale::body_scale_matrix(body_rot, self.basis, self.scale)
-    }
-
-    /// Adds `spin` to this placement's own-axis rotation.
-    fn with_spin(mut self, spin: f32) -> Self {
-        self.spin += spin;
-        self
     }
 }
 
@@ -323,20 +308,6 @@ impl ArrayMode {
                     }
                 }
             }
-            Self::Radial {
-                pivot,
-                angle_step,
-                rotate_items,
-            } => {
-                for k in 1..=count {
-                    let angle = angle_step * k as f32;
-                    // The orbit always rotates the *set* about the pivot;
-                    // `rotate_items` decides whether each body turns with it
-                    // or stays upright, which is an un-spin of the orbit.
-                    let spin = if rotate_items { 0.0 } else { -angle };
-                    out.push(placement_at(k, 0, Vec2::ZERO, pivot, angle, tweens).with_spin(spin));
-                }
-            }
         }
         out
     }
@@ -346,7 +317,6 @@ impl ArrayMode {
         match self {
             Self::Linear { .. } => "Linear",
             Self::Grid { .. } => "Grid",
-            Self::Radial { .. } => "Radial",
         }
     }
 }
@@ -486,7 +456,6 @@ fn apply_placement(clone: &mut BodyRecord, placement: CopyPlacement) {
 #[allow(clippy::float_cmp)] // asserting exactly-inert tweens
 mod tests {
     use super::*;
-    use std::f32::consts::FRAC_PI_2;
 
     #[test]
     fn a_linear_array_steps_uniformly() {
@@ -555,46 +524,6 @@ mod tests {
         assert!(
             row1.iter().any(|x| (x - 1.0).abs() < 1e-5),
             "row 1 shifted by half a step: {row1:?}"
-        );
-    }
-
-    #[test]
-    fn a_radial_array_orbits_the_pivot() {
-        let mode = ArrayMode::Radial {
-            pivot: Vec2::ZERO,
-            angle_step: FRAC_PI_2,
-            rotate_items: true,
-        };
-        let places = mode.placements(3, ArrayTweens::default());
-        let first = places[0].map_point(Vec2::new(1.0, 0.0));
-        assert!(first.distance(Vec2::new(0.0, 1.0)) < 1e-5, "got {first:?}");
-        assert!(
-            (places[0].body_rotation() - FRAC_PI_2).abs() < 1e-5,
-            "rotate_items turns the body with the pattern"
-        );
-    }
-
-    #[test]
-    fn radial_without_rotate_items_keeps_bodies_upright() {
-        let mode = ArrayMode::Radial {
-            pivot: Vec2::ZERO,
-            angle_step: FRAC_PI_2,
-            rotate_items: false,
-        };
-        let places = mode.placements(2, ArrayTweens::default());
-        for place in &places {
-            assert!(
-                place.body_rotation().abs() < 1e-5,
-                "the orbit must not turn the body: {}",
-                place.body_rotation()
-            );
-        }
-        assert!(
-            places[0]
-                .map_point(Vec2::new(1.0, 0.0))
-                .distance(Vec2::new(0.0, 1.0))
-                < 1e-5,
-            "...but they still orbit"
         );
     }
 

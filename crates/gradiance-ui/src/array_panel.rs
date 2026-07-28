@@ -12,9 +12,7 @@
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use gradiance_interaction::tools::array_tool::{
-    ArrayConfig, ArrayPattern, ArraySpacing, MAX_COPIES_PER_AXIS,
-};
+use gradiance_interaction::tools::array_tool::{ArrayConfig, ArraySpacing, MAX_COPIES_PER_AXIS};
 
 /// Whether the floating Array window is showing.
 #[derive(Resource, Default, Debug)]
@@ -69,7 +67,7 @@ fn array_body(ui: &mut egui::Ui, config: &mut ArrayConfig) {
         .small(),
     );
     ui.separator();
-    pattern_controls(ui, config);
+    bond_controls(ui, config);
     ui.separator();
     spacing_controls(ui, config);
     ui.separator();
@@ -79,83 +77,34 @@ fn array_body(ui: &mut egui::Ui, config: &mut ArrayConfig) {
 }
 
 /// Pattern family and its own parameters.
-fn pattern_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
-    ui.label(egui::RichText::new("Pattern").strong());
-    let mut pattern = config.pattern;
-    egui::ComboBox::from_id_salt("array-pattern")
-        .selected_text(pattern.label())
-        .show_ui(ui, |ui| {
-            for kind in ArrayPattern::ALL {
-                ui.selectable_value(&mut pattern, kind, kind.label());
-            }
-        });
-    if pattern != config.pattern {
-        config.pattern = pattern;
+fn bond_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
+    ui.label(egui::RichText::new("Bond").strong());
+    let mut stagger = config.stagger;
+    if ui
+        .add(
+            egui::DragValue::new(&mut stagger)
+                .speed(0.01)
+                .range(0.0..=1.0)
+                .prefix("row offset "),
+        )
+        .on_hover_text(
+            "fraction of a step that alternate grid rows shift by — \
+             0.5 gives a running-bond brick wall",
+        )
+        .changed()
+    {
+        config.stagger = stagger;
     }
-
-    match config.pattern {
-        ArrayPattern::Repeat => {
-            let mut stagger = config.stagger;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut stagger)
-                        .speed(0.01)
-                        .range(-1.0..=1.0)
-                        .prefix("row offset "),
-                )
-                .on_hover_text(
-                    "fraction of a step that alternate grid rows shift by — \
-                     0.5 gives a running-bond brick wall",
-                )
-                .changed()
-            {
-                config.stagger = stagger;
-            }
-            ui.horizontal(|ui| {
-                if ui.small_button("stack bond").clicked() {
-                    config.stagger = 0.0;
-                }
-                if ui.small_button("brick bond").clicked() {
-                    config.stagger = 0.5;
-                }
-            });
+    ui.horizontal(|ui| {
+        if ui.small_button("stack bond").clicked() {
+            config.stagger = 0.0;
         }
-        ArrayPattern::Radial => {
-            let mut degrees = config.angle_step.to_degrees();
-            if ui
-                .add(
-                    egui::DragValue::new(&mut degrees)
-                        .speed(0.5)
-                        .range(-360.0..=360.0)
-                        .suffix("°")
-                        .prefix("step "),
-                )
-                .on_hover_text("angle between consecutive copies")
-                .changed()
-            {
-                config.angle_step = degrees.to_radians();
-            }
-            ui.horizontal(|ui| {
-                // The counts that close a full circle exactly.
-                for n in [4u32, 6, 8, 12] {
-                    if ui.small_button(format!("{n}/turn")).clicked() {
-                        config.angle_step = std::f32::consts::TAU / n as f32;
-                    }
-                }
-            });
-            let mut rotate = config.rotate_items;
-            if ui
-                .checkbox(&mut rotate, "turn bodies with the sweep")
-                .on_hover_text("off = bodies orbit but stay upright")
-                .changed()
-            {
-                config.rotate_items = rotate;
-            }
+        if ui.small_button("brick bond").clicked() {
+            config.stagger = 0.5;
         }
-    }
+    });
 }
 
-/// How the step is derived from the selection's geometry.
 fn spacing_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
     ui.label(egui::RichText::new("Spacing").strong());
     let current = config.spacing;
@@ -191,30 +140,14 @@ fn spacing_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
             ui.add(
                 egui::DragValue::new(gap)
                     .speed(0.005)
-                    .range(-5.0..=100.0)
+                    .range(0.0..=100.0)
                     .suffix(" m")
                     .prefix("gap "),
             )
-            .on_hover_text("added to the flush pitch; negative deliberately overlaps");
-        }
-        ArraySpacing::Fixed(step) => {
-            ui.add(
-                egui::DragValue::new(step)
-                    .speed(0.01)
-                    .range(0.001..=1000.0)
-                    .suffix(" m")
-                    .prefix("step "),
-            )
-            .on_hover_text("ignores the geometry entirely");
-        }
-        ArraySpacing::Multiple(factor) => {
-            ui.add(
-                egui::DragValue::new(factor)
-                    .speed(0.05)
-                    .range(0.05..=100.0)
-                    .prefix("× contact "),
-            )
-            .on_hover_text("2.0 leaves a body-sized hole; 0.5 interleaves copies");
+            .on_hover_text(
+                "added to the flush pitch. It cannot go negative: a pattern \
+                 that overlaps itself is never what was wanted",
+            );
         }
     }
 }
@@ -222,22 +155,34 @@ fn spacing_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
 /// Whether the drag decides the count, or the user does.
 fn count_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
     ui.label(egui::RichText::new("Count").strong());
-    let mut fixed = config.count_override.is_some();
-    if ui
-        .checkbox(&mut fixed, "fixed count")
-        .on_hover_text("off = the drag distance decides how many copies fit")
-        .changed()
-    {
-        config.count_override = fixed.then_some(config.count_override.unwrap_or(4));
-    }
-    if let Some(count) = &mut config.count_override {
-        ui.add(
-            egui::DragValue::new(count)
-                .speed(0.2)
-                .range(1..=MAX_COPIES_PER_AXIS)
-                .prefix("copies "),
-        );
-    }
+    ui.label(
+        egui::RichText::new(
+            "fix a count and the drag sets the spacing instead — pull to \
+             spread that many copies over the distance",
+        )
+        .weak()
+        .small(),
+    );
+    axis_count(ui, "columns (X)", &mut config.count_x);
+    axis_count(ui, "rows (Y)", &mut config.count_y);
+}
+
+/// One axis' fixed-count control: a checkbox that turns the drag from
+/// "how many" into "how far apart", plus the count itself.
+fn axis_count(ui: &mut egui::Ui, label: &str, slot: &mut Option<u32>) {
+    ui.horizontal(|ui| {
+        let mut fixed = slot.is_some();
+        if ui.checkbox(&mut fixed, label).changed() {
+            *slot = fixed.then_some(slot.unwrap_or(4));
+        }
+        if let Some(count) = slot {
+            ui.add(
+                egui::DragValue::new(count)
+                    .speed(0.2)
+                    .range(1..=MAX_COPIES_PER_AXIS),
+            );
+        }
+    });
 }
 
 /// Per-copy changes along the pattern.
@@ -264,7 +209,7 @@ fn tween_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
         config.tweens = t;
     }
     ui.add_space(2.0);
-    if config.spacing.tracks_contact() && !config.tweens.is_identity() {
+    if !config.tweens.is_identity() {
         ui.label(
             egui::RichText::new(
                 "contact spacing follows the size taper: copies close up as \

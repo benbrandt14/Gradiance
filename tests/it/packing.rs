@@ -463,3 +463,103 @@ fn a_hard_rectangle_boundary_contains_the_result() {
         "result escaped the 3x3 box: {size:?}"
     );
 }
+
+/// The acid test's fixture: `cols × rows` identical boxes, thrown around.
+///
+/// Deterministic scatter (a fixed LCG) so a failure is reproducible, and
+/// deliberately messy: overlapping piles, big gaps, nothing aligned. This is
+/// what a grid looks like after you drop it.
+fn scattered_grid(app: &mut App, cols: usize, rows: usize, size: f32) -> Vec<StableId> {
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+    let mut rand = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        ((state >> 33) as f32) / (u32::MAX >> 1) as f32
+    };
+    (0..cols * rows)
+        .map(|_| {
+            let p = Vec2::new(rand() * 12.0 - 6.0, rand() * 12.0 - 6.0);
+            spawn_box(app, p, size, size)
+        })
+        .collect()
+}
+
+/// Every body's world AABB centre and half-size.
+fn cells(app: &mut App, ids: &[StableId]) -> Vec<(Vec2, Vec2)> {
+    ids.iter()
+        .filter_map(|id| {
+            let entity = entity_of(app, *id)?;
+            let (lo, hi) = bounds_of(app, std::slice::from_ref(id));
+            let _ = entity;
+            Some(((lo + hi) / 2.0, (hi - lo) / 2.0))
+        })
+        .collect()
+}
+
+/// Groups coordinates into clusters no wider than `tol`, returning the count.
+fn lanes(mut values: Vec<f32>, tol: f32) -> usize {
+    values.sort_by(f32::total_cmp);
+    let mut n = 0;
+    let mut last = f32::NEG_INFINITY;
+    for v in values {
+        if v - last > tol {
+            n += 1;
+        }
+        last = v;
+    }
+    n
+}
+
+#[test]
+fn a_scattered_grid_of_equal_boxes_packs_back_into_a_grid() {
+    // The headline scenario, in one test: take a grid of identical
+    // rectangles, drop them so they scatter, and ask the packer to put them
+    // back. Anything less than clean rows and columns is a failure — density
+    // alone is not the ask, *tidiness* is.
+    let mut app = paused_app();
+    let ids = scattered_grid(&mut app, 4, 3, 1.0);
+    select(&mut app, &ids);
+    // The app's own defaults, not a test-tuned config: this has to work for
+    // someone who never opens the optimizer panel.
+    configure(&mut app, PackConfig::default());
+
+    app.world_mut().write_message(StartPackRequest);
+    app.update();
+    run_to_completion(&mut app, 600);
+    step(&mut app, 2);
+
+    let cells = cells(&mut app, &ids);
+    assert_eq!(cells.len(), 12);
+
+    // No overlaps: axis-aligned boxes, so an AABB test is exact.
+    for (i, a) in cells.iter().enumerate() {
+        for b in cells.iter().skip(i + 1) {
+            let d = (a.0 - b.0).abs();
+            let touch = a.1 + b.1;
+            assert!(
+                d.x >= touch.x - 1e-3 || d.y >= touch.y - 1e-3,
+                "bodies overlap after packing: {a:?} vs {b:?}"
+            );
+        }
+    }
+
+    // A grid: 12 equal unit boxes should land on a small number of shared
+    // columns and rows, not 12 arbitrary positions.
+    let xs = lanes(cells.iter().map(|c| c.0.x).collect(), 0.2);
+    let ys = lanes(cells.iter().map(|c| c.0.y).collect(), 0.2);
+    assert!(
+        xs * ys <= 16 && xs <= 6 && ys <= 6,
+        "expected a tidy grid, got {xs} columns x {ys} rows"
+    );
+
+    // ...and a tight one: 12 unit boxes have area 12, so a 4x3 or 3x4
+    // packing bounds 12 m². Allow a row of slack, not a scatter.
+    let bounds = bounds_of(&mut app, &ids);
+    let filled = 12.0 / area(bounds);
+    assert!(
+        filled > 0.75,
+        "packing is loose: fill {filled:.3} over {:?}",
+        bounds.1 - bounds.0
+    );
+}
