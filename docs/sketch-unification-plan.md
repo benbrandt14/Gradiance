@@ -1,6 +1,6 @@
 # Plan: fold sketch mode into the paused editor
 
-**Status:** proposed, not started. Written after the sketch-mode spike landed
+**Status:** stage 0 landed; stages 1-3 proposed. Written after the sketch-mode spike landed
 (`docs/solvespace-sourcing-decision.md`, `crates/gradiance-sketch`,
 `interaction::tools::sketch_session`, `ui::sketch_panel`).
 
@@ -38,7 +38,7 @@ second system. The genuinely new work is in stages 0 and 3.
 
 ---
 
-## Stage 0 — three prerequisites
+## Stage 0 — three prerequisites — **DONE**
 
 These are independent, each useful on its own, and each blocks something later.
 None of them require the mode collapse to have happened.
@@ -78,6 +78,11 @@ containing one circle.
 
 **If this stage is skipped or deferred, stage 2 must not ship.**
 
+*Landed.* Recognition reads solved geometry in `lower::to_shape_with_origin`,
+with `as_circle` / `as_box` and an `AXIS_EPS` relative tolerance. The full
+workspace — 194 integration tests and the golden replays included — passed
+unchanged, so no existing content shifted.
+
 ### 0b. One snap resolver over both worlds
 
 There are two snapping systems today and they do not know about each other:
@@ -99,6 +104,13 @@ constraint story. Do not merge the two `SnapKind` enums into one; they mean
 different things and collapsing them would lose the "can this become a
 constraint" bit.
 
+*Landed.* `SketchSession::resolve_cursor` was the fix, and the bug was worse
+than "they don't compete": the world snap had **already moved `ctx.cursor`**
+before the session's `pick` ran, so sketch geometry was being measured from
+somewhere the author never pointed and a nearby body could silently steal a
+click. Sketch candidates are now measured from `raw_cursor` and compared
+against the world snap by distance, ties to the sketch.
+
 ### 0c. A real fixed joint
 
 The user-facing ask is "a single line acts like a non-colliding weld joint, to
@@ -109,16 +121,17 @@ preserve it during play". Gradiance has no such thing today:
   union, or pins a single body static (`connector_tool.rs:8`). Merging fuses
   geometry, which is the opposite of "preserve the line as a link".
 
-So: add `JointKind::Weld` mapping to avian's `FixedJoint`, defaulting to
-`collide_connected: false`. This is a small, self-contained addition to
-`domain::joint` + `physics::joint_sync` + the joint inspector, and it is a
-capability worth having regardless of the sketch work.
+So: add a joint kind mapping to avian's `FixedJoint`.
 
-Naming hazard: `ToolState::Weld` already means "merge". Either rename the
-existing tool to Merge (it is what it does, and the docs already say so) or name
-the new joint `Fixed`. Recommend renaming the tool to **Merge** and calling the
-joint **Weld**, because "weld" reads as a link to everyone who has used CAD, and
-the merge tool's own doc comment already apologises for the name.
+*Landed as `JointKind::Fixed`*, not `Weld`. The plan had recommended renaming
+the tool to Merge and taking the `Weld` name for the joint; that was written
+before checking the format history. `JointKind::Weld` **existed and was
+deliberately removed** in M20 (`gradiance-scene`'s v3 note) precisely because
+merging is the better answer when two bodies become one — it cannot drift, since
+there is no constraint to drift. Resurrecting the name would attach contrary
+history to it. `Fixed` matches avian, and the variant's doc says plainly what it
+is for: bodies that must stay *distinct* while being held together, which is the
+case merging cannot serve and a sketched link needs.
 
 ---
 

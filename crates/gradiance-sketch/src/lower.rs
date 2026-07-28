@@ -5,9 +5,23 @@
 //! sketch becomes a flat [`ShapeDef`]. A future 3D backend adds a sibling here
 //! rather than changing anything upstream of it.
 //!
-//! Lowering deliberately produces a plain [`ShapeDef::Polygon`] rather than a
-//! new shape variant, so every derived consumer — colliders, meshes, snapping —
-//! keeps working through the existing single discretization point.
+//! Lowering introduces no new shape variant, so every derived consumer —
+//! colliders, meshes, snapping — keeps working through the existing single
+//! discretization point.
+//!
+//! # Analytic recognition
+//!
+//! A sketch that *is* a circle lowers to [`ShapeDef::Circle`], and an
+//! axis-aligned four-sided loop lowers to [`ShapeDef::Box`]; everything else
+//! becomes a [`ShapeDef::Polygon`]. This is not an optimisation, it is
+//! correctness: polygonising every circle would make it a 48-gon — no longer an
+//! exact SDF, visibly faceted under zoom, and different under CSG.
+//!
+//! Recognition reads the *solved geometry*, never which tool drew it. So a
+//! polygon dragged square becomes a `Box`, and a `Box` pulled off-axis degrades
+//! to a `Polygon` on its own. That is what makes "box tool" honestly a shortcut
+//! for a sketch that happens to be a rectangle, rather than a separate kind of
+//! object.
 
 use bevy::math::Vec2;
 use gradiance_core::constants::CIRCLE_SEGMENTS;
@@ -136,9 +150,22 @@ pub fn to_shape(doc: &SketchDoc) -> Result<ShapeDef, LowerError> {
 ///
 /// As [`to_contours`].
 pub fn to_shape_with_origin(doc: &SketchDoc) -> Result<(ShapeDef, Vec2), LowerError> {
+    // A lone circle is taken at its word: the centre is exact, so the body's
+    // pose comes from the document rather than from a polygon's centroid.
+    if let Some((radius, centre)) = as_circle(doc) {
+        return Ok((ShapeDef::Circle { radius }, centre));
+    }
+
     let raw = raw_contours(doc)?;
     let origin = raw.centroid();
     let c = to_contours(doc)?;
+
+    if c.holes.is_empty()
+        && let Some((width, height)) = as_box(&c.outline)
+    {
+        return Ok((ShapeDef::Box { width, height }, origin));
+    }
+
     Ok((
         ShapeDef::Polygon {
             outline: c.outline,
@@ -146,6 +173,59 @@ pub fn to_shape_with_origin(doc: &SketchDoc) -> Result<(ShapeDef, Vec2), LowerEr
         },
         origin,
     ))
+}
+
+/// How far off-axis a solved edge may sit and still count as axis-aligned,
+/// relative to the profile's own size.
+///
+/// The solver settles constraints to roughly 1e-6, so this is loose enough to
+/// accept a genuinely constrained rectangle and far tighter than the 5-degree
+/// tolerance the line tool uses to *infer* an axis constraint in the first
+/// place. A rectangle that reaches here without those constraints — dragged
+/// square by hand — is only recognised while it stays square, which is the
+/// honest answer.
+const AXIS_EPS: f32 = 1e-4;
+
+/// The profile radius and centre when the sketch is exactly one circle.
+fn as_circle(doc: &SketchDoc) -> Option<(f32, Vec2)> {
+    let mut profile = doc.entities.iter().filter(|e| !doc.is_construction(e.id()));
+    let first = profile.next()?;
+    if profile.next().is_some() {
+        return None;
+    }
+    let SketchEntity::Circle { center, radius, .. } = *first else {
+        return None;
+    };
+    // A non-positive radius is a degenerate sketch, not a circle; falling
+    // through lets `raw_contours` report it as such.
+    if radius <= f32::EPSILON {
+        return None;
+    }
+    Some((radius, doc.point(center)?.at))
+}
+
+/// The width and height when `outline` is an axis-aligned rectangle.
+fn as_box(outline: &[Vec2]) -> Option<(f32, f32)> {
+    let [a, b, c, d] = outline else { return None };
+    let (min, max) = outline.iter().fold(
+        (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+        |(lo, hi), p| (lo.min(*p), hi.max(*p)),
+    );
+    let (width, height) = (max.x - min.x, max.y - min.y);
+    if width <= f32::EPSILON || height <= f32::EPSILON {
+        return None;
+    }
+
+    // Every edge must run along one axis. Four axis-aligned edges forming a
+    // closed ring can only be a rectangle, so this is the whole test — opposite
+    // sides being equal follows rather than needing its own check.
+    let tol = AXIS_EPS * width.max(height);
+    let axis_aligned = [(a, b), (b, c), (c, d), (d, a)].into_iter().all(|(p, q)| {
+        let e = *q - *p;
+        e.x.abs() <= tol || e.y.abs() <= tol
+    });
+
+    axis_aligned.then_some((width, height))
 }
 
 /// Force a ring's winding: counter-clockwise when `ccw`, clockwise otherwise.
@@ -481,13 +561,186 @@ mod tests {
 
     #[test]
     fn lowering_to_a_shape_preserves_the_contours() {
+        // A five-sided loop: deliberately not a shape any analytic primitive
+        // covers, so this still exercises the polygon path now that squares and
+        // circles are recognised (see `recognition_tests`).
         let mut d = SketchDoc::new();
-        rect(&mut d, 2.0, 2.0);
+        let p: Vec<SketchId> = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(2.0, 0.0),
+            Vec2::new(2.0, 2.0),
+            Vec2::new(1.0, 3.0),
+            Vec2::new(0.0, 2.0),
+        ]
+        .into_iter()
+        .map(|v| d.add_point(v))
+        .collect();
+        for i in 0..5 {
+            d.add_line(p[i], p[(i + 1) % 5]);
+        }
+
         let c = to_contours(&d).unwrap();
         let ShapeDef::Polygon { outline, holes } = to_shape(&d).unwrap() else {
-            unreachable!("a sketch lowers to a polygon")
+            unreachable!("an irregular loop lowers to a polygon")
         };
         assert_eq!(outline, c.outline);
         assert_eq!(holes, c.holes);
+    }
+}
+
+#[cfg(test)]
+mod recognition_tests {
+    use super::*;
+    use crate::doc::SketchDoc;
+
+    /// An axis-aligned rectangle of `w` x `h` with its lower-left at `at`.
+    fn rect_at(d: &mut SketchDoc, at: Vec2, w: f32, h: f32) -> [SketchId; 4] {
+        let p = [
+            d.add_point(at),
+            d.add_point(at + Vec2::new(w, 0.0)),
+            d.add_point(at + Vec2::new(w, h)),
+            d.add_point(at + Vec2::new(0.0, h)),
+        ];
+        for i in 0..4 {
+            d.add_line(p[i], p[(i + 1) % 4]);
+        }
+        p
+    }
+
+    #[test]
+    fn a_lone_circle_stays_an_exact_circle() {
+        let mut d = SketchDoc::new();
+        let c = d.add_point(Vec2::new(2.0, -3.0));
+        d.add_circle(c, 1.5);
+
+        let (shape, origin) = to_shape_with_origin(&d).expect("a circle is a profile");
+        assert_eq!(
+            shape,
+            ShapeDef::Circle { radius: 1.5 },
+            "polygonising this would make it a {CIRCLE_SEGMENTS}-gon"
+        );
+        assert!(
+            origin.distance(Vec2::new(2.0, -3.0)) < 1e-6,
+            "the pose comes from the circle's own centre, got {origin:?}"
+        );
+    }
+
+    #[test]
+    fn an_axis_aligned_loop_becomes_a_box() {
+        let mut d = SketchDoc::new();
+        rect_at(&mut d, Vec2::new(-1.0, -1.0), 4.0, 2.0);
+
+        let (shape, origin) = to_shape_with_origin(&d).expect("a closed rectangle");
+        assert_eq!(
+            shape,
+            ShapeDef::Box {
+                width: 4.0,
+                height: 2.0
+            }
+        );
+        assert!(origin.distance(Vec2::new(1.0, 0.0)) < 1e-5, "{origin:?}");
+    }
+
+    #[test]
+    fn a_rectangle_pulled_off_axis_degrades_to_a_polygon() {
+        // The recognition reads solved geometry, not the tool that drew it, so
+        // this has to stop being a Box the moment it stops being rectangular.
+        let mut d = SketchDoc::new();
+        let p = rect_at(&mut d, Vec2::ZERO, 2.0, 2.0);
+        d.point_mut(p[2]).expect("corner").at = Vec2::new(2.6, 2.4);
+
+        let (shape, _) = to_shape_with_origin(&d).expect("still a closed loop");
+        assert!(
+            matches!(shape, ShapeDef::Polygon { .. }),
+            "a skewed quad is not a Box, got {shape:?}"
+        );
+    }
+
+    #[test]
+    fn a_five_sided_loop_is_a_polygon() {
+        let mut d = SketchDoc::new();
+        let p: Vec<SketchId> = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(2.0, 0.0),
+            Vec2::new(2.0, 2.0),
+            Vec2::new(1.0, 3.0),
+            Vec2::new(0.0, 2.0),
+        ]
+        .into_iter()
+        .map(|v| d.add_point(v))
+        .collect();
+        for i in 0..5 {
+            d.add_line(p[i], p[(i + 1) % 5]);
+        }
+
+        let (shape, _) = to_shape_with_origin(&d).expect("closed");
+        assert!(matches!(shape, ShapeDef::Polygon { .. }), "{shape:?}");
+    }
+
+    #[test]
+    fn a_circle_beside_other_geometry_is_not_a_lone_circle() {
+        // Two loops means a body with a hole, which no analytic primitive
+        // covers — recognising the circle here would silently drop the rest.
+        let mut d = SketchDoc::new();
+        rect_at(&mut d, Vec2::new(-3.0, -3.0), 6.0, 6.0);
+        let c = d.add_point(Vec2::ZERO);
+        d.add_circle(c, 1.0);
+
+        let (shape, _) = to_shape_with_origin(&d).expect("outline plus hole");
+        match shape {
+            ShapeDef::Polygon { holes, .. } => assert_eq!(holes.len(), 1),
+            other => panic!("expected a polygon with a hole, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn construction_geometry_does_not_block_recognition() {
+        // Reference lines are excluded from the profile, so a circle with a
+        // centreline drawn across it is still just a circle.
+        let mut d = SketchDoc::new();
+        let c = d.add_point(Vec2::ZERO);
+        d.add_circle(c, 2.0);
+        let a = d.add_point(Vec2::new(-2.0, 0.0));
+        let b = d.add_point(Vec2::new(2.0, 0.0));
+        let guide = d.add_line(a, b);
+        d.mark_construction(guide);
+
+        let (shape, _) = to_shape_with_origin(&d).expect("a circle plus a guide");
+        assert_eq!(shape, ShapeDef::Circle { radius: 2.0 });
+    }
+
+    #[test]
+    fn a_box_survives_a_lower_reopen_round_trip() {
+        // The property that matters for re-opening: lowering to an analytic
+        // primitive must not lose the sketch it came from.
+        let mut d = SketchDoc::new();
+        rect_at(&mut d, Vec2::ZERO, 3.0, 1.0);
+
+        let (shape, origin) = to_shape_with_origin(&d).expect("closed");
+        assert_eq!(
+            shape,
+            ShapeDef::Box {
+                width: 3.0,
+                height: 1.0
+            }
+        );
+
+        // Re-open translates the stored document back into world space; the
+        // sketch is untouched by lowering, so it lowers to the same thing.
+        let (again, origin2) = to_shape_with_origin(&d).expect("closed");
+        assert_eq!(shape, again);
+        assert_eq!(origin, origin2);
+    }
+
+    #[test]
+    fn a_degenerate_circle_is_an_error_not_a_zero_radius_body() {
+        let mut d = SketchDoc::new();
+        let c = d.add_point(Vec2::ZERO);
+        d.add_circle(c, 0.0);
+
+        assert!(
+            to_shape_with_origin(&d).is_err(),
+            "a zero-radius circle encloses no area"
+        );
     }
 }

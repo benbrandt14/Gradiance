@@ -23,7 +23,9 @@ pub use records::{
 ///
 /// v3: the weld rework (M20) — `JointKind::Weld` no longer exists (the weld
 /// tool merges bodies or makes them static), so v2 files carrying weld
-/// joints do not load.
+/// joints do not load. `JointKind::Fixed` later reintroduced a rigid *link*
+/// for the case merging cannot serve — two bodies that must stay distinct —
+/// but under a new name and with no compatibility with the old `Weld`.
 ///
 /// v4: the strut rework — `JointKind::Spring` is authored as `rest_length`
 /// with an optional `range` clamp (was `bounds`), so v3 files carrying

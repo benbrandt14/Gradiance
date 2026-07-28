@@ -106,21 +106,18 @@ pub fn draw_joints(
                     draw_linear_motor(&mut gizmos, anchor, dir, *m, s);
                 }
             }
-            JointKind::Spring { .. } => {
-                // A coil between the two anchors; the connected bodies don't
-                // collide, so it reads as a free spring, not a rod.
-                let world_b = match def.body_b {
-                    Some(id) => index
-                        .entity(id)
-                        .and_then(|e| transforms.get(e).ok())
-                        .map(PosRot::from_transform)
-                        .map(|pose_b| {
-                            pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b)
-                        }),
-                    None => Some(def.anchor_b), // world pin
+            // Both of these span the two anchors; they differ only in what
+            // they draw between them.
+            JointKind::Spring { .. } | JointKind::Fixed => {
+                let Some(b) = far_anchor(def, &index, &transforms) else {
+                    continue;
                 };
-                if let Some(b) = world_b {
+                if matches!(def.kind, JointKind::Spring { .. }) {
+                    // A coil: the connected bodies don't collide, so it reads
+                    // as a free spring, not a rod.
                     draw_spring(&mut gizmos, anchor, b, s);
+                } else {
+                    draw_rigid_link(&mut gizmos, anchor, b, color, s);
                 }
             }
         }
@@ -279,4 +276,29 @@ fn draw_linear_motor(
     let perp = Vec2::new(-d.y, d.x);
     gizmos.line_2d(tip, tip + (back + perp) * 6.0 * s, css::GOLD);
     gizmos.line_2d(tip, tip + (back - perp) * 6.0 * s, css::GOLD);
+}
+
+/// The far end of a two-anchor joint in world space, or `None` when its body
+/// has gone away. A world-pinned joint anchors directly in world coordinates.
+fn far_anchor(def: &JointDef, index: &IdIndex, transforms: &Query<&Transform>) -> Option<Vec2> {
+    match def.body_b {
+        Some(id) => index
+            .entity(id)
+            .and_then(|e| transforms.get(e).ok())
+            .map(PosRot::from_transform)
+            .map(|pose_b| pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b)),
+        None => Some(def.anchor_b),
+    }
+}
+
+/// A rigid link: a plain bar with a tick at each end.
+///
+/// Visibly *not* a spring, because whether a linkage is held rigidly or softly
+/// is the first thing you need to be able to read off it.
+fn draw_rigid_link(gizmos: &mut Gizmos<OverlayGizmos>, a: Vec2, b: Vec2, color: Srgba, s: f32) {
+    gizmos.line_2d(a, b, OUTLINE);
+    gizmos.line_2d(a, b, color);
+    let tick = (b - a).normalize_or_zero().perp() * (4.0 * s);
+    gizmos.line_2d(a - tick, a + tick, color);
+    gizmos.line_2d(b - tick, b + tick, color);
 }

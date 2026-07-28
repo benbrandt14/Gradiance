@@ -210,6 +210,11 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 changed = true;
             }
         }
+        // A rigid link has nothing to tune — no limits, no motor, no
+        // stiffness. Saying so beats an empty section that reads as a bug.
+        JointKind::Fixed => {
+            ui.weak("rigid: the bodies hold their relative pose exactly");
+        }
     }
     changed
 }
@@ -220,13 +225,14 @@ pub fn kind_name(kind: &JointKind) -> &'static str {
         JointKind::Hinge { .. } => "Hinge (revolute)",
         JointKind::Slider { .. } => "Prismatic (slider)",
         JointKind::Spring { .. } => "Strut (spring-damper)",
+        JointKind::Fixed => "Rigid link (fixed)",
     }
 }
 
 fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
     match kind {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => *limits,
-        JointKind::Spring { .. } => None,
+        JointKind::Spring { .. } | JointKind::Fixed => None,
     }
 }
 

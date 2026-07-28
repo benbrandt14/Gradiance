@@ -440,6 +440,7 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 let clamp = range.map_or(String::new(), |[lo, hi]| format!(" [{lo:.0},{hi:.0}]"));
                 format!("Strut rest={rest_length:.0} k={stiffness:.0} c={damping:.1}{clamp}")
             }
+            JointKind::Fixed => "Rigid link".to_owned(),
         };
         let target = def
             .body_b

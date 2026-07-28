@@ -437,6 +437,37 @@ impl SketchSession {
         }
     }
 
+    /// Decide where the cursor really is, and whether the sketch's own
+    /// geometry claimed it.
+    ///
+    /// By the time a tool sees `ctx.cursor`, the world snap has already moved
+    /// it onto a body vertex, a body edge, or a grid point. Picking sketch
+    /// geometry against that *moved* position would let a nearby body silently
+    /// steal a click aimed at the sketch — the sketch would be measured from
+    /// somewhere the author never pointed.
+    ///
+    /// So sketch candidates are measured from the **raw** cursor and compared
+    /// against the world snap on equal terms, nearest wins. Ties go to the
+    /// sketch: a shared point or an on-line constraint makes the profile
+    /// parametric, where snapping to a foreign body only borrows a coordinate.
+    fn resolve_cursor(&self, ctx: &ToolContext) -> (Option<Vec2>, Option<PickHit>) {
+        let Some(raw) = ctx.raw_cursor.or(ctx.cursor) else {
+            return (None, None);
+        };
+        let world = ctx.cursor.unwrap_or(raw);
+        let world_distance = raw.distance(world);
+        let tol = SNAP_PIXELS * ctx.cam_scale;
+
+        match pick::pick(&self.doc, raw, tol) {
+            // `world_distance` of zero means nothing in the world claimed the
+            // cursor, so any sketch hit within tolerance is unopposed.
+            Some(hit) if hit.distance <= world_distance || world_distance <= f32::EPSILON => {
+                (Some(hit.at), Some(hit))
+            }
+            _ => (Some(world), None),
+        }
+    }
+
     /// Resolve a click into a point to build from, attaching whatever
     /// constraint the snap implies.
     ///
@@ -446,8 +477,8 @@ impl SketchSession {
     /// existing line adds a real `PointOnLine` constraint, so the new vertex
     /// keeps sliding on that line as the sketch is re-solved rather than
     /// merely starting out near it.
-    fn point_for_click(&mut self, cursor: Vec2, tol: f32) -> SketchId {
-        match pick::pick(&self.doc, cursor, tol) {
+    fn point_for_click(&mut self, cursor: Vec2, hit: Option<PickHit>) -> SketchId {
+        match hit {
             Some(hit) => match hit.target {
                 // Reuse the identity outright — a shared point beats a
                 // coincidence constraint between two coincident points.
@@ -562,19 +593,19 @@ impl DraftTool for SketchSession {
 
         // Hover tracking runs every frame, not just on press, so the preview
         // can show what a click would snap to before it happens.
-        let tol = SNAP_PIXELS * ctx.cam_scale;
-        self.hover = ctx.cursor.and_then(|c| pick::pick(&self.doc, c, tol));
+        let (cursor, hit) = self.resolve_cursor(ctx);
+        self.hover = hit;
 
         if ctx.confirm && self.tool == SketchTool::Line && self.chain.len() >= 3 {
             return self.close_chain();
         }
 
         match self.tool {
-            SketchTool::Select => self.update_select(ctx, tol),
-            SketchTool::Line => self.update_line(ctx, tol),
-            SketchTool::Arc => self.update_arc(ctx, tol),
-            SketchTool::Circle => self.update_circle(ctx, tol),
-            SketchTool::Trim => self.update_trim(ctx),
+            SketchTool::Select => self.update_select(ctx, cursor),
+            SketchTool::Line => self.update_line(ctx, cursor, hit),
+            SketchTool::Arc => self.update_arc(ctx, cursor, hit),
+            SketchTool::Circle => self.update_circle(ctx, cursor, hit),
+            SketchTool::Trim => self.update_trim(ctx, cursor),
         }
         None
     }
@@ -608,11 +639,12 @@ impl SketchSession {
     /// Toggling rather than replacing is what lets a selection be built up to
     /// the two or four elements most constraints need, without a modifier key
     /// the tool seam does not carry. Clicking empty space clears.
-    fn update_select(&mut self, ctx: &ToolContext, tol: f32) {
+    fn update_select(&mut self, ctx: &ToolContext, cursor: Option<Vec2>) {
         match ctx.phase {
             GesturePhase::Pressed => {
-                let Some(cursor) = ctx.cursor else { return };
-                match pick::pick(&self.doc, cursor, tol) {
+                // Selection reads the hover directly: only the sketch's own
+                // geometry is selectable, so a world snap is irrelevant here.
+                match self.hover {
                     Some(hit) => match hit.target {
                         SketchTarget::Point(id) => {
                             self.selection.toggle_point(id);
@@ -627,7 +659,7 @@ impl SketchSession {
                 // Live constrained dragging: the point follows the cursor as a
                 // solver *preference*, so the rest of the sketch slides to keep
                 // its constraints instead of the drag being refused.
-                if let (Some(id), Some(cursor)) = (self.drag, ctx.cursor) {
+                if let (Some(id), Some(cursor)) = (self.drag, cursor) {
                     if let Some(p) = self.doc.point_mut(id) {
                         p.at = cursor;
                     }
@@ -639,11 +671,11 @@ impl SketchSession {
         }
     }
 
-    fn update_line(&mut self, ctx: &ToolContext, tol: f32) {
+    fn update_line(&mut self, ctx: &ToolContext, cursor: Option<Vec2>, hit: Option<PickHit>) {
         if ctx.phase != GesturePhase::Pressed {
             return;
         }
-        let Some(p) = ctx.cursor else { return };
+        let Some(p) = cursor else { return };
 
         let closes = self.chain.len() >= 3
             && self
@@ -656,7 +688,7 @@ impl SketchSession {
             return;
         }
 
-        let id = self.point_for_click(p, tol);
+        let id = self.point_for_click(p, hit);
         // Clicking the point we are already chaining from would make a
         // zero-length segment; ignore it rather than feeding the solver a
         // degenerate line.
@@ -697,12 +729,12 @@ impl SketchSession {
     }
 
     /// Three clicks: centre, start, end.
-    fn update_arc(&mut self, ctx: &ToolContext, tol: f32) {
+    fn update_arc(&mut self, ctx: &ToolContext, cursor: Option<Vec2>, hit: Option<PickHit>) {
         if ctx.phase != GesturePhase::Pressed {
             return;
         }
-        let Some(p) = ctx.cursor else { return };
-        let id = self.point_for_click(p, tol);
+        let Some(p) = cursor else { return };
+        let id = self.point_for_click(p, hit);
         if self.arc.last() == Some(&id) {
             return;
         }
@@ -716,15 +748,15 @@ impl SketchSession {
         }
     }
 
-    fn update_circle(&mut self, ctx: &ToolContext, tol: f32) {
+    fn update_circle(&mut self, ctx: &ToolContext, cursor: Option<Vec2>, hit: Option<PickHit>) {
         match ctx.phase {
             GesturePhase::Pressed => {
-                let Some(p) = ctx.cursor else { return };
-                let center = self.point_for_click(p, tol);
+                let Some(p) = cursor else { return };
+                let center = self.point_for_click(p, hit);
                 self.circle = Some((center, 0.0));
             }
             GesturePhase::Held => {
-                if let (Some((center, _)), Some(p)) = (self.circle, ctx.cursor)
+                if let (Some((center, _)), Some(p)) = (self.circle, cursor)
                     && let Some(c) = self.at(center)
                 {
                     self.circle = Some((center, c.distance(p)));
@@ -752,11 +784,11 @@ impl SketchSession {
     /// Trimming back and extending forward are the same gesture — which end
     /// moves is decided by where the first click landed, so there is no
     /// separate Extend tool to hunt for.
-    fn update_trim(&mut self, ctx: &ToolContext) {
+    fn update_trim(&mut self, ctx: &ToolContext, cursor: Option<Vec2>) {
         if ctx.phase != GesturePhase::Pressed {
             return;
         }
-        let (Some(cursor), Some(hit)) = (ctx.cursor, self.hover) else {
+        let (Some(cursor), Some(hit)) = (cursor, self.hover) else {
             return;
         };
         let SketchTarget::Entity(id) = hit.target else {
@@ -1090,6 +1122,81 @@ mod tests {
             s.doc.points.len(),
             before,
             "a snapped click must share the point, not add a coincident twin"
+        );
+    }
+
+    /// A `ToolContext` where the world snap has pulled the cursor away from
+    /// where the author actually pointed.
+    fn snapped_ctx<'a>(
+        raw: Vec2,
+        world_snapped_to: Vec2,
+        constraints: &'a GestureConstraints,
+        snap: &'a SnapConfig,
+    ) -> ToolContext<'a> {
+        ToolContext {
+            phase: GesturePhase::Pressed,
+            cursor: Some(world_snapped_to),
+            raw_cursor: Some(raw),
+            ..ctx(GesturePhase::Pressed, Some(raw), constraints, snap)
+        }
+    }
+
+    #[test]
+    fn a_world_snap_cannot_steal_a_click_aimed_at_the_sketch() {
+        // The world snap runs first and has already moved `cursor` onto a body
+        // vertex. A sketch point nearer to where the author actually pointed
+        // must still win, or the sketch silently loses its own identity.
+        let mut s = session(SketchTool::Line);
+        click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
+        let before = s.doc.points.len();
+        s.chain.clear();
+
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        // Pointing 2mm off an existing sketch point, while a "body vertex"
+        // 40mm away claimed the cursor.
+        s.update(&snapped_ctx(
+            Vec2::new(0.002, 0.0),
+            Vec2::new(0.04, 0.04),
+            &gc,
+            &sc,
+        ));
+
+        assert_eq!(
+            s.doc.points.len(),
+            before,
+            "the click should have reused the nearer sketch point, not placed a \
+             new one at the world snap"
+        );
+    }
+
+    #[test]
+    fn a_nearer_world_snap_still_wins() {
+        // The converse: a body vertex right under the cursor beats a sketch
+        // point further away, so world snapping is not simply disabled.
+        let mut s = session(SketchTool::Line);
+        click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
+        let before = s.doc.points.len();
+        s.chain.clear();
+
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        // Pointing 60mm from the nearest sketch point; the world snap took the
+        // cursor 1mm to a body vertex.
+        s.update(&snapped_ctx(
+            Vec2::new(0.06, 0.0),
+            Vec2::new(0.061, 0.0),
+            &gc,
+            &sc,
+        ));
+
+        assert_eq!(
+            s.doc.points.len(),
+            before + 1,
+            "a body vertex under the cursor should place a new point there"
+        );
+        let placed = s.doc.points.last().expect("just added").at;
+        assert!(
+            placed.distance(Vec2::new(0.061, 0.0)) < 1e-6,
+            "and it should sit on the world snap, got {placed:?}"
         );
     }
 
