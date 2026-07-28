@@ -1,5 +1,5 @@
 //! The array drag: turn a selection into a repeated pattern by dragging a
-//! scale handle with `Alt` held.
+//! scale handle with `Ctrl` held.
 //!
 //! # Why it rides the scale handles
 //!
@@ -43,7 +43,9 @@ use gradiance_command::array_cmd::{ArrayMode, ArrayTweens, CopyPlacement};
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::shape::ShapeDef;
-use gradiance_geometry::array::{copies_within, extent_along, tapered_contact_pitch};
+use gradiance_geometry::array::{
+    copies_within, extent_along, geometric_span, tapered_contact_pitch,
+};
 
 use crate::tools::handles::{HandleKind, SelectionBox};
 
@@ -57,19 +59,18 @@ use crate::tools::handles::{HandleKind, SelectionBox};
 #[derive(Resource, Reflect, Debug, Clone, PartialEq)]
 #[reflect(Resource)]
 pub struct ArrayConfig {
-    /// Which family of repetition a drag produces.
-    pub pattern: ArrayPattern,
     /// How far apart copies sit.
     pub spacing: ArraySpacing,
     /// Fraction of a step that alternate grid rows are offset by — 0.5 gives
     /// a running-bond brick wall.
     pub stagger: f32,
-    /// Angle between copies for [`ArrayPattern::Radial`], radians.
-    pub angle_step: f32,
-    /// Whether a radial sweep turns each body with the pattern.
-    pub rotate_items: bool,
-    /// Ignore the drag distance and always make this many copies.
-    pub count_override: Option<u32>,
+    /// Fix the number of copies along the frame's X axis. When set, the drag
+    /// stops choosing *how many* and starts choosing *how far apart*: pulling
+    /// the handle spreads a fixed set of copies over the distance dragged.
+    pub count_x: Option<u32>,
+    /// The same for the frame's Y axis, so a grid can fix its columns, its
+    /// rows, or both independently.
+    pub count_y: Option<u32>,
     /// Per-copy parameter change, one lane per pattern axis and each size
     /// axis specified on its own.
     pub tweens: ArrayTweens,
@@ -78,12 +79,10 @@ pub struct ArrayConfig {
 impl Default for ArrayConfig {
     fn default() -> Self {
         Self {
-            pattern: ArrayPattern::default(),
             spacing: ArraySpacing::default(),
             stagger: 0.0,
-            angle_step: std::f32::consts::TAU / 8.0,
-            rotate_items: true,
-            count_override: None,
+            count_x: None,
+            count_y: None,
             tweens: ArrayTweens::default(),
         }
     }
@@ -97,14 +96,11 @@ impl ArrayConfig {
         let finite = |v: f32, fallback: f32| if v.is_finite() { v } else { fallback };
         let mut out = self.clone();
         out.stagger = finite(out.stagger, 0.0).clamp(-1.0, 1.0);
-        out.angle_step = finite(out.angle_step, std::f32::consts::TAU / 8.0)
-            .clamp(-std::f32::consts::TAU, std::f32::consts::TAU);
-        out.count_override = out.count_override.map(|c| c.clamp(1, MAX_COPIES_PER_AXIS));
+        out.count_x = out.count_x.map(|c| c.clamp(1, MAX_COPIES_PER_AXIS));
+        out.count_y = out.count_y.map(|c| c.clamp(1, MAX_COPIES_PER_AXIS));
         out.tweens = out.tweens.sanitized();
         out.spacing = match out.spacing {
-            ArraySpacing::Gap(g) => ArraySpacing::Gap(finite(g, 0.0).clamp(-100.0, 100.0)),
-            ArraySpacing::Fixed(s) => ArraySpacing::Fixed(finite(s, 1.0).clamp(1e-3, 1000.0)),
-            ArraySpacing::Multiple(m) => ArraySpacing::Multiple(finite(m, 1.0).clamp(0.05, 100.0)),
+            ArraySpacing::Gap(g) => ArraySpacing::Gap(finite(g, 0.0).clamp(0.0, 100.0)),
             ArraySpacing::Contact => ArraySpacing::Contact,
         };
         out
@@ -193,12 +189,9 @@ impl ArrayMetrics {
         Self::measure_tapered(pieces, sbox.rot, sbox.center, &config.tweens)
     }
 
-    /// The pitch shrink along an axis, or 1.0 when the spacing rule does not
-    /// track the geometry (a fixed step stays fixed however the copies grow).
-    pub fn ratio(&self, axis_y: bool, config: &ArrayConfig) -> f32 {
-        if !config.spacing.tracks_contact() {
-            return 1.0;
-        }
+    /// The pitch shrink along an axis: how much each successive step closes
+    /// up as the copies themselves shrink.
+    pub fn ratio(&self, axis_y: bool) -> f32 {
         let r = if axis_y { self.ratio_y } else { self.ratio_x };
         if r.is_finite() && r > 0.0 { r } else { 1.0 }
     }
@@ -211,42 +204,22 @@ pub enum ArraySpacing {
     /// exists.
     #[default]
     Contact,
-    /// Flush plus a fixed gap, in metres. Negative overlaps deliberately.
+    /// Flush plus a gap, in metres. Clamped so it can never pull copies back
+    /// into each other — a pattern that overlaps itself is never what was
+    /// wanted, and the drag has no way to express it deliberately.
     Gap(f32),
-    /// An explicit step, ignoring the geometry entirely.
-    Fixed(f32),
-    /// Contact pitch scaled by a factor — 2.0 leaves a body-sized hole
-    /// between copies, 0.5 interleaves them.
-    Multiple(f32),
 }
 
 impl ArraySpacing {
     /// Every variant at its default value, for UI enumeration.
-    pub const ALL: [Self; 4] = [
-        Self::Contact,
-        Self::Gap(0.05),
-        Self::Fixed(1.0),
-        Self::Multiple(2.0),
-    ];
+    pub const ALL: [Self; 2] = [Self::Contact, Self::Gap(0.05)];
 
     /// Short human label.
     pub fn label(self) -> &'static str {
         match self {
             Self::Contact => "Contact (flush)",
             Self::Gap(_) => "Contact + gap",
-            Self::Fixed(_) => "Fixed step",
-            Self::Multiple(_) => "Multiple of contact",
         }
-    }
-
-    /// Whether the step this rule produces is derived from the selection's
-    /// geometry — and therefore whether it should shrink along with a size
-    /// taper to keep copies flush.
-    ///
-    /// [`Fixed`](Self::Fixed) is the odd one out on purpose: an explicit step
-    /// means an explicit step, even when the copies are changing size.
-    pub fn tracks_contact(self) -> bool {
-        !matches!(self, Self::Fixed(_))
     }
 
     /// The step this rule produces from a measured contact pitch.
@@ -255,11 +228,12 @@ impl ArraySpacing {
     /// the count computation divide by zero and ask for an unbounded number
     /// of copies stacked in one place.
     pub fn step(self, contact: f32) -> f32 {
+        // A negative gap is clamped away rather than honoured: it would push
+        // copies *into* each other, and "the system makes smart layout
+        // decisions to avoid overlap" is the whole promise of the tool.
         let step = match self {
             Self::Contact => contact,
-            Self::Gap(g) => contact + g,
-            Self::Fixed(s) => s,
-            Self::Multiple(m) => contact * m,
+            Self::Gap(g) => contact + g.max(0.0),
         };
         if step.is_finite() && step > 1e-4 {
             step
@@ -304,9 +278,19 @@ impl ArrayPlan {
 /// Builds the plan for a drag of `delta_frame` (frame-local) on `handle`.
 ///
 /// The handle decides which axes participate: an edge handle arrays along its
-/// own axis only, a corner handle along both. Dragging *inward* (against the
-/// handle's outward direction) produces nothing rather than copies stacked
-/// behind the original — pulling a handle back is how you cancel.
+/// own axis, a corner handle along **both** — a corner always builds a 2D
+/// pattern, even before the second axis has been dragged far enough to earn a
+/// row. Dragging *inward* produces nothing rather than copies stacked behind
+/// the original: pulling a handle back is how you cancel.
+///
+/// Each axis resolves in one of two ways:
+///
+/// - **free count** (the default) — the pitch is the contact pitch and the
+///   drag decides how many copies fit;
+/// - **fixed count** ([`ArrayConfig::count_x`] / [`count_y`](ArrayConfig::count_y))
+///   — the count is given and the *drag* decides the pitch, spreading that
+///   many copies across the distance pulled. Floored at the contact pitch, so
+///   a fixed grid can be stretched apart but never squeezed into itself.
 pub fn plan_drag(
     handle: HandleKind,
     sbox: &SelectionBox,
@@ -316,77 +300,72 @@ pub fn plan_drag(
 ) -> Option<ArrayPlan> {
     let unit = handle.unit();
     let (uses_x, uses_y) = handle.scales();
-    let step_x = metrics.step(false, config);
-    let step_y = metrics.step(true, config);
-    let ratio_x = metrics.ratio(false, config);
-    let ratio_y = metrics.ratio(true, config);
+    let contact_x = metrics.step(false, config);
+    let contact_y = metrics.step(true, config);
+    let (ratio_x, ratio_y) = (metrics.ratio(false), metrics.ratio(true));
 
-    // Copies fit along each participating axis, in the handle's outward
-    // direction only. A taper makes the steps a geometric series rather than a
-    // constant, so this is not a plain division — and a converging taper has a
-    // finite reach however far you pull.
-    let count_along = |active: bool, sign: f32, delta: f32, step: f32, ratio: f32| -> u32 {
-        if !active || sign == 0.0 || step <= 0.0 {
-            return 0;
+    // Outward drag distance along each participating frame axis. Every
+    // direction works the same way because the handle's own outward unit
+    // supplies the sign — a left handle counts leftward pulls as positive.
+    let outward = |active: bool, sign: f32, delta: f32| {
+        if active && sign != 0.0 {
+            delta * sign
+        } else {
+            0.0
         }
-        copies_within(delta * sign, step, ratio, MAX_COPIES_PER_AXIS)
     };
-    let n_x = count_along(uses_x, unit.x, delta_frame.x, step_x, ratio_x);
-    let n_y = count_along(uses_y, unit.y, delta_frame.y, step_y, ratio_y);
+    let out_x = outward(uses_x, unit.x.signum(), delta_frame.x);
+    let out_y = outward(uses_y, unit.y.signum(), delta_frame.y);
+
+    let resolve = |fixed: Option<u32>, out: f32, contact: f32, ratio: f32| -> (u32, f32) {
+        match fixed {
+            Some(n) if n > 0 => {
+                // Spread `n` copies over the pull. The span is the tapered
+                // one, so a shrinking fixed array still lands where the
+                // pointer is rather than short of it.
+                let span = geometric_span(ratio, n).max(1e-3);
+                (n, (out / span).max(contact))
+            }
+            _ => (
+                copies_within(out, contact, ratio, MAX_COPIES_PER_AXIS),
+                contact,
+            ),
+        }
+    };
+    let (n_x, step_x) = resolve(config.count_x.filter(|_| uses_x), out_x, contact_x, ratio_x);
+    let (n_y, step_y) = resolve(config.count_y.filter(|_| uses_y), out_y, contact_y, ratio_y);
 
     let axis_x = Vec2::from_angle(sbox.rot) * step_x * unit.x.signum();
     let axis_y =
         Vec2::from_angle(sbox.rot + std::f32::consts::FRAC_PI_2) * step_y * unit.y.signum();
-    // The spacing ratios are per-axis because the two lanes resize
-    // independently: a grid column's pitch also follows the *row* lane's
-    // x-shrink, and vice versa.
-    let taper = config.spacing.tracks_contact();
-    let lane = |scale: Vec2| if taper { scale } else { Vec2::ONE };
 
-    let mode = match config.pattern {
-        ArrayPattern::Repeat if uses_x && uses_y => ArrayMode::Grid {
+    let mode = if uses_x && uses_y {
+        ArrayMode::Grid {
             step: axis_x,
             cross: axis_y,
             cross_count: n_y,
             stagger: config.stagger,
-            ratio: lane(config.tweens.along_x.scale),
-            cross_ratio: lane(config.tweens.along_y.scale),
-        },
-        ArrayPattern::Repeat => {
-            // One axis only: whichever the handle owns, and the lane that
-            // drives it is the one named after that axis.
-            let (step, ratio) = if uses_y {
-                (axis_y, ratio_y)
-            } else {
-                (axis_x, ratio_x)
-            };
-            ArrayMode::Linear {
-                step,
-                ratio,
-                axis_y: uses_y && !uses_x,
-            }
+            // Per-axis, because the two lanes resize independently: a grid
+            // column's pitch also follows the *row* lane's x-shrink.
+            ratio: config.tweens.along_x.scale,
+            cross_ratio: config.tweens.along_y.scale,
         }
-        ArrayPattern::Radial => ArrayMode::Radial {
-            pivot: sbox.center,
-            angle_step: config.angle_step,
-            rotate_items: config.rotate_items,
-        },
+    } else {
+        // One axis only: whichever the handle owns, driven by the lane named
+        // after that axis.
+        let (step, ratio) = if uses_y {
+            (axis_y, ratio_y)
+        } else {
+            (axis_x, ratio_x)
+        };
+        ArrayMode::Linear {
+            step,
+            ratio,
+            axis_y: uses_y,
+        }
     };
 
-    let count = match mode {
-        // A grid's primary axis is X; a linear array's is whichever axis the
-        // handle owns; a radial array counts the same either way.
-        ArrayMode::Grid { .. } => n_x,
-        ArrayMode::Linear { .. } => {
-            if uses_y && !uses_x {
-                n_y
-            } else {
-                n_x
-            }
-        }
-        ArrayMode::Radial { .. } => n_x.max(n_y),
-    };
-    let count = config.count_override.unwrap_or(count);
+    let count = if uses_y && !uses_x { n_y } else { n_x };
     let cross_count = if matches!(mode, ArrayMode::Grid { .. }) {
         n_y
     } else {
@@ -407,29 +386,6 @@ pub fn plan_drag(
         tweens,
     };
     (!plan.is_empty()).then_some(plan)
-}
-
-/// Which family of repetition a drag produces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
-pub enum ArrayPattern {
-    /// Translate copies along the dragged axes — a row, a column, or a grid.
-    #[default]
-    Repeat,
-    /// Sweep copies around the selection's centre.
-    Radial,
-}
-
-impl ArrayPattern {
-    /// Every variant, for UI enumeration.
-    pub const ALL: [Self; 2] = [Self::Repeat, Self::Radial];
-
-    /// Short human label.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Repeat => "Repeat (row / grid)",
-            Self::Radial => "Radial sweep",
-        }
-    }
 }
 
 /// The world-space convex outlines of a selection, for pitch measurement.
@@ -606,20 +562,13 @@ mod tests {
         let contact = 2.0;
         assert!((ArraySpacing::Contact.step(contact) - 2.0).abs() < 1e-6);
         assert!((ArraySpacing::Gap(0.5).step(contact) - 2.5).abs() < 1e-6);
-        assert!((ArraySpacing::Fixed(0.75).step(contact) - 0.75).abs() < 1e-6);
-        assert!((ArraySpacing::Multiple(1.5).step(contact) - 3.0).abs() < 1e-6);
     }
 
     #[test]
     fn a_degenerate_spacing_rule_never_yields_a_zero_step() {
         // A zero step would divide by zero in the count and ask for an
         // unbounded pile of copies in one place.
-        for rule in [
-            ArraySpacing::Fixed(0.0),
-            ArraySpacing::Fixed(-3.0),
-            ArraySpacing::Multiple(0.0),
-            ArraySpacing::Gap(-10.0),
-        ] {
+        for rule in [ArraySpacing::Gap(-10.0), ArraySpacing::Gap(0.0)] {
             assert!(rule.step(1.0) > 0.0, "{rule:?} produced a bad step");
         }
     }
@@ -644,7 +593,9 @@ mod tests {
     }
 
     #[test]
-    fn a_count_override_wins_over_the_drag() {
+    fn a_fixed_count_makes_the_drag_set_the_spacing() {
+        // The point of fixing a count: the pull stops adding copies and
+        // starts spreading the ones you asked for.
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
@@ -652,22 +603,29 @@ mod tests {
             ratio_y: 1.0,
         };
         let config = ArrayConfig {
-            count_override: Some(7),
+            count_x: Some(4),
             ..Default::default()
         };
         let plan = plan_drag(
             HandleKind::EdgeX(1),
             &sbox(Vec2::splat(0.5)),
             &metrics,
-            Vec2::new(2.0, 0.0),
+            Vec2::new(8.0, 0.0),
             &config,
         )
         .expect("a plan");
-        assert_eq!(plan.count, 7);
+        assert_eq!(plan.count, 4, "the count is what was asked for");
+        let last = plan.placements().last().copied().expect("copies").translate;
+        assert!(
+            (last.x - 8.0).abs() < 1e-3,
+            "four copies spread across the 8 m pull: {last:?}"
+        );
     }
 
     #[test]
-    fn the_radial_pattern_sweeps_about_the_selection_centre() {
+    fn a_fixed_count_never_squeezes_copies_into_each_other() {
+        // Dragging *short* must not compress a fixed array past contact —
+        // overlap is never the intent, so the pitch floors at the flush one.
         let metrics = ArrayMetrics {
             pitch_x: 1.0,
             pitch_y: 1.0,
@@ -675,20 +633,84 @@ mod tests {
             ratio_y: 1.0,
         };
         let config = ArrayConfig {
-            pattern: ArrayPattern::Radial,
-            angle_step: std::f32::consts::FRAC_PI_2,
+            count_x: Some(4),
             ..Default::default()
         };
         let plan = plan_drag(
-            HandleKind::Corner(1, 1),
+            HandleKind::EdgeX(1),
             &sbox(Vec2::splat(0.5)),
             &metrics,
-            Vec2::new(3.0, 0.0),
+            Vec2::new(0.5, 0.0),
             &config,
         )
         .expect("a plan");
-        assert!(matches!(plan.mode, ArrayMode::Radial { .. }));
-        assert_eq!(plan.count, 3);
+        let places = plan.placements();
+        for pair in places.windows(2) {
+            let step = pair[1].translate.x - pair[0].translate.x;
+            assert!(step >= 1.0 - 1e-3, "pitch fell below contact: {step}");
+        }
+    }
+
+    #[test]
+    fn a_corner_always_builds_a_two_dimensional_pattern() {
+        // Even before the second axis has been pulled far enough to earn a
+        // row, a corner drag is a grid — it must not silently degrade into a
+        // line and then jump to a grid when one more pixel of drag lands.
+        let metrics = ArrayMetrics {
+            pitch_x: 1.0,
+            pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
+        };
+        for delta in [
+            Vec2::new(3.0, 0.2),
+            Vec2::new(0.2, 3.0),
+            Vec2::new(3.0, 3.0),
+        ] {
+            let plan = plan_drag(
+                HandleKind::Corner(1, 1),
+                &sbox(Vec2::splat(0.5)),
+                &metrics,
+                delta,
+                &ArrayConfig::default(),
+            )
+            .expect("a plan");
+            assert!(
+                matches!(plan.mode, ArrayMode::Grid { .. }),
+                "corner drag {delta:?} produced {:?}",
+                plan.mode
+            );
+        }
+    }
+
+    #[test]
+    fn every_handle_direction_arrays_outward() {
+        // "It should work in all directions": each handle counts a pull along
+        // its own outward normal, whichever way that points.
+        let metrics = ArrayMetrics {
+            pitch_x: 1.0,
+            pitch_y: 1.0,
+            ratio_x: 1.0,
+            ratio_y: 1.0,
+        };
+        let cases = [
+            (HandleKind::EdgeX(1), Vec2::new(2.5, 0.0)),
+            (HandleKind::EdgeX(-1), Vec2::new(-2.5, 0.0)),
+            (HandleKind::EdgeY(1), Vec2::new(0.0, 2.5)),
+            (HandleKind::EdgeY(-1), Vec2::new(0.0, -2.5)),
+            (HandleKind::Corner(-1, -1), Vec2::new(-2.5, -2.5)),
+            (HandleKind::Corner(1, -1), Vec2::new(2.5, -2.5)),
+        ];
+        for (handle, delta) in cases {
+            let plan = plan_drag(
+                handle,
+                &sbox(Vec2::splat(0.5)),
+                &metrics,
+                delta,
+                &ArrayConfig::default(),
+            );
+            assert!(plan.is_some(), "{handle:?} produced nothing for {delta:?}");
+        }
     }
 
     #[test]

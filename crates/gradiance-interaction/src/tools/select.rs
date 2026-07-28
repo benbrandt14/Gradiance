@@ -301,11 +301,11 @@ impl SelectGesture {
                 .iter()
                 .filter_map(|e| world.shape_pose(e))
                 .collect();
-            // Alt on a handle means "repeat", not "stretch". The hulls are
+            // Ctrl on a handle means "repeat", not "stretch". The hulls are
             // taken once here — the selection cannot change under the
             // pointer — but the pitch itself is re-derived each frame, since
             // the taper it depends on can be edited mid-drag.
-            if ctx.alt && !targets.is_empty() {
+            if ctx.ctrl && !targets.is_empty() {
                 let pieces = selection_pieces(&ghosts);
                 *self = SelectGesture::Array {
                     handle,

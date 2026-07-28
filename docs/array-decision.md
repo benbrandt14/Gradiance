@@ -1,10 +1,10 @@
-# Array repetition — the alt-drag tool
+# Array repetition — the ctrl-drag tool
 
 **Status:** accepted, landed.
 
 ## What it is
 
-Hold `Alt` and drag one of the selection's scale handles: the selection
+Hold `Ctrl` and drag one of the selection's scale handles: the selection
 repeats along that axis. Side handles make a row or a column, corner handles
 make a grid. By default copies land **flush** — drag a single block sideways
 and you get a seamless wall; drag a two-block stack upward and you get a
@@ -19,7 +19,7 @@ handles means the affordance is already on screen, already frame-aware
 new thing to learn is the modifier. It also makes the two operations read as
 siblings, which they are: **scale stretches the content, array repeats it.**
 
-`Alt` was the free modifier in the select tool: `Ctrl` is duplicate-drag,
+`Ctrl` was the free modifier in the select tool: `Ctrl` is duplicate-drag,
 `Shift` is additive selection and uniform scaling.
 
 ## The flush pitch is exact, not a bounding box
@@ -183,6 +183,47 @@ other edit does — through the intent seam, once, on the cold path:
 as one undoable command. If a future pattern really does need an arbitrary
 `f(k)`, the place for it is a `kernel::Expr` compiled at press time — not a
 VM call per copy.
+
+## The refinement pass
+
+Four changes after using it in anger, each one a thing that was wrong rather
+than merely missing.
+
+**`Ctrl`, not `Alt`, and the handles say so.** The modifier moved to the key
+people already associate with copying. More importantly the affordance is now
+visible *before* the gesture: holding it repaints every handle and gives each
+one an outward ghost square, rotated with the frame, so a local-frame
+selection shows the offset along its own axes. A modal drag whose mode you
+cannot see until you release is a modal drag people mistrust.
+
+**Nearest handle wins.** `hit_handle` took the first handle within the capture
+radius. That radius is a fixed number of *pixels*, so on a small or
+zoomed-out selection several handles are in range simultaneously and the
+answer was whichever led `HandleKind::ALL` — reliably an edge. This is why
+grabbing a corner "worked sometimes": it depended on zoom. Nearest now wins,
+with corners breaking ties, because a corner is the more specific request —
+it asks for both axes, and an edge is always a few pixels away.
+
+**A corner always builds a grid.** Previously a corner drag produced a
+`Linear` mode until the second axis had been pulled far enough to earn a row,
+then snapped to `Grid`. One pixel of drag changed the kind of thing being
+built. It is a `Grid` from the first frame now, with zero rows if you have not
+pulled that way yet.
+
+**Fixed counts are per-axis, and invert the gesture.** `count_x` / `count_y`
+replace a single `count_override`. With a count fixed the drag stops choosing
+*how many* and starts choosing *how far apart* — pull to spread that many
+copies over the distance. The pitch floors at the contact pitch, so a fixed
+array can be stretched apart but never squeezed into itself.
+
+Two things were also removed. **Radial** is gone until it can carry a
+configurable centre of rotation; sweeping about the selection's own centre is
+the least useful of the possible pivots and was the wrong default to ship.
+**Spacing** is down from four rules to two — contact and contact-plus-gap —
+and the gap is clamped non-negative. `Fixed` and `Multiple` both existed to
+let a step ignore the geometry, which is the one thing this tool is for; and a
+negative gap let the drag ask for a pattern that overlaps itself, which is
+never the intent.
 
 ## Where the code lives
 

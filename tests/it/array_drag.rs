@@ -2,7 +2,7 @@
 //!
 //! The pitch arithmetic is unit-tested in `gradiance-geometry`, and the plan
 //! arithmetic in `gradiance-interaction`. What can only be tested here is the
-//! gesture: that alt-pressing a handle starts an array rather than a scale,
+//! gesture: that ctrl-pressing a handle starts an array rather than a scale,
 //! that the drag writes nothing until release, that release makes exactly one
 //! undoable command, and — the headline behaviour — that the copies land
 //! flush.
@@ -14,7 +14,7 @@ use gradiance::command::array_cmd::{ArrayTweens, TweenStep};
 use gradiance::interaction::camera::CameraScale;
 use gradiance::interaction::cursor::CursorWorldPos;
 use gradiance::interaction::selection::Selection;
-use gradiance::interaction::tools::array_tool::{ArrayConfig, ArrayPattern, ArraySpacing};
+use gradiance::interaction::tools::array_tool::{ArrayConfig, ArraySpacing};
 use gradiance::interaction::tools::handles::{HandleKind, ScaleFrame, SelectionBox};
 use gradiance::prelude::*;
 
@@ -50,12 +50,12 @@ fn mouse(app: &mut App, down: bool) {
     }
 }
 
-fn alt(app: &mut App, down: bool) {
+fn copy_modifier(app: &mut App, down: bool) {
     let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
     if down {
-        keys.press(KeyCode::AltLeft);
+        keys.press(KeyCode::ControlLeft);
     } else {
-        keys.release(KeyCode::AltLeft);
+        keys.release(KeyCode::ControlLeft);
     }
 }
 
@@ -96,12 +96,12 @@ fn sbox(app: &mut App) -> SelectionBox {
 /// case, and the one these tests mean to exercise.
 const TEST_CAM_SCALE: f32 = 0.01;
 
-/// Performs a complete alt-drag from `handle` to `to`.
+/// Performs a complete ctrl-drag from `handle` to `to`.
 fn array_drag(app: &mut App, handle: HandleKind, to: Vec2) {
     app.world_mut().insert_resource(ScaleFrame::Global);
     app.world_mut().insert_resource(CameraScale(TEST_CAM_SCALE));
     let start = sbox(app).point(handle.unit());
-    alt(app, true);
+    copy_modifier(app, true);
     set_cursor(app, start);
     mouse(app, true);
     app.update();
@@ -109,7 +109,7 @@ fn array_drag(app: &mut App, handle: HandleKind, to: Vec2) {
     app.update();
     mouse(app, false);
     app.update();
-    alt(app, false);
+    copy_modifier(app, false);
     // A frame for dispatch to drain the intent.
     app.update();
 }
@@ -138,7 +138,7 @@ fn boxes(app: &mut App) -> Vec<(Vec2, Vec2)> {
 }
 
 #[test]
-fn alt_dragging_a_side_handle_builds_a_flush_wall() {
+fn ctrl_dragging_a_side_handle_builds_a_flush_wall() {
     // The headline case from the feature request: one block, drag the side,
     // get a wall with no spacing between the blocks.
     let mut app = paused_app();
@@ -167,7 +167,7 @@ fn alt_dragging_a_side_handle_builds_a_flush_wall() {
 }
 
 #[test]
-fn alt_dragging_up_a_two_block_stack_builds_a_seamless_tower() {
+fn ctrl_dragging_up_a_two_block_stack_builds_a_seamless_tower() {
     // The second case from the request: two blocks stacked, drag up, get a
     // tower with no gaps — which requires stepping by the *stack* height,
     // not one block's height.
@@ -226,7 +226,7 @@ fn the_drag_writes_nothing_until_release() {
     app.world_mut().insert_resource(ScaleFrame::Global);
     app.world_mut().insert_resource(CameraScale(TEST_CAM_SCALE));
     let start = sbox(&mut app).point(HandleKind::EdgeX(1).unit());
-    alt(&mut app, true);
+    copy_modifier(&mut app, true);
     set_cursor(&mut app, start);
     mouse(&mut app, true);
     app.update();
@@ -327,51 +327,59 @@ fn a_gap_spacing_rule_leaves_the_gap_it_asks_for() {
 }
 
 #[test]
-fn a_fixed_count_ignores_how_far_the_drag_went() {
+fn a_fixed_count_makes_the_drag_set_the_spacing() {
+    // With a count fixed, the pull stops adding copies and starts spreading
+    // the ones asked for: a short drag and a long drag both make five, at
+    // different pitches.
     let mut app = paused_app();
     let id = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
     select(&mut app, &[id]);
     app.world_mut().insert_resource(ArrayConfig {
-        count_override: Some(5),
+        count_x: Some(5),
         ..Default::default()
     });
 
-    // A drag that would otherwise fit only one copy.
-    array_drag(&mut app, HandleKind::EdgeX(1), Vec2::new(1.2, 0.0));
+    array_drag(&mut app, HandleKind::EdgeX(1), Vec2::new(10.5, 0.0));
     assert_eq!(
         body_count(&mut app),
         6,
         "one original plus the five asked for"
     );
+    let centres: Vec<Vec2> = boxes(&mut app)
+        .iter()
+        .map(|(lo, hi)| (*lo + *hi) / 2.0)
+        .collect();
+    let step = centres[1].x - centres[0].x;
+    assert!(
+        step > 1.5,
+        "a 10 m pull should spread five copies well past contact: {step}"
+    );
+    for pair in centres.windows(2) {
+        assert!(
+            (pair[1].x - pair[0].x - step).abs() < 1e-2,
+            "evenly spread: {centres:?}"
+        );
+    }
 }
 
 #[test]
-fn a_radial_pattern_sweeps_copies_around_the_selection() {
+fn a_fixed_count_in_both_axes_makes_a_grid() {
+    // "The fixed copies should work in both x and y."
     let mut app = paused_app();
-    let id = spawn_box(&mut app, Vec2::new(3.0, 0.0), 1.0, 1.0);
+    let id = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
     select(&mut app, &[id]);
     app.world_mut().insert_resource(ArrayConfig {
-        pattern: ArrayPattern::Radial,
-        angle_step: std::f32::consts::FRAC_PI_2,
-        count_override: Some(3),
+        count_x: Some(2),
+        count_y: Some(3),
         ..Default::default()
     });
 
-    array_drag(&mut app, HandleKind::Corner(1, 1), Vec2::new(6.0, 2.0));
-
-    assert_eq!(body_count(&mut app), 4);
-    // A quarter-turn sweep about the body's own centre leaves every copy the
-    // same distance from that centre.
-    let rects = boxes(&mut app);
-    let centers: Vec<Vec2> = rects.iter().map(|(min, max)| (*min + *max) / 2.0).collect();
-    let pivot = centers.iter().copied().sum::<Vec2>() / centers.len() as f32;
-    let radii: Vec<f32> = centers.iter().map(|c| c.distance(pivot)).collect();
-    for r in &radii {
-        assert!(
-            (r - radii[0]).abs() < 1e-2,
-            "copies should share a radius: {radii:?}"
-        );
-    }
+    array_drag(&mut app, HandleKind::Corner(1, 1), Vec2::new(6.0, 8.0));
+    assert_eq!(
+        body_count(&mut app),
+        12,
+        "a 3-column by 4-row block, original included"
+    );
 }
 
 #[test]
@@ -518,7 +526,7 @@ fn a_fixed_step_ignores_the_taper_it_was_told_to_ignore() {
     let id = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
     select(&mut app, &[id]);
     app.world_mut().insert_resource(ArrayConfig {
-        spacing: ArraySpacing::Fixed(1.5),
+        spacing: ArraySpacing::Gap(0.25),
         tweens: ArrayTweens {
             along_x: TweenStep {
                 scale: Vec2::splat(0.5),

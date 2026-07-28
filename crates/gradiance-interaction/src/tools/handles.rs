@@ -49,6 +49,11 @@ impl HandleKind {
         Self::EdgeY(1),
     ];
 
+    /// Whether this is a corner (both axes) rather than an edge midpoint.
+    pub fn is_corner(&self) -> bool {
+        matches!(self, Self::Corner(_, _))
+    }
+
     /// The handle's normalized box position (`-1..1` per axis).
     pub fn unit(&self) -> Vec2 {
         match self {
@@ -148,15 +153,33 @@ pub fn selection_box(
 
 /// Finds the handle under `cursor`, if any (world-space `radius`).
 pub fn hit_handle(sbox: &SelectionBox, cursor: Vec2, radius: f32) -> Option<HandleKind> {
+    // Nearest, not first-in-list. The capture radius is a fixed number of
+    // *pixels*, so on a small or zoomed-out selection several handles are in
+    // range at once; taking the first match then hands back whichever
+    // happens to lead `ALL`, which is why grabbing a corner used to work
+    // sometimes and give you an edge the rest of the time.
+    //
+    // Corners win ties, because a corner is the more specific request: it
+    // asks for both axes, and an edge is always available a few pixels away.
     HandleKind::ALL
         .into_iter()
-        .find(|h| sbox.point(h.unit()).distance(cursor) <= radius)
+        .filter(|h| sbox.point(h.unit()).distance(cursor) <= radius)
+        .min_by(|a, b| {
+            let (da, db) = (
+                sbox.point(a.unit()).distance_squared(cursor),
+                sbox.point(b.unit()).distance_squared(cursor),
+            );
+            da.total_cmp(&db)
+                .then_with(|| b.is_corner().cmp(&a.is_corner()))
+        })
 }
 
 /// Draws the selection box and its handles.
 pub fn draw_handles(
     selection: Res<Selection>,
     frame: Res<ScaleFrame>,
+    keys: Res<ButtonInput<KeyCode>>,
+    keyboard_captured: Res<crate::KeyboardCaptured>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
     cam_scale: Res<crate::camera::CameraScale>,
     mut gizmos: Gizmos<OverlayGizmos>,
@@ -166,7 +189,14 @@ pub fn draw_handles(
     };
     let scale = cam_scale.0;
     let size = 5.0 * scale;
-    let color = if *frame == ScaleFrame::Local {
+    // Holding the copy modifier repaints the handles: a drag from here will
+    // repeat the selection rather than resize it, and that is worth knowing
+    // *before* committing to the gesture rather than after.
+    let copying = !keyboard_captured.0
+        && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight));
+    let color = if copying {
+        css::SPRING_GREEN
+    } else if *frame == ScaleFrame::Local {
         css::MEDIUM_PURPLE
     } else {
         css::LIGHT_SKY_BLUE
@@ -182,13 +212,25 @@ pub fn draw_handles(
     ];
     gizmos.linestrip_2d(corners, color.with_alpha(0.7));
 
-    // Handles.
+    // Handles. In copy mode each one gains a ghost square offset outward —
+    // the icon *is* the operation: one box becoming two, in the direction
+    // the drag will lay them down. It follows the frame's rotation, so a
+    // local-frame selection shows the offset along its own axes.
+    let along = Vec2::from_angle(sbox.rot);
     for handle in HandleKind::ALL {
         let p = sbox.point(handle.unit());
-        gizmos.rect_2d(
-            Isometry2d::new(p, Rot2::radians(sbox.rot)),
-            Vec2::splat(size * 2.0),
-            color,
-        );
+        let iso = Isometry2d::new(p, Rot2::radians(sbox.rot));
+        gizmos.rect_2d(iso, Vec2::splat(size * 2.0), color);
+        if copying {
+            let unit = handle.unit();
+            // Edge handles offset along their own axis; corners along both.
+            let dir = along.rotate(if unit == Vec2::ZERO { Vec2::X } else { unit });
+            let ghost = p + dir.normalize_or_zero() * size * 2.2;
+            gizmos.rect_2d(
+                Isometry2d::new(ghost, Rot2::radians(sbox.rot)),
+                Vec2::splat(size * 1.6),
+                color.with_alpha(0.55),
+            );
+        }
     }
 }

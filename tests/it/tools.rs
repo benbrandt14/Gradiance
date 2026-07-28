@@ -173,38 +173,6 @@ fn linear_array_creates_offset_copies_in_one_undo_step() {
     assert_eq!(body_count(&mut app), 1, "whole array is one undo step");
 }
 
-#[test]
-fn radial_array_places_copies_on_the_circle() {
-    let mut app = paused_app();
-    let id = spawn_box_at(&mut app, Vec2::new(100.0, 0.0), 20.0, 20.0);
-
-    app.world_mut().write_message(ArrayIntent {
-        sources: vec![id],
-        count: 3,
-        tweens: ArrayTweens::default(),
-        mode: ArrayMode::Radial {
-            pivot: Vec2::ZERO,
-            angle_step: std::f32::consts::FRAC_PI_2,
-            rotate_items: true,
-        },
-    });
-    app.update();
-    assert_eq!(body_count(&mut app), 4);
-
-    let positions: Vec<Vec2> = {
-        let mut q = app.world_mut().query_filtered::<&Transform, With<Body>>();
-        q.iter(app.world())
-            .map(|t| t.translation.truncate())
-            .collect()
-    };
-    for p in &positions {
-        assert!((p.length() - 100.0).abs() < 1e-3, "on the ring: {p}");
-    }
-    // One copy per quadrant axis.
-    assert!(positions.iter().any(|p| p.y > 99.0));
-    assert!(positions.iter().any(|p| p.x < -99.0));
-}
-
 // ---------- Select tool gestures ----------
 
 #[test]
