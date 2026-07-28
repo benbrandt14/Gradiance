@@ -372,8 +372,8 @@ fn run_controls(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPan
         .checkbox(&mut warm, "rebuild from scratch (warm start)")
         .on_hover_text(
             "start from a fresh constructive packing instead of the current arrangement. \
-             Much denser, but it discards where things are — turn it off (or use \
-             Relaxation) when the existing layout is meaningful.",
+             Much denser, but it discards where things are — turn it off when \
+             the existing layout is meaningful.",
         )
         .changed()
     {
@@ -445,11 +445,6 @@ fn run_readout(ui: &mut egui::Ui, opt: &OptimizerPanel) {
                 );
             }
             ui.end_row();
-            if report.restarts > 1 {
-                ui.label("restart");
-                ui.label(format!("{} / {}", report.restart + 1, report.restarts));
-                ui.end_row();
-            }
             ui.label("bodies");
             ui.label(format!("{}", opt.session.body_count()));
             ui.end_row();
@@ -579,7 +574,7 @@ fn rotation_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 next = RotationMode::Steps { steps: 8 };
             }
             ui.selectable_value(&mut next, RotationMode::Free, "Any angle")
-                .on_hover_text("largest search space; usually needs annealing");
+                .on_hover_text("largest search space; needs the most iterations");
         });
     if let RotationMode::Steps { steps } = next {
         let mut n = steps;
@@ -766,30 +761,6 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             }
             ui.end_row();
 
-            ui.label("restarts")
-                .on_hover_text("independent attempts from different seeds; the best one wins");
-            let mut restarts = opt.config.restarts;
-            if ui
-                .add(egui::DragValue::new(&mut restarts).range(1..=64).speed(0.2))
-                .changed()
-            {
-                opt.config.restarts = restarts;
-            }
-            ui.end_row();
-
-            ui.label("seed")
-                .on_hover_text("same seed, same arrangement — reproducible by construction");
-            ui.horizontal(|ui| {
-                let mut seed = opt.config.seed;
-                if ui.add(egui::DragValue::new(&mut seed).speed(1.0)).changed() {
-                    opt.config.seed = seed;
-                }
-                if ui.small_button("🎲").on_hover_text("try another").clicked() {
-                    opt.config.seed = opt.config.seed.wrapping_add(1);
-                }
-            });
-            ui.end_row();
-
             ui.label("iters / frame")
                 .on_hover_text("higher finishes sooner; lower makes the ghost readable");
             let mut per_frame = opt.config.iterations_per_frame;
@@ -827,8 +798,7 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 fn tuning_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     ui.label(egui::RichText::new("Tuning").strong());
     match opt.config.solver {
-        SolverKind::Relax | SolverKind::Naive => relax_tuning(ui, opt),
-        SolverKind::Anneal => anneal_tuning(ui, opt),
+        SolverKind::Naive => naive_tuning(ui, opt),
         SolverKind::Shelf => shelf_tuning(ui, opt),
         // L-BFGS has no knobs worth exposing: the line search and the
         // curvature memory are argmin's business, and the iteration budget
@@ -840,10 +810,13 @@ fn tuning_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     }
 }
 
-fn relax_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
-    let mut p = opt.config.relax;
+/// The baseline's two gains — exposed because the *ratio* between them is
+/// the point being demonstrated: it, and nothing about the packing, decides
+/// where this method stops.
+fn naive_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
+    let mut p = opt.config.naive;
     let mut changed = false;
-    egui::Grid::new("pack-relax")
+    egui::Grid::new("pack-naive")
         .num_columns(2)
         .spacing([8.0, 2.0])
         .show(ui, |ui| {
@@ -853,112 +826,21 @@ fn relax_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 &mut p.separation_gain,
                 0.01..=1.0,
                 0.01,
-                "fraction of an overlap resolved per iteration",
+                "fraction of each overlap resolved per iteration",
             );
             changed |= drag_row(
                 ui,
-                "compaction",
+                "attraction",
                 &mut p.attraction,
                 0.0..=0.5,
                 0.005,
-                "how hard each squeeze pulls the set inward",
-            );
-            changed |= drag_row(
-                ui,
-                "momentum",
-                &mut p.inertia,
-                0.0..=0.95,
-                0.01,
-                "keeps a pile flowing through a tight gap instead of stalling",
-            );
-            changed |= drag_row(
-                ui,
-                "jitter",
-                &mut p.jitter,
-                0.0..=0.5,
-                0.001,
-                "random kick that breaks symmetric standoffs",
-            );
-            changed |= drag_row(
-                ui,
-                "turn rate",
-                &mut p.rotation_gain,
-                0.0..=1.0,
-                0.01,
-                "how quickly items rotate toward a tidier footprint",
+                "inward pull per iteration — turn it up and bodies interpenetrate, \
+                 down and they stop with visible slack. There is no setting that \
+                 packs tightly, which is the finding",
             );
         });
     if changed {
-        opt.config.relax = p;
-    }
-}
-
-fn anneal_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
-    let mut p = opt.config.anneal;
-    let mut changed = false;
-    egui::Grid::new("pack-anneal")
-        .num_columns(2)
-        .spacing([8.0, 2.0])
-        .show(ui, |ui| {
-            changed |= drag_row(
-                ui,
-                "temperature",
-                &mut p.start_temperature,
-                1e-4..=10.0,
-                0.01,
-                "as a fraction of the starting score — higher explores more",
-            );
-            changed |= drag_row(
-                ui,
-                "cooling",
-                &mut p.cooling,
-                0.5..=0.99999,
-                0.0005,
-                "per-iteration decay; closer to 1 anneals slower and better",
-            );
-            changed |= drag_row(
-                ui,
-                "move size",
-                &mut p.move_scale,
-                1e-3..=10.0,
-                0.01,
-                "typical translation proposal, in metres",
-            );
-            changed |= drag_row(
-                ui,
-                "turn size",
-                &mut p.rotation_scale,
-                0.0..=std::f32::consts::TAU,
-                0.01,
-                "typical rotation proposal, in radians",
-            );
-            changed |= drag_row(
-                ui,
-                "swap chance",
-                &mut p.swap_probability,
-                0.0..=1.0,
-                0.01,
-                "probability of exchanging two bodies' positions instead of nudging one",
-            );
-            changed |= drag_row(
-                ui,
-                "inward pull",
-                &mut p.compaction,
-                0.0..=0.5,
-                0.005,
-                "leans every proposal toward the centre",
-            );
-            changed |= drag_row(
-                ui,
-                "overlap cost",
-                &mut p.overlap_penalty,
-                0.0..=1000.0,
-                1.0,
-                "how heavily a residual overlap is punished in the score",
-            );
-        });
-    if changed {
-        opt.config.anneal = p;
+        opt.config.naive = p;
     }
 }
 

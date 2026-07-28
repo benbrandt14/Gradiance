@@ -91,7 +91,6 @@ pub struct PackRun {
     best: Metrics,
     iteration: u32,
     total_iterations: u32,
-    restart: u32,
     since_improvement: u32,
     status: RunStatus,
 }
@@ -118,8 +117,7 @@ impl PackRun {
         let start_layout = Layout::from_starts(&problem.items);
         let start = metrics(&problem, &start_layout, &mut scratch);
         let movable = (0..problem.len()).filter(|i| problem.movable(*i)).count();
-        let seed = problem.config.seed;
-        let solver = crate::solvers::build(&problem, seed);
+        let solver = crate::solvers::build(&problem);
         let status = if problem.len() < 2 || movable == 0 {
             RunStatus::Empty
         } else {
@@ -134,7 +132,6 @@ impl PackRun {
             best: start,
             iteration: 0,
             total_iterations: 0,
-            restart: 0,
             since_improvement: 0,
             status,
             problem,
@@ -169,8 +166,6 @@ impl PackRun {
             status: self.status,
             iteration: self.iteration,
             total_iterations: self.total_iterations,
-            restart: self.restart,
-            restarts: self.problem.config.restarts,
             max_iterations: self.problem.config.max_iterations,
             start: self.start,
             current: self.current,
@@ -210,21 +205,14 @@ impl PackRun {
         self.status
     }
 
-    /// Ends the current attempt, starting the next restart if one is left.
+    /// Ends the run.
+    ///
+    /// This used to start the next restart. Restarts only ever bought
+    /// anything for a stochastic search — re-running a deterministic solver
+    /// reproduces the same layout — and every solver here is now
+    /// deterministic, so the branch (and the seed that fed it) is gone.
     fn finish_attempt(&mut self, outcome: RunStatus) {
-        let next = self.restart + 1;
-        // Restarts only buy anything for a stochastic search; re-running a
-        // deterministic one would reproduce the same layout.
-        if next < self.problem.config.restarts && !self.solver.is_one_shot() {
-            self.restart = next;
-            self.iteration = 0;
-            self.since_improvement = 0;
-            let seed = self.problem.config.seed ^ (u64::from(next).wrapping_mul(0x9E37_79B9));
-            self.solver = crate::solvers::build(&self.problem, seed);
-            self.status = RunStatus::Running;
-        } else {
-            self.status = outcome;
-        }
+        self.status = outcome;
     }
 
     /// Runs up to `budget` iterations, stopping early if the run finishes.
@@ -238,15 +226,9 @@ impl PackRun {
     }
 
     /// Runs to completion, ignoring the per-frame budget. Bounded by
-    /// `max_iterations × restarts`, so it always terminates.
+    /// `max_iterations`, so it always terminates.
     pub fn solve(&mut self) -> RunStatus {
-        let cap = self
-            .problem
-            .config
-            .max_iterations
-            .saturating_mul(self.problem.config.restarts)
-            .saturating_add(1);
-        self.advance(cap)
+        self.advance(self.problem.config.max_iterations.saturating_add(1))
     }
 }
 
@@ -285,10 +267,6 @@ pub struct PackReport {
     pub iteration: u32,
     /// Iterations across all attempts.
     pub total_iterations: u32,
-    /// Zero-based index of the current restart.
-    pub restart: u32,
-    /// Configured restart count.
-    pub restarts: u32,
     /// Configured iteration ceiling per attempt.
     pub max_iterations: u32,
     /// Score of the untouched selection.
@@ -402,14 +380,13 @@ mod tests {
         let mut run = PackRun::new(PackProblem::new(
             items,
             PackConfig {
-                solver: SolverKind::Relax,
+                solver: SolverKind::Descent,
                 max_iterations: 50,
                 patience: 50,
-                restarts: 3,
                 ..Default::default()
             },
         ));
         assert!(run.solve().is_done());
-        assert!(run.report().total_iterations <= 50 * 3 + 1);
+        assert!(run.report().total_iterations <= 51);
     }
 }

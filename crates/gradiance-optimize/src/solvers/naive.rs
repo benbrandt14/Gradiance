@@ -11,11 +11,10 @@
 //! the honest version of the obvious approach — a straw man would prove
 //! nothing. It gets the same separation quality, the same clearance
 //! handling, the same boundary clamping, and the same per-iteration step
-//! limit as [`RelaxSolver`](super::relax::RelaxSolver). The single
-//! difference is the one that matters: attraction and separation act
-//! together on every iteration, so the arrangement settles at the point
-//! where the two forces *balance* rather than at the point where the
-//! objective is smallest.
+//! limit as the real solvers. The single difference is the one that
+//! matters: attraction and separation act together on every iteration, so
+//! the arrangement settles at the point where the two forces *balance*
+//! rather than at the point where the objective is smallest.
 //!
 //! That balance is exactly the failure mode. The equilibrium gap between two
 //! bodies is set by the ratio of the attraction gain to the separation gain
@@ -68,7 +67,7 @@ impl Solver for NaiveSolver {
     fn step(&mut self, problem: &PackProblem, scratch: &mut Scratch) {
         let n = problem.items.len();
         let cfg = &problem.config;
-        let params = cfg.relax;
+        let params = cfg.naive;
         scratch.refresh(problem, &self.layout);
 
         self.correction.clear();
@@ -195,7 +194,7 @@ mod tests {
             .map(|i| square(Vec2::new(i as f32 * 2.0, 0.0), 0.5))
             .collect();
         let greedy = PackConfig {
-            relax: crate::problem::RelaxParams {
+            naive: crate::problem::NaiveParams {
                 attraction: 0.4,
                 ..Default::default()
             },

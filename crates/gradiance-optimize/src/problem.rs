@@ -23,9 +23,10 @@ use gradiance_geometry::hull::{circumradius, convex_hull, polygon_area, polygon_
 
 /// Which solver runs the arrangement.
 ///
-/// The three are genuinely different search strategies rather than tuning
-/// presets, which is the point: a packing instance that one handles badly is
-/// usually easy for another.
+/// Three strategies with three distinct jobs — build an arrangement, polish
+/// one, and be the yardstick — rather than a menu of tuning presets. Earlier
+/// revisions also carried a penalty relaxation and a simulated annealer;
+/// `docs/optimize-decision.md` records why the benchmark retired them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Reflect)]
 pub enum SolverKind {
     /// One-shot constructive placement into rows ("shelves"), largest first.
@@ -35,28 +36,12 @@ pub enum SolverKind {
     /// right first press on a scattered pile, and the usual seed for the
     /// iterative solvers.
     Shelf,
-    /// Penalty relaxation: separate every violating pair along its minimum
-    /// translation vector while pulling everything toward the arrangement
-    /// centre.
-    ///
-    /// Preserves the rough arrangement the user already has (things settle
-    /// where they were, only tighter), converges smoothly, and animates
-    /// legibly. Reach for it when *where things are* carries meaning; it is
-    /// measurably less dense than shelf or descent on a scattered pile.
-    Relax,
-    /// Metropolis simulated annealing over translations, rotations, and
-    /// pairwise swaps.
-    ///
-    /// The only one that can escape a bad local minimum (it accepts uphill
-    /// moves early), at the cost of many more iterations and a result that
-    /// depends on the seed. Use it when relaxation jams.
-    Anneal,
     /// Quasi-Newton descent on the objective's analytic gradient, driven by
     /// the `argmin` optimization crate (L-BFGS with a Hager–Zhang line
     /// search).
     ///
     /// The only solver here that uses real curvature information, so it
-    /// converges in far fewer iterations than relaxation once it is near a
+    /// converges in far fewer iterations than a first-order scheme near a
     /// solution — but it follows the gradient into the nearest minimum and
     /// will not climb out, so it is warm started by default.
     ///
@@ -78,20 +63,12 @@ pub enum SolverKind {
 
 impl SolverKind {
     /// Every variant, for UI enumeration.
-    pub const ALL: [Self; 5] = [
-        Self::Shelf,
-        Self::Relax,
-        Self::Descent,
-        Self::Anneal,
-        Self::Naive,
-    ];
+    pub const ALL: [Self; 3] = [Self::Shelf, Self::Descent, Self::Naive];
 
     /// Short human label.
     pub fn label(self) -> &'static str {
         match self {
             Self::Shelf => "Shelf (constructive)",
-            Self::Relax => "Relaxation",
-            Self::Anneal => "Annealing",
             Self::Descent => "Gradient descent (L-BFGS)",
             Self::Naive => "Naive attraction (baseline)",
         }
@@ -99,11 +76,12 @@ impl SolverKind {
 
     /// Whether this strategy benefits from a constructive warm start.
     ///
-    /// True for both search strategies that begin from wherever they are put:
-    /// descent because it strictly descends, annealing because its budget is
-    /// far better spent refining a decent arrangement than discovering one.
+    /// Descent strictly descends, so where it starts decides which minimum it
+    /// finds; the constructive seed was the single largest quality lever the
+    /// benchmark turned up. Shelf builds its own arrangement and the baseline
+    /// is deliberately given no help.
     pub fn wants_warm_start(self) -> bool {
-        matches!(self, Self::Descent | Self::Anneal)
+        matches!(self, Self::Descent)
     }
 
     /// One-line description for a tooltip.
@@ -112,14 +90,6 @@ impl SolverKind {
             Self::Shelf => {
                 "Instant, deterministic row packing. Discards the current \
                  arrangement and rebuilds it largest-first."
-            }
-            Self::Relax => {
-                "Pushes overlapping bodies apart along the shortest exit while \
-                 pulling the set inward. Keeps the arrangement you already have."
-            }
-            Self::Anneal => {
-                "Randomized search that accepts uphill moves early to escape \
-                 local minima. Slower; result depends on the seed."
             }
             Self::Descent => {
                 "Quasi-Newton descent on the analytic gradient (argmin's \
@@ -378,7 +348,7 @@ impl Default for ObjectiveWeights {
             fill: 1.0,
             // Zero by default: benchmarking across the three reference scenes
             // showed the gap term neutral at best for density, and slightly
-            // negative when it steered the relaxation pulse. It stays as a
+            // negative when it steered a compaction pulse. It stays as a
             // goal you can ask for — "hold a specific spacing between
             // neighbours" is a real request — but it does not earn a place in
             // the default packing.
@@ -427,101 +397,26 @@ impl ObjectiveWeights {
     ];
 }
 
-/// Tuning for [`SolverKind::Relax`].
+/// Tuning for [`SolverKind::Naive`], the baseline.
+///
+/// Two gains, and the ratio between them is the whole point: it — not
+/// anything about the packing — is what sets the equilibrium gap the method
+/// settles at. Turn attraction up and bodies interpenetrate; turn it down and
+/// they stop early with visible slack. That is the failure being measured.
 #[derive(Debug, Clone, Copy, PartialEq, Reflect)]
-pub struct RelaxParams {
+pub struct NaiveParams {
     /// Fraction of each pair's minimum translation applied per iteration.
-    /// 1.0 resolves a pair in one step but oscillates in dense piles; the
-    /// default under-relaxes for stability.
     pub separation_gain: f32,
-    /// Strength of one compaction pulse: the fraction of its distance to the
-    /// arrangement centre an item is pulled inward. This is the force that
-    /// actually *closes* the packing.
+    /// Fraction of its distance to the arrangement centre an item is pulled
+    /// inward, every iteration.
     pub attraction: f32,
-    /// Residual overlap (metres) below which the arrangement counts as
-    /// settled and the next compaction pulse may fire. Defaults to
-    /// [`Metrics::PENETRATION_TOLERANCE`](crate::Metrics::PENETRATION_TOLERANCE),
-    /// so a pulse fires exactly when the scorer would call the layout legal.
-    ///
-    /// Squeezing and separating on the *same* iteration is what makes a naive
-    /// penalty relaxation stall: the two forces reach a balance and leave a
-    /// permanent residual overlap, so the run "converges" to an illegal
-    /// layout. Pulsing instead — squeeze, then separate until clear — drives
-    /// the overlap back to zero between squeezes, so every pulse starts from
-    /// a legal arrangement and the best-so-far is always taken from one.
-    ///
-    /// The gate is on *overlap*, not on an iteration count, because how long
-    /// settling takes depends entirely on how tangled the selection was: a
-    /// fixed period lets a deeply interpenetrating pile get re-squeezed
-    /// before it has come apart, and it never converges. It is also what
-    /// makes the preview legible — you watch it clench and relax.
-    pub settle_epsilon: f32,
-    /// Random displacement added on each compaction pulse (metres), which
-    /// breaks the symmetric deadlocks that stall a pure gradient scheme.
-    /// Settling iterations stay deterministic so they can actually converge.
-    pub jitter: f32,
-    /// Per-iteration blend toward the orientation that minimizes an item's
-    /// own bounding box against the pull direction. Ignored when the
-    /// rotation mode is `Fixed`.
-    pub rotation_gain: f32,
-    /// Fraction of the previous iteration's displacement carried into the
-    /// next one. Momentum lets a pile keep flowing through a tight spot
-    /// instead of stalling at the first contact.
-    pub inertia: f32,
 }
 
-impl Default for RelaxParams {
+impl Default for NaiveParams {
     fn default() -> Self {
         Self {
             separation_gain: 0.6,
             attraction: 0.06,
-            settle_epsilon: crate::objective::Metrics::PENETRATION_TOLERANCE,
-            jitter: 0.002,
-            rotation_gain: 0.15,
-            inertia: 0.25,
-        }
-    }
-}
-
-/// Tuning for [`SolverKind::Anneal`].
-#[derive(Debug, Clone, Copy, PartialEq, Reflect)]
-pub struct AnnealParams {
-    /// Starting temperature, in objective units. Higher explores more.
-    pub start_temperature: f32,
-    /// Geometric cooling factor applied per iteration (0 < c < 1).
-    pub cooling: f32,
-    /// Standard deviation of a translation proposal, in metres.
-    pub move_scale: f32,
-    /// Standard deviation of a rotation proposal, in radians.
-    pub rotation_scale: f32,
-    /// Probability that a proposal swaps two items' positions instead of
-    /// nudging one. Swaps are what let a badly ordered pile re-sort itself.
-    pub swap_probability: f32,
-    /// Inward drift added to every nudge, as a fraction of the item's
-    /// distance to the arrangement centre.
-    ///
-    /// Without it, annealing on a spread-out selection barely works: a
-    /// symmetric random nudge almost always *grows* the bounding box (any
-    /// vertical component widens a flat row), so the Metropolis test spends
-    /// its whole budget rejecting. Leaning the proposal distribution inward
-    /// makes shrinking moves the common case and lets the acceptance test do
-    /// the job it is good at — deciding which of them survive the overlaps.
-    pub compaction: f32,
-    /// Weight of residual overlap in the energy. Large enough that a
-    /// violating layout never beats a legal one at low temperature.
-    pub overlap_penalty: f32,
-}
-
-impl Default for AnnealParams {
-    fn default() -> Self {
-        Self {
-            start_temperature: 0.5,
-            cooling: 0.997,
-            move_scale: 0.15,
-            rotation_scale: 0.4,
-            swap_probability: 0.15,
-            compaction: 0.05,
-            overlap_penalty: 40.0,
         }
     }
 }
@@ -645,12 +540,6 @@ pub struct PackConfig {
     /// metres. Keeps the preview from teleporting and the solver from
     /// exploding on a deeply interpenetrating start.
     pub max_step: f32,
-    /// Seed for the stochastic solvers. Same seed ⇒ same arrangement.
-    pub seed: u64,
-    /// Independent runs from different seeds; the best result wins. Only
-    /// meaningful for the stochastic solvers.
-    pub restarts: u32,
-
     /// Treat items the user pinned as immovable obstacles to pack around.
     pub honor_pinned: bool,
     /// Move each selection group as one rigid unit rather than as members.
@@ -670,14 +559,19 @@ pub struct PackConfig {
     /// it discards the arrangement the user had.
     ///
     /// On by default, because the default solver needs it and density is
-    /// what "pack this" asks for. Turn it off — or pick
-    /// [`SolverKind::Relax`] — when the existing arrangement is meaningful.
+    /// what "pack this" asks for. Turn it off when the existing arrangement
+    /// carries meaning and you only want it tightened in place.
     pub warm_start: bool,
+    /// Weight of residual overlap in the gradient path's energy.
+    ///
+    /// Large enough that a violating layout never scores better than a legal
+    /// one — the compaction term would otherwise keep pulling through
+    /// contact, because a quadratic penalty has a vanishing gradient exactly
+    /// where it needs to bite.
+    pub overlap_penalty: f32,
 
-    /// [`SolverKind::Relax`] tuning.
-    pub relax: RelaxParams,
-    /// [`SolverKind::Anneal`] tuning.
-    pub anneal: AnnealParams,
+    /// [`SolverKind::Naive`] tuning.
+    pub naive: NaiveParams,
     /// [`SolverKind::Shelf`] tuning.
     pub shelf: ShelfParams,
 }
@@ -700,15 +594,13 @@ impl Default for PackConfig {
             patience: 120,
             iterations_per_frame: 8,
             max_step: 0.25,
-            seed: 1,
-            restarts: 1,
             honor_pinned: true,
             keep_groups: true,
             gravity_bias: Vec2::ZERO,
             auto_apply: true,
             warm_start: true,
-            relax: RelaxParams::default(),
-            anneal: AnnealParams::default(),
+            overlap_penalty: 40.0,
+            naive: NaiveParams::default(),
             shelf: ShelfParams::default(),
         }
     }
@@ -734,7 +626,6 @@ impl PackConfig {
         out.weights.gap = finite(out.weights.gap, 1.5).clamp(-100.0, 100.0);
         out.weights.parallel = finite(out.weights.parallel, 0.0).clamp(0.0, 100.0);
         out.weights.contact = finite(out.weights.contact, 0.0).clamp(-100.0, 100.0);
-        out.restarts = out.restarts.clamp(1, 64);
         if !out.gravity_bias.is_finite() {
             out.gravity_bias = Vec2::ZERO;
         }
@@ -751,23 +642,9 @@ impl PackConfig {
             },
             Boundary::Free => Boundary::Free,
         };
-        out.relax.separation_gain = finite(out.relax.separation_gain, 0.6).clamp(0.01, 1.0);
-        out.relax.attraction = finite(out.relax.attraction, 0.06).clamp(0.0, 0.5);
-        out.relax.settle_epsilon = finite(
-            out.relax.settle_epsilon,
-            crate::objective::Metrics::PENETRATION_TOLERANCE,
-        )
-        .clamp(0.0, 10.0);
-        out.relax.jitter = finite(out.relax.jitter, 0.0).clamp(0.0, 1.0);
-        out.relax.rotation_gain = finite(out.relax.rotation_gain, 0.15).clamp(0.0, 1.0);
-        out.relax.inertia = finite(out.relax.inertia, 0.25).clamp(0.0, 0.95);
-        out.anneal.start_temperature = finite(out.anneal.start_temperature, 0.5).clamp(1e-6, 1e6);
-        out.anneal.cooling = finite(out.anneal.cooling, 0.997).clamp(0.5, 0.999_99);
-        out.anneal.move_scale = finite(out.anneal.move_scale, 0.15).clamp(1e-4, 100.0);
-        out.anneal.rotation_scale = finite(out.anneal.rotation_scale, 0.4).clamp(0.0, 10.0);
-        out.anneal.swap_probability = finite(out.anneal.swap_probability, 0.15).clamp(0.0, 1.0);
-        out.anneal.compaction = finite(out.anneal.compaction, 0.05).clamp(0.0, 0.5);
-        out.anneal.overlap_penalty = finite(out.anneal.overlap_penalty, 40.0).clamp(0.0, 1e6);
+        out.overlap_penalty = finite(out.overlap_penalty, 40.0).clamp(0.0, 1e6);
+        out.naive.separation_gain = finite(out.naive.separation_gain, 0.6).clamp(0.01, 1.0);
+        out.naive.attraction = finite(out.naive.attraction, 0.06).clamp(0.0, 0.5);
         if let RotationMode::Steps { steps } = out.rotation {
             out.rotation = RotationMode::Steps {
                 steps: steps.clamp(1, 360),
@@ -1046,7 +923,6 @@ mod tests {
             max_iterations: 0,
             patience: 9999,
             max_step: 0.0,
-            restarts: 500,
             gravity_bias: Vec2::new(f32::INFINITY, 0.0),
             boundary: Boundary::Rect {
                 width: -3.0,
@@ -1060,7 +936,6 @@ mod tests {
         assert_eq!(cfg.max_iterations, 1);
         assert_eq!(cfg.patience, 1, "patience never exceeds the iteration cap");
         assert!(cfg.max_step > 0.0);
-        assert_eq!(cfg.restarts, 64);
         assert_eq!(cfg.gravity_bias, Vec2::ZERO);
         assert!(
             matches!(cfg.boundary, Boundary::Rect { width, height } if width > 0.0 && height > 0.0)

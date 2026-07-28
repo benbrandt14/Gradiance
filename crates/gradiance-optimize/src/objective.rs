@@ -239,7 +239,7 @@ pub fn measure(problem: &PackProblem, scratch: &Scratch) -> Metrics {
         + w.contact * (pairs.contact / length_ref)
         // Hard constraints are not weights — they are always paid, and paid
         // heavily enough that no amount of tidiness buys an illegal layout.
-        + (pairs.overlap / length_ref) * cfg.anneal.overlap_penalty.max(1.0)
+        + (pairs.overlap / length_ref) * cfg.overlap_penalty.max(1.0)
         + (boundary_error / length_ref) * 100.0
         + aspect_penalty(problem, size);
 

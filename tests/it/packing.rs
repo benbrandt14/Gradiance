@@ -190,7 +190,7 @@ fn a_running_session_does_not_touch_the_world_until_it_is_accepted() {
         PackConfig {
             auto_apply: false,
             iterations_per_frame: 1,
-            ..quick(SolverKind::Relax)
+            ..quick(SolverKind::Descent)
         },
     );
 
@@ -246,7 +246,7 @@ fn cancelling_leaves_the_scene_exactly_as_it_was() {
         PackConfig {
             auto_apply: false,
             iterations_per_frame: 1,
-            ..quick(SolverKind::Relax)
+            ..quick(SolverKind::Descent)
         },
     );
 
@@ -445,7 +445,7 @@ fn a_hard_rectangle_boundary_contains_the_result() {
                 width: 3.0,
                 height: 3.0,
             },
-            ..quick(SolverKind::Relax)
+            ..quick(SolverKind::Descent)
         },
     );
 

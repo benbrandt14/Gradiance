@@ -31,7 +31,7 @@ thing and a worse one for this job:
 | "Smallest" | whatever the dynamics fall into | bounding area, hull area, enclosing circle, hull perimeter |
 | Extra inputs | mass, density, restitution, friction, sleeping, time step | none |
 | Reproducible | no (solver order, substep timing) | yes, from a seed |
-| Escapes a bad local minimum | no | yes (annealing) |
+| Escapes a bad local minimum | no | yes (warm start + restarts, if ever needed) |
 | Tunable goal | no | parallel edges, contact, density, aspect … |
 | Container / aspect targets | no | yes, hard or soft |
 | Cost of a "what if" | re-simulate | re-solve, interruptibly |
@@ -56,7 +56,7 @@ sat.rs        separating-axis overlap → minimum translation vector
 objective.rs  Metrics: the weighted terms → one comparable scalar
 gradient.rs   PackEnergy: layout ↔ parameter vector, cost and analytic gradient
 solver.rs     the Solver trait and PackRun (convergence, best-so-far, restarts)
-solvers/      shelf.rs, relax.rs, descent.rs, anneal.rs, naive.rs
+solvers/      shelf.rs, descent.rs, naive.rs
 rng.rs        splitmix64 — reproducibility without a dependency
 ```
 
@@ -94,7 +94,7 @@ and receives no signal, while a local gap measure would give every body a
 direction. It was expected to be the biggest quality win.
 
 **It was not.** Measured across the three reference scenes it is neutral for
-density at best, and when it was wired into the relaxation solver's
+density at best, and when it was wired into the iterative solver's
 compaction pulse it was actively worse — a local pull forms tight clumps that
 each close their own gaps while the arrangement as a whole stays loose. That
 wiring was removed and the default weight is **0**. It survives as a *goal*
@@ -118,15 +118,42 @@ handles badly is usually easy for another.
   arrangement — the right first press on a scattered pile. Reasons about
   bounding boxes, so its results are always legal but never as tight as
   relaxation's.
-- **Relaxation** (default). Alternates a Jacobi separation sweep with a
-  compaction pulse that squeezes everything toward the centre. Preserves the
-  arrangement the user already has and animates legibly.
-- **Descent** — L-BFGS from the `argmin` crate, over an analytic gradient.
-  See below.
-- **Annealing**. Metropolis over nudges, turns, and *position swaps*. The
-  only one that can escape a bad local minimum; the swap move is most of why
-  it beats relaxation when it does.
+- **Descent** (default) — L-BFGS from the `argmin` crate, over an analytic
+  gradient. See below.
 - **Naive** — the baseline. See below.
+
+### Two that the benchmark retired
+
+An earlier revision also shipped a **penalty relaxation** (Jacobi separation
+sweeps alternating with compaction pulses) and a **simulated annealer**
+(Metropolis over nudges, turns, and position swaps). Both worked. Neither
+earned its keep once the numbers were in:
+
+| scene | Shelf | Relax | **Descent** | Anneal |
+|---|---|---|---|---|
+| uniform | 1.000 | 0.982 | **1.000** | 1.000 |
+| mixed | 0.681 | 0.465 | **0.693** | 0.681 |
+| bars | 0.898 | 0.610 | **0.898** | 0.898 |
+
+Annealing scored *identically to shelf* on all three scenes — once warm
+started from a shelf packing it had nothing left to discover, and the
+acceptance test could not improve on what it was handed. Relaxation was
+dominated everywhere, by a wide margin on the two hard scenes. So the
+"different strategies cover each other's bad instances" argument, which is
+the entire justification for carrying more than one, turned out not to hold
+for these two: they had no instance they were best at.
+
+Deleting them took ~1,350 lines with their tests, params, tuning panels, and
+the `rng` module — and it took the **restart machinery** with them. Restarts
+and the run seed only ever bought anything for a stochastic search; with
+every remaining solver deterministic, re-running one reproduces the same
+layout exactly. Keeping a "restarts" slider that cannot change the answer
+would have been worse than not having one.
+
+What survives has three distinct jobs rather than five overlapping ones:
+build an arrangement, polish one, be the yardstick. If a future instance
+genuinely defeats descent, adding a strategy back is one row in
+`solvers::build` — but it should arrive with a scene it wins on.
 
 ## Gradient descent: argmin owns the algorithm
 
@@ -149,7 +176,7 @@ would discard it and reduce L-BFGS to plain gradient descent.
 **The gradient.** Translation is analytic and nearly free: SAT already
 computes the separating axis `n`, and `∂(separation)/∂posⱼ = +n`, so the
 overlap and gap terms differentiate to a sum of `±n` contributions — the same
-quantity relaxation already uses as a correction. Rotation gets one forward
+quantity SAT already yields as a minimum translation. Rotation gets one forward
 difference per item (differentiating through moving witness features is not
 worth the machinery), which is why `RotationMode::Fixed` is dramatically
 cheaper. The extent term gets a *descent direction* rather than its true
@@ -191,19 +218,21 @@ answer from the solver it is meant to be compared against.
 Fill ratio (body area ÷ bounding area; 1.0 is a perfect tiling) on the three
 benchmark scenes, at the tuned defaults:
 
-| scene | Shelf | Relax | **Descent** | Anneal | Naive |
-|---|---|---|---|---|---|
-| uniform (12 equal squares) | 1.000 | 0.982 | **1.000** | 1.000 | 0.311 |
-| mixed (14 random sizes) | 0.681 | 0.465 | **0.693** | 0.681 | 0.087 † |
-| bars (long bars + squares) | 0.898 | 0.610 | **0.898** | 0.898 | 0.065 |
+| scene | Shelf | **Descent** | Naive |
+|---|---|---|---|
+| uniform (12 equal squares) | 1.000 | **1.000** | 0.311 |
+| mixed (14 random sizes) | 0.681 | **0.693** | 0.087 † |
+| bars (long bars + squares) | 0.898 | **0.898** | 0.065 |
 
 † infeasible — the baseline left bodies overlapping.
 
 Two things drove those numbers more than any objective tuning:
 
-- **Warm starting** the search solvers from a shelf packing. Annealing went
-  from 0.33/0.08/0.25 to 1.00/0.68/0.90 on the strength of that one change,
-  and descent cannot work without it on a scattered pile.
+- **Warm starting** the search solvers from a shelf packing — by far the
+  largest single lever. The annealer went from 0.33/0.08/0.25 to
+  1.00/0.68/0.90 on that one change alone (and thereby stopped being
+  distinguishable from the shelf packing feeding it, which is why it is gone).
+  Descent cannot work at all without it on a scattered pile.
 - **Making the overlap penalty steep enough** (see `OVERLAP_DOMINANCE`). A
   quadratic penalty has a vanishing gradient at contact, so descent settled a
   hair inside every neighbour — infeasible, rejected wholesale by the run,
@@ -213,24 +242,19 @@ Two things drove those numbers more than any objective tuning:
 
 ### Two non-obvious things that had to be got right
 
-**Compaction must pulse, not pull continuously.** The obvious relaxation —
-apply separation and attraction on every iteration — does not converge to a
-legal layout. The two forces reach a *force balance*, leaving a permanent
-residual overlap proportional to the attraction gain, and the run then
-reports convergence on an arrangement whose bodies are inside each other.
-Alternating instead (squeeze, then separate until clear) means every squeeze
-starts from a legal state and the best-so-far is always taken from a settled
-moment. The gate is on measured overlap rather than an iteration count,
-because how long settling takes depends entirely on how tangled the input
-was — a fixed period re-squeezes a deep tangle before it has come apart and
-never reaches a legal state at all.
+**Separation and attraction must not act together.** Applying both on every
+iteration does not converge to a legal layout: the two forces reach a *force
+balance*, leaving a residual overlap proportional to the attraction gain, and
+the run then reports convergence on an arrangement whose bodies are inside
+each other. This is not a tuning problem — the equilibrium gap is set by the
+gain ratio rather than by anything about the packing. `NaiveSolver` is that
+failure, preserved deliberately as the yardstick, and it is precisely what
+"turn up gravity and let physics squash it together" amounts to.
 
-**Annealing needs a biased proposal distribution.** A symmetric random nudge
-almost always *grows* the bounding box (any vertical component widens a flat
-row), so plain Metropolis spends its whole budget rejecting and barely
-improves. Leaning proposals inward makes shrinking moves the common case and
-lets the acceptance test do the thing it is good at: deciding which of them
-survive the overlaps.
+**The overlap penalty must be steep at contact.** A quadratic penalty has a
+vanishing gradient exactly where it needs to bite, so descent settled a hair
+inside every neighbour — infeasible, rejected wholesale, and indistinguishable
+from the solver doing nothing. `OVERLAP_DOMINANCE` is the fix.
 
 ## Depth is a first-class constraint
 
@@ -310,7 +334,7 @@ existing seams without new machinery:
 - **Nesting** (non-convex, true no-fit-polygon) — a new item representation
   behind the same `Solver` trait.
 - **Auto-layout of the node graph** — a different objective (edge crossings,
-  edge length) over the same relaxation core.
+  edge length) over the same objective core.
 - **Constraint-driven assembly** — "these two edges touch", "this stays
   above that" as additional penalty terms in `objective.rs`.
 - **Scripted optimization** — `PackConfig` already derives `Reflect` and is
@@ -324,7 +348,7 @@ gap *distribution* rather than a mean, and symmetry about an axis.
 
 Other argmin solvers are nearly free too — `NelderMead` (derivative-free, for
 when the surrogate is a poor guide), `ParticleSwarm` (global, and it would
-slot in beside annealing). Each is one more row in `solvers::build`. The one
+slot in beside descent). Each is one more row in `solvers::build`. The one
 caveat is the one this crate already learned the hard way: any gradient-based
 addition must be handed a cost and a gradient *of the same function*, or its
 line search will hunt forever.

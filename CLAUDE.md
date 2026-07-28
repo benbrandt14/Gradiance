@@ -31,7 +31,7 @@ the single px↔SI seam `units::world` (`PIXELS_PER_METER`).
 
 `gradiance-optimize` is the layout-solver crate (`docs/optimize-decision.md`):
 a pure geometric search over poses — convex hulls, SAT, a weighted objective,
-and a `Solver` trait with five interchangeable strategies (one of them
+and a `Solver` trait with three interchangeable strategies (one of them
 `argmin`-backed L-BFGS over an analytic gradient, one a deliberately naive
 baseline the others are CI-asserted to beat). Like `geometry` it has
 no systems and no queries; its only bevy surface is `Resource`/`Reflect` on
