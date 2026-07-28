@@ -3,13 +3,11 @@
 //! Adding a strategy is: a module here implementing
 //! [`Solver`](crate::solver::Solver), a variant on
 //! [`SolverKind`](crate::problem::SolverKind), and one row in [`build`].
-//! Stopping rules, restarts, and best-so-far tracking are *not* a solver's
+//! Stopping rules and best-so-far tracking are *not* a solver's
 //! business — [`PackRun`](crate::solver::PackRun) owns those for everyone.
 
-pub mod anneal;
 pub mod descent;
 pub mod naive;
-pub mod relax;
 pub mod shelf;
 
 use crate::problem::{PackProblem, SolverKind};
@@ -17,11 +15,9 @@ use crate::solver::Solver;
 
 /// Instantiates the configured solver, seeded for reproducibility and warm
 /// started if the config asks for it.
-pub fn build(problem: &PackProblem, seed: u64) -> Box<dyn Solver> {
+pub fn build(problem: &PackProblem) -> Box<dyn Solver> {
     let mut solver: Box<dyn Solver> = match problem.config.solver {
         SolverKind::Shelf => Box::new(shelf::ShelfSolver::new(problem)),
-        SolverKind::Relax => Box::new(relax::RelaxSolver::new(problem, seed)),
-        SolverKind::Anneal => Box::new(anneal::AnnealSolver::new(problem, seed)),
         SolverKind::Descent => Box::new(descent::DescentSolver::new(problem)),
         SolverKind::Naive => Box::new(naive::NaiveSolver::new(problem)),
     };
@@ -72,10 +68,27 @@ mod tests {
         )
     }
 
-    /// Deterministic pseudo-random scatter, so the benchmark scenes are
-    /// fixed rather than whatever the last edit happened to produce.
+    /// A fixed-seed LCG, so the benchmark scenes are the same every run
+    /// rather than whatever the last edit happened to produce. Six lines
+    /// inline beats a module: this is its only caller.
+    struct Rng(u64);
+
+    impl Rng {
+        fn unit(&mut self) -> f32 {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            ((self.0 >> 33) as f32) / (u32::MAX >> 1) as f32
+        }
+        fn range(&mut self, lo: f32, hi: f32) -> f32 {
+            lo + self.unit() * (hi - lo)
+        }
+    }
+
+    /// Deterministic pseudo-random scatter for the benchmark scenes.
     fn scene(kind: &str) -> Vec<PackItem> {
-        let mut rng = crate::rng::Rng::new(0xBEEF);
+        let mut rng = Rng(0xBEEF);
         match kind {
             // Uniform squares, far apart: the easy case every solver should
             // handle, and the one where a perfect tiling exists.
@@ -118,7 +131,6 @@ mod tests {
             rotation: RotationMode::Fixed,
             max_iterations: 2500,
             patience: 400,
-            seed: 7,
             // Explicit rather than inherited: every comparison here has to
             // control for the warm start, or it is measuring the shelf.
             warm_start: solver.wants_warm_start(),
@@ -146,12 +158,7 @@ mod tests {
     #[test]
     fn every_real_solver_returns_a_collision_free_layout() {
         for kind in ["uniform", "mixed", "bars"] {
-            for solver in [
-                SolverKind::Shelf,
-                SolverKind::Relax,
-                SolverKind::Descent,
-                SolverKind::Anneal,
-            ] {
+            for solver in [SolverKind::Shelf, SolverKind::Descent] {
                 let (_, feasible) = run(kind, base_config(solver));
                 assert!(feasible, "{solver:?} left overlaps on the {kind} scene");
             }
@@ -169,7 +176,7 @@ mod tests {
     fn the_real_solvers_beat_the_naive_baseline_on_density() {
         for kind in ["uniform", "mixed", "bars"] {
             let (naive_fill, _) = run(kind, base_config(SolverKind::Naive));
-            for solver in [SolverKind::Shelf, SolverKind::Relax, SolverKind::Descent] {
+            for solver in [SolverKind::Shelf, SolverKind::Descent] {
                 let (fill, feasible) = run(kind, base_config(solver));
                 assert!(feasible);
                 assert!(
@@ -186,7 +193,7 @@ mod tests {
     fn packing_reaches_a_respectable_fill_ratio() {
         // Twelve equal squares admit a perfect tiling; anything under two
         // thirds means the solver is leaving obvious space on the table.
-        for solver in [SolverKind::Shelf, SolverKind::Relax, SolverKind::Descent] {
+        for solver in [SolverKind::Shelf, SolverKind::Descent] {
             let (fill, _) = run("uniform", base_config(solver));
             assert!(
                 fill > 0.66,
@@ -259,8 +266,8 @@ mod tests {
 
     #[test]
     fn seeding_replaces_the_working_layout_for_iterative_solvers() {
-        let problem = PackProblem::new(scene("uniform"), base_config(SolverKind::Relax));
-        let mut solver = build(&problem, 1);
+        let problem = PackProblem::new(scene("uniform"), base_config(SolverKind::Descent));
+        let mut solver = build(&problem);
         let seeded = warm_start_layout(&problem);
         solver.seed(seeded.clone());
         assert_eq!(solver.layout().poses, seeded.poses);
@@ -290,7 +297,7 @@ mod tests {
             })
             .collect();
         let measure_alignment = |parallel: f32| {
-            let mut config = base_config(SolverKind::Relax);
+            let mut config = base_config(SolverKind::Descent);
             config.rotation = RotationMode::Free;
             config.weights.parallel = parallel;
             let problem = PackProblem::new(bars.clone(), config);
@@ -315,7 +322,7 @@ mod tests {
             .map(|i| rect(Vec2::new((i % 3) as f32, (i / 3) as f32), Vec2::splat(0.45)))
             .collect();
         let measure_contact = |contact: f32| {
-            let mut config = base_config(SolverKind::Relax);
+            let mut config = base_config(SolverKind::Descent);
             config.boundary = crate::problem::Boundary::Rect {
                 width: 6.0,
                 height: 6.0,

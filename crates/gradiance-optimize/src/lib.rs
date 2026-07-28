@@ -75,15 +75,13 @@
 pub mod gradient;
 pub mod objective;
 pub mod problem;
-pub mod rng;
 pub mod solver;
 pub mod solvers;
 
 pub use gradiance_geometry::{array, hull, sat};
 pub use objective::{Metrics, Scratch, metrics};
 pub use problem::{
-    AnnealParams, Boundary, EdgeAlignment, LayerRule, Layout, Objective, ObjectiveWeights,
-    PackConfig, PackItem, PackProblem, RelaxParams, RotationMode, ShelfOrder, ShelfParams,
-    SolverKind,
+    Boundary, EdgeAlignment, LayerRule, Layout, NaiveParams, Objective, ObjectiveWeights,
+    PackConfig, PackItem, PackProblem, RotationMode, ShelfOrder, ShelfParams, SolverKind,
 };
 pub use solver::{PackReport, PackRun, RunStatus, Solver};

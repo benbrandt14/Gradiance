@@ -54,7 +54,7 @@
 //! ```
 //!
 //! so both pair terms differentiate to a sum of `±n` contributions — the
-//! same quantity the relaxation solver already uses as a correction. The
+//! same quantity SAT already yields as a minimum translation. The
 //! compaction term differentiates to `2(pos − centre)`. No finite
 //! differences, no extra evaluations.
 //!
@@ -277,7 +277,7 @@ impl<'a> PackEnergy<'a> {
         let length_ref = self.problem.total_area().max(1e-9).sqrt();
         let scale = f64::from(1.0 / (length_ref * length_ref));
         SurrogateWeights {
-            overlap: f64::from(cfg.anneal.overlap_penalty.max(1.0)) * OVERLAP_DOMINANCE * scale,
+            overlap: f64::from(cfg.overlap_penalty.max(1.0)) * OVERLAP_DOMINANCE * scale,
             gap: f64::from(cfg.weights.gap) * scale,
             compaction: f64::from(cfg.weights.extent + cfg.weights.fill) * scale,
         }
