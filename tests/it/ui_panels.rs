@@ -35,7 +35,9 @@ fn toolbar_palette_lists_all_tools_and_reports_clicks() {
         "Drag (D)",
         "Box (B)",
         "Circle (C)",
-        "Polygon (P)",
+        "Line (L)",
+        "Arc (A)",
+        "Trim (T)",
         "Hinge (H)",
         "Prismatic (R)",
         "Strut (T)",
@@ -146,45 +148,54 @@ fn lighting_and_scenery_settings_render_rows() {
     }
 }
 
-/// The sketch palette lists every sketch tool and reports a click.
+/// The unified palette lists the sketch tools alongside the rest — there is no
+/// separate sketch palette to switch into any more.
 #[test]
-fn sketch_palette_lists_every_tool() {
-    use gradiance::core::states::{EditorMode, SketchTool};
+fn tool_palette_includes_the_sketch_tools() {
+    let clicked: Cell<Option<ToolState>> = Cell::new(None);
+    let mut harness = Harness::new_ui(|ui| {
+        if let Some(tool) = tools_palette_ui(ui, ToolState::Select, None) {
+            clicked.set(Some(tool));
+        }
+    });
+    harness.run();
+
+    for label in ["Box (B)", "Circle (C)", "Line (L)", "Arc (A)", "Trim (T)"] {
+        harness.get_by_label(label);
+    }
+
+    harness.get_by_label("Arc (A)").click();
+    harness.run();
+    assert_eq!(clicked.get(), Some(ToolState::Arc));
+}
+
+/// The sketch strip carries what has no home in the tool palette: the
+/// reference toggle and the degrees-of-freedom readout.
+#[test]
+fn sketch_strip_reports_dof_and_toggles_reference_geometry() {
     use gradiance::ui::toolbar::{SketchAction, sketch_palette_ui};
 
     let clicked: Cell<Option<SketchAction>> = Cell::new(None);
     let mut harness = Harness::new_ui(|ui| {
-        if let Some(a) =
-            sketch_palette_ui(ui, EditorMode::Sketch, SketchTool::Select, Some(3), false)
-        {
+        if let Some(a) = sketch_palette_ui(ui, Some(3), false) {
             clicked.set(Some(a));
         }
     });
     harness.run();
 
-    for label in ["Select", "Line", "Arc", "Circle", "Trim", "Ref"] {
-        harness.get_by_label(label);
-    }
-    // The readout CAD users steer by.
     harness.get_by_label("3 DOF");
-
-    harness.get_by_label("Arc").click();
+    harness.get_by_label("Ref").click();
     harness.run();
-    assert_eq!(
-        clicked.get(),
-        Some(SketchAction::SetTool(SketchTool::Arc)),
-        "the palette reports which tool was asked for"
-    );
+    assert_eq!(clicked.get(), Some(SketchAction::SetConstruction(true)));
 }
 
 /// A fully constrained sketch says so rather than reporting "0 DOF".
 #[test]
-fn sketch_palette_calls_out_a_fully_constrained_sketch() {
-    use gradiance::core::states::{EditorMode, SketchTool};
+fn sketch_strip_calls_out_a_fully_constrained_sketch() {
     use gradiance::ui::toolbar::sketch_palette_ui;
 
     let mut harness = Harness::new_ui(|ui| {
-        sketch_palette_ui(ui, EditorMode::Sketch, SketchTool::Line, Some(0), false);
+        sketch_palette_ui(ui, Some(0), false);
     });
     harness.run();
     harness.get_by_label("fully constrained");

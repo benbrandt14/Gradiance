@@ -329,17 +329,20 @@ fn box_tool_drag_spawns_a_box() {
 }
 
 #[test]
-fn polygon_tool_clicks_close_into_a_ccw_centroid_relative_polygon() {
+fn line_tool_clicks_close_into_a_ccw_centroid_relative_polygon() {
     let mut app = paused_app();
     app.world_mut()
         .resource_mut::<NextState<ToolState>>()
-        .set(ToolState::Polygon);
+        .set(ToolState::Line);
     app.update();
 
+    // Spaced well outside the snap radius: the line tool snaps to existing
+    // sketch geometry, so vertices closer together than that would all collapse
+    // onto the first point.
     for p in [
         Vec2::new(0.0, 0.0),
-        Vec2::new(0.6, 0.0),
-        Vec2::new(0.3, 0.6),
+        Vec2::new(60.0, 0.0),
+        Vec2::new(30.0, 60.0),
     ] {
         set_cursor(&mut app, p);
         mouse(&mut app, MouseButton::Left, true);
@@ -348,7 +351,7 @@ fn polygon_tool_clicks_close_into_a_ccw_centroid_relative_polygon() {
         app.update();
     }
     // Close by clicking near the first vertex.
-    set_cursor(&mut app, Vec2::new(0.02, 0.02));
+    set_cursor(&mut app, Vec2::new(2.0, 2.0));
     mouse(&mut app, MouseButton::Left, true);
     app.update();
     mouse(&mut app, MouseButton::Left, false);

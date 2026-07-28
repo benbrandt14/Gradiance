@@ -22,7 +22,7 @@
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
-use gradiance_core::states::SketchTool;
+use gradiance_core::states::ToolState;
 use gradiance_sketch::doc::{SketchConstraint, SketchDoc, SketchEntity, SketchId};
 use gradiance_sketch::edit::{self, ConstraintKind, SketchSelection};
 use gradiance_sketch::ops;
@@ -32,8 +32,14 @@ use gradiance_sketch::{lower, solve};
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
 
-/// Clicking within this distance of the first point closes the loop.
-const CLOSE_RADIUS: f32 = 0.08;
+/// Clicking within this many logical screen pixels of the first point closes
+/// the loop.
+///
+/// Screen-relative for the same reason [`SNAP_PIXELS`] is: an absolute world
+/// distance makes closing a large sketch impossible and closing a small one
+/// automatic. A little larger than the snap radius, so the gesture that ends
+/// the loop is easier to hit than the one that merely reuses a point.
+const CLOSE_PIXELS: f32 = 14.0;
 
 /// A segment within this many degrees of an axis is taken to be *meant* as
 /// axis-aligned, and gets a constraint rather than just happening to look
@@ -97,12 +103,25 @@ pub struct SketchSession {
     /// sketch you can debug and one that just refuses to move.
     failed: Vec<usize>,
     status: Option<SessionStatus>,
-    tool: SketchTool,
+    tool: ToolState,
 
     /// Line-chain in progress; `chain[0]` is where the loop closes.
     chain: Vec<SketchId>,
     /// Circle being dragged: centre point and live radius.
     circle: Option<(SketchId, f32)>,
+    /// Rectangle being dragged: the corner it started from.
+    box_start: Option<Vec2>,
+    /// Live opposite corner while dragging a rectangle.
+    box_end: Option<Vec2>,
+    /// Set by a handler that just completed a shape, read by `update`.
+    gesture_finished: bool,
+    /// Whether the gesture in flight should commit the moment it finishes.
+    ///
+    /// Set when a gesture begins on an empty sketch that is not editing an
+    /// existing body — the "draw one shape, get one body" path that is most of
+    /// what a sandbox does. Composing several loops happens by re-opening the
+    /// committed body, where the sketch is non-empty and this stays false.
+    auto_commit: bool,
     /// Arc being swept: the points collected so far (centre, then start).
     arc: Vec<SketchId>,
     /// The point being dragged, fed to the solver as a preference.
@@ -170,7 +189,7 @@ impl SketchSession {
     ///
     /// The document and selection survive: switching from Line to Select must
     /// not throw away the sketch, only the dangling chain.
-    pub fn set_tool(&mut self, tool: SketchTool) {
+    pub fn set_tool(&mut self, tool: ToolState) {
         if self.tool != tool {
             self.tool = tool;
             self.cancel_gesture();
@@ -178,7 +197,7 @@ impl SketchSession {
     }
 
     /// The active tool.
-    pub fn tool(&self) -> SketchTool {
+    pub fn tool(&self) -> ToolState {
         self.tool
     }
 
@@ -358,10 +377,24 @@ impl SketchSession {
         };
     }
 
+    /// Arm the fast path if this gesture is starting from nothing.
+    ///
+    /// Called at the top of each shape gesture rather than once in `update`,
+    /// because only a handler knows whether the press it just saw actually
+    /// begins a shape.
+    fn arm_auto_commit(&mut self) {
+        if self.editing.is_none() && self.is_empty() {
+            self.auto_commit = true;
+        }
+    }
+
     /// Abandon the in-progress gesture, keeping the document.
     fn cancel_gesture(&mut self) {
         self.chain.clear();
         self.circle = None;
+        self.box_start = None;
+        self.box_end = None;
+        self.auto_commit = false;
         self.arc.clear();
         self.drag = None;
         self.trim_target = None;
@@ -596,16 +629,28 @@ impl DraftTool for SketchSession {
         let (cursor, hit) = self.resolve_cursor(ctx);
         self.hover = hit;
 
-        if ctx.confirm && self.tool == SketchTool::Line && self.chain.len() >= 3 {
+        if ctx.confirm && self.tool == ToolState::Line && self.chain.len() >= 3 {
             return self.close_chain();
         }
 
         match self.tool {
-            SketchTool::Select => self.update_select(ctx, cursor),
-            SketchTool::Line => self.update_line(ctx, cursor, hit),
-            SketchTool::Arc => self.update_arc(ctx, cursor, hit),
-            SketchTool::Circle => self.update_circle(ctx, cursor, hit),
-            SketchTool::Trim => self.update_trim(ctx, cursor),
+            ToolState::Select => self.update_select(ctx, cursor),
+            ToolState::Line => self.update_line(ctx, cursor, hit),
+            ToolState::Arc => self.update_arc(ctx, cursor, hit),
+            ToolState::Circle => self.update_circle(ctx, cursor, hit),
+            ToolState::Box => self.update_box(ctx, cursor),
+            ToolState::Trim => self.update_trim(ctx, cursor),
+            // Every other tool authors something that is not sketch geometry.
+            _ => {}
+        }
+
+        // A fast-path gesture that just finished commits itself, so "drag a
+        // box, get a body" stays one motion. `finished` is set by whichever
+        // handler completed; nothing else can trigger this.
+        if self.auto_commit && self.gesture_finished {
+            self.gesture_finished = false;
+            self.auto_commit = false;
+            return self.commit();
         }
         None
     }
@@ -613,6 +658,7 @@ impl DraftTool for SketchSession {
     fn drafting(&self) -> bool {
         !self.chain.is_empty()
             || self.circle.is_some()
+            || self.box_start.is_some()
             || !self.arc.is_empty()
             || self.drag.is_some()
     }
@@ -682,12 +728,17 @@ impl SketchSession {
                 .chain
                 .first()
                 .and_then(|&f| self.at(f))
-                .is_some_and(|f| f.distance(p) <= CLOSE_RADIUS);
+                .is_some_and(|f| f.distance(p) <= CLOSE_PIXELS * ctx.cam_scale);
         if closes {
             self.close_chain();
             return;
         }
 
+        // Armed *before* the first point exists: `point_for_click` adds to the
+        // document, so asking "was the sketch empty" afterwards always says no.
+        if self.chain.is_empty() {
+            self.arm_auto_commit();
+        }
         let id = self.point_for_click(p, hit);
         // Clicking the point we are already chaining from would make a
         // zero-length segment; ignore it rather than feeding the solver a
@@ -725,6 +776,7 @@ impl SketchSession {
             self.resolve();
         }
         self.chain.clear();
+        self.gesture_finished = true;
         None
     }
 
@@ -734,6 +786,9 @@ impl SketchSession {
             return;
         }
         let Some(p) = cursor else { return };
+        if self.arc.is_empty() {
+            self.arm_auto_commit();
+        }
         let id = self.point_for_click(p, hit);
         if self.arc.last() == Some(&id) {
             return;
@@ -752,6 +807,7 @@ impl SketchSession {
         match ctx.phase {
             GesturePhase::Pressed => {
                 let Some(p) = cursor else { return };
+                self.arm_auto_commit();
                 let center = self.point_for_click(p, hit);
                 self.circle = Some((center, 0.0));
             }
@@ -774,9 +830,65 @@ impl SketchSession {
                 let circle = self.doc.add_circle(center, r);
                 self.tag(circle);
                 self.resolve();
+                self.gesture_finished = true;
             }
             GesturePhase::Idle => {}
         }
+    }
+
+    /// Drag out a rectangle: four lines that are *constrained* rectangular.
+    ///
+    /// The constraints are the whole difference from the old box tool. A body
+    /// drawn this way is not a rectangle that happens to look square — it is a
+    /// loop the solver holds square, so dragging one corner afterwards moves
+    /// the two adjacent corners with it instead of shearing the shape.
+    fn update_box(&mut self, ctx: &ToolContext, cursor: Option<Vec2>) {
+        match ctx.phase {
+            GesturePhase::Pressed => {
+                self.arm_auto_commit();
+                self.box_start = cursor;
+                self.box_end = cursor;
+            }
+            GesturePhase::Held => self.box_end = cursor.or(self.box_end),
+            GesturePhase::Released => {
+                let (Some(a), Some(b)) = (self.box_start.take(), self.box_end.take()) else {
+                    return;
+                };
+                let (min, max) = (a.min(b), a.max(b));
+                if (max.x - min.x) < MIN_RADIUS || (max.y - min.y) < MIN_RADIUS {
+                    return;
+                }
+                self.add_rectangle(min, max);
+                self.resolve();
+                self.gesture_finished = true;
+            }
+            GesturePhase::Idle => {}
+        }
+    }
+
+    /// Four corners, four lines, and the constraints that keep them a rectangle.
+    fn add_rectangle(&mut self, min: Vec2, max: Vec2) {
+        let corners = [
+            self.doc.add_point(min),
+            self.doc.add_point(Vec2::new(max.x, min.y)),
+            self.doc.add_point(max),
+            self.doc.add_point(Vec2::new(min.x, max.y)),
+        ];
+        let lines: Vec<SketchId> = (0..4)
+            .map(|i| {
+                let l = self.doc.add_line(corners[i], corners[(i + 1) % 4]);
+                self.tag(l);
+                l
+            })
+            .collect();
+
+        // Horizontal/vertical on the four sides is enough on its own: with the
+        // corners shared structurally, that already forces a rectangle. Equal
+        // *length* is deliberately not added — it would make it a square.
+        self.doc.constrain(SketchConstraint::Horizontal(lines[0]));
+        self.doc.constrain(SketchConstraint::Vertical(lines[1]));
+        self.doc.constrain(SketchConstraint::Horizontal(lines[2]));
+        self.doc.constrain(SketchConstraint::Vertical(lines[3]));
     }
 
     /// Two clicks: the thing to cut, then the boundary to cut it against.
@@ -920,9 +1032,23 @@ impl SketchSession {
         // The closing hint, so it is obvious where the loop completes.
         if pts.len() >= 3
             && let (Some(first), Some(p)) = (pts.first().copied(), ctx.cursor)
-            && first.distance(p) <= CLOSE_RADIUS
+            && first.distance(p) <= CLOSE_PIXELS * ctx.cam_scale
         {
             out.line(p, first, css::LIME);
+        }
+
+        if let (Some(a), Some(b)) = (self.box_start, self.box_end) {
+            let (min, max) = (a.min(b), a.max(b));
+            out.polyline(
+                vec![
+                    min,
+                    Vec2::new(max.x, min.y),
+                    max,
+                    Vec2::new(min.x, max.y),
+                    min,
+                ],
+                css::YELLOW,
+            );
         }
 
         if let Some((center, r)) = self.circle
@@ -1041,7 +1167,7 @@ mod tests {
     }
 
     /// A session with the given tool selected.
-    fn session(tool: SketchTool) -> SketchSession {
+    fn session(tool: ToolState) -> SketchSession {
         let mut s = SketchSession::default();
         s.set_tool(tool);
         s
@@ -1067,7 +1193,7 @@ mod tests {
 
     /// A closed unit square, drawn with the line tool.
     fn square() -> SketchSession {
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(
             &mut s,
             &[
@@ -1083,7 +1209,7 @@ mod tests {
 
     #[test]
     fn a_near_horizontal_segment_is_solved_exactly_horizontal() {
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         // Second point is 2 degrees off horizontal — within the inference
         // tolerance, so it should be *made* horizontal, not left as drawn.
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.035)]);
@@ -1098,7 +1224,7 @@ mod tests {
 
     #[test]
     fn a_clearly_diagonal_segment_is_left_alone() {
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0)]);
 
         let pts: Vec<Vec2> = s.chain.iter().filter_map(|&id| s.at(id)).collect();
@@ -1110,7 +1236,7 @@ mod tests {
 
     #[test]
     fn clicking_an_existing_point_reuses_its_identity() {
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(0.5, 0.7)]);
         let before = s.doc.points.len();
 
@@ -1146,7 +1272,7 @@ mod tests {
         // The world snap runs first and has already moved `cursor` onto a body
         // vertex. A sketch point nearer to where the author actually pointed
         // must still win, or the sketch silently loses its own identity.
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
         let before = s.doc.points.len();
         s.chain.clear();
@@ -1173,7 +1299,7 @@ mod tests {
     fn a_nearer_world_snap_still_wins() {
         // The converse: a body vertex right under the cursor beats a sketch
         // point further away, so world snapping is not simply disabled.
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
         let before = s.doc.points.len();
         s.chain.clear();
@@ -1204,11 +1330,11 @@ mod tests {
     fn every_tool_draws_into_the_same_document() {
         // The reason the session exists: a circle and a line have to be able to
         // end up in one document, or no constraint can ever name both.
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
         let lines = s.doc.entities.len();
 
-        s.set_tool(SketchTool::Circle);
+        s.set_tool(ToolState::Circle);
         drag(&mut s, Vec2::new(3.0, 3.0), Vec2::new(3.5, 3.0));
 
         assert_eq!(s.doc.entities.len(), lines + 1);
@@ -1220,7 +1346,7 @@ mod tests {
 
     #[test]
     fn a_stray_circle_click_leaves_no_orphan_point() {
-        let mut s = session(SketchTool::Circle);
+        let mut s = session(ToolState::Circle);
         let before = s.doc.points.len();
         drag(&mut s, Vec2::new(1.0, 1.0), Vec2::new(1.0, 1.0));
 
@@ -1234,7 +1360,7 @@ mod tests {
 
     #[test]
     fn three_clicks_make_an_arc() {
-        let mut s = session(SketchTool::Arc);
+        let mut s = session(ToolState::Arc);
         click_all(
             &mut s,
             &[
@@ -1256,7 +1382,7 @@ mod tests {
         // Most constraints need two elements, and the tool seam carries no
         // modifier key, so a second click has to add rather than replace.
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
 
         click_all(&mut s, &[Vec2::new(0.0, 0.0)]);
         assert_eq!(s.selection.points.len(), 1);
@@ -1271,7 +1397,7 @@ mod tests {
     #[test]
     fn clicking_empty_space_clears_the_selection() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         click_all(&mut s, &[Vec2::new(0.0, 0.0)]);
         assert!(!s.selection.is_empty());
 
@@ -1282,7 +1408,7 @@ mod tests {
     #[test]
     fn dragging_a_point_moves_it_and_re_solves() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         let corner = s.doc.points[2].id;
         let before = s.at(corner).expect("corner exists");
 
@@ -1298,11 +1424,11 @@ mod tests {
 
     #[test]
     fn switching_tools_keeps_the_sketch_but_drops_the_gesture() {
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
         assert!(!s.chain.is_empty());
 
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
 
         assert!(s.chain.is_empty(), "the dangling chain is abandoned");
         assert_eq!(s.doc.entities.len(), 1, "the drawn segment survives");
@@ -1311,7 +1437,7 @@ mod tests {
     #[test]
     fn a_constraint_applies_to_the_selection_and_reports_itself() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         // Two opposite edges: parallel is offered for a pair of lines.
         let (a, b) = (s.doc.entities[0].id(), s.doc.entities[2].id());
         s.selection.toggle_entity(a);
@@ -1329,7 +1455,7 @@ mod tests {
     #[test]
     fn an_inapplicable_constraint_is_refused_out_loud() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         s.selection.toggle_point(s.doc.points[0].id);
 
         // A lone point cannot be a diameter.
@@ -1344,7 +1470,7 @@ mod tests {
     #[test]
     fn a_dimension_drives_the_geometry() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         let (a, b) = (s.doc.points[0].id, s.doc.points[1].id);
         s.selection.toggle_point(a);
         s.selection.toggle_point(b);
@@ -1374,7 +1500,7 @@ mod tests {
     #[test]
     fn reference_geometry_toggles_and_leaves_the_profile() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         let edge = s.doc.entities[0].id();
         s.selection.toggle_entity(edge);
 
@@ -1395,7 +1521,7 @@ mod tests {
     #[test]
     fn deleting_a_point_takes_its_edges_with_it() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         s.selection.toggle_point(s.doc.points[0].id);
 
         s.run_op(SketchOp::Delete);
@@ -1418,7 +1544,7 @@ mod tests {
     #[test]
     fn a_filleted_corner_gains_an_arc() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         let corner = s.doc.points[1].id;
         s.selection.toggle_point(corner);
         let before = s.doc.entities.len();
@@ -1532,8 +1658,106 @@ mod tests {
     }
 
     #[test]
+    fn a_closed_loop_auto_commits_on_a_blank_sketch() {
+        // The fast path: draw one shape, get one body, no Commit click. This
+        // is what keeps the sandbox flow intact now that every tool is
+        // sketch-backed.
+        let mut s = session(ToolState::Line);
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        for p in [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(0.6, 0.0),
+            Vec2::new(0.3, 0.6),
+        ] {
+            s.update(&ctx(GesturePhase::Pressed, Some(p), &gc, &sc));
+        }
+        let commit = s.update(&ctx(
+            GesturePhase::Pressed,
+            Some(Vec2::new(0.02, 0.02)),
+            &gc,
+            &sc,
+        ));
+
+        assert!(
+            matches!(commit, Some(ToolCommit::SpawnBody(_))),
+            "closing the loop should have committed, got {commit:?}"
+        );
+        assert!(s.is_empty(), "and cleared the session");
+    }
+
+    #[test]
+    fn a_box_drag_auto_commits_and_stays_rectangular() {
+        let mut s = session(ToolState::Box);
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        s.update(&ctx(GesturePhase::Pressed, Some(Vec2::ZERO), &gc, &sc));
+        s.update(&ctx(
+            GesturePhase::Held,
+            Some(Vec2::new(0.6, 0.4)),
+            &gc,
+            &sc,
+        ));
+        let commit = s.update(&ctx(
+            GesturePhase::Released,
+            Some(Vec2::new(0.6, 0.4)),
+            &gc,
+            &sc,
+        ));
+
+        let Some(ToolCommit::SpawnBody(record)) = commit else {
+            panic!("a box drag should commit a body, got {commit:?}")
+        };
+        // 0a's recognition: still an exact Box, not a four-gon.
+        assert_eq!(
+            record.shape,
+            gradiance_domain::shape::ShapeDef::Box {
+                width: 0.6,
+                height: 0.4
+            }
+        );
+        let sketch = record.sketch.expect("the box carries its sketch");
+        assert_eq!(
+            sketch.constraints.len(),
+            4,
+            "four sides constrained axis-aligned is what keeps it a rectangle"
+        );
+    }
+
+    #[test]
+    fn a_second_shape_joins_the_sketch_instead_of_committing() {
+        // Re-opened or already-populated sketches compose rather than
+        // auto-committing, which is what makes multi-loop profiles reachable.
+        let mut s = session(ToolState::Box);
+        let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
+        s.open(
+            gradiance_core::ids::StableId::new(),
+            SketchDoc::new(),
+            Vec2::ZERO,
+        );
+        // `open` on an empty doc leaves the session empty but marks it editing.
+        s.update(&ctx(GesturePhase::Pressed, Some(Vec2::ZERO), &gc, &sc));
+        s.update(&ctx(
+            GesturePhase::Held,
+            Some(Vec2::new(0.6, 0.4)),
+            &gc,
+            &sc,
+        ));
+        let commit = s.update(&ctx(
+            GesturePhase::Released,
+            Some(Vec2::new(0.6, 0.4)),
+            &gc,
+            &sc,
+        ));
+
+        assert!(
+            commit.is_none(),
+            "an edit in progress must wait for an explicit commit"
+        );
+        assert!(!s.is_empty(), "the geometry stayed in the sketch");
+    }
+
+    #[test]
     fn an_open_profile_cannot_be_committed() {
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
         assert!(
             !s.can_commit(),
@@ -1544,9 +1768,9 @@ mod tests {
     #[test]
     fn escape_backs_out_of_the_gesture_before_the_selection() {
         let mut s = square();
-        s.set_tool(SketchTool::Select);
+        s.set_tool(ToolState::Select);
         s.selection.toggle_point(s.doc.points[0].id);
-        s.set_tool(SketchTool::Line);
+        s.set_tool(ToolState::Line);
         click_all(&mut s, &[Vec2::new(5.0, 5.0), Vec2::new(6.0, 5.0)]);
 
         let (gc, sc) = (GestureConstraints::default(), SnapConfig::default());
@@ -1563,7 +1787,7 @@ mod tests {
 
     #[test]
     fn reference_mode_marks_what_it_draws() {
-        let mut s = session(SketchTool::Line);
+        let mut s = session(ToolState::Line);
         s.set_construction(true);
         click_all(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0)]);
 

@@ -27,7 +27,6 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use gradiance_core::states::EditorMode;
 use gradiance_interaction::tools::sketch_session::{
     SessionStatus, SketchOp, SketchSession, describe_constraint,
 };
@@ -107,18 +106,21 @@ pub enum SketchPanelAction {
     Discard,
 }
 
-/// Host the sketch editor panel while sketch mode is active.
+/// Host the sketch editor panel whenever there is a sketch to edit.
+///
+/// Presence, not a mode: the panel appears when the session holds geometry and
+/// gets out of the way when it does not, so a sandbox user who never opens a
+/// sketch never sees it.
 ///
 /// # Errors
 ///
 /// Propagates the egui context lookup.
 pub fn sketch_panel(
     mut contexts: EguiContexts,
-    mode: Res<State<EditorMode>>,
     mut panel: ResMut<SketchPanel>,
     mut session: ResMut<SketchSession>,
 ) -> Result {
-    if *mode.get() != EditorMode::Sketch || !panel.open {
+    if session.is_empty() || !panel.open {
         return Ok(());
     }
     let ctx = contexts.ctx_mut()?;

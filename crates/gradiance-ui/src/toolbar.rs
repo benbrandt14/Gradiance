@@ -4,7 +4,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use gradiance_core::states::{EditorMode, GameState, SketchTool, ToolState};
+use gradiance_core::states::{GameState, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
 use gradiance_interaction::tools::sketch_session::SketchSession;
 
@@ -51,7 +51,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
         &[
             (ToolState::Box, "Box", "B", "tool_box"),
             (ToolState::Circle, "Circle", "C", "tool_circle"),
-            (ToolState::Polygon, "Polygon", "P", "tool_polygon"),
+            (ToolState::Line, "Line", "L", "tool_polygon"),
+            (ToolState::Arc, "Arc", "A", "tool_arc"),
         ],
     ),
     (
@@ -67,6 +68,7 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
     (
         "Modify",
         &[
+            (ToolState::Trim, "Trim", "T", "tool_trim"),
             (ToolState::Cut, "Cut", "K", "tool_cut"),
             (ToolState::Tracer, "Tracer", "Y", "tool_tracer"),
         ],
@@ -101,14 +103,6 @@ pub fn load_tool_icons(
 /// system-parameter limit (it already carries nine).
 #[derive(SystemParam)]
 pub struct SketchControls<'w> {
-    /// Which authoring surface is active.
-    pub mode: Res<'w, State<EditorMode>>,
-    /// Mode changes requested this frame.
-    pub next_mode: ResMut<'w, NextState<EditorMode>>,
-    /// Active tool within sketch mode.
-    pub tool: Res<'w, State<SketchTool>>,
-    /// Sketch-tool changes requested this frame.
-    pub next_tool: ResMut<'w, NextState<SketchTool>>,
     /// The sketch being authored, read for the degrees-of-freedom readout
     /// and the construction-geometry toggle.
     pub session: ResMut<'w, SketchSession>,
@@ -117,10 +111,6 @@ pub struct SketchControls<'w> {
 /// What the sketch palette is asking for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SketchAction {
-    /// Enter or leave sketch mode.
-    SetMode(EditorMode),
-    /// Switch the active sketch tool.
-    SetTool(SketchTool),
     /// Draw subsequent geometry as reference-only, or stop doing so.
     SetConstruction(bool),
 }
@@ -202,25 +192,13 @@ pub fn toolbar(
             // A single column about twice the icon width (icons ~26px), so each
             // sits in a roomy cell — a compact Blender-style T-panel strip.
             ui.set_max_width(52.0);
-            let mode = *sketch.mode.get();
-            // The direct tools are meaningless while sketching, so the palette
-            // hides rather than showing a strip of dead buttons.
-            if mode == EditorMode::Direct
-                && let Some(state) = tools_palette_ui(ui, *tool.get(), Some(&tool_icons))
-            {
+            if let Some(state) = tools_palette_ui(ui, *tool.get(), Some(&tool_icons)) {
                 next_tool.set(state);
             }
             ui.separator();
-            let palette = sketch_palette_ui(
-                ui,
-                mode,
-                *sketch.tool.get(),
-                sketch.session.dof(),
-                sketch.session.construction(),
-            );
+            let palette =
+                sketch_palette_ui(ui, sketch.session.dof(), sketch.session.construction());
             match palette {
-                Some(SketchAction::SetMode(m)) => sketch.next_mode.set(m),
-                Some(SketchAction::SetTool(t)) => sketch.next_tool.set(t),
                 Some(SketchAction::SetConstruction(on)) => sketch.session.set_construction(on),
                 None => {}
             }
@@ -265,87 +243,21 @@ pub fn tools_palette_ui(
     clicked
 }
 
-/// Sketch-mode entry point and, once inside, the sketch tool strip plus the
-/// degrees-of-freedom readout.
+/// The sketch strip that sits under the tool palette: reference-geometry
+/// toggle plus the degrees-of-freedom readout.
 ///
 /// Host-agnostic (pure `Ui` in, choice out) for the same reason
 /// [`tools_palette_ui`] is: `tests/it/ui_panels.rs` can drive it headlessly.
 ///
-/// The DOF readout is the number CAD users actually steer by — it counts how
-/// much freedom the sketch still has, so reaching zero is the signal that the
-/// geometry is pinned down rather than merely looking right.
+/// There is no mode button any more. Sketching is what the paused editor
+/// *does*, so the only thing left here is state that has no home in the tool
+/// palette itself.
 pub fn sketch_palette_ui(
     ui: &mut egui::Ui,
-    mode: EditorMode,
-    tool: SketchTool,
     dof: Option<i32>,
     construction: bool,
 ) -> Option<SketchAction> {
-    let sketching = mode == EditorMode::Sketch;
     let mut action = None;
-
-    if ui
-        .selectable_label(sketching, "✏ Sketch")
-        .on_hover_text(if sketching {
-            "leave sketch mode and return to the direct tools"
-        } else {
-            "enter constraint-based sketch mode (pauses the simulation)"
-        })
-        .clicked()
-    {
-        action = Some(SketchAction::SetMode(if sketching {
-            EditorMode::Direct
-        } else {
-            EditorMode::Sketch
-        }));
-    }
-    if !sketching {
-        return action;
-    }
-
-    ui.separator();
-    for (state, name, key, hint) in [
-        (
-            SketchTool::Select,
-            "Select",
-            "S",
-            "click to select, drag a point to move it — the solver holds the constraints",
-        ),
-        (
-            SketchTool::Line,
-            "Line",
-            "L",
-            "chain segments; near-axis ones get a real constraint. Enter or click the start to close",
-        ),
-        (
-            SketchTool::Arc,
-            "Arc",
-            "A",
-            "three clicks: centre, start, end",
-        ),
-        (
-            SketchTool::Circle,
-            "Circle",
-            "C",
-            "drag from centre to rim; the radius stays a solver parameter",
-        ),
-        (
-            SketchTool::Trim,
-            "Trim",
-            "T",
-            "click what to cut, then the boundary — extends just as well as it trims",
-        ),
-    ] {
-        if ui
-            .selectable_label(tool == state, name)
-            .on_hover_text(format!("{name} ({key}) — {hint}"))
-            .clicked()
-        {
-            action = Some(SketchAction::SetTool(state));
-        }
-    }
-
-    ui.separator();
     if ui
         .selectable_label(construction, "Ref")
         .on_hover_text(
@@ -356,7 +268,6 @@ pub fn sketch_palette_ui(
     {
         action = Some(SketchAction::SetConstruction(!construction));
     }
-
     ui.separator();
     dof_readout(ui, dof);
     action
