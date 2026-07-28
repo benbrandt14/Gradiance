@@ -18,6 +18,7 @@
 //! workplane, so a future 3D construction plane is a new workplane rather than
 //! a redesign.
 
+pub mod annotate;
 pub mod doc;
 pub mod edit;
 pub mod lower;
