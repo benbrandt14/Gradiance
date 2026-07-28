@@ -2,7 +2,7 @@
 //!
 //! Everything a solver needs to compare two layouts goes through
 //! [`metrics`]. The score is a **weighted sum of dimensionless terms**
-//! ([`ObjectiveWeights`]) rather than one number, which is what lets the
+//! ([`ObjectiveWeights`](crate::problem::ObjectiveWeights)) rather than one number, which is what lets the
 //! same machinery express "pack this as tight as possible", "line these up",
 //! and "spread these out inside a box" without a different solver for each.
 //!
@@ -23,7 +23,7 @@
 //! # The gap term
 //!
 //! The single most useful term is not the bounding box — it is
-//! [`ObjectiveWeights::gap`], the mean leftover space between *neighbouring*
+//! [`ObjectiveWeights::gap`](crate::problem::ObjectiveWeights::gap), the mean leftover space between *neighbouring*
 //! bodies. A body in the middle of a cluster contributes nothing to the
 //! bounding box, so a pure extent objective gives it **exactly zero
 //! gradient** and it simply never tightens. The gap term is local, so every

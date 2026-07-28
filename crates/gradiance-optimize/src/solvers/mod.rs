@@ -1,8 +1,7 @@
 //! The solver implementations.
 //!
 //! Adding a strategy is: a module here implementing
-//! [`Solver`](crate::solver::Solver), a variant on
-//! [`SolverKind`](crate::problem::SolverKind), and one row in [`build`].
+//! [`Solver`], a variant on [`SolverKind`], and one row in [`build`].
 //! Stopping rules and best-so-far tracking are *not* a solver's
 //! business — [`PackRun`](crate::solver::PackRun) owns those for everyone.
 

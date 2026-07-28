@@ -4,7 +4,7 @@
 //! into the smallest area without colliding. The first (and so far only)
 //! problem class is **close packing** of a selection, but the crate is
 //! deliberately shaped as a family: a [`problem`] description, an
-//! [`objective`] to minimize, and a [`Solver`](solver::Solver) trait with
+//! [`objective`] to minimize, and a [`Solver`] trait with
 //! several interchangeable strategies behind it.
 //!
 //! # Why this is not the physics engine
