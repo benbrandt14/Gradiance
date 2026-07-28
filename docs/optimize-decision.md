@@ -108,6 +108,30 @@ the arrangement is a global minimum, and a strong weight collapsed fill from
 (`gap_neighbors`), which can never empty out.
 `a_strong_gap_weight_cannot_be_escaped_by_spreading_out` guards it.
 
+## Warm starts removed
+
+The warm start seeded an iterative solver with a constructive shelf packing.
+It made the measured numbers much better and the behaviour much worse to
+reason about:
+
+- the result depended on a hidden pre-pass, so what you got was not what the
+  solver you selected actually did;
+- running a pack twice did not do the same thing twice, because the second
+  run started from the first run's output;
+- and — the bug in the previous revision — a solver that was doing nothing at
+  all was indistinguishable from one that was working, because the shelf
+  layout it had been handed carried the result.
+
+It is gone: `build` now constructs the solver you asked for and nothing else,
+and every solver starts from the poses on screen. `SolverKind::Shelf` is the
+default, being the only strategy that reliably produces a tidy packing
+unaided. Descent stays, honestly labelled: from a scattered pile it converges
+to the scattered pile, and fixing that is the next optimizer spike's job.
+
+`Solver::seed` remains on the trait with a test pinning its contract — the
+spike will want to hand descent a starting arrangement, deliberately and
+visibly, rather than have one applied behind it.
+
 ## The solvers
 
 Genuinely different search strategies, not tuning presets — an instance one

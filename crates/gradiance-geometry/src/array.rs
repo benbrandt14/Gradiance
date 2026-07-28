@@ -36,24 +36,6 @@
 //! Taking the maximum over every ordered pair of pieces gives the pitch for
 //! the whole selection.
 //!
-//! # Tapered arrays
-//!
-//! When each copy is a scaled version of the last, the pitch is no longer one
-//! number — but it is still closed-form. Let `H` be the selection's outline
-//! about its centre and `u` the per-copy scale (one ratio per frame axis), so
-//! copy `k` occupies `u^k ⊙ H`. Clearing copy `k+1` from copy `k` along a
-//! frame axis `d` needs
-//!
-//! ```text
-//! t_k · (u^-k ⊙ d) clears H from u ⊙ H   ⇒   t_k = u_d^k · Q
-//! ```
-//!
-//! where `Q = contact_pitch_between(u ⊙ H, H, d)` — a single extra
-//! measurement — and `u_d` is the scale component along `d`. The step down the
-//! array is therefore *geometric*, and the position of copy `k` is the partial
-//! sum `Q · (1 − u_d^k)/(1 − u_d)`. Exact whenever `d` is one of the frame
-//! axes the scale is expressed in, which is every case a handle drag produces.
-//!
 //! # The conservative part
 //!
 //! Pieces are convex hulls of each body's outline, so a body with a bite cut
@@ -131,30 +113,15 @@ fn project(poly: &[Vec2], n: Vec2) -> (f32, f32) {
 /// measure. A set that already clears itself at every step returns `0.0`,
 /// which callers should treat as "no natural pitch here".
 pub fn contact_pitch(pieces: &[Vec<Vec2>], direction: Vec2) -> Option<f32> {
-    contact_pitch_between(pieces, pieces, direction)
-}
-
-/// The smallest step along `direction` that moves every piece of `moving`
-/// clear of every piece of `fixed`.
-///
-/// The two-set form of [`contact_pitch`], which is the same question asked of
-/// an array whose copies are not all the same size: the copy that is about to
-/// be placed (`moving`, already scaled) has to clear the copy already there
-/// (`fixed`). Passing the same set twice recovers the uniform case.
-pub fn contact_pitch_between(
-    moving: &[Vec<Vec2>],
-    fixed: &[Vec<Vec2>],
-    direction: Vec2,
-) -> Option<f32> {
     let d = direction.normalize_or_zero();
-    if d == Vec2::ZERO || moving.is_empty() || fixed.is_empty() {
+    if d == Vec2::ZERO || pieces.is_empty() {
         return None;
     }
     let mut pitch = 0.0_f32;
-    for a in moving {
-        for b in fixed {
-            // Ordered pairs, including a piece against its own original: the
-            // copy of piece `a` has to clear *every* fixed piece, and its own
+    for a in pieces {
+        for b in pieces {
+            // Ordered pairs, including a piece against itself: the copy of
+            // piece `a` has to clear *every* original piece, and its own
             // original is usually the binding one.
             if let Some((_, hi)) = overlap_interval(a, b, d) {
                 pitch = pitch.max(hi);
@@ -162,89 +129,6 @@ pub fn contact_pitch_between(
         }
     }
     pitch.is_finite().then_some(pitch.max(0.0))
-}
-
-/// Every piece scaled by `factors` about `pivot`, along axes rotated by
-/// `basis`.
-///
-/// The array tool's per-copy taper acts in the selection's own frame, so the
-/// scaled outline a pitch measurement needs is not simply `p * factors`.
-pub fn scale_pieces(
-    pieces: &[Vec<Vec2>],
-    factors: Vec2,
-    pivot: Vec2,
-    basis: f32,
-) -> Vec<Vec<Vec2>> {
-    pieces
-        .iter()
-        .map(|piece| {
-            piece
-                .iter()
-                .map(|p| crate::scale::scale_point(*p, pivot, basis, factors))
-                .collect()
-        })
-        .collect()
-}
-
-/// The flush pitch of the *first* gap of a tapered array: the step that clears
-/// a copy scaled by `factors` from the unscaled original.
-///
-/// Every later gap is this number times `factors`' component along
-/// `direction`, raised to the copy index — see the module docs. Falls back to
-/// the untapered answer when the taper is inert.
-pub fn tapered_contact_pitch(
-    pieces: &[Vec<Vec2>],
-    direction: Vec2,
-    factors: Vec2,
-    pivot: Vec2,
-    basis: f32,
-) -> Option<f32> {
-    if (factors - Vec2::ONE).abs().max_element() <= 1e-6 {
-        return contact_pitch(pieces, direction);
-    }
-    let scaled = scale_pieces(pieces, factors, pivot, basis);
-    contact_pitch_between(&scaled, pieces, direction)
-}
-
-/// The partial sum `1 + r + r² + … + r^(k−1)` — how many pitches down the
-/// array copy `k` sits when each step is `r` times the last.
-///
-/// The `r → 1` limit is `k`, taken directly rather than through the closed
-/// form so an inert taper is exact rather than a `0/0`.
-#[must_use]
-pub fn geometric_span(ratio: f32, k: u32) -> f32 {
-    let k = k as f32;
-    if !ratio.is_finite() || (ratio - 1.0).abs() < 1e-5 {
-        return k;
-    }
-    (1.0 - ratio.powf(k)) / (1.0 - ratio)
-}
-
-/// How many tapered copies of pitch `step` (shrinking by `ratio` each time)
-/// fit within `distance`.
-///
-/// Solves `step · geometric_span(ratio, n) ≤ distance` for the largest `n`. A
-/// converging taper (`ratio < 1`) has a finite reach however far you drag —
-/// `distance` beyond it yields `cap` rather than an unbounded count.
-#[must_use]
-pub fn copies_within(distance: f32, step: f32, ratio: f32, cap: u32) -> u32 {
-    if distance <= 0.0 || step <= 0.0 || !distance.is_finite() || !step.is_finite() {
-        return 0;
-    }
-    if !ratio.is_finite() || (ratio - 1.0).abs() < 1e-5 {
-        return ((distance / step).floor() as i64).clamp(0, i64::from(cap)) as u32;
-    }
-    // span(n) = (1 - r^n)/(1 - r) ≤ distance/step  ⇒  r^n ≥ 1 - (1-r)·d/s.
-    let bound = 1.0 - (1.0 - ratio) * distance / step;
-    if bound <= 0.0 {
-        // The array outruns the drag before it stops fitting.
-        return cap;
-    }
-    let n = bound.ln() / ratio.ln();
-    if !n.is_finite() {
-        return cap;
-    }
-    (n.floor() as i64).clamp(0, i64::from(cap)) as u32
 }
 
 /// The flush pitch along `direction`, falling back to the set's extent along
@@ -428,93 +312,6 @@ mod tests {
     fn an_empty_or_degenerate_request_is_none_rather_than_a_panic() {
         assert!(contact_pitch(&[], Vec2::X).is_none());
         assert!(contact_pitch(&[rect(Vec2::ZERO, Vec2::ONE)], Vec2::ZERO).is_none());
-    }
-
-    #[test]
-    fn a_tapered_pitch_is_smaller_than_the_flush_one() {
-        // Shrinking copies must sit closer together, or "retain contact"
-        // would leave a growing gap exactly where the taper bites.
-        let pieces = vec![rect(Vec2::ZERO, Vec2::splat(0.5))];
-        let flush = contact_pitch(&pieces, Vec2::X).expect("a pitch");
-        let taper = tapered_contact_pitch(&pieces, Vec2::X, Vec2::splat(0.5), Vec2::ZERO, 0.0)
-            .expect("a pitch");
-        // A unit square against a half-size copy: half-widths 0.5 + 0.25.
-        assert!((taper - 0.75).abs() < 1e-4, "got {taper}");
-        assert!(taper < flush);
-    }
-
-    #[test]
-    fn a_geometric_chain_of_tapered_pitches_stays_flush_all_the_way_down() {
-        // The property the closed form exists for: place copy k at
-        // Q·span(r, k) with each copy scaled by r^k, and *every* consecutive
-        // pair must be touching-but-not-overlapping, not just the first.
-        let ratio = 0.8_f32;
-        let base = vec![rect(Vec2::ZERO, Vec2::new(0.6, 0.4))];
-        let scale = Vec2::splat(ratio);
-        let q = tapered_contact_pitch(&base, Vec2::X, scale, Vec2::ZERO, 0.0).expect("a pitch");
-
-        let copy = |k: u32| -> Vec<Vec<Vec2>> {
-            let s = Vec2::splat(ratio.powf(k as f32));
-            let shifted = scale_pieces(&base, s, Vec2::ZERO, 0.0);
-            let dx = Vec2::X * q * geometric_span(ratio, k);
-            shifted
-                .iter()
-                .map(|p| p.iter().map(|v| *v + dx).collect())
-                .collect()
-        };
-        for k in 0..5 {
-            let (a, b) = (copy(k), copy(k + 1));
-            for pa in &a {
-                for pb in &b {
-                    // Flush is two-sided: not interpenetrating, but *within* a
-                    // hair's breadth — a gap that grew with k would fail the
-                    // second half. The overlap side needs a tolerance because
-                    // pieces that touch exactly read as either sign.
-                    assert!(
-                        crate::sat::penetration(pb, pa, 0.0).is_none_or(|m| m.depth < 1e-4),
-                        "copies {k}/{} overlap",
-                        k + 1
-                    );
-                    assert!(
-                        crate::sat::penetration(pb, pa, 1e-3).is_some(),
-                        "copies {k}/{} drifted apart",
-                        k + 1
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn per_axis_taper_only_shrinks_the_pitch_of_the_axis_it_names() {
-        // The grid case: scaling x alone must leave the vertical pitch alone.
-        let pieces = vec![rect(Vec2::ZERO, Vec2::splat(0.5))];
-        let narrow = Vec2::new(0.5, 1.0);
-        let x = tapered_contact_pitch(&pieces, Vec2::X, narrow, Vec2::ZERO, 0.0).expect("a pitch");
-        let y = tapered_contact_pitch(&pieces, Vec2::Y, narrow, Vec2::ZERO, 0.0).expect("a pitch");
-        assert!((x - 0.75).abs() < 1e-4, "x pitch shrinks: {x}");
-        assert!((y - 1.0).abs() < 1e-4, "y pitch is untouched: {y}");
-    }
-
-    #[test]
-    fn a_converging_taper_has_a_finite_reach() {
-        // Copies at 0.5^k cover at most 2 pitches however far you drag, so
-        // the count has to saturate at the cap instead of running away.
-        assert_eq!(copies_within(1e9, 1.0, 0.5, 512), 512);
-        assert_eq!(copies_within(1.4, 1.0, 0.5, 512), 1, "1 + 0.5 = 1.5 > 1.4");
-        assert_eq!(copies_within(1.6, 1.0, 0.5, 512), 2);
-        // An inert ratio must agree with plain division.
-        assert_eq!(copies_within(3.4, 1.0, 1.0, 512), 3);
-        assert_eq!(copies_within(-1.0, 1.0, 1.0, 512), 0);
-        assert_eq!(copies_within(10.0, 0.0, 1.0, 512), 0);
-    }
-
-    #[test]
-    fn the_geometric_span_degrades_to_counting() {
-        assert!((geometric_span(1.0, 4) - 4.0).abs() < 1e-6);
-        assert!((geometric_span(0.5, 3) - 1.75).abs() < 1e-6); // 1 + .5 + .25
-        assert!((geometric_span(2.0, 3) - 7.0).abs() < 1e-5); // 1 + 2 + 4
-        assert!((geometric_span(0.9, 0)).abs() < 1e-6);
     }
 
     #[test]

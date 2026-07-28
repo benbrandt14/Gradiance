@@ -38,8 +38,10 @@
 //! percent of fill in tens of iterations where relaxation takes hundreds.
 //! But it strictly descends, so it cannot leave the basin it starts in. On a
 //! scattered pile it will happily converge to the scattered pile's nearest
-//! local minimum, which is why [`SolverKind::wants_warm_start`](crate::problem::SolverKind::wants_warm_start) is true for
-//! it and the run seeds it from a shelf packing by default.
+//! local minimum. That is a real limitation, not a tuning problem, and it is
+//! why [`SolverKind::Shelf`](crate::problem::SolverKind::Shelf) is the
+//! default. Making descent useful on a scattered input is the subject of the
+//! next optimizer spike.
 
 // argmin's own `terminate_internal` is deliberately *not* used: it unwraps
 // the state's gradient and panics when there is none, and stopping rules are
@@ -272,7 +274,6 @@ mod tests {
             rotation: RotationMode::Fixed,
             max_iterations: 300,
             patience: 60,
-            warm_start: true,
             ..Default::default()
         }
     }

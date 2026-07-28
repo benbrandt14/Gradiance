@@ -367,18 +367,6 @@ fn run_controls(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPan
             opt.config.auto_apply = auto;
         }
     });
-    let mut warm = opt.config.warm_start;
-    if ui
-        .checkbox(&mut warm, "rebuild from scratch (warm start)")
-        .on_hover_text(
-            "start from a fresh constructive packing instead of the current arrangement. \
-             Much denser, but it discards where things are — turn it off when \
-             the existing layout is meaningful.",
-        )
-        .changed()
-    {
-        opt.config.warm_start = warm;
-    }
 }
 
 /// The live progress block.

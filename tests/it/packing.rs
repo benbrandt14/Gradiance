@@ -40,10 +40,8 @@ fn configure(app: &mut App, config: PackConfig) {
 
 /// A configuration that finishes quickly and deterministically.
 ///
-/// The warm start is off: these tests are about the *session* — its frames,
-/// its preview, its single commit — and a warm start replaces the layout
-/// before any iteration runs, which would mask exactly the mechanics being
-/// checked. Solver quality is measured in `gradiance-optimize`'s own tests.
+/// These tests are about the *session* — its frames, its preview, its single
+/// commit. Solver quality is measured in `gradiance-optimize`'s own tests.
 fn quick(solver: SolverKind) -> PackConfig {
     PackConfig {
         solver,
@@ -52,7 +50,6 @@ fn quick(solver: SolverKind) -> PackConfig {
         max_iterations: 800,
         patience: 200,
         iterations_per_frame: 400,
-        warm_start: false,
         ..Default::default()
     }
 }

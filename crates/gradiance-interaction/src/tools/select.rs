@@ -228,17 +228,13 @@ impl ManipTool for SelectGesture {
                 // cannot disagree with what release produces.
                 for placement in plan.placements() {
                     for (shape, pose) in ghosts {
-                        // The same decomposition the command applies: resize
-                        // in the body's own frame, then turn by the pattern.
-                        let base = Vec2::from_angle(pose.rot);
-                        let resize = placement.body_matrix(pose.rot);
-                        let turn = Vec2::from_angle(placement.body_rotation());
+                        // A placement is a pure translation, so the ghost is
+                        // the source outline moved — nothing to get wrong.
+                        let rot = Vec2::from_angle(pose.rot);
                         let centre = placement.map_point(pose.pos);
                         for ring in polygonize(shape).rings() {
-                            let mut pts: Vec<Vec2> = ring
-                                .iter()
-                                .map(|v| centre + turn.rotate(base.rotate(resize * *v)))
-                                .collect();
+                            let mut pts: Vec<Vec2> =
+                                ring.iter().map(|v| centre + rot.rotate(*v)).collect();
                             if let Some(first) = pts.first().copied() {
                                 pts.push(first);
                             }
@@ -497,7 +493,7 @@ impl SelectGesture {
                     // selection arrays along its own axes, exactly as it
                     // scales along them.
                     let delta = sbox.to_frame(p, *press);
-                    let metrics = ArrayMetrics::for_drag(pieces, sbox, &ctx.array);
+                    let metrics = ArrayMetrics::for_drag(pieces, sbox);
                     *plan = plan_drag(*handle, sbox, &metrics, delta, &ctx.array);
                 }
             }
@@ -613,7 +609,6 @@ impl SelectGesture {
                     sources: targets,
                     count: plan.count,
                     mode: plan.mode,
-                    tweens: plan.tweens,
                 }),
                 ..Default::default()
             },
