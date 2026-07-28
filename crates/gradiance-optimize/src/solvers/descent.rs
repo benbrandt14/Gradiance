@@ -4,7 +4,7 @@
 //! algorithm** (the L-BFGS two-loop recursion, the curvature history, the
 //! More–Thuente line search and its Wolfe conditions), and this crate owns
 //! only the problem — the cost and the gradient, from
-//! [`PackEnergy`](crate::gradient::PackEnergy). Hand-rolling a line search
+//! [`PackEnergy`]. Hand-rolling a line search
 //! that reliably satisfies the strong Wolfe conditions is exactly the kind
 //! of numerical work that is easy to get subtly, silently wrong, and there
 //! is nothing packing-specific about it.
@@ -38,7 +38,7 @@
 //! percent of fill in tens of iterations where relaxation takes hundreds.
 //! But it strictly descends, so it cannot leave the basin it starts in. On a
 //! scattered pile it will happily converge to the scattered pile's nearest
-//! local minimum, which is why [`SolverKind::wants_warm_start`] is true for
+//! local minimum, which is why [`SolverKind::wants_warm_start`](crate::problem::SolverKind::wants_warm_start) is true for
 //! it and the run seeds it from a shelf packing by default.
 
 // argmin's own `terminate_internal` is deliberately *not* used: it unwraps
