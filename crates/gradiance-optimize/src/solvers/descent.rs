@@ -92,7 +92,9 @@ impl CostFunction for Energy<'_> {
     type Output = f64;
 
     fn cost(&self, param: &Self::Param) -> Result<Self::Output, argmin::core::Error> {
-        Ok(self.energy.cost(param, &mut self.scratch.borrow_mut()))
+        Ok(finite(
+            self.energy.cost(param, &mut self.scratch.borrow_mut()),
+        ))
     }
 }
 
@@ -101,11 +103,26 @@ impl Gradient for Energy<'_> {
     type Gradient = Vec<f64>;
 
     fn gradient(&self, param: &Self::Param) -> Result<Self::Gradient, argmin::core::Error> {
-        let (_, grad) = self
+        let (_, mut grad) = self
             .energy
             .cost_and_gradient(param, &mut self.scratch.borrow_mut());
+        for g in &mut grad {
+            *g = finite(*g);
+        }
         Ok(grad)
     }
+}
+
+/// Replaces a non-finite value with a large finite one.
+///
+/// A line search handed a `NaN` cost cannot satisfy the Wolfe conditions and
+/// cannot bracket, so it runs to its iteration cap on *every* outer step —
+/// each probe re-scanning every pair. That is not a hang, which makes it
+/// worse: it is a silent factor-of-twenty slowdown that only shows up as a
+/// timed-out CI job. Clamping keeps the search in finite arithmetic where a
+/// failure is reported instead of ground out.
+fn finite(v: f64) -> f64 {
+    if v.is_finite() { v } else { 1e30 }
 }
 
 type DescentState = IterState<Vec<f64>, Vec<f64>, (), (), (), f64>;

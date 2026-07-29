@@ -132,6 +132,37 @@ to the scattered pile, and fixing that is the next optimizer spike's job.
 spike will want to hand descent a starting arrangement, deliberately and
 visibly, rather than have one applied behind it.
 
+### What removing them cost, measured
+
+Warm starts were not free to remove, and the bill is worth stating rather
+than discovering later:
+
+- **Two objective-term tests stopped being observable.** The gap-weight and
+  parallel-weight tests assert what a *term* does to a solved arrangement.
+  They could only ever see that through a solver that moves; descent used to
+  be handed a shelf packing to polish, and now descends into the scattered
+  input's own basin and barely moves. They are `#[ignore]`d with that reason,
+  not deleted and not weakened until they passed — they are the acceptance
+  criteria for the spike, and `cargo test -- --ignored` runs them.
+- **The quality assertions moved to the default solver.** Beating the naive
+  baseline by 1.15x and reaching 0.66 fill on a perfectly tiling scene are
+  now asserted of `Shelf` alone. Asserting them of descent would have encoded
+  a property the code does not have.
+- **Descent got an honest test instead**: it must stay legal and must never
+  return an arrangement worse than the one it was given. It is explicitly not
+  required to improve one.
+
+The budget came down with them — 2500 iterations to 400, patience 400 to 60.
+Without a warm start descent runs a full line search per outer iteration from
+a far-from-feasible start, and 2500 of those across three scenes in three
+tests was most of this crate's CI time and, under coverage instrumentation,
+the reason the pipeline timed out. The suite now runs in well under a second.
+
+A non-finite cost or gradient is also clamped to a large finite value. A
+`NaN` cost cannot satisfy the Wolfe conditions and cannot bracket, so the
+line search runs to its cap on *every* outer step — not a hang, which is what
+makes it dangerous: it surfaces only as a job that times out.
+
 ## The solvers
 
 Genuinely different search strategies, not tuning presets — an instance one

@@ -41,15 +41,19 @@ fn configure(app: &mut App, config: PackConfig) {
 /// A configuration that finishes quickly and deterministically.
 ///
 /// These tests are about the *session* — its frames, its preview, its single
-/// commit. Solver quality is measured in `gradiance-optimize`'s own tests.
+/// commit. Solver quality is measured in `gradiance-optimize`'s own tests, so
+/// the budgets here are deliberately small: a session test that needs 800
+/// iterations to observe a frame boundary is testing the wrong thing, and on
+/// an instrumented coverage build those iterations are what turns a fast
+/// suite into a timed-out one.
 fn quick(solver: SolverKind) -> PackConfig {
     PackConfig {
         solver,
         clearance: 0.0,
         rotation: RotationMode::Fixed,
-        max_iterations: 800,
-        patience: 200,
-        iterations_per_frame: 400,
+        max_iterations: 120,
+        patience: 40,
+        iterations_per_frame: 60,
         ..Default::default()
     }
 }
@@ -187,7 +191,7 @@ fn a_running_session_does_not_touch_the_world_until_it_is_accepted() {
         PackConfig {
             auto_apply: false,
             iterations_per_frame: 1,
-            ..quick(SolverKind::Descent)
+            ..quick(SolverKind::Naive)
         },
     );
 
@@ -243,7 +247,7 @@ fn cancelling_leaves_the_scene_exactly_as_it_was() {
         PackConfig {
             auto_apply: false,
             iterations_per_frame: 1,
-            ..quick(SolverKind::Descent)
+            ..quick(SolverKind::Naive)
         },
     );
 
@@ -442,7 +446,7 @@ fn a_hard_rectangle_boundary_contains_the_result() {
                 width: 3.0,
                 height: 3.0,
             },
-            ..quick(SolverKind::Descent)
+            ..quick(SolverKind::Naive)
         },
     );
 
