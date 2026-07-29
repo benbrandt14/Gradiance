@@ -15,6 +15,7 @@ pub mod console;
 pub mod context_menu;
 pub mod depth_panel;
 pub mod dock;
+pub mod fonts;
 pub mod inspector;
 pub mod joint_inspector;
 pub mod labels;
