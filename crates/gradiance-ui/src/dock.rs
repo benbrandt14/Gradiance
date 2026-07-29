@@ -9,15 +9,18 @@
 //! also where the dock keeps its single `PropertyEditIntent` writer and
 //! `SignalBindings` (the Depth and Signals sections edit through them), so the
 //! one dock system holds exactly one of each. Which panes exist tracks the open
-//! toggles: the tree is
-//! rebuilt only when that open-set changes, so a user's tab layout survives
-//! between frames. It docks the screen's right edge on the background layer and
-//! feeds its rect to [`PanelRects`](crate::PanelRects).
+//! toggles, kept in step by [`sync_panes`](crate::dock_sync::sync_panes), which
+//! adds and removes individual tiles so a user's splits and tab order survive an
+//! unrelated section being toggled. Each tab's ✕ turns its section's toggle off,
+//! so the dock and the View menu never disagree. It docks the screen's right
+//! edge on the background layer and feeds its rect to
+//! [`PanelRects`](crate::PanelRects).
 
 use crate::console::{self, ScriptConsole};
 use crate::depth_panel::{self, DepthPanel};
 use crate::inspector::{self, BodyProps, InspectorPanel};
 use crate::outliner::{self, OutlinerClick, OutlinerModel, OutlinerParams};
+use crate::panels::PanelToggle;
 use crate::plot::{self, PlotConfig, PlotPanel};
 use crate::signals::{self, SignalsDock, SignalsPanel};
 use bevy::ecs::system::SystemParam;
@@ -79,13 +82,12 @@ pub struct PlotParams<'w> {
     pub(crate) bus: Res<'w, SignalBus>,
 }
 
-/// The right dock's persisted `egui_tiles` layout plus the open-set it was
-/// built for (so we only rebuild — losing the user's arrangement — when the
-/// visible sections actually change). Editor view-state; never persisted.
+/// The right dock's `egui_tiles` layout. [`sync_panes`](crate::dock_sync::sync_panes)
+/// keeps its tiles in step with the open set by adding and removing individual
+/// tiles, so splits and tab order survive. Editor view-state; never persisted.
 #[derive(Resource, Default)]
 pub struct RightDock {
     tree: Option<egui_tiles::Tree<Pane>>,
-    shown: Vec<Pane>,
 }
 
 /// Routes each `egui_tiles` pane to its section renderer, holding the state the
@@ -112,11 +114,50 @@ struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss, 'wo> {
     inputs: &'a mut ScriptInputs,
     registry: &'a OperationRegistry,
     log: &'a ScriptLog,
+    /// Set by [`Behavior::on_tab_close`](egui_tiles::Behavior::on_tab_close) —
+    /// drained after the tree renders, because closing a tab has to turn the
+    /// section's *open toggle* off, and those resources are borrowed by the
+    /// caller for the duration of this borrow.
+    closed: &'a mut Option<Pane>,
 }
 
 impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_, '_> {
     fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
         pane.title().into()
+    }
+
+    /// Every section is closable — the ✕ on the tab is the direct counterpart
+    /// of its View-menu checkbox.
+    fn is_tab_closable(
+        &self,
+        _tiles: &egui_tiles::Tiles<Pane>,
+        _tile_id: egui_tiles::TileId,
+    ) -> bool {
+        true
+    }
+
+    /// Record the close and let `egui_tiles` drop the tile; [`right_dock`]
+    /// turns the matching toggle off afterwards, so [`sync_panes`] does not
+    /// simply put the pane back next frame.
+    fn on_tab_close(
+        &mut self,
+        tiles: &mut egui_tiles::Tiles<Pane>,
+        tile_id: egui_tiles::TileId,
+    ) -> bool {
+        if let Some(egui_tiles::Tile::Pane(pane)) = tiles.get(tile_id) {
+            *self.closed = Some(*pane);
+        }
+        true
+    }
+
+    /// Keep every pane inside a `Tabs` container even when it is the only one,
+    /// so a lone section still shows a tab bar (and therefore its close button),
+    /// and so [`sync_panes`] always has a container to graft new panes onto.
+    fn simplification_options(&self) -> egui_tiles::SimplificationOptions {
+        egui_tiles::SimplificationOptions {
+            all_panes_must_have_tabs: true,
+            ..Default::default()
+        }
     }
 
     fn pane_ui(
@@ -127,8 +168,15 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_, '_> {
     ) -> egui_tiles::UiResponse {
         let height = ui.available_height();
         match pane {
+            // Both of these overflow their pane routinely — a large scene's
+            // outliner and a body's full property sheet are taller than any
+            // dock height — so they scroll rather than clip.
             Pane::Tree => {
-                outliner::outliner_section(ui, self.outliner, self.outliner_click);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        outliner::outliner_section(ui, self.outliner, self.outliner_click);
+                    });
             }
             Pane::Depth => {
                 depth_panel::depth_section(
@@ -160,7 +208,11 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_, '_> {
                 }
             }
             Pane::Properties => {
-                inspector::inspector_pane(ui, self.selection, self.props, self.optimizer);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        inspector::inspector_pane(ui, self.selection, self.props, self.optimizer);
+                    });
             }
             Pane::Console => {
                 console::console_section(ui, self.console, self.inputs, self.registry, self.log);
@@ -202,7 +254,7 @@ fn depth_rows(
 /// system-parameter count limit.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct PropertiesParams<'w> {
-    panel: Res<'w, InspectorPanel>,
+    panel: ResMut<'w, InspectorPanel>,
     optimizer: crate::optimizer::OptimizerPanel<'w>,
 }
 
@@ -213,7 +265,7 @@ pub struct PropertiesParams<'w> {
 pub fn right_dock(
     mut contexts: EguiContexts,
     mut panel: ResMut<DepthPanel>,
-    signals_panel: Res<SignalsPanel>,
+    mut signals_panel: ResMut<SignalsPanel>,
     mut signals: SignalsDock,
     mut selection: ResMut<Selection>,
     ids: Query<&StableId, With<Body>>,
@@ -240,8 +292,9 @@ pub fn right_dock(
         }
     }
 
-    // Which panes are visible, in a stable order. Rebuild the tree only when
-    // this set changes, so a user's tab arrangement persists between frames.
+    // Which panes are visible, in a stable order. `sync_panes` adds and removes
+    // individual tiles, so a user's splits and tab order survive an unrelated
+    // section being toggled.
     let desired: Vec<Pane> = [
         op.panel.is_open().then_some(Pane::Tree),
         panel.open.then_some(Pane::Depth),
@@ -252,18 +305,7 @@ pub fn right_dock(
     .into_iter()
     .flatten()
     .collect();
-    if desired.is_empty() {
-        dock.tree = None;
-        dock.shown.clear();
-        return Ok(());
-    }
-    if dock.shown != desired {
-        dock.tree = Some(egui_tiles::Tree::new_tabs(
-            "right-dock-tiles",
-            desired.clone(),
-        ));
-        dock.shown = desired;
-    }
+    crate::dock_sync::sync_panes(&mut dock.tree, "right-dock-tiles", &desired);
     let Some(tree) = dock.tree.as_mut() else {
         return Ok(());
     };
@@ -284,6 +326,7 @@ pub fn right_dock(
         OutlinerModel::default()
     };
     let mut outliner_click: Option<OutlinerClick> = None;
+    let mut closed: Option<Pane> = None;
 
     // Scope the behavior so its borrows of the section state end before we
     // drain the outliner click back into the selection below.
@@ -306,6 +349,7 @@ pub fn right_dock(
             inputs: &mut console.inputs,
             registry: &console.registry,
             log: &console.log,
+            closed: &mut closed,
         };
 
         // egui 0.35 panels dock inside a `Ui`; build the screen-root one.
@@ -327,6 +371,21 @@ pub fn right_dock(
     };
     // Claim the dock's rect so input over it doesn't leak to the scene.
     panels.push(panel_rect);
+
+    // A closed tab turns its section's toggle off — the same state the View
+    // menu edits, so the two agree and the pane doesn't reappear next frame.
+    // Signals+Plot is one tab over two toggles, so closing it closes both.
+    match closed {
+        Some(Pane::Tree) => op.panel.set_open(false),
+        Some(Pane::Depth) => panel.open = false,
+        Some(Pane::Signals) => {
+            signals_panel.set_open(false);
+            plot.panel.set_open(false);
+        }
+        Some(Pane::Properties) => properties.panel.open = false,
+        Some(Pane::Console) => console.console.set_open(false),
+        None => {}
+    }
 
     // Universal selection: a tree-row click drives the same Selection /
     // SelectedJoint the viewport and node graph use, via the sanctioned seam.

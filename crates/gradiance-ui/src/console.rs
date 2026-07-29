@@ -47,19 +47,9 @@ pub struct ScriptConsole {
     stash: String,
 }
 
+crate::impl_panel_toggle!(ScriptConsole, open);
+
 impl ScriptConsole {
-    /// Whether the console is currently shown (read by the transport button so
-    /// it can reflect the open state).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the console's visibility. Both the backquote shortcut and the
-    /// transport button toggle through here.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
     /// Steps through history entries starting with the stashed prefix
     /// (`dir` −1 = older, +1 = newer). Returns the buffer to show.
     fn walk_history(&mut self, dir: i32) -> Option<String> {

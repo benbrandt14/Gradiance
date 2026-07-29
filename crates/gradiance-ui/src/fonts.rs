@@ -3,7 +3,7 @@
 //! # Why this module exists
 //!
 //! Before it, the workspace installed **no fonts at all** — the editor ran on
-//! egui's stock [`FontDefinitions::default`], whose families are:
+//! egui's stock [`egui::FontDefinitions::default`], whose families are:
 //!
 //! ```text
 //! Monospace:    Hack → Ubuntu-Light → NotoEmoji-Regular → emoji-icon-font

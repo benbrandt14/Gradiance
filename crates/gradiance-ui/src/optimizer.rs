@@ -54,12 +54,7 @@ pub struct OptimizerPanel<'w> {
 #[derive(Resource, Default, Debug)]
 pub struct OptimizerExpanded(pub bool);
 
-impl OptimizerExpanded {
-    /// Flips the window open/closed.
-    pub fn toggle(&mut self) {
-        self.0 = !self.0;
-    }
-}
+crate::impl_panel_toggle!(OptimizerExpanded, 0);
 
 impl OptimizerPanel<'_> {
     /// Asks for a run over the current selection.

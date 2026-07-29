@@ -188,17 +188,9 @@ impl Default for NodeGraph {
     }
 }
 
+crate::impl_panel_toggle!(NodeGraph, open);
+
 impl NodeGraph {
-    /// Whether the canvas is shown (read by the toolbar toggle).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the canvas visibility.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
     /// Adds a body's block to the canvas and opens it (the "Add to node
     /// editor" context action).
     pub fn add_body(&mut self, id: StableId) {

@@ -3,35 +3,10 @@
 
 use crate::fonts::glyph;
 use crate::icons::{self, Icon};
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
-
-/// The editor panels the transport strip toggles, bundled so the toolbar
-/// system stays under Bevy's system-parameter limit.
-#[derive(SystemParam)]
-pub struct Panels<'w> {
-    /// Settings window.
-    pub settings: ResMut<'w, crate::settings::SettingsWindow>,
-    /// Properties inspector dock pane (toggle).
-    pub inspector: ResMut<'w, crate::inspector::InspectorPanel>,
-    /// Live plot panel.
-    pub plot: ResMut<'w, crate::plot::PlotPanel>,
-    /// Physics probe panel.
-    pub probe: ResMut<'w, crate::probe::ProbePanel>,
-    /// Signals dock section.
-    pub signals: ResMut<'w, crate::signals::SignalsPanel>,
-    /// Node-graph canvas.
-    pub node_graph: ResMut<'w, crate::node_graph::NodeGraph>,
-    /// Object tree (outliner).
-    pub outliner: ResMut<'w, crate::outliner::ObjectTreePanel>,
-    /// Scripting console.
-    pub console: ResMut<'w, crate::console::ScriptConsole>,
-    /// Debug overlays (field vectors).
-    pub debug: ResMut<'w, gradiance_domain::settings::DebugSettings>,
-}
 
 /// Tool-palette entries grouped into sections (Blender-style), in workflow
 /// order — pick/move, create a shape, connect with a constraint, then modify.

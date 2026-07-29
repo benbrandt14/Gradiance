@@ -37,6 +37,8 @@ pub struct InspectorPanel {
     pub open: bool,
 }
 
+crate::impl_panel_toggle!(InspectorPanel, open);
+
 /// Everything the body-property sections read and write, bundled as one
 /// `SystemParam` so both hosts (context menu, Properties dock pane) stay under
 /// Bevy's system-parameter limit.

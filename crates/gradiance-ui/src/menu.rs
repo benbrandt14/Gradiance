@@ -7,7 +7,7 @@
 //! leak to the scene.
 
 use crate::PanelRects;
-use crate::toolbar::Panels;
+use crate::panels::PanelToggle;
 use crate::widgets;
 use bevy::app::AppExit;
 use bevy::ecs::system::SystemParam;
@@ -28,6 +28,38 @@ use gradiance_scene::{EnvironmentRecord, SceneRecord};
 #[derive(Resource, Default)]
 pub struct AboutWindow {
     open: bool,
+}
+
+/// Every panel the View menu offers, bundled so `menu_bar` stays under Bevy's
+/// system-parameter limit. Each field implements
+/// [`PanelToggle`], which is what lets the View menu be a table rather
+/// than a branch per panel.
+#[derive(SystemParam)]
+pub struct Panels<'w> {
+    /// Settings window.
+    pub settings: ResMut<'w, crate::settings::SettingsWindow>,
+    /// Properties inspector dock pane.
+    pub inspector: ResMut<'w, crate::inspector::InspectorPanel>,
+    /// Depth-band editor dock pane.
+    pub depth: ResMut<'w, crate::depth_panel::DepthPanel>,
+    /// Live plot panel.
+    pub plot: ResMut<'w, crate::plot::PlotPanel>,
+    /// Physics probe panel.
+    pub probe: ResMut<'w, crate::probe::ProbePanel>,
+    /// Signals dock section.
+    pub signals: ResMut<'w, crate::signals::SignalsPanel>,
+    /// Node-graph canvas.
+    pub node_graph: ResMut<'w, crate::node_graph::NodeGraph>,
+    /// Object tree (outliner).
+    pub outliner: ResMut<'w, crate::outliner::ObjectTreePanel>,
+    /// Scripting console.
+    pub console: ResMut<'w, crate::console::ScriptConsole>,
+    /// Array-pattern options window.
+    pub array: ResMut<'w, crate::array_panel::ArrayWindow>,
+    /// Layout-optimizer window.
+    pub optimizer: ResMut<'w, crate::optimizer::OptimizerExpanded>,
+    /// Debug overlays (field vectors).
+    pub debug: ResMut<'w, gradiance_domain::settings::DebugSettings>,
 }
 
 /// Every message the menu bar can emit, grouped to stay under the
@@ -218,40 +250,62 @@ fn edit_menu(
     });
 }
 
+/// The View menu, as a table. Every panel implements [`PanelToggle`], so the
+/// two idioms that used to need separate code paths are one row each — and a
+/// new panel is a row, not a branch. Grouped: right-dock sections, then the
+/// bottom dock and floating windows, then scene overlays.
 fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
     ui.menu_button("View", |ui| {
-        // Panels whose visibility is a plain bool field.
-        ui.checkbox(&mut panels.inspector.open, "Properties");
-        ui.checkbox(&mut panels.settings.open, "Settings");
+        // (label, shortcut hint, panel). The hint is the real binding — see
+        // `dock::right_dock` for `` ` `` and `\`; an empty hint means unbound.
+        let dock_sections: [(&str, &str, &mut dyn PanelToggle); 5] = [
+            ("Outliner", "", &mut *panels.outliner),
+            ("Properties", "", &mut *panels.inspector),
+            ("Depth", "", &mut *panels.depth),
+            ("Signals", "", &mut *panels.signals),
+            ("Plot", "\\", &mut *panels.plot),
+        ];
+        for (label, shortcut, panel) in dock_sections {
+            toggle_item(ui, label, shortcut, panel);
+        }
         ui.separator();
-        // Panels toggled through their `is_open`/`toggle` API.
-        toggle_item(ui, "Outliner", panels.outliner.is_open(), || {
-            panels.outliner.toggle();
-        });
-        toggle_item(ui, "Node Graph", panels.node_graph.is_open(), || {
-            panels.node_graph.toggle();
-        });
-        toggle_item(ui, "Signals", panels.signals.is_open(), || {
-            panels.signals.toggle();
-        });
-        toggle_item(ui, "Plot", panels.plot.is_open(), || panels.plot.toggle());
-        toggle_item(ui, "Probe", panels.probe.is_open(), || {
-            panels.probe.toggle();
-        });
-        toggle_item(ui, "Console", panels.console.is_open(), || {
-            panels.console.toggle();
-        });
+        let windows: [(&str, &str, &mut dyn PanelToggle); 5] = [
+            ("Node Graph", "", &mut *panels.node_graph),
+            ("Script console", "`", &mut *panels.console),
+            ("Probe", "", &mut *panels.probe),
+            ("Array", "", &mut *panels.array),
+            ("Optimizer", "", &mut *panels.optimizer),
+        ];
+        for (label, shortcut, panel) in windows {
+            toggle_item(ui, label, shortcut, panel);
+        }
         ui.separator();
+        toggle_item(ui, "Settings", "", &mut *panels.settings);
         ui.checkbox(&mut grid.visible, "Grid");
         ui.checkbox(&mut panels.debug.show_fields, "Field overlay");
     });
 }
 
-/// A menu checkbox for a panel exposed only through `is_open`/`toggle`.
-fn toggle_item(ui: &mut egui::Ui, label: &str, open: bool, mut toggle: impl FnMut()) {
-    let mut shown = open;
-    if ui.checkbox(&mut shown, label).changed() {
-        toggle();
+/// One View-menu row: a checkbox bound to the panel, with its keyboard
+/// shortcut right-aligned when it has one.
+fn toggle_item(ui: &mut egui::Ui, label: &str, shortcut: &str, panel: &mut dyn PanelToggle) {
+    let mut shown = panel.is_open();
+    // `Checkbox` has no `shortcut_text` (only `Button` does), so build the same
+    // shape from atoms: label, a grow spacer, then the key in weak text.
+    let response = if shortcut.is_empty() {
+        ui.checkbox(&mut shown, label)
+    } else {
+        ui.add(egui::Checkbox::new(
+            &mut shown,
+            (
+                egui::Atom::from(label),
+                egui::Atom::grow(),
+                egui::Atom::from(egui::RichText::new(shortcut).weak()),
+            ),
+        ))
+    };
+    if response.changed() {
+        panel.set_open(shown);
     }
 }
 

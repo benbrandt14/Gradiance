@@ -59,6 +59,8 @@ pub struct SettingsWindow {
     pub tab: SettingsTab,
 }
 
+crate::impl_panel_toggle!(SettingsWindow, open);
+
 /// Renders the tabbed settings window.
 pub fn settings_window(
     mut contexts: EguiContexts,

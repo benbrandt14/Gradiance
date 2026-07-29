@@ -22,30 +22,12 @@ pub struct PlotPanel {
     open: bool,
 }
 
-/// What the plot's horizontal axis represents. Time (sample order, the live
-/// default) today; the enum leaves room for "versus another signal" (XY) later.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub enum XAxis {
-    /// Elapsed time — the recorded sample order.
-    #[default]
-    Time,
-}
-
-impl XAxis {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Time => "t",
-        }
-    }
-}
-
-/// Plotter configuration: which series are hidden (default: show all) and what
-/// the X axis is. A signal is drawn unless the user unchecks it, so new signals
+/// Plotter configuration: which series are hidden (default: show all).
+/// A signal is drawn unless the user unchecks it, so new signals
 /// appear automatically. Editor view-state — never persisted.
 #[derive(Resource, Default)]
 pub struct PlotConfig {
     hidden: HashSet<String>,
-    x_axis: XAxis,
 }
 
 /// The plottable series to draw, in bus order, minus the ones the user hid —
@@ -60,19 +42,7 @@ fn visible_series<'a>(
         .collect()
 }
 
-impl PlotPanel {
-    /// Whether the panel is currently shown (read by the transport button so it
-    /// can reflect the open state).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the panel's visibility. Both the `\` shortcut and the transport
-    /// button toggle through here.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-}
+crate::impl_panel_toggle!(PlotPanel, open);
 
 /// Colours cycled across the plotted signals.
 const SIGNAL_COLORS: [egui::Color32; 4] = [
@@ -147,7 +117,6 @@ pub fn plot_section(
         }
     }
     ui.add_space(2.0);
-    ui.weak(format!("x-axis: {} →", config.x_axis.label()));
 }
 
 /// A collapsible list of the plottable signals, each a checkbox that hides or

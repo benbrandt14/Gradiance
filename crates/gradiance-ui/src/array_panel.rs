@@ -22,12 +22,7 @@ pub struct ArrayWindow {
     pub open: bool,
 }
 
-impl ArrayWindow {
-    /// Flips the window open/closed.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-}
+crate::impl_panel_toggle!(ArrayWindow, open);
 
 /// Renders the floating Array window.
 pub fn array_window(
@@ -67,7 +62,6 @@ fn array_body(ui: &mut egui::Ui, config: &mut ArrayConfig) {
         .weak()
         .small(),
     );
-    ui.separator();
     ui.separator();
     spacing_controls(ui, config);
     ui.separator();

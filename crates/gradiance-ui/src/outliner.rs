@@ -31,23 +31,13 @@ pub struct ObjectTreePanel {
     open: bool,
 }
 
-impl ObjectTreePanel {
-    /// Whether the outliner is shown (read by the toolbar / menu toggles).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the outliner's visibility.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-}
+crate::impl_panel_toggle!(ObjectTreePanel, open);
 
 /// The outliner's ECS read set plus the selection-mutation handles, bundled as
 /// one [`SystemParam`] so the dock host stays under Bevy's parameter cap.
 #[derive(SystemParam)]
 pub struct OutlinerParams<'w, 's> {
-    pub(crate) panel: Res<'w, ObjectTreePanel>,
+    pub(crate) panel: ResMut<'w, ObjectTreePanel>,
     pub(crate) bodies: Query<'w, 's, (Entity, &'static StableId, &'static ShapeDef), With<Body>>,
     pub(crate) joints: Query<'w, 's, (Entity, &'static StableId, &'static JointDef), With<Joint>>,
     pub(crate) nodes:

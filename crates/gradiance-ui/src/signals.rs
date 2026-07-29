@@ -25,17 +25,7 @@ pub struct SignalsPanel {
     open: bool,
 }
 
-impl SignalsPanel {
-    /// Whether the section is shown (read by the transport toggle + dock).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the section's visibility.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-}
+crate::impl_panel_toggle!(SignalsPanel, open);
 
 /// The signal-graph config resources the dock section edits, bundled so the
 /// dock host stays under Bevy's system-parameter limit.

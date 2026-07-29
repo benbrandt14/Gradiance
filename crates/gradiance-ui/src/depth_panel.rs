@@ -67,6 +67,8 @@ impl Default for DepthPanel {
     }
 }
 
+crate::impl_panel_toggle!(DepthPanel, open);
+
 /// The band a drag produces for a pointer at `depth`, snapped and sane.
 fn dragged_band(drag: &BandDrag, depth: f32) -> DepthBand {
     let band = match drag.grab {
