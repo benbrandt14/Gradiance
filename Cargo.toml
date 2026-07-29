@@ -21,6 +21,9 @@ egui-snarl = "=0.11.0"
 # Docking/tabbing workspace (Rerun's tiling lib; the desktop-app shell — see
 # docs/ui-shell-decision.md). Shares egui 0.35 with bevy_egui.
 egui_tiles = "=0.16.0"
+# Plotting widget (axes, zoom/pan, legend, cursor) — the live plotter and the
+# substrate the curve editor draws on. Shares egui 0.35 with bevy_egui.
+egui_plot = "=0.36.0"
 leafwing-input-manager = "=0.21.0"
 
 # Numerical optimization (the layout solver family — docs/optimize-decision.md).

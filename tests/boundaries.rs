@@ -125,6 +125,7 @@ fn engine_facing_dependencies_stay_exact_pinned() {
         "steel-core",
         "egui-snarl",
         "egui_tiles",
+        "egui_plot",
         "egui_kittest",
     ];
     for name in pinned {
@@ -285,6 +286,7 @@ fn ui_and_script_stacks_stay_confined_in_manifests() {
         ("bevy_egui", "gradiance-ui"),
         ("egui-snarl", "gradiance-ui"),
         ("egui_tiles", "gradiance-ui"),
+        ("egui_plot", "gradiance-ui"),
         ("egui_kittest", "gradiance-ui"),
         ("steel-core", "gradiance-script"),
     ];

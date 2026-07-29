@@ -15,7 +15,7 @@ use bevy::ecs::system::SystemParam;
 use bevy_egui::egui;
 use gradiance_core::ids::StableId;
 use gradiance_signal::{
-    ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
+    ComputedSignals, Curve, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
     SignalParams, SignalSink, SignalSource,
 };
 
@@ -239,6 +239,9 @@ fn expr_rpn(expr: &gradiance_signal::SignalExpr) -> String {
         E::Div(a, b) => format!("{} {} /", expr_rpn(a), expr_rpn(b)),
         E::Min(a, b) => format!("{} {} min", expr_rpn(a), expr_rpn(b)),
         E::Max(a, b) => format!("{} {} max", expr_rpn(a), expr_rpn(b)),
+        // No RPN token exists for a curve (its parameter is a shape), so this
+        // is a readable rendering, not a round-trip.
+        E::Curve(a, _) => format!("{} curve", expr_rpn(a)),
     }
 }
 
@@ -384,4 +387,26 @@ fn binding_row(
                 ui.selectable_value(&mut binding.sink, SignalSink::Plot, "plot");
             });
     });
+    curve_section(ui, i, binding);
+}
+
+/// The optional response curve, collapsed by default: a checkbox that adds or
+/// removes it, and the editor when present.
+///
+/// `None` and the identity curve behave identically, so the checkbox is the
+/// honest control — it is the difference between "no reshaping" and "a curve I
+/// am shaping", not a value change. Removing it drops the points rather than
+/// flattening them, so re-enabling starts from the identity again.
+fn curve_section(ui: &mut egui::Ui, i: usize, binding: &mut SignalBinding) {
+    let mut enabled = binding.curve.is_some();
+    if ui
+        .checkbox(&mut enabled, "response curve")
+        .on_hover_text("reshape the normalized value before it drives the sink")
+        .changed()
+    {
+        binding.curve = enabled.then(Curve::default);
+    }
+    if let Some(curve) = binding.curve.as_mut() {
+        crate::curve::curve_editor(ui, &format!("binding-curve-{i}"), curve);
+    }
 }

@@ -1124,6 +1124,14 @@ impl SnarlViewer<NodeData> for GraphViewer {
             add(ui, "ƒ Min (a, b)", BlockOp::Min { a: None, b: None });
             add(ui, "ƒ Max (a, b)", BlockOp::Max { a: None, b: None });
             add(ui, "ƒ Abs |in|", BlockOp::Abs { input: None });
+            add(
+                ui,
+                "ƒ Curve (shape in)",
+                BlockOp::Curve {
+                    input: None,
+                    curve: gradiance_signal::Curve::default(),
+                },
+            );
         });
         widgets::empty_state(ui, "Output: the ▭ Scope block is always present.");
     }
@@ -1289,6 +1297,11 @@ fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
                 ui.small("value");
                 changed |= ui.add(egui::DragValue::new(value).speed(0.05)).changed();
             });
+        }
+        // The only block whose parameter is a shape: the curve editor sits in
+        // the block footer, the same place a `k` drag value would.
+        BlockOp::Curve { curve, .. } => {
+            changed |= crate::curve::curve_editor(ui, "block-curve", curve);
         }
         // Ops without editable constants (their behavior is fully wired).
         BlockOp::Time

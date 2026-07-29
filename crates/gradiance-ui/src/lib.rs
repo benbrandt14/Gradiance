@@ -13,6 +13,7 @@ pub mod array_panel;
 pub mod bottom_dock;
 pub mod console;
 pub mod context_menu;
+pub mod curve;
 pub mod depth_panel;
 pub mod dock;
 pub mod dock_sync;

@@ -33,7 +33,6 @@ use gradiance_domain::depth::DepthBand;
 use gradiance_interaction::selection::Selection;
 use gradiance_script::bridge::{OperationRegistry, ScriptInputs, ScriptLog};
 use gradiance_signal::SignalBus;
-use std::collections::VecDeque;
 
 /// A dockable section of the right workspace.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -108,7 +107,7 @@ struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss, 'wo> {
     outliner_click: &'a mut Option<OutlinerClick>,
     show_signals: bool,
     show_plot: bool,
-    plottable: &'a [(&'a str, &'static str, &'a VecDeque<f32>)],
+    plottable: &'a [plot::Series<'a>],
     plot_config: &'a mut PlotConfig,
     console: &'a mut ScriptConsole,
     inputs: &'a mut ScriptInputs,

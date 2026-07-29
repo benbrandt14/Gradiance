@@ -10,7 +10,7 @@
 //! [`Kernel::eval`] with zero allocation.
 
 use gradiance_domain::signal::SignalExpr;
-use gradiance_kernel::{BinaryOp, Expr, Kernel, KernelError, UnaryOp};
+use gradiance_kernel::{BinaryOp, Expr, Kernel, KernelError, Lut, UnaryOp};
 
 /// A computed signal compiled for the hot path: the ordered input names to
 /// gather (var 0, 1, …) plus the tape that consumes them.
@@ -49,8 +49,24 @@ fn lower(expr: &SignalExpr, inputs: &[String]) -> Expr {
         SignalExpr::Div(a, b) => Expr::binary(BinaryOp::Div, lower(a, inputs), lower(b, inputs)),
         SignalExpr::Min(a, b) => Expr::binary(BinaryOp::Min, lower(a, inputs), lower(b, inputs)),
         SignalExpr::Max(a, b) => Expr::binary(BinaryOp::Max, lower(a, inputs), lower(b, inputs)),
+        // The curve is *sampled here* — at compile time, on the cold path —
+        // into the kernel's uniform table. That is the whole two-tier rule in
+        // one line: the authoring shape (control points, monotone-cubic
+        // interpolation, a binary search per lookup) never reaches the frame
+        // loop; what reaches it is a clamp and a lerp.
+        SignalExpr::Curve(a, curve) => Expr::Curve(
+            Box::new(lower(a, inputs)),
+            Lut::sample(CURVE_LUT_RESOLUTION, |x| curve.eval(x)),
+        ),
     }
 }
+
+/// Intervals in a lowered curve's lookup table.
+///
+/// 128 puts the sampling error of a monotone cubic well below the precision
+/// any of these signals drive (a colour channel, a tracer width), while the
+/// table stays 516 bytes — small enough to sit in cache alongside the tape.
+const CURVE_LUT_RESOLUTION: usize = 128;
 
 #[cfg(test)]
 mod tests {

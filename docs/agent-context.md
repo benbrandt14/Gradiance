@@ -53,16 +53,24 @@ These are the load-bearing walls. Every feature is designed *around* them, and
    directly wherever physics is done; authored physics state *is* avian
    components. `physics::queries` stays as a convenience/DRY read cut-point,
    not an abstraction boundary.)
-4. **`egui`/`bevy_egui` is imported only inside `src/ui/`.** UI reads component
-   copies and emits intents. Sole exception: editor **settings resources**
-   (`GridSettings`, `SnapConfig`, `SimSettings`) are non-authored config and may
-   be written by UI; seams consume them via change detection.
-5. **Authored vs derived.** Components in `src/domain/` (+ `StableId`) plus the
+4. **`egui`/`bevy_egui` is a dependency of `crates/gradiance-ui` only** (and
+   `steel` of `crates/gradiance-script` only) — enforced by the package graph
+   and re-checked by `tests/boundaries.rs`. UI reads component copies and emits
+   intents. Sole exception: editor **settings resources** may be written by UI;
+   seams consume them via change detection. Those split by *what they describe*:
+   **scene content** (`SimSettings`, `RenderSettings`, `LightingSettings`,
+   `ScenerySettings`, the signal-graph resources) is part of the document —
+   saved **and** undoable, one settled edit per drag; **workstation config**
+   (`GridSettings`, `SnapConfig`) belongs to the person — saved, never in undo
+   history. The split lives in `scene::records::EnvironmentRecord`.
+5. **Authored vs derived.** Components in `gradiance-domain` (+ `StableId`) plus the
    authored avian components (`RigidBody`, `Friction`, `Restitution`,
    `ColliderDensity`, `GravityScale`, `Sensor`, `LockedAxes`) *are* the save
    file. Derived state (`Collider`, `Mass`, contacts, meshes, materials, live
    avian joint entities) is rebuilt by `Changed<>`-driven sync systems — never
-   serialized, never in undo records, never read by commands.
+   serialized, never in undo records, never read by commands. The save
+   *format* (records, RON, version migrations) is `gradiance-scene`; records
+   are the shared unit of undo capture and persistence.
 
 **The governance model in one line:** *reads are total, writes are
 seam-mediated.* Any reader (plotter, script, probe) may query any component or
@@ -89,15 +97,30 @@ records and the sync systems reconstruct everything derived. Commands resolve
 entities by `StableId` at execution time, so they survive undo/redo
 despawn/respawn.
 
-**Layer boundaries (compile-fenced by `tests/boundaries.rs`):**
+**Layer boundaries — the layer diagram *is* the crate DAG.** Each architectural
+layer is its own package under `crates/`, so a boundary violation is a **compile
+error**, not a review comment. `tests/boundaries.rs` asserts the DAG itself as
+data: adding a `gradiance-*` dependency edge needs a matching row there, which
+makes it a deliberate, reviewed architecture change.
 
-- Pure, no ECS engine deps: `core`, `geometry`, and the `script` core
-  (`kernel`, `reflect_bridge`) — put testable math here. (`domain` carries the
-  authored avian components post-collapse, so it is avian-shaped by design.)
-- ECS layers: `command`, `physics`, `interaction`, `render`,
-  `ui` ⟨only egui⟩, `persist`, `script/bridge` ⟨only steel⟩.
+```text
+kernel → (nothing)                  units → (nothing, +bevy for Reflect)
+core → bevy                         geometry → core
+domain → core, geometry             scene → core, domain
+optimize → core, geometry           physics → core, domain, geometry, units
+signal → kernel, domain, physics     command → scene, signal (+ lower)
+persist → scene, command            interaction → command, optimize, persist (+ lower)
+render → interaction, units (+ lower)   script → command, signal (+ lower)
+ui → everything except render
+```
+
+- Fully pure (no bevy at all): `kernel`. No systems/resources/queries, bevy only
+  for `Reflect`/`Component` derives: `geometry`, `optimize`, `units` — put
+  testable math there. (`domain` carries the authored avian components
+  post-collapse, so it is avian-shaped by design.)
 - `interaction`/plotters prefer the `physics::queries` read cut-point (a
   convenience/DRY layer, no longer an enforced boundary).
+- Rationale and the roadmap→package feature tree: `docs/workspace-plan.md`.
 
 **Geometry — SDF trees are the base representation.** Every shape is a
 signed-distance-function tree (`ShapeDef`: `Box·Circle·Polygon·HalfPlane`
@@ -108,28 +131,40 @@ discretization point, `geometry::polygonize`, turns any tree into contours, and
 The SDF field is also the hook for future analytic forces (magnetism, field
 forces). Rationale + trade-offs: `docs/sdf-geometry-decision.md`.
 
-**2.5D depth mapping.** `LayerMask32` memberships → `occupied_range()` →
-`layer_z_range` → an extruded prism. The *same* mask is the physics collision
-filter, so a body's depth and its collision set are one authored value.
-`PIXELS_PER_METER = 100`; gravity `(0, -1000)`; `LAYER_HEIGHT = 10` (bit 0
-front … bit 31 back).
+**2.5D depth mapping.** Depth is a continuous authored `DepthBand {near, far}`
+(world units into the screen); a body spans `z ∈ [−far, −near]` and extrudes
+into a prism. The collision **layer bits** (`LAYER_HEIGHT = 10.0` slabs, bit 0
+front) are *derived* from the band, so collision layer ≡ visual depth — one
+authored value, not two that can disagree. `PIXELS_PER_METER = 100`; gravity
+`(0, -1000)`. `gradiance-units` owns the single px↔SI seam
+(`docs/units-decision.md`).
 
 ---
 
-## 4. Module map (`src/`)
+## 4. Package map (`crates/`)
 
-| Module | Role |
+The root package `gradiance` is the app shell (plugin group, prelude, `main`,
+the integration tests) and re-exports each package under its layer name
+(`gradiance::command`, `gradiance::geometry`, …), so doc and test paths read as
+they did before the split.
+
+| Package | Role |
 |---|---|
-| `core/` | ids (`StableId` UUID), units (`PosRot`), constants, states. Pure. |
-| `domain/` | **Authored components = the save format**: `ShapeDef`, `JointDef`, `LayerMask32`, `Appearance`, settings resources. Pure. |
-| `geometry/` | SDF eval, `polygonize`/contour, extrusion. Pure, no ECS — all testable math. |
-| `command/` | The choke point: `intent` (typed events), `dispatch` (the sole mutator), `CommandStack`, snapshots for undo. |
-| `physics/` | Sync systems derive colliders/joints from authored state; `queries` is the shared read cut-point. (avian is used directly wherever physics is done — see `docs/physics-deadapter-decision.md`.) |
-| `interaction/` | Picking, selection, camera, and `tools/` (the tool facade — see §6). |
-| `render/` | Derived meshes/materials, toon look, grid, joint gizmos, debug overlays. |
-| `ui/` | **Only** egui import. Toolbar, inspectors, context menu, settings, script console, live plot panel. Thin projections + intents. |
-| `script/` | The DSL: pure `kernel` (hot numeric tape) + `reflect_bridge`; `bridge` (the one ECS/steel seam, `run_scripts`), `registry` (operation catalog). |
-| `persist/` | Single-format RON save/load of materialized authored state. |
+| `gradiance-kernel` | The Tier-B numeric tape: `Expr` → flat allocation-free `Kernel`, plus `Lut` (sampled response curves). Fully pure — no bevy. |
+| `gradiance-units` | Typed SI quantities and the one px↔SI seam (`units::world`). |
+| `gradiance-core` | ids (`StableId` UUID), `PosRot`, constants, states. |
+| `gradiance-geometry` | SDF eval, `polygonize`/contour, extrusion, hulls/SAT, array pitch. No systems, no queries — all testable math. |
+| `gradiance-domain` | **Authored components = the save content**: `ShapeDef`, `JointDef`, `DepthBand`, `Appearance`, signal types, settings resources. |
+| `gradiance-scene` | The save **format**: records, RON, version migrations. Records are the shared unit of undo capture and persistence. |
+| `gradiance-optimize` | The layout solver: hulls, SAT, a weighted objective, and a `Solver` trait. Pure search over poses — it never touches the physics engine (`docs/optimize-decision.md`). |
+| `gradiance-physics` | Sync systems derive colliders/joints from authored state; `queries` is the shared read cut-point. (avian is used directly — `docs/physics-deadapter-decision.md`.) |
+| `gradiance-signal` | The dataflow: bus, bindings, params, computed signals, and the lowering to `gradiance-kernel`. |
+| `gradiance-command` | The choke point: `intent` (typed messages), `dispatch` (the sole mutator), `CommandStack`. |
+| `gradiance-persist` | RON save/load of materialized authored state. |
+| `gradiance-interaction` | Picking, selection, camera, `tools/` (the tool facade — see §6), and the ECS half of packing. |
+| `gradiance-render` | Derived meshes/materials, toon look, grid, joint gizmos, debug overlays. |
+| `gradiance-script` | The DSL: `bridge` (the one ECS/steel seam, `run_scripts`), `registry` (operation catalog), `reflect_bridge`. **Only** steel import. |
+| `gradiance-ui` | **Only** egui import. Docks, toolbar, inspectors, context menu, settings, console, node canvas, plotter, curve editor. Thin projections + intents. |
 
 ---
 
@@ -160,9 +195,10 @@ front … bit 31 back).
 These are the accretion patterns — follow them and a feature lands uniformly
 instead of as a side-car.
 
-- **A new edit / command:** add a typed intent in `command::intent` (derive
-  `Reflect`, register it), build the `GameCommand` in `dispatch`, mutate only
-  authored components, provide `undo`. Recipe in `src/command/mod.rs`.
+- **A new edit / command:** add one row to the `command_intents!` table in
+  `command::dispatch` (it registers the message + reflected type and dispatches
+  it), plus the intent and command types. Mutate only authored components;
+  provide `undo`.
 - **A new tool:** implement `DraftTool`/`ManipTool` as
   `ToolContext → (preview, commit-intent)`; read via `ToolWorld`, commit one
   intent on release. Reuses the shared press/drag/release driver — the *same*
@@ -185,9 +221,12 @@ instead of as a side-car.
 
 **The perf rule (non-negotiable for anything continuous):** the scripting VM is
 the *cold/authoring* path and must **never** run per-frame. Continuous drivers
-lower to the compiled, allocation-free numeric **kernel** (`script/kernel.rs`,
-Tier B) that runs over query/buffer columns in one system. Bulk/particle updates
-are *derived* — never commands, never undo-recorded, never persisted.
+lower to the compiled, allocation-free numeric **kernel** (`gradiance-kernel`,
+Tier B) that runs over query/buffer columns in one system. The package graph
+states this: `signal` depends on `kernel`, not on `script`. Note the rule
+applies to *shapes* too — an authored response curve is sampled into a `Lut` at
+compile time, so the frame loop does a lerp, not a segment search. Bulk/particle
+updates are *derived* — never commands, never undo-recorded, never persisted.
 
 ---
 
@@ -198,9 +237,9 @@ homoiconic operation registry** as the tool's control plane. Programmability is
 not one milestone — it **accretes through** the substrate so we script real
 features, not placeholders. Both linchpin spikes have passed:
 
-- **Perf spike:** `script/kernel.rs` — numeric DSL → flat allocation-free tape,
+- **Perf spike:** `gradiance-kernel` — numeric DSL → flat allocation-free tape,
   VM-free hot-path eval (~27.7 M evals/s debug at particle scale).
-- **Reflect↔steel spike:** `script/reflect_bridge.rs` — one generic converter
+- **Reflect↔steel spike:** `script::reflect_bridge` — one generic converter
   reads/writes any `#[derive(Reflect)]` value by reflect-path, so "everything
   programmable" is a *derive*, not N hand-written builtins.
 
@@ -223,16 +262,20 @@ operation registry is a runtime construct, not a second on-disk format.
 
 ## 8. Current state — landed vs. next
 
-**Landed:** full command/undo core · SDF geometry + cut/merge · draw tools
+**Landed:** full command/undo core · the workspace split (one package per layer,
+DAG asserted as data) · typed SI units · SDF geometry + cut/merge · draw tools
 (box/circle/polygon) · manip tools (select/drag) on the `ManipTool` facade ·
 joints (hinge/weld/slider) + motors · **strut** spring/damper
 (`JointKind::Spring`, mass-based default stiffness, coil gizmo, inspector) ·
-contact-point/force debug overlay (reads avian `ContactGraph`) · **live plotter**
-(selected body speed/height or joint length/angle, named-signal store) ·
-**script P1**: operation registry + Edit/Config/Query/EditorState verbs + REPL
-console + `--script foo.scm` loader + data-driven context-menu actions · joint
-config in the right-click menu · **UI toggle buttons for the plot & script
-panels** (this PR).
+contact-point/force debug overlay (reads avian `ContactGraph`) · **signal
+dataflow P2** (bus, bindings, params, computed signals lowered to the kernel) ·
+node canvas (`egui-snarl`) · **script P1**: operation registry +
+Edit/Config/Query/EditorState verbs + REPL console + `--script foo.scm` loader +
+data-driven context-menu actions · **layout optimizer** (`gradiance-optimize`,
+Shelf/Descent/Naive behind one `Solver` trait) · **array patterns**
+(Ctrl-drag a handle → linear or grid, flush-pitch spacing) · the `egui_tiles`
+dock shell + menu bar · **plotter on `egui_plot`** (real time axis, zoom/pan,
+legend, cursor) · the **curve editor** and `BlockOp::Curve`.
 
 **Sequencing (`docs/roadmap.md` §"Sequencing after M17.1"):** substrate first,
 then script it. Order: (1) interactions & joints/constraints + their UI →
@@ -240,16 +283,16 @@ then script it. Order: (1) interactions & joints/constraints + their UI →
 
 **Queued / open to brainstorm:**
 
-- **Curve editor** (Lightroom-style) for nonlinear strut stiffness/damping — the
-  first UI where an authored value is a *function*, not a scalar.
+- **Curve editor beyond signals** — nonlinear strut stiffness/damping. The
+  widget exists (`ui::curve`); what is missing is a joint-side authored value
+  that is a *function* rather than a scalar.
 - More plotter signals (contact force), **pinnable multi-body probes**, and the
   script-driven `(measure …)` data-out seam.
-- **P2 dataflow wiring** (`defsignal`/`defparam` → sliders/drivers) once the
-  read surface is rich enough.
-- **UI overhaul** — explicitly deferred: the increments above are landing
-  first, then a restructure once all features are present. Discoverability,
-  docking, inspector-vs-context-menu balance, and the transport strip are all
-  in scope.
+- **UI polish pass** — in progress. Landed so far: a font/glyph vocabulary
+  (no tofu), an image-icon registry, a shared widget vocabulary, layout-
+  preserving docks, and the plotter/curve work above. Remaining: a top-down
+  depth editor, retiring the Signals pane into the node canvas, node-canvas
+  usability (multi-select, comments, persisted positions), and `ui-design.md`.
 - M18 grids/snapping (CAD pass), M19 rendering/camera polish, M20 constraints II
   (weld-as-merge, magnetism/SDF force fields, breaking limits), M21 CSG modeling.
 
