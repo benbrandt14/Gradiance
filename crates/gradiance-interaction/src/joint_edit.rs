@@ -84,7 +84,9 @@ pub fn glyph_distance(
             let (from, to) = slider_span(anchor, dir, *limits, s);
             p.distance(project_on_segment(p, from, to))
         }
-        JointKind::Spring { .. } => match world_b {
+        // A rigid link is drawn, and so picked, as the segment between its
+        // two anchors — the same shape as a spring, without the coil.
+        JointKind::Spring { .. } | JointKind::Fixed => match world_b {
             Some(b) => p.distance(project_on_segment(p, anchor, b)),
             None => anchor.distance(p),
         },
@@ -170,7 +172,7 @@ fn with_limits(def: &JointDef, new_limits: [f32; 2]) -> JointDef {
         JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => {
             *limits = Some(new_limits);
         }
-        JointKind::Spring { .. } => {}
+        JointKind::Spring { .. } | JointKind::Fixed => {}
     }
     new
 }

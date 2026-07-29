@@ -355,7 +355,16 @@ pub fn evaluate_signals(
                 }
             }
             Err(_) => {
-                commands.entity(*entity).insert(*next);
+                // `try_insert`, not `insert`: the entity comes from
+                // `IdIndex`, which can still name a body that another
+                // system despawned this frame (undo, or a duplicate that
+                // respawns). A queue-time liveness check does not help —
+                // the entity is alive when this runs and dead by the time
+                // the buffer applies, which is precisely when plain
+                // `insert` panics. Skipping is right: the override is
+                // derived state, so a body that no longer exists simply
+                // goes untinted.
+                commands.entity(*entity).try_insert(*next);
             }
         }
     }

@@ -35,7 +35,23 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld libeigen3-dev
+
+      # `gradiance-slvs-sys` compiles the vendored SolveSpace solver with `cc`
+      # and hand-written bindings, so no libclang and no bindgen are involved on
+      # any platform. Eigen is the one thing it needs from the system — it is
+      # header-only, and vendoring it would add ~150k lines. See
+      # third_party/solvespace/SOURCE.md.
+      - name: Install Eigen (macOS)
+        if: matrix.target == 'macos'
+        run: brew install eigen
+
+      - name: Install Eigen (Windows)
+        if: matrix.target == 'windows'
+        shell: bash
+        run: |
+          vcpkg install eigen3:x64-windows
+          echo "EIGEN3_INCLUDE_DIR=$VCPKG_INSTALLATION_ROOT/installed/x64-windows/include" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@stable
 

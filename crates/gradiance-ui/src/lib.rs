@@ -26,6 +26,8 @@ pub mod probe;
 pub mod reflect_grid;
 pub mod settings;
 pub mod signals;
+pub mod sketch_annotations;
+pub mod sketch_panel;
 pub mod toolbar;
 pub mod view_cube;
 pub mod widgets;
@@ -172,6 +174,7 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<outliner::ObjectTreePanel>();
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
+        app.init_resource::<sketch_panel::SketchPanel>();
         app.init_resource::<dock::RightDock>();
         app.init_resource::<bottom_dock::BottomDock>();
         app.add_systems(
@@ -182,8 +185,10 @@ impl Plugin for GradianceUiPlugin {
                 dock::right_dock,
                 view_cube::view_cube,
                 labels::draw_workspace_labels,
+                sketch_annotations::draw_sketch_annotations,
                 joint_inspector::joint_inspector,
                 settings::settings_window,
+                sketch_panel::sketch_panel,
                 bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,

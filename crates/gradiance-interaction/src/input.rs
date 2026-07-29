@@ -85,11 +85,13 @@ fn default_input_map() -> InputMap<EditorAction> {
     map.insert(A::Tool(ToolState::Drag), KeyCode::KeyD);
     map.insert(A::Tool(ToolState::Box), KeyCode::KeyB);
     map.insert(A::Tool(ToolState::Circle), KeyCode::KeyC);
-    map.insert(A::Tool(ToolState::Polygon), KeyCode::KeyP);
+    map.insert(A::Tool(ToolState::Line), KeyCode::KeyL);
+    map.insert(A::Tool(ToolState::Arc), KeyCode::KeyA);
     map.insert(A::Tool(ToolState::Hinge), KeyCode::KeyH);
     map.insert(A::Tool(ToolState::Weld), KeyCode::KeyW);
     map.insert(A::Tool(ToolState::Slider), KeyCode::KeyR);
-    map.insert(A::Tool(ToolState::Strut), KeyCode::KeyT);
+    map.insert(A::Tool(ToolState::Strut), KeyCode::KeyM);
+    map.insert(A::Tool(ToolState::Trim), KeyCode::KeyT);
     map.insert(A::Tool(ToolState::Ground), KeyCode::KeyG);
     map.insert(A::Tool(ToolState::Cut), KeyCode::KeyK);
     map

@@ -67,6 +67,15 @@ pub struct BodyRecord {
     /// Trajectory-trail marker, if the body carries one.
     #[serde(default)]
     pub tracer: Option<gradiance_domain::tracer::Tracer>,
+    /// The constrained sketch this body was authored from.
+    ///
+    /// Present **only** for bodies drawn in sketch mode; bodies from the
+    /// direct tools carry `None`. Re-opening a body for constraint editing
+    /// is exactly "does this record have a sketch". The solved geometry
+    /// still lives in `shape` — this is the source it was lowered from, and
+    /// being part of the record makes it both saved and undoable for free.
+    #[serde(default)]
+    pub sketch: Option<gradiance_domain::sketch::SketchDoc>,
 }
 
 impl BodyRecord {
@@ -92,6 +101,9 @@ impl BodyRecord {
             tracer: entity_ref
                 .get::<gradiance_domain::tracer::Tracer>()
                 .copied(),
+            sketch: entity_ref
+                .get::<gradiance_domain::sketch::SketchDoc>()
+                .cloned(),
         })
     }
 
@@ -116,6 +128,9 @@ impl BodyRecord {
         }
         if let Some(tracer) = self.tracer {
             entity.insert(tracer);
+        }
+        if let Some(sketch) = &self.sketch {
+            entity.insert(sketch.clone());
         }
         entity.id()
     }
@@ -173,6 +188,16 @@ impl BodyRecord {
                 }
                 None => {
                     entity.remove::<gradiance_domain::tracer::Tracer>();
+                }
+            }
+        }
+        if self.sketch != prev.sketch {
+            match &self.sketch {
+                Some(sketch) => {
+                    entity.insert(sketch.clone());
+                }
+                None => {
+                    entity.remove::<gradiance_domain::sketch::SketchDoc>();
                 }
             }
         }

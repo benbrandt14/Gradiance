@@ -3669,6 +3669,7 @@ dependencies = [
  "gradiance-scene",
  "gradiance-script",
  "gradiance-signal",
+ "gradiance-sketch",
  "gradiance-ui",
  "gradiance-units",
  "mimalloc",
@@ -3710,6 +3711,7 @@ dependencies = [
  "glam 0.32.1",
  "gradiance-core",
  "gradiance-geometry",
+ "gradiance-sketch",
  "gradiance-units",
  "serde",
  "thiserror 2.0.18",
@@ -3741,6 +3743,7 @@ dependencies = [
  "gradiance-persist",
  "gradiance-physics",
  "gradiance-scene",
+ "gradiance-sketch",
  "leafwing-input-manager",
 ]
 
@@ -3835,6 +3838,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gradiance-sketch"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "glam 0.32.1",
+ "gradiance-core",
+ "gradiance-geometry",
+ "gradiance-slvs-sys",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gradiance-slvs-sys"
+version = "0.2.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "gradiance-ui"
 version = "0.2.0"
 dependencies = [
@@ -3854,6 +3877,7 @@ dependencies = [
  "gradiance-scene",
  "gradiance-script",
  "gradiance-signal",
+ "gradiance-sketch",
  "gradiance-units",
 ]
 

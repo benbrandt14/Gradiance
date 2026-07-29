@@ -64,6 +64,7 @@
 //! | [`geometry`] | the SDF shape tree + all 2D/2.5D math | core |
 //! | [`domain`] | authored components = save content (incl. avian physics) | core, geometry |
 //! | [`scene`] | records + RON format + migrations | core, domain |
+//! | [`sketch`] | constrained sketching + the SolveSpace bridge | core, geometry |
 //! | [`physics`] | avian systems: collider/joint derivation, read facade | core, domain, geometry |
 //! | [`signal`] | signal-dataflow evaluation | kernel, domain, physics |
 //! | [`command`] | intents, commands, undo | scene, signal + below |
@@ -91,6 +92,7 @@ pub use gradiance_render as render;
 pub use gradiance_scene as scene;
 pub use gradiance_script as script;
 pub use gradiance_signal as signal;
+pub use gradiance_sketch as sketch;
 pub use gradiance_ui as ui;
 pub use gradiance_units as units;
 

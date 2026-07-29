@@ -98,6 +98,7 @@ fn joint_label(kind: &JointKind) -> &'static str {
         JointKind::Hinge { .. } => "hinge",
         JointKind::Slider { .. } => "prismatic",
         JointKind::Spring { .. } => "spring",
+        JointKind::Fixed => "rigid link",
     }
 }
 

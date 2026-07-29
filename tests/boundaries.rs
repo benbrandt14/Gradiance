@@ -99,6 +99,49 @@ fn steel_is_confined_to_the_script_layer() {
 }
 
 #[test]
+fn unsafe_is_confined_to_the_ffi_crate() {
+    // The workspace sets `unsafe_code = "deny"`, and exactly one crate opts out
+    // of it: `gradiance-slvs-sys`, where FFI to the vendored SolveSpace solver
+    // cannot be expressed without it. That exemption is the reason the crate
+    // exists as its own layer, so a second `#![allow(unsafe_code)]` appearing
+    // anywhere else is an architecture change, not a local convenience.
+    let v = violations("unsafe", &["crates/gradiance-slvs-sys/src/"]);
+    assert!(
+        v.is_empty(),
+        "unsafe code may only appear in crates/gradiance-slvs-sys/ \
+         (the FFI boundary):\n{}",
+        v.join("\n")
+    );
+}
+
+#[test]
+fn the_vendored_solver_stays_pristine_upstream() {
+    // `third_party/solvespace/` is a byte-identical copy of upstream at the tag
+    // recorded in its SOURCE.md — the property that makes "no fork" true and
+    // makes re-vendoring an overwrite rather than a merge. Everything Gradiance
+    // adds lives in `crates/gradiance-slvs-sys/`, so nothing here should ever
+    // mention Gradiance.
+    let root = repo_root().join("third_party/solvespace");
+    let mut vendored = files_with_ext(&root, "cpp");
+    vendored.extend(files_with_ext(&root, "h"));
+    for file in vendored {
+        let text = std::fs::read_to_string(&file).expect("readable vendored file");
+        assert!(
+            !text.contains("gradiance") && !text.contains("Gradiance"),
+            "{} mentions Gradiance — the vendored tree must stay pristine \
+             upstream; put local adaptation in crates/gradiance-slvs-sys/",
+            file.display()
+        );
+    }
+
+    let source_md = std::fs::read_to_string(root.join("SOURCE.md")).expect("read SOURCE.md");
+    assert!(
+        source_md.contains("27b6a080c8b669421bd4d444650c3b8eddec5687"),
+        "SOURCE.md must record the exact upstream commit the tree was taken from"
+    );
+}
+
+#[test]
 fn command_stack_is_only_driven_by_the_command_module() {
     let v = violations("CommandStack", &["crates/gradiance-command/src/"]);
     assert!(
@@ -151,12 +194,18 @@ fn serialization_is_confined_to_authored_data() {
         "crates/gradiance-units/src/",
         "crates/gradiance-scene/src/",
         "crates/gradiance-persist/src/",
+        // The sketch document is authored state: it is what the person drew
+        // plus the relationships they asked for, and it rides in the save file
+        // alongside the body it produced. The solver's own handles are
+        // ephemeral and never serialized.
+        "crates/gradiance-sketch/src/doc.rs",
     ];
     let v = violations("Serialize", &allowed);
     assert!(
         v.is_empty(),
         "Serde derives are only allowed on authored/persisted data \
-         (domain, core, the shape tree, typed quantities, scene records, persist):\n{}",
+         (domain, core, the shape tree, typed quantities, scene records, \
+         persist, the sketch document):\n{}",
         v.join("\n")
     );
 }
@@ -190,12 +239,12 @@ fn the_crate_dag_matches_the_architecture() {
             &["core", "domain", "geometry", "scene", "signal"],
         ),
         ("core", &[]),
-        ("domain", &["core", "geometry", "units"]),
+        ("domain", &["core", "geometry", "sketch", "units"]),
         ("geometry", &["core"]),
         (
             "interaction",
             &[
-                "command", "core", "domain", "geometry", "persist", "physics", "scene",
+                "command", "core", "domain", "geometry", "persist", "physics", "scene", "sketch",
             ],
         ),
         ("kernel", &[]),
@@ -219,6 +268,16 @@ fn the_crate_dag_matches_the_architecture() {
             &["command", "core", "domain", "geometry", "scene", "signal"],
         ),
         ("signal", &["core", "domain", "kernel", "physics"]),
+        // Sketching is an authoring-time subsystem: geometry in, geometry out.
+        // The absence of `physics` here is the point — the constraint solver
+        // must never reach a `Transform`, a joint, or an avian component, and
+        // that stays a compile error rather than a review note.
+        ("sketch", &["core", "geometry", "slvs-sys"]),
+        // The FFI floor: hand-written bindings over the vendored SolveSpace
+        // solver in `third_party/solvespace`. A bottom node with no gradiance
+        // deps, and the *only* crate allowed to write `unsafe` or link C++ —
+        // see `unsafe_is_confined_to_the_ffi_crate`.
+        ("slvs-sys", &[]),
         (
             "ui",
             &[
@@ -232,6 +291,7 @@ fn the_crate_dag_matches_the_architecture() {
                 "scene",
                 "script",
                 "signal",
+                "sketch",
                 "units",
             ],
         ),

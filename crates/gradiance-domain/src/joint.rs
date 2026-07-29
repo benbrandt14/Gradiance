@@ -172,6 +172,20 @@ pub enum JointKind {
         /// and springs back past either end.
         range: Option<[f32; 2]>,
     },
+    /// Rigid link: the bodies hold their relative pose entirely.
+    ///
+    /// Distinct from the **weld tool**, which merges two bodies into one SDF
+    /// union. Merging is the better answer when the result is genuinely one
+    /// object — it cannot drift, because there is no constraint to drift. This
+    /// is for when the two must stay *separate* bodies that happen to be held
+    /// together: different materials, independently selectable and deletable,
+    /// and each still its own `StableId`. A sketched link between two bodies is
+    /// exactly that case, which is why the variant exists again after M20
+    /// removed the old `Weld` (see `gradiance-scene`'s format history).
+    ///
+    /// It solves as a constraint, so it can drift under extreme load in a way
+    /// a merge cannot. That is the price of keeping the bodies distinct.
+    Fixed,
 }
 
 /// Fallback spring constant (N/m) for the inspector's reset (the strut tool

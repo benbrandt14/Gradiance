@@ -27,12 +27,21 @@ pub enum ToolState {
     Select,
     /// Grab and fling bodies with a physical constraint.
     Drag,
-    /// Draw axis-aligned rectangles.
+    /// Drag out a rectangle. A fast path for a sketch that happens to be one
+    /// box: the body it makes carries the four constrained lines, so dragging
+    /// a corner afterwards keeps it rectangular.
     Box,
-    /// Draw circles.
+    /// Drag from centre to rim. The radius stays a solver parameter, so a
+    /// later diameter dimension can drive it.
     Circle,
-    /// Click out arbitrary polygons.
-    Polygon,
+    /// Chain line segments, inferring axis constraints as you draw. Closing
+    /// the loop gives you a polygon; leaving it open gives you a link.
+    Line,
+    /// Sweep an arc from a centre through a start and end point.
+    Arc,
+    /// Trim geometry back to a boundary — or extend it forward to one, which
+    /// is the same gesture.
+    Trim,
     /// Connect two bodies (or one body to the world) with a revolute joint.
     Hinge,
     /// Rigidly weld two bodies together.

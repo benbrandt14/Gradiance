@@ -1,10 +1,16 @@
 [workspace]
 members = ["crates/*"]
+# `third_party/solvespace/` needs no `exclude`: it is plain C++ source compiled
+# by `gradiance-slvs-sys`'s build script, not a cargo package, so it can never
+# become an implicit workspace member or reach `[workspace.lints]`.
 
 [workspace.package]
 version = "0.2.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+# Gradiance links SolveSpace's constraint solver (GPL-3.0) via
+# `gradiance-slvs-sys`, so the distributed binary is GPL-3.0.
+# See third_party/solvespace/SOURCE.md.
+license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
 # Engine + physics. Versions are exact-pinned: agent sessions must not drift
@@ -37,6 +43,9 @@ rfd = "0.17"
 
 # Utilities
 thiserror = "2"
+# Drives the C++ build of the vendored SolveSpace solver
+# (crates/gradiance-slvs-sys/build.rs). No CMake, no bindgen, no libclang.
+cc = "1"
 mimalloc = "0.1"
 
 # Scripting (Tier-A authoring engine): the Lisp control plane is a first-class
@@ -60,6 +69,8 @@ gradiance-units = { path = "crates/gradiance-units" }
 gradiance-geometry = { path = "crates/gradiance-geometry" }
 gradiance-domain = { path = "crates/gradiance-domain" }
 gradiance-scene = { path = "crates/gradiance-scene" }
+gradiance-sketch = { path = "crates/gradiance-sketch" }
+gradiance-slvs-sys = { path = "crates/gradiance-slvs-sys" }
 gradiance-physics = { path = "crates/gradiance-physics" }
 gradiance-signal = { path = "crates/gradiance-signal" }
 gradiance-command = { path = "crates/gradiance-command" }
@@ -115,6 +126,7 @@ gradiance-units.workspace = true
 gradiance-geometry.workspace = true
 gradiance-domain.workspace = true
 gradiance-scene.workspace = true
+gradiance-sketch.workspace = true
 gradiance-physics.workspace = true
 gradiance-signal.workspace = true
 gradiance-command.workspace = true

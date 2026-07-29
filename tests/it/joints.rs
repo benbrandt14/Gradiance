@@ -301,6 +301,7 @@ fn set_cursor(app: &mut App, p: Vec2) {
         raw: Some(p),
         position: Some(p),
         kind: None,
+        body: None,
     });
 }
 
@@ -1021,5 +1022,88 @@ fn motorized_slider_drives_body_along_its_axis() {
         pose_of(&app, slider_id).pos.y.abs() < 1.0,
         "slider stays on its axis (y = {})",
         pose_of(&app, slider_id).pos.y
+    );
+}
+
+/// A rigid link holds position *and* rotation, which is what separates it from
+/// a hinge at the same anchor.
+///
+/// A body hung off-centre from a world pin would swing under gravity on a
+/// hinge; on a `Fixed` joint it must neither fall nor rotate.
+#[test]
+fn a_rigid_link_holds_both_position_and_rotation() {
+    let mut app = headless_app();
+    let body = box_record(Vec2::new(20.0, -30.0), 10.0, 10.0);
+    let body_id = spawn_body(&mut app, body);
+    let start = pose_of(&app, body_id);
+
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Fixed,
+            common: JointCommon::default(),
+            body_a: body_id,
+            // Anchored off the body's centre, so a hinge here would swing.
+            anchor_a: Vec2::new(-5.0, 5.0),
+            body_b: None,
+            anchor_b: Vec2::new(15.0, -25.0),
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+
+    step(&mut app, 120);
+    let end = pose_of(&app, body_id);
+
+    assert!(
+        end.pos.distance(start.pos) < 1.0,
+        "a rigid link must not let the body fall: {:?} -> {:?}",
+        start.pos,
+        end.pos
+    );
+    assert!(
+        (end.rot - start.rot).abs() < 0.05,
+        "a rigid link pins rotation too, unlike a hinge (rotated {:.3} rad)",
+        end.rot - start.rot
+    );
+}
+
+/// The rigid link is a real constraint between two bodies that stay separate —
+/// the case merging cannot serve, because merging would make them one body.
+#[test]
+fn a_rigid_link_keeps_two_bodies_distinct() {
+    let mut app = headless_app();
+    let anchor = spawn_body(&mut app, {
+        let mut r = box_record(Vec2::ZERO, 10.0, 10.0);
+        r.physics.rigid_body = RigidBody::Static;
+        r
+    });
+    let hung = spawn_body(&mut app, box_record(Vec2::new(0.0, -40.0), 10.0, 10.0));
+    let before = body_count(&mut app);
+
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Fixed,
+            common: JointCommon::default(),
+            body_a: anchor,
+            body_b: Some(hung),
+            anchor_a: Vec2::new(0.0, -40.0),
+            anchor_b: Vec2::ZERO,
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        },
+    );
+    step(&mut app, 120);
+
+    assert_eq!(
+        body_count(&mut app),
+        before,
+        "linking is not merging: both bodies survive as their own entities"
+    );
+    let pos = pose_of(&app, hung).pos;
+    assert!(
+        pos.distance(Vec2::new(0.0, -40.0)) < 1.0,
+        "the hung body is held by the link, got {pos:?}"
     );
 }

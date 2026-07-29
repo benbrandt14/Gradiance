@@ -110,6 +110,10 @@ pub struct ToolContext<'a> {
     pub snap: &'a SnapConfig,
     /// World units per logical screen pixel at the current zoom.
     pub cam_scale: f32,
+    /// The body the cursor snapped onto, if an object snap won.
+    ///
+    /// Lets a tool anchor to the body rather than only borrow its coordinate.
+    pub snapped_body: Option<StableId>,
 }
 
 /// A completed authoring action in a front-end-agnostic form.
@@ -122,6 +126,20 @@ pub struct ToolContext<'a> {
 pub enum ToolCommit {
     /// Author a new body (box/circle/polygon/ground).
     SpawnBody(Box<BodyRecord>),
+    /// Rewrite a sketched body from its re-solved sketch.
+    ///
+    /// The re-open counterpart of `SpawnBody`: same gesture, same one-commit
+    /// discipline, but the body keeps its identity instead of being replaced.
+    ReshapeBody {
+        /// The body to rewrite.
+        id: gradiance_core::ids::StableId,
+        /// The new centroid-relative geometry.
+        shape: gradiance_domain::shape::ShapeDef,
+        /// The sketch it came from, boxed to keep the enum small.
+        sketch: Box<gradiance_domain::sketch::SketchDoc>,
+        /// Where the new centroid sits in world space.
+        origin: Vec2,
+    },
     /// Sever bodies along a stroke.
     Cut {
         /// Stroke start, world space.
@@ -291,9 +309,22 @@ pub trait DraftTool: Resource<Mutability = Mutable> {
     /// gesture completes (otherwise `None`).
     fn update(&mut self, ctx: &ToolContext) -> Option<ToolCommit>;
 
-    /// Whether a draft is currently in progress (drives [`ActiveGesture`]
-    /// and whether the preview draws).
+    /// Whether a draft is currently in progress (drives [`ActiveGesture`]).
+    ///
+    /// This is about the *gesture*, not about having something to show: it
+    /// suppresses camera pan/zoom while a drag is live, so a tool that reports
+    /// `true` whenever it holds state would leave the camera stuck.
     fn drafting(&self) -> bool;
+
+    /// Whether the preview should draw this frame.
+    ///
+    /// Defaults to "only while drafting", which is right for tools whose
+    /// preview *is* the in-progress gesture. A tool that owns persistent
+    /// geometry between gestures — the sketch session — overrides this, or its
+    /// document would blink out of existence the moment a gesture ended.
+    fn wants_preview(&self) -> bool {
+        self.drafting()
+    }
 
     /// Renders the in-progress preview from draft state.
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview);
@@ -306,6 +337,7 @@ pub struct ToolCommitWriters<'w> {
     spawn: MessageWriter<'w, SpawnBodyIntent>,
     spawn_node: MessageWriter<'w, gradiance_command::intent::SpawnNodeIntent>,
     cut: MessageWriter<'w, CutIntent>,
+    reshape: MessageWriter<'w, gradiance_command::intent::ReshapeBodyIntent>,
     joint: MessageWriter<'w, SpawnJointIntent>,
     moves: MessageWriter<'w, CommitTransformIntent>,
     scales: MessageWriter<'w, ScaleIntent>,
@@ -325,6 +357,20 @@ impl ToolCommitWriters<'_> {
             ToolCommit::SpawnNode(record) => {
                 self.spawn_node
                     .write(gradiance_command::intent::SpawnNodeIntent { record: *record });
+            }
+            ToolCommit::ReshapeBody {
+                id,
+                shape,
+                sketch,
+                origin,
+            } => {
+                self.reshape
+                    .write(gradiance_command::intent::ReshapeBodyIntent {
+                        id,
+                        shape,
+                        sketch: *sketch,
+                        origin,
+                    });
             }
             ToolCommit::Cut { a, b, width } => {
                 self.cut.write(CutIntent { a, b, width });
@@ -402,6 +448,7 @@ pub fn run_draft_tool<T: DraftTool>(
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
     cam_scale: Res<crate::camera::CameraScale>,
+    ids: Query<&StableId>,
     mut tool: ResMut<T>,
     mut active: ResMut<ActiveGesture>,
     mut writers: ToolCommitWriters,
@@ -416,6 +463,9 @@ pub fn run_draft_tool<T: DraftTool>(
         constraints: &constraints,
         snap: &snap,
         cam_scale: cam_scale.0,
+        // Resolved here rather than in the tool: `StableId` is what authored
+        // state references, and tools have no ECS access to look it up.
+        snapped_body: snapped.body.and_then(|e| ids.get(e).ok().copied()),
     };
     if let Some(commit) = tool.update(&ctx) {
         writers.emit(commit);
@@ -434,9 +484,11 @@ pub fn draw_draft_preview<T: DraftTool>(
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
     tool: Res<T>,
+    cam_scale: Res<crate::camera::CameraScale>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
-    if !tool.drafting() {
+    let snapped_body = None;
+    if !tool.wants_preview() {
         return;
     }
     let ctx = ToolContext {
@@ -448,7 +500,13 @@ pub fn draw_draft_preview<T: DraftTool>(
         cancel: false,
         constraints: &constraints,
         snap: &snap,
-        cam_scale: 1.0,
+        // The real scale, matching `run_draft_tool`. Hardcoding 1.0 here made
+        // every pixel-sized preview marker come out in *metres* — a hundred
+        // times too big at PIXELS_PER_METER, which only went unnoticed while
+        // previews were plain polylines that never used it.
+        cam_scale: cam_scale.0,
+        // Previews never author anything, so they never need the anchor.
+        snapped_body,
     };
     let mut preview = ToolPreview::default();
     tool.preview(&ctx, &mut preview);

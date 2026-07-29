@@ -19,6 +19,10 @@ gradiance-physics.workspace = true
 gradiance-scene.workspace = true
 gradiance-script.workspace = true
 gradiance-signal.workspace = true
+# The constraint vocabulary the sketch panel offers (`edit::ConstraintKind`) is
+# an editing concept, not authored data, so it comes from the sketch crate
+# rather than being re-exported through `domain`.
+gradiance-sketch.workspace = true
 gradiance-units.workspace = true
 avian2d.workspace = true
 bevy.workspace = true

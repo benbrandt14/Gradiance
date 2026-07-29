@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
+use gradiance_interaction::tools::sketch_session::SketchSession;
 
 /// The editor panels the transport strip toggles, bundled so the toolbar
 /// system stays under Bevy's system-parameter limit.
@@ -50,7 +51,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
         &[
             (ToolState::Box, "Box", "B", "tool_box"),
             (ToolState::Circle, "Circle", "C", "tool_circle"),
-            (ToolState::Polygon, "Polygon", "P", "tool_polygon"),
+            (ToolState::Line, "Line", "L", "tool_polygon"),
+            (ToolState::Arc, "Arc", "A", "tool_arc"),
         ],
     ),
     (
@@ -66,6 +68,7 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
     (
         "Modify",
         &[
+            (ToolState::Trim, "Trim", "T", "tool_trim"),
             (ToolState::Cut, "Cut", "K", "tool_cut"),
             (ToolState::Tracer, "Tracer", "Y", "tool_tracer"),
         ],
@@ -96,6 +99,22 @@ pub fn load_tool_icons(
     }
 }
 
+/// Sketch-mode state, bundled so `toolbar` stays under Bevy's
+/// system-parameter limit (it already carries nine).
+#[derive(SystemParam)]
+pub struct SketchControls<'w> {
+    /// The sketch being authored, read for the degrees-of-freedom readout
+    /// and the construction-geometry toggle.
+    pub session: ResMut<'w, SketchSession>,
+}
+
+/// What the sketch palette is asking for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SketchAction {
+    /// Draw subsequent geometry as reference-only, or stop doing so.
+    SetConstruction(bool),
+}
+
 /// Left tool palette and top transport strip.
 pub fn toolbar(
     mut contexts: EguiContexts,
@@ -107,6 +126,7 @@ pub fn toolbar(
     mut rig: ResMut<gradiance_interaction::camera::CameraRig>,
     panel_rects: Res<crate::PanelRects>,
     tool_icons: Res<ToolIcons>,
+    mut sketch: SketchControls,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -175,6 +195,13 @@ pub fn toolbar(
             if let Some(state) = tools_palette_ui(ui, *tool.get(), Some(&tool_icons)) {
                 next_tool.set(state);
             }
+            ui.separator();
+            let palette =
+                sketch_palette_ui(ui, sketch.session.dof(), sketch.session.construction());
+            match palette {
+                Some(SketchAction::SetConstruction(on)) => sketch.session.set_construction(on),
+                None => {}
+            }
         });
     Ok(())
 }
@@ -214,4 +241,54 @@ pub fn tools_palette_ui(
         });
     }
     clicked
+}
+
+/// The sketch strip that sits under the tool palette: reference-geometry
+/// toggle plus the degrees-of-freedom readout.
+///
+/// Host-agnostic (pure `Ui` in, choice out) for the same reason
+/// [`tools_palette_ui`] is: `tests/it/ui_panels.rs` can drive it headlessly.
+///
+/// There is no mode button any more. Sketching is what the paused editor
+/// *does*, so the only thing left here is state that has no home in the tool
+/// palette itself.
+pub fn sketch_palette_ui(
+    ui: &mut egui::Ui,
+    dof: Option<i32>,
+    construction: bool,
+) -> Option<SketchAction> {
+    let mut action = None;
+    if ui
+        .selectable_label(construction, "Ref")
+        .on_hover_text(
+            "draw reference geometry: solved and snappable like anything else, \
+             but never part of the committed profile",
+        )
+        .clicked()
+    {
+        action = Some(SketchAction::SetConstruction(!construction));
+    }
+    ui.separator();
+    dof_readout(ui, dof);
+    action
+}
+
+/// The degrees-of-freedom readout.
+///
+/// Zero is the goal state, so it gets the affirmative colour; anything else is
+/// a count of how much the sketch can still move.
+pub fn dof_readout(ui: &mut egui::Ui, dof: Option<i32>) {
+    match dof {
+        None => {
+            ui.weak("no sketch");
+        }
+        Some(0) => {
+            ui.colored_label(egui::Color32::LIGHT_GREEN, "fully constrained")
+                .on_hover_text("every degree of freedom is pinned down");
+        }
+        Some(n) => {
+            ui.label(format!("{n} DOF"))
+                .on_hover_text(format!("{n} degree(s) of freedom remain unconstrained"));
+        }
+    }
 }
