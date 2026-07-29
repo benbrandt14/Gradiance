@@ -12,23 +12,26 @@
 //! - Fields **superpose** (sum of accelerations). Time variation arrives by
 //!   driving `FieldSource::strength` through the existing seams (an
 //!   authored edit, or a P2 signal driver) — the sampler stays pure.
-//! - Forces are one-shot through avian's `Forces` (constraints always win);
-//!   nothing here is authored, undoable, or persisted.
+//! - Forces are one-shot through [`ForceAccumulator`](crate::forces) (the
+//!   solver's constraints always win); nothing here is authored, undoable, or
+//!   persisted.
 //! - Fields are **Newtonian**: every force gets an equal-and-opposite
 //!   reaction on its source (momentum conserves), and a source's strength
 //!   couples through its [`FieldMass`] (area × density), so cutting a source
 //!   redistributes — never changes — its total field.
 
+use crate::forces::ForceAccumulator;
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
-use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
 use gradiance_domain::field::{FieldFalloff, FieldSource};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::sdf;
-use gradiance_units::{Acceleration, Acceleration2, Density, Force2, Length, Mass, Velocity};
+use gradiance_units::{
+    Acceleration, Acceleration2, Density, Force2, Length, Mass, Torque, Velocity,
+};
 
 /// Acceleration magnitude clamp (keeps zero-distance fields sane).
 const MAX_FIELD_ACCEL: Acceleration = Acceleration(500.0);
@@ -179,9 +182,8 @@ impl Fields<'_, '_> {
 pub fn apply_field_forces(
     fields: Fields,
     targets: Query<(Entity, &RigidBody, &ComputedMass, &Transform), With<Body>>,
-    mut forces: Query<Forces, With<Body>>,
+    mut accumulator: ResMut<ForceAccumulator>,
 ) {
-    let mut net: HashMap<Entity, Force2> = HashMap::new();
     for (entity, rigid_body, mass, transform) in &targets {
         if !rigid_body.is_dynamic() {
             continue;
@@ -192,13 +194,8 @@ pub fn apply_field_forces(
             if force.value() == Vec2::ZERO {
                 continue;
             }
-            *net.entry(entity).or_default() += force;
-            *net.entry(source).or_default() -= force;
-        }
-    }
-    for (entity, force) in net {
-        if let Ok(mut item) = forces.get_mut(entity) {
-            item.apply_force(force.value());
+            accumulator.add_force(entity, force);
+            accumulator.add_force(source, -force);
         }
     }
 }
@@ -266,7 +263,17 @@ const FRICTION_REST_SPEED: Velocity = Velocity(0.02);
 /// the fields above — never authored, undoable, or persisted.
 pub fn apply_plane_friction(
     settings: Res<gradiance_domain::settings::SimSettings>,
-    mut bodies: Query<(Forces, &ComputedMass, &ComputedAngularInertia), With<Body>>,
+    bodies: Query<
+        (
+            Entity,
+            &LinearVelocity,
+            &AngularVelocity,
+            &ComputedMass,
+            &ComputedAngularInertia,
+        ),
+        With<Body>,
+    >,
+    mut accumulator: ResMut<ForceAccumulator>,
 ) {
     let mu = settings.plane_friction;
     if mu <= 0.0 {
@@ -275,21 +282,21 @@ pub fn apply_plane_friction(
     // The implicit into-screen gravity uses the standard magnitude even
     // when in-plane gravity is zeroed (that's what top-down *means*).
     let g = Acceleration(gradiance_core::constants::GRAVITY.length());
-    for (mut forces, mass, inertia) in &mut bodies {
+    for (entity, linear, angular, mass, inertia) in &bodies {
         let m = mass.value();
         if m <= 0.0 {
             continue;
         }
-        let velocity = forces.linear_velocity();
-        let speed = velocity.length();
+        let speed = linear.0.length();
         if speed > FRICTION_REST_SPEED.value() {
-            forces.apply_force(-velocity / speed * mu * m * g.value());
+            let load = mu * m * g.value();
+            accumulator.add_force(entity, Force2::new(-linear.0 / speed * load));
         }
-        let spin = forces.angular_velocity();
+        let spin = angular.0;
         if spin.abs() > FRICTION_REST_SPEED.value() {
             // Gyration radius: the lever arm the surface rubs at.
             let k = (inertia.value() / m).max(0.0).sqrt();
-            forces.apply_torque(-spin.signum() * mu * m * g.value() * k);
+            accumulator.add_torque(entity, Torque(-spin.signum() * mu * m * g.value() * k));
         }
     }
 }

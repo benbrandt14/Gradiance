@@ -3,8 +3,11 @@
 
 use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::{CollisionLayers, LockedAxes, RigidBody, Sensor};
+use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
+use gradiance::physics::queries::PhysicsQueries;
 use gradiance::prelude::*;
+use gradiance_units::Force2;
 
 #[test]
 fn spawned_body_gains_engine_components() {
@@ -784,5 +787,94 @@ fn net_contact_impulse_reads_a_resting_bodys_weight() {
     assert!(
         (force - weight).abs() < 0.3 * weight,
         "contact force approximates the weight ({force} vs {weight})"
+    );
+}
+
+/// The force seam's calibration anchor: a body resting on the ground reports a
+/// contact impulse of about its weight over one step.
+///
+/// This is the number that has to survive the engine swap. avian accumulates a
+/// contact's normal impulse once per solver pass, which `net_contact_impulse`
+/// corrects for; a different engine accumulates differently, and this test is
+/// what says whether the correction is still right. Written now, against the
+/// engine we are leaving, so it is a regression net rather than a fresh
+/// assertion about new code.
+#[test]
+fn a_resting_body_reports_about_its_weight() {
+    let mut app = headless_app();
+
+    let mut ground = box_record(Vec2::new(0.0, -0.5), 4.0, 0.2);
+    ground.physics = BodyPhysics::fixed();
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: ground });
+
+    let mut body = box_record(Vec2::new(0.0, -0.29), 0.2, 0.2);
+    body.physics.density = Density(1.0);
+    let id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+
+    // Let it settle onto the ground.
+    step(&mut app, 90);
+
+    let entity = entity_of(&app, id).expect("body is alive");
+    let mass = {
+        let mut state: SystemState<PhysicsQueries> = SystemState::new(app.world_mut());
+        state
+            .get(app.world())
+            .expect("PhysicsQueries param is always valid")
+            .mass_of(entity)
+            .expect("a settled body has mass")
+    };
+
+    let dt = app
+        .world()
+        .resource::<Time<Fixed>>()
+        .timestep()
+        .as_secs_f32();
+    let g = gradiance::core::constants::GRAVITY.length();
+    let expected = mass.value() * g * dt;
+
+    let impulse = {
+        let mut state: SystemState<PhysicsQueries> = SystemState::new(app.world_mut());
+        state
+            .get(app.world())
+            .expect("PhysicsQueries param is always valid")
+            .net_contact_impulse(entity)
+    };
+
+    let up = impulse.value().y;
+    assert!(
+        up > 0.0,
+        "the ground pushes up, not down (impulse {:?})",
+        impulse.value()
+    );
+    assert!(
+        (up - expected).abs() < expected * 0.5,
+        "resting impulse {up} should be about weight x dt = {expected}"
+    );
+}
+
+/// Forces are one-shot: a body with no contribution this step keeps none from
+/// the last, so a transient push cannot become a permanent one.
+#[test]
+fn accumulated_forces_do_not_persist_across_steps() {
+    let mut app = headless_app();
+    let entity = app.world_mut().spawn_empty().id();
+
+    let mut acc = app
+        .world_mut()
+        .resource_mut::<gradiance::physics::forces::ForceAccumulator>();
+    acc.add_force(entity, Force2::new(Vec2::new(0.0, 10.0)));
+    assert!(!acc.is_empty(), "the contribution registered");
+
+    step(&mut app, 1);
+
+    let acc = app
+        .world()
+        .resource::<gradiance::physics::forces::ForceAccumulator>();
+    assert!(
+        acc.is_empty(),
+        "the commit system clears every step; a stale force would keep pushing"
     );
 }

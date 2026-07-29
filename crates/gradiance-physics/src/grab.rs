@@ -4,8 +4,10 @@
 //! play-mode rotate's twist (a velocity servo toward a target angle) are
 //! physical interactions — never commands, never undoable, matching Algodoo.
 
+use crate::forces::ForceAccumulator;
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use gradiance_units::Torque;
 
 /// Velocity gain toward the target (per second).
 const SPRING_GAIN: f32 = 12.0;
@@ -82,17 +84,15 @@ pub struct MouseTwist(pub Vec<Twist>);
 /// are respected — the solver, not the gesture, has the last word.
 pub fn apply_mouse_twist(
     twist: Res<MouseTwist>,
-    mut bodies: Query<(&ComputedAngularInertia, Forces)>,
+    bodies: Query<(&ComputedAngularInertia, &Rotation, &AngularVelocity)>,
+    mut accumulator: ResMut<ForceAccumulator>,
 ) {
     for t in &twist.0 {
-        let Ok((inertia, mut forces)) = bodies.get_mut(t.entity) else {
+        let Ok((inertia, rotation, spin)) = bodies.get(t.entity) else {
             continue;
         };
-        // Pose/velocity read through `Forces` itself — it holds write access
-        // to the velocity components, so separate query terms would conflict.
-        let err = gradiance_geometry::wrap_angle(t.target_rot - forces.rotation().as_radians());
-        let accel = (err * TWIST_KP - forces.angular_velocity() * TWIST_KD)
-            .clamp(-MAX_TWIST_ACCEL, MAX_TWIST_ACCEL);
-        forces.apply_torque(inertia.value() * accel);
+        let err = gradiance_geometry::wrap_angle(t.target_rot - rotation.as_radians());
+        let accel = (err * TWIST_KP - spin.0 * TWIST_KD).clamp(-MAX_TWIST_ACCEL, MAX_TWIST_ACCEL);
+        accumulator.add_torque(t.entity, Torque(inertia.value() * accel));
     }
 }

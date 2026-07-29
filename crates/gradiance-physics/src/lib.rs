@@ -12,6 +12,7 @@
 pub mod body_sync;
 pub mod clock;
 pub mod fields;
+pub mod forces;
 pub mod grab;
 pub mod hold;
 pub mod joint_sync;
@@ -58,6 +59,7 @@ impl Plugin for GradiancePhysicsPlugin {
             apply_sim_settings.run_if(resource_changed::<gradiance_domain::settings::SimSettings>),
         );
         app.init_resource::<clock::SimClock>();
+        app.init_resource::<forces::ForceAccumulator>();
         app.add_systems(First, clock::sync_sim_clock);
         app.init_resource::<hold::KinematicHold>();
         app.init_resource::<grab::MouseSpring>();
@@ -81,7 +83,18 @@ impl Plugin for GradiancePhysicsPlugin {
                 fields::apply_field_forces.run_if(in_state(GameState::Playing)),
                 fields::apply_plane_friction.run_if(in_state(GameState::Playing)),
                 fields::set_in_orbit,
-            ),
+            )
+                .chain(),
+        );
+        // Every contributor accumulates first; one system hands the totals to
+        // the engine and clears. Ordering is the whole contract, so it is
+        // stated here rather than left to system-set inference.
+        app.add_systems(
+            Update,
+            forces::commit_forces
+                .after(grab::apply_mouse_twist)
+                .after(fields::apply_field_forces)
+                .after(fields::apply_plane_friction),
         );
         app.add_systems(
             PostUpdate,
