@@ -10,6 +10,7 @@
 //! ordinary `Static` body with a large box shape.
 
 pub mod body_sync;
+pub mod clock;
 pub mod fields;
 pub mod grab;
 pub mod hold;
@@ -56,6 +57,8 @@ impl Plugin for GradiancePhysicsPlugin {
             Update,
             apply_sim_settings.run_if(resource_changed::<gradiance_domain::settings::SimSettings>),
         );
+        app.init_resource::<clock::SimClock>();
+        app.add_systems(First, clock::sync_sim_clock);
         app.init_resource::<hold::KinematicHold>();
         app.init_resource::<grab::MouseSpring>();
         app.init_resource::<grab::MouseTwist>();

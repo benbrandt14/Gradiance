@@ -3830,7 +3830,6 @@ dependencies = [
 name = "gradiance-render"
 version = "0.2.0"
 dependencies = [
- "avian2d",
  "bevy",
  "gradiance-core",
  "gradiance-domain",
@@ -3875,7 +3874,6 @@ dependencies = [
 name = "gradiance-signal"
 version = "0.2.0"
 dependencies = [
- "avian2d",
  "bevy",
  "gradiance-core",
  "gradiance-domain",
