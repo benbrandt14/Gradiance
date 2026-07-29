@@ -585,6 +585,7 @@ fn cutting_a_field_source_conserves_its_field() {
             .get(app.world())
             .expect("Fields param is always valid")
             .accel_at(probe, None)
+            .value()
     };
     let before = sample(&mut app);
     assert!(before.length() > 0.1, "the probe feels the field");

@@ -281,7 +281,7 @@ fn draw_field_overlay(
     for gy in -ny..=ny {
         for gx in -nx..=nx {
             let p = center + Vec2::new(gx as f32, gy as f32) * spacing;
-            let a = fields.accel_at(p, None);
+            let a = fields.accel_at(p, None).value();
             let mag = a.length();
             // Acceleration is m/s² (SI); the skip floor and saturation knees
             // are ÷100 from the former px/s² values.

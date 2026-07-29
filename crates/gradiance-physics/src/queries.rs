@@ -12,7 +12,8 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use gradiance_core::units::PosRot;
 use gradiance_units::{
-    AngularMomentum, AngularVelocity, Energy, Impulse, Impulse2, Mass, Momentum, Velocity2,
+    AngularMomentum, AngularVelocity, Energy, Impulse, Impulse2, Mass, MomentOfInertia, Momentum,
+    Velocity2,
 };
 
 /// A world-space contact sample: the point, its unit normal, and the normal
@@ -136,8 +137,11 @@ impl PhysicsQueries<'_, '_> {
     /// The solver's computed angular inertia (moment of inertia, kg·m²), if the
     /// body simulates — the rotational analogue of [`mass_of`](Self::mass_of),
     /// for rotational kinetic energy `½Iω²`.
-    pub fn angular_inertia_of(&self, entity: Entity) -> Option<f32> {
-        self.inertias.get(entity).ok().map(|i| i.value())
+    pub fn angular_inertia_of(&self, entity: Entity) -> Option<MomentOfInertia> {
+        self.inertias
+            .get(entity)
+            .ok()
+            .map(|i| MomentOfInertia(i.value()))
     }
 
     /// Total kinetic energy `½mv² + ½Iω²` of a simulating body — a derived read
