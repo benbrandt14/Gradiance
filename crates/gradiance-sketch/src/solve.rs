@@ -96,7 +96,6 @@ enum Kind {
     Line,
     Arc,
     Circle,
-    Cubic,
 }
 
 /// Handle bookkeeping for one compile-and-solve pass.
@@ -141,11 +140,6 @@ impl Built {
             .ok_or(SketchError::UnknownArc(id))
     }
 
-    fn cubic(&self, id: SketchId) -> Result<Entity, SketchError> {
-        self.of_kind(id, &[Kind::Cubic])
-            .ok_or(SketchError::UnknownArc(id))
-    }
-
     /// Anything with a radius: an arc or a full circle.
     fn radial(&self, id: SketchId) -> Result<Entity, SketchError> {
         self.of_kind(id, &[Kind::Arc, Kind::Circle])
@@ -155,7 +149,7 @@ impl Built {
     /// Anything with two endpoints and a tangent direction at each: an arc or
     /// a bezier.
     fn curve(&self, id: SketchId) -> Result<Entity, SketchError> {
-        self.of_kind(id, &[Kind::Arc, Kind::Cubic])
+        self.of_kind(id, &[Kind::Arc])
             .ok_or(SketchError::UnknownArc(id))
     }
 }
@@ -238,22 +232,6 @@ fn build(
                 let n = *plane_normal.get_or_insert_with(|| sys.add_normal_2d(g, wp));
                 let h = sys.add_arc(g, wp, n, pc, ps, pe);
                 b.entities.insert(id, (h, Kind::Arc));
-            }
-            SketchEntity::Cubic {
-                id,
-                start,
-                start_control,
-                end_control,
-                end,
-            } => {
-                let pts = [
-                    b.point(start)?,
-                    b.point(start_control)?,
-                    b.point(end_control)?,
-                    b.point(end)?,
-                ];
-                let h = sys.add_cubic(g, wp, pts);
-                b.entities.insert(id, (h, Kind::Cubic));
             }
             SketchEntity::Circle { id, center, radius } => {
                 let pc = b.point(center)?;
@@ -395,30 +373,6 @@ fn constraint_def(
         K::Angle { a, b: bb, degrees } => {
             ee(sc::ANGLE, f64::from(degrees), b.line(a)?, b.line(bb)?)
         }
-        K::LengthRatio { a, b: bb, ratio } => {
-            ee(sc::LENGTH_RATIO, f64::from(ratio), b.line(a)?, b.line(bb)?)
-        }
-        K::LengthDifference {
-            a,
-            b: bb,
-            difference,
-        } => ee(
-            sc::LENGTH_DIFFERENCE,
-            f64::from(difference),
-            b.line(a)?,
-            b.line(bb)?,
-        ),
-        K::EqualAngle {
-            a,
-            b: bb,
-            c: cc,
-            d: dd,
-        } => ConstraintDef {
-            entity_c: b.line(cc)?,
-            entity_d: b.line(dd)?,
-            ..ee(sc::EQUAL_ANGLE, 0.0, b.line(a)?, b.line(bb)?)
-        },
-
         // Diameter is a property of the circle itself rather than something
         // measured in a plane; upstream's `Slvs_Diameter` passes
         // SLVS_FREE_IN_3D, and so must we.
@@ -434,14 +388,6 @@ fn constraint_def(
         K::ArcLineTangent { arc, line, at_end } => ConstraintDef {
             other: at_end,
             ..ee(sc::ARC_LINE_TANGENT, 0.0, b.arc(arc)?, b.line(line)?)
-        },
-        K::CubicLineTangent {
-            cubic,
-            line,
-            at_end,
-        } => ConstraintDef {
-            other: at_end,
-            ..ee(sc::CUBIC_LINE_TANGENT, 0.0, b.cubic(cubic)?, b.line(line)?)
         },
         K::CurveCurveTangent {
             a,
@@ -686,37 +632,6 @@ mod tests {
     }
 
     #[test]
-    fn length_ratio_ties_two_lines_together() {
-        let mut d = SketchDoc::new();
-        let o = d.add_point(Vec2::ZERO);
-        d.point_mut(o).unwrap().fixed = true;
-        let a1 = d.add_point(Vec2::new(2.0, 0.0));
-        let l1 = d.add_line(o, a1);
-        let b0 = d.add_point(Vec2::new(0.0, 1.0));
-        let b1 = d.add_point(Vec2::new(1.0, 1.0));
-        d.point_mut(b0).unwrap().fixed = true;
-        let l2 = d.add_line(b0, b1);
-
-        d.constrain(SketchConstraint::Distance {
-            a: o,
-            b: a1,
-            d: 6.0,
-        });
-        d.constrain(SketchConstraint::LengthRatio {
-            a: l1,
-            b: l2,
-            ratio: 3.0,
-        });
-
-        let out = solve(&mut d, None).unwrap();
-        assert!(out.is_solved(), "solver failed: {out:?}");
-        let len1 = d.point(o).unwrap().at.distance(d.point(a1).unwrap().at);
-        let len2 = d.point(b0).unwrap().at.distance(d.point(b1).unwrap().at);
-        assert!((len1 - 6.0).abs() < 1e-4, "first line is {len1}");
-        assert!((len1 / len2 - 3.0).abs() < 1e-3, "ratio is {}", len1 / len2);
-    }
-
-    #[test]
     fn symmetry_about_a_line_mirrors_a_pair() {
         let mut d = SketchDoc::new();
         // A vertical mirror line on x = 0.
@@ -776,55 +691,6 @@ mod tests {
         // A full circle has no endpoint for the tangency to attach to, so this
         // is a structural error rather than a solver failure.
         assert_eq!(solve(&mut d, None), Err(SketchError::UnknownArc(circle)));
-    }
-
-    #[test]
-    fn a_bezier_survives_a_solve_and_keeps_its_endpoints() {
-        let mut d = SketchDoc::new();
-        let s0 = d.add_point(Vec2::new(0.0, 0.0));
-        let c0 = d.add_point(Vec2::new(1.0, 2.0));
-        let c1 = d.add_point(Vec2::new(3.0, 2.0));
-        let s1 = d.add_point(Vec2::new(4.0, 0.0));
-        d.point_mut(s0).unwrap().fixed = true;
-        d.point_mut(s1).unwrap().fixed = true;
-        d.add_cubic(s0, c0, c1, s1);
-
-        let out = solve(&mut d, None).unwrap();
-        assert!(out.is_solved(), "solver failed on a bezier: {out:?}");
-        assert!((d.point(s0).unwrap().at - Vec2::ZERO).length() < 1e-4);
-        assert!((d.point(s1).unwrap().at - Vec2::new(4.0, 0.0)).length() < 1e-4);
-    }
-
-    #[test]
-    fn a_bezier_can_be_held_tangent_to_a_line() {
-        let mut d = SketchDoc::new();
-        // A horizontal line the bezier must leave smoothly.
-        let la = d.add_point(Vec2::new(-2.0, 0.0));
-        let lb = d.add_point(Vec2::new(0.0, 0.0));
-        d.point_mut(la).unwrap().fixed = true;
-        d.point_mut(lb).unwrap().fixed = true;
-        let line = d.add_line(la, lb);
-
-        let c0 = d.add_point(Vec2::new(1.0, 1.5));
-        let c1 = d.add_point(Vec2::new(3.0, 2.0));
-        let s1 = d.add_point(Vec2::new(4.0, 0.0));
-        d.point_mut(s1).unwrap().fixed = true;
-        let cubic = d.add_cubic(lb, c0, c1, s1);
-        d.constrain(SketchConstraint::CubicLineTangent {
-            cubic,
-            line,
-            at_end: false,
-        });
-
-        let out = solve(&mut d, None).unwrap();
-        assert!(out.is_solved(), "tangency solve failed: {out:?}");
-        // Leaving the joint tangent to a horizontal line means the first
-        // control point must sit level with it.
-        let y = d.point(c0).unwrap().at.y;
-        assert!(
-            y.abs() < 1e-3,
-            "the outgoing control point should be level with the line, got y = {y}"
-        );
     }
 
     #[test]

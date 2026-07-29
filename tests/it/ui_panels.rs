@@ -256,7 +256,7 @@ fn sketch_editor_offers_applicable_constraints_and_reports_clicks() {
 
     harness.get_by_label("Parallel");
     harness.get_by_label("Perpendicular");
-    harness.get_by_label("0 point(s), 2 edge(s)");
+    harness.get_by_label("2 edges");
 
     harness.get_by_label("Parallel").click();
     harness.run();
@@ -342,7 +342,7 @@ fn sketch_editor_lists_constraints_and_removes_them() {
     });
     harness.run();
 
-    harness.get_by_label("Constraints (2)");
+    harness.get_by_label("CONSTRAINTS (2)");
     harness.get_by_label("horizontal");
     harness.get_by_label("vertical");
 

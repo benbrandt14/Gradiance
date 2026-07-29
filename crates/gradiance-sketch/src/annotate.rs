@@ -70,24 +70,47 @@ fn describe(c: SketchConstraint) -> (String, AnnotationKind) {
         K::Distance { d, .. } | K::PointLineDistance { d, .. } => (format_length(d), Dimension),
         K::Diameter { d, .. } => (format!("⌀{}", format_length(d)), Dimension),
         K::Angle { degrees, .. } => (format!("{degrees:.1}°"), Dimension),
-        K::LengthRatio { ratio, .. } => (format!("×{ratio:.2}"), Dimension),
-        K::LengthDifference { difference, .. } => {
-            (format!("Δ{}", format_length(difference)), Dimension)
-        }
         K::Horizontal(_) => ("H".to_owned(), Relation),
         K::Vertical(_) => ("V".to_owned(), Relation),
         K::Parallel(..) => ("//".to_owned(), Relation),
         K::Perpendicular(..) => ("|_".to_owned(), Relation),
         K::EqualLength(..) => ("=".to_owned(), Relation),
         K::EqualRadius(..) => ("=R".to_owned(), Relation),
-        K::EqualAngle { .. } => ("=A".to_owned(), Relation),
         K::Coincident(..) => ("+".to_owned(), Relation),
         K::Midpoint { .. } => ("MID".to_owned(), Relation),
         K::PointOnLine { .. } | K::PointOnCircle { .. } => ("ON".to_owned(), Relation),
-        K::ArcLineTangent { .. } | K::CubicLineTangent { .. } | K::CurveCurveTangent { .. } => {
-            ("TAN".to_owned(), Relation)
-        }
+        K::ArcLineTangent { .. } | K::CurveCurveTangent { .. } => ("TAN".to_owned(), Relation),
         K::SymmetricAboutLine { .. } => ("SYM".to_owned(), Relation),
+    }
+}
+
+/// A constraint's name in prose, for lists and status lines.
+///
+/// The long form of the canvas token `describe` produces. Both live here so
+/// that adding
+/// a constraint variant means editing one module, not hunting for the second
+/// place that also happened to name them all.
+#[must_use]
+pub fn label(c: &SketchConstraint) -> &'static str {
+    use SketchConstraint as K;
+    match c {
+        K::Coincident(..) => "coincident",
+        K::Distance { .. } => "distance",
+        K::Horizontal(_) => "horizontal",
+        K::Vertical(_) => "vertical",
+        K::Parallel(..) => "parallel",
+        K::Perpendicular(..) => "perpendicular",
+        K::EqualLength(..) => "equal length",
+        K::PointOnLine { .. } => "point on line",
+        K::Midpoint { .. } => "midpoint",
+        K::Diameter { .. } => "diameter",
+        K::EqualRadius(..) => "equal radius",
+        K::Angle { .. } => "angle",
+        K::PointOnCircle { .. } => "point on circle",
+        K::PointLineDistance { .. } => "point-line distance",
+        K::ArcLineTangent { .. } => "arc tangent",
+        K::CurveCurveTangent { .. } => "curve tangent",
+        K::SymmetricAboutLine { .. } => "symmetric",
     }
 }
 
@@ -128,15 +151,9 @@ fn anchor(doc: &SketchDoc, c: SketchConstraint) -> Option<Vec2> {
         | K::EqualLength(a, b)
         | K::EqualRadius(a, b)
         | K::Angle { a, b, .. }
-        | K::LengthRatio { a, b, .. }
-        | K::LengthDifference { a, b, .. }
         | K::CurveCurveTangent { a, b, .. }
-        | K::EqualAngle { a, b, .. }
         | K::ArcLineTangent {
             arc: a, line: b, ..
-        }
-        | K::CubicLineTangent {
-            cubic: a, line: b, ..
         } => Some(midpoint(entity_center(doc, a)?, entity_center(doc, b)?)),
     }
 }
@@ -152,9 +169,6 @@ fn entity_center(doc: &SketchDoc, id: SketchId) -> Option<Vec2> {
         SketchEntity::Line { a, b, .. } => Some(midpoint(doc.point(a)?.at, doc.point(b)?.at)),
         SketchEntity::Circle { center, .. } | SketchEntity::Arc { center, .. } => {
             Some(doc.point(center)?.at)
-        }
-        SketchEntity::Cubic { start, end, .. } => {
-            Some(midpoint(doc.point(start)?.at, doc.point(end)?.at))
         }
     }
 }

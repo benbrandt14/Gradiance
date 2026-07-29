@@ -76,23 +76,6 @@ pub enum SketchEntity {
         /// End point.
         end: SketchId,
     },
-    /// Cubic bezier: two endpoints with a control point apiece.
-    ///
-    /// SolveSpace's `Cubic` is a single bezier segment rather than a general
-    /// NURBS, so tangency is the strongest continuity available — enough for
-    /// smooth joins, short of curvature matching.
-    Cubic {
-        /// Identity within the sketch.
-        id: SketchId,
-        /// Start point.
-        start: SketchId,
-        /// Control point leaving `start`.
-        start_control: SketchId,
-        /// Control point entering `end`.
-        end_control: SketchId,
-        /// End point.
-        end: SketchId,
-    },
     /// Full circle about `center`.
     ///
     /// The radius is a solver parameter, so it can be driven by a
@@ -114,25 +97,10 @@ impl SketchEntity {
         match *self {
             SketchEntity::Line { id, .. }
             | SketchEntity::Arc { id, .. }
-            | SketchEntity::Cubic { id, .. }
             | SketchEntity::Circle { id, .. } => id,
         }
     }
 }
-
-/// Evaluate a cubic bezier at `t` in `[0, 1]`.
-///
-/// Shared by lowering and hit-testing so a bezier is discretized the same way
-/// wherever it is consumed — a curve that picks differently from how it draws
-/// is a curve users cannot click.
-#[must_use]
-pub fn cubic_at(p0: Vec2, c0: Vec2, c1: Vec2, p1: Vec2, t: f32) -> Vec2 {
-    let u = 1.0 - t;
-    p0 * (u * u * u) + c0 * (3.0 * u * u * t) + c1 * (3.0 * u * t * t) + p1 * (t * t * t)
-}
-
-/// Samples used to discretize one bezier segment.
-pub const CUBIC_SEGMENTS: usize = 24;
 
 /// A relationship the solver must satisfy.
 ///
@@ -218,16 +186,7 @@ pub enum SketchConstraint {
         /// Whether the tangency is at the arc's end rather than its start.
         at_end: bool,
     },
-    /// A cubic bezier meets a line tangentially.
-    CubicLineTangent {
-        /// The bezier.
-        cubic: SketchId,
-        /// The line it is tangent to.
-        line: SketchId,
-        /// Whether the tangency is at the bezier's end rather than its start.
-        at_end: bool,
-    },
-    /// Two curves (arc or bezier) meet tangentially.
+    /// Two arcs meet tangentially.
     ///
     /// This is the smooth-join condition between spline segments — the
     /// strongest continuity SolveSpace offers, short of curvature matching.
@@ -249,35 +208,6 @@ pub enum SketchConstraint {
         b: SketchId,
         /// The mirror line.
         line: SketchId,
-    },
-    /// Two lines' lengths hold a fixed ratio (`a` / `b`).
-    LengthRatio {
-        /// Numerator line.
-        a: SketchId,
-        /// Denominator line.
-        b: SketchId,
-        /// Required ratio.
-        ratio: f32,
-    },
-    /// Two lines' lengths differ by a fixed amount (`a` - `b`).
-    LengthDifference {
-        /// First line.
-        a: SketchId,
-        /// Second line.
-        b: SketchId,
-        /// Required difference in metres.
-        difference: f32,
-    },
-    /// The angle between `a` and `b` equals the angle between `c` and `d`.
-    EqualAngle {
-        /// First line of the first pair.
-        a: SketchId,
-        /// Second line of the first pair.
-        b: SketchId,
-        /// First line of the second pair.
-        c: SketchId,
-        /// Second line of the second pair.
-        d: SketchId,
     },
 }
 
@@ -303,8 +233,6 @@ impl SketchConstraint {
             | K::EqualLength(a, b)
             | K::EqualRadius(a, b)
             | K::Distance { a, b, .. }
-            | K::LengthRatio { a, b, .. }
-            | K::LengthDifference { a, b, .. }
             | K::Angle { a, b, .. }
             | K::CurveCurveTangent { a, b, .. }
             | K::PointOnLine { point: a, line: b }
@@ -318,12 +246,8 @@ impl SketchConstraint {
             }
             | K::ArcLineTangent {
                 arc: a, line: b, ..
-            }
-            | K::CubicLineTangent {
-                cubic: a, line: b, ..
             } => vec![a, b],
             K::SymmetricAboutLine { a, b, line } => vec![a, b, line],
-            K::EqualAngle { a, b, c, d } => vec![a, b, c, d],
         }
     }
 }
@@ -391,25 +315,6 @@ impl SketchDoc {
             id,
             center,
             start,
-            end,
-        });
-        id
-    }
-
-    /// Add a cubic bezier, returning its identity.
-    pub fn add_cubic(
-        &mut self,
-        start: SketchId,
-        start_control: SketchId,
-        end_control: SketchId,
-        end: SketchId,
-    ) -> SketchId {
-        let id = self.fresh_id();
-        self.entities.push(SketchEntity::Cubic {
-            id,
-            start,
-            start_control,
-            end_control,
             end,
         });
         id
@@ -500,13 +405,6 @@ fn entity_uses_point(e: &SketchEntity, id: SketchId) -> bool {
         SketchEntity::Arc {
             center, start, end, ..
         } => center == id || start == id || end == id,
-        SketchEntity::Cubic {
-            start,
-            start_control,
-            end_control,
-            end,
-            ..
-        } => start == id || start_control == id || end_control == id || end == id,
     }
 }
 

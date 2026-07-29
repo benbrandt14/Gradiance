@@ -168,35 +168,106 @@ pub fn sketch_editor_ui(
 ) -> Option<SketchPanelAction> {
     let mut action = None;
 
+    // Status first: after an action, the outcome is the thing you look for,
+    // and a banner at the bottom of a scrolling panel is a banner nobody reads.
+    status_banner(ui, view);
     selection_header(ui, view, &mut action);
-    ui.separator();
+    ui.add_space(6.0);
     constraint_section(ui, view, panel, &mut action);
-    ui.separator();
+    ui.add_space(6.0);
     operation_section(ui, view, panel, &mut action);
-    ui.separator();
+    ui.add_space(6.0);
     constraint_list(ui, view, &mut action);
-    ui.separator();
+    ui.add_space(8.0);
     footer(ui, view, &mut action);
 
     action
+}
+
+/// A section heading: a small caps-ish label with a rule under it, so the
+/// panel reads as three groups rather than one undifferentiated stack.
+fn heading(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(2.0);
+    ui.label(
+        egui::RichText::new(text)
+            .size(11.0)
+            .color(ui.visuals().weak_text_color())
+            .strong(),
+    );
+    ui.separator();
+}
+
+/// The outcome of the last action, or the solver's verdict when it is bad news.
+///
+/// Coloured by severity and given its own strip rather than a bare line of
+/// text: a refusal that looks the same as a success is a refusal that gets
+/// missed.
+fn status_banner(ui: &mut egui::Ui, view: &SketchView) {
+    let Some(status) = view.status else { return };
+    let (fill, fg) = if status.error {
+        (
+            egui::Color32::from_rgb(70, 26, 26),
+            egui::Color32::from_rgb(255, 190, 190),
+        )
+    } else {
+        (
+            egui::Color32::from_rgb(26, 54, 34),
+            egui::Color32::from_rgb(190, 240, 200),
+        )
+    };
+    egui::Frame::new()
+        .fill(fill)
+        .corner_radius(4.0)
+        .inner_margin(egui::Margin::symmetric(8, 4))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new(&status.text).color(fg).size(12.0));
+        });
+    ui.add_space(6.0);
+}
+
+/// The selection in words rather than counts — "2 edges" beats "0 point(s),
+/// 2 edge(s)", and the plural is worth getting right in something you read
+/// every few seconds.
+fn summarize_selection(points: usize, entities: usize) -> String {
+    let mut parts = Vec::new();
+    if points > 0 {
+        parts.push(format!(
+            "{points} point{}",
+            if points == 1 { "" } else { "s" }
+        ));
+    }
+    if entities > 0 {
+        parts.push(format!(
+            "{entities} edge{}",
+            if entities == 1 { "" } else { "s" }
+        ));
+    }
+    parts.join(" + ")
 }
 
 /// What is selected, and the escape hatch from it.
 fn selection_header(ui: &mut egui::Ui, view: &SketchView, action: &mut Option<SketchPanelAction>) {
     ui.horizontal(|ui| {
         if view.points == 0 && view.entities == 0 {
-            ui.weak("nothing selected");
+            ui.label(egui::RichText::new("nothing selected").color(ui.visuals().weak_text_color()));
         } else {
-            ui.label(format!(
-                "{} point(s), {} edge(s)",
-                view.points, view.entities
-            ));
-            if ui.small_button("clear").clicked() {
-                *action = Some(SketchPanelAction::ClearSelection);
-            }
+            ui.label(
+                egui::RichText::new(summarize_selection(view.points, view.entities))
+                    .color(egui::Color32::from_rgb(255, 176, 84))
+                    .strong(),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .small_button("✕")
+                    .on_hover_text("deselect (Esc)")
+                    .clicked()
+                {
+                    *action = Some(SketchPanelAction::ClearSelection);
+                }
+            });
         }
     });
-    ui.weak("click to add or remove; empty space clears");
 }
 
 /// The constraints that apply to what is selected, and nothing else.
@@ -206,7 +277,7 @@ fn constraint_section(
     panel: &mut SketchPanel,
     action: &mut Option<SketchPanelAction>,
 ) {
-    ui.strong("Constrain");
+    heading(ui, "CONSTRAIN");
     if view.applicable.is_empty() {
         ui.weak("select geometry to see what can be constrained");
         return;
@@ -275,7 +346,7 @@ fn operation_section(
     panel: &mut SketchPanel,
     action: &mut Option<SketchPanelAction>,
 ) {
-    ui.strong("Modify");
+    heading(ui, "MODIFY");
     let has_points = view.points > 0;
     let has_entities = view.entities > 0;
 
@@ -360,7 +431,7 @@ fn operation_section(
 /// sketch just mysteriously refuses to move. This list is where that lands, and
 /// it is also the only way to undo a constraint applied by mistake.
 fn constraint_list(ui: &mut egui::Ui, view: &SketchView, action: &mut Option<SketchPanelAction>) {
-    ui.strong(format!("Constraints ({})", view.constraints.len()));
+    heading(ui, &format!("CONSTRAINTS ({})", view.constraints.len()));
     if view.constraints.is_empty() {
         ui.weak("none yet — drawn segments pick up axis constraints on their own");
         return;
@@ -393,15 +464,6 @@ fn constraint_list(ui: &mut egui::Ui, view: &SketchView, action: &mut Option<Ske
 /// Status, degrees of freedom, and the two ways out.
 fn footer(ui: &mut egui::Ui, view: &SketchView, action: &mut Option<SketchPanelAction>) {
     crate::toolbar::dof_readout(ui, view.dof);
-
-    if let Some(status) = view.status {
-        let color = if status.error {
-            egui::Color32::LIGHT_RED
-        } else {
-            egui::Color32::LIGHT_GREEN
-        };
-        ui.colored_label(color, &status.text);
-    }
 
     ui.horizontal(|ui| {
         if ui

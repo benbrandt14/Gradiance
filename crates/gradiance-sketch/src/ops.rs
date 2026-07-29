@@ -338,15 +338,6 @@ pub fn offset(
     Ok(out)
 }
 
-/// Mark geometry as a centerline: reference-only construction geometry.
-///
-/// A centerline is not a distinct entity kind — it is an ordinary line flagged
-/// as construction, which is why it can be snapped to and constrained against
-/// while staying out of the committed profile.
-pub fn make_centerline(doc: &mut SketchDoc, line: SketchId) {
-    doc.mark_construction(line);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,19 +528,5 @@ mod tests {
     fn offsetting_nothing_is_refused() {
         let mut d = SketchDoc::new();
         assert_eq!(offset(&mut d, &[], 1.0), Err(OpError::Degenerate));
-    }
-
-    #[test]
-    fn a_centerline_is_construction_geometry() {
-        let mut d = SketchDoc::new();
-        let a = d.add_point(Vec2::ZERO);
-        let b = d.add_point(Vec2::new(1.0, 0.0));
-        let l = d.add_line(a, b);
-        assert!(!d.is_construction(l));
-        make_centerline(&mut d, l);
-        assert!(
-            d.is_construction(l),
-            "a centerline stays snappable but out of the profile"
-        );
     }
 }

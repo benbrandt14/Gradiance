@@ -12,7 +12,7 @@
 
 use bevy::math::Vec2;
 
-use crate::doc::{CUBIC_SEGMENTS, SketchDoc, SketchEntity, SketchId, cubic_at};
+use crate::doc::{SketchDoc, SketchEntity, SketchId};
 
 /// What a hover landed on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,19 +100,6 @@ pub fn pick(doc: &SketchDoc, cursor: Vec2, tol: f32) -> Option<PickHit> {
                     round_hits(doc, id, center, s.at.distance(c.at), cursor, &mut hits);
                 }
             }
-            SketchEntity::Cubic {
-                id,
-                start,
-                start_control,
-                end_control,
-                end,
-            } => cubic_hits(
-                doc,
-                id,
-                [start, start_control, end_control, end],
-                cursor,
-                &mut hits,
-            ),
         }
     }
 
@@ -180,38 +167,6 @@ fn round_hits(
             at: q,
             distance: cursor.distance(q),
         });
-    }
-}
-
-/// A bezier is hit-tested against the same discretization lowering uses, so
-/// what you can click matches what gets built.
-fn cubic_hits(
-    doc: &SketchDoc,
-    id: SketchId,
-    pts: [SketchId; 4],
-    cursor: Vec2,
-    out: &mut Vec<PickHit>,
-) {
-    let Some([p0, c0, c1, p1]) = pts
-        .iter()
-        .map(|i| doc.point(*i).map(|p| p.at))
-        .collect::<Option<Vec<_>>>()
-        .and_then(|v| <[Vec2; 4]>::try_from(v).ok())
-    else {
-        return;
-    };
-    let mut prev = p0;
-    for i in 1..=CUBIC_SEGMENTS {
-        let t = (i as f32) / (CUBIC_SEGMENTS as f32);
-        let next = cubic_at(p0, c0, c1, p1, t);
-        let (q, d) = closest_on_segment(cursor, prev, next);
-        out.push(PickHit {
-            target: SketchTarget::Entity(id),
-            kind: SnapKind::OnEntity,
-            at: q,
-            distance: d,
-        });
-        prev = next;
     }
 }
 

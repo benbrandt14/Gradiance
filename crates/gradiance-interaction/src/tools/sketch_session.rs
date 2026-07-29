@@ -232,7 +232,7 @@ impl SketchSession {
     pub fn remove_constraint(&mut self, index: usize) {
         if let Some(c) = edit::remove_constraint(&mut self.doc, index) {
             self.resolve();
-            self.note(format!("removed {}", constraint_label(&c)), false);
+            self.note(format!("removed {}", describe_constraint(&c)), false);
         }
     }
 
@@ -646,37 +646,13 @@ impl SketchSession {
     }
 }
 
-/// A short description of a constraint, for the constraint list.
-fn constraint_label(c: &SketchConstraint) -> &'static str {
-    match c {
-        SketchConstraint::Coincident(..) => "coincident",
-        SketchConstraint::Distance { .. } => "distance",
-        SketchConstraint::Horizontal(_) => "horizontal",
-        SketchConstraint::Vertical(_) => "vertical",
-        SketchConstraint::Parallel(..) => "parallel",
-        SketchConstraint::Perpendicular(..) => "perpendicular",
-        SketchConstraint::EqualLength(..) => "equal length",
-        SketchConstraint::PointOnLine { .. } => "point on line",
-        SketchConstraint::Midpoint { .. } => "midpoint",
-        SketchConstraint::Diameter { .. } => "diameter",
-        SketchConstraint::EqualRadius(..) => "equal radius",
-        SketchConstraint::Angle { .. } => "angle",
-        SketchConstraint::PointOnCircle { .. } => "point on circle",
-        SketchConstraint::PointLineDistance { .. } => "point-line distance",
-        SketchConstraint::ArcLineTangent { .. } => "arc tangent",
-        SketchConstraint::CubicLineTangent { .. } => "bezier tangent",
-        SketchConstraint::CurveCurveTangent { .. } => "curve tangent",
-        SketchConstraint::SymmetricAboutLine { .. } => "symmetric",
-        SketchConstraint::LengthRatio { .. } => "length ratio",
-        SketchConstraint::LengthDifference { .. } => "length difference",
-        SketchConstraint::EqualAngle { .. } => "equal angle",
-    }
-}
-
-/// A short description of a constraint, exposed for the constraint list.
+/// A constraint's name in prose, re-exported for the panel's list.
+///
+/// Thin on purpose: `sketch::annotate` owns every constraint's wording, both
+/// the canvas token and this long form, so there is one place to edit.
 #[must_use]
 pub fn describe_constraint(c: &SketchConstraint) -> &'static str {
-    constraint_label(c)
+    gradiance_sketch::annotate::label(c)
 }
 
 impl DraftTool for SketchSession {
@@ -1034,18 +1010,6 @@ impl SketchSession {
                     out.polyline(arc_points(c, s, f), color);
                 }
             }
-            SketchEntity::Cubic {
-                start,
-                start_control,
-                end_control,
-                end,
-                ..
-            } => {
-                let pts = [start, start_control, end_control, end].map(|p| self.at(p));
-                if let [Some(p0), Some(c0), Some(c1), Some(p1)] = pts {
-                    out.polyline(cubic_points(p0, c0, c1, p1), color);
-                }
-            }
         }
     }
 
@@ -1197,14 +1161,6 @@ fn arc_points(center: Vec2, start: Vec2, end: Vec2) -> Vec<Vec2> {
             let a = a0 + sweep * t;
             center + Vec2::from_angle(a) * r
         })
-        .collect()
-}
-
-/// Flatten a cubic for preview, matching the document's own discretization.
-fn cubic_points(p0: Vec2, c0: Vec2, c1: Vec2, p1: Vec2) -> Vec<Vec2> {
-    use gradiance_sketch::doc::{CUBIC_SEGMENTS, cubic_at};
-    (0..=CUBIC_SEGMENTS)
-        .map(|i| cubic_at(p0, c0, c1, p1, i as f32 / CUBIC_SEGMENTS as f32))
         .collect()
 }
 
