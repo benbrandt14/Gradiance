@@ -111,6 +111,7 @@ pub fn commit_forces(
 mod tests {
     use super::*;
     use bevy::ecs::entity::Entity;
+    use bevy::platform::collections::HashSet;
 
     fn entity(index: u32) -> Entity {
         Entity::from_raw_u32(index).expect("valid test entity id")
@@ -150,9 +151,10 @@ mod tests {
         let mut acc = ForceAccumulator::default();
         acc.add_force(entity(1), Force2::new(Vec2::X));
         acc.add_torque(entity(2), Torque(1.0));
-        let mut seen: Vec<Entity> = acc.bodies().collect();
-        seen.sort_unstable();
-        seen.dedup();
-        assert_eq!(seen, vec![entity(1), entity(2)]);
+        // A set, not a sequence: `bodies()` chains two hash-map key iterators,
+        // and `Entity`'s own ordering is not index-ascending — depending on
+        // either would be testing something this method does not promise.
+        let seen: HashSet<Entity> = acc.bodies().collect();
+        assert_eq!(seen, HashSet::from_iter([entity(1), entity(2)]));
     }
 }
