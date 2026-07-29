@@ -16,6 +16,7 @@ pub mod context_menu;
 pub mod depth_panel;
 pub mod dock;
 pub mod fonts;
+pub mod icons;
 pub mod inspector;
 pub mod joint_inspector;
 pub mod labels;
@@ -162,6 +163,8 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(Startup, spawn_ui_camera);
         app.init_resource::<toolbar::ToolIcons>();
         app.add_systems(Startup, toolbar::load_tool_icons);
+        app.init_resource::<icons::Icons>();
+        app.add_systems(Startup, icons::load_icons);
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
