@@ -9,6 +9,7 @@
 //! the bottom. Dragging previews locally (panel-scratch state, invariant
 //! 2) and commits exactly **one** `PropertyEditIntent` on release.
 
+use crate::fonts::glyph;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use gradiance_command::intent::PropertyEditIntent;
@@ -113,7 +114,7 @@ pub fn depth_section(
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Depth").strong())
             .on_hover_text("front ↑ · back ↓ — a body collides with what its band overlaps");
-        if ui.button("✕").clicked() {
+        if ui.button(glyph::CLOSE).clicked() {
             panel.open = false;
             panel.drag = None;
         }

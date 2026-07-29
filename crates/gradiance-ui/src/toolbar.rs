@@ -1,6 +1,7 @@
 //! Tool palette (left T-panel of icons) + transport strip (play/pause, scale
 //! frame, 2D-view home). Undo/redo and panel toggles live in the menu bar.
 
+use crate::fonts::glyph;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -125,7 +126,11 @@ pub fn toolbar(
             ui.horizontal(|ui| {
                 let playing = *game.get() == GameState::Playing;
                 if ui
-                    .button(if playing { "⏸ Pause" } else { "▶ Play" })
+                    .button(if playing {
+                        format!("{} Pause", glyph::PAUSE)
+                    } else {
+                        format!("{} Play", glyph::PLAY)
+                    })
                     .clicked()
                 {
                     next_game.set(if playing {
@@ -149,7 +154,7 @@ pub fn toolbar(
                 // Re-home the orbited view back to the straight-on 2D
                 // view (also bound to Home). Enabled only when tilted.
                 if ui
-                    .add_enabled(!rig.is_flat(), egui::Button::new("⌂ 2D view"))
+                    .add_enabled(!rig.is_flat(), egui::Button::new("2D view"))
                     .on_hover_text("return the camera to the flat 2D view (Home)")
                     .clicked()
                 {

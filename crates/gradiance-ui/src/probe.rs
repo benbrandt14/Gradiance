@@ -6,6 +6,7 @@
 //! no mutation, no persistence (pins are workstation state, entities
 //! resolved by `StableId` so undo/redo cycles keep them valid).
 
+use crate::fonts::glyph;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::ids::{IdIndex, StableId};
@@ -151,7 +152,7 @@ pub fn probe_panel(
                     ui.separator();
                     ui.horizontal(|ui| {
                         ui.monospace(format!("#{}", &id.0.to_string()[..8]));
-                        if ui.small_button("✖").clicked() {
+                        if ui.small_button(glyph::CLOSE).clicked() {
                             unpin = Some(i);
                         }
                     });

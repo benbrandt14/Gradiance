@@ -54,8 +54,8 @@ pub fn joint_inspector(
             ui.label(egui::RichText::new(kind_name(&def.kind)).strong());
             ui.label(
                 egui::RichText::new(match def.body_b {
-                    Some(b) => format!("{:.8} ↔ {b:.8}", def.body_a),
-                    None => format!("{:.8} ↔ world pin", def.body_a),
+                    Some(b) => format!("{:.8} to {b:.8}", def.body_a),
+                    None => format!("{:.8} to world pin", def.body_a),
                 })
                 .weak(),
             );

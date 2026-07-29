@@ -164,6 +164,23 @@ pub fn install(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+/// Installs the editor fonts on the primary egui context, once.
+///
+/// Runs in `EguiPrimaryContextPass` rather than `Startup` because the egui
+/// context does not exist yet at startup. The `Local` latch keeps it to a
+/// single call: `set_fonts` rebuilds the font atlas, so calling it every frame
+/// would rebuild it every frame.
+pub fn install_fonts(mut contexts: bevy_egui::EguiContexts, mut done: bevy::prelude::Local<bool>) {
+    if *done {
+        return;
+    }
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
+    install(ctx);
+    *done = true;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +278,65 @@ mod tests {
                 "the proportional chain never reached Hack"
             );
         });
+    }
+
+    /// No source file may use a non-ASCII character that is not in the
+    /// vocabulary.
+    ///
+    /// The coverage test proves every *listed* glyph renders; this proves the
+    /// list is the whole story. Without it, the next person to type a `✕`
+    /// straight into a button reintroduces exactly the bug this module exists
+    /// to remove, and nothing would notice until someone looked at the running
+    /// editor.
+    ///
+    /// Prose in comments and doc-comments is exempt — this is about what the
+    /// editor *draws*, and `fonts.rs` itself has to name the broken characters
+    /// in order to document them.
+    #[test]
+    fn no_source_file_uses_an_unlisted_glyph() {
+        let allowed: std::collections::HashSet<char> =
+            glyph::ALL.iter().flat_map(|g| g.chars()).collect();
+
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders: Vec<String> = Vec::new();
+
+        let entries = std::fs::read_dir(&dir).expect("the crate has a src dir");
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            // This file documents the broken characters by name.
+            if path.file_name().is_some_and(|n| n == "fonts.rs") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for (line_no, line) in text.lines().enumerate() {
+                let trimmed = line.trim_start();
+                if trimmed.starts_with("//") {
+                    continue; // prose, not drawn
+                }
+                for c in line.chars() {
+                    if !c.is_ascii() && !allowed.contains(&c) {
+                        offenders.push(format!(
+                            "{}:{} U+{:04X} {c}",
+                            path.file_name().unwrap_or_default().to_string_lossy(),
+                            line_no + 1,
+                            c as u32
+                        ));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "non-ASCII characters outside the vocabulary (add them to \
+             `glyph` — and check they render — or use plain text): {}",
+            offenders.join(", ")
+        );
     }
 
     /// Stock egui really is missing these — the assertion above is meaningful

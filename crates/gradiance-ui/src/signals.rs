@@ -10,6 +10,7 @@
 //! undo, exactly like the grid and snap settings. Lives in the right dock
 //! (`ui::dock`), the direction toward dockable inspectors.
 
+use crate::fonts::glyph;
 use bevy::ecs::system::SystemParam;
 use bevy_egui::egui;
 use gradiance_core::ids::StableId;
@@ -162,7 +163,7 @@ fn params_block(ui: &mut egui::Ui, params: &mut Vec<gradiance_signal::SignalPara
                     .text(&param.name)
                     .clamping(egui::SliderClamping::Never),
             );
-            if ui.small_button("✖").clicked() {
+            if ui.small_button(glyph::CLOSE).clicked() {
                 remove = Some(i);
             }
         });
@@ -192,7 +193,7 @@ fn computed_block(
             if let Some(v) = bus.get(&signal.name) {
                 ui.weak(format!("= {v:.3}"));
             }
-            if ui.small_button("✖").clicked() {
+            if ui.small_button(glyph::CLOSE).clicked() {
                 remove = Some(i);
             }
         });
@@ -330,7 +331,7 @@ fn binding_row(
     ui.horizontal(|ui| {
         ui.strong(source_label(&binding.source));
         ui.text_edit_singleline(&mut binding.name);
-        if ui.small_button("✖").clicked() {
+        if ui.small_button(glyph::CLOSE).clicked() {
             *remove = Some(i);
         }
     });

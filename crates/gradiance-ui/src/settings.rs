@@ -4,6 +4,7 @@
 //! the UI automatically. Enums (not reflect-derivable into widgets) get
 //! explicit rows; that is the sanctioned escape hatch.
 
+use crate::fonts::glyph;
 use crate::reflect_grid::{reflect_grid, reflect_grid_units};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
@@ -209,7 +210,7 @@ fn lighting_tab(
     for (index, light) in settings.lights.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("Light {}", index + 1)).strong());
-            if count > 1 && ui.small_button("✕").clicked() {
+            if count > 1 && ui.small_button(glyph::CLOSE).clicked() {
                 remove = Some(index);
             }
         });
@@ -444,7 +445,11 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
         let target = def
             .body_b
             .map_or("world pin".to_owned(), |b| format!("{b:.8}"));
-        ui.label(format!("{id:.8}: {kind} · {:.8} ↔ {target}", def.body_a));
+        ui.label(format!(
+            "{id:.8}: {kind} {} {:.8} to {target}",
+            glyph::MIDDOT,
+            def.body_a
+        ));
     }
 }
 

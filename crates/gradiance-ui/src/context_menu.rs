@@ -464,7 +464,7 @@ pub fn context_menu(
                         !selected_ids.is_empty(),
                         egui::Button::new("Add to node editor"),
                     )
-                    .on_hover_text("place this body's block on the ⬡ Graph canvas")
+                    .on_hover_text("place this body's block on the node graph canvas")
                     .clicked()
                 {
                     for id in &selected_ids {
@@ -535,10 +535,10 @@ pub fn context_menu(
                             ("right ⏵", AlignOp::Right),
                             ("⏶ top", AlignOp::Top),
                             ("bottom ⏷", AlignOp::Bottom),
-                            ("center ↕", AlignOp::CenterY),
-                            ("center ↔", AlignOp::CenterX),
-                            ("distribute ↔", AlignOp::DistributeX),
-                            ("distribute ↕", AlignOp::DistributeY),
+                            ("center vertically", AlignOp::CenterY),
+                            ("center horizontally", AlignOp::CenterX),
+                            ("distribute horizontally", AlignOp::DistributeX),
+                            ("distribute vertically", AlignOp::DistributeY),
                         ] {
                             if ui.small_button(label).clicked() {
                                 emit(op);
@@ -552,7 +552,7 @@ pub fn context_menu(
                 // menu entry only opens the rulebook.
                 if !selected_ids.is_empty()
                     && ui
-                        .button("⧉ Array options…")
+                        .button("Array options…")
                         .on_hover_text(
                             "repeat the selection by holding Alt and dragging a \
                              selection handle",

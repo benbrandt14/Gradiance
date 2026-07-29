@@ -29,7 +29,7 @@ pub enum BottomPane {
 impl BottomPane {
     fn title(self) -> &'static str {
         match self {
-            Self::Graph => "⬡ Node Graph",
+            Self::Graph => "Node Graph",
         }
     }
 }

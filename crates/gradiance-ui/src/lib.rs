@@ -182,6 +182,7 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(
             EguiPrimaryContextPass,
             (
+                fonts::install_fonts,
                 menu::menu_bar,
                 toolbar::toolbar,
                 dock::right_dock,

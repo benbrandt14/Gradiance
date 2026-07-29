@@ -106,7 +106,7 @@ pub fn context_menu_entry(
 
     let enabled = selection.len() >= 2;
     if ui
-        .add_enabled(enabled, egui::Button::new("⬓ Pack selection"))
+        .add_enabled(enabled, egui::Button::new("Pack selection"))
         .on_hover_text(
             "Rearrange the selection to fit into the smallest area without \
              collisions. Bodies on different depth bands may share a footprint.",
@@ -325,14 +325,14 @@ fn run_controls(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPan
         run_readout(ui, opt);
         ui.horizontal(|ui| {
             if ui
-                .button("✔ Apply")
+                .button("Apply")
                 .on_hover_text("commit the best arrangement as one undo step")
                 .clicked()
             {
                 opt.apply();
             }
             if ui
-                .button("✖ Cancel")
+                .button("Cancel")
                 .on_hover_text("discard the run (Escape does the same)")
                 .clicked()
             {
@@ -352,7 +352,7 @@ fn run_controls(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPan
     let enabled = selection.len() >= 2;
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(enabled, egui::Button::new("⬓ Pack selection"))
+            .add_enabled(enabled, egui::Button::new("Pack selection"))
             .on_disabled_hover_text("select at least two bodies")
             .clicked()
         {
@@ -625,7 +625,7 @@ fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             }
             if ui
                 .selectable_label(matches!(next, Boundary::Aspect { .. }), "Target aspect")
-                .on_hover_text("soft: bias the result toward a width∶height ratio")
+                .on_hover_text("soft: bias the result toward a width:height ratio")
                 .clicked()
                 && !matches!(next, Boundary::Aspect { .. })
             {
