@@ -317,8 +317,42 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
     }
 }
 
-/// Renders the node-graph canvas into `ui` (its dock pane): the header + fit
-/// button, the canvas-following dot-grid, and the snarl node view. Persists this
+/// The canvas toolbar.
+///
+/// The header used to be a title, a fit button, and one grey sentence of hint
+/// text that was the only place three separate gestures were documented — and
+/// it stayed on screen forever, spending the width that the canvas wanted.
+/// The gestures are now tooltips on the controls they belong to, and the block
+/// palette (previously reachable only by right-clicking empty canvas) is a
+/// button, so adding a block does not require knowing it is there.
+fn toolbar(ui: &mut egui::Ui, graph: &mut NodeGraph, viewer: &mut GraphViewer) {
+    ui.horizontal(|ui| {
+        widgets::section_header(ui, "Node Graph");
+        ui.menu_button("+ Add", |ui| {
+            viewer.add_menu(ui);
+        })
+        .response
+        .on_hover_text("add a block — also on right-click over empty canvas");
+        if ui
+            .small_button(crate::fonts::glyph::FIT)
+            .on_hover_text("zoom to fit the whole graph")
+            .clicked()
+        {
+            graph.fit_requested = true;
+        }
+        ui.separator();
+        // The gestures that have no button. Kept as one hover target rather
+        // than a permanent sentence, so the width goes to the canvas.
+        ui.label(egui::RichText::new(crate::fonts::glyph::PARAM).weak())
+            .on_hover_text(
+                "Shift-drag empty canvas: box-select · drag a selected block: move them all\n\
+                 Drag a sensor pin onto an actuator pin: bind them\n\
+                 Right-click a body in the scene ▸ Add to node editor",
+            );
+    });
+}
+
+/// Renders the node-graph canvas into `ui` (its dock pane): the toolbar, the canvas-following dot-grid, and the snarl node view. Persists this
 /// frame's pan/zoom transform and retires a fulfilled fit request. The user's
 /// connect/disconnect gestures land in `viewer`, drained by [`apply_pane`].
 pub(crate) fn node_graph_section(
@@ -326,20 +360,7 @@ pub(crate) fn node_graph_section(
     graph: &mut NodeGraph,
     viewer: &mut GraphViewer,
 ) {
-    ui.horizontal(|ui| {
-        widgets::section_header(ui, "Node Graph");
-        if ui
-            .small_button("⛶ fit")
-            .on_hover_text("Zoom to fit the whole graph")
-            .clicked()
-        {
-            graph.fit_requested = true;
-        }
-        widgets::empty_state(
-            ui,
-            "· right-click a body ▸ Add to node editor · drag sensor → actuator to bind",
-        );
-    });
+    toolbar(ui, graph, viewer);
     if graph.keys.is_empty() {
         widgets::empty_state(
             ui,
@@ -850,6 +871,70 @@ fn pin_label(name: &str, value: Option<f32>, unit: &str) -> String {
     }
 }
 
+/// The block palette, shared by the toolbar button and the canvas right-click
+/// menu — one definition, so a new block appears in both.
+impl GraphViewer {
+    pub(crate) fn add_menu(&mut self, ui: &mut egui::Ui) {
+        widgets::section_header(ui, "Add block");
+        ui.menu_button("Input", |ui| {
+            if ui.button("⊙ Parameter (slider)").clicked() {
+                self.add_param = true;
+                ui.close();
+            }
+            if ui.button("# Constant").clicked() {
+                self.add_blocks.push(BlockOp::Constant { value: 1.0 });
+                ui.close();
+            }
+            if ui.button("ƒ Time").clicked() {
+                self.add_blocks.push(BlockOp::Time);
+                ui.close();
+            }
+            if ui.button("ƒ Oscillator").clicked() {
+                self.add_blocks.push(BlockOp::Oscillator {
+                    amp: 1.0,
+                    freq: 1.0,
+                });
+                ui.close();
+            }
+        });
+        ui.menu_button("Modulation", |ui| {
+            let mut add = |ui: &mut egui::Ui, label: &str, op: BlockOp| {
+                if ui.button(label).clicked() {
+                    self.add_blocks.push(op);
+                    ui.close();
+                }
+            };
+            add(
+                ui,
+                "ƒ Gain (× k)",
+                BlockOp::Gain {
+                    input: None,
+                    k: 1.0,
+                },
+            );
+            add(ui, "ƒ Sum (a + b)", BlockOp::Sum { a: None, b: None });
+            add(ui, "ƒ Sub (a − b)", BlockOp::Sub { a: None, b: None });
+            add(
+                ui,
+                "ƒ Product (a · b)",
+                BlockOp::Product { a: None, b: None },
+            );
+            add(ui, "ƒ Min (a, b)", BlockOp::Min { a: None, b: None });
+            add(ui, "ƒ Max (a, b)", BlockOp::Max { a: None, b: None });
+            add(ui, "ƒ Abs |in|", BlockOp::Abs { input: None });
+            add(
+                ui,
+                "ƒ Curve (shape in)",
+                BlockOp::Curve {
+                    input: None,
+                    curve: gradiance_signal::Curve::default(),
+                },
+            );
+        });
+        widgets::empty_state(ui, "Output: the ▭ Scope block is always present.");
+    }
+}
+
 impl SnarlViewer<NodeData> for GraphViewer {
     fn title(&mut self, node: &NodeData) -> String {
         node.title()
@@ -1077,63 +1162,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         _snarl: &mut Snarl<NodeData>,
     ) {
-        widgets::section_header(ui, "Add block");
-        ui.menu_button("Input", |ui| {
-            if ui.button("⊙ Parameter (slider)").clicked() {
-                self.add_param = true;
-                ui.close();
-            }
-            if ui.button("# Constant").clicked() {
-                self.add_blocks.push(BlockOp::Constant { value: 1.0 });
-                ui.close();
-            }
-            if ui.button("ƒ Time").clicked() {
-                self.add_blocks.push(BlockOp::Time);
-                ui.close();
-            }
-            if ui.button("ƒ Oscillator").clicked() {
-                self.add_blocks.push(BlockOp::Oscillator {
-                    amp: 1.0,
-                    freq: 1.0,
-                });
-                ui.close();
-            }
-        });
-        ui.menu_button("Modulation", |ui| {
-            let mut add = |ui: &mut egui::Ui, label: &str, op: BlockOp| {
-                if ui.button(label).clicked() {
-                    self.add_blocks.push(op);
-                    ui.close();
-                }
-            };
-            add(
-                ui,
-                "ƒ Gain (× k)",
-                BlockOp::Gain {
-                    input: None,
-                    k: 1.0,
-                },
-            );
-            add(ui, "ƒ Sum (a + b)", BlockOp::Sum { a: None, b: None });
-            add(ui, "ƒ Sub (a − b)", BlockOp::Sub { a: None, b: None });
-            add(
-                ui,
-                "ƒ Product (a · b)",
-                BlockOp::Product { a: None, b: None },
-            );
-            add(ui, "ƒ Min (a, b)", BlockOp::Min { a: None, b: None });
-            add(ui, "ƒ Max (a, b)", BlockOp::Max { a: None, b: None });
-            add(ui, "ƒ Abs |in|", BlockOp::Abs { input: None });
-            add(
-                ui,
-                "ƒ Curve (shape in)",
-                BlockOp::Curve {
-                    input: None,
-                    curve: gradiance_signal::Curve::default(),
-                },
-            );
-        });
-        widgets::empty_state(ui, "Output: the ▭ Scope block is always present.");
+        self.add_menu(ui);
     }
 
     // Right-click a block to remove/delete it.

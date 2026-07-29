@@ -1,5 +1,5 @@
 //! The right **dock**: an [`egui_tiles`] workspace hosting the Outliner, Depth,
-//! Signals+Plot, Properties, and Script-console sections as re-arrangeable tabs
+//! Plot, Properties, and Script-console sections as re-arrangeable tabs
 //! — the first `egui_tiles` surface of the desktop-app shell
 //! (`docs/ui-shell-decision.md`).
 //!
@@ -7,7 +7,7 @@
 //! [`Behavior`](egui_tiles::Behavior) just routes each pane to its renderer. The
 //! Properties pane hosts the body inspector, and its [`BodyProps`] bundle is
 //! also where the dock keeps its single `PropertyEditIntent` writer and
-//! `SignalBindings` (the Depth and Signals sections edit through them), so the
+//! `SignalBindings` (the Depth section edits through them), so the
 //! one dock system holds exactly one of each. Which panes exist tracks the open
 //! toggles, kept in step by [`sync_panes`](crate::dock_sync::sync_panes), which
 //! adds and removes individual tiles so a user's splits and tab order survive an
@@ -22,7 +22,6 @@ use crate::inspector::{self, BodyProps, InspectorPanel};
 use crate::outliner::{self, OutlinerClick, OutlinerModel, OutlinerParams};
 use crate::panels::PanelToggle;
 use crate::plot::{self, PlotConfig, PlotPanel};
-use crate::signals::{self, SignalsDock, SignalsPanel};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -41,9 +40,8 @@ pub enum Pane {
     Tree,
     /// Depth-band editor for the selection.
     Depth,
-    /// Signal bindings / params / computed **and** the live plotter — one
-    /// merged pane (the signal dataflow and its readout live together).
-    Signals,
+    /// The live plotter.
+    Plot,
     /// The property inspector for the current selection.
     Properties,
     /// The scripting REPL.
@@ -55,7 +53,7 @@ impl Pane {
         match self {
             Self::Tree => "Outliner",
             Self::Depth => "Depth",
-            Self::Signals => "Signals + Plot",
+            Self::Plot => "Plot",
             Self::Properties => "Properties",
             Self::Console => "Script",
         }
@@ -92,21 +90,17 @@ pub struct RightDock {
 /// Routes each `egui_tiles` pane to its section renderer, holding the state the
 /// renderers need for this frame. The writer and the signals bundle carry
 /// independent system lifetimes, so each gets its own.
-struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss, 'wo> {
+struct DockBehavior<'a, 'wp, 'sp, 'wo> {
     depth: &'a mut DepthPanel,
-    rows: &'a [(StableId, DepthBand, egui::Color32)],
+    rows: &'a [depth_panel::PlanRow],
     /// The property inspector's read/write bundle — also the single
     /// `PropertyEditIntent` writer and `SignalBindings` the Depth and Signals
     /// sections edit through (so the dock host holds exactly one of each).
     props: &'a mut BodyProps<'wp, 'sp>,
     optimizer: &'a mut crate::optimizer::OptimizerPanel<'wo>,
-    signals: &'a mut SignalsDock<'ws, 'ss>,
-    selected: &'a [StableId],
     selection: &'a Selection,
     outliner: &'a OutlinerModel,
     outliner_click: &'a mut Option<OutlinerClick>,
-    show_signals: bool,
-    show_plot: bool,
     plottable: &'a [plot::Series<'a>],
     plot_config: &'a mut PlotConfig,
     console: &'a mut ScriptConsole,
@@ -120,7 +114,7 @@ struct DockBehavior<'a, 'wp, 'sp, 'ws, 'ss, 'wo> {
     closed: &'a mut Option<Pane>,
 }
 
-impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_, '_> {
+impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
     fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
         pane.title().into()
     }
@@ -186,25 +180,8 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_, '_> {
                     height,
                 );
             }
-            Pane::Signals => {
-                // One merged pane: the bindings/params/computed above, the live
-                // plotter below. Each half honors its own open toggle.
-                if self.show_signals {
-                    signals::signals_section(
-                        ui,
-                        self.signals,
-                        &mut self.props.bindings,
-                        self.selected,
-                        self.selection,
-                        &mut self.props.edits,
-                    );
-                }
-                if self.show_plot {
-                    if self.show_signals {
-                        ui.separator();
-                    }
-                    plot::plot_section(ui, self.plottable, self.plot_config);
-                }
+            Pane::Plot => {
+                plot::plot_section(ui, self.plottable, self.plot_config);
             }
             Pane::Properties => {
                 egui::ScrollArea::vertical()
@@ -221,31 +198,73 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_, '_, '_> {
     }
 }
 
-/// The depth section's rows: each selected body projected to `(id, band,
-/// fill-color)` bars. Split out so [`right_dock`] stays within the line lint.
-fn depth_rows(
-    selection: &Selection,
-    ids: &Query<&StableId, With<Body>>,
-    bands: &Query<&DepthBand, With<Body>>,
-    appearances: &Query<&Appearance, With<Body>>,
-) -> Vec<(StableId, DepthBand, egui::Color32)> {
-    selection
+/// The **whole scene** projected to plan-view footprints — the depth panel is
+/// a view of the model, not of the selection, so every body appears and the
+/// selected ones are merely highlighted.
+///
+/// A body extrudes as a prism, so from above it is its contour's world-x extent
+/// by its depth band. The extent comes from the shape's contour through
+/// [`geometry::polygonize`](gradiance_geometry::polygonize) — the single
+/// discretization point — and not from a nominal width, because a rotated
+/// polygon's x extent is not its width.
+fn depth_rows(selection: &Selection, bodies: &BodyQuery) -> Vec<depth_panel::PlanRow> {
+    bodies
         .iter()
-        .filter_map(|e| {
-            let id = *ids.get(e).ok()?;
-            let band = bands.get(e).ok()?.sanitized();
-            let c = appearances.get(e).map_or(
+        .map(|(entity, id, band, appearance, shape, transform)| {
+            let c = appearance.map_or(
                 gradiance_domain::appearance::Rgba::rgb(1.0, 1.0, 1.0),
                 |a| a.fill,
             );
-            let color = egui::Color32::from_rgb(
-                (c.r * 255.0) as u8,
-                (c.g * 255.0) as u8,
-                (c.b * 255.0) as u8,
-            );
-            Some((id, band, color))
+            depth_panel::PlanRow {
+                id: *id,
+                x_extent: world_x_extent(shape, transform),
+                band: band.sanitized(),
+                color: egui::Color32::from_rgb(
+                    (c.r * 255.0) as u8,
+                    (c.g * 255.0) as u8,
+                    (c.b * 255.0) as u8,
+                ),
+                selected: selection.contains(entity),
+            }
         })
         .collect()
+}
+
+/// The scene read the depth panel and the binding add-buttons share. One query
+/// rather than four keeps [`right_dock`] under Bevy's parameter cap.
+type BodyQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static StableId,
+        &'static DepthBand,
+        Option<&'static Appearance>,
+        &'static gradiance_domain::shape::ShapeDef,
+        &'static Transform,
+    ),
+    With<Body>,
+>;
+
+/// The `[min, max]` world-x span of a shape's outline under `transform`.
+fn world_x_extent(shape: &gradiance_domain::shape::ShapeDef, transform: &Transform) -> (f32, f32) {
+    let contour = gradiance_geometry::polygonize::polygonize(shape);
+    let matrix = transform.to_matrix();
+    let xs = contour.outline.iter().map(|v| {
+        matrix
+            .transform_point3(bevy::math::Vec3::new(v.x, v.y, 0.0))
+            .x
+    });
+    let (lo, hi) = xs.fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), x| {
+        (lo.min(x), hi.max(x))
+    });
+    // An empty contour (a degenerate shape) collapses to the body's origin
+    // rather than an infinite span that would swallow the whole axis.
+    if lo.is_finite() && hi.is_finite() {
+        (lo, hi)
+    } else {
+        (transform.translation.x, transform.translation.x)
+    }
 }
 
 /// The Properties pane's own parameters: whether it is open, and the
@@ -264,12 +283,8 @@ pub struct PropertiesParams<'w> {
 pub fn right_dock(
     mut contexts: EguiContexts,
     mut panel: ResMut<DepthPanel>,
-    mut signals_panel: ResMut<SignalsPanel>,
-    mut signals: SignalsDock,
     mut selection: ResMut<Selection>,
-    ids: Query<&StableId, With<Body>>,
-    bands: Query<&DepthBand, With<Body>>,
-    appearances: Query<&Appearance, With<Body>>,
+    bodies: BodyQuery,
     mut props: BodyProps,
     mut properties: PropertiesParams,
     mut plot: PlotParams,
@@ -297,7 +312,7 @@ pub fn right_dock(
     let desired: Vec<Pane> = [
         op.panel.is_open().then_some(Pane::Tree),
         panel.open.then_some(Pane::Depth),
-        (signals_panel.is_open() || plot.panel.is_open()).then_some(Pane::Signals),
+        plot.panel.is_open().then_some(Pane::Plot),
         properties.panel.open.then_some(Pane::Properties),
         console.console.is_open().then_some(Pane::Console),
     ]
@@ -309,13 +324,8 @@ pub fn right_dock(
         return Ok(());
     };
 
-    // Rows for the depth section: the selection projected to bars.
-    let rows = depth_rows(&selection, &ids, &bands, &appearances);
-    // Selected body ids (for the signal binding add-buttons).
-    let selected: Vec<StableId> = selection
-        .iter()
-        .filter_map(|e| ids.get(e).ok().copied())
-        .collect();
+    // The depth section's plan view: the whole scene, selection highlighted.
+    let rows = depth_rows(&selection, &bodies);
     // The plot pane's series list, computed from the bus.
     let plottable = plot::plottable_series(&plot.bus, &props.bindings);
     // The outliner snapshot (empty when the pane is closed).
@@ -335,13 +345,9 @@ pub fn right_dock(
             rows: &rows,
             props: &mut props,
             optimizer: &mut properties.optimizer,
-            signals: &mut signals,
-            selected: &selected,
             selection: &selection,
             outliner: &outliner_model,
             outliner_click: &mut outliner_click,
-            show_signals: signals_panel.is_open(),
-            show_plot: plot.panel.is_open(),
             plottable: &plottable,
             plot_config: &mut plot.config,
             console: &mut console.console,
@@ -377,10 +383,7 @@ pub fn right_dock(
     match closed {
         Some(Pane::Tree) => op.panel.set_open(false),
         Some(Pane::Depth) => panel.open = false,
-        Some(Pane::Signals) => {
-            signals_panel.set_open(false);
-            plot.panel.set_open(false);
-        }
+        Some(Pane::Plot) => plot.panel.set_open(false),
         Some(Pane::Properties) => properties.panel.open = false,
         Some(Pane::Console) => console.console.set_open(false),
         None => {}

@@ -347,7 +347,7 @@ pub fn context_menu(
                 {
                     let kind = kind.clone();
                     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-                    if let Some(next) = crate::signals::node_kind_editor(ui, "menu", &kind) {
+                    if let Some(next) = widgets::node_kind_editor(ui, "menu", &kind) {
                         props.edits.write(PropertyEditIntent {
                             changes: vec![PropertyChange {
                                 id: node_id,

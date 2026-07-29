@@ -455,7 +455,7 @@ module boundary test already puts the seams where crate edges would go.
   picker (per-series show/hide), overlay or stacked layouts, zoom/pan, a legend,
   a cursor readout, and a real seconds axis read from the bus timestamps.
 - **Dockable/tabbable shell + menu bar** *(landed)*: an `egui_tiles`-based
-  workspace (Rerun's tiling lib) hosting Outliner / Depth / Signals+Plot /
+  workspace (Rerun's tiling lib) hosting Outliner / Depth / Plot /
   Properties / Script as right-dock tabs and the Node Graph as a bottom-dock
   tab, with a File/Edit/View/Help menu bar and scene-camera viewport routing.
   Toggling a pane edits tiles in place (`ui/dock_sync.rs`) rather than

@@ -252,3 +252,44 @@ mod layout_tests {
         });
     }
 }
+
+/// The behavior-node kind editor widgets.
+///
+/// Lives here rather than beside any one host because it has three: the
+/// inspector, the node context menu, and the signal list. Returns the edited
+/// kind when a field changed (the caller emits one undoable
+/// `PropertyEditIntent` — this widget never mutates). `salt` keeps widget ids
+/// unique between host surfaces.
+pub fn node_kind_editor(
+    ui: &mut egui::Ui,
+    salt: &str,
+    kind: &gradiance_domain::node::NodeKind,
+) -> Option<gradiance_domain::node::NodeKind> {
+    use gradiance_domain::node::NodeKind;
+    let mut next = kind.clone();
+    match &mut next {
+        NodeKind::Tracer(tracer) => {
+            ui.horizontal(|ui| {
+                ui.label("fade (s)");
+                ui.add(egui::DragValue::new(&mut tracer.fade_secs).speed(0.05));
+                ui.label("size");
+                ui.add(
+                    egui::DragValue::new(&mut tracer.size)
+                        .speed(0.1)
+                        .range(0.5..=20.0),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("pattern");
+                egui::ComboBox::from_id_salt(ui.id().with((salt, "pattern")))
+                    .selected_text(format!("{:?}", tracer.pattern))
+                    .show_ui(ui, |ui| {
+                        for p in gradiance_domain::tracer::TracePattern::ALL {
+                            ui.selectable_value(&mut tracer.pattern, p, format!("{p:?}"));
+                        }
+                    });
+            });
+        }
+    }
+    (next != *kind).then_some(next)
+}

@@ -29,6 +29,11 @@ a bottom node with no `gradiance-*` deps but a minimal `bevy` surface (its
 quantity newtypes derive `Reflect`, like the geometry shape tree). It owns
 the single px↔SI seam `units::world` (`PIXELS_PER_METER`).
 
+`gradiance-kernel` also owns `Lut`, the sampled form of an authored response
+curve: the curve editor's control points are sampled once at compile time
+(`signal::compile`) so the frame loop does a clamp and a lerp rather than a
+segment search. The two-tier rule applies to shapes, not only expressions.
+
 `gradiance-optimize` is the layout-solver crate (`docs/optimize-decision.md`):
 a pure geometric search over poses — convex hulls, SAT, a weighted objective,
 and a `Solver` trait with three interchangeable strategies (one of them
@@ -117,6 +122,13 @@ Rationale, coupling data, and the roadmap→package feature tree:
   `Component`/`Reflect` derives on the shape tree). `gradiance-kernel` is fully
   pure (no bevy at all).
 - Errors: `thiserror` enums; no `unwrap`/`expect`/`panic!` outside tests (clippy denies).
+- UI chrome: **`docs/ui-design.md` is the design system** — read it before adding a
+  panel, a glyph, or a numeric field. Three rules bite immediately:
+  non-ASCII characters come from `ui::fonts::glyph` and nowhere else (a source
+  scanner test enforces it); a numeric field on the **edit** seam uses
+  `widgets::precise_drag` (one undo step per gesture) while a **config** field
+  uses `widgets::labelled_drag`; and a new panel resource implements
+  `panels::PanelToggle` so the View menu stays a table.
 
 ## Scripting & symbolic modeling (foundation landed — read `docs/script-lisp-decision.md`; user/verb guide in `docs/scripting.md`)
 

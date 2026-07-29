@@ -709,7 +709,7 @@ fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProp
         .zip(props.node_kinds.get(primary).ok().cloned())
     {
         ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-        if let Some(next) = crate::signals::node_kind_editor(ui, "inspector", &kind) {
+        if let Some(next) = widgets::node_kind_editor(ui, "inspector", &kind) {
             props.edits.write(PropertyEditIntent {
                 changes: vec![PropertyChange {
                     id,

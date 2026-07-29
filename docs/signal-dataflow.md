@@ -41,7 +41,7 @@ the authoring form needs never enters the frame loop, and every curve costs the
 same regardless of how many points were placed.
 
 - **Params** (`defparam name value min max`) are tunable knobs — an
-  auto-slider in the Signals dock. Each publishes its value on the bus
+  auto-slider in the signal list beside the node canvas. Each publishes its value on the bus
   every frame; it is the simplest modulator *input*.
 - **Computed signals** (`defsignal name expr`) are the **modulator** tier:
   a named value that is a numeric expression over other bus signals (and
@@ -155,7 +155,7 @@ wiring a named producer (param / computed / block) into an operand pin sets that
 operand and re-lowers. **Right-click a block** ▸ Remove / Delete; a block's **footer** configures it
 in place — a body edits the domain + gradient of each wire driving it, a
 modulation block edits its constants (k / amp / freq), and a param block carries
-its tuning slider (the same knob as the Signals dock) — Simulink-style
+its tuning slider (the same knob as the signal list) — Simulink-style
 double-click-to-configure, all editing the same authored state.
 
 A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
@@ -174,7 +174,7 @@ are rebuilt from the bindings — the ECS is the source of truth, not snarl's ow
 graph. Wires are right-angle (Simulink), so a body's own sensor→actuator
 self-wire routes around it. Layout is pure editor view-state in the `NodeGraph`
 resource (never persisted). Wiring edits `SignalBindings` directly (config-seam,
-like the Signals dock) — no placeable entity, one currency. Usable without
+like the signal list) — no placeable entity, one currency. Usable without
 scripting: the sensor → map + gradient → actuator loop is entirely UI-driven.
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)

@@ -288,11 +288,14 @@ then script it. Order: (1) interactions & joints/constraints + their UI →
   that is a *function* rather than a scalar.
 - More plotter signals (contact force), **pinnable multi-body probes**, and the
   script-driven `(measure …)` data-out seam.
-- **UI polish pass** — in progress. Landed so far: a font/glyph vocabulary
-  (no tofu), an image-icon registry, a shared widget vocabulary, layout-
-  preserving docks, and the plotter/curve work above. Remaining: a top-down
-  depth editor, retiring the Signals pane into the node canvas, node-canvas
-  usability (multi-select, comments, persisted positions), and `ui-design.md`.
+- **UI polish pass** — largely landed; `docs/ui-design.md` is the record.
+  A font/glyph vocabulary (no tofu, enforced by a source scanner), an
+  image-icon registry, a shared widget vocabulary, layout-preserving docks with
+  closable tabs, the `egui_plot` plotter and curve editor, a top-down depth
+  plan view with scene-wide draggable depth lines, and the Signals pane folded
+  into the node canvas as a side list. Remaining: node-canvas comment blocks
+  and **persisted block positions** (an open classification question — document
+  content or workstation layout?).
 - M18 grids/snapping (CAD pass), M19 rendering/camera polish, M20 constraints II
   (weld-as-merge, magnetism/SDF force fields, breaking limits), M21 CSG modeling.
 
@@ -319,5 +322,6 @@ then script it. Order: (1) interactions & joints/constraints + their UI →
 **Deeper reading (only when a topic needs it):** `docs/script-lisp-decision.md`
 (scripting design + governance), `docs/sdf-geometry-decision.md` (geometry),
 `docs/scripting.md` (verb author guide), `docs/roadmap.md` (full milestone
-list), `docs/bevy19-notes.md` (version gotchas), `docs/feature-feedback.md`
-(user feedback log).
+list), `docs/bevy19-notes.md` (version gotchas), `docs/ui-design.md` (the
+chrome design system — glyphs, widget vocabulary, seam rules, keybindings),
+`docs/feature-feedback.md` (user feedback log).

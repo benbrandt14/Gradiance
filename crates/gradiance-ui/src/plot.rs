@@ -81,7 +81,7 @@ const SIGNAL_COLORS: [egui::Color32; 4] = [
 /// anything without a dimensioned source.
 ///
 /// `values` and `times` are the same length (the bus records them together),
-/// but [`points`](Self::points) does not assume it.
+/// but the projection to plot points does not assume it.
 #[derive(Clone, Copy)]
 pub struct Series<'a> {
     /// The bus name, as shown in the legend and the picker.

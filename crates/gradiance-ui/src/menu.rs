@@ -46,8 +46,6 @@ pub struct Panels<'w> {
     pub plot: ResMut<'w, crate::plot::PlotPanel>,
     /// Physics probe panel.
     pub probe: ResMut<'w, crate::probe::ProbePanel>,
-    /// Signals dock section.
-    pub signals: ResMut<'w, crate::signals::SignalsPanel>,
     /// Node-graph canvas.
     pub node_graph: ResMut<'w, crate::node_graph::NodeGraph>,
     /// Object tree (outliner).
@@ -258,11 +256,10 @@ fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
     ui.menu_button("View", |ui| {
         // (label, shortcut hint, panel). The hint is the real binding — see
         // `dock::right_dock` for `` ` `` and `\`; an empty hint means unbound.
-        let dock_sections: [(&str, &str, &mut dyn PanelToggle); 5] = [
+        let dock_sections: [(&str, &str, &mut dyn PanelToggle); 4] = [
             ("Outliner", "", &mut *panels.outliner),
             ("Properties", "", &mut *panels.inspector),
             ("Depth", "", &mut *panels.depth),
-            ("Signals", "", &mut *panels.signals),
             ("Plot", "\\", &mut *panels.plot),
         ];
         for (label, shortcut, panel) in dock_sections {
