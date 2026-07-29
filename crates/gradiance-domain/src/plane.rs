@@ -4,7 +4,7 @@
 //! **simulation plane**, and its authored pose, shape, joint anchors and
 //! velocities are all expressed in that plane's local 2D coordinates; the
 //! physics layer lifts them through the plane's
-//! [`PlaneFrame`](gradiance_core::units::PlaneFrame) and projects results back.
+//! [`PlaneFrame`] and projects results back.
 //!
 //! Keeping interaction implicitly planar is the point. A mechanism built by 2D
 //! drags needs no degree-of-freedom decisions — the plane *is* the constraint —
