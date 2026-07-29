@@ -438,15 +438,25 @@ impl SceneView {
 
 /// Snapshots the committed scene (bodies ordered by id) for the read builtins.
 fn snapshot_scene(world: &mut World) -> SceneView {
-    // Touching counts per body entity (one pass over the contact graph).
+    // Touching counts per body entity (one pass over the narrow phase).
+    //
+    // The engine keys contacts by collider handle, so the pairs are mapped back
+    // to entities through the context's own index. Sensors are excluded, as
+    // before: an overlap is not a touch.
     let mut touch: HashMap<Entity, usize> = HashMap::new();
-    if let Some(contacts) = world.get_resource::<avian2d::prelude::ContactGraph>() {
-        for pair in contacts
-            .iter_active_touching()
-            .chain(contacts.iter_sleeping_touching())
-        {
-            for entity in [pair.collider1, pair.collider2] {
-                *touch.entry(entity).or_default() += 1;
+    {
+        use bevy_rapier3d::plugin::context::{RapierContextColliders, RapierContextSimulation};
+        let mut contexts = world.query::<(&RapierContextSimulation, &RapierContextColliders)>();
+        for (simulation, colliders) in contexts.iter(world) {
+            for pair in simulation.narrow_phase.contact_pairs() {
+                if !pair.has_any_active_contact() {
+                    continue;
+                }
+                for handle in [pair.collider1, pair.collider2] {
+                    if let Some(entity) = colliders.collider_entity(handle) {
+                        *touch.entry(entity).or_default() += 1;
+                    }
+                }
             }
         }
     }

@@ -17,7 +17,7 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::polygonize::polygonize;
 use gradiance_geometry::sdf;
 use gradiance_interaction::overlay::OverlayGizmos;
-use gradiance_physics::SubstepTrace;
+use gradiance_physics::StepTrace;
 use gradiance_physics::fields::Fields;
 use gradiance_physics::queries::PhysicsQueries;
 
@@ -37,7 +37,7 @@ pub fn draw_debug_overlays(
     fields: Fields,
     cameras: Query<(&Transform, &Projection), (With<Camera3d>, Without<Body>)>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
-    substeps: Res<SubstepTrace>,
+    steps: Res<StepTrace>,
     joints: Query<&JointDef>,
     index: Res<IdIndex>,
     poses: Query<&Transform, With<Body>>,
@@ -68,10 +68,16 @@ pub fn draw_debug_overlays(
     }
 
     if debug.show_substeps {
-        // Ghost dots at each substep position of the last physics step,
-        // brightening toward the final substep.
-        let n = substeps.0.len().max(1) as f32;
-        for (i, frame) in substeps.0.iter().enumerate() {
+        // Ghost dots at each body's position over the last few physics steps,
+        // brightening toward the present.
+        //
+        // This traced *substeps* under the 2D engine. rapier runs its substeps
+        // inside one step call with no hook, and faking it by taking several
+        // single-substep steps would re-run collision detection and re-warm-
+        // start — drawing something the solver never did. A per-step trail is
+        // the honest version of the same overlay.
+        let n = steps.0.len().max(1) as f32;
+        for (i, frame) in steps.0.iter().enumerate() {
             let alpha = 0.25 + 0.75 * ((i + 1) as f32 / n);
             let color = css::MEDIUM_ORCHID.with_alpha(alpha);
             for pos in frame {

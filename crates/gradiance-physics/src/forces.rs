@@ -87,24 +87,64 @@ impl ForceAccumulator {
 /// so the one-shot semantics survive an engine that does not provide them.
 pub fn commit_forces(
     mut accumulator: ResMut<ForceAccumulator>,
-    mut bodies: Query<avian2d::prelude::Forces>,
+    mut bodies: Query<(Entity, &mut bevy_rapier3d::prelude::ExternalForce)>,
 ) {
-    use avian2d::dynamics::rigid_body::forces::WriteRigidBodyForces as _;
-
-    for entity in accumulator.bodies().collect::<Vec<_>>() {
-        let Ok(mut forces) = bodies.get_mut(entity) else {
-            continue;
-        };
-        let force = accumulator.force_of(entity);
-        if force != Force2::default() {
-            forces.apply_force(force.value());
-        }
-        let torque = accumulator.torque_of(entity);
-        if torque != Torque::default() {
-            forces.apply_torque(torque.value());
+    let plane = gradiance_core::units::PlaneFrame::XY;
+    // Every force component is visited, not just the ones with a contribution:
+    // a body that *stopped* being pushed this step must be zeroed, or rapier
+    // would keep re-applying last step's force forever.
+    for (entity, mut external) in &mut bodies {
+        let force = plane.dir(accumulator.force_of(entity).value());
+        let torque = plane.spin(accumulator.torque_of(entity).value());
+        // Change-gated: see the module docs. Writing an unchanged value marks
+        // the component `Changed`, which wakes the body — every frame, forever.
+        if external.force != force || external.torque != torque {
+            external.force = force;
+            external.torque = torque;
         }
     }
     accumulator.clear();
+}
+
+/// Ensures every body carries the engine components the rest of the crate
+/// reads and writes through.
+///
+/// All three are **opt-in** in rapier and none is inserted by the sync systems:
+/// `ExternalForce` is where [`commit_forces`] writes, `Velocity` is both the
+/// grab spring's write target and every velocity read, and
+/// `ReadMassProperties` is the solver's mass/inertia readback that fields,
+/// friction, the twist servo, auto-sized motor ceilings and the query facade
+/// all depend on. Without them those systems simply match no entities — no
+/// error, just a world where nothing pushes anything and nothing appears to
+/// move.
+pub fn ensure_engine_components(
+    mut commands: Commands,
+    missing: Query<
+        Entity,
+        (
+            With<gradiance_domain::Body>,
+            Or<(
+                Without<bevy_rapier3d::prelude::ExternalForce>,
+                Without<bevy_rapier3d::prelude::ReadMassProperties>,
+                Without<bevy_rapier3d::prelude::Velocity>,
+                Without<bevy_rapier3d::prelude::Sleeping>,
+            )>,
+        ),
+    >,
+) {
+    for entity in &missing {
+        // `insert_if_new`, not `insert`: the query matches when *any* of these
+        // is absent, and a plain insert would then reset the others. That would
+        // silently zero a velocity another system had just seeded — which is
+        // exactly what the cut tool does when it carries a severed body's motion
+        // onto its pieces.
+        commands.entity(entity).insert_if_new((
+            bevy_rapier3d::prelude::ExternalForce::default(),
+            bevy_rapier3d::prelude::ReadMassProperties::default(),
+            bevy_rapier3d::prelude::Velocity::default(),
+            bevy_rapier3d::prelude::Sleeping::disabled(),
+        ));
+    }
 }
 
 #[cfg(test)]

@@ -5,8 +5,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::harness::{box_record, entity_of, headless_app, paused_app, step};
-use avian2d::prelude::LinearVelocity;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::Velocity;
 use gradiance::prelude::*;
 use gradiance::signal::{
     ScriptSignals, SignalBinding, SignalBindings, SignalBus, SignalColorOverride, SignalMap,
@@ -51,9 +51,10 @@ fn a_speed_binding_tints_the_body_and_cleans_up_when_removed() {
         },
     );
     let entity = entity_of(&app, id).unwrap();
-    app.world_mut()
-        .entity_mut(entity)
-        .insert(LinearVelocity(Vec2::new(100.0, 0.0)));
+    app.world_mut().entity_mut(entity).insert(Velocity {
+        linear: Vec3::new(100.0, 0.0, 0.0),
+        angular: Vec3::ZERO,
+    });
     step(&mut app, 3);
 
     let slow_tint = app
@@ -69,9 +70,10 @@ fn a_speed_binding_tints_the_body_and_cleans_up_when_removed() {
     );
 
     // Faster → a different band of the gradient.
-    app.world_mut()
-        .entity_mut(entity)
-        .insert(LinearVelocity(Vec2::new(390.0, 0.0)));
+    app.world_mut().entity_mut(entity).insert(Velocity {
+        linear: Vec3::new(390.0, 0.0, 0.0),
+        angular: Vec3::ZERO,
+    });
     step(&mut app, 3);
     let fast_tint = app
         .world()
@@ -281,9 +283,10 @@ fn a_body_sensor_feeds_a_modulation_block_over_the_canonical_bus_name() {
 
     // Give the body a known, constant speed (zero gravity, no drag).
     let entity = entity_of(&app, id).unwrap();
-    app.world_mut()
-        .entity_mut(entity)
-        .insert(LinearVelocity(Vec2::new(30.0, 40.0)));
+    app.world_mut().entity_mut(entity).insert(Velocity {
+        linear: Vec3::new(30.0, 40.0, 0.0),
+        angular: Vec3::ZERO,
+    });
 
     // "twice-speed" = speed@<id> * 2, referencing the sensor by its bus name.
     let sensor = SignalSource::Speed(id).bus_name().unwrap();

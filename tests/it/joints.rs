@@ -696,24 +696,45 @@ fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, stiffness
 }
 
 #[test]
-fn strut_derives_a_distance_joint_and_damping() {
-    use avian2d::prelude::{DistanceJoint, JointDamping};
+fn strut_derives_a_spring_motor() {
+    use bevy_rapier3d::prelude::{ImpulseJoint, JointAxis};
     let mut app = headless_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(60.0, 0.0), 20.0, 20.0));
     let jid = spawn_joint(&mut app, strut(a, Some(b), 60.0, 500.0));
     step(&mut app, 2);
 
+    // The 2D engine expressed a strut as a distance joint plus a separate
+    // damping component. rapier has one joint whose free axis carries a
+    // position motor, so stiffness and damping are that motor's own terms.
     let je = entity_of(&app, jid).unwrap();
+    let derived = app
+        .world()
+        .get::<gradiance::physics::joint_sync::DerivedJoint>(je)
+        .expect("the strut derived an engine joint");
+    let joint = app
+        .world()
+        .get::<ImpulseJoint>(derived.0)
+        .expect("the derived entity carries the joint");
+    let motor = joint
+        .data
+        .as_ref()
+        .motor(JointAxis::LinX)
+        .expect("the strut servos its free axis");
     assert!(
-        app.world().get::<DistanceJoint>(je).is_some(),
-        "strut derives a DistanceJoint"
+        (motor.target_pos - 60.0).abs() < 1e-3,
+        "rest length is the motor target ({})",
+        motor.target_pos
     );
-    let damping = app.world().get::<JointDamping>(je).unwrap();
     assert!(
-        (damping.linear - 5.0).abs() < 1e-3,
-        "damping maps onto JointDamping ({})",
-        damping.linear
+        (motor.stiffness - 500.0).abs() < 1e-3,
+        "stiffness maps onto the motor ({})",
+        motor.stiffness
+    );
+    assert!(
+        (motor.damping - 5.0).abs() < 1e-3,
+        "damping maps onto the motor ({})",
+        motor.damping
     );
 }
 
@@ -794,9 +815,9 @@ fn prismatic_locks_rotation_under_torque_load() {
         let entity = entity_of(&app, arm).unwrap();
         let mut angular = app
             .world_mut()
-            .get_mut::<avian2d::prelude::AngularVelocity>(entity)
+            .get_mut::<bevy_rapier3d::prelude::Velocity>(entity)
             .unwrap();
-        angular.0 = 5.0;
+        angular.angular = Vec3::new(0.0, 0.0, 5.0);
     }
     step(&mut app, 300);
 
@@ -922,8 +943,8 @@ fn motorized_hinge_holds_its_pivot() {
 /// Reads a body's avian angular velocity (rad/s), or 0 before the solver runs.
 fn angular_velocity(app: &App, id: StableId) -> f32 {
     entity_of(app, id)
-        .and_then(|e| app.world().get::<avian2d::prelude::AngularVelocity>(e))
-        .map_or(0.0, |w| w.0)
+        .and_then(|e| app.world().get::<bevy_rapier3d::prelude::Velocity>(e))
+        .map_or(0.0, |w| w.angular.z)
 }
 
 /// A strut's stiffness must be scaled for SI: a body hung from a world-pinned

@@ -3,8 +3,8 @@
 //! application — everything below the egui skin, tested headless.
 
 use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
-use avian2d::prelude::Friction;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::Friction;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
 
@@ -67,27 +67,13 @@ fn property_edit_batches_multi_target_into_one_undo_step() {
     );
     for id in [a, b] {
         let entity = entity_of(&app, id).unwrap();
-        assert!(
-            (app.world()
-                .get::<Friction>(entity)
-                .unwrap()
-                .dynamic_coefficient
-                - 0.9)
-                .abs()
-                < 1e-6
-        );
+        assert!((app.world().get::<Friction>(entity).unwrap().coefficient - 0.9).abs() < 1e-6);
     }
     undo(&mut app);
     for id in [a, b] {
         let entity = entity_of(&app, id).unwrap();
         assert!(
-            (app.world()
-                .get::<Friction>(entity)
-                .unwrap()
-                .dynamic_coefficient
-                - 0.5)
-                .abs()
-                < 1e-6,
+            (app.world().get::<Friction>(entity).unwrap().coefficient - 0.5).abs() < 1e-6,
             "undo restored both targets"
         );
     }

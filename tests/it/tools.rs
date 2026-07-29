@@ -2,8 +2,8 @@
 //! commands behave exactly and undo cleanly.
 
 use crate::harness::{body_count, box_record, entity_of, paused_app, step, undo};
-use avian2d::prelude::{AngularVelocity, RigidBody};
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::{RigidBody, Velocity};
 use gradiance::command::CommandStack;
 use gradiance::physics::grab::MouseTwist;
 use gradiance::prelude::*;
@@ -355,7 +355,7 @@ fn ground_tool_spawns_static_half_plane_with_drag_tilt() {
         .query_filtered::<(&ShapeDef, &RigidBody, &Transform), With<Body>>();
     let (shape, props, transform) = q.iter(app.world()).next().expect("ground spawned");
     assert_eq!(*shape, ShapeDef::HalfPlane);
-    assert_eq!(*props, RigidBody::Static);
+    assert_eq!(*props, RigidBody::Fixed);
     let expected = (Vec2::new(100.0, -20.0) - Vec2::new(0.0, -50.0)).to_angle();
     let rot = PosRot::from_transform(transform).rot;
     assert!((rot - expected).abs() < 1e-3, "tilt follows drag ({rot})");
@@ -567,7 +567,7 @@ fn weld_tool_pins_a_single_body_by_making_it_static() {
     let entity = entity_of(&app, id).unwrap();
     assert_eq!(
         *app.world().get::<RigidBody>(entity).unwrap(),
-        RigidBody::Static,
+        RigidBody::Fixed,
         "welding a lone body pins it to the world"
     );
     assert_eq!(stack_undo_len(&app), before + 1);
@@ -695,7 +695,7 @@ fn play_mode_right_drag_spins_physically_without_a_command() {
     set_cursor(&mut app, Vec2::new(0.0, 30.0));
     step(&mut app, 3);
 
-    let spin = app.world().get::<AngularVelocity>(entity).unwrap().0;
+    let spin = app.world().get::<Velocity>(entity).unwrap().angular.z;
     assert!(spin > 0.1, "twist servo spins the body ({spin})");
     assert!(
         !app.world().resource::<MouseTwist>().0.is_empty(),

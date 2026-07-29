@@ -119,7 +119,7 @@ fn engine_facing_dependencies_stay_exact_pinned() {
         std::fs::read_to_string(repo_root().join("Cargo.toml")).expect("read Cargo.toml");
     let pinned = [
         "bevy",
-        "avian2d",
+        "bevy_rapier3d",
         "bevy_egui",
         "leafwing-input-manager",
         "steel-core",
@@ -315,4 +315,30 @@ fn ui_and_script_stacks_stay_confined_in_manifests() {
             }
         }
     }
+}
+
+/// The physics engine stays at the physics seam.
+///
+/// A narrower, more honest rule than the engine-swap abstraction the
+/// de-adapter collapse retired: the engine may appear where physics is *done*
+/// (`gradiance-physics`) and where engine-typed reads are consumed
+/// (`gradiance-script`'s contact counting). It must never appear in authored
+/// state, commands, tools, or UI — those speak the domain's own vocabulary, so
+/// changing engines cannot reach them.
+///
+/// This is what kept the rapier3d migration out of the concurrent UI and
+/// interaction work, and what keeps the next one cheap.
+#[test]
+fn the_physics_engine_stays_at_the_physics_seam() {
+    let allowed = [
+        "crates/gradiance-physics/src/",
+        "crates/gradiance-script/src/",
+    ];
+    let v = violations("bevy_rapier3d", &allowed);
+    assert!(
+        v.is_empty(),
+        "the physics engine is confined to `gradiance-physics` (where physics is \
+         done) and `gradiance-script` (which consumes engine-typed reads):\n{}",
+        v.join("\n")
+    );
 }

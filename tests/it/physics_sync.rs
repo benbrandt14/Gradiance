@@ -2,9 +2,9 @@
 //! the simulation behaves qualitatively (falls, rests, pauses).
 
 use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
-use avian2d::prelude::{CollisionLayers, LockedAxes, RigidBody, Sensor};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::{CollisionGroups, LockedAxes, RigidBody, Sensor};
 use gradiance::physics::queries::PhysicsQueries;
 use gradiance::prelude::*;
 use gradiance_units::Force2;
@@ -25,12 +25,17 @@ fn spawned_body_gains_engine_components() {
     let world = app.world();
     assert_eq!(world.get::<RigidBody>(entity), Some(&RigidBody::Dynamic));
     assert!(
-        world.get::<avian2d::prelude::Collider>(entity).is_some(),
+        world
+            .get::<bevy_rapier3d::prelude::Collider>(entity)
+            .is_some(),
         "collider derived from ShapeDef"
     );
+    let groups = world
+        .get::<CollisionGroups>(entity)
+        .expect("depth derives collision groups");
     assert_eq!(
-        world.get::<CollisionLayers>(entity),
-        Some(&CollisionLayers::from_bits(0b0110, 0b0110)),
+        (groups.memberships.bits(), groups.filters.bits()),
+        (0b0110, 0b0110),
         "band bits are both memberships and filters (depth = collision)"
     );
 }
@@ -58,7 +63,7 @@ fn polygon_shapes_get_decomposed_colliders() {
     let entity = entity_of(&app, id).unwrap();
     assert!(
         app.world()
-            .get::<avian2d::prelude::Collider>(entity)
+            .get::<bevy_rapier3d::prelude::Collider>(entity)
             .is_some()
     );
     assert_eq!(body_count(&mut app), 1);
@@ -73,21 +78,36 @@ fn sensor_and_rotation_lock_follow_props() {
     step(&mut app, 2);
     let entity = entity_of(&app, id).unwrap();
     assert!(app.world().get::<Sensor>(entity).is_none());
-    assert!(app.world().get::<LockedAxes>(entity).is_none());
+    // Every body carries `LockedAxes` now — it holds the simulation-plane
+    // constraint. Rotation lock is one bit within it, composed in the physics
+    // layer, so "unlocked" means the bit is clear rather than the component
+    // being absent.
+    assert!(
+        app.world()
+            .get::<LockedAxes>(entity)
+            .is_some_and(|axes| !axes.contains(LockedAxes::ROTATION_LOCKED_Z)),
+        "a default body is plane-locked but free to spin in plane"
+    );
 
-    // Simulate a property command's authored mutation.
+    // A property command edits the authored component; the sync derives from it.
     {
         let mut e = app.world_mut().entity_mut(entity);
-        e.insert(RigidBody::Kinematic);
-        e.insert(Sensor);
-        e.insert(LockedAxes::ROTATION_LOCKED);
+        let mut physics = e.get_mut::<BodyPhysics>().unwrap();
+        physics.kind = BodyKind::Kinematic;
+        physics.sensor = true;
+        physics.rotation_locked = true;
     }
     step(&mut app, 2);
     assert!(app.world().get::<Sensor>(entity).is_some());
-    assert!(app.world().get::<LockedAxes>(entity).is_some());
+    assert!(
+        app.world()
+            .get::<LockedAxes>(entity)
+            .is_some_and(|axes| axes.contains(LockedAxes::ROTATION_LOCKED_Z)),
+        "the authored flag derives the in-plane rotation lock"
+    );
     assert_eq!(
         app.world().get::<RigidBody>(entity),
-        Some(&RigidBody::Kinematic)
+        Some(&RigidBody::KinematicPositionBased)
     );
 
     {
@@ -261,7 +281,7 @@ fn timestep_setting_applies_to_the_fixed_clock() {
 }
 
 #[test]
-fn substep_trace_records_one_entry_per_substep() {
+fn step_trace_records_one_entry_per_step() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::DebugSettings>()
@@ -272,16 +292,17 @@ fn substep_trace_records_one_entry_per_substep() {
 
     step(&mut app, 3); // a few physics steps while falling
 
-    let substeps = app.world().resource::<avian2d::prelude::SubstepCount>().0 as usize;
-    let trace = app.world().resource::<gradiance::physics::SubstepTrace>();
-    assert_eq!(
-        trace.0.len(),
-        substeps,
-        "the trace holds exactly the last step's substeps"
-    );
+    // A per-*step* trail, not per-substep: rapier runs its substeps inside one
+    // step call with no hook, so the overlay traces the last few steps instead.
+    let trace = app.world().resource::<gradiance::physics::StepTrace>();
     assert!(
-        trace.0.iter().all(|frame| frame.len() == 1),
-        "every substep recorded the one dynamic body"
+        !trace.0.is_empty(),
+        "stepping while the overlay is on records a trail"
+    );
+    assert_eq!(
+        trace.0.last().map(Vec::len),
+        Some(1),
+        "the latest step recorded the one dynamic body"
     );
 }
 
@@ -478,7 +499,7 @@ fn world_pin_prismatic_locks_rotation_by_default() {
     assert!(
         app.world()
             .get::<LockedAxes>(plank_entity)
-            .is_some_and(avian2d::prelude::LockedAxes::is_rotation_locked),
+            .is_some_and(|axes| axes.contains(LockedAxes::ROTATION_LOCKED_Z)),
         "spawning a world-pin prismatic rotation-locks the pinned body"
     );
 
@@ -499,8 +520,13 @@ fn world_pin_prismatic_locks_rotation_by_default() {
     undo(&mut app);
     undo(&mut app);
     let plank_entity = entity_of(&app, plank_id).unwrap();
+    // `LockedAxes` always exists now — it carries the simulation-plane
+    // constraint — so undo clears the in-plane rotation bit rather than the
+    // whole component.
     assert!(
-        app.world().get::<LockedAxes>(plank_entity).is_none(),
+        app.world()
+            .get::<LockedAxes>(plank_entity)
+            .is_some_and(|axes| !axes.contains(LockedAxes::ROTATION_LOCKED_Z)),
         "undo removes the default rotation lock"
     );
 }
@@ -541,13 +567,15 @@ fn field_forces_are_equal_and_opposite() {
         let entity = entity_of(app, id).unwrap();
         let mass = app
             .world()
-            .get::<avian2d::prelude::ComputedMass>(entity)
+            .get::<bevy_rapier3d::prelude::ReadMassProperties>(entity)
             .unwrap()
-            .value();
+            .get()
+            .mass;
         app.world()
-            .get::<avian2d::prelude::LinearVelocity>(entity)
+            .get::<bevy_rapier3d::prelude::Velocity>(entity)
             .unwrap()
-            .0
+            .linear
+            .truncate()
             * mass
     };
     let pa = momentum(&app, attractor_id);
@@ -633,9 +661,10 @@ fn tracers_sample_fading_trails_and_toggle_undoably() {
     // Samples older than the fade window expire (the trail is a window,
     // not an unbounded history).
     step(&mut app, 90);
+    // Simulated time is Gradiance's own clock now, not the engine's.
     let now = app
         .world()
-        .resource::<Time<avian2d::prelude::Physics>>()
+        .resource::<gradiance::physics::clock::SimClock>()
         .elapsed_secs();
     let trail = app.world().get::<TraceTrail>(entity).unwrap();
     let (oldest, _) = trail.0.front().copied().unwrap();
@@ -674,7 +703,7 @@ fn tracers_sample_fading_trails_and_toggle_undoably() {
 
 #[test]
 fn box_size_density_and_restitution_edits_apply_and_undo() {
-    use avian2d::prelude::{ColliderDensity, Restitution};
+    use bevy_rapier3d::prelude::Restitution;
     use gradiance::domain::shape::ShapeDef;
     let mut app = headless_app();
     let record = box_record(Vec2::ZERO, 20.0, 20.0);
@@ -722,7 +751,16 @@ fn box_size_density_and_restitution_edits_apply_and_undo() {
         },
         "box resize applied"
     );
-    assert!((app.world().get::<ColliderDensity>(entity).unwrap().0 - 2.5).abs() < 1e-6);
+    assert!(
+        (app.world()
+            .get::<BodyPhysics>(entity)
+            .unwrap()
+            .density
+            .value()
+            - 2.5)
+            .abs()
+            < 1e-6
+    );
     assert!(
         (app.world().get::<Restitution>(entity).unwrap().coefficient - 0.9).abs() < 1e-6,
         "restitution applied"

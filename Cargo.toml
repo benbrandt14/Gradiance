@@ -10,10 +10,23 @@ license = "MIT OR Apache-2.0"
 # Engine + physics. Versions are exact-pinned: agent sessions must not drift
 # APIs (enforced by tests/boundaries.rs).
 bevy = "=0.19.0"
-# `serialize` lets authored avian components go straight into the RON save
-# (the de-adapter collapse — see docs/physics-deadapter-decision.md). Save
-# stability across avian versions is explicitly not a goal.
-avian2d = { version = "=0.7.0", features = ["serialize"] }
+# The 3D physics engine. Authoring stays plane-local 2D and the engine is
+# confined to `gradiance-physics` (+ `gradiance-script`'s contact reads), so
+# no authored state depends on it — see docs/physics-rapier3d-decision.md.
+#
+# NOTE: 0.35.0 pins `rapier3d =0.33.0-alpha` transitively. That is an accepted
+# pre-release risk in an otherwise exact-pinned workspace, taken because 0.35 is
+# the only release supporting bevy 0.19.
+#
+# Default features are deliberately pared: colliders are built from `ShapeDef`,
+# meshes from `Contours`, and picking goes through `physics::queries`, so
+# `async-collider`, `to-bevy-mesh`, `picking-backend` and the debug renderer are
+# all dead weight. `simd-stable` is on; `enhanced-determinism` is off (it is
+# incompatible with SIMD and parallelism, and nothing replays a *simulation*).
+bevy_rapier3d = { version = "=0.35.0", default-features = false, features = [
+    "dim3",
+    "simd-stable",
+] }
 bevy_egui = "=0.41.0"
 # Node-graph editor widget: the Simulink-style signal canvas. Shares egui 0.35
 # with bevy_egui (the only major node-editor crate on egui 0.35).
@@ -172,7 +185,7 @@ tracy = [
 ]
 
 [dev-dependencies]
-avian2d.workspace = true
+bevy_rapier3d.workspace = true
 # The integration suite drives the whole app, egui panels included.
 bevy_egui.workspace = true
 proptest.workspace = true

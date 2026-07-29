@@ -193,7 +193,7 @@ fn duplicating_a_body_copies_its_attached_tracer_and_bindings() {
 
 #[test]
 fn a_speed_to_fill_binding_tints_the_target_body() {
-    use avian2d::prelude::LinearVelocity;
+    use bevy_rapier3d::prelude::Velocity;
     use gradiance::domain::signal::{GradientSpec, SignalMap};
     use gradiance::signal::{
         SignalBinding, SignalBindings, SignalColorOverride, SignalSink, SignalSource,
@@ -233,9 +233,10 @@ fn a_speed_to_fill_binding_tints_the_target_body() {
 
     // Drive A; the binding reads its speed and tints B's fill.
     let a_entity = entity_of(&app, a_id).unwrap();
-    app.world_mut()
-        .entity_mut(a_entity)
-        .insert(LinearVelocity(Vec2::new(150.0, 0.0)));
+    app.world_mut().entity_mut(a_entity).insert(Velocity {
+        linear: Vec3::new(150.0, 0.0, 0.0),
+        angular: Vec3::ZERO,
+    });
     step(&mut app, 3);
 
     let b_entity = entity_of(&app, b_id).unwrap();

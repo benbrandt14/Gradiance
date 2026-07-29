@@ -21,17 +21,18 @@
 //!   redistributes — never changes — its total field.
 
 use crate::forces::ForceAccumulator;
-use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
 use gradiance_domain::field::{FieldFalloff, FieldSource};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::sdf;
-use gradiance_units::{
-    Acceleration, Acceleration2, Density, Force2, Length, Mass, Torque, Velocity,
-};
+// rapier's `Velocity` component and the unit quantity share a name; the
+// quantity is aliased so the distinction is visible at every use.
+use gradiance_units::Velocity as Speed;
+use gradiance_units::{Acceleration, Acceleration2, Force2, Length, Mass, Torque};
 
 /// Acceleration magnitude clamp (keeps zero-distance fields sane).
 const MAX_FIELD_ACCEL: Acceleration = Acceleration(500.0);
@@ -58,26 +59,23 @@ pub struct FieldMass(pub Mass);
 pub fn sync_field_mass(
     mut commands: Commands,
     changed: Query<
-        (Entity, &ShapeDef, &ColliderDensity),
+        (Entity, &ShapeDef, &gradiance_domain::props::BodyPhysics),
         (
             With<FieldSource>,
             Or<(
                 Added<FieldSource>,
                 Changed<FieldSource>,
                 Changed<ShapeDef>,
-                Changed<ColliderDensity>,
+                Changed<gradiance_domain::props::BodyPhysics>,
             )>,
         ),
     >,
 ) {
-    for (entity, shape, density) in &changed {
+    for (entity, shape, physics) in &changed {
         let area = gradiance_units::Area(gradiance_geometry::polygonize::polygonize(shape).area());
         commands
             .entity(entity)
-            .insert(FieldMass(gradiance_units::mass_of(
-                Density(density.0),
-                area,
-            )));
+            .insert(FieldMass(gradiance_units::mass_of(physics.density, area)));
     }
 }
 
@@ -98,8 +96,8 @@ pub fn falloff_factor(falloff: FieldFalloff, d: f32) -> f32 {
 /// guard (1 px) the SI flip missed: at metre scale that silently substituted
 /// `r = 1 m` for every orbit set inside a metre, overstating `v` so the body
 /// flew off instead of circling.
-pub fn orbit_speed(accel: Acceleration, radius: Length) -> Velocity {
-    Velocity((accel.value().abs() * radius.value().max(f32::EPSILON)).sqrt())
+pub fn orbit_speed(accel: Acceleration, radius: Length) -> Speed {
+    Speed((accel.value().abs() * radius.value().max(f32::EPSILON)).sqrt())
 }
 
 /// **The sampling cut-point.** Superposed field acceleration at any world
@@ -181,16 +179,17 @@ impl Fields<'_, '_> {
 /// attractor is pulled toward what it attracts and momentum conserves).
 pub fn apply_field_forces(
     fields: Fields,
-    targets: Query<(Entity, &RigidBody, &ComputedMass, &Transform), With<Body>>,
+    targets: Query<(Entity, &RigidBody, &ReadMassProperties, &Transform), With<Body>>,
     mut accumulator: ResMut<ForceAccumulator>,
 ) {
+    let plane = gradiance_core::units::PlaneFrame::XY;
     for (entity, rigid_body, mass, transform) in &targets {
-        if !rigid_body.is_dynamic() {
+        if *rigid_body != RigidBody::Dynamic {
             continue;
         }
-        let p = transform.translation.truncate();
+        let p = plane.project(transform.translation).0;
         for (source, accel) in fields.contributions(p, Some(entity)) {
-            let force = Mass(mass.value()) * accel;
+            let force = Mass(mass.get().mass) * accel;
             if force.value() == Vec2::ZERO {
                 continue;
             }
@@ -218,21 +217,28 @@ pub fn set_in_orbit(
     fields: Fields,
     index: Res<IdIndex>,
     transforms: Query<&Transform, With<Body>>,
-    mut velocities: Query<&mut LinearVelocity, With<Body>>,
+    mut velocities: Query<&mut Velocity, With<Body>>,
 ) {
+    let plane = gradiance_core::units::PlaneFrame::XY;
     for request in requests.read() {
         for id in &request.targets {
             let Some(entity) = index.entity(*id) else {
                 continue;
             };
-            let Ok(p) = transforms.get(entity).map(|t| t.translation.truncate()) else {
+            let Ok(p) = transforms
+                .get(entity)
+                .map(|t| plane.project(t.translation).0)
+            else {
                 continue;
             };
             let Some((source, accel)) = fields.dominant_at(p, Some(entity)) else {
                 continue;
             };
             // Only an *attractive* net pull supports an orbit.
-            let Ok(center) = transforms.get(source).map(|t| t.translation.truncate()) else {
+            let Ok(center) = transforms
+                .get(source)
+                .map(|t| plane.project(t.translation).0)
+            else {
                 continue;
             };
             let toward = (center - p).normalize_or_zero();
@@ -242,9 +248,12 @@ pub fn set_in_orbit(
             let r = Length(p.distance(center));
             let v = orbit_speed(accel.magnitude(), r);
             // Orbit relative to a moving attractor: inherit its drift.
-            let drift = velocities.get(source).map(|lv| lv.0).unwrap_or_default();
-            if let Ok(mut lv) = velocities.get_mut(entity) {
-                lv.0 = drift + toward.perp() * v.value();
+            let drift = velocities
+                .get(source)
+                .map(|vel| plane.project_dir(vel.linear))
+                .unwrap_or_default();
+            if let Ok(mut vel) = velocities.get_mut(entity) {
+                vel.linear = plane.dir(drift + toward.perp() * v.value());
             }
         }
     }
@@ -252,7 +261,7 @@ pub fn set_in_orbit(
 
 /// Below this speed the plane friction lets the solver's sleeping take over
 /// instead of jittering around zero.
-const FRICTION_REST_SPEED: Velocity = Velocity(0.02);
+const FRICTION_REST_SPEED: Speed = Speed(0.02);
 
 /// Coulomb friction against the back plane (top-down mode).
 ///
@@ -263,18 +272,10 @@ const FRICTION_REST_SPEED: Velocity = Velocity(0.02);
 /// the fields above — never authored, undoable, or persisted.
 pub fn apply_plane_friction(
     settings: Res<gradiance_domain::settings::SimSettings>,
-    bodies: Query<
-        (
-            Entity,
-            &LinearVelocity,
-            &AngularVelocity,
-            &ComputedMass,
-            &ComputedAngularInertia,
-        ),
-        With<Body>,
-    >,
+    bodies: Query<(Entity, &Velocity, &ReadMassProperties), With<Body>>,
     mut accumulator: ResMut<ForceAccumulator>,
 ) {
+    let plane = gradiance_core::units::PlaneFrame::XY;
     let mu = settings.plane_friction;
     if mu <= 0.0 {
         return;
@@ -282,20 +283,22 @@ pub fn apply_plane_friction(
     // The implicit into-screen gravity uses the standard magnitude even
     // when in-plane gravity is zeroed (that's what top-down *means*).
     let g = Acceleration(gradiance_core::constants::GRAVITY.length());
-    for (entity, linear, angular, mass, inertia) in &bodies {
-        let m = mass.value();
+    for (entity, velocity, properties) in &bodies {
+        let m = properties.get().mass;
         if m <= 0.0 {
             continue;
         }
-        let speed = linear.0.length();
+        let linear = plane.project_dir(velocity.linear);
+        let speed = linear.length();
         if speed > FRICTION_REST_SPEED.value() {
             let load = mu * m * g.value();
-            accumulator.add_force(entity, Force2::new(-linear.0 / speed * load));
+            accumulator.add_force(entity, Force2::new(-linear / speed * load));
         }
-        let spin = angular.0;
+        let spin = plane.unspin(velocity.angular);
         if spin.abs() > FRICTION_REST_SPEED.value() {
             // Gyration radius: the lever arm the surface rubs at.
-            let k = (inertia.value() / m).max(0.0).sqrt();
+            let inertia = plane.unspin(properties.get().principal_inertia).abs();
+            let k = (inertia / m).max(0.0).sqrt();
             accumulator.add_torque(entity, Torque(-spin.signum() * mu * m * g.value() * k));
         }
     }

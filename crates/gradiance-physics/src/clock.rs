@@ -48,15 +48,23 @@ impl SimClock {
 /// The single point where simulated time is read off the engine; swapping the
 /// engine rewrites this function and nothing downstream.
 pub fn sync_sim_clock(
-    engine: Res<bevy::prelude::Time<avian2d::prelude::Physics>>,
+    fixed: Res<bevy::prelude::Time<bevy::prelude::Fixed>>,
+    config: Query<&bevy_rapier3d::plugin::RapierConfiguration>,
     mut clock: ResMut<SimClock>,
 ) {
-    use avian2d::prelude::PhysicsTime as _;
-
+    // rapier has no clock of its own: it steps the fixed schedule while the
+    // pipeline is active. Simulated time is therefore fixed time that actually
+    // advanced the solver, which is what a tracer or plotter means by "when".
+    let running = config.iter().any(|c| c.physics_pipeline_active);
+    let delta = if running {
+        Seconds(fixed.delta_secs())
+    } else {
+        Seconds(0.0)
+    };
     let next = SimClock {
-        elapsed: Seconds(engine.elapsed_secs()),
-        delta: Seconds(engine.delta_secs()),
-        paused: engine.is_paused(),
+        elapsed: clock.elapsed + delta,
+        delta,
+        paused: !running,
     };
     // Change detection on the clock would fire every frame and is meaningless;
     // write through so a reader's `Changed<>` means something if one appears.
