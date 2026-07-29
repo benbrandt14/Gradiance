@@ -15,7 +15,7 @@
 //! [`OperationRegistry`] — the catalog the VM binds its builtins against — so
 //! what highlights and is documented always tracks what the VM understands.
 
-use crate::fonts::glyph;
+use crate::widgets;
 use bevy_egui::egui;
 use gradiance_script::bridge::{OperationRegistry, ScriptInputs, ScriptLog};
 use std::collections::BTreeSet;
@@ -198,10 +198,10 @@ pub fn console_section(
     log: &ScriptLog,
 ) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Script").strong())
+        widgets::section_header(ui, "Script")
             .on_hover_text("Enter runs · Shift+Enter newline · ↑/↓ history (by prefix)");
         ui.checkbox(&mut console.show_reference, "Reference");
-        if ui.button(glyph::CLOSE).clicked() {
+        if widgets::close_button(ui, "clear the log") {
             console.open = false;
         }
     });

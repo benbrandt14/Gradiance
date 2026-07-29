@@ -24,6 +24,7 @@
 //! [`SignalBinding`]: gradiance_domain::signal::SignalBinding
 
 use crate::ports::{body_actuators, body_sensors};
+use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -334,7 +335,7 @@ pub(crate) fn node_graph_section(
     viewer: &mut GraphViewer,
 ) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Node Graph").strong());
+        widgets::section_header(ui, "Node Graph");
         if ui
             .small_button("⛶ fit")
             .on_hover_text("Zoom to fit the whole graph")
@@ -342,10 +343,16 @@ pub(crate) fn node_graph_section(
         {
             graph.fit_requested = true;
         }
-        ui.weak("· right-click a body ▸ Add to node editor · drag sensor → actuator to bind");
+        widgets::empty_state(
+            ui,
+            "· right-click a body ▸ Add to node editor · drag sensor → actuator to bind",
+        );
     });
     if graph.keys.is_empty() {
-        ui.weak("Empty — add a body from its right-click menu, or add params/computed.");
+        widgets::empty_state(
+            ui,
+            "Empty — add a body from its right-click menu, or add params/computed.",
+        );
         return;
     }
     // The canvas-following dot-grid (last frame's transform), behind the
@@ -1078,7 +1085,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         _snarl: &mut Snarl<NodeData>,
     ) {
-        ui.label(egui::RichText::new("Add block").strong());
+        widgets::section_header(ui, "Add block");
         ui.menu_button("Input", |ui| {
             if ui.button("⊙ Parameter (slider)").clicked() {
                 self.add_param = true;
@@ -1126,7 +1133,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
             add(ui, "ƒ Max (a, b)", BlockOp::Max { a: None, b: None });
             add(ui, "ƒ Abs |in|", BlockOp::Abs { input: None });
         });
-        ui.weak("Output: the ▭ Scope block is always present.");
+        widgets::empty_state(ui, "Output: the ▭ Scope block is always present.");
     }
 
     // Right-click a block to remove/delete it.
@@ -1165,7 +1172,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 }
             }
             Some(NodeData::Scope) | None => {
-                ui.weak("the plot output");
+                widgets::empty_state(ui, "the plot output");
             }
         }
     }

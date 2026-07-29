@@ -6,6 +6,7 @@
 
 use crate::fonts::glyph;
 use crate::reflect_grid::{reflect_grid, reflect_grid_units};
+use crate::widgets;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -145,7 +146,7 @@ fn grid_snap_tab(
     snap: &mut ResMut<SnapConfig>,
     tool_defaults: &mut ResMut<ToolDefaults>,
 ) {
-    ui.label(egui::RichText::new("Grid").strong());
+    widgets::section_header(ui, "Grid");
     // Enum escape hatch: explicit variant picker.
     ui.horizontal(|ui| {
         ui.label("system");
@@ -175,7 +176,7 @@ fn grid_snap_tab(
     );
     grid.set_changed();
     ui.separator();
-    ui.label(egui::RichText::new("Snapping").strong());
+    widgets::section_header(ui, "Snapping");
     // `max_screen_distance` is a screen-pixel capture radius, not a world
     // length — deliberately unlabelled.
     reflect_grid_units(
@@ -186,7 +187,7 @@ fn grid_snap_tab(
     );
     snap.set_changed();
     ui.separator();
-    ui.label(egui::RichText::new("Tools").strong());
+    widgets::section_header(ui, "Tools");
     reflect_grid(
         ui,
         egui::Id::new("tool-defaults"),
@@ -210,7 +211,7 @@ fn lighting_tab(
     for (index, light) in settings.lights.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("Light {}", index + 1)).strong());
-            if count > 1 && ui.small_button(glyph::CLOSE).clicked() {
+            if count > 1 && widgets::close_button(ui, "remove") {
                 remove = Some(index);
             }
         });
@@ -245,7 +246,7 @@ fn lighting_tab(
     }
 
     ui.separator();
-    ui.label(egui::RichText::new("Scene").strong());
+    widgets::section_header(ui, "Scene");
     ui.horizontal(|ui| {
         ui.label("ambient");
         changed |= ui
@@ -291,7 +292,7 @@ fn lighting_tab(
     }
 
     ui.separator();
-    ui.label(egui::RichText::new("Backdrop").strong());
+    widgets::section_header(ui, "Backdrop");
     color_row(
         ui,
         "back plane color",
@@ -380,7 +381,7 @@ fn sun_gadget(ui: &mut egui::Ui, index: usize, light: &mut KeyLightSettings) -> 
 /// One line per internals fact — the "what is the editor actually doing"
 /// readout that grounds bug reports.
 fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
-    ui.label(egui::RichText::new("Internals").strong());
+    widgets::section_header(ui, "Internals");
     if let Some(fps) = r
         .diagnostics
         .as_ref()
@@ -404,7 +405,7 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
     ));
 
     ui.separator();
-    ui.label(egui::RichText::new("Selection").strong());
+    widgets::section_header(ui, "Selection");
     let ids: Vec<String> = r
         .selection
         .iter()
@@ -419,7 +420,7 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
     }
 
     ui.separator();
-    ui.label(egui::RichText::new("Joints (authored)").strong());
+    widgets::section_header(ui, "Joints (authored)");
     for (id, def) in &r.joints {
         let kind = match &def.kind {
             JointKind::Hinge { limits, motor } => format!(

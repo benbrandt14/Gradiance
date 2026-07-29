@@ -8,6 +8,7 @@
 
 use crate::PanelRects;
 use crate::toolbar::Panels;
+use crate::widgets;
 use bevy::app::AppExit;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -99,7 +100,7 @@ pub fn menu_bar(
         .collapsible(false)
         .resizable(false)
         .show(ctx, |ui| {
-            ui.label(egui::RichText::new("Gradiance").strong());
+            widgets::section_header(ui, "Gradiance");
             ui.label("An Algodoo-inspired 2.5D physics sandbox.");
             ui.label(format!("Scene format v{FORMAT_VERSION}"));
         });

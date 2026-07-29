@@ -10,7 +10,7 @@
 //! undo, exactly like the grid and snap settings. Lives in the right dock
 //! (`ui::dock`), the direction toward dockable inspectors.
 
-use crate::fonts::glyph;
+use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy_egui::egui;
 use gradiance_core::ids::StableId;
@@ -154,7 +154,7 @@ pub fn node_kind_editor(
 
 /// The param sliders (`defparam` knobs) — the P2 driver inputs.
 fn params_block(ui: &mut egui::Ui, params: &mut Vec<gradiance_signal::SignalParam>) {
-    ui.label(egui::RichText::new("Parameters").strong());
+    widgets::section_header(ui, "Parameters");
     let mut remove = None;
     for (i, param) in params.iter_mut().enumerate() {
         ui.horizontal(|ui| {
@@ -163,7 +163,7 @@ fn params_block(ui: &mut egui::Ui, params: &mut Vec<gradiance_signal::SignalPara
                     .text(&param.name)
                     .clamping(egui::SliderClamping::Never),
             );
-            if ui.small_button(glyph::CLOSE).clicked() {
+            if widgets::close_button(ui, "delete this parameter") {
                 remove = Some(i);
             }
         });
@@ -185,7 +185,7 @@ fn computed_block(
     compiled: &gradiance_signal::CompiledSignals,
     bus: &SignalBus,
 ) {
-    ui.label(egui::RichText::new("Computed").strong());
+    widgets::section_header(ui, "Computed");
     let mut remove = None;
     for (i, signal) in computed.iter_mut().enumerate() {
         ui.horizontal(|ui| {
@@ -193,7 +193,7 @@ fn computed_block(
             if let Some(v) = bus.get(&signal.name) {
                 ui.weak(format!("= {v:.3}"));
             }
-            if ui.small_button(glyph::CLOSE).clicked() {
+            if widgets::close_button(ui, "delete this computed signal") {
                 remove = Some(i);
             }
         });
@@ -214,10 +214,13 @@ fn computed_block(
 
 /// The source→sink bindings (unchanged model).
 fn bindings_block(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[StableId]) {
-    ui.label(egui::RichText::new("Bindings").strong());
+    widgets::section_header(ui, "Bindings");
     add_buttons(ui, bindings, selected);
     if bindings.0.is_empty() {
-        ui.weak("Select a body and add a source above; its value drives the sink.");
+        widgets::empty_state(
+            ui,
+            "Select a body and add a source above; its value drives the sink.",
+        );
     }
     let mut remove = None;
     for (i, binding) in bindings.0.iter_mut().enumerate() {
@@ -331,7 +334,7 @@ fn binding_row(
     ui.horizontal(|ui| {
         ui.strong(source_label(&binding.source));
         ui.text_edit_singleline(&mut binding.name);
-        if ui.small_button(glyph::CLOSE).clicked() {
+        if widgets::close_button(ui, "remove this binding") {
             *remove = Some(i);
         }
     });

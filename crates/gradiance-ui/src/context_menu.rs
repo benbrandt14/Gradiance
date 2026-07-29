@@ -2,6 +2,7 @@
 //! layer operations.
 
 use crate::joint_inspector::kind_name;
+use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -371,7 +372,7 @@ pub fn context_menu(
                     && let Some(entity) = index.entity(joint_id)
                     && let Ok(def) = joints.get(entity)
                 {
-                    ui.label(egui::RichText::new(kind_name(&def.kind)).strong());
+                    widgets::section_header(ui, kind_name(&def.kind));
                     if ui.button("Configure joint…").clicked() {
                         SelectTransition::SelectJoint(entity).apply(
                             &mut selection,

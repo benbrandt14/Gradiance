@@ -9,7 +9,7 @@
 //! the bottom. Dragging previews locally (panel-scratch state, invariant
 //! 2) and commits exactly **one** `PropertyEditIntent` on release.
 
-use crate::fonts::glyph;
+use crate::widgets;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use gradiance_command::intent::PropertyEditIntent;
@@ -112,15 +112,15 @@ pub fn depth_section(
         .max((content_deepest / LAYER_HEIGHT).ceil() * LAYER_HEIGHT);
 
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Depth").strong())
+        widgets::section_header(ui, "Depth")
             .on_hover_text("front ↑ · back ↓ — a body collides with what its band overlaps");
-        if ui.button(glyph::CLOSE).clicked() {
+        if widgets::close_button(ui, "close the depth panel") {
             panel.open = false;
             panel.drag = None;
         }
     });
     if rows.is_empty() {
-        ui.weak("select bodies to edit their depth bands");
+        widgets::empty_state(ui, "select bodies to edit their depth bands");
         return;
     }
 

@@ -11,6 +11,7 @@
 //!
 //! [`SignalBus`]: gradiance_signal::SignalBus
 
+use crate::widgets;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use std::collections::{HashSet, VecDeque};
@@ -128,7 +129,7 @@ pub fn plot_section(
 
     let visible = visible_series(plottable.iter().map(|(n, _, _)| *n), &config.hidden);
     if visible.is_empty() {
-        ui.weak("No series selected — pick one above.");
+        widgets::empty_state(ui, "No series selected — pick one above.");
         return;
     }
     for (i, name) in visible.iter().enumerate() {

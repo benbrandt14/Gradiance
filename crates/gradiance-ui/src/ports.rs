@@ -10,6 +10,7 @@
 //! [`read_source`](gradiance_signal::read_source) reader — no parallel "read a
 //! body quantity" implementation.
 
+use crate::widgets;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use gradiance_core::ids::{IdIndex, StableId};
@@ -72,7 +73,7 @@ pub fn sensor_readouts(
             ui.label(label);
             match gradiance_signal::read_source(&source, index, physics, transforms, dt) {
                 Some(value) => ui.monospace(format!("{value:.2} {}", unit(&source))),
-                None => ui.weak("—"),
+                None => widgets::empty_state(ui, "—"),
             };
             let plotted = plot_index(bindings, &source).is_some();
             if ui
@@ -100,7 +101,7 @@ pub fn sensor_readouts(
         ui.label("mass");
         match index.entity(id).and_then(|e| physics.mass_of(e)) {
             Some(mass) => ui.monospace(format!("{:.2} {}", mass.value(), Mass::UNIT)),
-            None => ui.weak("—"),
+            None => widgets::empty_state(ui, "—"),
         };
     });
 }

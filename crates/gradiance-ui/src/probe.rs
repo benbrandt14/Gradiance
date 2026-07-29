@@ -6,7 +6,7 @@
 //! no mutation, no persistence (pins are workstation state, entities
 //! resolved by `StableId` so undo/redo cycles keep them valid).
 
-use crate::fonts::glyph;
+use crate::widgets;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::ids::{IdIndex, StableId};
@@ -152,7 +152,7 @@ pub fn probe_panel(
                     ui.separator();
                     ui.horizontal(|ui| {
                         ui.monospace(format!("#{}", &id.0.to_string()[..8]));
-                        if ui.small_button(glyph::CLOSE).clicked() {
+                        if widgets::close_button(ui, "unpin this probe") {
                             unpin = Some(i);
                         }
                     });
@@ -161,7 +161,7 @@ pub fn probe_panel(
                             ui.label(text);
                         }
                         None => {
-                            ui.weak("(not in scene)");
+                            widgets::empty_state(ui, "(not in scene)");
                         }
                     }
                 }

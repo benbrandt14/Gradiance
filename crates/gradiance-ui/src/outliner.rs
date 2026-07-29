@@ -12,6 +12,7 @@
 //! the recorded click afterward — the same prepare/render/apply shape the
 //! node-graph pane uses.
 
+use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -162,7 +163,7 @@ pub(crate) fn outliner_section(
     click: &mut Option<OutlinerClick>,
 ) {
     if model.is_empty() {
-        ui.weak("Empty scene — nothing to list yet.");
+        widgets::empty_state(ui, "Empty scene — nothing to list yet.");
         return;
     }
     let shift = ui.input(|i| i.modifiers.shift);
