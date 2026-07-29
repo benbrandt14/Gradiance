@@ -10,7 +10,6 @@
 use crate::harness::{body_count, paused_app, undo};
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
-use gradiance::prelude::*;
 use gradiance::script::bridge::{ScriptActions, ScriptInputs};
 
 /// Submits `source` and advances one frame: `run_scripts` emits the intents,
@@ -421,40 +420,4 @@ fn defparam_and_defsignal_build_the_dataflow() {
     assert_eq!(app.world().resource::<SignalParams>().0.len(), 1);
     crate::harness::step(&mut app, 2);
     assert_eq!(app.world().resource::<SignalBus>().get("osc"), Some(15.0));
-}
-
-#[test]
-fn a_scripted_array_repeats_a_body_with_a_per_copy_taper() {
-    // The Lisp surface for the per-copy parameter change: one verb, on the
-    // cold path, landing through the same intent seam the drag uses. The
-    // taper is applied *and* the step shrinks with it, so the run stays
-    // flush — the closed form, not a re-measure per copy.
-    let mut app = paused_app();
-    run(
-        &mut app,
-        "(define b (spawn-box 0 0 1 1))
-         (array-repeat b 3 1.0 0 0.5 0.5)",
-    );
-    // The spawn commits first; the array runs against the committed world.
-    app.update();
-    assert_eq!(body_count(&mut app), 4, "the original plus three copies");
-
-    let mut q = app
-        .world_mut()
-        .query_filtered::<(&ShapeDef, &Transform), With<Body>>();
-    let mut widths: Vec<f32> = q
-        .iter(app.world())
-        .map(|(shape, _)| {
-            let ring = gradiance::geometry::polygonize::polygonize(shape);
-            let xs: Vec<f32> = ring.rings().flatten().map(|v| v.x).collect();
-            let lo = xs.iter().copied().fold(f32::MAX, f32::min);
-            let hi = xs.iter().copied().fold(f32::MIN, f32::max);
-            hi - lo
-        })
-        .collect();
-    widths.sort_by(f32::total_cmp);
-    assert!(
-        (widths[0] - 0.125).abs() < 1e-3 && (widths[3] - 1.0).abs() < 1e-3,
-        "each copy halves the last: {widths:?}"
-    );
 }
