@@ -102,7 +102,7 @@ fn falling_box_scene(app: &mut App) -> (StableId, StableId) {
     let falling = box_record(Vec2::new(0.0, 2.0), 0.2, 0.2);
     let falling_id = falling.id;
     let mut floor = box_record(Vec2::new(0.0, -1.0), 10.0, 0.2);
-    floor.physics.rigid_body = RigidBody::Static;
+    floor.physics.kind = BodyKind::Static;
     let floor_id = floor.id;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: falling });
@@ -358,7 +358,7 @@ fn a_field_acts_on_plain_bodies_too() {
     app.update();
 
     let mut attractor = box_record(Vec2::ZERO, 40.0, 40.0);
-    attractor.physics.rigid_body = RigidBody::Static;
+    attractor.physics.kind = BodyKind::Static;
     attractor.field = Some(FieldSource {
         strength: -2000.0,
         falloff: FieldFalloff::Quadratic,
@@ -393,7 +393,7 @@ fn set_in_orbit_produces_a_limit_cycle() {
 
     let mut sun = box_record(Vec2::ZERO, 60.0, 60.0);
     sun.shape = ShapeDef::Circle { radius: 30.0 };
-    sun.physics.rigid_body = RigidBody::Static;
+    sun.physics.kind = BodyKind::Static;
     sun.field = Some(FieldSource {
         strength: -4000.0,
         falloff: FieldFalloff::Quadratic,
@@ -681,8 +681,8 @@ fn box_size_density_and_restitution_edits_apply_and_undo() {
     let entity = entity_of(&app, id).unwrap();
 
     let old_shape = app.world().get::<ShapeDef>(entity).unwrap().clone();
-    let old_density = *app.world().get::<ColliderDensity>(entity).unwrap();
-    let old_restitution = *app.world().get::<Restitution>(entity).unwrap();
+    let authored = *app.world().get::<BodyPhysics>(entity).unwrap();
+    let (old_density, old_restitution) = (authored.density, authored.restitution);
 
     // One batched edit of all three (the inspector commits each separately,
     // but the command path is identical) — proves the fields are editable.
@@ -699,12 +699,12 @@ fn box_size_density_and_restitution_edits_apply_and_undo() {
             PropertyChange {
                 id,
                 old: PropertyValue::Density(old_density),
-                new: PropertyValue::Density(ColliderDensity(2.5)),
+                new: PropertyValue::Density(Density(2.5)),
             },
             PropertyChange {
                 id,
                 old: PropertyValue::Restitution(old_restitution),
-                new: PropertyValue::Restitution(Restitution::new(0.9)),
+                new: PropertyValue::Restitution(0.9),
             },
         ],
     });
@@ -730,7 +730,16 @@ fn box_size_density_and_restitution_edits_apply_and_undo() {
     undo(&mut app);
     let entity = entity_of(&app, id).unwrap();
     assert_eq!(app.world().get::<ShapeDef>(entity).unwrap(), &old_shape);
-    assert!((app.world().get::<ColliderDensity>(entity).unwrap().0 - old_density.0).abs() < 1e-6);
+    assert!(
+        (app.world()
+            .get::<BodyPhysics>(entity)
+            .unwrap()
+            .density
+            .value()
+            - old_density.value())
+        .abs()
+            < 1e-6
+    );
 }
 
 #[derive(Resource)]

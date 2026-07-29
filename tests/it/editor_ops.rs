@@ -47,12 +47,8 @@ fn property_edit_batches_multi_target_into_one_undo_step() {
         .into_iter()
         .map(|id| {
             let entity = entity_of(&app, id).unwrap();
-            let old = *app.world().get::<Friction>(entity).unwrap();
-            let new = Friction {
-                dynamic_coefficient: 0.9,
-                static_coefficient: 0.9,
-                ..old
-            };
+            let old = app.world().get::<BodyPhysics>(entity).unwrap().friction;
+            let new = 0.9;
             PropertyChange {
                 id,
                 old: PropertyValue::Friction(old),

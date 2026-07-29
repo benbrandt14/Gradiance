@@ -1,5 +1,5 @@
 (
-    version: 6,
+    version: 7,
     app_version: "golden",
     bodies: [
         (
@@ -22,18 +22,11 @@
                 holes: [],
             ),
             physics: (
-                rigid_body: Dynamic,
-                friction: (
-                    dynamic_coefficient: 0.5,
-                    static_coefficient: 0.5,
-                    combine_rule: Average,
-                ),
-                restitution: (
-                    coefficient: 0.3,
-                    combine_rule: Average,
-                ),
+                kind: Dynamic,
+                friction: 0.5,
+                restitution: 0.3,
                 density: (1.0),
-                gravity_scale: (1.0),
+                gravity_scale: 1.0,
                 sensor: false,
                 rotation_locked: false,
             ),
@@ -68,18 +61,11 @@
             ),
             shape: HalfPlane,
             physics: (
-                rigid_body: Static,
-                friction: (
-                    dynamic_coefficient: 0.5,
-                    static_coefficient: 0.5,
-                    combine_rule: Average,
-                ),
-                restitution: (
-                    coefficient: 0.3,
-                    combine_rule: Average,
-                ),
+                kind: Static,
+                friction: 0.5,
+                restitution: 0.3,
                 density: (1.0),
-                gravity_scale: (1.0),
+                gravity_scale: 1.0,
                 sensor: false,
                 rotation_locked: false,
             ),
@@ -126,18 +112,11 @@
                 holes: [],
             ),
             physics: (
-                rigid_body: Dynamic,
-                friction: (
-                    dynamic_coefficient: 0.5,
-                    static_coefficient: 0.5,
-                    combine_rule: Average,
-                ),
-                restitution: (
-                    coefficient: 0.3,
-                    combine_rule: Average,
-                ),
+                kind: Dynamic,
+                friction: 0.5,
+                restitution: 0.3,
                 density: (1.0),
-                gravity_scale: (1.0),
+                gravity_scale: 1.0,
                 sensor: false,
                 rotation_locked: false,
             ),
@@ -174,18 +153,11 @@
                 radius: 25.0,
             ),
             physics: (
-                rigid_body: Dynamic,
-                friction: (
-                    dynamic_coefficient: 0.5,
-                    static_coefficient: 0.5,
-                    combine_rule: Average,
-                ),
-                restitution: (
-                    coefficient: 0.3,
-                    combine_rule: Average,
-                ),
+                kind: Dynamic,
+                friction: 0.5,
+                restitution: 0.3,
                 density: (1.0),
-                gravity_scale: (1.0),
+                gravity_scale: 1.0,
                 sensor: false,
                 rotation_locked: false,
             ),

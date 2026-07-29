@@ -3717,13 +3717,14 @@ dependencies = [
 name = "gradiance-command"
 version = "0.2.0"
 dependencies = [
- "avian2d",
  "bevy",
  "gradiance-core",
  "gradiance-domain",
  "gradiance-geometry",
+ "gradiance-physics",
  "gradiance-scene",
  "gradiance-signal",
+ "gradiance-units",
  "thiserror 2.0.18",
 ]
 
@@ -3741,13 +3742,13 @@ dependencies = [
 name = "gradiance-domain"
 version = "0.2.0"
 dependencies = [
- "avian2d",
  "bevy",
  "colorgrad",
  "glam 0.32.1",
  "gradiance-core",
  "gradiance-geometry",
  "gradiance-units",
+ "ron",
  "serde",
  "thiserror 2.0.18",
  "uuid",
@@ -3769,7 +3770,6 @@ dependencies = [
 name = "gradiance-interaction"
 version = "0.2.0"
 dependencies = [
- "avian2d",
  "bevy",
  "gradiance-command",
  "gradiance-core",
@@ -3885,7 +3885,6 @@ dependencies = [
 name = "gradiance-ui"
 version = "0.2.0"
 dependencies = [
- "avian2d",
  "bevy",
  "bevy_egui",
  "egui-snarl",

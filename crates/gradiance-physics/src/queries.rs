@@ -228,3 +228,36 @@ impl PhysicsQueries<'_, '_> {
         Impulse2::new(total / SOLVER_PASSES)
     }
 }
+
+/// Reads a body's plane-local motion directly from a `&World`.
+///
+/// The [`PhysicsQueries`] `SystemParam` is the facade for systems; this is the
+/// same read for the exclusive-`World` callers that cannot hold one — commands.
+/// Returns `None` for a body that does not simulate.
+pub fn read_motion(world: &World, entity: Entity) -> Option<(Velocity2, AngularVelocity)> {
+    let lin = world.get::<LinearVelocity>(entity)?;
+    let ang = world
+        .get::<avian2d::prelude::AngularVelocity>(entity)
+        .map_or(0.0, |a| a.0);
+    Some((Velocity2::new(lin.0), AngularVelocity(ang)))
+}
+
+/// Writes a body's plane-local motion.
+///
+/// Velocity is simulation state, never authored state: this exists so a command
+/// that *destroys and respawns* a body can carry its motion across (the cut
+/// tool's `v + ω × r` split), not so commands can drive physics. It is never
+/// recorded and never undone — the same status as the grab spring's writes.
+pub fn write_motion(
+    world: &mut World,
+    entity: Entity,
+    linear: Velocity2,
+    angular: AngularVelocity,
+) {
+    if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+        entity_mut.insert((
+            LinearVelocity(linear.value()),
+            avian2d::prelude::AngularVelocity(angular.value()),
+        ));
+    }
+}

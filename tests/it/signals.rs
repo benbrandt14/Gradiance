@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::harness::{box_record, entity_of, headless_app, paused_app, step};
-use avian2d::prelude::{LinearVelocity, RigidBody};
+use avian2d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use gradiance::prelude::*;
 use gradiance::signal::{
@@ -160,7 +160,7 @@ fn contact_count_source_reads_the_facade() {
     let falling = box_record(Vec2::new(0.0, 1.2), 0.2, 0.2);
     let falling_id = falling.id;
     let mut floor = box_record(Vec2::new(0.0, -1.0), 10.0, 0.2);
-    floor.physics.rigid_body = RigidBody::Static;
+    floor.physics.kind = BodyKind::Static;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: falling });
     app.world_mut()

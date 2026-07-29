@@ -1,7 +1,6 @@
 //! Command-layer integration tests: intents → dispatch → stack semantics.
 
 use crate::harness::{body_count, box_record, entity_of, paused_app, redo, undo};
-use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::prelude::*;
@@ -24,7 +23,7 @@ fn spawn_intent_creates_a_complete_body() {
     let entity = entity_of(&app, id).expect("body indexed by stable id");
     let world = app.world();
     assert!(world.get::<ShapeDef>(entity).is_some());
-    assert!(world.get::<RigidBody>(entity).is_some());
+    assert!(world.get::<BodyPhysics>(entity).is_some());
     assert!(world.get::<Appearance>(entity).is_some());
     assert!(world.get::<DepthBand>(entity).is_some());
     let transform = world.get::<Transform>(entity).unwrap();

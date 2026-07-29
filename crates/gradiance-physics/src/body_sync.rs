@@ -5,6 +5,7 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
+use gradiance_domain::props::{BodyKind, BodyPhysics};
 use gradiance_domain::shape::ShapeDef;
 
 /// Builds the engine collider for a validated shape.
@@ -94,5 +95,52 @@ pub fn sync_collision_layers(
         commands
             .entity(entity)
             .insert(CollisionLayers::from_bits(bits, bits));
+    }
+}
+
+/// Translates the authored [`BodyPhysics`] into engine components.
+///
+/// **The one write path for authored physics.** Everything upstream — tools,
+/// commands, the inspector, scripts — edits the plain domain component; this is
+/// where it becomes something the solver understands, and the only place that
+/// mapping exists.
+///
+/// `Changed<>`-driven and idempotent, like every other sync here.
+pub fn sync_body_physics(
+    mut commands: Commands,
+    changed: Query<(Entity, &BodyPhysics), (With<Body>, Changed<BodyPhysics>)>,
+) {
+    for (entity, physics) in &changed {
+        let mut entity_commands = commands.entity(entity);
+        entity_commands.insert((
+            rigid_body_for(physics.kind),
+            Friction::new(physics.friction),
+            Restitution::new(physics.restitution),
+            ColliderDensity(physics.density.value()),
+            GravityScale(physics.gravity_scale),
+        ));
+        if physics.sensor {
+            entity_commands.insert(Sensor);
+        } else {
+            entity_commands.remove::<Sensor>();
+        }
+        // Derived, never authored: the authored flag is `rotation_locked`, and
+        // the engine's locked-axis set is composed from it here so nothing
+        // upstream can clobber it. The simulation-plane constraint joins this
+        // composition when the world becomes 3D.
+        if physics.rotation_locked {
+            entity_commands.insert(LockedAxes::ROTATION_LOCKED);
+        } else {
+            entity_commands.remove::<LockedAxes>();
+        }
+    }
+}
+
+/// The engine's simulation role for an authored [`BodyKind`].
+fn rigid_body_for(kind: BodyKind) -> RigidBody {
+    match kind {
+        BodyKind::Dynamic => RigidBody::Dynamic,
+        BodyKind::Static => RigidBody::Static,
+        BodyKind::Kinematic => RigidBody::Kinematic,
     }
 }

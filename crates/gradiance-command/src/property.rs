@@ -1,12 +1,12 @@
 //! Property edits: typed authored-component changes, batched and undoable.
 
 use crate::{CommandError, GameCommand, resolve};
-use avian2d::prelude::*;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::joint::JointDef;
+use gradiance_domain::props::{BodyKind, BodyPhysics, Density};
 use gradiance_domain::shape::ShapeDef;
 
 /// A snapshot of one editable authored component.
@@ -18,22 +18,23 @@ pub enum PropertyValue {
     /// Body geometry.
     Shape(ShapeDef),
     /// Simulation role (dynamic/static/kinematic).
-    RigidBody(RigidBody),
-    /// Coulomb friction.
-    Friction(Friction),
+    BodyKind(BodyKind),
+    /// Coulomb friction coefficient.
+    Friction(f32),
     /// Bounciness.
-    Restitution(Restitution),
-    /// Mass density.
-    Density(ColliderDensity),
+    Restitution(f32),
+    /// Areal mass density.
+    Density(Density),
     /// Per-body gravity multiplier.
-    GravityScale(GravityScale),
-    /// Overlap-sensor flag (marker presence).
+    GravityScale(f32),
+    /// Overlap-sensor flag.
     Sensor(bool),
     /// Field source (`None` = no field).
     Field(Option<gradiance_domain::field::FieldSource>),
     /// Trajectory-trail marker (`None` = no tracer).
     Tracer(Option<gradiance_domain::tracer::Tracer>),
-    /// Rotation-lock flag (`LockedAxes::ROTATION_LOCKED` presence).
+    /// Rotation-lock flag (authored intent; the engine's locked-axis set is
+    /// derived from it in the physics layer).
     RotationLock(bool),
     /// Visual appearance.
     Appearance(Appearance),
@@ -46,6 +47,18 @@ pub enum PropertyValue {
     NodeKind(gradiance_domain::node::NodeKind),
 }
 
+/// The authored physics of a body being edited.
+///
+/// A body without one is not an authored body, so an edit aimed at it is a
+/// no-op rather than an error worth surfacing.
+fn physics_mut<'a>(
+    entity_mut: &'a mut EntityWorldMut,
+) -> Result<Mut<'a, BodyPhysics>, CommandError> {
+    entity_mut
+        .get_mut::<BodyPhysics>()
+        .ok_or(CommandError::NoEffect)
+}
+
 impl PropertyValue {
     fn write(&self, world: &mut World, entity: Entity) -> Result<(), CommandError> {
         let mut entity_mut = world
@@ -56,20 +69,23 @@ impl PropertyValue {
                 v.validate()?;
                 entity_mut.insert(v.clone());
             }
-            Self::RigidBody(v) => {
-                entity_mut.insert(*v);
+            // Every physics property edits one field of the authored
+            // `BodyPhysics`; the physics layer turns that into engine
+            // components on `Changed<>`. Nothing here names the engine.
+            Self::BodyKind(v) => {
+                physics_mut(&mut entity_mut)?.kind = *v;
             }
             Self::Friction(v) => {
-                entity_mut.insert(*v);
+                physics_mut(&mut entity_mut)?.friction = *v;
             }
             Self::Restitution(v) => {
-                entity_mut.insert(*v);
+                physics_mut(&mut entity_mut)?.restitution = *v;
             }
             Self::Density(v) => {
-                entity_mut.insert(*v);
+                physics_mut(&mut entity_mut)?.density = *v;
             }
             Self::GravityScale(v) => {
-                entity_mut.insert(*v);
+                physics_mut(&mut entity_mut)?.gravity_scale = *v;
             }
             Self::Field(field) => match field {
                 Some(f) => {
@@ -88,18 +104,10 @@ impl PropertyValue {
                 }
             },
             Self::Sensor(on) => {
-                if *on {
-                    entity_mut.insert(Sensor);
-                } else {
-                    entity_mut.remove::<Sensor>();
-                }
+                physics_mut(&mut entity_mut)?.sensor = *on;
             }
             Self::RotationLock(on) => {
-                if *on {
-                    entity_mut.insert(LockedAxes::ROTATION_LOCKED);
-                } else {
-                    entity_mut.remove::<LockedAxes>();
-                }
+                physics_mut(&mut entity_mut)?.rotation_locked = *on;
             }
             Self::Appearance(v) => {
                 entity_mut.insert(*v);

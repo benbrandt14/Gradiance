@@ -60,7 +60,7 @@ fn spawning_a_tracer_node_is_undoable_and_persists() {
 fn an_attached_node_follows_its_body() {
     let mut app = paused_app();
     let mut body = box_record(Vec2::new(100.0, 0.0), 20.0, 20.0);
-    body.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    body.physics.kind = BodyKind::Static;
     let body_id = body.id;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: body });
@@ -208,7 +208,7 @@ fn a_speed_to_fill_binding_tints_the_target_body() {
     // Body A moves; body B is tinted by A's speed through a binding (the
     // object-port model: a sensor port on A wired to an actuator port on B).
     let mut a = box_record(Vec2::ZERO, 20.0, 20.0);
-    a.physics.rigid_body = avian2d::prelude::RigidBody::Dynamic;
+    a.physics.kind = BodyKind::Dynamic;
     let a_id = a.id;
     app.world_mut().write_message(SpawnBodyIntent { record: a });
     let b = box_record(Vec2::new(200.0, 0.0), 20.0, 20.0);
@@ -256,7 +256,7 @@ fn a_pos_x_to_tracer_binding_drives_the_trail_channel() {
 
     let mut app = paused_app();
     let mut body = box_record(Vec2::new(300.0, 0.0), 20.0, 20.0);
-    body.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    body.physics.kind = BodyKind::Static;
     let body_id = body.id;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: body });

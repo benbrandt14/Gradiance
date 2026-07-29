@@ -585,8 +585,8 @@ fn weld_tool_pins_a_single_body_by_making_it_static() {
     app.world_mut().write_message(PropertyEditIntent {
         changes: vec![PropertyChange {
             id,
-            old: PropertyValue::RigidBody(RigidBody::Dynamic),
-            new: PropertyValue::RigidBody(RigidBody::Static),
+            old: PropertyValue::BodyKind(BodyKind::Dynamic),
+            new: PropertyValue::BodyKind(BodyKind::Static),
         }],
     });
     app.update();
@@ -719,7 +719,7 @@ fn play_mode_right_drag_spins_physically_without_a_command() {
 fn play_mode_rotate_cannot_twist_through_a_prismatic() {
     let mut app = paused_app();
     let mut base = box_record(Vec2::ZERO, 40.0, 40.0);
-    base.physics.rigid_body = RigidBody::Static;
+    base.physics.kind = BodyKind::Static;
     let base_id = base.id;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: base });

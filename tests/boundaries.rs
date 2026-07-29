@@ -187,7 +187,9 @@ fn the_crate_dag_matches_the_architecture() {
     let allowed: &[(&str, &[&str])] = &[
         (
             "command",
-            &["core", "domain", "geometry", "scene", "signal"],
+            &[
+                "core", "domain", "geometry", "physics", "scene", "signal", "units",
+            ],
         ),
         ("core", &[]),
         ("domain", &["core", "geometry", "units"]),
