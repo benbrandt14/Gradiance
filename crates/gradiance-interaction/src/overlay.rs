@@ -3,8 +3,8 @@
 //!
 //! All gizmos — grid, snap glyphs, selection outlines, tool previews, joint
 //! glyphs, debug overlays — live on the **interaction plane**
-//! ([`INTERACTION_PLANE_Z`](gradiance_core::constants::INTERACTION_PLANE_Z), the
-//! picking plane) and render with a negative `depth_bias` so they always draw
+//! ([`PlaneFrame::XY`](gradiance_core::units::PlaneFrame::XY), the picking
+//! plane) and render with a negative `depth_bias` so they always draw
 //! in front of the extruded body prisms. One group replaces the former
 //! default/`JointGizmos`/`SelectionGizmos` split, so "overlays sit on the
 //! interaction plane, in front of the scene" holds everywhere by construction.

@@ -12,6 +12,7 @@ pub mod group;
 pub mod joint;
 pub mod layers;
 pub mod node;
+pub mod plane;
 pub mod props;
 pub mod settings;
 pub use gradiance_geometry::shape;
