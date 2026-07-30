@@ -88,6 +88,13 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (slider a b x y ax ay)       ; prismatic joint at (x, y) along world axis (ax, ay)
 (spring a b stiffness damping) ; spring-damper strut between the two centres
 
+;; edit — a body's authored properties (the inspector's fields as ops)
+(place i x y angle)          ; move and rotate the i-th body
+(set-friction i v)           ; Coulomb friction (both coefficients)
+(set-restitution i v)        ; bounciness, 0 = dead, 1 = perfectly elastic
+(set-density i v)            ; mass density (area x density = mass)
+(set-static i on)            ; non-zero = static, 0 = dynamic
+
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
 (sim-set "gravity.y" -500)   ; write one (any scalar field, by path)
@@ -103,6 +110,8 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (body-count)                 ; number of bodies
 (body-x i) (body-y i) (body-rot i)   ; pose of the i-th body (id order)
 (joint-count)                ; number of joints
+(body-friction i) (body-restitution i) (body-density i)  ; read them back
+(body-static? i)             ; 1 when static, 0 otherwise
 (count-at x y)               ; how many bodies' shapes contain the point
 (nearest-at x y)             ; index of the nearest body centre (-1 if none)
 (nearest-dist x y)           ; distance to the nearest body centre (-1 if none)
@@ -240,6 +249,44 @@ heuristic stops being reproducible the moment the shape changes.
 There is no `weld` verb because there is no weld *joint* — in this engine
 welding is `merge` (one CSG body) or make-static, not a constraint.
 
+### Properties: reads and writes name the same thing
+
+Every `set-*` verb has a matching `body-*` read, deliberately. Reads are total,
+so a script can inspect a value it did not author and decide from it:
+
+```scheme
+;; make everything slippery except what is already slippery
+(if (> (body-friction 0) 0.2) (set-friction 0 0.05) 0)
+```
+
+Three properties of the write side worth knowing:
+
+- **One undo step, same as a hand edit.** They go through `PropertyEditIntent`,
+  the seam the inspector's `precise_drag` rows commit through, so a scripted
+  change and a dragged one are indistinguishable in the save file and the stack.
+- **A redundant set is not a step.** Setting a value to what it already holds
+  emits nothing, so a loop that normalises a scene does not bury the undo stack
+  in empty entries. (`place` has the same guard.)
+- **⚠ Within one run, every read sees the pre-run value.** Combined with the
+  guard above this has a surprising consequence:
+
+  ```scheme
+  (begin (set-static 0 1) (set-static 0 0))   ; leaves the body STATIC
+  ```
+
+  Both calls read the same snapshot, so the second sees `old == new` and is
+  suppressed. Writes to *different* properties in one run compose fine — each
+  reads a field the other does not touch — but two writes to the **same**
+  property need two runs. This is the same one-snapshot rule `(delete i)` has;
+  it is just easier to trip over here.
+- **A read of a missing body is NaN**, not zero — zero would read as a real
+  measurement of a frictionless body. NaN compares false against everything, so
+  a guard like the one above simply does not fire.
+
+`(set-friction …)` moves both the static and dynamic coefficients together,
+which is what the inspector does: authoring two numbers that are almost always
+equal is friction the UI deliberately does not expose.
+
 ### Why `(delete i)` and not `(delete-selection)`
 
 The Edit menu's delete acts on the selection. A verb cannot: `Selection` lives
@@ -257,6 +304,9 @@ reads and edits compose within one script:
 ```scheme
 (when (> (body-count) 0) (delete 0))   ; pop the first body
 ```
+
+The snapshot is taken once per **run**, not per call — see the ⚠ note under
+Properties for the case where that matters.
 
 Group/ungroup are deliberately absent: their natural argument *is* a set, and a
 fixed-arity `(group i j)` would be an arbitrary restriction rather than the op.

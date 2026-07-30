@@ -38,11 +38,13 @@
 
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
+use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use gradiance_command::CommandDispatchSet;
 use gradiance_command::intent::{
-    CommitTransformIntent, CutIntent, DeleteIntent, RedoIntent, SpawnBodyIntent, SpawnJointIntent,
-    TransformChange, UndoIntent,
+    CommitTransformIntent, CutIntent, DeleteIntent, PropertyEditIntent, RedoIntent,
+    SpawnBodyIntent, SpawnJointIntent, TransformChange, UndoIntent,
 };
+use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
@@ -396,6 +398,14 @@ struct BodyView {
     /// is never cross-referenced (invariant 3), and the snapshot outlives the
     /// frame it was taken in, so the id is the only safe handle here.
     id: StableId,
+    /// Authored physics — the *old* half of a property edit.
+    ///
+    /// `PropertyChange` carries both ends so it can reverse itself, and the
+    /// script layer has no live World access at verb time (the VM runs inside
+    /// one exclusive system, reading this snapshot). So the values a
+    /// `set-*` verb might change have to be *in* the snapshot; they double as
+    /// the `body-friction`-style reads, which is the read-total half.
+    physics: BodyPhysics,
     pos: Vec2,
     rot: f32,
     shape: ShapeDef,
@@ -470,6 +480,11 @@ impl SceneView {
         self.joints as f64
     }
 
+    /// The authored physics of the `i`-th body.
+    fn physics(&self, i: usize) -> Option<&BodyPhysics> {
+        self.bodies.get(i).map(|b| &b.physics)
+    }
+
     /// How many bodies contain the world point `p`.
     fn count_at(&self, p: Vec2) -> f64 {
         self.bodies.iter().filter(|b| b.contains(p)).count() as f64
@@ -526,14 +541,40 @@ fn snapshot_scene(world: &mut World) -> SceneView {
             }
         }
     }
-    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize)> = world
-        .query_filtered::<(Entity, &StableId, &Transform, &ShapeDef), With<Body>>()
+    // Authored physics is spread across avian components (that is the
+    // de-adapter collapse — `docs/physics-deadapter-decision.md`), so the
+    // snapshot re-gathers them into the `BodyPhysics` bundle the records use.
+    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize, BodyPhysics)> = world
+        .query_filtered::<(
+            Entity,
+            &StableId,
+            &Transform,
+            &ShapeDef,
+            Option<&avian2d::prelude::RigidBody>,
+            Option<&avian2d::prelude::Friction>,
+            Option<&avian2d::prelude::Restitution>,
+            Option<&avian2d::prelude::ColliderDensity>,
+        ), With<Body>>()
         .iter(world)
-        .map(|(entity, id, transform, shape)| {
-            let pose = PosRot::from_transform(transform);
-            let touching = touch.get(&entity).copied().unwrap_or(0);
-            (*id, pose.pos, pose.rot, shape.clone(), touching)
-        })
+        .map(
+            |(entity, id, transform, shape, rigid_body, friction, restitution, density)| {
+                let pose = PosRot::from_transform(transform);
+                let touching = touch.get(&entity).copied().unwrap_or(0);
+                // The components are `Option` so that a body missing one is
+                // still *in* the snapshot: making them required would silently
+                // drop it from `body-count` and every index after it, which is
+                // a far worse failure than reading a default.
+                let defaults = BodyPhysics::default();
+                let physics = BodyPhysics {
+                    rigid_body: rigid_body.copied().unwrap_or(defaults.rigid_body),
+                    friction: friction.copied().unwrap_or(defaults.friction),
+                    restitution: restitution.copied().unwrap_or(defaults.restitution),
+                    density: density.copied().unwrap_or(defaults.density),
+                    ..defaults
+                };
+                (*id, pose.pos, pose.rot, shape.clone(), touching, physics)
+            },
+        )
         .collect();
     rows.sort_by_key(|(id, ..)| id.0);
     let joints = world
@@ -544,8 +585,9 @@ fn snapshot_scene(world: &mut World) -> SceneView {
         joints,
         bodies: rows
             .into_iter()
-            .map(|(id, pos, rot, shape, touching)| BodyView {
+            .map(|(id, pos, rot, shape, touching, physics)| BodyView {
                 id,
+                physics,
                 pos,
                 rot,
                 shape,
@@ -630,6 +672,10 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<SpawnJointIntent>(name::SLIDER),
         EditBinding::new::<SpawnJointIntent>(name::SPRING),
         EditBinding::new::<CommitTransformIntent>(name::PLACE),
+        EditBinding::new::<PropertyEditIntent>(name::SET_FRICTION),
+        EditBinding::new::<PropertyEditIntent>(name::SET_RESTITUTION),
+        EditBinding::new::<PropertyEditIntent>(name::SET_DENSITY),
+        EditBinding::new::<PropertyEditIntent>(name::SET_STATIC),
     ]
 }
 
@@ -734,6 +780,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_edit_verbs(engine, &shared.ops);
     register_lifecycle_verbs(engine, &shared.ops, &shared.view);
     register_joint_verbs(engine, &shared.ops, &shared.view);
+    register_property_verbs(engine, &shared.ops, &shared.view);
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
@@ -1060,6 +1107,109 @@ fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedVie
             }
         },
     );
+}
+
+/// Body-property verbs — the inspector's fields as ops.
+///
+/// Every one is a [`PropertyEditIntent`], the same seam the inspector's
+/// `precise_drag` rows commit through, so a scripted change is one undo step
+/// and lands in the save file identically to a hand edit.
+///
+/// The reads are the other half and are deliberately symmetric: `set-friction`
+/// and `body-friction` name the same quantity, so a script can round-trip a
+/// value it did not author. Reads are total; writes are seam-mediated.
+fn register_property_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // Writes. Each closure turns the new scalar into the `PropertyValue` pair
+    // the command needs, reading `old` out of the snapshot.
+    for (verb, build) in [
+        (
+            name::SET_FRICTION,
+            (|physics: &BodyPhysics, v: f64| {
+                let old = PropertyValue::Friction(physics.friction);
+                let new = PropertyValue::Friction(Friction {
+                    // Both coefficients move together, as the inspector does:
+                    // authoring two numbers that are almost always equal is
+                    // friction the UI deliberately does not expose.
+                    dynamic_coefficient: v as f32,
+                    static_coefficient: v as f32,
+                    ..physics.friction
+                });
+                (old, new)
+            }) as fn(&BodyPhysics, f64) -> (PropertyValue, PropertyValue),
+        ),
+        (name::SET_RESTITUTION, |physics: &BodyPhysics, v: f64| {
+            let old = PropertyValue::Restitution(physics.restitution);
+            let new = PropertyValue::Restitution(Restitution {
+                coefficient: v as f32,
+                ..physics.restitution
+            });
+            (old, new)
+        }),
+        (name::SET_DENSITY, |physics: &BodyPhysics, v: f64| {
+            let old = PropertyValue::Density(physics.density);
+            let new = PropertyValue::Density(ColliderDensity(v as f32));
+            (old, new)
+        }),
+        (name::SET_STATIC, |physics: &BodyPhysics, v: f64| {
+            let old = PropertyValue::RigidBody(physics.rigid_body);
+            // Non-zero = static; anything else returns the body to dynamic, so
+            // the verb is a toggle with an explicit argument rather than two
+            // verbs that can disagree.
+            let new = PropertyValue::RigidBody(if v == 0.0 {
+                RigidBody::Dynamic
+            } else {
+                RigidBody::Static
+            });
+            (old, new)
+        }),
+    ] {
+        let prop_ops = Arc::clone(ops);
+        let prop_view = Arc::clone(view);
+        engine.register_fn(verb, move |i: SteelVal, v: SteelVal| {
+            if let Some([i, v]) = nums([&i, &v])
+                && i >= 0.0
+                && let Ok(view) = prop_view.lock()
+                && let Some(id) = view.id(i as usize)
+                && let Some(physics) = view.physics(i as usize)
+            {
+                let (old, new) = build(physics, v);
+                // Setting a value to what it already is would be an empty undo
+                // step — the same guard `place` has.
+                if old != new {
+                    emit(
+                        &prop_ops,
+                        Box::new(PropertyEditIntent {
+                            changes: vec![PropertyChange { id, old, new }],
+                        }),
+                    );
+                }
+            }
+        });
+    }
+
+    // Reads — the same quantities, so a script can inspect before it edits.
+    for (verb, read) in [
+        (
+            name::BODY_FRICTION,
+            (|p: &BodyPhysics| f64::from(p.friction.dynamic_coefficient))
+                as fn(&BodyPhysics) -> f64,
+        ),
+        (name::BODY_RESTITUTION, |p: &BodyPhysics| {
+            f64::from(p.restitution.coefficient)
+        }),
+        (name::BODY_DENSITY, |p: &BodyPhysics| f64::from(p.density.0)),
+        (name::BODY_STATIC, |p: &BodyPhysics| {
+            f64::from(u8::from(p.rigid_body == RigidBody::Static))
+        }),
+    ] {
+        let v = Arc::clone(view);
+        engine.register_fn(verb, move |i: SteelVal| -> f64 {
+            match (v.lock(), index_arg(&i)) {
+                (Ok(view), Some(i)) => view.physics(i).map_or(f64::NAN, read),
+                _ => f64::NAN,
+            }
+        });
+    }
 }
 
 /// Joint verbs — **relationships** between bodies, the half of the scene model

@@ -56,6 +56,22 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
+    /// `(set-friction i v)` — Coulomb friction of the i-th body.
+    pub const SET_FRICTION: &str = "set-friction";
+    /// `(set-restitution i v)` — bounciness of the i-th body.
+    pub const SET_RESTITUTION: &str = "set-restitution";
+    /// `(set-density i v)` — mass density of the i-th body.
+    pub const SET_DENSITY: &str = "set-density";
+    /// `(set-static i on)` — make the i-th body static (or dynamic again).
+    pub const SET_STATIC: &str = "set-static";
+    /// `(body-friction i)` — read it back.
+    pub const BODY_FRICTION: &str = "body-friction";
+    /// `(body-restitution i)` — read it back.
+    pub const BODY_RESTITUTION: &str = "body-restitution";
+    /// `(body-density i)` — read it back.
+    pub const BODY_DENSITY: &str = "body-density";
+    /// `(body-static? i)` — whether the i-th body is static.
+    pub const BODY_STATIC: &str = "body-static?";
     /// `(place i x y angle)` — move/rotate the i-th body.
     pub const PLACE: &str = "place";
     /// `(hinge a b x y)` — pin two bodies at a world point.
@@ -157,8 +173,11 @@ impl OperationCatalog {
     /// verbs accrete.
     pub fn builtin() -> Self {
         let mut ops = Vec::new();
-        ops.extend(edit_specs());
+        ops.extend(spawn_specs());
+        ops.extend(mutate_specs());
+        ops.extend(property_specs());
         ops.extend(query_specs());
+        ops.extend(property_query_specs());
         ops.extend(config_specs());
         ops.extend(editor_specs());
         ops.extend(meta_specs());
@@ -188,7 +207,8 @@ impl Default for OperationCatalog {
 }
 
 /// Authored-world edit verbs (→ intents).
-fn edit_specs() -> Vec<OpSpec> {
+/// Edits that **author new geometry** — the spawn family and the cut.
+fn spawn_specs() -> Vec<OpSpec> {
     use OpCategory::Edit;
     vec![
         OpSpec {
@@ -212,6 +232,15 @@ fn edit_specs() -> Vec<OpSpec> {
             category: Edit,
             args: 3,
         },
+    ]
+}
+
+/// Edits over **existing bodies**: their pose, their properties, their
+/// relationships, and the history ops. Split from [`spawn_specs`] to mirror the
+/// bridge's own split — these all name their target by index.
+fn mutate_specs() -> Vec<OpSpec> {
+    use OpCategory::Edit;
+    vec![
         OpSpec {
             name: name::PLACE,
             signature: "(place i x y angle)",
@@ -271,7 +300,76 @@ fn edit_specs() -> Vec<OpSpec> {
     ]
 }
 
-/// Read-total geometric query verbs (→ the scene snapshot).
+/// Body-property edits — the inspector's fields as ops.
+fn property_specs() -> Vec<OpSpec> {
+    vec![
+        OpSpec {
+            name: name::SET_FRICTION,
+            signature: "(set-friction i v)",
+            doc: "Set the i-th body's Coulomb friction (static and dynamic) — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SET_RESTITUTION,
+            signature: "(set-restitution i v)",
+            doc: "Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SET_DENSITY,
+            signature: "(set-density i v)",
+            doc: "Set the i-th body's mass density (area x density = mass) — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SET_STATIC,
+            signature: "(set-static i on)",
+            doc: "Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+    ]
+}
+
+/// Reads of a body's authored properties — the mirror image of
+/// [`property_specs`], so a script can inspect a value it did not author.
+fn property_query_specs() -> Vec<OpSpec> {
+    use OpCategory::Query;
+    vec![
+        OpSpec {
+            name: name::BODY_FRICTION,
+            signature: "(body-friction i)",
+            doc: "Coulomb friction of the i-th body.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_RESTITUTION,
+            signature: "(body-restitution i)",
+            doc: "Bounciness of the i-th body.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_DENSITY,
+            signature: "(body-density i)",
+            doc: "Mass density of the i-th body.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_STATIC,
+            signature: "(body-static? i)",
+            doc: "Whether the i-th body is static (1) or not (0).",
+            category: Query,
+            args: 1,
+        },
+    ]
+}
+
 fn query_specs() -> Vec<OpSpec> {
     use OpCategory::Query;
     vec![

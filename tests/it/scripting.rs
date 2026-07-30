@@ -202,6 +202,144 @@ fn a_registered_action_runs_when_invoked() {
     assert_eq!(body_count(&mut app), 3);
 }
 
+/// Body properties round-trip: a `set-*` verb writes through the same
+/// `PropertyEditIntent` the inspector's fields commit, and the matching
+/// `body-*` read gets it back. Reads are total; writes are seam-mediated — this
+/// asserts both halves name the same quantity.
+#[test]
+fn body_properties_round_trip_through_the_property_seam() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(
+        &mut app,
+        "(begin (set-friction 0 0.8) (set-restitution 0 0.25) (set-density 0 3))",
+    );
+    // Read each back and spawn a marker per value that took.
+    run(
+        &mut app,
+        "(begin
+           (if (> (body-friction 0) 0.79) (spawn-box 0 -100 4 4) 0)
+           (if (< (body-restitution 0) 0.26) (spawn-box 10 -100 4 4) 0)
+           (if (> (body-density 0) 2.9) (spawn-box 20 -100 4 4) 0))",
+    );
+    assert_eq!(body_count(&mut app), 4, "all three values read back");
+}
+
+/// `(set-static i on)` is one verb with an argument rather than two verbs that
+/// could disagree, and it is undoable like any property edit.
+#[test]
+fn making_a_body_static_is_reversible() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(
+        &mut app,
+        "(if (> (body-static? 0) 0) (spawn-box 0 -100 4 4) 0)",
+    );
+    assert_eq!(body_count(&mut app), 1, "a fresh box is dynamic");
+
+    run(&mut app, "(set-static 0 1)");
+    run(
+        &mut app,
+        "(if (> (body-static? 0) 0) (spawn-box 0 -100 4 4) 0)",
+    );
+    assert_eq!(body_count(&mut app), 2, "now static");
+
+    // Undo the marker spawn, then the static edit.
+    undo(&mut app);
+    undo(&mut app);
+    run(
+        &mut app,
+        "(if (> (body-static? 0) 0) (spawn-box 0 -100 4 4) 0)",
+    );
+    assert_eq!(body_count(&mut app), 1, "dynamic again, no marker");
+
+    // And zero puts it back explicitly — in a *separate* run, see below.
+    run(&mut app, "(set-static 0 1)");
+    run(&mut app, "(set-static 0 0)");
+    run(
+        &mut app,
+        "(if (> (body-static? 0) 0) (spawn-box 0 -100 4 4) 0)",
+    );
+    assert_eq!(body_count(&mut app), 1, "0 means dynamic");
+}
+
+/// The one-snapshot-per-run rule reaches property writes too, and here it is
+/// genuinely surprising: `(begin (set-static 0 1) (set-static 0 0))` leaves the
+/// body **static**, because both calls read the same pre-run value — so the
+/// second sees `old == new` and is correctly suppressed as a no-op.
+///
+/// This is the documented semantics, not a bug, and it is pinned because the
+/// naive reading (that the calls compose left to right) is the one a script
+/// author will reach for first.
+#[test]
+fn property_writes_in_one_run_all_see_the_pre_run_value() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(&mut app, "(begin (set-static 0 1) (set-static 0 0))");
+    run(
+        &mut app,
+        "(if (> (body-static? 0) 0) (spawn-box 0 -100 4 4) 0)",
+    );
+    assert_eq!(
+        body_count(&mut app),
+        2,
+        "the second set saw the pre-run value and was a no-op, so the body is static"
+    );
+
+    // The same shape with two *different* properties composes fine, because
+    // each reads a field the other does not touch.
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(&mut app, "(begin (set-friction 0 0.9) (set-density 0 5))");
+    run(
+        &mut app,
+        "(begin
+           (if (> (body-friction 0) 0.89) (spawn-box 0 -100 4 4) 0)
+           (if (> (body-density 0) 4.9) (spawn-box 10 -100 4 4) 0))",
+    );
+    assert_eq!(body_count(&mut app), 3, "independent fields both took");
+}
+
+/// Setting a property to the value it already holds must not push an empty undo
+/// step — the same guard `place` has, and easy to get wrong because the write
+/// still "succeeds".
+#[test]
+fn setting_a_property_to_its_current_value_is_not_a_step() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(&mut app, "(set-friction 0 0.5)");
+    // 0.5 is the default, so that was a no-op; undo should reach the spawn.
+    undo(&mut app);
+    assert_eq!(
+        body_count(&mut app),
+        0,
+        "the redundant set left no step, so undo reached the spawn"
+    );
+}
+
+/// Reads of a body that does not exist are NaN rather than a panic or a zero
+/// that would read as a real measurement.
+#[test]
+fn property_reads_of_a_missing_body_are_not_silently_zero() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    // NaN compares false against everything, so no marker spawns either way.
+    run(
+        &mut app,
+        "(begin
+           (if (> (body-friction 99) -1000) (spawn-box 0 -100 4 4) 0)
+           (if (< (body-density 99) 1000) (spawn-box 10 -100 4 4) 0))",
+    );
+    assert_eq!(body_count(&mut app), 1, "NaN failed both comparisons");
+    // And a write to a missing body changes nothing.
+    run(&mut app, "(set-friction 99 0.9)");
+    run(
+        &mut app,
+        "(if (> (body-friction 0) 0.89) (spawn-box 0 -100 4 4) 0)",
+    );
+    assert_eq!(body_count(&mut app), 1, "body 0 was not touched");
+}
+
 /// A script could spawn and delete but never *move* anything after the fact.
 /// `(place …)` closes that, and it is one undo step because the old pose comes
 /// from the run's snapshot — a command that only knew the new pose could not
