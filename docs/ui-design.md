@@ -61,9 +61,21 @@ an `Icon` enum with an asset path, loaded once at startup and registered with
   hover text, and it is the fallback when the texture is missing — which is
   what makes the palette testable headless (`tests/it/ui_panels.rs` reads the
   labels).
-- Use an icon for a *prominent, repeated* action (transport, tool palette,
-  pack, array). Use a glyph for inline chrome (a close ✕, a ▸ disclosure).
-  Use words for anything the user must read to understand.
+- Use an icon for a *prominent, repeated* action — the transport, the tool
+  palette — where a user learns the picture's **position** and stops reading it.
+  Use a glyph for inline chrome (a close ✕, a ▸ disclosure). Use words for
+  anything the user must read to understand.
+
+The `Icon` enum is deliberately narrow, and that is a correction rather than an
+oversight: it shipped with eight variants picked by guessing which actions wanted
+pictures, and five never found a call site. Their natural homes turned out to be
+glyph territory (close, zoom-to-fit — both already glyphs) or *menu text*, which
+is read rather than recognised. Adding decoration to menu entries to justify an
+enum variant is backwards reasoning, so the variants went instead.
+
+Beware the shape of the test that let them survive: `every_icon_path_exists`
+iterates `Icon::ALL`, so an unused variant still compiles and still passes. A
+green suite is not evidence a variant is *used* — only that its file is on disk.
 
 ---
 

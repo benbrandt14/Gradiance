@@ -30,6 +30,19 @@ use bevy_egui::egui;
 /// editor actually uses it, so the unused remainder stays visibly unused rather
 /// than becoming an undifferentiated grab-bag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// The editor's image icons.
+///
+/// Deliberately **narrow**. This started with eight variants, chosen from the
+/// asset set by guessing which actions wanted pictures; five of them never
+/// found a call site, because on contact with the code their natural homes
+/// turned out to be places `docs/ui-design.md` assigns to *glyphs* (a close ✕,
+/// a zoom-to-fit) or to *words* (context-menu entries, which are read rather
+/// than recognised). Decorating menu text to justify an enum variant is
+/// backwards, so they were removed.
+///
+/// The rule, restated: an icon earns its place when the action is **prominent
+/// and repeated** — the transport, the tool palette — where a user learns the
+/// picture's position and stops reading. Everything else is a glyph or a word.
 pub enum Icon {
     /// Start the simulation.
     Play,
@@ -37,30 +50,11 @@ pub enum Icon {
     Pause,
     /// Return the camera to the straight-on 2D view.
     HomeView,
-    /// Close a panel, window, or row.
-    Close,
-    /// Open settings.
-    Settings,
-    /// Repeat a selection as an array.
-    Array,
-    /// Pack / optimize a selection's layout.
-    Pack,
-    /// Zoom to fit.
-    Fit,
 }
 
 impl Icon {
     /// Every icon, for loading.
-    pub const ALL: [Self; 8] = [
-        Self::Play,
-        Self::Pause,
-        Self::HomeView,
-        Self::Close,
-        Self::Settings,
-        Self::Array,
-        Self::Pack,
-        Self::Fit,
-    ];
+    pub const ALL: [Self; 3] = [Self::Play, Self::Pause, Self::HomeView];
 
     /// The asset path, relative to `assets/`.
     ///
@@ -72,11 +66,6 @@ impl Icon {
             Self::Play => "icons/play.png",
             Self::Pause => "icons/pause.png",
             Self::HomeView => "icons/home (2).png",
-            Self::Close => "icons/close.png",
-            Self::Settings => "icons/settings.png",
-            Self::Array => "icons/clone (2).png",
-            Self::Pack => "icons/csg_union.png",
-            Self::Fit => "icons/fullscreen.png",
         }
     }
 }
@@ -178,6 +167,48 @@ mod tests {
             .filter(|rel| !root.join(rel).exists())
             .collect();
         assert!(missing.is_empty(), "missing icon files: {missing:?}");
+    }
+
+    /// Every variant must have a real call site.
+    ///
+    /// This is the test that was missing. `every_icon_path_exists` iterates
+    /// `Icon::ALL`, so a variant nobody draws still compiles and still passes —
+    /// the suite was green while five of eight variants were dead. Scanning the
+    /// sources is the only way to tell "declared" from "used", the same reason
+    /// `fonts::no_source_file_uses_an_unlisted_glyph` exists.
+    #[test]
+    fn every_icon_variant_is_actually_drawn_somewhere() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut sources = String::new();
+        for entry in std::fs::read_dir(&dir)
+            .expect("the crate has a src dir")
+            .flatten()
+        {
+            let path = entry.path();
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            // This file declares the variants; a mention here is not a use.
+            if path.file_name().is_some_and(|n| n == "icons.rs") {
+                continue;
+            }
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                sources.push_str(&text);
+            }
+        }
+
+        let unused: Vec<String> = Icon::ALL
+            .iter()
+            .map(|icon| format!("{icon:?}"))
+            .filter(|name| !sources.contains(&format!("Icon::{name}")))
+            .collect();
+        assert!(
+            unused.is_empty(),
+            "these Icon variants are declared but never drawn: {unused:?}\n\
+             An icon earns its place only where the action is prominent and \
+             repeated — otherwise it is a glyph or a word (docs/ui-design.md). \
+             Remove the variant rather than decorating a menu to justify it."
+        );
     }
 
     /// The registry is empty headless, and `icon_button` must cope rather than
