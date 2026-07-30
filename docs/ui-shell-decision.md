@@ -48,8 +48,23 @@ separates "a weekend" from "an R&D project."
   the UI publishes rather than a dependency edge upward. Any later extension of
   the action layer — tools, commands — should copy that asymmetry.
 
-  Still open: the *action* half beyond panels. Menu items that emit intents
-  (undo, delete, group) are hand-wired, not registry rows.
+  The **action** half is registered too, as far as it honestly can be: `undo`,
+  `redo` and `delete` are Edit-category ops going through the same
+  `UndoIntent`/`RedoIntent`/`DeleteIntent` the menu emits, so a script can walk
+  the stack it just wrote to.
+
+  What is deliberately *not* generated is the Edit menu's **presentation**. Its
+  rows carry state a flat registry row cannot express — an enablement predicate
+  (`undo_depth > 0`) and a dynamic label ("Undo Spawn Body", named from the
+  pending step, which matters mid-run because a simulation is one undo step).
+  Forcing those through a registry would make the menu worse, not more uniform.
+  The op is the registered thing; the row is a projection of it plus history
+  state.
+
+  Still open: set-shaped edits (`group`, `ungroup`). Their natural argument is a
+  selection, which lives *above* this layer, and a fixed-arity `(group i j)`
+  would be an arbitrary restriction. They wait for a list-argument convention —
+  see `docs/scripting.md`.
 - Keep the `dev` dynamic-linking loop; widen `egui_kittest` headless coverage.
 
 ## What landed (option A, by accretion)

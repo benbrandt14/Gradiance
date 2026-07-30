@@ -600,6 +600,13 @@ a normal dependency, not a cargo feature — see the decision doc's
     and invoking one runs its source through `ScriptInputs`. Next: pass the
     click point / selection into the action, and fold the existing hard-coded
     `ui::context_menu` buttons into the same table as the built-in seed.
+  - **History and delete as ops (landed).** `(undo)`, `(redo)` and `(delete i)`
+    route through the same `UndoIntent`/`RedoIntent`/`DeleteIntent` the Edit menu
+    emits, so a script can walk the stack it just wrote to — the loop a `.scm`
+    fixture needs. Indexed rather than selection-scoped: `Selection` lives in
+    `gradiance-interaction`, *above* the script layer, and a script acting on
+    invisible state would not be reproducible anyway. Set-shaped edits
+    (`group`/`ungroup`) wait for a list-argument convention.
   - **Panels are registered ops (landed).** `panel-show` / `panel-hide` /
     `panel-toggle` / `panel-open?` resolve against `menu::Panels::named` — the
     *same* table the View menu renders — so a panel appears in the menu and the

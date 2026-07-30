@@ -56,6 +56,12 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
+    /// `(undo)` — undo the last command.
+    pub const UNDO: &str = "undo";
+    /// `(redo)` — redo the last undone command.
+    pub const REDO: &str = "redo";
+    /// `(delete i)` — delete the i-th body (id order).
+    pub const DELETE: &str = "delete";
     /// `(panel-show name)` — open an editor panel by name.
     pub const PANEL_SHOW: &str = "panel-show";
     /// `(panel-hide name)` — close an editor panel by name.
@@ -195,6 +201,27 @@ fn edit_specs() -> Vec<OpSpec> {
             doc: "Author a fixed ground half-plane through (x, y), tilted by angle radians.",
             category: Edit,
             args: 3,
+        },
+        OpSpec {
+            name: name::DELETE,
+            signature: "(delete i)",
+            doc: "Delete the i-th body (id order, same index as body-x) — undoable.",
+            category: OpCategory::Edit,
+            args: 1,
+        },
+        OpSpec {
+            name: name::UNDO,
+            signature: "(undo)",
+            doc: "Undo the last command — the same step Edit ▸ Undo takes.",
+            category: OpCategory::Edit,
+            args: 0,
+        },
+        OpSpec {
+            name: name::REDO,
+            signature: "(redo)",
+            doc: "Redo the last undone command.",
+            category: OpCategory::Edit,
+            args: 0,
         },
         OpSpec {
             name: name::CUT,

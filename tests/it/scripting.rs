@@ -202,6 +202,99 @@ fn a_registered_action_runs_when_invoked() {
     assert_eq!(body_count(&mut app), 3);
 }
 
+/// The history verbs are the Edit menu's undo/redo as ops: no arguments, and
+/// they route through the *same* `UndoIntent`/`RedoIntent` the menu emits, so a
+/// script can walk the stack it just wrote to.
+#[test]
+fn a_script_can_undo_and_redo_its_own_edits() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 10 10)");
+    run(&mut app, "(spawn-box 30 0 10 10)");
+    assert_eq!(body_count(&mut app), 2);
+
+    run(&mut app, "(undo)");
+    assert_eq!(body_count(&mut app), 1, "one step back");
+    run(&mut app, "(redo)");
+    assert_eq!(body_count(&mut app), 2, "and forward again");
+}
+
+/// `(delete i)` is the destructive counterpart to `spawn-*`, indexed the same
+/// way `body-x` is. It goes through `DeleteIntent`, so it is one undoable
+/// command — asserted here, because a delete that skipped the command seam
+/// would look identical until someone pressed undo.
+#[test]
+fn a_scripted_delete_is_one_undoable_command() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 10 10) (spawn-box 30 0 10 10))",
+    );
+    assert_eq!(body_count(&mut app), 2);
+
+    run(&mut app, "(delete 0)");
+    assert_eq!(body_count(&mut app), 1);
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 2, "the delete was undoable");
+}
+
+/// An out-of-range or negative index must be a no-op, not a panic and not a
+/// delete of something else. The index is resolved against the run's snapshot,
+/// so this is the boundary every scripted edit shares.
+#[test]
+fn a_delete_with_a_bad_index_does_nothing() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 10 10)");
+    run(&mut app, "(begin (delete 99) (delete -1))");
+    assert_eq!(body_count(&mut app), 1);
+}
+
+/// Within **one** run every index resolves against the same snapshot, taken
+/// before the script started. Two different indices therefore delete two
+/// bodies (what you would expect), and the same index twice emits two intents
+/// for one id — the second must be a harmless no-op at dispatch, not a panic.
+/// This is the seam's sharpest edge, so it is pinned rather than assumed.
+#[test]
+fn indices_in_one_run_resolve_against_one_snapshot() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 10 10) (spawn-box 30 0 10 10) (spawn-box 60 0 10 10))",
+    );
+    // Two distinct indices in one run: both land.
+    run(&mut app, "(begin (delete 0) (delete 1))");
+    assert_eq!(body_count(&mut app), 1);
+
+    // The same index twice in one run: one body goes, the repeat is inert.
+    run(
+        &mut app,
+        "(begin (spawn-box 90 0 10 10) (spawn-box 120 0 10 10))",
+    );
+    assert_eq!(body_count(&mut app), 3);
+    run(&mut app, "(begin (delete 0) (delete 0))");
+    assert_eq!(
+        body_count(&mut app),
+        2,
+        "a repeated index deletes once and does not panic"
+    );
+}
+
+/// Reads compose with the new edit: clear the scene by deleting index 0 as many
+/// times as there are bodies. Each `(delete 0)` resolves against a fresh
+/// snapshot, which is what makes the loop terminate at the right count.
+#[test]
+fn delete_composes_with_the_query_verbs() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 10 10) (spawn-box 30 0 10 10) (spawn-box 60 0 10 10))",
+    );
+    assert_eq!(body_count(&mut app), 3);
+    for _ in 0..3 {
+        run(&mut app, "(when (> (body-count) 0) (delete 0))");
+    }
+    assert_eq!(body_count(&mut app), 0);
+}
+
 /// The panel verbs queue a request rather than writing panel state — the UI
 /// layer sits above the script layer, so it could not write it even if the
 /// seam allowed. This asserts the script half: three verbs, three queued

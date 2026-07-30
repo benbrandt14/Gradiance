@@ -39,7 +39,7 @@
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
 use gradiance_command::CommandDispatchSet;
-use gradiance_command::intent::{CutIntent, SpawnBodyIntent};
+use gradiance_command::intent::{CutIntent, DeleteIntent, RedoIntent, SpawnBodyIntent, UndoIntent};
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
@@ -388,6 +388,10 @@ pub struct PanelStates(pub Vec<(String, bool)>);
 
 /// One body in a [`SceneView`] snapshot (world pose + authored shape).
 struct BodyView {
+    /// Durable identity — what an edit verb names as its target. Raw `Entity`
+    /// is never cross-referenced (invariant 3), and the snapshot outlives the
+    /// frame it was taken in, so the id is the only safe handle here.
+    id: StableId,
     pos: Vec2,
     rot: f32,
     shape: ShapeDef,
@@ -432,6 +436,11 @@ impl SceneView {
     /// Rotation (radians) of the `i`-th body, or NaN if out of range.
     fn rot(&self, i: usize) -> f64 {
         self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.rot))
+    }
+
+    /// Identity of the `i`-th body — the target an edit verb names.
+    fn id(&self, i: usize) -> Option<StableId> {
+        self.bodies.get(i).map(|b| b.id)
     }
 
     /// How many bodies contain the world point `p`.
@@ -503,7 +512,8 @@ fn snapshot_scene(world: &mut World) -> SceneView {
     SceneView {
         bodies: rows
             .into_iter()
-            .map(|(_, pos, rot, shape, touching)| BodyView {
+            .map(|(id, pos, rot, shape, touching)| BodyView {
+                id,
                 pos,
                 rot,
                 shape,
@@ -581,6 +591,9 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_CIRCLE),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_GROUND),
+        EditBinding::new::<DeleteIntent>(name::DELETE),
+        EditBinding::new::<UndoIntent>(name::UNDO),
+        EditBinding::new::<RedoIntent>(name::REDO),
     ]
 }
 
@@ -682,7 +695,7 @@ fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
 /// [`OperationCatalog::builtin`] + (for edits) one [`IntentDispatch::register`]
 /// call in [`ScriptPlugin`].
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
-    register_edit_verbs(engine, &shared.ops);
+    register_edit_verbs(engine, &shared.ops, &shared.view);
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
@@ -697,7 +710,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
 }
 
 /// Authored-world edits — each emits a reflected intent onto the op queue.
-fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
+fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
     // `(cut ax ay bx by width)` — sever bodies along a stroke.
     let cut_ops = Arc::clone(ops);
     engine.register_fn(
@@ -715,6 +728,35 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
             }
         },
     );
+
+    // `(undo)` / `(redo)` — the history ops, the same steps Edit ▸ Undo/Redo
+    // take. No arguments and no targets: the stack knows what it did.
+    let undo_ops = Arc::clone(ops);
+    engine.register_fn(name::UNDO, move || {
+        emit(&undo_ops, Box::new(UndoIntent));
+    });
+    let redo_ops = Arc::clone(ops);
+    engine.register_fn(name::REDO, move || {
+        emit(&redo_ops, Box::new(RedoIntent));
+    });
+
+    // `(delete i)` — remove the i-th body, by the same index order as
+    // `body-x`/`body-y`. Indexed rather than selection-scoped: the selection
+    // lives in `gradiance-interaction`, which sits *above* this layer, and a
+    // script acting on "whatever happens to be selected" would be fragile
+    // anyway. `i` is resolved against the run's snapshot, so a delete composes
+    // with the reads above it in the same script.
+    let delete_ops = Arc::clone(ops);
+    let delete_view = Arc::clone(view);
+    engine.register_fn(name::DELETE, move |i: SteelVal| {
+        if let Some([i]) = nums([&i])
+            && i >= 0.0
+            && let Ok(view) = delete_view.lock()
+            && let Some(id) = view.id(i as usize)
+        {
+            emit(&delete_ops, Box::new(DeleteIntent { targets: vec![id] }));
+        }
+    });
 
     // `(spawn-box x y w h)` — author a box body centered at (x, y). Returns
     // the new body's handle (its stable id), so `(define b (spawn-box …))`

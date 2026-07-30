@@ -80,6 +80,8 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (spawn-circle x y r)         ; a circle centred at (x, y) → its handle
 (spawn-ground x y angle)     ; a fixed ground half-plane → its handle
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
+(delete i)                   ; delete the i-th body (id order, as body-x)
+(undo) (redo)                ; walk the command stack — Edit ▸ Undo/Redo as ops
 
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
@@ -198,6 +200,28 @@ constant, so a new verb touches three (edits: four) places:
    case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
    `cargo test` green — the validation test above already covers the
    catalog↔builtin drift cases.
+
+### Why `(delete i)` and not `(delete-selection)`
+
+The Edit menu's delete acts on the selection. A verb cannot: `Selection` lives
+in `gradiance-interaction`, which sits **above** `gradiance-script` in the layer
+graph, so the script layer cannot read it — the same asymmetry `panel-open?`
+resolves with a mirror.
+
+A mirror would be the wrong answer here, though. A script that deletes
+"whatever happens to be selected" depends on invisible state and is not
+reproducible, which is exactly what you do not want from a `.scm` fixture. So
+edits are **indexed**, sharing the `i` vocabulary the query verbs already use
+(`body-x i`, `body-y i`). The index is resolved against the run's snapshot, so
+reads and edits compose within one script:
+
+```scheme
+(when (> (body-count) 0) (delete 0))   ; pop the first body
+```
+
+Group/ungroup are deliberately absent: their natural argument *is* a set, and a
+fixed-arity `(group i j)` would be an arbitrary restriction rather than the op.
+They wait for a list-shaped argument convention.
 
 ### Panels are registered ops
 

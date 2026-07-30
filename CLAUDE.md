@@ -141,6 +141,15 @@ REPL console + `--script` loader (`crates/gradiance-script/src/bridge.rs`,
 `crates/gradiance-ui/src/console.rs`); adding a verb follows the recipe in
 `docs/scripting.md`.
 
+Two accretion points already landed that set the pattern for the rest:
+**panels are registered ops** (`menu::Panels::named` is the one table the View
+menu and the `panel-*` verbs share) and **history/delete are ops** (`(undo)`,
+`(redo)`, `(delete i)` emit the same intents the Edit menu does). Both obey the
+asymmetry below — a verb *queues* through an existing seam, and where a read
+would have to reach **up** the layer graph (panel state, the selection) it
+either goes through a mirror the upper layer publishes or the verb is indexed
+instead. Never add an upward dependency edge to make a verb work.
+
 - **No new mutation path.** Scripting reuses the *same* intent seam as tools/UI
   (invariants 1–2). A future operation registry may only dispatch through
   intents / settings resources — never `get_mut` an authored component.
