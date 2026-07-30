@@ -56,6 +56,16 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
+    /// `(place i x y angle)` — move/rotate the i-th body.
+    pub const PLACE: &str = "place";
+    /// `(hinge a b x y)` — pin two bodies at a world point.
+    pub const HINGE: &str = "hinge";
+    /// `(slider a b x y ax ay)` — prismatic joint along an axis.
+    pub const SLIDER: &str = "slider";
+    /// `(spring a b stiffness damping)` — spring-damper strut.
+    pub const SPRING: &str = "spring";
+    /// `(joint-count)` — how many joints exist.
+    pub const JOINT_COUNT: &str = "joint-count";
     /// `(undo)` — undo the last command.
     pub const UNDO: &str = "undo";
     /// `(redo)` — redo the last undone command.
@@ -203,6 +213,34 @@ fn edit_specs() -> Vec<OpSpec> {
             args: 3,
         },
         OpSpec {
+            name: name::PLACE,
+            signature: "(place i x y angle)",
+            doc: "Move the i-th body to (x, y) and rotate it to `angle` radians — one undo step.",
+            category: OpCategory::Edit,
+            args: 4,
+        },
+        OpSpec {
+            name: name::HINGE,
+            signature: "(hinge a b x y)",
+            doc: "Hinge bodies a and b at world point (x, y); b < 0 pins a to the world.",
+            category: OpCategory::Edit,
+            args: 4,
+        },
+        OpSpec {
+            name: name::SLIDER,
+            signature: "(slider a b x y ax ay)",
+            doc: "Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world.",
+            category: OpCategory::Edit,
+            args: 6,
+        },
+        OpSpec {
+            name: name::SPRING,
+            signature: "(spring a b stiffness damping)",
+            doc: "Spring-damper strut between the centres of a and b; rest length is their current distance.",
+            category: OpCategory::Edit,
+            args: 4,
+        },
+        OpSpec {
             name: name::DELETE,
             signature: "(delete i)",
             doc: "Delete the i-th body (id order, same index as body-x) — undoable.",
@@ -243,6 +281,13 @@ fn query_specs() -> Vec<OpSpec> {
             doc: "Whether an editor panel is currently shown (reads are total).",
             category: Query,
             args: 1,
+        },
+        OpSpec {
+            name: name::JOINT_COUNT,
+            signature: "(joint-count)",
+            doc: "Number of authored joints in the committed scene.",
+            category: Query,
+            args: 0,
         },
         OpSpec {
             name: name::BODY_COUNT,

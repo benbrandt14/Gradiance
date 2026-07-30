@@ -7,7 +7,7 @@
 //! a scene fixture is a few lines of lisp, and the assertions are on the real
 //! authored world it produces.
 
-use crate::harness::{body_count, paused_app, undo};
+use crate::harness::{body_count, joint_count, paused_app, undo};
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
 use gradiance::script::bridge::{
@@ -200,6 +200,152 @@ fn a_registered_action_runs_when_invoked() {
     let source = app.world().resource::<ScriptActions>().0[0].source.clone();
     run(&mut app, &source);
     assert_eq!(body_count(&mut app), 3);
+}
+
+/// A script could spawn and delete but never *move* anything after the fact.
+/// `(place …)` closes that, and it is one undo step because the old pose comes
+/// from the run's snapshot — a command that only knew the new pose could not
+/// reverse itself.
+#[test]
+fn a_script_moves_and_rotates_a_body() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(&mut app, "(place 0 50 25 1.5)");
+    // Read the pose back through the query verbs — the same index vocabulary.
+    run(
+        &mut app,
+        "(begin
+             (if (> (body-x 0) 49) (spawn-box 0 -100 4 4) 0)
+             (if (> (body-y 0) 24) (spawn-box 10 -100 4 4) 0)
+             (if (> (body-rot 0) 1.4) (spawn-box 20 -100 4 4) 0))",
+    );
+    assert_eq!(
+        body_count(&mut app),
+        4,
+        "x, y and rotation all took — three markers spawned"
+    );
+}
+
+#[test]
+fn a_scripted_move_is_undoable_and_a_no_op_move_is_not_a_step() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(&mut app, "(place 0 50 0 0)");
+    undo(&mut app);
+    // Back at the origin: a marker spawns only if x came back below 1.
+    run(&mut app, "(if (< (body-x 0) 1) (spawn-box 0 -100 4 4) 0)");
+    assert_eq!(body_count(&mut app), 2, "the move was undoable");
+
+    // Placing a body where it already is must not push an empty undo step:
+    // undoing after it should reverse the *spawn*, not nothing.
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 7 0 20 20)");
+    run(&mut app, "(place 0 7 0 0)");
+    undo(&mut app);
+    assert_eq!(
+        body_count(&mut app),
+        0,
+        "the no-op place left no step, so undo reached the spawn"
+    );
+}
+
+/// A **chain** — the thing a multibody DSL exists for, and the thing a script
+/// could not express at all before: three bodies, two hinges, authored in one
+/// run. Joints are the *relationships* half of the scene model.
+#[test]
+fn a_script_builds_a_hinged_chain() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 20 6) (spawn-box 30 0 20 6) (spawn-box 60 0 20 6))",
+    );
+    assert_eq!(body_count(&mut app), 3);
+    // Hinge 0-1 at their shared edge, then 1-2 at theirs.
+    run(&mut app, "(begin (hinge 0 1 15 0) (hinge 1 2 45 0))");
+    assert_eq!(joint_count(&mut app), 2, "two hinges in the scene");
+}
+
+/// A joint verb returns its handle, and `b < 0` is the world pin — the
+/// one-body case the tools produce by clicking where only one body sits.
+#[test]
+fn a_negative_second_body_pins_to_the_world() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 6)");
+    run(&mut app, "(hinge 0 -1 0 0)");
+    assert_eq!(joint_count(&mut app), 1);
+    // The handle is a real value, so `(define j (hinge …))` names the joint —
+    // asserted by binding it and using it, since a verb that returned an empty
+    // string would still have spawned the joint above.
+    run(
+        &mut app,
+        r#"(begin (define j (hinge 0 -1 10 0)) (label j "pivot"))"#,
+    );
+    assert_eq!(joint_count(&mut app), 2);
+    let labels = app
+        .world()
+        .resource::<gradiance::script::bridge::WorkspaceLabels>();
+    assert_eq!(
+        labels.0.first().map(|(n, _)| n.as_str()),
+        Some("pivot"),
+        "the joint handle parsed as an id and bound a name"
+    );
+}
+
+/// All three kinds reach the scene, and each is one undoable command. A joint
+/// that skipped the command seam would look identical until someone pressed
+/// undo — the same trap the delete test guards.
+#[test]
+fn every_joint_kind_lands_and_is_undoable() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 20 6) (spawn-box 40 0 20 6))",
+    );
+    run(&mut app, "(hinge 0 1 20 0)");
+    run(&mut app, "(slider 0 1 20 0 1 0)");
+    run(&mut app, "(spring 0 1 100 0.5)");
+    assert_eq!(joint_count(&mut app), 3, "hinge, slider, spring");
+
+    undo(&mut app);
+    assert_eq!(joint_count(&mut app), 2, "the spring was one command");
+    undo(&mut app);
+    undo(&mut app);
+    assert_eq!(joint_count(&mut app), 0);
+}
+
+/// Bad body indices must not produce a half-built joint. A first index that
+/// does not resolve emits nothing at all; a bad *second* index degrades to a
+/// world pin, so a typo shows up in the scene rather than silently vanishing.
+#[test]
+fn joint_verbs_reject_unresolvable_bodies() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 6)");
+
+    run(&mut app, "(hinge 99 0 0 0)");
+    assert_eq!(joint_count(&mut app), 0, "no body 99 — nothing emitted");
+    run(&mut app, "(hinge -1 0 0 0)");
+    assert_eq!(
+        joint_count(&mut app),
+        0,
+        "a negative *first* body is not a pin"
+    );
+
+    run(&mut app, "(hinge 0 99 0 0)");
+    assert_eq!(
+        joint_count(&mut app),
+        1,
+        "a bad second body pins to the world"
+    );
+}
+
+/// A hinge between a body and *itself* is meaningless, and avian would be
+/// constraining one body to its own anchor. It degrades to a world pin.
+#[test]
+fn a_joint_from_a_body_to_itself_becomes_a_world_pin() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 6)");
+    run(&mut app, "(hinge 0 0 0 0)");
+    assert_eq!(joint_count(&mut app), 1, "one joint, not a self-constraint");
 }
 
 /// The history verbs are the Edit menu's undo/redo as ops: no arguments, and

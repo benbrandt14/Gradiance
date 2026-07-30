@@ -39,12 +39,16 @@
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
 use gradiance_command::CommandDispatchSet;
-use gradiance_command::intent::{CutIntent, DeleteIntent, RedoIntent, SpawnBodyIntent, UndoIntent};
+use gradiance_command::intent::{
+    CommitTransformIntent, CutIntent, DeleteIntent, RedoIntent, SpawnBodyIntent, SpawnJointIntent,
+    TransformChange, UndoIntent,
+};
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
+use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::settings::SimSettings;
 use gradiance_domain::shape::ShapeDef;
@@ -415,6 +419,9 @@ impl BodyView {
 #[derive(Default)]
 pub struct SceneView {
     bodies: Vec<BodyView>,
+    /// How many joints the committed scene holds — the observable a script (or
+    /// a test) uses to confirm a constraint landed.
+    joints: usize,
 }
 
 impl SceneView {
@@ -441,6 +448,26 @@ impl SceneView {
     /// Identity of the `i`-th body — the target an edit verb names.
     fn id(&self, i: usize) -> Option<StableId> {
         self.bodies.get(i).map(|b| b.id)
+    }
+
+    /// Identity **and pose** of the `i`-th body. Joint anchors are authored in
+    /// each body's *local* space, so a verb that places one needs the pose to
+    /// convert, exactly as the connector tool does.
+    fn body(&self, i: usize) -> Option<(StableId, PosRot)> {
+        self.bodies.get(i).map(|b| {
+            (
+                b.id,
+                PosRot {
+                    pos: b.pos,
+                    rot: b.rot,
+                },
+            )
+        })
+    }
+
+    /// Number of authored joints.
+    fn joint_count(&self) -> f64 {
+        self.joints as f64
     }
 
     /// How many bodies contain the world point `p`.
@@ -509,7 +536,12 @@ fn snapshot_scene(world: &mut World) -> SceneView {
         })
         .collect();
     rows.sort_by_key(|(id, ..)| id.0);
+    let joints = world
+        .query_filtered::<(), With<gradiance_domain::Joint>>()
+        .iter(world)
+        .count();
     SceneView {
+        joints,
         bodies: rows
             .into_iter()
             .map(|(id, pos, rot, shape, touching)| BodyView {
@@ -594,6 +626,10 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<DeleteIntent>(name::DELETE),
         EditBinding::new::<UndoIntent>(name::UNDO),
         EditBinding::new::<RedoIntent>(name::REDO),
+        EditBinding::new::<SpawnJointIntent>(name::HINGE),
+        EditBinding::new::<SpawnJointIntent>(name::SLIDER),
+        EditBinding::new::<SpawnJointIntent>(name::SPRING),
+        EditBinding::new::<CommitTransformIntent>(name::PLACE),
     ]
 }
 
@@ -695,7 +731,9 @@ fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
 /// [`OperationCatalog::builtin`] + (for edits) one [`IntentDispatch::register`]
 /// call in [`ScriptPlugin`].
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
-    register_edit_verbs(engine, &shared.ops, &shared.view);
+    register_edit_verbs(engine, &shared.ops);
+    register_lifecycle_verbs(engine, &shared.ops, &shared.view);
+    register_joint_verbs(engine, &shared.ops, &shared.view);
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
@@ -710,7 +748,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
 }
 
 /// Authored-world edits — each emits a reflected intent onto the op queue.
-fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
     // `(cut ax ay bx by width)` — sever bodies along a stroke.
     let cut_ops = Arc::clone(ops);
     engine.register_fn(
@@ -728,35 +766,6 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
             }
         },
     );
-
-    // `(undo)` / `(redo)` — the history ops, the same steps Edit ▸ Undo/Redo
-    // take. No arguments and no targets: the stack knows what it did.
-    let undo_ops = Arc::clone(ops);
-    engine.register_fn(name::UNDO, move || {
-        emit(&undo_ops, Box::new(UndoIntent));
-    });
-    let redo_ops = Arc::clone(ops);
-    engine.register_fn(name::REDO, move || {
-        emit(&redo_ops, Box::new(RedoIntent));
-    });
-
-    // `(delete i)` — remove the i-th body, by the same index order as
-    // `body-x`/`body-y`. Indexed rather than selection-scoped: the selection
-    // lives in `gradiance-interaction`, which sits *above* this layer, and a
-    // script acting on "whatever happens to be selected" would be fragile
-    // anyway. `i` is resolved against the run's snapshot, so a delete composes
-    // with the reads above it in the same script.
-    let delete_ops = Arc::clone(ops);
-    let delete_view = Arc::clone(view);
-    engine.register_fn(name::DELETE, move |i: SteelVal| {
-        if let Some([i]) = nums([&i])
-            && i >= 0.0
-            && let Ok(view) = delete_view.lock()
-            && let Some(id) = view.id(i as usize)
-        {
-            emit(&delete_ops, Box::new(DeleteIntent { targets: vec![id] }));
-        }
-    });
 
     // `(spawn-box x y w h)` — author a box body centered at (x, y). Returns
     // the new body's handle (its stable id), so `(define b (spawn-box …))`
@@ -822,6 +831,11 @@ fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
     let v = Arc::clone(view);
     engine.register_fn(name::BODY_COUNT, move || -> f64 {
         v.lock().map_or(f64::NAN, |view| view.count())
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::JOINT_COUNT, move || -> f64 {
+        v.lock().map_or(f64::NAN, |view| view.joint_count())
     });
 
     let v = Arc::clone(view);
@@ -977,6 +991,245 @@ fn register_panel_verbs(
             .and_then(|states| states.get(panel.trim()).copied())
             .unwrap_or(false)
     });
+}
+
+/// Verbs over **existing** bodies — the history ops and the edits that move or
+/// remove something already authored.
+///
+/// Split from [`register_edit_verbs`] (which authors *new* geometry) because
+/// these all share one property: they name their target by index against the
+/// run's snapshot, and they need the *old* value to be reversible.
+fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // `(undo)` / `(redo)` — the history ops, the same steps Edit ▸ Undo/Redo
+    // take. No arguments and no targets: the stack knows what it did.
+    let undo_ops = Arc::clone(ops);
+    engine.register_fn(name::UNDO, move || {
+        emit(&undo_ops, Box::new(UndoIntent));
+    });
+    let redo_ops = Arc::clone(ops);
+    engine.register_fn(name::REDO, move || {
+        emit(&redo_ops, Box::new(RedoIntent));
+    });
+
+    // `(delete i)` — remove the i-th body, by the same index order as
+    // `body-x`/`body-y`. Indexed rather than selection-scoped: the selection
+    // lives in `gradiance-interaction`, which sits *above* this layer, and a
+    // script acting on "whatever happens to be selected" would be fragile
+    // anyway. `i` is resolved against the run's snapshot, so a delete composes
+    // with the reads above it in the same script.
+    let delete_ops = Arc::clone(ops);
+    let delete_view = Arc::clone(view);
+    engine.register_fn(name::DELETE, move |i: SteelVal| {
+        if let Some([i]) = nums([&i])
+            && i >= 0.0
+            && let Ok(view) = delete_view.lock()
+            && let Some(id) = view.id(i as usize)
+        {
+            emit(&delete_ops, Box::new(DeleteIntent { targets: vec![id] }));
+        }
+    });
+
+    // `(place i x y angle)` — move and rotate the i-th body. The *old* pose
+    // comes from the run's snapshot, which is what makes this one undoable
+    // step rather than a teleport: `CommitTransformCommand` needs both ends of
+    // the move to be able to reverse it.
+    let place_ops = Arc::clone(ops);
+    let place_view = Arc::clone(view);
+    engine.register_fn(
+        name::PLACE,
+        move |i: SteelVal, x: SteelVal, y: SteelVal, angle: SteelVal| {
+            if let Some([i, x, y, angle]) = nums([&i, &x, &y, &angle])
+                && i >= 0.0
+                && let Ok(view) = place_view.lock()
+                && let Some((id, old)) = view.body(i as usize)
+            {
+                let new = PosRot {
+                    pos: Vec2::new(x as f32, y as f32),
+                    rot: angle as f32,
+                };
+                // A move to where the body already is is not an edit; emitting
+                // it would put an empty step on the undo stack.
+                if new != old {
+                    emit(
+                        &place_ops,
+                        Box::new(CommitTransformIntent {
+                            changes: vec![TransformChange { id, old, new }],
+                        }),
+                    );
+                }
+            }
+        },
+    );
+}
+
+/// Joint verbs — **relationships** between bodies, the half of the scene model
+/// a script could not touch at all before.
+///
+/// A joint's anchors are authored in each body's *local* space and its
+/// `rest_rot_*` capture the bodies' orientations at creation (welds hold that
+/// relative angle, sliders lock rotation to it, hinge limits measure from it).
+/// Getting that wrong makes joints between rotated bodies snap violently at
+/// spawn, so these verbs do exactly what `interaction::tools::connector_tool`
+/// does — [`joint_def`] is the one place the conversion lives.
+///
+/// Bodies are named by index, like every other edit verb, and `b < 0` means
+/// "pin to the world" — the same one-body case the tools produce by clicking
+/// where only one body sits.
+fn register_joint_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // `(hinge a b x y)` — revolute joint at a world point.
+    let hinge_ops = Arc::clone(ops);
+    let hinge_view = Arc::clone(view);
+    engine.register_fn(
+        name::HINGE,
+        move |a: SteelVal, b: SteelVal, x: SteelVal, y: SteelVal| -> String {
+            let Some([a, b, x, y]) = nums([&a, &b, &x, &y]) else {
+                return String::new();
+            };
+            let kind = JointKind::Hinge {
+                limits: None,
+                motor: None,
+            };
+            spawn_joint(
+                &hinge_ops,
+                &hinge_view,
+                a,
+                b,
+                Vec2::new(x as f32, y as f32),
+                kind,
+                false,
+            )
+        },
+    );
+
+    // `(slider a b x y ax ay)` — prismatic joint sliding along a world axis.
+    // The axis is stored body-A local, so it rotates with the body.
+    let slider_ops = Arc::clone(ops);
+    let slider_view = Arc::clone(view);
+    engine.register_fn(
+        name::SLIDER,
+        move |a: SteelVal,
+              b: SteelVal,
+              x: SteelVal,
+              y: SteelVal,
+              ax: SteelVal,
+              ay: SteelVal|
+              -> String {
+            let Some([a, b, x, y, ax, ay]) = nums([&a, &b, &x, &y, &ax, &ay]) else {
+                return String::new();
+            };
+            let world_axis = Vec2::new(ax as f32, ay as f32);
+            // A zero-length axis has no direction to slide along; fall back to
+            // body-A's local X, which is what a too-short tool drag does.
+            let anchor = Vec2::new(x as f32, y as f32);
+            let Some((_, pose_a)) = slider_view.lock().ok().and_then(|v| v.body(a as usize)) else {
+                return String::new();
+            };
+            let world_axis = if world_axis.length() < 1e-6 {
+                Vec2::from_angle(pose_a.rot)
+            } else {
+                world_axis.normalize()
+            };
+            let kind = JointKind::Slider {
+                axis: Vec2::from_angle(-pose_a.rot).rotate(world_axis),
+                limits: None,
+                motor: None,
+            };
+            spawn_joint(&slider_ops, &slider_view, a, b, anchor, kind, false)
+        },
+    );
+
+    // `(spring a b stiffness damping)` — a strut between the two bodies'
+    // centres. Unlike the tool, which sizes stiffness from the connected mass,
+    // a script states it: a fixture that depends on a mass heuristic is not
+    // reproducible when the shape changes.
+    let spring_ops = Arc::clone(ops);
+    let spring_view = Arc::clone(view);
+    engine.register_fn(
+        name::SPRING,
+        move |a: SteelVal, b: SteelVal, stiffness: SteelVal, damping: SteelVal| -> String {
+            let Some([a, b, stiffness, damping]) = nums([&a, &b, &stiffness, &damping]) else {
+                return String::new();
+            };
+            let Ok(view) = spring_view.lock() else {
+                return String::new();
+            };
+            let Some((_, pose_a)) = view.body(a as usize) else {
+                return String::new();
+            };
+            // Rest length is the *current* separation, so the strut starts
+            // relaxed — the same thing the tool's drag length means.
+            let far = (b >= 0.0).then(|| view.body(b as usize)).flatten();
+            let rest_length = far.map_or(0.0, |(_, pose_b)| pose_a.pos.distance(pose_b.pos));
+            drop(view);
+            let kind = JointKind::Spring {
+                rest_length,
+                stiffness: stiffness as f32,
+                damping: damping as f32,
+                range: None,
+            };
+            // Anchored at body A's centre; `spawn_joint` puts B's anchor at
+            // B's centre because that is where the anchor point resolves to.
+            let anchor = pose_a.pos;
+            // Struts collide by default (the tool's convention), so a spring
+            // between neighbours does not make them pass through each other.
+            spawn_joint(&spring_ops, &spring_view, a, b, anchor, kind, true)
+        },
+    );
+}
+
+/// Builds and emits one [`SpawnJointIntent`], returning the joint's handle (or
+/// an empty string when a body index does not resolve).
+///
+/// `anchor` is a **world** point; it is converted into each body's local frame
+/// here — the single place that conversion happens on the script side.
+fn spawn_joint(
+    ops: &OpQueue,
+    view: &SharedView,
+    a: f64,
+    b: f64,
+    anchor: Vec2,
+    kind: JointKind,
+    collide_connected: bool,
+) -> String {
+    if a < 0.0 {
+        return String::new();
+    }
+    let Ok(view) = view.lock() else {
+        return String::new();
+    };
+    let Some((id_a, pose_a)) = view.body(a as usize) else {
+        return String::new();
+    };
+    let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
+    let mut def = JointDef {
+        kind,
+        common: JointCommon { collide_connected },
+        body_a: id_a,
+        body_b: None,
+        // For a world pin the far anchor is the world point itself.
+        anchor_b: anchor,
+        anchor_a: to_local(pose_a, anchor),
+        rest_rot_a: pose_a.rot,
+        rest_rot_b: 0.0,
+    };
+    // `b < 0` is the world pin; otherwise resolve the second body. An index
+    // that does not resolve degrades to a world pin rather than dropping the
+    // joint, so a typo is visible in the scene instead of silent.
+    if b >= 0.0
+        && let Some((id_b, pose_b)) = view.body(b as usize)
+        && id_b != id_a
+    {
+        def.body_b = Some(id_b);
+        def.anchor_b = to_local(pose_b, anchor);
+        def.rest_rot_b = pose_b.rot;
+    }
+    let record = gradiance_scene::JointRecord {
+        id: StableId::new(),
+        def,
+    };
+    let handle = record.id.0.to_string();
+    emit(ops, Box::new(SpawnJointIntent { record }));
+    handle
 }
 
 /// Signal-dataflow verbs — the script side of the signal bus

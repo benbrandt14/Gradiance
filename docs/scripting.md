@@ -83,6 +83,11 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (delete i)                   ; delete the i-th body (id order, as body-x)
 (undo) (redo)                ; walk the command stack — Edit ▸ Undo/Redo as ops
 
+;; edit — relationships between bodies (b < 0 pins to the world)
+(hinge a b x y)              ; revolute joint at world point (x, y) → its handle
+(slider a b x y ax ay)       ; prismatic joint at (x, y) along world axis (ax, ay)
+(spring a b stiffness damping) ; spring-damper strut between the two centres
+
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
 (sim-set "gravity.y" -500)   ; write one (any scalar field, by path)
@@ -97,6 +102,7 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 ;; query — read the committed scene (reads are total)
 (body-count)                 ; number of bodies
 (body-x i) (body-y i) (body-rot i)   ; pose of the i-th body (id order)
+(joint-count)                ; number of joints
 (count-at x y)               ; how many bodies' shapes contain the point
 (nearest-at x y)             ; index of the nearest body centre (-1 if none)
 (nearest-dist x y)           ; distance to the nearest body centre (-1 if none)
@@ -200,6 +206,39 @@ constant, so a new verb touches three (edits: four) places:
    case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
    `cargo test` green — the validation test above already covers the
    catalog↔builtin drift cases.
+
+### Joints: relationships, not just objects
+
+A multibody sandbox is mostly about *how things are connected*, and until these
+verbs a script could author bodies but not a single constraint. All three of the
+engine's joint kinds are reachable:
+
+```scheme
+;; a three-link chain, hinged at the shared edges
+(begin (spawn-box 0 0 20 6) (spawn-box 30 0 20 6) (spawn-box 60 0 20 6))
+(begin (hinge 0 1 15 0) (hinge 1 2 45 0))
+```
+
+Two things the verbs handle for you, because getting them wrong is subtle:
+
+- **Anchors are local.** A joint stores its anchor in each body's own frame and
+  records both bodies' rotations at creation (`rest_rot_*`) — welds hold that
+  relative angle, sliders lock rotation to it, hinge limits measure from it.
+  You pass a **world** point; the conversion happens in one place, the same one
+  `interaction::tools::connector_tool` uses. Skipping it makes joints between
+  rotated bodies snap violently at spawn.
+- **`b < 0` is a world pin**, matching what the tools produce when you click
+  where only one body sits. A *first* index that does not resolve emits nothing;
+  a bad *second* index degrades to a world pin, so a typo is visible in the
+  scene rather than silently dropped. A body hinged to itself becomes a world
+  pin too.
+
+Unlike the strut tool, `(spring …)` takes stiffness explicitly rather than
+sizing it from the connected mass: a fixture whose stiffness depends on a mass
+heuristic stops being reproducible the moment the shape changes.
+
+There is no `weld` verb because there is no weld *joint* — in this engine
+welding is `merge` (one CSG body) or make-static, not a constraint.
 
 ### Why `(delete i)` and not `(delete-selection)`
 
