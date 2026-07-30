@@ -10,6 +10,7 @@
 //! sanctioned Config seam) and never touches the world; the array still lands
 //! through the ordinary intent path as one undoable command.
 
+use crate::widgets;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_interaction::tools::array_tool::{ArrayConfig, ArraySpacing, MAX_COPIES_PER_AXIS};
@@ -21,12 +22,7 @@ pub struct ArrayWindow {
     pub open: bool,
 }
 
-impl ArrayWindow {
-    /// Flips the window open/closed.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-}
+crate::impl_panel_toggle!(ArrayWindow, open);
 
 /// Renders the floating Array window.
 pub fn array_window(
@@ -67,7 +63,6 @@ fn array_body(ui: &mut egui::Ui, config: &mut ArrayConfig) {
         .small(),
     );
     ui.separator();
-    ui.separator();
     spacing_controls(ui, config);
     ui.separator();
     count_controls(ui, config);
@@ -75,7 +70,7 @@ fn array_body(ui: &mut egui::Ui, config: &mut ArrayConfig) {
 }
 
 fn spacing_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
-    ui.label(egui::RichText::new("Spacing").strong());
+    widgets::section_header(ui, "Spacing");
     let current = config.spacing;
     let mut next = current;
     egui::ComboBox::from_id_salt("array-spacing")
@@ -123,7 +118,7 @@ fn spacing_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
 
 /// Whether the drag decides the count, or the user does.
 fn count_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
-    ui.label(egui::RichText::new("Count").strong());
+    widgets::section_header(ui, "Count");
     ui.label(
         egui::RichText::new(
             "fix a count and the drag sets the spacing instead — pull to \

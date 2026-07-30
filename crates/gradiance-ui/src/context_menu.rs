@@ -2,6 +2,7 @@
 //! layer operations.
 
 use crate::joint_inspector::kind_name;
+use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -346,7 +347,7 @@ pub fn context_menu(
                 {
                     let kind = kind.clone();
                     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-                    if let Some(next) = crate::signals::node_kind_editor(ui, "menu", &kind) {
+                    if let Some(next) = widgets::node_kind_editor(ui, "menu", &kind) {
                         props.edits.write(PropertyEditIntent {
                             changes: vec![PropertyChange {
                                 id: node_id,
@@ -371,7 +372,7 @@ pub fn context_menu(
                     && let Some(entity) = index.entity(joint_id)
                     && let Ok(def) = joints.get(entity)
                 {
-                    ui.label(egui::RichText::new(kind_name(&def.kind)).strong());
+                    widgets::section_header(ui, kind_name(&def.kind));
                     if ui.button("Configure joint…").clicked() {
                         SelectTransition::SelectJoint(entity).apply(
                             &mut selection,
@@ -464,7 +465,7 @@ pub fn context_menu(
                         !selected_ids.is_empty(),
                         egui::Button::new("Add to node editor"),
                     )
-                    .on_hover_text("place this body's block on the ⬡ Graph canvas")
+                    .on_hover_text("place this body's block on the node graph canvas")
                     .clicked()
                 {
                     for id in &selected_ids {
@@ -535,10 +536,10 @@ pub fn context_menu(
                             ("right ⏵", AlignOp::Right),
                             ("⏶ top", AlignOp::Top),
                             ("bottom ⏷", AlignOp::Bottom),
-                            ("center ↕", AlignOp::CenterY),
-                            ("center ↔", AlignOp::CenterX),
-                            ("distribute ↔", AlignOp::DistributeX),
-                            ("distribute ↕", AlignOp::DistributeY),
+                            ("center vertically", AlignOp::CenterY),
+                            ("center horizontally", AlignOp::CenterX),
+                            ("distribute horizontally", AlignOp::DistributeX),
+                            ("distribute vertically", AlignOp::DistributeY),
                         ] {
                             if ui.small_button(label).clicked() {
                                 emit(op);
@@ -552,7 +553,7 @@ pub fn context_menu(
                 // menu entry only opens the rulebook.
                 if !selected_ids.is_empty()
                     && ui
-                        .button("⧉ Array options…")
+                        .button("Array options…")
                         .on_hover_text(
                             "repeat the selection by holding Alt and dragging a \
                              selection handle",

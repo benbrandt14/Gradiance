@@ -6,6 +6,7 @@
 //! carrying [`PropertyValue::Joint`] — the same undoable path body edits
 //! use, so joint configuration composes with undo/redo for free.
 
+use crate::widgets;
 use crate::widgets::{Commit, precise_drag_unit};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -51,11 +52,11 @@ pub fn joint_inspector(
         .default_width(240.0)
         .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
         .show(ctx, |ui| {
-            ui.label(egui::RichText::new(kind_name(&def.kind)).strong());
+            widgets::section_header(ui, kind_name(&def.kind));
             ui.label(
                 egui::RichText::new(match def.body_b {
-                    Some(b) => format!("{:.8} ↔ {b:.8}", def.body_a),
-                    None => format!("{:.8} ↔ world pin", def.body_a),
+                    Some(b) => format!("{:.8} to {b:.8}", def.body_a),
+                    None => format!("{:.8} to world pin", def.body_a),
                 })
                 .weak(),
             );
@@ -63,7 +64,7 @@ pub fn joint_inspector(
 
             // Sensor readouts: the joint's live geometry (its read-only ports).
             if let Some((length, angle)) = joint_geometry(def, &transforms, &index) {
-                ui.label(egui::RichText::new("Sensors").strong());
+                widgets::section_header(ui, "Sensors");
                 ui.horizontal(|ui| {
                     ui.label("length");
                     ui.monospace(format!("{length:.2} {}", Dimension::Length.symbol()));

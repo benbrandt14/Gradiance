@@ -451,32 +451,45 @@ module boundary test already puts the seams where crate edges would go.
 - **Node-editor feel** *(landed)*: header zoom-to-fit, a vvvv-flavoured theme
   (sharp corners, flat fills, thin wires), and a faint dot-grid that pans and
   zooms with the canvas.
-- **Configurable plotter** *(landed)*: a signals picker (per-series show/hide)
-  and a time X-axis; the enum leaves room for XY / other-signal axes.
-- **Dockable/tabbable shell + menu bar** *(planned)*: an `egui_tiles`-based
-  workspace (Rerun's tiling lib, egui-0.35-compatible) hosting Node Graph /
-  Signals / Plot / Inspector as dock tabs, with a File/Edit/View/Help menu bar
-  and persisted layout. Needs bevy camera-viewport management (the scene renders
-  under egui, so the dock leaves a central region for it) — its own PR.
-- **Lightroom-style curve editor** *(planned; see below)*.
+- **Configurable plotter** *(landed, then rebuilt on `egui_plot`)*: a series
+  picker (per-series show/hide), overlay or stacked layouts, zoom/pan, a legend,
+  a cursor readout, and a real seconds axis read from the bus timestamps.
+- **Dockable/tabbable shell + menu bar** *(landed)*: an `egui_tiles`-based
+  workspace (Rerun's tiling lib) hosting Outliner / Depth / Plot /
+  Properties / Script as right-dock tabs and the Node Graph as a bottom-dock
+  tab, with a File/Edit/View/Help menu bar and scene-camera viewport routing.
+  Toggling a pane edits tiles in place (`ui/dock_sync.rs`) rather than
+  rebuilding the tree, so splits and tab order survive; each tab's ✕ turns its
+  View-menu toggle off. Layout is per-session, not yet persisted to disk.
+- **Lightroom-style curve editor** *(landed; see below)*.
 
-### Lightroom-style curve editor
+### Lightroom-style curve editor *(landed)*
 
-A reusable, direct-manipulation **curve widget** — draggable control points with
-tangent handles over a piecewise curve (linear / monotone-cubic / bezier;
-presets: linear, ease, S-curve) — that shapes any scalar response. It accretes on
-the **existing signal-dataflow seams** (no new mutation path), and every use
-**lowers once to the Tier-B `script::kernel`** as a segment-evaluated,
-allocation-free tape, so the authoring editor never runs in the per-frame loop
-(the two-tier PERF rule, like `SignalExpr`/`BlockOp` today).
+A reusable, direct-manipulation **curve widget** (`ui/curve.rs`) — draggable
+control points over a piecewise curve (linear / monotone-cubic) — that shapes
+any scalar response. It accretes on the **existing signal-dataflow seams** (no
+new mutation path), and every use **lowers once to the Tier-B kernel**, so the
+authoring editor never runs in the per-frame loop (the two-tier PERF rule, like
+`SignalExpr`/`BlockOp`).
 
-- **Binding transfer**: generalises the linear `SignalMap {in_min, in_max}` on a
-  `SignalBinding` into an arbitrary response curve (source → **curve** → t →
-  gradient → sink). A straight two-point curve *is* today's linear map, so it is
-  backward-compatible; edited in the body block's footer next to the gradient.
-- **Curve modulation block**: a new `BlockOp::Curve` in the node canvas — one
-  input → curve → output — sitting beside Gain/Sum/… and lowering through the
-  same `to_expr`/kernel path.
+The lowering is a **sampled lookup table**, not a transcription of the control
+points: `signal::compile` calls `Lut::sample` at compile time, and the kernel's
+`Instr::Curve` is a clamp + a lerp into an out-of-line table (deduplicated, so
+one curve reused across a graph is one table). That keeps the hot path's cost
+independent of how many points the user placed, and keeps the authoring
+representation — with its per-lookup segment search — out of the frame loop
+entirely. Tangent handles and the preset list (ease, S-curve) are not built;
+the two interpolation modes cover the shapes in practice.
+
+- **Binding transfer** *(landed)*: the linear `SignalMap {in_min, in_max}` on a
+  `SignalBinding` is followed by an optional response curve (source → map →
+  **curve** → t → gradient → sink), edited from the binding row. `None` and the
+  identity curve behave identically, so the checkbox that adds one is the honest
+  control and old scenes load unchanged.
+- **Curve modulation block** *(landed)*: `BlockOp::Curve` in the node canvas —
+  one input → curve → output — beside Gain/Sum/…, lowering through the same
+  `to_expr`/kernel path. Its editor sits in the block footer where a `k` drag
+  value would.
 - **Parameter & envelope shaping**: a param or `t` driven through a curve (an
   envelope), the "vary nonlinearly" hook the M20 strut knobs already anticipate.
 - **Persistence**: serializable control points inside the config-seam
@@ -696,8 +709,12 @@ the hand-rolled flight recorder (`command/flight_recorder.rs` +
 ### C. Incremental external adoptions (rows 7, 8, 9, 12, 13, 15, 17, 19, 21, 22, 24)
 
 Land as each seam is touched:
-- **egui_plot** (row 9): replace the hand-drawn painter plot (`ui/plot.rs`) —
-  axes/zoom/pan/legend/cursor; the curve-editor substrate.
+- **egui_plot** (row 9) — **adopted** (`=0.36.0`, which pins egui `^0.35`, our
+  version). Replaced the hand-drawn painter plot: shared time axis, zoom/pan,
+  legend, cursor readout, and overlay-vs-stacked layouts; also the curve
+  editor's substrate. The real time axis needed the bus to stamp each recorded
+  sample (`BusEntry::times`), so a paused run shows a gap instead of sliding
+  its later samples left.
 - **miette** (row 19): diagnostic renderer for `thiserror` enums **across
   crates**, wiring steel's spans in.
 - **insta + approx + proptest** (rows 11, 15): golden/replay snapshots, kill

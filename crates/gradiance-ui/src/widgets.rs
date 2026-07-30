@@ -133,3 +133,163 @@ mod tests {
         assert_eq!(parse_with_unit("1.5 m/s", "m"), None);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Layout vocabulary
+// ---------------------------------------------------------------------------
+//
+// These exist because the crate had grown four different ways to write a
+// section header, two spellings of the close button (neither of which
+// rendered — see `crate::fonts`), and no shared notion of a labelled row or an
+// empty state at all. Each panel had reinvented them slightly differently, so
+// nothing lined up between panes.
+//
+// They are deliberately thin. The goal is one obvious way to say a common
+// thing, not an abstraction layer over egui.
+
+/// A section heading.
+///
+/// The crate previously used `RichText::strong`, `RichText::weak`,
+/// `ui.heading`, and bare `CollapsingHeader` for the same job, so headings
+/// changed weight from pane to pane. This is the one spelling.
+///
+/// Returns the `Response` so a header can still carry hover text, which
+/// several of them do.
+pub fn section_header(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.label(egui::RichText::new(text).strong())
+}
+
+/// Explanatory text under a header or beside a control.
+///
+/// Small and dimmed — for the sentence that says what a section is *for*,
+/// which several panes were writing as a full-weight label.
+pub fn hint(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.label(egui::RichText::new(text).weak().small())
+}
+
+/// The placeholder shown when a panel has nothing to display.
+///
+/// Five panes phrased these differently and two used a full-weight `label`,
+/// so an empty panel read as either an error or a heading depending on which
+/// one you were looking at.
+pub fn empty_state(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.label(egui::RichText::new(text).weak())
+}
+
+/// A small close / remove button.
+///
+/// One glyph and one size for an action that had two of each. Returns whether
+/// it was clicked.
+pub fn close_button(ui: &mut Ui, hover: &str) -> bool {
+    ui.small_button(crate::fonts::glyph::CLOSE)
+        .on_hover_text(hover)
+        .clicked()
+}
+
+/// A labelled numeric row inside an [`egui::Grid`]: label, drag, `end_row`.
+///
+/// Generalised from the optimizer's private helper, which was already the
+/// right shape and the only place in the crate where labels lined up into a
+/// column. Everywhere else builds rows as ad-hoc `ui.horizontal`, so labels
+/// never align — using this is what makes a panel look like the rest.
+///
+/// For **authored** values prefer [`precise_drag_unit`], which commits once
+/// per gesture for the undo record; this is for config-seam edits, which are
+/// not undoable.
+pub fn labelled_drag(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut f32,
+    range: std::ops::RangeInclusive<f32>,
+    speed: f32,
+    hover: &str,
+) -> bool {
+    ui.label(label).on_hover_text(hover);
+    let changed = ui
+        .add(egui::DragValue::new(value).speed(speed).range(range))
+        .changed();
+    ui.end_row();
+    changed
+}
+
+/// The same, for an integer.
+pub fn labelled_drag_u32(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut u32,
+    range: std::ops::RangeInclusive<u32>,
+    hover: &str,
+) -> bool {
+    ui.label(label).on_hover_text(hover);
+    let changed = ui
+        .add(egui::DragValue::new(value).speed(0.2).range(range))
+        .changed();
+    ui.end_row();
+    changed
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    /// The helpers must not panic on an empty context — they are called from
+    /// every pane, including headless where there is no real UI.
+    #[test]
+    fn the_layout_helpers_render_headlessly() {
+        // egui's own test harness: builds a real `Ui` without a window, which
+        // is the path every headless panel test takes.
+        egui::__run_test_ui(|ui| {
+            let _ = section_header(ui, "Section");
+            let _ = hint(ui, "what this is for");
+            let _ = empty_state(ui, "Nothing selected");
+            let _ = close_button(ui, "remove");
+            egui::Grid::new("t").num_columns(2).show(ui, |ui| {
+                let mut v = 1.0_f32;
+                let _ = labelled_drag(ui, "value", &mut v, 0.0..=2.0, 0.01, "hover");
+                let mut n = 3_u32;
+                let _ = labelled_drag_u32(ui, "count", &mut n, 1..=9, "hover");
+            });
+        });
+    }
+}
+
+/// The behavior-node kind editor widgets.
+///
+/// Lives here rather than beside any one host because it has three: the
+/// inspector, the node context menu, and the signal list. Returns the edited
+/// kind when a field changed (the caller emits one undoable
+/// `PropertyEditIntent` — this widget never mutates). `salt` keeps widget ids
+/// unique between host surfaces.
+pub fn node_kind_editor(
+    ui: &mut egui::Ui,
+    salt: &str,
+    kind: &gradiance_domain::node::NodeKind,
+) -> Option<gradiance_domain::node::NodeKind> {
+    use gradiance_domain::node::NodeKind;
+    let mut next = kind.clone();
+    match &mut next {
+        NodeKind::Tracer(tracer) => {
+            ui.horizontal(|ui| {
+                ui.label("fade (s)");
+                ui.add(egui::DragValue::new(&mut tracer.fade_secs).speed(0.05));
+                ui.label("size");
+                ui.add(
+                    egui::DragValue::new(&mut tracer.size)
+                        .speed(0.1)
+                        .range(0.5..=20.0),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("pattern");
+                egui::ComboBox::from_id_salt(ui.id().with((salt, "pattern")))
+                    .selected_text(format!("{:?}", tracer.pattern))
+                    .show_ui(ui, |ui| {
+                        for p in gradiance_domain::tracer::TracePattern::ALL {
+                            ui.selectable_value(&mut tracer.pattern, p, format!("{p:?}"));
+                        }
+                    });
+            });
+        }
+    }
+    (next != *kind).then_some(next)
+}

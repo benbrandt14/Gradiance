@@ -15,6 +15,7 @@
 //! [`OperationRegistry`] — the catalog the VM binds its builtins against — so
 //! what highlights and is documented always tracks what the VM understands.
 
+use crate::widgets;
 use bevy_egui::egui;
 use gradiance_script::bridge::{OperationRegistry, ScriptInputs, ScriptLog};
 use std::collections::BTreeSet;
@@ -46,19 +47,9 @@ pub struct ScriptConsole {
     stash: String,
 }
 
+crate::impl_panel_toggle!(ScriptConsole, open);
+
 impl ScriptConsole {
-    /// Whether the console is currently shown (read by the transport button so
-    /// it can reflect the open state).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the console's visibility. Both the backquote shortcut and the
-    /// transport button toggle through here.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
     /// Steps through history entries starting with the stashed prefix
     /// (`dir` −1 = older, +1 = newer). Returns the buffer to show.
     fn walk_history(&mut self, dir: i32) -> Option<String> {
@@ -197,10 +188,10 @@ pub fn console_section(
     log: &ScriptLog,
 ) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Script").strong())
+        widgets::section_header(ui, "Script")
             .on_hover_text("Enter runs · Shift+Enter newline · ↑/↓ history (by prefix)");
         ui.checkbox(&mut console.show_reference, "Reference");
-        if ui.button("✕").clicked() {
+        if widgets::close_button(ui, "clear the log") {
             console.open = false;
         }
     });

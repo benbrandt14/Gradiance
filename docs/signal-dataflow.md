@@ -28,13 +28,20 @@ source (read) ──▶ map [in_min, in_max] → t ──▶ [curve] → t' ─�
 The optional **curve** (`SignalBinding.curve`, serde-defaulted so old scenes
 load) is the Lightroom-style response transfer — control points reshaping the
 normalized `t ∈ [0, 1]` before the gradient (`SignalBinding::transfer` is the
-one place map + curve compose). The default identity line is today's straight
-map; the curve *editor widget* is the upcoming UI (roadmap "Lightroom-style
-curve editor"), with the same `Curve` also lowering to a `BlockOp::Curve`
-modulation block.
+one place map + curve compose). The default identity line is the straight map,
+so `None` and an untouched curve are indistinguishable in behaviour. It is
+authored with `ui::curve::curve_editor`, embedded both in the binding row and
+in the `BlockOp::Curve` modulation block's footer.
+
+On the hot path a curve is **not** its control points: `signal::compile`
+samples it once into a `gradiance_kernel::Lut`, and the tape's `Instr::Curve`
+is a clamp plus a lerp into an out-of-line table. That is the two-tier rule
+applied to a shape rather than an expression — the per-lookup segment search
+the authoring form needs never enters the frame loop, and every curve costs the
+same regardless of how many points were placed.
 
 - **Params** (`defparam name value min max`) are tunable knobs — an
-  auto-slider in the Signals dock. Each publishes its value on the bus
+  auto-slider in the signal list beside the node canvas. Each publishes its value on the bus
   every frame; it is the simplest modulator *input*.
 - **Computed signals** (`defsignal name expr`) are the **modulator** tier:
   a named value that is a numeric expression over other bus signals (and
@@ -86,10 +93,10 @@ body exposes named **ports**: its **sensor ports** (read-only) are the scene
 reads it publishes — speed, spin, height, pos-x, contact force, contact count
 ([`SignalSource`]) — and its **actuator ports** (writable) are the color
 channels a bound signal can drive — fill, tracer trail ([`SignalSink`]). The
-single catalog lives in [`ui::ports`](../src/ui/ports.rs)
+single catalog lives in [`ui::ports`](../crates/gradiance-ui/src/ports.rs)
 (`body_sensors`/`body_actuators`), reused by the inspector's live readouts and
 the node canvas's pins, and read through the one shared reader
-[`signal::read_source`](../src/signal/mod.rs) — there is no parallel "read a
+[`signal::read_source`](../crates/gradiance-signal/src/lib.rs) — there is no parallel "read a
 body quantity" implementation, and no `SensorQuantity`/`ActuatorTarget` enum.
 
 A **wire between ports is a [`SignalBinding`]**: a source (a sensor port, a
@@ -102,7 +109,7 @@ copies with the base object.
 ## The placeable tracer node
 
 The one remaining *placeable* dataflow entity is the **tracer** — a trajectory
-probe. A [`domain::node`](../src/domain/node.rs) is an authored entity
+probe. A [`domain::node`](../crates/gradiance-domain/src/node.rs) is an authored entity
 (`StableId`, pose, optional body attachment) whose only [`NodeKind`] is
 `Tracer`. The **Tracer tool** (key `Y`) drops one on the body under the cursor
 (it rides the body) or free; nodes are individually selectable
@@ -115,7 +122,7 @@ any other actuator.
 ## The node-graph canvas
 
 The Simulink-style editor this substrate has grown toward now ships as a
-screen-**bottom docked** canvas ([`ui::node_graph`](../src/ui/node_graph.rs),
+screen-**bottom docked** canvas ([`ui::node_graph`](../crates/gradiance-ui/src/node_graph.rs),
 toolbar **⬡ Graph**), built on the [`egui-snarl`] node-graph widget — the one major
 node editor tracking our pinned egui 0.35 (`egui_node_graph2` is stuck on
 0.29 and can't share the bevy_egui context). snarl owns the box layout,
@@ -148,7 +155,7 @@ wiring a named producer (param / computed / block) into an operand pin sets that
 operand and re-lowers. **Right-click a block** ▸ Remove / Delete; a block's **footer** configures it
 in place — a body edits the domain + gradient of each wire driving it, a
 modulation block edits its constants (k / amp / freq), and a param block carries
-its tuning slider (the same knob as the Signals dock) — Simulink-style
+its tuning slider (the same knob as the signal list) — Simulink-style
 double-click-to-configure, all editing the same authored state.
 
 A **wire is a [`SignalBinding`]**: dragging a body's sensor output onto another
@@ -167,7 +174,7 @@ are rebuilt from the bindings — the ECS is the source of truth, not snarl's ow
 graph. Wires are right-angle (Simulink), so a body's own sensor→actuator
 self-wire routes around it. Layout is pure editor view-state in the `NodeGraph`
 resource (never persisted). Wiring edits `SignalBindings` directly (config-seam,
-like the Signals dock) — no placeable entity, one currency. Usable without
+like the signal list) — no placeable entity, one currency. Usable without
 scripting: the sensor → map + gradient → actuator loop is entirely UI-driven.
 
 The perf rule holds: the per-frame evaluator (`signal::evaluate_signals`)

@@ -1,35 +1,12 @@
 //! Tool palette (left T-panel of icons) + transport strip (play/pause, scale
 //! frame, 2D-view home). Undo/redo and panel toggles live in the menu bar.
 
-use bevy::ecs::system::SystemParam;
+use crate::fonts::glyph;
+use crate::icons::{self, Icon};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
-
-/// The editor panels the transport strip toggles, bundled so the toolbar
-/// system stays under Bevy's system-parameter limit.
-#[derive(SystemParam)]
-pub struct Panels<'w> {
-    /// Settings window.
-    pub settings: ResMut<'w, crate::settings::SettingsWindow>,
-    /// Properties inspector dock pane (toggle).
-    pub inspector: ResMut<'w, crate::inspector::InspectorPanel>,
-    /// Live plot panel.
-    pub plot: ResMut<'w, crate::plot::PlotPanel>,
-    /// Physics probe panel.
-    pub probe: ResMut<'w, crate::probe::ProbePanel>,
-    /// Signals dock section.
-    pub signals: ResMut<'w, crate::signals::SignalsPanel>,
-    /// Node-graph canvas.
-    pub node_graph: ResMut<'w, crate::node_graph::NodeGraph>,
-    /// Object tree (outliner).
-    pub outliner: ResMut<'w, crate::outliner::ObjectTreePanel>,
-    /// Scripting console.
-    pub console: ResMut<'w, crate::console::ScriptConsole>,
-    /// Debug overlays (field vectors).
-    pub debug: ResMut<'w, gradiance_domain::settings::DebugSettings>,
-}
 
 /// Tool-palette entries grouped into sections (Blender-style), in workflow
 /// order — pick/move, create a shape, connect with a constraint, then modify.
@@ -67,7 +44,7 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
         "Modify",
         &[
             (ToolState::Cut, "Cut", "K", "tool_cut"),
-            (ToolState::Tracer, "Tracer", "Y", "tool_tracer"),
+            (ToolState::Tracer, "Tracer", "N", "tool_tracer"),
         ],
     ),
 ];
@@ -107,6 +84,7 @@ pub fn toolbar(
     mut rig: ResMut<gradiance_interaction::camera::CameraRig>,
     panel_rects: Res<crate::PanelRects>,
     tool_icons: Res<ToolIcons>,
+    icons: Res<crate::icons::Icons>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -124,10 +102,16 @@ pub fn toolbar(
             // used to live here too — that duplication is removed.
             ui.horizontal(|ui| {
                 let playing = *game.get() == GameState::Playing;
-                if ui
-                    .button(if playing { "⏸ Pause" } else { "▶ Play" })
-                    .clicked()
-                {
+                // Image first, glyph as the fallback label: the transport is
+                // always on screen, so it is the one control most worth a real
+                // picture — and `▶` is not in any bundled font, so the glyph
+                // path alone was a tofu box here for the editor's whole life.
+                let (icon, label) = if playing {
+                    (Icon::Pause, format!("{} Pause", glyph::PAUSE))
+                } else {
+                    (Icon::Play, format!("{} Play", glyph::PLAY))
+                };
+                if icons::icon_text_button(ui, &icons, icon, &label).clicked() {
                     next_game.set(if playing {
                         GameState::Paused
                     } else {
@@ -149,7 +133,19 @@ pub fn toolbar(
                 // Re-home the orbited view back to the straight-on 2D
                 // view (also bound to Home). Enabled only when tilted.
                 if ui
-                    .add_enabled(!rig.is_flat(), egui::Button::new("⌂ 2D view"))
+                    .add_enabled(
+                        !rig.is_flat(),
+                        match icons.get(Icon::HomeView) {
+                            Some(id) => egui::Button::image_and_text(
+                                egui::load::SizedTexture::new(
+                                    id,
+                                    egui::vec2(icons::ICON_SIZE, icons::ICON_SIZE),
+                                ),
+                                "2D view",
+                            ),
+                            None => egui::Button::new("2D view"),
+                        },
+                    )
                     .on_hover_text("return the camera to the flat 2D view (Home)")
                     .clicked()
                 {

@@ -6,6 +6,7 @@
 //! no mutation, no persistence (pins are workstation state, entities
 //! resolved by `StableId` so undo/redo cycles keep them valid).
 
+use crate::widgets;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::ids::{IdIndex, StableId};
@@ -32,17 +33,9 @@ pub struct ProbePanel {
     pub pinned: Vec<StableId>,
 }
 
+crate::impl_panel_toggle!(ProbePanel, open);
+
 impl ProbePanel {
-    /// Whether the window is shown (read by the transport toggle).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the window's visibility.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
     /// Pins `id` (idempotent) and opens the window so the pin is visible.
     pub fn pin(&mut self, id: StableId) {
         if !self.pinned.contains(&id) {
@@ -151,7 +144,7 @@ pub fn probe_panel(
                     ui.separator();
                     ui.horizontal(|ui| {
                         ui.monospace(format!("#{}", &id.0.to_string()[..8]));
-                        if ui.small_button("✖").clicked() {
+                        if widgets::close_button(ui, "unpin this probe") {
                             unpin = Some(i);
                         }
                     });
@@ -160,7 +153,7 @@ pub fn probe_panel(
                             ui.label(text);
                         }
                         None => {
-                            ui.weak("(not in scene)");
+                            widgets::empty_state(ui, "(not in scene)");
                         }
                     }
                 }

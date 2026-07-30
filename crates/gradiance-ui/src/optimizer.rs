@@ -25,6 +25,7 @@
 //! the command discipline. The arrangement the solver produces still lands
 //! through the ordinary intent path as one undoable command.
 
+use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -53,12 +54,7 @@ pub struct OptimizerPanel<'w> {
 #[derive(Resource, Default, Debug)]
 pub struct OptimizerExpanded(pub bool);
 
-impl OptimizerExpanded {
-    /// Flips the window open/closed.
-    pub fn toggle(&mut self) {
-        self.0 = !self.0;
-    }
-}
+crate::impl_panel_toggle!(OptimizerExpanded, 0);
 
 impl OptimizerPanel<'_> {
     /// Asks for a run over the current selection.
@@ -106,7 +102,7 @@ pub fn context_menu_entry(
 
     let enabled = selection.len() >= 2;
     if ui
-        .add_enabled(enabled, egui::Button::new("⬓ Pack selection"))
+        .add_enabled(enabled, egui::Button::new("Pack selection"))
         .on_hover_text(
             "Rearrange the selection to fit into the smallest area without \
              collisions. Bodies on different depth bands may share a footprint.",
@@ -133,7 +129,7 @@ pub fn context_menu_entry(
 /// it that must stay reachable.
 pub fn optimizer_section(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPanel) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Optimizer").strong());
+        widgets::section_header(ui, "Optimizer");
         if ui
             .small_button("⚙ options…")
             .on_hover_text("open the full rulebook in its own window")
@@ -222,7 +218,7 @@ fn preset_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 
 /// The objective weights — what "better" means for this run.
 fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
-    ui.label(egui::RichText::new("Goal").strong());
+    widgets::section_header(ui, "Goal");
     let mut w = opt.config.weights;
     let mut changed = false;
     egui::Grid::new("pack-weights")
@@ -325,14 +321,14 @@ fn run_controls(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPan
         run_readout(ui, opt);
         ui.horizontal(|ui| {
             if ui
-                .button("✔ Apply")
+                .button("Apply")
                 .on_hover_text("commit the best arrangement as one undo step")
                 .clicked()
             {
                 opt.apply();
             }
             if ui
-                .button("✖ Cancel")
+                .button("Cancel")
                 .on_hover_text("discard the run (Escape does the same)")
                 .clicked()
             {
@@ -352,7 +348,7 @@ fn run_controls(ui: &mut egui::Ui, selection: &Selection, opt: &mut OptimizerPan
     let enabled = selection.len() >= 2;
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(enabled, egui::Button::new("⬓ Pack selection"))
+            .add_enabled(enabled, egui::Button::new("Pack selection"))
             .on_disabled_hover_text("select at least two bodies")
             .clicked()
         {
@@ -375,7 +371,7 @@ fn run_readout(ui: &mut egui::Ui, opt: &OptimizerPanel) {
         return;
     };
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(report.solver).strong());
+        widgets::section_header(ui, report.solver);
         ui.label(egui::RichText::new(report.status.label()).weak());
     });
     ui.add(
@@ -441,7 +437,7 @@ fn run_readout(ui: &mut egui::Ui, opt: &OptimizerPanel) {
 
 /// Solver choice and objective.
 fn solver_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
-    ui.label(egui::RichText::new("Solver").strong());
+    widgets::section_header(ui, "Solver");
     let mut solver = opt.config.solver;
     egui::ComboBox::from_id_salt("pack-solver")
         .selected_text(solver.label())
@@ -476,7 +472,7 @@ fn solver_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 
 /// The problem constraints: clearance, rotation, layers, boundary, groups.
 fn constraint_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
-    ui.label(egui::RichText::new("Constraints").strong());
+    widgets::section_header(ui, "Constraints");
 
     let mut clearance = opt.config.clearance;
     if ui
@@ -625,7 +621,7 @@ fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             }
             if ui
                 .selectable_label(matches!(next, Boundary::Aspect { .. }), "Target aspect")
-                .on_hover_text("soft: bias the result toward a width∶height ratio")
+                .on_hover_text("soft: bias the result toward a width:height ratio")
                 .clicked()
                 && !matches!(next, Boundary::Aspect { .. })
             {
@@ -698,7 +694,7 @@ fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 
 /// Stopping rules and the preview pace.
 fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
-    ui.label(egui::RichText::new("Convergence").strong());
+    widgets::section_header(ui, "Convergence");
     egui::Grid::new("pack-convergence")
         .num_columns(2)
         .spacing([8.0, 2.0])
@@ -784,7 +780,7 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 
 /// Per-solver tuning, shown only for the solver that uses it.
 fn tuning_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
-    ui.label(egui::RichText::new("Tuning").strong());
+    widgets::section_header(ui, "Tuning");
     match opt.config.solver {
         SolverKind::Naive => naive_tuning(ui, opt),
         SolverKind::Shelf => shelf_tuning(ui, opt),
@@ -793,7 +789,10 @@ fn tuning_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
         // and goal weights above already cover everything a user would want
         // to reach for.
         SolverKind::Descent => {
-            ui.weak("Gradient descent is tuned by the goal weights and the iteration budget.");
+            widgets::empty_state(
+                ui,
+                "Gradient descent is tuned by the goal weights and the iteration budget.",
+            );
         }
     }
 }

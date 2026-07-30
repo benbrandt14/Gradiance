@@ -12,6 +12,7 @@
 //! the recorded click afterward — the same prepare/render/apply shape the
 //! node-graph pane uses.
 
+use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -30,23 +31,13 @@ pub struct ObjectTreePanel {
     open: bool,
 }
 
-impl ObjectTreePanel {
-    /// Whether the outliner is shown (read by the toolbar / menu toggles).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the outliner's visibility.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-}
+crate::impl_panel_toggle!(ObjectTreePanel, open);
 
 /// The outliner's ECS read set plus the selection-mutation handles, bundled as
 /// one [`SystemParam`] so the dock host stays under Bevy's parameter cap.
 #[derive(SystemParam)]
 pub struct OutlinerParams<'w, 's> {
-    pub(crate) panel: Res<'w, ObjectTreePanel>,
+    pub(crate) panel: ResMut<'w, ObjectTreePanel>,
     pub(crate) bodies: Query<'w, 's, (Entity, &'static StableId, &'static ShapeDef), With<Body>>,
     pub(crate) joints: Query<'w, 's, (Entity, &'static StableId, &'static JointDef), With<Joint>>,
     pub(crate) nodes:
@@ -162,7 +153,7 @@ pub(crate) fn outliner_section(
     click: &mut Option<OutlinerClick>,
 ) {
     if model.is_empty() {
-        ui.weak("Empty scene — nothing to list yet.");
+        widgets::empty_state(ui, "Empty scene — nothing to list yet.");
         return;
     }
     let shift = ui.input(|i| i.modifiers.shift);

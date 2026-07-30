@@ -13,8 +13,12 @@ pub mod array_panel;
 pub mod bottom_dock;
 pub mod console;
 pub mod context_menu;
+pub mod curve;
 pub mod depth_panel;
 pub mod dock;
+pub mod dock_sync;
+pub mod fonts;
+pub mod icons;
 pub mod inspector;
 pub mod joint_inspector;
 pub mod labels;
@@ -22,6 +26,7 @@ pub mod menu;
 pub mod node_graph;
 pub mod optimizer;
 pub mod outliner;
+pub mod panels;
 pub mod plot;
 pub mod ports;
 pub mod probe;
@@ -161,6 +166,8 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(Startup, spawn_ui_camera);
         app.init_resource::<toolbar::ToolIcons>();
         app.add_systems(Startup, toolbar::load_tool_icons);
+        app.init_resource::<icons::Icons>();
+        app.add_systems(Startup, icons::load_icons);
         app.init_resource::<settings::SettingsWindow>();
         app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
@@ -169,7 +176,6 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<plot::PlotPanel>();
         app.init_resource::<plot::PlotConfig>();
         app.init_resource::<probe::ProbePanel>();
-        app.init_resource::<signals::SignalsPanel>();
         app.init_resource::<node_graph::NodeGraph>();
         app.init_resource::<outliner::ObjectTreePanel>();
         app.init_resource::<optimizer::OptimizerExpanded>();
@@ -181,6 +187,7 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(
             EguiPrimaryContextPass,
             (
+                fonts::install_fonts,
                 menu::menu_bar,
                 toolbar::toolbar,
                 dock::right_dock,

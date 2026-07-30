@@ -38,8 +38,9 @@ use gradiance_physics::queries::PhysicsQueries;
 use std::collections::VecDeque;
 
 pub use gradiance_domain::signal::{
-    BlockOp, ComputedSignal, ComputedSignals, GradientSpec, SignalBinding, SignalBindings,
-    SignalExpr, SignalMap, SignalParam, SignalParams, SignalSink, SignalSource, remap_binding,
+    BlockOp, ComputedSignal, ComputedSignals, Curve, CurveInterp, GradientSpec, SignalBinding,
+    SignalBindings, SignalExpr, SignalMap, SignalParam, SignalParams, SignalSink, SignalSource,
+    remap_binding,
 };
 
 /// The reserved input name for elapsed simulated seconds (the "clock" every
@@ -51,10 +52,17 @@ pub const TIME_INPUT: &str = "t";
 const HISTORY_CAP: usize = 600;
 
 /// One live signal on the bus: its current value and rolling history.
+///
+/// [`history`](Self::history) and [`times`](Self::times) are parallel: sample
+/// `i` was recorded at `times[i]` simulated seconds. Keeping the stamps is what
+/// lets the plotter draw a **time** axis rather than a sample index — the two
+/// differ whenever the frame rate wobbles or recording pauses mid-run (pausing
+/// leaves a gap in the stamps, which is the honest picture).
 #[derive(Debug, Default)]
 pub struct BusEntry {
     value: f32,
     history: VecDeque<f32>,
+    times: VecDeque<f32>,
 }
 
 impl BusEntry {
@@ -67,6 +75,12 @@ impl BusEntry {
     pub fn history(&self) -> &VecDeque<f32> {
         &self.history
     }
+
+    /// The simulated timestamp of each recorded sample, parallel to
+    /// [`history`](Self::history).
+    pub fn times(&self) -> &VecDeque<f32> {
+        &self.times
+    }
 }
 
 /// The live signal bus: named current values + rolling histories. Derived
@@ -76,9 +90,18 @@ impl BusEntry {
 #[derive(Resource, Debug, Default)]
 pub struct SignalBus {
     entries: Vec<(String, BusEntry)>,
+    now: f32,
 }
 
 impl SignalBus {
+    /// Stamps subsequent [`publish`](Self::publish) calls with `seconds` of
+    /// simulated time. Called once at the top of each frame's signal pass, so
+    /// every sample recorded that frame shares one timestamp — cheaper and
+    /// more truthful than each publisher reading the clock itself.
+    pub fn set_time(&mut self, seconds: f32) {
+        self.now = seconds;
+    }
+
     /// Sets `name`'s current value, appending to its history when
     /// `record` is true (recording pauses with the simulation).
     pub fn publish(&mut self, name: &str, value: f32, record: bool) {
@@ -96,8 +119,10 @@ impl SignalBus {
         entry.value = value;
         if record {
             entry.history.push_back(value);
+            entry.times.push_back(self.now);
             while entry.history.len() > HISTORY_CAP {
                 entry.history.pop_front();
+                entry.times.pop_front();
             }
         }
     }
@@ -179,10 +204,14 @@ pub fn publish_sensor_refs(
     index: Res<IdIndex>,
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
+    sim: Res<Time<Physics>>,
     game: Res<State<GameState>>,
     transforms: Query<&Transform, With<Body>>,
     mut bus: ResMut<SignalBus>,
 ) {
+    // First publisher of the frame, so this is where the frame's recording
+    // timestamp is set — every sample recorded below and downstream shares it.
+    bus.set_time(sim.elapsed_secs());
     let recording = *game.get() == GameState::Playing;
     let dt = fixed.timestep().as_secs_f32().max(1e-6);
     for signal in &computed.0 {

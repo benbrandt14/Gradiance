@@ -1,84 +1,71 @@
-//! The Signals **dock section**: plain, functional editing of the
-//! signal-dataflow graph (`docs/signal-dataflow.md`) — params (auto-slider
-//! knobs), computed modulators, and source→sink bindings.
+//! The **signal list**: the dataflow graph (`docs/signal-dataflow.md`) as a
+//! form — params (auto-slider knobs), computed modulators, and source→sink
+//! bindings.
 //!
-//! Deliberately visuals-light — sliders and rows — while the dataflow
-//! substrate matures; the node-editor canvas replaces this surface later
-//! (drag a property out of a panel → a source node). The signal resources
-//! (`SignalBindings`, `SignalParams`, `ComputedSignals`) are config-seam
-//! (invariant-#4 class), so the UI edits them directly: no intents, no
-//! undo, exactly like the grid and snap settings. Lives in the right dock
-//! (`ui::dock`), the direction toward dockable inspectors.
+//! # Why this is not a pane
+//!
+//! It used to be one, sharing a right-dock tab with the plotter, which made
+//! three surfaces for one model: a canvas that could wire blocks, a list that
+//! could rename and delete them, and a plot of the result — none of them next
+//! to each other. The list now lives **inside the node-graph pane**, beside the
+//! canvas, because they are two views of the same graph: the canvas is the one
+//! you draw in, the list is the one that shows names, compile errors, and the
+//! edits a canvas has no gesture for (rename a binding, retarget a sink, delete
+//! a param, type a script-published bus name). The plotter kept the pane.
+//!
+//! The signal resources (`SignalBindings`, `SignalParams`, `ComputedSignals`)
+//! are config-seam (invariant-#4 class), so this edits them directly: no
+//! intents, no undo, exactly like the grid and snap settings. The one exception
+//! is the behavior-node editor, which edits *authored* state and therefore
+//! emits a `PropertyEditIntent` like everything else.
 
-use bevy::ecs::system::SystemParam;
+use crate::widgets;
 use bevy_egui::egui;
 use gradiance_core::ids::StableId;
 use gradiance_signal::{
-    ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
-    SignalParams, SignalSink, SignalSource,
+    Curve, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalSink,
+    SignalSource,
 };
 
-/// Signals dock section visibility.
-#[derive(bevy::prelude::Resource, Default)]
-pub struct SignalsPanel {
-    open: bool,
-}
-
-impl SignalsPanel {
-    /// Whether the section is shown (read by the transport toggle + dock).
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Flips the section's visibility.
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-}
-
-/// The signal-graph config resources the dock section edits, bundled so the
-/// dock host stays under Bevy's system-parameter limit.
-#[derive(SystemParam)]
-pub struct SignalsDock<'w, 's> {
+/// Everything the list reads and writes, as **borrowed pieces** rather than a
+/// `SystemParam` bundle.
+///
+/// It used to be a bundle, and that was a mistake the ECS caught: the list now
+/// lives inside the node-graph pane, whose host already holds `SignalParams`,
+/// `ComputedSignals` and `SignalBindings` for the canvas. A second bundle
+/// requesting the same resources is a system-parameter conflict — Bevy panics
+/// at schedule build, and `tests/it/ui_conflicts.rs` fails. A leaf renderer
+/// should not be deciding what the world lends it; the host does that once and
+/// passes the pieces down.
+pub struct SignalListView<'a> {
     /// Tunable slider params.
-    pub params: bevy::prelude::ResMut<'w, SignalParams>,
+    pub params: &'a mut Vec<gradiance_signal::SignalParam>,
     /// Computed modulator signals.
-    pub computed: bevy::prelude::ResMut<'w, ComputedSignals>,
-    /// The live bus (read-only: current values for readouts).
-    pub bus: bevy::prelude::Res<'w, SignalBus>,
-    /// Compile errors to surface (read-only).
-    pub compiled: bevy::prelude::Res<'w, gradiance_signal::CompiledSignals>,
-    /// Selected behavior nodes to edit (id + kind).
-    pub nodes: bevy::prelude::Query<
-        'w,
-        's,
-        (
-            bevy::prelude::Entity,
-            &'static StableId,
-            &'static gradiance_domain::node::NodeKind,
-        ),
-        bevy::prelude::With<gradiance_domain::node::BehaviorNode>,
-    >,
+    pub computed: &'a mut Vec<gradiance_signal::ComputedSignal>,
+    /// The live bus (current values for readouts).
+    pub bus: &'a SignalBus,
+    /// Compile errors to surface.
+    pub compiled: &'a gradiance_signal::CompiledSignals,
+    /// The selected behavior node to edit, if exactly one is selected.
+    pub node: Option<(StableId, gradiance_domain::node::NodeKind)>,
 }
 
-/// Renders the whole Signals section into a dock `ui`. `selected` is the
-/// current body selection (for the binding add-buttons); `selection` is the
-/// full selection (to find a selected node to edit).
+/// Renders the whole signal list into `ui`. `selected` is the current body
+/// selection (for the binding add-buttons).
 pub fn signals_section(
     ui: &mut egui::Ui,
-    dock: &mut SignalsDock,
+    view: &mut SignalListView,
     bindings: &mut SignalBindings,
     selected: &[StableId],
-    selection: &gradiance_interaction::selection::Selection,
     edits: &mut bevy::prelude::MessageWriter<gradiance_command::intent::PropertyEditIntent>,
 ) {
     egui::ScrollArea::vertical()
         .id_salt("signals-section")
         .show(ui, |ui| {
-            node_block(ui, dock, selection, edits);
-            params_block(ui, &mut dock.params.0);
+            node_block(ui, view.node.clone(), edits);
+            params_block(ui, view.params);
             ui.separator();
-            computed_block(ui, &mut dock.computed.0, &dock.compiled, &dock.bus);
+            computed_block(ui, view.computed, view.compiled, view.bus);
             ui.separator();
             bindings_block(ui, bindings, selected);
         });
@@ -90,18 +77,14 @@ pub fn signals_section(
 /// change (authored state → the command seam, never a direct write).
 fn node_block(
     ui: &mut egui::Ui,
-    dock: &mut SignalsDock,
-    selection: &gradiance_interaction::selection::Selection,
+    node: Option<(StableId, gradiance_domain::node::NodeKind)>,
     edits: &mut bevy::prelude::MessageWriter<gradiance_command::intent::PropertyEditIntent>,
 ) {
-    let Some((id, kind)) = selection
-        .iter()
-        .find_map(|e| dock.nodes.get(e).ok().map(|(_, id, k)| (*id, k.clone())))
-    else {
+    let Some((id, kind)) = node else {
         return;
     };
     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-    if let Some(next) = node_kind_editor(ui, "dock", &kind) {
+    if let Some(next) = widgets::node_kind_editor(ui, "list", &kind) {
         edits.write(gradiance_command::intent::PropertyEditIntent {
             changes: vec![gradiance_command::property::PropertyChange {
                 id,
@@ -113,47 +96,9 @@ fn node_block(
     ui.separator();
 }
 
-/// The behavior-node kind editor widgets — shared by the Signals dock and
-/// the node context menu. Returns the edited kind when a field changed
-/// (the caller emits one undoable `PropertyEditIntent`). `salt` keeps
-/// widget ids unique between host surfaces.
-pub fn node_kind_editor(
-    ui: &mut egui::Ui,
-    salt: &str,
-    kind: &gradiance_domain::node::NodeKind,
-) -> Option<gradiance_domain::node::NodeKind> {
-    use gradiance_domain::node::NodeKind;
-    let mut next = kind.clone();
-    match &mut next {
-        NodeKind::Tracer(tracer) => {
-            ui.horizontal(|ui| {
-                ui.label("fade (s)");
-                ui.add(egui::DragValue::new(&mut tracer.fade_secs).speed(0.05));
-                ui.label("size");
-                ui.add(
-                    egui::DragValue::new(&mut tracer.size)
-                        .speed(0.1)
-                        .range(0.5..=20.0),
-                );
-            });
-            ui.horizontal(|ui| {
-                ui.label("pattern");
-                egui::ComboBox::from_id_salt(ui.id().with((salt, "pattern")))
-                    .selected_text(format!("{:?}", tracer.pattern))
-                    .show_ui(ui, |ui| {
-                        for p in gradiance_domain::tracer::TracePattern::ALL {
-                            ui.selectable_value(&mut tracer.pattern, p, format!("{p:?}"));
-                        }
-                    });
-            });
-        }
-    }
-    (next != *kind).then_some(next)
-}
-
 /// The param sliders (`defparam` knobs) — the P2 driver inputs.
 fn params_block(ui: &mut egui::Ui, params: &mut Vec<gradiance_signal::SignalParam>) {
-    ui.label(egui::RichText::new("Parameters").strong());
+    widgets::section_header(ui, "Parameters");
     let mut remove = None;
     for (i, param) in params.iter_mut().enumerate() {
         ui.horizontal(|ui| {
@@ -162,7 +107,7 @@ fn params_block(ui: &mut egui::Ui, params: &mut Vec<gradiance_signal::SignalPara
                     .text(&param.name)
                     .clamping(egui::SliderClamping::Never),
             );
-            if ui.small_button("✖").clicked() {
+            if widgets::close_button(ui, "delete this parameter") {
                 remove = Some(i);
             }
         });
@@ -184,7 +129,7 @@ fn computed_block(
     compiled: &gradiance_signal::CompiledSignals,
     bus: &SignalBus,
 ) {
-    ui.label(egui::RichText::new("Computed").strong());
+    widgets::section_header(ui, "Computed");
     let mut remove = None;
     for (i, signal) in computed.iter_mut().enumerate() {
         ui.horizontal(|ui| {
@@ -192,7 +137,7 @@ fn computed_block(
             if let Some(v) = bus.get(&signal.name) {
                 ui.weak(format!("= {v:.3}"));
             }
-            if ui.small_button("✖").clicked() {
+            if widgets::close_button(ui, "delete this computed signal") {
                 remove = Some(i);
             }
         });
@@ -213,10 +158,13 @@ fn computed_block(
 
 /// The source→sink bindings (unchanged model).
 fn bindings_block(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[StableId]) {
-    ui.label(egui::RichText::new("Bindings").strong());
+    widgets::section_header(ui, "Bindings");
     add_buttons(ui, bindings, selected);
     if bindings.0.is_empty() {
-        ui.weak("Select a body and add a source above; its value drives the sink.");
+        widgets::empty_state(
+            ui,
+            "Select a body and add a source above; its value drives the sink.",
+        );
     }
     let mut remove = None;
     for (i, binding) in bindings.0.iter_mut().enumerate() {
@@ -245,6 +193,9 @@ fn expr_rpn(expr: &gradiance_signal::SignalExpr) -> String {
         E::Div(a, b) => format!("{} {} /", expr_rpn(a), expr_rpn(b)),
         E::Min(a, b) => format!("{} {} min", expr_rpn(a), expr_rpn(b)),
         E::Max(a, b) => format!("{} {} max", expr_rpn(a), expr_rpn(b)),
+        // No RPN token exists for a curve (its parameter is a shape), so this
+        // is a readable rendering, not a round-trip.
+        E::Curve(a, _) => format!("{} curve", expr_rpn(a)),
     }
 }
 
@@ -330,7 +281,7 @@ fn binding_row(
     ui.horizontal(|ui| {
         ui.strong(source_label(&binding.source));
         ui.text_edit_singleline(&mut binding.name);
-        if ui.small_button("✖").clicked() {
+        if widgets::close_button(ui, "remove this binding") {
             *remove = Some(i);
         }
     });
@@ -390,4 +341,26 @@ fn binding_row(
                 ui.selectable_value(&mut binding.sink, SignalSink::Plot, "plot");
             });
     });
+    curve_section(ui, i, binding);
+}
+
+/// The optional response curve, collapsed by default: a checkbox that adds or
+/// removes it, and the editor when present.
+///
+/// `None` and the identity curve behave identically, so the checkbox is the
+/// honest control — it is the difference between "no reshaping" and "a curve I
+/// am shaping", not a value change. Removing it drops the points rather than
+/// flattening them, so re-enabling starts from the identity again.
+fn curve_section(ui: &mut egui::Ui, i: usize, binding: &mut SignalBinding) {
+    let mut enabled = binding.curve.is_some();
+    if ui
+        .checkbox(&mut enabled, "response curve")
+        .on_hover_text("reshape the normalized value before it drives the sink")
+        .changed()
+    {
+        binding.curve = enabled.then(Curve::default);
+    }
+    if let Some(curve) = binding.curve.as_mut() {
+        crate::curve::curve_editor(ui, &format!("binding-curve-{i}"), curve);
+    }
 }

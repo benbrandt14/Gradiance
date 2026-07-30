@@ -109,6 +109,71 @@ impl BinaryOp {
     }
 }
 
+/// A **lookup table** over `[0, 1]`: the Tier-B form of an authored response
+/// curve.
+///
+/// The authoring side (a Lightroom-style curve of control points, monotone
+/// cubic or linear) is far too shapeful to encode as opcodes, and evaluating
+/// it directly means a per-sample binary search over a `Vec` — allocation-free
+/// but branchy, and it drags the authoring representation into the hot loop,
+/// which is exactly what the two-tier rule forbids. Sampling it once at
+/// compile time into a uniform table reduces the hot path to a clamp, a
+/// multiply, and a lerp, and makes every curve cost the same regardless of how
+/// many points the user placed.
+///
+/// The table has at least two entries; input is clamped to `[0, 1]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lut {
+    samples: Vec<f32>,
+}
+
+impl Lut {
+    /// Builds a table by sampling `f` uniformly over `[0, 1]`.
+    ///
+    /// `resolution` is the number of *intervals*; the table gets
+    /// `resolution + 1` entries. Values below 1 are raised to 1, so the table
+    /// always has the two endpoints a lerp needs.
+    pub fn sample(resolution: usize, f: impl Fn(f32) -> f32) -> Self {
+        let n = resolution.max(1);
+        Self {
+            samples: (0..=n).map(|i| f(i as f32 / n as f32)).collect(),
+        }
+    }
+
+    /// Builds a table from precomputed samples (at least two; a shorter slice
+    /// is padded by repetition so lookup stays total).
+    pub fn from_samples(samples: &[f32]) -> Self {
+        match samples {
+            [] => Self {
+                samples: vec![0.0, 0.0],
+            },
+            [only] => Self {
+                samples: vec![*only, *only],
+            },
+            rest => Self {
+                samples: rest.to_vec(),
+            },
+        }
+    }
+
+    /// Looks `x` up, clamping to `[0, 1]` and lerping between neighbours.
+    #[inline]
+    pub fn lookup(&self, x: f32) -> f32 {
+        let n = self.samples.len() - 1;
+        let pos = x.clamp(0.0, 1.0) * n as f32;
+        let i = (pos as usize).min(n - 1);
+        let frac = pos - i as f32;
+        let a = self.samples[i];
+        let b = self.samples[i + 1];
+        a + frac * (b - a)
+    }
+
+    /// The table's entries — for tests and diagnostics.
+    pub fn samples(&self) -> &[f32] {
+        &self.samples
+    }
+}
+
 /// A numeric driver expression: the authored, structural form.
 ///
 /// This is the subset a driver or a node-graph signal compiles down from.
@@ -126,6 +191,8 @@ pub enum Expr {
     Unary(UnaryOp, Box<Expr>),
     /// A binary operation over two subexpressions.
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
+    /// A [`Lut`] lookup of a subexpression — a sampled response curve.
+    Curve(Box<Expr>, Lut),
 }
 
 impl Expr {
@@ -159,6 +226,7 @@ impl Expr {
             Self::Var(i) => vars.get(usize::from(*i)).copied().unwrap_or(0.0),
             Self::Unary(op, child) => op.apply(child.eval_ref(vars)),
             Self::Binary(op, lhs, rhs) => op.apply(lhs.eval_ref(vars), rhs.eval_ref(vars)),
+            Self::Curve(child, lut) => lut.lookup(child.eval_ref(vars)),
         }
     }
 
@@ -167,7 +235,7 @@ impl Expr {
         match self {
             Self::Const(_) => None,
             Self::Var(i) => Some(*i),
-            Self::Unary(_, child) => child.max_var(),
+            Self::Unary(_, child) | Self::Curve(child, _) => child.max_var(),
             Self::Binary(_, lhs, rhs) => match (lhs.max_var(), rhs.max_var()) {
                 (a, None) => a,
                 (None, b) => b,
@@ -205,6 +273,10 @@ enum Instr {
     Var(u8),
     Unary(UnaryOp),
     Binary(BinaryOp),
+    /// Replace the top of stack with `luts[index].lookup(top)`. The table is
+    /// held out-of-line so `Instr` stays `Copy` and the tape stays a flat
+    /// array of small values.
+    Curve(u16),
 }
 
 /// A compiled driver expression: a flat tape plus its proven stack depth.
@@ -215,6 +287,8 @@ enum Instr {
 #[derive(Debug, Clone)]
 pub struct Kernel {
     tape: Vec<Instr>,
+    /// Sampled response curves, referenced by [`Instr::Curve`] index.
+    luts: Vec<Lut>,
     /// Peak stack depth this tape reaches (≤ [`MAX_STACK`]); validated in
     /// [`compile`](Kernel::compile), retained only for test diagnostics.
     #[cfg(test)]
@@ -234,12 +308,14 @@ impl Kernel {
             return Err(KernelError::VarOutOfRange { index: max });
         }
         let mut tape = Vec::new();
-        let depth = lower(expr, &mut tape, 0, 0);
+        let mut luts = Vec::new();
+        let depth = lower(expr, &mut tape, &mut luts, 0, 0);
         if depth > MAX_STACK {
             return Err(KernelError::TooDeep { needed: depth });
         }
         Ok(Self {
             tape,
+            luts,
             #[cfg(test)]
             stack_depth: depth,
         })
@@ -293,6 +369,15 @@ impl Kernel {
                     sp -= 1;
                     stack[sp - 1] = op.apply(a, b);
                 }
+                Instr::Curve(index) => {
+                    // Like a unary op: consumes and replaces the top of stack.
+                    // The index is in range by construction (`lower` pushed the
+                    // table); an out-of-range one would mean a corrupted tape,
+                    // so fall through to the identity rather than panicking.
+                    if let Some(lut) = self.luts.get(usize::from(index)) {
+                        stack[sp - 1] = lut.lookup(stack[sp - 1]);
+                    }
+                }
             }
         }
         stack[0]
@@ -324,7 +409,7 @@ impl Kernel {
 
 /// Post-order lowering of an [`Expr`] into `tape`, returning the peak stack
 /// depth reached by this subtree given it starts at height `sp`.
-fn lower(expr: &Expr, tape: &mut Vec<Instr>, sp: usize, peak: usize) -> usize {
+fn lower(expr: &Expr, tape: &mut Vec<Instr>, luts: &mut Vec<Lut>, sp: usize, peak: usize) -> usize {
     match expr {
         Expr::Const(c) => {
             tape.push(Instr::Const(*c));
@@ -336,16 +421,31 @@ fn lower(expr: &Expr, tape: &mut Vec<Instr>, sp: usize, peak: usize) -> usize {
         }
         Expr::Unary(op, child) => {
             // Child leaves one value; the op replaces it in place.
-            let peak = lower(child, tape, sp, peak);
+            let peak = lower(child, tape, luts, sp, peak);
             tape.push(Instr::Unary(*op));
             peak
         }
         Expr::Binary(op, lhs, rhs) => {
             // lhs occupies slot `sp`; rhs is evaluated above it, so the
             // subtree's peak accounts for both operands being live at once.
-            let peak = lower(lhs, tape, sp, peak);
-            let peak = lower(rhs, tape, sp + 1, peak);
+            let peak = lower(lhs, tape, luts, sp, peak);
+            let peak = lower(rhs, tape, luts, sp + 1, peak);
             tape.push(Instr::Binary(*op));
+            peak
+        }
+        Expr::Curve(child, lut) => {
+            // Same stack shape as a unary op; the table moves out-of-line and
+            // the tape keeps its index. Identical tables are deduplicated —
+            // one curve reused across a graph is one table.
+            let peak = lower(child, tape, luts, sp, peak);
+            let index = luts.iter().position(|l| l == lut).unwrap_or_else(|| {
+                luts.push(lut.clone());
+                luts.len() - 1
+            });
+            // A tape referencing more than u16::MAX distinct curves is not a
+            // real program; saturating keeps `lower` total, and the eval-side
+            // bounds check turns any such lookup into the identity.
+            tape.push(Instr::Curve(u16::try_from(index).unwrap_or(u16::MAX)));
             peak
         }
     }
@@ -452,11 +552,64 @@ mod tests {
                         Just(BinaryOp::Max),
                     ],
                     inner.clone(),
-                    inner
+                    inner.clone()
                 )
                     .prop_map(|(op, l, r)| Expr::binary(op, l, r)),
+                // A curve node, so the tape's out-of-line table handling is
+                // covered by the same oracle as everything else.
+                (prop::collection::vec(-2.0_f32..2.0, 2..8), inner).prop_map(|(samples, c)| {
+                    Expr::Curve(Box::new(c), Lut::from_samples(&samples))
+                }),
             ]
         })
+    }
+
+    #[test]
+    fn a_lut_lerps_between_its_samples_and_clamps_outside() {
+        let lut = Lut::from_samples(&[0.0, 1.0, 0.0]);
+        assert!((lut.lookup(0.0) - 0.0).abs() < 1e-6);
+        assert!((lut.lookup(0.5) - 1.0).abs() < 1e-6, "the middle sample");
+        assert!((lut.lookup(0.25) - 0.5).abs() < 1e-6, "lerped halfway");
+        assert!((lut.lookup(1.0) - 0.0).abs() < 1e-6);
+        // Outside [0, 1] holds the endpoints rather than extrapolating.
+        assert!((lut.lookup(-5.0) - 0.0).abs() < 1e-6);
+        assert!((lut.lookup(5.0) - 0.0).abs() < 1e-6);
+    }
+
+    /// A table shorter than two entries would make `lookup`'s lerp index out
+    /// of bounds, so construction pads instead of trusting the caller.
+    #[test]
+    fn a_degenerate_lut_is_padded_not_rejected() {
+        assert_eq!(Lut::from_samples(&[]).samples().len(), 2);
+        let one = Lut::from_samples(&[7.0]);
+        assert_eq!(one.samples().len(), 2);
+        assert!((one.lookup(0.3) - 7.0).abs() < 1e-6, "a constant table");
+    }
+
+    #[test]
+    fn sampling_a_function_reproduces_it_at_the_sample_points() {
+        let lut = Lut::sample(8, |x| x * x);
+        assert_eq!(lut.samples().len(), 9);
+        assert!((lut.lookup(0.5) - 0.25).abs() < 1e-6);
+        assert!((lut.lookup(1.0) - 1.0).abs() < 1e-6);
+        // Resolution 0 would leave a one-entry table; it is raised to 1.
+        assert_eq!(Lut::sample(0, |_| 1.0).samples().len(), 2);
+    }
+
+    /// The whole point of moving tables out-of-line: reusing one curve in
+    /// several places costs one table, not several.
+    #[test]
+    fn identical_curves_share_one_table() {
+        let lut = Lut::from_samples(&[0.0, 1.0]);
+        let expr = Expr::binary(
+            BinaryOp::Add,
+            Expr::Curve(Box::new(Expr::var(0)), lut.clone()),
+            Expr::Curve(Box::new(Expr::var(1)), lut),
+        );
+        let kernel = Kernel::compile(&expr).expect("compiles");
+        assert_eq!(kernel.luts.len(), 1, "deduplicated");
+        // …and it still evaluates both operands through it.
+        assert!((kernel.eval(&[0.5, 1.0]) - 1.5).abs() < 1e-6);
     }
 
     proptest! {

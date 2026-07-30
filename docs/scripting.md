@@ -80,9 +80,6 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (spawn-circle x y r)         ; a circle centred at (x, y) → its handle
 (spawn-ground x y angle)     ; a fixed ground half-plane → its handle
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
-(array-repeat b n dx dy sx sy) ; repeat a body n times stepping (dx, dy), each
-                             ; copy sx/sy the size of the last — the step
-                             ; shrinks with them, so copies stay in contact
 
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
@@ -175,16 +172,16 @@ Reads driving edits (a marker under every existing body):
 The catalog and the steel registration are kept in lockstep by a shared name
 constant, so a new verb touches three (edits: four) places:
 
-1. **`src/script/registry.rs`** — add a `name::MY_VERB` constant and an `OpSpec`
+1. **`crates/gradiance-script/src/registry.rs`** — add a `name::MY_VERB` constant and an `OpSpec`
    entry in the matching `*_specs()` helper (name, signature, doc, category,
    arity). The console picks it up automatically.
-2. **`src/script/bridge.rs`** — register the builtin in the matching
+2. **`crates/gradiance-script/src/bridge.rs`** — register the builtin in the matching
    `register_*_verbs` function, under the same `name::MY_VERB` constant:
    - an **edit** verb `emit`s a reflected intent onto the op queue;
    - a **config** verb reads the settings mirror / queues a reflect-path write;
    - a **query** verb reads the `SceneView` snapshot and returns a number;
    - an **editor** verb queues an editor-state change.
-3. **Edits only:** add a row to `edit_bindings()` in `src/script/bridge.rs`
+3. **Edits only:** add a row to `edit_bindings()` in `bridge.rs`
    (op name + the intent type it emits). `ScriptPlugin` registers the bus
    writer from that table, and `tests/it/registry_validation.rs` fails if a
    catalog Edit op has no binding, an unregistered intent, or an intent
@@ -194,14 +191,17 @@ constant, so a new verb touches three (edits: four) places:
    `cargo test` green — the validation test above already covers the
    catalog↔builtin drift cases.
 
-`steel` may be imported only in `src/script/{bridge,reflect_bridge}` and `egui`
-only in `src/ui/` — `tests/boundaries.rs` enforces both.
+`steel` may be declared only by `crates/gradiance-script` and `egui` only by
+`crates/gradiance-ui` — the package graph enforces both, and
+`tests/boundaries.rs` re-checks the manifests and the source text.
 
 ## What's next (see the roadmap)
 
 - **User tools from `.scm`** — a scripted tool as a `ToolContext → (preview,
   commit-intent)` closure, reusing the same driver the built-in tools use.
 - **Driver dataflow (sensors / modulators / actuators)** — named-signal bindings
-  lowered to the allocation-free Tier-B kernel (`src/script/kernel.rs`); a
+  lowered to the allocation-free Tier-B kernel (`gradiance-kernel`); a
   sensor is a query, a modulator is a kernel, an actuator is a config/edit op.
+  **Landed** as `gradiance-signal` — bindings, params, and computed signals all
+  compile through `signal::compile` to a `Kernel` tape.
 - **A fuel/step budget** for runaway authoring scripts.

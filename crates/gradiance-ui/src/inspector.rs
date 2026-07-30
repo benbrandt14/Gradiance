@@ -13,6 +13,7 @@
 //! body — each target's own prior value is captured for undo.
 
 use crate::ports;
+use crate::widgets;
 use crate::widgets::{Commit, precise_drag, precise_drag_unit};
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
@@ -35,6 +36,8 @@ pub struct InspectorPanel {
     /// Show the Properties dock pane.
     pub open: bool,
 }
+
+crate::impl_panel_toggle!(InspectorPanel, open);
 
 /// Everything the body-property sections read and write, bundled as one
 /// `SystemParam` so both hosts (context menu, Properties dock pane) stay under
@@ -654,10 +657,10 @@ pub(crate) fn inspector_pane(
     optimizer: &mut crate::optimizer::OptimizerPanel,
 ) {
     if selection.is_empty() {
-        ui.weak("Nothing selected — pick a body to edit its properties.");
+        widgets::empty_state(ui, "Nothing selected — pick a body to edit its properties.");
         return;
     }
-    ui.heading(format!("Selection ({})", selection.len()));
+    widgets::section_header(ui, &format!("Selection ({})", selection.len()));
     ui.separator();
     inspector_body(ui, selection, props);
     // Multi-body operations live below the per-body sections: the optimizer
@@ -675,24 +678,24 @@ pub(crate) fn inspector_pane(
 /// editor; anything else gets a note rather than empty headers.
 fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps) {
     let Some(primary) = selection.primary() else {
-        ui.weak("Nothing selected.");
+        widgets::empty_state(ui, "Nothing selected.");
         return;
     };
     if props.is_body(primary) {
-        ui.label(egui::RichText::new("Sensors").strong())
+        widgets::section_header(ui, "Sensors")
             .on_hover_text("live read-only quantities — the object's sensor ports");
         props.sensors(ui, primary);
         ui.separator();
-        ui.label(egui::RichText::new("Physics").strong());
+        widgets::section_header(ui, "Physics");
         physics_section(ui, selection, props);
         ui.separator();
-        ui.label(egui::RichText::new("Shape").strong());
+        widgets::section_header(ui, "Shape");
         shape_section(ui, selection, props);
         ui.separator();
-        ui.label(egui::RichText::new("Appearance").strong());
+        widgets::section_header(ui, "Appearance");
         appearance_section(ui, selection, props);
         ui.separator();
-        ui.label(egui::RichText::new("Depth").strong());
+        widgets::section_header(ui, "Depth");
         depth_section(ui, selection, props);
         return;
     }
@@ -706,7 +709,7 @@ fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProp
         .zip(props.node_kinds.get(primary).ok().cloned())
     {
         ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-        if let Some(next) = crate::signals::node_kind_editor(ui, "inspector", &kind) {
+        if let Some(next) = widgets::node_kind_editor(ui, "inspector", &kind) {
             props.edits.write(PropertyEditIntent {
                 changes: vec![PropertyChange {
                     id,
@@ -717,5 +720,8 @@ fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProp
         }
         return;
     }
-    ui.weak("This selection has no editable properties here (use its own editor).");
+    widgets::empty_state(
+        ui,
+        "This selection has no editable properties here (use its own editor).",
+    );
 }

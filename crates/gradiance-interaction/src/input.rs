@@ -92,6 +92,10 @@ fn default_input_map() -> InputMap<EditorAction> {
     map.insert(A::Tool(ToolState::Strut), KeyCode::KeyT);
     map.insert(A::Tool(ToolState::Ground), KeyCode::KeyG);
     map.insert(A::Tool(ToolState::Cut), KeyCode::KeyK);
+    // `N` for node — a tracer is a `BehaviorNode`. The tool palette had
+    // advertised `Y` for it, but `Y` is Redo and Tracer had no binding at all,
+    // so the hint sent people to a different action entirely.
+    map.insert(A::Tool(ToolState::Tracer), KeyCode::KeyN);
     map
 }
 

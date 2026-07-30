@@ -469,6 +469,14 @@ pub enum SignalExpr {
     Min(Box<SignalExpr>, Box<SignalExpr>),
     /// Maximum.
     Max(Box<SignalExpr>, Box<SignalExpr>),
+    /// Reshape a subexpression through a response [`Curve`].
+    ///
+    /// There is no RPN spelling for this — a curve is a shape, not a token, so
+    /// it is authored in the curve editor and reaches the expression tree by
+    /// construction (the `curve` block on the node canvas). The RPN parser has
+    /// no token for it, so a console-authored expression can never produce one
+    /// — which is correct: there would be nothing to author the shape with.
+    Curve(Box<SignalExpr>, Curve),
 }
 
 impl SignalExpr {
@@ -533,7 +541,9 @@ impl SignalExpr {
                     out.push(name.clone());
                 }
             }
-            Self::Neg(a) | Self::Sin(a) | Self::Cos(a) | Self::Abs(a) => a.collect_inputs(out),
+            Self::Neg(a) | Self::Sin(a) | Self::Cos(a) | Self::Abs(a) | Self::Curve(a, _) => {
+                a.collect_inputs(out);
+            }
             Self::Add(a, b)
             | Self::Sub(a, b)
             | Self::Mul(a, b)
@@ -665,6 +675,18 @@ pub enum BlockOp {
         /// Second operand's bus name.
         b: Option<String>,
     },
+    /// `curve(in)` — reshape one input through an authored response curve.
+    ///
+    /// The only block whose parameter is a *shape* rather than a number, and
+    /// the node-canvas home of the curve editor. Its domain is `[0, 1]`, like
+    /// every [`Curve`]: feed it a normalized signal (a binding's transfer, a
+    /// param, a `t`-driven ramp), not a raw metre-per-second reading.
+    Curve {
+        /// The bus name feeding the input.
+        input: Option<String>,
+        /// The authored transfer.
+        curve: Curve,
+    },
 }
 
 impl BlockOp {
@@ -695,6 +717,9 @@ impl BlockOp {
             Self::Abs { input } => SignalExpr::Abs(Box::new(operand(input))),
             Self::Min { a, b } => SignalExpr::Min(Box::new(operand(a)), Box::new(operand(b))),
             Self::Max { a, b } => SignalExpr::Max(Box::new(operand(a)), Box::new(operand(b))),
+            Self::Curve { input, curve } => {
+                SignalExpr::Curve(Box::new(operand(input)), curve.clone())
+            }
         }
     }
 
@@ -703,7 +728,9 @@ impl BlockOp {
     pub fn input_slots(&self) -> Vec<(&'static str, Option<String>)> {
         match self {
             Self::Time | Self::Constant { .. } | Self::Oscillator { .. } => Vec::new(),
-            Self::Gain { input, .. } | Self::Abs { input } => vec![("in", input.clone())],
+            Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
+                vec![("in", input.clone())]
+            }
             Self::Sum { a, b }
             | Self::Product { a, b }
             | Self::Sub { a, b }
@@ -718,7 +745,7 @@ impl BlockOp {
     pub fn set_input(&mut self, i: usize, name: Option<String>) {
         match self {
             Self::Time | Self::Constant { .. } | Self::Oscillator { .. } => {}
-            Self::Gain { input, .. } | Self::Abs { input } => {
+            Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
                 if i == 0 {
                     *input = name;
                 }
@@ -748,6 +775,7 @@ impl BlockOp {
             Self::Abs { .. } => "abs",
             Self::Min { .. } => "min",
             Self::Max { .. } => "max",
+            Self::Curve { .. } => "curve",
         }
     }
 }
