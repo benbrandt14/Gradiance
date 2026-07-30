@@ -248,39 +248,60 @@ fn edit_menu(
     });
 }
 
-/// The View menu, as a table. Every panel implements [`PanelToggle`], so the
-/// two idioms that used to need separate code paths are one row each — and a
-/// new panel is a row, not a branch. Grouped: right-dock sections, then the
-/// bottom dock and floating windows, then scene overlays.
+/// The View menu, as a table over the panel registry.
+///
+/// Every panel implements [`PanelToggle`], so the two idioms that used to need
+/// separate code paths are one row each — and the rows come from
+/// `Panels::named`, the same registry the `panel-show`/`-hide`/`-toggle` script
+/// verbs resolve against. A panel cannot appear in the menu but not the API, or
+/// the reverse.
+///
+/// The groups are presentation only: right-dock sections, then the bottom dock
+/// and floating windows, then scene overlays.
 fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
+    // Where a horizontal rule goes, by row index. Presentation, not structure.
+    const GROUPS: [usize; 2] = [4, 9];
     ui.menu_button("View", |ui| {
-        // (label, shortcut hint, panel). The hint is the real binding — see
-        // `dock::right_dock` for `` ` `` and `\`; an empty hint means unbound.
-        let dock_sections: [(&str, &str, &mut dyn PanelToggle); 4] = [
-            ("Outliner", "", &mut *panels.outliner),
-            ("Properties", "", &mut *panels.inspector),
-            ("Depth", "", &mut *panels.depth),
-            ("Plot", "\\", &mut *panels.plot),
-        ];
-        for (label, shortcut, panel) in dock_sections {
-            toggle_item(ui, label, shortcut, panel);
+        let mut rows = panels.named();
+        for (i, (name, panel)) in rows.iter_mut().enumerate() {
+            if GROUPS.contains(&i) {
+                ui.separator();
+            }
+            toggle_item(ui, menu_label(name), shortcut_for(name), &mut **panel);
         }
         ui.separator();
-        let windows: [(&str, &str, &mut dyn PanelToggle); 5] = [
-            ("Node Graph", "", &mut *panels.node_graph),
-            ("Script console", "`", &mut *panels.console),
-            ("Probe", "", &mut *panels.probe),
-            ("Array", "", &mut *panels.array),
-            ("Optimizer", "", &mut *panels.optimizer),
-        ];
-        for (label, shortcut, panel) in windows {
-            toggle_item(ui, label, shortcut, panel);
-        }
-        ui.separator();
-        toggle_item(ui, "Settings", "", &mut *panels.settings);
         ui.checkbox(&mut grid.visible, "Grid");
         ui.checkbox(&mut panels.debug.show_fields, "Field overlay");
     });
+}
+
+/// The menu label for a registry name. Names are an API and stay stable; labels
+/// are prose and may be retitled, which is why they are not the same string.
+pub(crate) fn menu_label(name: &str) -> &'static str {
+    match name {
+        "outliner" => "Outliner",
+        "properties" => "Properties",
+        "depth" => "Depth",
+        "plot" => "Plot",
+        "nodes" => "Node Graph",
+        "console" => "Script console",
+        "probe" => "Probe",
+        "array" => "Array",
+        "optimizer" => "Optimizer",
+        "settings" => "Settings",
+        _ => "Panel",
+    }
+}
+
+/// The keyboard shortcut shown against a panel's row, or empty when unbound.
+/// The real bindings live in `dock::right_dock`; a shortcut that exists only in
+/// code is a shortcut nobody finds.
+fn shortcut_for(name: &str) -> &'static str {
+    match name {
+        "console" => "`",
+        "plot" => "\\",
+        _ => "",
+    }
 }
 
 /// One View-menu row: a checkbox bound to the panel, with its keyboard

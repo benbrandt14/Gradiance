@@ -80,14 +80,41 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (spawn-circle x y r)         ; a circle centred at (x, y) → its handle
 (spawn-ground x y angle)     ; a fixed ground half-plane → its handle
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
+(delete i)                   ; delete the i-th body (id order, as body-x)
+(undo) (redo)                ; walk the command stack — Edit ▸ Undo/Redo as ops
+
+;; edit — relationships between bodies (b < 0 pins to the world)
+(hinge a b x y)              ; revolute joint at world point (x, y) → its handle
+(slider a b x y ax ay)       ; prismatic joint at (x, y) along world axis (ax, ay)
+(spring a b stiffness damping) ; spring-damper strut between the two centres
+
+;; edit — a body's authored properties (the inspector's fields as ops)
+(place i x y angle)          ; move and rotate the i-th body
+(set-friction i v)           ; Coulomb friction (both coefficients)
+(set-restitution i v)        ; bounciness, 0 = dead, 1 = perfectly elastic
+(set-density i v)            ; mass density (area x density = mass)
+(set-static i on)            ; non-zero = static, 0 = dynamic
+(scale i fx fy)              ; resize about the body's own centre, own axes
+(merge a b)                  ; fuse into one CSG union; a survives
+(delete-joint i)             ; remove the i-th joint
 
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
 (sim-set "gravity.y" -500)   ; write one (any scalar field, by path)
 
+;; editor — the chrome, through the EditorState seam
+(panel-show "properties")    ; open a panel — the same toggle the View menu drives
+(panel-hide "console")       ; close one
+(panel-toggle "plot")        ; flip one
+(panel-open? "depth")        ; #t / #f — whether it is showing
+;; names: outliner properties depth plot nodes console probe array optimizer settings
+
 ;; query — read the committed scene (reads are total)
 (body-count)                 ; number of bodies
 (body-x i) (body-y i) (body-rot i)   ; pose of the i-th body (id order)
+(joint-count)                ; number of joints
+(body-friction i) (body-restitution i) (body-density i)  ; read them back
+(body-static? i)             ; 1 when static, 0 otherwise
 (count-at x y)               ; how many bodies' shapes contain the point
 (nearest-at x y)             ; index of the nearest body centre (-1 if none)
 (nearest-dist x y)           ; distance to the nearest body centre (-1 if none)
@@ -151,8 +178,9 @@ Extend the right-click menu from an init script (`--script init.scm`):
   "(let loop ((i 0)) (when (< i 8) (spawn-box (* i 30) 0 24 24) (loop (+ i 1))))")
 ```
 
-A script-computed value driving a body's color (bind *named* `touches` to
-the body's fill in the **Signals** window — `docs/signal-dataflow.md`):
+A script-computed value driving a body's color (bind *named* `touches` to the
+body's fill in the **signal list** beside the node canvas —
+`docs/signal-dataflow.md`):
 
 ```scheme
 (signal-set "touches" (touch-count 0))
@@ -190,6 +218,124 @@ constant, so a new verb touches three (edits: four) places:
    case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
    `cargo test` green — the validation test above already covers the
    catalog↔builtin drift cases.
+
+### Joints: relationships, not just objects
+
+A multibody sandbox is mostly about *how things are connected*, and until these
+verbs a script could author bodies but not a single constraint. All three of the
+engine's joint kinds are reachable:
+
+```scheme
+;; a three-link chain, hinged at the shared edges
+(begin (spawn-box 0 0 20 6) (spawn-box 30 0 20 6) (spawn-box 60 0 20 6))
+(begin (hinge 0 1 15 0) (hinge 1 2 45 0))
+```
+
+Two things the verbs handle for you, because getting them wrong is subtle:
+
+- **Anchors are local.** A joint stores its anchor in each body's own frame and
+  records both bodies' rotations at creation (`rest_rot_*`) — welds hold that
+  relative angle, sliders lock rotation to it, hinge limits measure from it.
+  You pass a **world** point; the conversion happens in one place, the same one
+  `interaction::tools::connector_tool` uses. Skipping it makes joints between
+  rotated bodies snap violently at spawn.
+- **`b < 0` is a world pin**, matching what the tools produce when you click
+  where only one body sits. A *first* index that does not resolve emits nothing;
+  a bad *second* index degrades to a world pin, so a typo is visible in the
+  scene rather than silently dropped. A body hinged to itself becomes a world
+  pin too.
+
+Unlike the strut tool, `(spring …)` takes stiffness explicitly rather than
+sizing it from the connected mass: a fixture whose stiffness depends on a mass
+heuristic stops being reproducible the moment the shape changes.
+
+There is no `weld` verb because there is no weld *joint* — in this engine
+welding is `merge` (one CSG body) or make-static, not a constraint.
+
+### Properties: reads and writes name the same thing
+
+Every `set-*` verb has a matching `body-*` read, deliberately. Reads are total,
+so a script can inspect a value it did not author and decide from it:
+
+```scheme
+;; make everything slippery except what is already slippery
+(if (> (body-friction 0) 0.2) (set-friction 0 0.05) 0)
+```
+
+Three properties of the write side worth knowing:
+
+- **One undo step, same as a hand edit.** They go through `PropertyEditIntent`,
+  the seam the inspector's `precise_drag` rows commit through, so a scripted
+  change and a dragged one are indistinguishable in the save file and the stack.
+- **A redundant set is not a step.** Setting a value to what it already holds
+  emits nothing, so a loop that normalises a scene does not bury the undo stack
+  in empty entries. (`place` has the same guard.)
+- **⚠ Within one run, every read sees the pre-run value.** Combined with the
+  guard above this has a surprising consequence:
+
+  ```scheme
+  (begin (set-static 0 1) (set-static 0 0))   ; leaves the body STATIC
+  ```
+
+  Both calls read the same snapshot, so the second sees `old == new` and is
+  suppressed. Writes to *different* properties in one run compose fine — each
+  reads a field the other does not touch — but two writes to the **same**
+  property need two runs. This is the same one-snapshot rule `(delete i)` has;
+  it is just easier to trip over here.
+- **A read of a missing body is NaN**, not zero — zero would read as a real
+  measurement of a frictionless body. NaN compares false against everything, so
+  a guard like the one above simply does not fire.
+
+`(scale i fx fy)` works along the body's **own** axes about its own centre, so
+"twice as wide" means along the body's width and a box stays a box. A
+global-axis scale of a rotated box would shear it into a polygon — which
+`geometry::scale` handles correctly, but it is not what the caller meant. Zero
+and negative factors are rejected: zero is unrecoverable and a negative mirrors,
+and neither is a resize.
+
+`(set-friction …)` moves both the static and dynamic coefficients together,
+which is what the inspector does: authoring two numbers that are almost always
+equal is friction the UI deliberately does not expose.
+
+### Why `(delete i)` and not `(delete-selection)`
+
+The Edit menu's delete acts on the selection. A verb cannot: `Selection` lives
+in `gradiance-interaction`, which sits **above** `gradiance-script` in the layer
+graph, so the script layer cannot read it — the same asymmetry `panel-open?`
+resolves with a mirror.
+
+A mirror would be the wrong answer here, though. A script that deletes
+"whatever happens to be selected" depends on invisible state and is not
+reproducible, which is exactly what you do not want from a `.scm` fixture. So
+edits are **indexed**, sharing the `i` vocabulary the query verbs already use
+(`body-x i`, `body-y i`). The index is resolved against the run's snapshot, so
+reads and edits compose within one script:
+
+```scheme
+(when (> (body-count) 0) (delete 0))   ; pop the first body
+```
+
+The snapshot is taken once per **run**, not per call — see the ⚠ note under
+Properties for the case where that matters.
+
+Group/ungroup are deliberately absent: their natural argument *is* a set, and a
+fixed-arity `(group i j)` would be an arbitrary restriction rather than the op.
+They wait for a list-shaped argument convention.
+
+### Panels are registered ops
+
+`panel-show` and friends resolve against **one** table — `Panels::named` in
+`crates/gradiance-ui/src/panels.rs` — which is the same table the View menu
+renders. Adding a panel is one row there and it appears in both, so the menu
+and the API cannot drift; a unit test asserts every registry name has a menu
+label.
+
+The verbs add no mutation path. A verb queues a `PanelRequest`; the UI applies
+it through `PanelToggle::set_open`, which is exactly what a menu click does.
+The read direction (`panel-open?`) crosses the layer boundary as a mirror —
+panel state lives in `gradiance-ui`, which sits *above* `gradiance-script`, so
+the UI publishes `PanelStates` each frame rather than the script layer reaching
+up.
 
 `steel` may be declared only by `crates/gradiance-script` and `egui` only by
 `crates/gradiance-ui` — the package graph enforces both, and

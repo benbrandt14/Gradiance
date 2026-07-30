@@ -56,6 +56,52 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
+    /// `(set-friction i v)` — Coulomb friction of the i-th body.
+    pub const SET_FRICTION: &str = "set-friction";
+    /// `(set-restitution i v)` — bounciness of the i-th body.
+    pub const SET_RESTITUTION: &str = "set-restitution";
+    /// `(set-density i v)` — mass density of the i-th body.
+    pub const SET_DENSITY: &str = "set-density";
+    /// `(set-static i on)` — make the i-th body static (or dynamic again).
+    pub const SET_STATIC: &str = "set-static";
+    /// `(body-friction i)` — read it back.
+    pub const BODY_FRICTION: &str = "body-friction";
+    /// `(body-restitution i)` — read it back.
+    pub const BODY_RESTITUTION: &str = "body-restitution";
+    /// `(body-density i)` — read it back.
+    pub const BODY_DENSITY: &str = "body-density";
+    /// `(body-static? i)` — whether the i-th body is static.
+    pub const BODY_STATIC: &str = "body-static?";
+    /// `(place i x y angle)` — move/rotate the i-th body.
+    pub const PLACE: &str = "place";
+    /// `(scale i fx fy)` — resize the i-th body about its own centre.
+    pub const SCALE: &str = "scale";
+    /// `(merge a b)` — fuse two bodies into one CSG union.
+    pub const MERGE: &str = "merge";
+    /// `(delete-joint i)` — remove the i-th joint.
+    pub const DELETE_JOINT: &str = "delete-joint";
+    /// `(hinge a b x y)` — pin two bodies at a world point.
+    pub const HINGE: &str = "hinge";
+    /// `(slider a b x y ax ay)` — prismatic joint along an axis.
+    pub const SLIDER: &str = "slider";
+    /// `(spring a b stiffness damping)` — spring-damper strut.
+    pub const SPRING: &str = "spring";
+    /// `(joint-count)` — how many joints exist.
+    pub const JOINT_COUNT: &str = "joint-count";
+    /// `(undo)` — undo the last command.
+    pub const UNDO: &str = "undo";
+    /// `(redo)` — redo the last undone command.
+    pub const REDO: &str = "redo";
+    /// `(delete i)` — delete the i-th body (id order).
+    pub const DELETE: &str = "delete";
+    /// `(panel-show name)` — open an editor panel by name.
+    pub const PANEL_SHOW: &str = "panel-show";
+    /// `(panel-hide name)` — close an editor panel by name.
+    pub const PANEL_HIDE: &str = "panel-hide";
+    /// `(panel-toggle name)` — flip an editor panel's visibility.
+    pub const PANEL_TOGGLE: &str = "panel-toggle";
+    /// `(panel-open? name)` — whether a panel is currently shown.
+    pub const PANEL_OPEN: &str = "panel-open?";
     /// `(defparam name value min max)` — declare a tunable slider param.
     pub const DEFPARAM: &str = "defparam";
     /// `(defsignal name expr)` — declare a computed signal (RPN expression).
@@ -133,8 +179,11 @@ impl OperationCatalog {
     /// verbs accrete.
     pub fn builtin() -> Self {
         let mut ops = Vec::new();
-        ops.extend(edit_specs());
+        ops.extend(spawn_specs());
+        ops.extend(mutate_specs());
+        ops.extend(property_specs());
         ops.extend(query_specs());
+        ops.extend(property_query_specs());
         ops.extend(config_specs());
         ops.extend(editor_specs());
         ops.extend(meta_specs());
@@ -164,7 +213,8 @@ impl Default for OperationCatalog {
 }
 
 /// Authored-world edit verbs (→ intents).
-fn edit_specs() -> Vec<OpSpec> {
+/// Edits that **author new geometry** — the spawn family and the cut.
+fn spawn_specs() -> Vec<OpSpec> {
     use OpCategory::Edit;
     vec![
         OpSpec {
@@ -188,6 +238,85 @@ fn edit_specs() -> Vec<OpSpec> {
             category: Edit,
             args: 3,
         },
+    ]
+}
+
+/// Edits over **existing bodies**: their pose, their properties, their
+/// relationships, and the history ops. Split from [`spawn_specs`] to mirror the
+/// bridge's own split — these all name their target by index.
+fn mutate_specs() -> Vec<OpSpec> {
+    use OpCategory::Edit;
+    vec![
+        OpSpec {
+            name: name::SCALE,
+            signature: "(scale i fx fy)",
+            doc: "Resize the i-th body by (fx, fy) about its own centre, along its own axes.",
+            category: Edit,
+            args: 3,
+        },
+        OpSpec {
+            name: name::MERGE,
+            signature: "(merge a b)",
+            doc: "Fuse bodies a and b into one CSG union; a survives.",
+            category: Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::DELETE_JOINT,
+            signature: "(delete-joint i)",
+            doc: "Remove the i-th joint (id order, as joint-count) — undoable.",
+            category: Edit,
+            args: 1,
+        },
+        OpSpec {
+            name: name::PLACE,
+            signature: "(place i x y angle)",
+            doc: "Move the i-th body to (x, y) and rotate it to `angle` radians — one undo step.",
+            category: OpCategory::Edit,
+            args: 4,
+        },
+        OpSpec {
+            name: name::HINGE,
+            signature: "(hinge a b x y)",
+            doc: "Hinge bodies a and b at world point (x, y); b < 0 pins a to the world.",
+            category: OpCategory::Edit,
+            args: 4,
+        },
+        OpSpec {
+            name: name::SLIDER,
+            signature: "(slider a b x y ax ay)",
+            doc: "Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world.",
+            category: OpCategory::Edit,
+            args: 6,
+        },
+        OpSpec {
+            name: name::SPRING,
+            signature: "(spring a b stiffness damping)",
+            doc: "Spring-damper strut between the centres of a and b; rest length is their current distance.",
+            category: OpCategory::Edit,
+            args: 4,
+        },
+        OpSpec {
+            name: name::DELETE,
+            signature: "(delete i)",
+            doc: "Delete the i-th body (id order, same index as body-x) — undoable.",
+            category: OpCategory::Edit,
+            args: 1,
+        },
+        OpSpec {
+            name: name::UNDO,
+            signature: "(undo)",
+            doc: "Undo the last command — the same step Edit ▸ Undo takes.",
+            category: OpCategory::Edit,
+            args: 0,
+        },
+        OpSpec {
+            name: name::REDO,
+            signature: "(redo)",
+            doc: "Redo the last undone command.",
+            category: OpCategory::Edit,
+            args: 0,
+        },
         OpSpec {
             name: name::CUT,
             signature: "(cut ax ay bx by width)",
@@ -198,10 +327,93 @@ fn edit_specs() -> Vec<OpSpec> {
     ]
 }
 
-/// Read-total geometric query verbs (→ the scene snapshot).
+/// Body-property edits — the inspector's fields as ops.
+fn property_specs() -> Vec<OpSpec> {
+    vec![
+        OpSpec {
+            name: name::SET_FRICTION,
+            signature: "(set-friction i v)",
+            doc: "Set the i-th body's Coulomb friction (static and dynamic) — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SET_RESTITUTION,
+            signature: "(set-restitution i v)",
+            doc: "Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SET_DENSITY,
+            signature: "(set-density i v)",
+            doc: "Set the i-th body's mass density (area x density = mass) — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SET_STATIC,
+            signature: "(set-static i on)",
+            doc: "Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable.",
+            category: OpCategory::Edit,
+            args: 2,
+        },
+    ]
+}
+
+/// Reads of a body's authored properties — the mirror image of
+/// [`property_specs`], so a script can inspect a value it did not author.
+fn property_query_specs() -> Vec<OpSpec> {
+    use OpCategory::Query;
+    vec![
+        OpSpec {
+            name: name::BODY_FRICTION,
+            signature: "(body-friction i)",
+            doc: "Coulomb friction of the i-th body.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_RESTITUTION,
+            signature: "(body-restitution i)",
+            doc: "Bounciness of the i-th body.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_DENSITY,
+            signature: "(body-density i)",
+            doc: "Mass density of the i-th body.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::BODY_STATIC,
+            signature: "(body-static? i)",
+            doc: "Whether the i-th body is static (1) or not (0).",
+            category: Query,
+            args: 1,
+        },
+    ]
+}
+
 fn query_specs() -> Vec<OpSpec> {
     use OpCategory::Query;
     vec![
+        OpSpec {
+            name: name::PANEL_OPEN,
+            signature: "(panel-open? name)",
+            doc: "Whether an editor panel is currently shown (reads are total).",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::JOINT_COUNT,
+            signature: "(joint-count)",
+            doc: "Number of authored joints in the committed scene.",
+            category: Query,
+            args: 0,
+        },
         OpSpec {
             name: name::BODY_COUNT,
             signature: "(body-count)",
@@ -320,6 +532,27 @@ fn editor_specs() -> Vec<OpSpec> {
             doc: "Name a body in the workspace (a viewport tag); body is a spawn's return value.",
             category: OpCategory::EditorState,
             args: 2,
+        },
+        OpSpec {
+            name: name::PANEL_SHOW,
+            signature: "(panel-show name)",
+            doc: "Open an editor panel — the same toggle the View menu drives (try (panels)).",
+            category: OpCategory::EditorState,
+            args: 1,
+        },
+        OpSpec {
+            name: name::PANEL_HIDE,
+            signature: "(panel-hide name)",
+            doc: "Close an editor panel by name.",
+            category: OpCategory::EditorState,
+            args: 1,
+        },
+        OpSpec {
+            name: name::PANEL_TOGGLE,
+            signature: "(panel-toggle name)",
+            doc: "Flip an editor panel's visibility.",
+            category: OpCategory::EditorState,
+            args: 1,
         },
         OpSpec {
             name: name::DEFPARAM,

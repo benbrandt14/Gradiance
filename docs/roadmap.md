@@ -448,6 +448,11 @@ module boundary test already puts the seams where crate edges would go.
 - **Panel input independence** *(landed)*: the node graph and right dock capture
   their own pointer/scroll/resize (rects fed into `PointerOverUi`) instead of
   leaking to the scene — independent pan/zoom falls out.
+- **Node-canvas notes** *(landed)*: free-floating comment blocks — no pins, no
+  effect on the graph. Pure view state, **not persisted**: block positions and
+  notes are lost on restart while the canvas is in flux, because persisting them
+  means choosing between document content and workstation layout, and either
+  choice is a format to migrate later.
 - **Node-editor feel** *(landed)*: header zoom-to-fit, a vvvv-flavoured theme
   (sharp corners, flat fills, thin wires), and a faint dot-grid that pans and
   zooms with the canvas.
@@ -594,7 +599,39 @@ a normal dependency, not a cargo feature — see the decision doc's
     `ScriptActions` table; the context menu's "Scripts" section surfaces them
     and invoking one runs its source through `ScriptInputs`. Next: pass the
     click point / selection into the action, and fold the existing hard-coded
-    `src/ui/context_menu.rs` buttons into the same table as the built-in seed.
+    `ui::context_menu` buttons into the same table as the built-in seed.
+  - **The scene model is reachable (landed).** Objects: `spawn-*`, `delete`,
+    `cut`, `place`, `scale`, `merge`, and the physics properties
+    (`set-friction`/`-restitution`/`-density`/`-static`) each with a matching
+    read. Relationships: `hinge`, `slider`, `spring` (all three joint kinds,
+    `b < 0` = world pin) and `delete-joint`. Every one routes through the intent
+    the equivalent tool or inspector field emits, so a scripted scene and a
+    hand-built one are indistinguishable in the save file and on the undo stack.
+
+    The **one-snapshot-per-run** rule is the thing to know: within a single
+    submitted script every index and every `old` value reads the state from
+    before it started. Writes to different properties compose; two writes to the
+    same property need two runs. `docs/scripting.md` has the worked example.
+
+    Still absent: set-shaped edits (`group`/`ungroup`), which want a list
+    argument — `steel`'s `RestArgs` is private so true variadics are out, but
+    `SteelVal::ListV` makes `(group (list 0 1 2))` workable when wanted.
+  - **History and delete as ops (landed).** `(undo)`, `(redo)` and `(delete i)`
+    route through the same `UndoIntent`/`RedoIntent`/`DeleteIntent` the Edit menu
+    emits, so a script can walk the stack it just wrote to — the loop a `.scm`
+    fixture needs. Indexed rather than selection-scoped: `Selection` lives in
+    `gradiance-interaction`, *above* the script layer, and a script acting on
+    invisible state would not be reproducible anyway. Set-shaped edits
+    (`group`/`ungroup`) wait for a list-argument convention.
+  - **Panels are registered ops (landed).** `panel-show` / `panel-hide` /
+    `panel-toggle` / `panel-open?` resolve against `menu::Panels::named` — the
+    *same* table the View menu renders — so a panel appears in the menu and the
+    scripting API together, and a test asserts the two cannot drift. Note the
+    shape: a verb queues a request the UI applies through `PanelToggle`, so
+    scripting adds no mutation path; and because panel state lives *above* the
+    script layer, `panel-open?` reads a mirror the UI publishes rather than a
+    dependency edge upward. The menu's *intent*-emitting items (undo, delete,
+    group) are still hand-wired — that is the rest of the action layer.
   - **User tools from `.scm`:** a tool is a `ToolContext → (preview,
     commit-intent)` (M17's `DraftTool`) / `ManipTool` closure; the registry
     lets one be authored in lisp and registered by name, reusing the exact

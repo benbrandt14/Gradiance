@@ -30,14 +30,41 @@ separates "a weekend" from "an R&D project."
 
 ## No-regret growth work (framework-independent, still open)
 
-- **Split into a Cargo workspace** (`-core`/`-physics`/`-script`/`-ui` + app
-  binary) — the biggest compile-time win, and enforces the module boundaries at
-  the crate level (stronger than `tests/boundaries.rs`). The boundary discipline
-  already puts the seams where crate edges would go.
-- **App-shell architecture** — a `View`/`Panel` trait + registry and an
-  action/command layer (dovetails with the scripting operation registry — a menu
-  item is a registered op), so chrome is extensible and a later framework swap is
-  a port, not a rewrite.
+- ~~**Split into a Cargo workspace**~~ — **done**, and further than proposed here:
+  one package per architectural layer, so the layer diagram *is* the crate DAG
+  and `tests/boundaries.rs` asserts that DAG as data. See
+  `docs/workspace-plan.md`.
+- ~~**App-shell architecture**~~ — **done** for panels. `ui::panels::PanelToggle`
+  is the trait; `menu::Panels::named` is the registry; the View menu is a loop
+  over it, and so are the `panel-show`/`panel-hide`/`panel-toggle` script verbs
+  and the `panel-open?` read. "A menu item is a registered op" is literal:
+  adding a panel is one row, and it appears in the menu and the scripting API
+  together (a test asserts every name has a label, so they cannot drift).
+
+  Note the shape this took. A verb does **not** get its own write path — it
+  queues a `PanelRequest` and the UI calls `set_open`, exactly as a menu click
+  does. And because panel state lives in `gradiance-ui`, which sits *above*
+  `gradiance-script` in the DAG, the read direction (`panel-open?`) is a mirror
+  the UI publishes rather than a dependency edge upward. Any later extension of
+  the action layer — tools, commands — should copy that asymmetry.
+
+  The **action** half is registered too, as far as it honestly can be: `undo`,
+  `redo` and `delete` are Edit-category ops going through the same
+  `UndoIntent`/`RedoIntent`/`DeleteIntent` the menu emits, so a script can walk
+  the stack it just wrote to.
+
+  What is deliberately *not* generated is the Edit menu's **presentation**. Its
+  rows carry state a flat registry row cannot express — an enablement predicate
+  (`undo_depth > 0`) and a dynamic label ("Undo Spawn Body", named from the
+  pending step, which matters mid-run because a simulation is one undo step).
+  Forcing those through a registry would make the menu worse, not more uniform.
+  The op is the registered thing; the row is a projection of it plus history
+  state.
+
+  Still open: set-shaped edits (`group`, `ungroup`). Their natural argument is a
+  selection, which lives *above* this layer, and a fixed-arity `(group i j)`
+  would be an arbitrary restriction. They wait for a list-argument convention —
+  see `docs/scripting.md`.
 - Keep the `dev` dynamic-linking loop; widen `egui_kittest` headless coverage.
 
 ## What landed (option A, by accretion)

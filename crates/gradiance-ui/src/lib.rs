@@ -209,7 +209,20 @@ impl Plugin for GradianceUiPlugin {
             )
                 .chain(),
         );
-        app.add_systems(Update, context_menu::open_context_menu);
+        // The panel registry's script seam: apply what `panel-show` and friends
+        // asked for, then publish the state `panel-open?` reads. Both sit in
+        // `Update` rather than the egui pass — they touch no context, and
+        // applying before the pass means a script's request is visible the same
+        // frame it ran.
+        app.add_systems(
+            Update,
+            (
+                context_menu::open_context_menu,
+                panels::apply_panel_requests,
+                panels::publish_panel_states,
+            )
+                .chain(),
+        );
     }
 }
 
