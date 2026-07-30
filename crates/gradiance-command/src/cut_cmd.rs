@@ -13,7 +13,6 @@
 //! when no piece contains it.
 
 use crate::{CommandError, GameCommand, resolve};
-use avian2d::prelude::{AngularVelocity, LinearVelocity};
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
@@ -242,21 +241,20 @@ impl GameCommand for CutCommand {
                     // live at apply time and never recorded: velocities are
                     // simulation state, not authored state, exactly like
                     // the grab spring's writes.
-                    let motion = world.get::<LinearVelocity>(entity).copied().map(|lv| {
-                        (
-                            lv.0,
-                            world.get::<AngularVelocity>(entity).map_or(0.0, |a| a.0),
-                        )
-                    });
+                    let motion = gradiance_physics::queries::read_motion(world, entity);
                     world.despawn(entity);
                     for piece in pieces {
                         let spawned = piece.spawn(world);
                         if let Some((v, omega)) = motion {
                             let r = piece.pose.pos - outcome.original.pose.pos;
-                            world.entity_mut(spawned).insert((
-                                LinearVelocity(v + omega * r.perp()),
-                                AngularVelocity(omega),
-                            ));
+                            gradiance_physics::queries::write_motion(
+                                world,
+                                spawned,
+                                gradiance_units::Velocity2::new(
+                                    v.value() + omega.value() * r.perp(),
+                                ),
+                                omega,
+                            );
                         }
                     }
                     apply_joint_changes(world, &outcome.joint_changes)?;

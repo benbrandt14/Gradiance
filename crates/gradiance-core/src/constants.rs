@@ -11,9 +11,12 @@
 pub const GRAVITY: bevy::math::Vec2 = bevy::math::Vec2::new(0.0, -10.0);
 
 /// The interaction plane: where the cursor picks, where gizmos/grid/snap
-/// indicators draw, and where the front-most body face sits. The **single**
-/// authority for plane geometry — future multi-plane 3D work parameterizes
-/// this, so no other file may hard-code an overlay z.
+/// indicators draw, and where the front-most body face sits.
+///
+/// Read it through [`PlaneFrame::XY`](crate::units::PlaneFrame::XY), which is
+/// the frame this constant seeds and the **single** authority for plane
+/// geometry — no other file may hard-code an overlay z. Multi-plane work
+/// supplies further frames; this constant stays the default plane's offset.
 pub const INTERACTION_PLANE_Z: f32 = 0.0;
 
 /// Extrusion depth contributed by each active collision-layer bit.

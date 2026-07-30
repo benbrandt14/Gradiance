@@ -2,7 +2,6 @@
 //! undoable loads, and debug snapshots.
 
 use crate::harness::{body_count, box_record, entity_of, paused_app, undo};
-use avian2d::prelude::{ColliderDensity, Friction, GravityScale, Restitution, RigidBody};
 use bevy::prelude::*;
 use gradiance::domain::settings::{
     GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
@@ -63,9 +62,9 @@ fn shape_strategy() -> impl Strategy<Value = ShapeDef> {
 fn physics_strategy() -> impl Strategy<Value = BodyPhysics> {
     (
         prop_oneof![
-            Just(RigidBody::Dynamic),
-            Just(RigidBody::Static),
-            Just(RigidBody::Kinematic)
+            Just(BodyKind::Dynamic),
+            Just(BodyKind::Static),
+            Just(BodyKind::Kinematic)
         ],
         0.1f32..10.0,
         0.0f32..2.0,
@@ -75,21 +74,13 @@ fn physics_strategy() -> impl Strategy<Value = BodyPhysics> {
         any::<bool>(),
     )
         .prop_map(
-            |(
-                rigid_body,
-                density,
-                friction,
-                restitution,
-                gravity_scale,
-                sensor,
-                rotation_locked,
-            )| {
+            |(kind, density, friction, restitution, gravity_scale, sensor, rotation_locked)| {
                 BodyPhysics {
-                    rigid_body,
-                    friction: Friction::new(friction),
-                    restitution: Restitution::new(restitution),
-                    density: ColliderDensity(density),
-                    gravity_scale: GravityScale(gravity_scale),
+                    kind,
+                    friction,
+                    restitution,
+                    density: Density(density),
+                    gravity_scale,
                     sensor,
                     rotation_locked,
                 }
@@ -539,6 +530,30 @@ fn pre_si_files_are_rejected() {
             Err(gradiance::scene::PersistError::Version(5))
         ),
         "pre-SI (v5) files are rejected, not silently loaded"
+    );
+}
+
+#[test]
+fn pre_domain_physics_files_are_rejected() {
+    // v7 made authored physics plain domain data. A v6 file stores the physics
+    // engine's own component shapes (a `Friction` with a `combine_rule`, a
+    // nested `Restitution`), which the format no longer has a place for — so it
+    // is rejected with a version error rather than partially parsed.
+    let scene = SceneRecord {
+        version: 6,
+        app_version: String::new(),
+        bodies: vec![box_record(Vec2::ZERO, 0.1, 0.1)],
+        joints: vec![],
+        nodes: vec![],
+        environment: EnvironmentRecord::default(),
+    };
+    let text = to_ron(&scene).unwrap();
+    assert!(
+        matches!(
+            from_ron(&text),
+            Err(gradiance::scene::PersistError::Version(6))
+        ),
+        "pre-domain-physics (v6) files are rejected, not silently loaded"
     );
 }
 

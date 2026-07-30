@@ -1,5 +1,5 @@
 (
-    version: 6,
+    version: 7,
     app_version: "golden",
     bodies: [
         (
@@ -13,18 +13,11 @@
                 height: 20.0,
             ),
             physics: (
-                rigid_body: Dynamic,
-                friction: (
-                    dynamic_coefficient: 0.5,
-                    static_coefficient: 0.5,
-                    combine_rule: Average,
-                ),
-                restitution: (
-                    coefficient: 0.3,
-                    combine_rule: Average,
-                ),
+                kind: Dynamic,
+                friction: 0.5,
+                restitution: 0.3,
                 density: (3.5),
-                gravity_scale: (1.0),
+                gravity_scale: 1.0,
                 sensor: false,
                 rotation_locked: false,
             ),
@@ -62,18 +55,11 @@
                 height: 20.0,
             ),
             physics: (
-                rigid_body: Dynamic,
-                friction: (
-                    dynamic_coefficient: 0.5,
-                    static_coefficient: 0.5,
-                    combine_rule: Average,
-                ),
-                restitution: (
-                    coefficient: 0.3,
-                    combine_rule: Average,
-                ),
+                kind: Dynamic,
+                friction: 0.5,
+                restitution: 0.3,
                 density: (1.0),
-                gravity_scale: (1.0),
+                gravity_scale: 1.0,
                 sensor: false,
                 rotation_locked: false,
             ),

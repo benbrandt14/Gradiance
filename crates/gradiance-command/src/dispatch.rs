@@ -81,7 +81,6 @@ command_intents! {
     CommitTransformIntent => |i| Box::new(CommitTransformCommand { changes: i.changes }),
     SpawnJointIntent => |i| Box::new(SpawnJointCommand {
         record: i.record,
-        locked_before: None,
     }),
     LoadSceneIntent => |i| Box::new(LoadSceneCommand::new(i.scene)),
     PropertyEditIntent => |i| Box::new(PropertyEditCommand { changes: i.changes }),

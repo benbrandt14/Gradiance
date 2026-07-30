@@ -37,7 +37,16 @@ pub use records::{
 /// pixel world at 100 px/m). Older files are not loaded; a units-only v5→v6
 /// migration (÷100, with `ShapeDef` tree scaling) is a planned follow-up
 /// (`docs/units-decision.md`).
-pub const FORMAT_VERSION: u32 = 6;
+///
+/// v7: **authored physics is domain data.** A body's physics is a plain
+/// `BodyPhysics` — a `BodyKind` plus scalars — instead of the physics engine's
+/// own components serialized in place. v6 files carry engine-internal shapes
+/// (a `Friction` struct with a `combine_rule`, a nested `Restitution`) that no
+/// longer exist in the format, so they do not load. See
+/// `docs/physics-deadapter-decision.md` for what this partially reverses and
+/// why: the engine's components are `Reflect` but not `Serialize`, so they
+/// cannot be the save format once the engine changes.
+pub const FORMAT_VERSION: u32 = 7;
 
 /// What went wrong while serializing, parsing, or migrating a scene.
 #[derive(Debug, thiserror::Error)]

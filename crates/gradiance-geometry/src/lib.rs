@@ -7,8 +7,10 @@
 pub mod array;
 pub mod contour;
 pub mod contours;
+pub mod convex;
 pub mod extrusion;
 pub mod hull;
+pub mod inertia;
 pub mod polygonize;
 pub mod sat;
 pub mod scale;

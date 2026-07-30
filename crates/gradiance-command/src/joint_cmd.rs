@@ -30,9 +30,6 @@ pub fn joints_referencing(world: &mut World, body_ids: &[StableId]) -> Vec<(Enti
 pub struct SpawnJointCommand {
     /// The authored joint to create; its `id` is reused on redo.
     pub record: JointRecord,
-    /// Whether body A was rotation-locked before this command (world-pin
-    /// prismatics lock the pinned body by default; undo restores).
-    pub locked_before: Option<bool>,
 }
 
 impl GameCommand for SpawnJointCommand {
@@ -53,10 +50,11 @@ impl GameCommand for SpawnJointCommand {
             && let Ok(body) = resolve(world, self.record.def.body_a)
             && let Ok(mut body_mut) = world.get_entity_mut(body)
         {
-            let was_locked = body_mut.contains::<avian2d::prelude::LockedAxes>();
-            self.locked_before = Some(was_locked);
-            if !was_locked {
-                body_mut.insert(avian2d::prelude::LockedAxes::ROTATION_LOCKED);
+            // Authored intent, not a derived engine component: the physics
+            // layer composes the engine's locked-axis set from this flag and
+            // the body's simulation-plane constraint, in one place.
+            if let Some(mut physics) = body_mut.get_mut::<gradiance_domain::props::BodyPhysics>() {
+                physics.rotation_locked = true;
             }
         }
         Ok(())

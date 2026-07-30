@@ -4,8 +4,11 @@
 //! play-mode rotate's twist (a velocity servo toward a target angle) are
 //! physical interactions — never commands, never undoable, matching Algodoo.
 
-use avian2d::prelude::*;
+use crate::forces::ForceAccumulator;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
+use gradiance_core::units::PlaneFrame;
+use gradiance_units::Torque;
 
 /// Velocity gain toward the target (per second).
 const SPRING_GAIN: f32 = 12.0;
@@ -34,21 +37,24 @@ pub struct MouseSpring(pub Option<Grab>);
 /// spring.
 pub fn apply_mouse_spring(
     spring: Res<MouseSpring>,
-    mut bodies: Query<(&Transform, &mut LinearVelocity, &mut AngularVelocity)>,
+    mut bodies: Query<(&Transform, &mut Velocity)>,
 ) {
     let Some(grab) = spring.0 else {
         return;
     };
-    let Ok((transform, mut linear, mut angular)) = bodies.get_mut(grab.entity) else {
+    let Ok((transform, mut velocity)) = bodies.get_mut(grab.entity) else {
         return;
     };
+    let plane = PlaneFrame::XY;
     let world_grip = transform
         .compute_affine()
         .transform_point3(grab.local_point.extend(0.0))
         .truncate();
     let pull = (grab.target - world_grip) * SPRING_GAIN;
-    linear.0 = pull.clamp_length_max(MAX_SPEED);
-    angular.0 *= ANGULAR_DAMP;
+    // The gesture is plane-local; lift it at the write, which is the only
+    // place this file touches three dimensions.
+    velocity.linear = plane.dir(pull.clamp_length_max(MAX_SPEED));
+    velocity.angular *= ANGULAR_DAMP;
 }
 
 /// Twist proportional gain (angular acceleration per radian of error).
@@ -82,17 +88,21 @@ pub struct MouseTwist(pub Vec<Twist>);
 /// are respected — the solver, not the gesture, has the last word.
 pub fn apply_mouse_twist(
     twist: Res<MouseTwist>,
-    mut bodies: Query<(&ComputedAngularInertia, Forces)>,
+    bodies: Query<(&ReadMassProperties, &Transform, &Velocity)>,
+    mut accumulator: ResMut<ForceAccumulator>,
 ) {
+    let plane = PlaneFrame::XY;
     for t in &twist.0 {
-        let Ok((inertia, mut forces)) = bodies.get_mut(t.entity) else {
+        let Ok((mass, transform, velocity)) = bodies.get(t.entity) else {
             continue;
         };
-        // Pose/velocity read through `Forces` itself — it holds write access
-        // to the velocity components, so separate query terms would conflict.
-        let err = gradiance_geometry::wrap_angle(t.target_rot - forces.rotation().as_radians());
-        let accel = (err * TWIST_KP - forces.angular_velocity() * TWIST_KD)
-            .clamp(-MAX_TWIST_ACCEL, MAX_TWIST_ACCEL);
-        forces.apply_torque(inertia.value() * accel);
+        // Pose and spin are projected back to the plane; the servo, its gains
+        // and its clamp all stay the scalar maths they always were.
+        let rot = plane.pose(transform).rot;
+        let spin = plane.unspin(velocity.angular);
+        let err = gradiance_geometry::wrap_angle(t.target_rot - rot);
+        let accel = (err * TWIST_KP - spin * TWIST_KD).clamp(-MAX_TWIST_ACCEL, MAX_TWIST_ACCEL);
+        let inertia = plane.unspin(mass.get().principal_inertia).abs();
+        accumulator.add_torque(t.entity, Torque(inertia * accel));
     }
 }
