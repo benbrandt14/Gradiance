@@ -94,6 +94,9 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (set-restitution i v)        ; bounciness, 0 = dead, 1 = perfectly elastic
 (set-density i v)            ; mass density (area x density = mass)
 (set-static i on)            ; non-zero = static, 0 = dynamic
+(scale i fx fy)              ; resize about the body's own centre, own axes
+(merge a b)                  ; fuse into one CSG union; a survives
+(delete-joint i)             ; remove the i-th joint
 
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
@@ -282,6 +285,13 @@ Three properties of the write side worth knowing:
 - **A read of a missing body is NaN**, not zero — zero would read as a real
   measurement of a frictionless body. NaN compares false against everything, so
   a guard like the one above simply does not fire.
+
+`(scale i fx fy)` works along the body's **own** axes about its own centre, so
+"twice as wide" means along the body's width and a box stays a box. A
+global-axis scale of a rotated box would shear it into a polygon — which
+`geometry::scale` handles correctly, but it is not what the caller meant. Zero
+and negative factors are rejected: zero is unrecoverable and a negative mirrors,
+and neither is a resize.
 
 `(set-friction …)` moves both the static and dynamic coefficients together,
 which is what the inspector does: authoring two numbers that are almost always

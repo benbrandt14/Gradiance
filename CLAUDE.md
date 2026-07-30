@@ -141,14 +141,28 @@ REPL console + `--script` loader (`crates/gradiance-script/src/bridge.rs`,
 `crates/gradiance-ui/src/console.rs`); adding a verb follows the recipe in
 `docs/scripting.md`.
 
-Two accretion points already landed that set the pattern for the rest:
-**panels are registered ops** (`menu::Panels::named` is the one table the View
-menu and the `panel-*` verbs share) and **history/delete are ops** (`(undo)`,
-`(redo)`, `(delete i)` emit the same intents the Edit menu does). Both obey the
-asymmetry below — a verb *queues* through an existing seam, and where a read
-would have to reach **up** the layer graph (panel state, the selection) it
-either goes through a mirror the upper layer publishes or the verb is indexed
-instead. Never add an upward dependency edge to make a verb work.
+**The scene model is reachable from a script** — objects (`spawn-*`, `delete`,
+`cut`, `place`, `scale`, `merge`, the physics properties) and relationships
+(`hinge`, `slider`, `spring`, `delete-joint`) — plus panels as registered ops
+(`menu::Panels::named` is the one table the View menu and the `panel-*` verbs
+share). Every verb emits the intent its equivalent tool or inspector field
+emits; menus and scripting are two control surfaces over one model.
+
+Three rules hold that together, and a new verb must obey all three:
+
+1. **A verb queues through an existing seam.** Never a new mutation path, never
+   `get_mut`.
+2. **A read never reaches *up* the layer graph.** Where the state a verb wants
+   lives above `gradiance-script` — panel visibility, the selection — it either
+   comes from a mirror the upper layer publishes (`PanelStates`) or the verb is
+   **indexed** instead (`(delete i)` rather than `(delete-selection)`). A script
+   acting on invisible state is not reproducible anyway. Never add an upward
+   dependency edge to make a verb work.
+3. **One snapshot per run.** Every index and every `old` value in a submitted
+   script reads pre-run state, so a verb needs the old value in the snapshot to
+   be reversible, and two writes to the *same* property in one run do not
+   compose (the second is suppressed as a no-op). Pinned by tests; explained in
+   `docs/scripting.md`.
 
 - **No new mutation path.** Scripting reuses the *same* intent seam as tools/UI
   (invariants 1–2). A future operation registry may only dispatch through

@@ -41,8 +41,9 @@ use crate::registry::{OperationCatalog, name};
 use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use gradiance_command::CommandDispatchSet;
 use gradiance_command::intent::{
-    CommitTransformIntent, CutIntent, DeleteIntent, PropertyEditIntent, RedoIntent,
-    SpawnBodyIntent, SpawnJointIntent, TransformChange, UndoIntent,
+    CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent, MergeIntent,
+    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
+    TransformChange, UndoIntent,
 };
 use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::StableId;
@@ -429,9 +430,10 @@ impl BodyView {
 #[derive(Default)]
 pub struct SceneView {
     bodies: Vec<BodyView>,
-    /// How many joints the committed scene holds — the observable a script (or
-    /// a test) uses to confirm a constraint landed.
-    joints: usize,
+    /// The committed scene's joints, in `StableId` order. Ids rather than a
+    /// count so `delete-joint` can name one, using the same index vocabulary
+    /// the body verbs use.
+    joints: Vec<StableId>,
 }
 
 impl SceneView {
@@ -477,7 +479,12 @@ impl SceneView {
 
     /// Number of authored joints.
     fn joint_count(&self) -> f64 {
-        self.joints as f64
+        self.joints.len() as f64
+    }
+
+    /// Identity of the `i`-th joint.
+    fn joint_id(&self, i: usize) -> Option<StableId> {
+        self.joints.get(i).copied()
     }
 
     /// The authored physics of the `i`-th body.
@@ -577,10 +584,12 @@ fn snapshot_scene(world: &mut World) -> SceneView {
         )
         .collect();
     rows.sort_by_key(|(id, ..)| id.0);
-    let joints = world
-        .query_filtered::<(), With<gradiance_domain::Joint>>()
+    let mut joints: Vec<StableId> = world
+        .query_filtered::<&StableId, With<gradiance_domain::Joint>>()
         .iter(world)
-        .count();
+        .copied()
+        .collect();
+    joints.sort_by_key(|id| id.0);
     SceneView {
         joints,
         bodies: rows
@@ -676,6 +685,9 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<PropertyEditIntent>(name::SET_RESTITUTION),
         EditBinding::new::<PropertyEditIntent>(name::SET_DENSITY),
         EditBinding::new::<PropertyEditIntent>(name::SET_STATIC),
+        EditBinding::new::<ScaleIntent>(name::SCALE),
+        EditBinding::new::<MergeIntent>(name::MERGE),
+        EditBinding::new::<DeleteJointIntent>(name::DELETE_JOINT),
     ]
 }
 
@@ -1073,6 +1085,75 @@ fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedVie
             && let Some(id) = view.id(i as usize)
         {
             emit(&delete_ops, Box::new(DeleteIntent { targets: vec![id] }));
+        }
+    });
+
+    // `(scale i fx fy)` — resize about the body's own centre, along its own
+    // axes. Local axes rather than global: "twice as wide" means along the
+    // body's width, and a global-axis scale of a rotated box would shear it
+    // into a polygon (`geometry::scale` handles that, but it is not what the
+    // caller meant).
+    let scale_ops = Arc::clone(ops);
+    let scale_view = Arc::clone(view);
+    engine.register_fn(
+        name::SCALE,
+        move |i: SteelVal, fx: SteelVal, fy: SteelVal| {
+            if let Some([i, fx, fy]) = nums([&i, &fx, &fy])
+                && i >= 0.0
+                // A zero or negative factor would collapse or mirror the body;
+                // neither is a resize, and zero is unrecoverable.
+                && fx > 0.0
+                && fy > 0.0
+                && let Ok(view) = scale_view.lock()
+                && let Some((id, pose)) = view.body(i as usize)
+            {
+                emit(
+                    &scale_ops,
+                    Box::new(ScaleIntent {
+                        targets: vec![id],
+                        pivot: pose.pos,
+                        frame_rot: pose.rot,
+                        factors: Vec2::new(fx as f32, fy as f32),
+                    }),
+                );
+            }
+        },
+    );
+
+    // `(merge a b)` — one CSG union; `a` survives carrying both shapes. This is
+    // what "weld" means in this engine (there is no weld joint).
+    let merge_ops = Arc::clone(ops);
+    let merge_view = Arc::clone(view);
+    engine.register_fn(name::MERGE, move |a: SteelVal, b: SteelVal| {
+        if let Some([a, b]) = nums([&a, &b])
+            && a >= 0.0
+            && b >= 0.0
+            && let Ok(view) = merge_view.lock()
+            && let (Some(id_a), Some(id_b)) = (view.id(a as usize), view.id(b as usize))
+            // Merging a body with itself would ask the command to fuse one
+            // body into one body — a no-op that still costs an undo step.
+            && id_a != id_b
+        {
+            emit(
+                &merge_ops,
+                Box::new(MergeIntent {
+                    targets: vec![id_a, id_b],
+                }),
+            );
+        }
+    });
+
+    // `(delete-joint i)` — unmake a relationship. Without this a script could
+    // create constraints and only undo them wholesale.
+    let unjoin_ops = Arc::clone(ops);
+    let unjoin_view = Arc::clone(view);
+    engine.register_fn(name::DELETE_JOINT, move |i: SteelVal| {
+        if let Some([i]) = nums([&i])
+            && i >= 0.0
+            && let Ok(view) = unjoin_view.lock()
+            && let Some(id) = view.joint_id(i as usize)
+        {
+            emit(&unjoin_ops, Box::new(DeleteJointIntent { id }));
         }
     });
 

@@ -202,6 +202,98 @@ fn a_registered_action_runs_when_invoked() {
     assert_eq!(body_count(&mut app), 3);
 }
 
+/// Resizing: `(scale i fx fy)` works along the body's *own* axes about its own
+/// centre, so "twice as wide" means what it says even for a rotated body and a
+/// box stays a box.
+#[test]
+fn a_script_resizes_a_body_in_place() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 10 0 20 20)");
+    run(&mut app, "(scale 0 2 0.5)");
+    // The centre must not move — a pivot bug would show up as a shifted body.
+    run(
+        &mut app,
+        "(begin
+           (if (< (abs (- (body-x 0) 10)) 0.001) (spawn-box 0 -100 4 4) 0))",
+    );
+    assert_eq!(body_count(&mut app), 2, "scaled in place, centre unmoved");
+    undo(&mut app);
+    undo(&mut app);
+    assert_eq!(
+        body_count(&mut app),
+        1,
+        "the scale was one undoable command"
+    );
+}
+
+/// A zero or negative factor is not a resize: zero is unrecoverable and a
+/// negative mirrors. Both are rejected rather than committed.
+#[test]
+fn a_degenerate_scale_factor_is_rejected() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(
+        &mut app,
+        "(begin (scale 0 0 1) (scale 0 -2 1) (scale 0 1 0))",
+    );
+    // Nothing was emitted, so undo reaches the spawn.
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 0, "no degenerate scale was committed");
+}
+
+/// `(merge a b)` is what "weld" means here — one CSG union, `a` surviving with
+/// both shapes. It is the relationship that *removes* a body.
+#[test]
+fn a_script_merges_two_bodies_into_one() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 20 20) (spawn-box 15 0 20 20))",
+    );
+    assert_eq!(body_count(&mut app), 2);
+    run(&mut app, "(merge 0 1)");
+    assert_eq!(body_count(&mut app), 1, "two bodies became one");
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 2, "and the merge was undoable");
+}
+
+/// Merging a body with itself would ask the command to fuse one body into one
+/// body — a no-op that would still cost an undo step.
+#[test]
+fn merging_a_body_with_itself_does_nothing() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 20 20)");
+    run(&mut app, "(merge 0 0)");
+    undo(&mut app);
+    assert_eq!(
+        body_count(&mut app),
+        0,
+        "no step, so undo reached the spawn"
+    );
+}
+
+/// A script could *make* relationships but not unmake one individually — only
+/// undo them wholesale. `(delete-joint i)` closes that, indexed like the bodies.
+#[test]
+fn a_script_removes_one_joint_of_several() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 20 6) (spawn-box 30 0 20 6) (spawn-box 60 0 20 6))",
+    );
+    run(&mut app, "(begin (hinge 0 1 15 0) (hinge 1 2 45 0))");
+    assert_eq!(joint_count(&mut app), 2);
+
+    run(&mut app, "(delete-joint 0)");
+    assert_eq!(joint_count(&mut app), 1, "one joint removed, one left");
+    undo(&mut app);
+    assert_eq!(joint_count(&mut app), 2, "and it came back");
+
+    // An index past the end removes nothing.
+    run(&mut app, "(delete-joint 99)");
+    assert_eq!(joint_count(&mut app), 2);
+}
+
 /// Body properties round-trip: a `set-*` verb writes through the same
 /// `PropertyEditIntent` the inspector's fields commit, and the matching
 /// `body-*` read gets it back. Reads are total; writes are seam-mediated — this

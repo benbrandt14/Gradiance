@@ -74,6 +74,12 @@ pub mod name {
     pub const BODY_STATIC: &str = "body-static?";
     /// `(place i x y angle)` — move/rotate the i-th body.
     pub const PLACE: &str = "place";
+    /// `(scale i fx fy)` — resize the i-th body about its own centre.
+    pub const SCALE: &str = "scale";
+    /// `(merge a b)` — fuse two bodies into one CSG union.
+    pub const MERGE: &str = "merge";
+    /// `(delete-joint i)` — remove the i-th joint.
+    pub const DELETE_JOINT: &str = "delete-joint";
     /// `(hinge a b x y)` — pin two bodies at a world point.
     pub const HINGE: &str = "hinge";
     /// `(slider a b x y ax ay)` — prismatic joint along an axis.
@@ -241,6 +247,27 @@ fn spawn_specs() -> Vec<OpSpec> {
 fn mutate_specs() -> Vec<OpSpec> {
     use OpCategory::Edit;
     vec![
+        OpSpec {
+            name: name::SCALE,
+            signature: "(scale i fx fy)",
+            doc: "Resize the i-th body by (fx, fy) about its own centre, along its own axes.",
+            category: Edit,
+            args: 3,
+        },
+        OpSpec {
+            name: name::MERGE,
+            signature: "(merge a b)",
+            doc: "Fuse bodies a and b into one CSG union; a survives.",
+            category: Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::DELETE_JOINT,
+            signature: "(delete-joint i)",
+            doc: "Remove the i-th joint (id order, as joint-count) — undoable.",
+            category: Edit,
+            args: 1,
+        },
         OpSpec {
             name: name::PLACE,
             signature: "(place i x y angle)",

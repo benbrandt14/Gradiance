@@ -600,6 +600,22 @@ a normal dependency, not a cargo feature — see the decision doc's
     and invoking one runs its source through `ScriptInputs`. Next: pass the
     click point / selection into the action, and fold the existing hard-coded
     `ui::context_menu` buttons into the same table as the built-in seed.
+  - **The scene model is reachable (landed).** Objects: `spawn-*`, `delete`,
+    `cut`, `place`, `scale`, `merge`, and the physics properties
+    (`set-friction`/`-restitution`/`-density`/`-static`) each with a matching
+    read. Relationships: `hinge`, `slider`, `spring` (all three joint kinds,
+    `b < 0` = world pin) and `delete-joint`. Every one routes through the intent
+    the equivalent tool or inspector field emits, so a scripted scene and a
+    hand-built one are indistinguishable in the save file and on the undo stack.
+
+    The **one-snapshot-per-run** rule is the thing to know: within a single
+    submitted script every index and every `old` value reads the state from
+    before it started. Writes to different properties compose; two writes to the
+    same property need two runs. `docs/scripting.md` has the worked example.
+
+    Still absent: set-shaped edits (`group`/`ungroup`), which want a list
+    argument — `steel`'s `RestArgs` is private so true variadics are out, but
+    `SteelVal::ListV` makes `(group (list 0 1 2))` workable when wanted.
   - **History and delete as ops (landed).** `(undo)`, `(redo)` and `(delete i)`
     route through the same `UndoIntent`/`RedoIntent`/`DeleteIntent` the Edit menu
     emits, so a script can walk the stack it just wrote to — the loop a `.scm`
