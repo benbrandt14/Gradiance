@@ -10,7 +10,9 @@
 use crate::harness::{body_count, paused_app, undo};
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
-use gradiance::script::bridge::{ScriptActions, ScriptInputs};
+use gradiance::script::bridge::{
+    PanelRequest, PanelRequests, PanelStates, ScriptActions, ScriptInputs,
+};
 
 /// Submits `source` and advances one frame: `run_scripts` emits the intents,
 /// `dispatch_intents` (later the same frame) turns them into commands.
@@ -198,6 +200,148 @@ fn a_registered_action_runs_when_invoked() {
     let source = app.world().resource::<ScriptActions>().0[0].source.clone();
     run(&mut app, &source);
     assert_eq!(body_count(&mut app), 3);
+}
+
+/// The panel verbs queue a request rather than writing panel state — the UI
+/// layer sits above the script layer, so it could not write it even if the
+/// seam allowed. This asserts the script half: three verbs, three queued
+/// requests, in order, with `None` meaning "flip".
+#[test]
+fn panel_verbs_queue_requests_for_the_ui_to_apply() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (panel-show \"properties\") (panel-hide \"console\") (panel-toggle \"plot\"))",
+    );
+    let queued = &app.world().resource::<PanelRequests>().0;
+    assert_eq!(
+        queued,
+        &[
+            PanelRequest {
+                name: "properties".to_owned(),
+                shown: Some(true),
+            },
+            PanelRequest {
+                name: "console".to_owned(),
+                shown: Some(false),
+            },
+            PanelRequest {
+                name: "plot".to_owned(),
+                shown: None,
+            },
+        ]
+    );
+}
+
+/// A name is normalised (trimmed, lower-cased) on the way in, so
+/// `(panel-show "  Properties ")` is not a silent no-op.
+#[test]
+fn panel_names_are_normalised_not_taken_literally() {
+    let mut app = paused_app();
+    run(&mut app, "(panel-show \"  Properties \")");
+    assert_eq!(
+        app.world().resource::<PanelRequests>().0[0].name,
+        "properties"
+    );
+}
+
+/// `panel-open?` reads the mirror the UI publishes. Headless there is no UI, so
+/// this seeds the mirror directly — which is exactly the contract: the verb
+/// reads `PanelStates` and nothing else, and an unknown panel is `#f` rather
+/// than an error that would abort the run.
+#[test]
+fn panel_open_reads_the_published_mirror() {
+    let mut app = paused_app();
+    app.world_mut().resource_mut::<PanelStates>().0 = vec![
+        ("properties".to_owned(), true),
+        ("console".to_owned(), false),
+    ];
+    // Spawn one box per open panel the script finds: an observable count.
+    run(
+        &mut app,
+        "(begin
+           (if (panel-open? \"properties\") (spawn-box 0 0 10 10) 0)
+           (if (panel-open? \"console\") (spawn-box 20 0 10 10) 0)
+           (if (panel-open? \"nope\") (spawn-box 40 0 10 10) 0))",
+    );
+    assert_eq!(
+        body_count(&mut app),
+        1,
+        "only `properties` was open; a closed and an unknown panel are both #f"
+    );
+}
+
+/// The UI half: `apply_panel_requests` resolves a name against the registry,
+/// applies it through `PanelToggle`, and clears the queue.
+///
+/// This runs the system on a bare `App` with just the panel resources, because
+/// the real UI plugin no-ops without a renderer. It is the half the scripting
+/// test above cannot reach, and it covers the failure mode that matters: an
+/// unknown name must not touch anything, and must not stop the rest of the
+/// batch.
+#[test]
+fn the_ui_applies_queued_panel_requests_and_ignores_unknown_names() {
+    use gradiance::ui::panels::{PanelToggle, apply_panel_requests};
+
+    let mut app = App::new();
+    app.init_resource::<PanelRequests>();
+    app.init_resource::<gradiance::ui::settings::SettingsWindow>();
+    app.init_resource::<gradiance::ui::inspector::InspectorPanel>();
+    app.init_resource::<gradiance::ui::depth_panel::DepthPanel>();
+    app.init_resource::<gradiance::ui::plot::PlotPanel>();
+    app.init_resource::<gradiance::ui::probe::ProbePanel>();
+    app.init_resource::<gradiance::ui::node_graph::NodeGraph>();
+    app.init_resource::<gradiance::ui::outliner::ObjectTreePanel>();
+    app.init_resource::<gradiance::ui::console::ScriptConsole>();
+    app.init_resource::<gradiance::ui::array_panel::ArrayWindow>();
+    app.init_resource::<gradiance::ui::optimizer::OptimizerExpanded>();
+    app.init_resource::<gradiance::domain::settings::DebugSettings>();
+    app.add_systems(Update, apply_panel_requests);
+
+    app.world_mut().resource_mut::<PanelRequests>().0 = vec![
+        PanelRequest {
+            name: "properties".to_owned(),
+            shown: Some(true),
+        },
+        PanelRequest {
+            name: "not-a-panel".to_owned(),
+            shown: Some(true),
+        },
+        // Queued after the bad name: it must still be applied.
+        PanelRequest {
+            name: "depth".to_owned(),
+            shown: Some(true),
+        },
+    ];
+    app.update();
+
+    assert!(
+        app.world()
+            .resource::<gradiance::ui::inspector::InspectorPanel>()
+            .is_open()
+    );
+    assert!(
+        app.world()
+            .resource::<gradiance::ui::depth_panel::DepthPanel>()
+            .is_open(),
+        "an unknown name must not abort the batch"
+    );
+    assert!(
+        app.world().resource::<PanelRequests>().0.is_empty(),
+        "the queue is drained, so a request applies once and not every frame"
+    );
+
+    // And `None` flips rather than setting.
+    app.world_mut().resource_mut::<PanelRequests>().0 = vec![PanelRequest {
+        name: "depth".to_owned(),
+        shown: None,
+    }];
+    app.update();
+    assert!(
+        !app.world()
+            .resource::<gradiance::ui::depth_panel::DepthPanel>()
+            .is_open()
+    );
 }
 
 #[test]

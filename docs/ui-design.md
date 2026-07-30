@@ -132,12 +132,25 @@ list now sits beside the canvas inside the Node Graph pane: the canvas is the
 surface you draw on, the list is where names, compile errors, and the edits
 with no gesture (rename a binding, retarget a sink, delete a param) live.
 
-### Panels are data
+### Panels are data — and a registry
 
 Every panel resource implements `ui::panels::PanelToggle` (`is_open`,
-`set_open`, `toggle`), so chrome that offers panels — the View menu, dock tab
-close buttons — is a **table** rather than a branch per panel. Adding a panel
-is a row.
+`set_open`, `toggle`), and `menu::Panels::named` gives each one a stable
+lower-case name. That table is the registry: the View menu is a loop over it,
+and so are the `panel-show` / `panel-hide` / `panel-toggle` script verbs and the
+`panel-open?` read. **Adding a panel is one row** and it appears in the menu and
+the scripting API together — a unit test asserts every name has a menu label, so
+the two cannot drift.
+
+This is `docs/ui-shell-decision.md`'s "a menu item is a registered op", and it
+is deliberately literal: a verb queues a request, and the UI applies it through
+`set_open` — the same call a menu click makes. Scripting adds no mutation path.
+The read direction is a mirror rather than a dependency, because panel state
+lives in `gradiance-ui` and the script layer sits below it.
+
+Names are an API and stay stable; menu **labels** are prose and may be
+retitled, which is why `menu_label` maps between them instead of reusing one
+string for both.
 
 Before the trait there were two idioms (a `pub open: bool` field, and a private
 field behind hand-written accessors) and every consumer paid for both. The
@@ -237,6 +250,15 @@ break:
   renderers and queries the accessibility tree, which catches reflow and
   missing-label regressions. A panel that only exists as a Bevy system is
   covered by its intent-level tests instead.
+
+### The node canvas has no persistence
+
+Comment blocks and dragged block positions are **view state on `NodeGraph`**,
+lost on restart. That is deliberate while the canvas is in flux: persisting them
+means choosing whether layout is document content (undoable, travels with the
+file) or workstation config (a separate layout file, keyed to a scene somehow),
+and either choice is a format to migrate later. Comments survive reconcile, not
+restart.
 
 Note that egui and gizmo draw paths are structurally uncoverable headless
 (`desmell-log.md:68`), against a 50% CI line floor — which is another reason to

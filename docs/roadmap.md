@@ -448,6 +448,11 @@ module boundary test already puts the seams where crate edges would go.
 - **Panel input independence** *(landed)*: the node graph and right dock capture
   their own pointer/scroll/resize (rects fed into `PointerOverUi`) instead of
   leaking to the scene — independent pan/zoom falls out.
+- **Node-canvas notes** *(landed)*: free-floating comment blocks — no pins, no
+  effect on the graph. Pure view state, **not persisted**: block positions and
+  notes are lost on restart while the canvas is in flux, because persisting them
+  means choosing between document content and workstation layout, and either
+  choice is a format to migrate later.
 - **Node-editor feel** *(landed)*: header zoom-to-fit, a vvvv-flavoured theme
   (sharp corners, flat fills, thin wires), and a faint dot-grid that pans and
   zooms with the canvas.
@@ -594,7 +599,16 @@ a normal dependency, not a cargo feature — see the decision doc's
     `ScriptActions` table; the context menu's "Scripts" section surfaces them
     and invoking one runs its source through `ScriptInputs`. Next: pass the
     click point / selection into the action, and fold the existing hard-coded
-    `src/ui/context_menu.rs` buttons into the same table as the built-in seed.
+    `ui::context_menu` buttons into the same table as the built-in seed.
+  - **Panels are registered ops (landed).** `panel-show` / `panel-hide` /
+    `panel-toggle` / `panel-open?` resolve against `menu::Panels::named` — the
+    *same* table the View menu renders — so a panel appears in the menu and the
+    scripting API together, and a test asserts the two cannot drift. Note the
+    shape: a verb queues a request the UI applies through `PanelToggle`, so
+    scripting adds no mutation path; and because panel state lives *above* the
+    script layer, `panel-open?` reads a mirror the UI publishes rather than a
+    dependency edge upward. The menu's *intent*-emitting items (undo, delete,
+    group) are still hand-wired — that is the rest of the action layer.
   - **User tools from `.scm`:** a tool is a `ToolContext → (preview,
     commit-intent)` (M17's `DraftTool`) / `ManipTool` closure; the registry
     lets one be authored in lisp and registered by name, reusing the exact

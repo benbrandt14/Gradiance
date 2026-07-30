@@ -116,6 +116,13 @@ struct Shared {
     /// Workspace labels emitted by `label` → the [`WorkspaceLabels`] table
     /// (body-handle uuid string + display name).
     labels: Arc<Mutex<Vec<(String, String)>>>,
+    /// Panel visibility requests emitted by `panel-show`/`-hide`/`-toggle` →
+    /// the [`PanelRequests`] queue the UI drains. `None` means "flip it".
+    panel_requests: Arc<Mutex<Vec<(String, Option<bool>)>>>,
+    /// Read mirror of which panels are open → `panel-open?`. Published by the
+    /// UI each frame, because panel state lives in `gradiance-ui` and the
+    /// script layer sits below it.
+    panel_states: Arc<Mutex<HashMap<String, bool>>>,
     /// The operation catalog → the `ops`/`describe` meta verbs.
     catalog: Arc<OperationCatalog>,
 }
@@ -132,6 +139,8 @@ impl Shared {
             signal_values: Arc::new(Mutex::new(HashMap::new())),
             signal_defs: Arc::new(Mutex::new(Vec::new())),
             labels: Arc::new(Mutex::new(Vec::new())),
+            panel_requests: Arc::new(Mutex::new(Vec::new())),
+            panel_states: Arc::new(Mutex::new(HashMap::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
         }
     }
@@ -345,6 +354,37 @@ impl ScriptActions {
         }
     }
 }
+
+/// Panel visibility changes a script asked for, drained by the UI.
+///
+/// The UI owns panel state (`gradiance-ui` is above `gradiance-script` in the
+/// layer graph), so a verb cannot write it directly — nor should it, since that
+/// is the same **`EditorState`** seam the View menu uses. The script queues a
+/// request by name; the UI applies it through
+/// `panels::PanelToggle::set_open`, exactly as a menu click does. That is what
+/// makes "a menu item is a registered op" true rather than aspirational.
+///
+/// An unknown name is reported once and dropped — a typo should say so, not
+/// fail silently and not abort the run.
+#[derive(Resource, Default, Debug)]
+pub struct PanelRequests(pub Vec<PanelRequest>);
+
+/// One queued panel change: the panel's name, and what to do to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelRequest {
+    /// The panel's script-facing name (lower-case, e.g. `"properties"`).
+    pub name: String,
+    /// `Some(true)` show, `Some(false)` hide, `None` flip.
+    pub shown: Option<bool>,
+}
+
+/// Which panels are currently open, published by the UI for `panel-open?`.
+///
+/// Reads are total, so a script may ask about any panel; the mirror is how a
+/// *read* crosses the layer boundary the other way. Rebuilt each frame, never
+/// persisted.
+#[derive(Resource, Default, Debug)]
+pub struct PanelStates(pub Vec<(String, bool)>);
 
 /// One body in a [`SceneView`] snapshot (world pose + authored shape).
 struct BodyView {
@@ -646,6 +686,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
+    register_panel_verbs(engine, &shared.panel_requests, &shared.panel_states);
     register_signal_verbs(
         engine,
         &shared.signal_writes,
@@ -863,6 +904,39 @@ fn register_editor_verbs(
     });
 }
 
+/// Panel verbs — the script side of the View menu.
+///
+/// Three writes (`panel-show`, `panel-hide`, `panel-toggle`) queue a request
+/// the UI drains; one read (`panel-open?`) consults the mirror the UI
+/// publishes. No verb touches panel state directly: the layer graph forbids it,
+/// and the `EditorState` seam is the point.
+fn register_panel_verbs(
+    engine: &mut Engine,
+    requests: &Arc<Mutex<Vec<(String, Option<bool>)>>>,
+    states: &Arc<Mutex<HashMap<String, bool>>>,
+) {
+    for (verb, shown) in [
+        (name::PANEL_SHOW, Some(true)),
+        (name::PANEL_HIDE, Some(false)),
+        (name::PANEL_TOGGLE, None),
+    ] {
+        let q = Arc::clone(requests);
+        engine.register_fn(verb, move |panel: String| {
+            if let Ok(mut queue) = q.lock() {
+                queue.push((panel, shown));
+            }
+        });
+    }
+
+    let m = Arc::clone(states);
+    engine.register_fn(name::PANEL_OPEN, move |panel: String| -> bool {
+        m.lock()
+            .ok()
+            .and_then(|states| states.get(panel.trim()).copied())
+            .unwrap_or(false)
+    });
+}
+
 /// Signal-dataflow verbs — the script side of the signal bus
 /// (`docs/signal-dataflow.md`). `signal-set` queues a named publish (the
 /// exclusive system moves it onto the `SignalBus`); `signal-get` reads the
@@ -977,6 +1051,7 @@ pub fn run_scripts(world: &mut World) {
         *guard = settings;
     }
     refresh_signal_mirror(world);
+    refresh_panel_mirror(world);
 
     for source in sources {
         // NonSend: the VM lives on the main thread (this exclusive system is
@@ -1048,6 +1123,7 @@ pub fn run_scripts(world: &mut World) {
 
     drain_labels(world);
     drain_actions(world);
+    drain_panel_requests(world);
     drain_signal_publishes(world);
     drain_signal_defs(world);
 }
@@ -1075,6 +1151,50 @@ fn drain_labels(world: &mut World) {
             } else {
                 warn!("(label …): `{handle}` is not a body handle");
             }
+        }
+    }
+}
+
+/// Moves queued panel requests onto the [`PanelRequests`] resource for the UI
+/// to apply. Appends rather than replaces: two scripts in one frame both get
+/// their say, and the UI clears the queue when it drains it.
+fn drain_panel_requests(world: &mut World) {
+    let requests: Vec<(String, Option<bool>)> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .panel_requests
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if !requests.is_empty()
+        && let Some(mut queue) = world.get_resource_mut::<PanelRequests>()
+    {
+        queue
+            .0
+            .extend(requests.into_iter().map(|(name, shown)| PanelRequest {
+                name: name.trim().to_lowercase(),
+                shown,
+            }));
+    }
+}
+
+/// Mirrors [`PanelStates`] into the `panel-open?` read snapshot (part of the
+/// per-run read refresh).
+fn refresh_panel_mirror(world: &mut World) {
+    if let (Some(mirror), Some(states)) = (
+        world
+            .get_non_send::<ScriptEngine>()
+            .map(|engine| Arc::clone(&engine.shared.panel_states)),
+        world.get_resource::<PanelStates>(),
+    ) && let Ok(mut mirror) = mirror.lock()
+    {
+        mirror.clear();
+        for (name, open) in &states.0 {
+            mirror.insert(name.clone(), *open);
         }
     }
 }
@@ -1207,6 +1327,8 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptLog>();
         app.init_resource::<OperationRegistry>();
         app.init_resource::<ScriptActions>();
+        app.init_resource::<PanelRequests>();
+        app.init_resource::<PanelStates>();
         app.init_resource::<WorkspaceLabels>();
         app.init_resource::<StartupScripts>();
         app.init_resource::<ScriptWatch>();

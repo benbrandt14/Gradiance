@@ -54,6 +54,8 @@ enum GraphKey {
     /// The singleton **Scope** sink — the Live Plot as a block. Any signal
     /// wired into it becomes a plot-sink binding.
     Scope,
+    /// A free-floating annotation, by its serial number.
+    Comment(u32),
 }
 
 /// What a block *is* — carries what the viewer needs to label pins and resolve
@@ -81,6 +83,19 @@ enum NodeData {
     /// The singleton **Scope** block: one input, no output — wiring a signal
     /// into it makes a `SignalSink::Plot` binding (the Live Plot as a block).
     Scope,
+    /// A **comment**: free text, no pins, wired to nothing.
+    ///
+    /// Unlike every other block, a comment has no backing resource — it exists
+    /// only because someone typed it. It is therefore pure view state, held in
+    /// [`NodeGraph::comments`] and **not persisted**: the canvas layout is in
+    /// flux, and inventing a file format for it now would mean migrating that
+    /// format later. Comments survive reconcile, not restart.
+    Comment {
+        /// Serial number, the reconcile key (text changes, identity does not).
+        id: u32,
+        /// The note.
+        text: String,
+    },
 }
 
 impl NodeData {
@@ -90,6 +105,7 @@ impl NodeData {
             Self::Param(name) => GraphKey::Param(name.clone()),
             Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
             Self::Scope => GraphKey::Scope,
+            Self::Comment { id, .. } => GraphKey::Comment(*id),
         }
     }
 
@@ -99,6 +115,7 @@ impl NodeData {
             Self::Param(_) => Role::Producer,
             Self::Computed { .. } => Role::Modulator,
             Self::Scope => Role::Scope,
+            Self::Comment { .. } => Role::Comment,
         }
     }
 
@@ -109,6 +126,7 @@ impl NodeData {
             Self::Param(name) => format!("⊙ {name}"),
             Self::Computed { name, .. } => format!("ƒ {name}"),
             Self::Scope => "▭ Scope".to_owned(),
+            Self::Comment { .. } => "note".to_owned(),
         }
     }
 
@@ -118,7 +136,7 @@ impl NodeData {
             Self::Body { id, .. } => body_sensors(*id).get(index).map(|(_, s)| s.clone()),
             Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
             Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
-            Self::Scope => None,
+            Self::Scope | Self::Comment { .. } => None,
         }
     }
 
@@ -139,6 +157,9 @@ enum Role {
     Modulator,
     Body,
     Scope,
+    /// Comments get their own column so a new one never lands on top of a
+    /// block, and so the notes read as a margin rather than as the graph.
+    Comment,
 }
 
 impl Role {
@@ -148,6 +169,7 @@ impl Role {
             Self::Modulator => 220.0,
             Self::Body => 420.0,
             Self::Scope => 640.0,
+            Self::Comment => 840.0,
         }
     }
 }
@@ -166,6 +188,12 @@ pub struct NodeGraph {
     added: HashSet<StableId>,
     /// Optional custom short names per body (editable in the block; view-state).
     names: HashMap<StableId, String>,
+    /// Free-floating annotations: `(serial, text)`. Pure view state — see
+    /// [`NodeData::Comment`] for why they are not persisted.
+    comments: Vec<(u32, String)>,
+    /// Next comment serial. Monotonic, so deleting a note never lets a new one
+    /// inherit its identity (and its dragged position).
+    next_comment: u32,
     /// Set by the header **fit** button; consumed next frame to re-center the
     /// view on the graph's bounding box.
     fit_requested: bool,
@@ -182,6 +210,8 @@ impl Default for NodeGraph {
             keys: HashMap::new(),
             added: HashSet::new(),
             names: HashMap::new(),
+            comments: Vec::new(),
+            next_comment: 0,
             fit_requested: false,
             last_transform: None,
         }
@@ -280,6 +310,7 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
     let desired = collect_desired(
         &gp.graph.added,
         &gp.graph.names,
+        &gp.graph.comments,
         &gp.bindings,
         &gp.params,
         &gp.computed,
@@ -435,6 +466,22 @@ fn apply_viewer_edits(
             binding.gradient = gradient;
         }
     }
+    // Comment lifecycle: add, edit, delete — all view state on `NodeGraph`.
+    if viewer.add_comment {
+        let id = graph.next_comment;
+        graph.next_comment += 1;
+        graph.comments.push((id, String::new()));
+    }
+    for (id, text) in viewer.comment_edits {
+        if let Some(slot) = graph.comments.iter_mut().find(|(c, _)| *c == id) {
+            slot.1 = text;
+        }
+    }
+    if !viewer.delete_comments.is_empty() {
+        graph
+            .comments
+            .retain(|(id, _)| !viewer.delete_comments.contains(id));
+    }
     for (id, name) in viewer.renames {
         if name.trim().is_empty() {
             graph.names.remove(&id);
@@ -527,7 +574,7 @@ fn output_pin_values(
                 .map(|(_, s)| read_source(s, index, physics, body_transforms, dt))
                 .collect(),
             NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
-            NodeData::Scope => Vec::new(),
+            NodeData::Scope | NodeData::Comment { .. } => Vec::new(),
         };
         values.insert(data.key(), vals);
     }
@@ -593,6 +640,7 @@ fn paint_dot_grid(painter: &egui::Painter, rect: egui::Rect, t: egui::emath::TST
 fn collect_desired(
     added: &HashSet<StableId>,
     names: &HashMap<StableId, String>,
+    comments: &[(u32, String)],
     bindings: &SignalBindings,
     params: &SignalParams,
     computed: &ComputedSignals,
@@ -649,6 +697,11 @@ fn collect_desired(
     // The Scope sink is a fixture whenever there's anything to plot into it.
     if !items.is_empty() {
         items.push(NodeData::Scope);
+        // Comments last, so a new note lands after the graph in reconcile order.
+        items.extend(comments.iter().map(|(id, text)| NodeData::Comment {
+            id: *id,
+            text: text.clone(),
+        }));
     }
     items
 }
@@ -705,6 +758,7 @@ struct ColumnCursor {
     modulator: f32,
     body: f32,
     scope: f32,
+    comment: f32,
 }
 
 impl ColumnCursor {
@@ -714,6 +768,7 @@ impl ColumnCursor {
             Role::Modulator => &mut self.modulator,
             Role::Body => &mut self.body,
             Role::Scope => &mut self.scope,
+            Role::Comment => &mut self.comment,
         };
         let y = *slot + 16.0;
         *slot = y + 96.0;
@@ -778,6 +833,12 @@ pub(crate) struct GraphViewer {
     transfer_edits: Vec<(SignalSource, SignalSink, SignalMap, GradientSpec)>,
     /// Custom-name edits `(body, new name)` from the block's rename field.
     renames: Vec<(StableId, String)>,
+    /// Comment text edits, keyed by serial → [`NodeGraph::comments`].
+    comment_edits: Vec<(u32, String)>,
+    /// Comments the user deleted.
+    delete_comments: Vec<u32>,
+    /// Set when the palette's "note" entry was chosen.
+    add_comment: bool,
     /// A body block whose "locate" button was clicked — select it in the
     /// scene (block → object → inspector, the reverse of the highlight).
     select_body: Option<StableId>,
@@ -876,6 +937,14 @@ fn pin_label(name: &str, value: Option<f32>, unit: &str) -> String {
 impl GraphViewer {
     pub(crate) fn add_menu(&mut self, ui: &mut egui::Ui) {
         widgets::section_header(ui, "Add block");
+        if ui
+            .button("Note")
+            .on_hover_text("a free-floating annotation — no pins, no effect on the graph")
+            .clicked()
+        {
+            self.add_comment = true;
+            ui.close();
+        }
         ui.menu_button("Input", |ui| {
             if ui.button("⊙ Parameter (slider)").clicked() {
                 self.add_param = true;
@@ -979,6 +1048,9 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 
     fn has_body(&mut self, node: &NodeData) -> bool {
+        if matches!(node, NodeData::Comment { .. }) {
+            return true;
+        }
         matches!(node, NodeData::Body { .. })
     }
 
@@ -990,6 +1062,22 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) {
+        // A comment is the one block whose body *is* its content.
+        if let Some(NodeData::Comment { id, text }) = snarl.get_node(node) {
+            let (id, mut text) = (*id, text.clone());
+            if ui
+                .add(
+                    egui::TextEdit::multiline(&mut text)
+                        .desired_width(140.0)
+                        .desired_rows(2)
+                        .hint_text("note"),
+                )
+                .changed()
+            {
+                self.comment_edits.push((id, text));
+            }
+            return;
+        }
         let Some(NodeData::Body { id, name, .. }) = snarl.get_node(node) else {
             return;
         };
@@ -1020,7 +1108,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
     fn inputs(&mut self, node: &NodeData) -> usize {
         match node {
             NodeData::Body { id, .. } => body_actuators(*id).len(),
-            NodeData::Param(_) => 0,
+            NodeData::Param(_) | NodeData::Comment { .. } => 0,
             NodeData::Computed { inputs, block, .. } => block
                 .as_ref()
                 .map_or(inputs.len(), |op| op.input_slots().len()),
@@ -1032,7 +1120,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         match node {
             NodeData::Body { id, .. } => body_sensors(*id).len(),
             NodeData::Param(_) | NodeData::Computed { .. } => 1,
-            NodeData::Scope => 0,
+            NodeData::Scope | NodeData::Comment { .. } => 0,
         }
     }
 
@@ -1082,7 +1170,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 |(l, s)| ((*l).to_owned(), s.dimension().symbol()),
             ),
             Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => (name.clone(), ""),
-            Some(NodeData::Scope) | None => (String::new(), ""),
+            Some(NodeData::Scope | NodeData::Comment { .. }) | None => (String::new(), ""),
         };
         let key = snarl.get_node(pin.id.node).map(NodeData::key);
         let value = key
@@ -1197,6 +1285,13 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 let name = name.clone();
                 if ui.button("Delete computed").clicked() {
                     self.delete_computed.push(name);
+                    ui.close();
+                }
+            }
+            Some(NodeData::Comment { id, .. }) => {
+                let id = *id;
+                if ui.button("Delete note").clicked() {
+                    self.delete_comments.push(id);
                     ui.close();
                 }
             }

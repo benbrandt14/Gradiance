@@ -85,6 +85,13 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
 (sim-set "gravity.y" -500)   ; write one (any scalar field, by path)
 
+;; editor — the chrome, through the EditorState seam
+(panel-show "properties")    ; open a panel — the same toggle the View menu drives
+(panel-hide "console")       ; close one
+(panel-toggle "plot")        ; flip one
+(panel-open? "depth")        ; #t / #f — whether it is showing
+;; names: outliner properties depth plot nodes console probe array optimizer settings
+
 ;; query — read the committed scene (reads are total)
 (body-count)                 ; number of bodies
 (body-x i) (body-y i) (body-rot i)   ; pose of the i-th body (id order)
@@ -151,8 +158,9 @@ Extend the right-click menu from an init script (`--script init.scm`):
   "(let loop ((i 0)) (when (< i 8) (spawn-box (* i 30) 0 24 24) (loop (+ i 1))))")
 ```
 
-A script-computed value driving a body's color (bind *named* `touches` to
-the body's fill in the **Signals** window — `docs/signal-dataflow.md`):
+A script-computed value driving a body's color (bind *named* `touches` to the
+body's fill in the **signal list** beside the node canvas —
+`docs/signal-dataflow.md`):
 
 ```scheme
 (signal-set "touches" (touch-count 0))
@@ -190,6 +198,21 @@ constant, so a new verb touches three (edits: four) places:
    case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
    `cargo test` green — the validation test above already covers the
    catalog↔builtin drift cases.
+
+### Panels are registered ops
+
+`panel-show` and friends resolve against **one** table — `Panels::named` in
+`crates/gradiance-ui/src/panels.rs` — which is the same table the View menu
+renders. Adding a panel is one row there and it appears in both, so the menu
+and the API cannot drift; a unit test asserts every registry name has a menu
+label.
+
+The verbs add no mutation path. A verb queues a `PanelRequest`; the UI applies
+it through `PanelToggle::set_open`, which is exactly what a menu click does.
+The read direction (`panel-open?`) crosses the layer boundary as a mirror —
+panel state lives in `gradiance-ui`, which sits *above* `gradiance-script`, so
+the UI publishes `PanelStates` each frame rather than the script layer reaching
+up.
 
 `steel` may be declared only by `crates/gradiance-script` and `egui` only by
 `crates/gradiance-ui` — the package graph enforces both, and

@@ -56,6 +56,14 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
+    /// `(panel-show name)` — open an editor panel by name.
+    pub const PANEL_SHOW: &str = "panel-show";
+    /// `(panel-hide name)` — close an editor panel by name.
+    pub const PANEL_HIDE: &str = "panel-hide";
+    /// `(panel-toggle name)` — flip an editor panel's visibility.
+    pub const PANEL_TOGGLE: &str = "panel-toggle";
+    /// `(panel-open? name)` — whether a panel is currently shown.
+    pub const PANEL_OPEN: &str = "panel-open?";
     /// `(defparam name value min max)` — declare a tunable slider param.
     pub const DEFPARAM: &str = "defparam";
     /// `(defsignal name expr)` — declare a computed signal (RPN expression).
@@ -203,6 +211,13 @@ fn query_specs() -> Vec<OpSpec> {
     use OpCategory::Query;
     vec![
         OpSpec {
+            name: name::PANEL_OPEN,
+            signature: "(panel-open? name)",
+            doc: "Whether an editor panel is currently shown (reads are total).",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
             name: name::BODY_COUNT,
             signature: "(body-count)",
             doc: "Number of authored bodies in the committed scene.",
@@ -320,6 +335,27 @@ fn editor_specs() -> Vec<OpSpec> {
             doc: "Name a body in the workspace (a viewport tag); body is a spawn's return value.",
             category: OpCategory::EditorState,
             args: 2,
+        },
+        OpSpec {
+            name: name::PANEL_SHOW,
+            signature: "(panel-show name)",
+            doc: "Open an editor panel — the same toggle the View menu drives (try (panels)).",
+            category: OpCategory::EditorState,
+            args: 1,
+        },
+        OpSpec {
+            name: name::PANEL_HIDE,
+            signature: "(panel-hide name)",
+            doc: "Close an editor panel by name.",
+            category: OpCategory::EditorState,
+            args: 1,
+        },
+        OpSpec {
+            name: name::PANEL_TOGGLE,
+            signature: "(panel-toggle name)",
+            doc: "Flip an editor panel's visibility.",
+            category: OpCategory::EditorState,
+            args: 1,
         },
         OpSpec {
             name: name::DEFPARAM,
