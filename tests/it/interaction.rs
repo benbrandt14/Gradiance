@@ -3,6 +3,8 @@
 
 use crate::harness::{body_count, box_record, entity_of, paused_app, step};
 use bevy::prelude::*;
+use gradiance::geometry::snapping::ISOMETRIC_LINE_DIRECTIONS;
+use gradiance::interaction::camera::CameraScale;
 use gradiance::prelude::*;
 
 /// Presses (and holds) keys for one frame.
@@ -171,6 +173,9 @@ fn grid_snap_applies_when_no_object_nearby() {
         grid.snap_enabled = true;
         grid.spacing = 100.0;
     }
+    // 2 world/px: the 100-unit base draws at 50 px, inside the adaptive
+    // band, so the drawn (and snapped) step is the base itself.
+    app.world_mut().insert_resource(CameraScale(2.0));
     app.world_mut()
         .insert_resource(CursorWorldPos(Some(Vec2::new(430.0, 690.0))));
     let _ = app
@@ -191,6 +196,7 @@ fn isometric_grid_snaps_to_rhombic_lattice() {
         grid.system = GridSystem::Isometric;
         grid.spacing = 100.0;
     }
+    app.world_mut().insert_resource(CameraScale(2.0));
     app.world_mut()
         .insert_resource(CursorWorldPos(Some(Vec2::new(90.0, 45.0))));
     let _ = app
@@ -198,13 +204,47 @@ fn isometric_grid_snaps_to_rhombic_lattice() {
         .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
 
     let snapped = app.world().resource::<SnappedCursor>().position.unwrap();
-    // Verify lattice residency in the iso basis.
-    let a = Vec2::from_angle(30_f32.to_radians()) * 100.0;
-    let b = Vec2::from_angle(150_f32.to_radians()) * 100.0;
-    let det = a.perp_dot(b);
-    let u = snapped.perp_dot(b) / det;
-    let v = a.perp_dot(snapped) / det;
-    assert!((u - u.round()).abs() < 1e-3 && (v - v.round()).abs() < 1e-3);
+    // Residency on the *drawn* lines: offset along each family's normal is
+    // a whole number of steps (the renderer's description of the grid).
+    for dir in ISOMETRIC_LINE_DIRECTIONS {
+        let k = snapped.dot(dir.perp()) / 100.0;
+        assert!((k - k.round()).abs() < 1e-3, "{snapped}: {k} steps");
+    }
+}
+
+/// Runs the snap system for a 1 m grid at the given zoom and returns the
+/// snapped cursor.
+fn snap_at_zoom(world_per_px: f32, cursor: Vec2) -> SnappedCursor {
+    let mut app = paused_app();
+    {
+        let mut grid = app.world_mut().resource_mut::<GridSettings>();
+        grid.snap_enabled = true;
+        grid.spacing = 1.0;
+    }
+    app.world_mut().insert_resource(CameraScale(world_per_px));
+    app.world_mut().insert_resource(CursorWorldPos(Some(cursor)));
+    let _ = app
+        .world_mut()
+        .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
+    *app.world().resource::<SnappedCursor>()
+}
+
+#[test]
+fn zoomed_out_grid_snap_lands_on_the_drawn_adaptive_step() {
+    // 0.05 m/px: a 1 m cell would be 20 px, under the band, so the grid is
+    // drawn every 2 m. Odd metres are invisible and must not attract.
+    let snapped = snap_at_zoom(0.05, Vec2::new(3.1, 4.9));
+    assert_eq!(snapped.kind, Some(SnapKind::Grid));
+    assert_eq!(snapped.position, Some(Vec2::new(4.0, 4.0)), "not the base (3, 5)");
+}
+
+#[test]
+fn zoomed_in_grid_snap_refines_with_the_drawn_step() {
+    // 0.001 m/px: a 1 m cell is 1000 px; the grid halves down to 1/16 m
+    // (62.5 px). The base lattice would collapse this cursor to the origin.
+    let snapped = snap_at_zoom(0.001, Vec2::new(0.05, 0.1));
+    assert_eq!(snapped.kind, Some(SnapKind::Grid));
+    assert_eq!(snapped.position, Some(Vec2::new(0.0625, 0.125)));
 }
 
 #[test]

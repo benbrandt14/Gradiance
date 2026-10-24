@@ -12,7 +12,7 @@ use gradiance_domain::settings::{GridSettings, GridSystem, SnapConfig};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::polygonize::polygonize;
 use gradiance_geometry::snapping::{
-    cartesian_snap, isometric_snap, polar_snap, project_on_segment,
+    adaptive_step, cartesian_snap, isometric_snap, polar_snap, project_on_segment,
 };
 use gradiance_physics::queries::PhysicsQueries;
 
@@ -138,18 +138,17 @@ pub fn update_snapped_cursor(
 
     // --- Grid snap. ---
     // Grid snapping only applies when the grid is visible (invisible
-    // magnetism is disorienting).
+    // magnetism is disorienting), and it snaps to the step the grid is
+    // *drawn* at: the zoom-adapted step, from the same `CameraScale` the
+    // renderer reads — never the raw authored spacing.
     if grid.snap_enabled && grid.visible {
+        let step = adaptive_step(grid.spacing, scale);
         let snapped = match grid.system {
-            GridSystem::Cartesian => cartesian_snap(p, grid.origin, grid.rotation, grid.spacing),
-            GridSystem::Isometric => isometric_snap(p, grid.origin, grid.rotation, grid.spacing),
-            GridSystem::Polar { angular_divisions } => polar_snap(
-                p,
-                grid.origin,
-                grid.rotation,
-                grid.spacing,
-                angular_divisions,
-            ),
+            GridSystem::Cartesian => cartesian_snap(p, grid.origin, grid.rotation, step),
+            GridSystem::Isometric => isometric_snap(p, grid.origin, grid.rotation, step),
+            GridSystem::Polar { angular_divisions } => {
+                polar_snap(p, grid.origin, grid.rotation, step, angular_divisions)
+            }
         };
         out.position = Some(snapped);
         out.kind = Some(SnapKind::Grid);
