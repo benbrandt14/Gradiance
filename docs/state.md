@@ -8,11 +8,14 @@ Last updated: 2026-10-24, Phase 0 (orchestrator).
 - **Phase:** 0 — Reset (`docs/orchestration.md` § The plan).
 - **Next brief:** `docs/briefs/1-1-adaptive-snap.md` (status: ready).
 - **main:** `b1418a8` — PR #210 (action layer) merged 2026-10-24.
-  CI on main: **red at Clippy** on the newer `@stable` toolchain; the code was
-  last green on 1.97 (July). Fix: PR #211.
-- **Open PR #211** `claude/resurrect-orchestration` (draft): CI annotations,
-  the toolchain clippy fix, this file, `orchestration.md`, the first brief,
-  `frames-decision.md` stub.
+  CI on main: **red at Clippy** — `@stable` had moved past 1.97 and new
+  pedantic lints became errors under `-D warnings`. PR #211 fixes it.
+- **PR #211** `claude/resurrect-orchestration`: CI pinned to `RUST_PIN`
+  1.97.0; clippy failures re-emitted as readable annotations; one geometry
+  lint fixed forward (`as_chunks`); `CLAUDE.md` agent-session section; this
+  file; `orchestration.md`; brief 1-1; `frames-decision.md` stub.
+  **CI fully green** (ci, coverage, coupling). Awaiting merge — merging it
+  turns main green and closes Phase 0.
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
@@ -28,9 +31,9 @@ gate if nobody claims them.
 
 ## Last verified
 
-- Local toolchain in the agent container: rustc 1.97.0. CI `@stable` is newer.
-- Last full suite (July, per the previous session): 233 integration tests,
-  62 in `gradiance-ui`, 0 failures. Not re-run this session.
+- Agent container rustc 1.97.0 = `RUST_PIN`. Local clippy clean.
+- PR #211 CI run 40134366700: all gates green on 1.97.0.
+- Pending toolchain-bump debt: `orchestration.md` § Recurring.
 
 ## Known hazards
 
