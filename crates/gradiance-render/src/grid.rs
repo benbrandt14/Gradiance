@@ -31,7 +31,10 @@ pub fn draw_grid(
     // Visible half-extent (generous; gizmo lines are cheap).
     let half = 800.0 * scale;
 
-    let spacing = adaptive_step(grid.spacing, scale);
+    // No valid spacing, no grid (and no unbounded line/ring loops below).
+    let Some(spacing) = adaptive_step(grid.spacing, scale) else {
+        return;
+    };
     // Mid-value tint + low alpha: visible over the light backdrop without
     // clashing on dark bodies (the grid is an overlay, not a surface).
     let minor = Color::srgba(0.55, 0.57, 0.62, 0.14);

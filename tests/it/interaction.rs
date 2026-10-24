@@ -253,6 +253,30 @@ fn zoomed_in_grid_snap_refines_with_the_drawn_step() {
 }
 
 #[test]
+fn zero_grid_spacing_snaps_to_nothing() {
+    // A spacing field dragged to zero draws no grid; snapping must leave the
+    // cursor raw rather than produce NaN or hang.
+    let mut app = paused_app();
+    {
+        let mut grid = app.world_mut().resource_mut::<GridSettings>();
+        grid.snap_enabled = true;
+        grid.spacing = 0.0;
+        grid.system = GridSystem::Polar {
+            angular_divisions: 8,
+        };
+    }
+    let raw = Vec2::new(0.37, -1.2);
+    app.world_mut().insert_resource(CameraScale(0.01));
+    app.world_mut().insert_resource(CursorWorldPos(Some(raw)));
+    let _ = app
+        .world_mut()
+        .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
+    let snapped = app.world().resource::<SnappedCursor>();
+    assert_eq!(snapped.kind, None);
+    assert_eq!(snapped.position, Some(raw));
+}
+
+#[test]
 fn gesture_constraints_follow_modifier_keys() {
     let mut app = paused_app();
 

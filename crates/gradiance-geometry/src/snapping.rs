@@ -31,10 +31,16 @@ pub const ISOMETRIC_LINE_DIRECTIONS: [Vec2; 2] =
 /// Because the result is `base · 2ᵏ` (exact in floating point), every
 /// adaptive lattice nests inside or around the authored one.
 ///
-/// Degenerate inputs (non-finite or non-positive) return `base` unchanged.
-pub fn adaptive_step(base: f32, world_per_px: f32) -> f32 {
-    if !(base.is_finite() && base > 0.0 && world_per_px.is_finite() && world_per_px > 0.0) {
-        return base;
+/// Returns `None` when `base` is not a positive, finite length: there is no
+/// grid to draw or snap to (a spacing field dragged to zero must not hang
+/// the ring loop or emit billions of lines). A degenerate `world_per_px`
+/// (non-finite or non-positive) leaves a valid `base` unadapted.
+pub fn adaptive_step(base: f32, world_per_px: f32) -> Option<f32> {
+    if !(base.is_finite() && base > 0.0) {
+        return None;
+    }
+    if !(world_per_px.is_finite() && world_per_px > 0.0) {
+        return Some(base);
     }
     // f32 exponents span about ±150, so 300 halvings/doublings is a bound
     // that is never reached by real input but keeps the loop total.
@@ -48,7 +54,8 @@ pub fn adaptive_step(base: f32, world_per_px: f32) -> f32 {
         step *= 0.5;
         guard += 1;
     }
-    step
+    // Only reachable with a subnormal scale: never hand back 0 or inf.
+    (step.is_finite() && step > 0.0).then_some(step)
 }
 
 /// Snaps `p` to a square grid with the given origin, rotation, and spacing.
@@ -210,7 +217,7 @@ mod tests {
         let mut wpp = 1e-5_f32;
         while wpp < 1e3 {
             for base in [0.001_f32, 0.25, 1.0, 100.0] {
-                let step = adaptive_step(base, wpp);
+                let step = adaptive_step(base, wpp).expect("valid base");
                 let screen = step / wpp;
                 assert!(
                     (GRID_MIN_SCREEN_STEP..=GRID_MAX_SCREEN_STEP).contains(&screen),
@@ -224,10 +231,14 @@ mod tests {
     }
 
     #[test]
-    fn adaptive_step_passes_degenerate_input_through() {
-        assert_eq!(adaptive_step(1.0, 0.0), 1.0);
-        assert_eq!(adaptive_step(1.0, f32::NAN), 1.0);
-        assert_eq!(adaptive_step(0.0, 0.01), 0.0);
+    fn adaptive_step_rejects_a_degenerate_base_and_ignores_a_degenerate_scale() {
+        // No grid: a spacing dragged to (or past) zero, or garbage.
+        for base in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(adaptive_step(base, 0.01), None, "base {base}");
+        }
+        // A broken camera scale leaves a valid base as authored.
+        assert_eq!(adaptive_step(1.0, 0.0), Some(1.0));
+        assert_eq!(adaptive_step(1.0, f32::NAN), Some(1.0));
     }
 
     /// The brief's acceptance test: across a sweep of zooms, in every grid
@@ -247,7 +258,7 @@ mod tests {
         ];
         let mut wpp = 1e-4_f32;
         while wpp < 10.0 {
-            let step = adaptive_step(base, wpp);
+            let step = adaptive_step(base, wpp).expect("valid base");
             assert!((GRID_MIN_SCREEN_STEP..=GRID_MAX_SCREEN_STEP).contains(&(step / wpp)));
             for p in probes {
                 let q = cartesian_snap(p, origin, rotation, step);
@@ -269,7 +280,7 @@ mod tests {
     fn snapping_to_the_adaptive_step_differs_from_the_base_step_when_zoomed_out() {
         // 1 m base, 0.05 m/px: the base step is 20 px on screen, under the
         // band, so the drawn step is 2 m and odd metres are not grid points.
-        let step = adaptive_step(1.0, 0.05);
+        let step = adaptive_step(1.0, 0.05).expect("valid base");
         assert!((step - 2.0).abs() < f32::EPSILON);
         let q = cartesian_snap(Vec2::new(3.1, 0.0), Vec2::ZERO, 0.0, step);
         assert_ne!(q.x, 3.0);

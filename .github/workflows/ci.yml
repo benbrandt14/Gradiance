@@ -73,6 +73,7 @@ jobs:
         shell: bash
         run: |
           out=$(cargo fmt --all -- --check -l 2>&1) && exit 0
+          [ -z "$out" ] && echo "::error::cargo fmt failed with no output"
           while IFS= read -r f; do
             case "$f" in
               "") ;;

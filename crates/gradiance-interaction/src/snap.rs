@@ -141,8 +141,11 @@ pub fn update_snapped_cursor(
     // magnetism is disorienting), and it snaps to the step the grid is
     // *drawn* at: the zoom-adapted step, from the same `CameraScale` the
     // renderer reads — never the raw authored spacing.
-    if grid.snap_enabled && grid.visible {
-        let step = adaptive_step(grid.spacing, scale);
+    // A degenerate spacing draws no grid, so it snaps to none either.
+    if grid.snap_enabled
+        && grid.visible
+        && let Some(step) = adaptive_step(grid.spacing, scale)
+    {
         let snapped = match grid.system {
             GridSystem::Cartesian => cartesian_snap(p, grid.origin, grid.rotation, step),
             GridSystem::Isometric => isometric_snap(p, grid.origin, grid.rotation, step),
