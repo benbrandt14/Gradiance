@@ -191,8 +191,12 @@ Three rules hold that together, and a new verb must obey all three:
 
 ## Build & test
 
-Toolchain: **rustc ≥ 1.95.0** (Bevy 0.19's floor; CI uses `@stable`). Native
-builds also need `libasound2-dev libudev-dev`.
+Toolchain: **rustc ≥ 1.95.0** (Bevy 0.19's floor). CI is **pinned** to
+`RUST_PIN` in `.github/workflows/ci.yml` (currently 1.97.0) — pedantic lints
+are warn-level and `-D warnings` makes them errors, so a floating toolchain
+breaks main on every release that adds one. Bumping the pin is its own
+reviewed PR that fixes the new lints. Native builds also need
+`libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld`.
 
 
 ```sh
@@ -228,3 +232,33 @@ The `dev` feature is dev-only (never release/CI). Linking uses `lld` via
 `.cargo/config.toml` — needs `clang`+`lld` installed.
 
 Every change must leave fmt+clippy+test green; milestones are not done otherwise.
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --lib` is a CI gate
+too and catches failures clippy does not — run it.
+
+## Agent sessions — boot, scope, hand off
+
+Work is driven across many sessions; threads lose coherence over time, so
+**nothing that matters lives only in a conversation.** Boot order:
+this file → `docs/state.md` (where things are) → `docs/orchestration.md`
+(roles, coherence budget, the phase plan, future intent) → your brief in
+`docs/briefs/`. One worker session = one brief = one PR. Hand off by updating
+`docs/state.md` and the brief's Outcome, then push.
+
+Agent-container hazards:
+
+- `cargo test --workspace` links many Bevy-sized binaries and can exhaust the
+  writable allowance. The symptom is misleading: `ld.lld` fails with "failed
+  to write output … No such file or directory" while `df` looks fine. Recover
+  with `rm -rf target/debug/deps/*gradiance*` — **never `cargo clean`**, which
+  discards the third-party build. Use `-p <crate>` runs as the inner loop and
+  `--workspace` once, as the gate.
+- `grep -E '^test result|FAILED|panicked'` matches nothing in a *build*
+  failure — an empty result is not green. Check the exit code.
+- rust-lang.org is not reachable from the container, so the toolchain can't
+  be updated there; that is why CI is pinned to the container's version.
+  If `rustc --version` differs from `RUST_PIN`, say so in your handoff.
+  CI is the authority; read its failures through annotations
+  (`docs/orchestration.md` § Gates and CI), because Actions logs return 403
+  and GitHub GraphQL is unavailable.
+- A fresh container may lack the native libs (the `alsa-sys` build script
+  fails). `apt-get install` the list above.

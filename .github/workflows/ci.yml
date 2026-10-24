@@ -12,11 +12,13 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # The CI toolchain. See the comment on the `ci` job's toolchain step.
+  RUST_PIN: "1.97.0"
 
-# Lint policy: clippy::pedantic runs at *warn* (Cargo.toml) — an output linter
-# to triage, never a gate; only lints that prove consistently right get
-# promoted to deny there. `-D warnings` below gates on rustc + the explicitly
-# denied clippy lints (unwrap/expect/panic/etc.).
+# Lint policy: clippy::pedantic runs at *warn* (Cargo.toml), and `-D warnings`
+# below promotes every warning — pedantic included — to an error. That is
+# only stable because the toolchain is pinned (`RUST_PIN`): new lints arrive
+# in a deliberate toolchain-bump PR, never as a surprise on main.
 #
 # All cargo invocations run `--locked`: agent sessions must not drift the
 # resolved graph silently — a lockfile change is a reviewed diff, not a
@@ -42,8 +44,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned, like Cargo.lock: `pedantic` is warn-level and clippy runs
+      # with `-D warnings`, so on `@stable` every Rust release that adds a
+      # pedantic lint turned main red with no code change (2026-10). A
+      # toolchain bump is now a reviewed PR that fixes the new lints in the
+      # same diff. Keep `RUST_PIN` in sync across jobs; agent containers run
+      # this version, so local gates reproduce CI exactly.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_PIN }}
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -62,7 +71,31 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        # Short-format diagnostics are teed to a file so the step below can
+        # re-emit them as annotations: agent sessions cannot download Actions
+        # logs (403), but they can read annotations through the REST API
+        # (`gh api repos/{o}/{r}/check-runs/{id}/annotations`). Same gate,
+        # same exit code — only the reporting changes.
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked --workspace --all-targets --message-format=short --color=never -- -D warnings 2>&1 | tee clippy.txt
+
+      - name: Annotate clippy failures
+        # GitHub keeps at most 10 error annotations per step, so the most
+        # useful lines go first: located diagnostics, then a tail fallback
+        # for failures that are not lints (build scripts, ICEs).
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          sed -E 's/\x1b\[[0-9;]*m//g' clippy.txt > clippy.plain
+          hits=$(grep -E '(^|: )(error|warning)(\[[^]]*\])?:' clippy.plain | grep -v 'could not compile\|aborting due to' | head -9)
+          if [ -n "$hits" ]; then
+            while IFS= read -r line; do echo "::error::$line"; done <<< "$hits"
+          fi
+          echo "::error::tail: $(tail -n 12 clippy.plain | tr '\n' '|' | cut -c1-1500)"
+          exit 0
 
       - name: Architecture boundaries (crate DAG, confinement, pins)
         run: cargo test --locked --test boundaries
@@ -97,8 +130,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_PIN }}
           components: llvm-tools-preview
 
       - uses: taiki-e/install-action@cargo-llvm-cov

@@ -7,6 +7,12 @@ Priority now rebalances to the **physics/interaction/visualization substrate
 before the scripting that drives it** — read "Sequencing after M17.1" below for
 the ordering; M18–M21 and the tracers/plotters milestone carry the detail.
 
+> **Execution order (2026-10-24):** this file is the *what*. The *order* in
+> which the remaining items are worked, and what is deferred to the next
+> planning stage, is the phase plan in `docs/orchestration.md`; it
+> supersedes the "Sequencing after M17.1" section below where they differ.
+> Current position: `docs/state.md`.
+
 ## Addressed in M12 (this round)
 
 - **Joint rest frames** (4.3, partially 4.2): joints capture creation-time
