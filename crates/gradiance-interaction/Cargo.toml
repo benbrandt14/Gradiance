@@ -17,6 +17,5 @@ gradiance-optimize.workspace = true
 gradiance-persist.workspace = true
 gradiance-physics.workspace = true
 gradiance-scene.workspace = true
-avian2d.workspace = true
 bevy.workspace = true
 leafwing-input-manager.workspace = true

@@ -6,7 +6,6 @@
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
 
 use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
-use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance::prelude::*;
 
@@ -62,7 +61,7 @@ fn hinge(body_a: StableId, body_b: Option<StableId>, anchor_a: Vec2, anchor_b: V
 fn motorized_hinge_oscillates_between_its_limits() {
     let mut app = headless_app();
     let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
-    anchor.physics.rigid_body = RigidBody::Static;
+    anchor.physics.kind = BodyKind::Static;
     let anchor_id = spawn_body(&mut app, anchor);
     // Arm hinged at its left end to the anchor's center.
     let arm = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
@@ -164,7 +163,7 @@ fn world_pinned_body_swings_about_a_fixed_anchor() {
 fn slider_constrains_motion_to_the_axis_and_respects_limits() {
     let mut app = headless_app();
     let mut rail = box_record(Vec2::ZERO, 20.0, 20.0);
-    rail.physics.rigid_body = RigidBody::Static;
+    rail.physics.kind = BodyKind::Static;
     let rail_id = spawn_body(&mut app, rail);
     let cart = box_record(Vec2::new(0.0, -30.0), 20.0, 20.0);
     let cart_id = spawn_body(&mut app, cart);
@@ -520,7 +519,7 @@ fn random_command_sequences_never_leave_dangling_joints() {
 fn hinged_arm_swings_down_under_gravity() {
     let mut app = headless_app();
     let mut anchor_block = box_record(Vec2::ZERO, 20.0, 20.0);
-    anchor_block.physics.rigid_body = RigidBody::Static;
+    anchor_block.physics.kind = BodyKind::Static;
     let block = spawn_body(&mut app, anchor_block);
     // Horizontal arm extending to the right of the block.
     let arm = spawn_body(&mut app, box_record(Vec2::new(40.0, 0.0), 60.0, 8.0));
@@ -547,7 +546,7 @@ fn hinged_arm_swings_down_under_gravity() {
 fn hinge_angle_limit_stops_a_free_arm_under_gravity() {
     let mut app = headless_app();
     let mut anchor_block = box_record(Vec2::ZERO, 20.0, 20.0);
-    anchor_block.physics.rigid_body = RigidBody::Static;
+    anchor_block.physics.kind = BodyKind::Static;
     let block = spawn_body(&mut app, anchor_block);
     let arm = spawn_body(&mut app, box_record(Vec2::new(40.0, 0.0), 60.0, 8.0));
 
@@ -697,38 +696,58 @@ fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, stiffness
 }
 
 #[test]
-fn strut_derives_a_distance_joint_and_damping() {
-    use avian2d::prelude::{DistanceJoint, JointDamping};
+fn strut_derives_a_spring_motor() {
+    use bevy_rapier3d::prelude::{ImpulseJoint, JointAxis};
     let mut app = headless_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(60.0, 0.0), 20.0, 20.0));
     let jid = spawn_joint(&mut app, strut(a, Some(b), 60.0, 500.0));
     step(&mut app, 2);
 
+    // The 2D engine expressed a strut as a distance joint plus a separate
+    // damping component. rapier has one joint whose free axis carries a
+    // position motor, so stiffness and damping are that motor's own terms.
     let je = entity_of(&app, jid).unwrap();
+    let derived = app
+        .world()
+        .get::<gradiance::physics::joint_sync::DerivedJoint>(je)
+        .expect("the strut derived an engine joint");
+    let joint = app
+        .world()
+        .get::<ImpulseJoint>(derived.0)
+        .expect("the derived entity carries the joint");
+    let motor = joint
+        .data
+        .as_ref()
+        .motor(JointAxis::LinX)
+        .expect("the strut servos its free axis");
     assert!(
-        app.world().get::<DistanceJoint>(je).is_some(),
-        "strut derives a DistanceJoint"
+        (motor.target_pos - 60.0).abs() < 1e-3,
+        "rest length is the motor target ({})",
+        motor.target_pos
     );
-    let damping = app.world().get::<JointDamping>(je).unwrap();
     assert!(
-        (damping.linear - 5.0).abs() < 1e-3,
-        "damping maps onto JointDamping ({})",
-        damping.linear
+        (motor.stiffness - 500.0).abs() < 1e-3,
+        "stiffness maps onto the motor ({})",
+        motor.stiffness
+    );
+    assert!(
+        (motor.damping - 5.0).abs() < 1e-3,
+        "damping maps onto the motor ({})",
+        motor.damping
     );
 }
 
 #[test]
 fn strut_pulls_a_body_toward_its_rest_length() {
-    use avian2d::prelude::GravityScale;
     let mut app = headless_app();
     // A static anchor at the origin.
     let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
-    anchor.physics.rigid_body = RigidBody::Static;
+    anchor.physics.kind = BodyKind::Static;
     let anchor_id = spawn_body(&mut app, anchor);
     // A dynamic body 100 px away, gravity off so only the strut acts.
     let mut ball = box_record(Vec2::new(100.0, 0.0), 20.0, 20.0);
-    ball.physics.gravity_scale = GravityScale(0.0);
+    ball.physics.gravity_scale = 0.0;
     let ball_id = spawn_body(&mut app, ball);
     // A stiff strut with a 50 px rest length between their centres.
     spawn_joint(&mut app, strut(anchor_id, Some(ball_id), 50.0, 1000.0));
@@ -769,7 +788,7 @@ fn a_strut_is_undoable_and_persists_its_kind() {
 fn prismatic_locks_rotation_under_torque_load() {
     let mut app = headless_app();
     let mut base = box_record(Vec2::ZERO, 40.0, 40.0);
-    base.physics.rigid_body = RigidBody::Static;
+    base.physics.kind = BodyKind::Static;
     let a = spawn_body(&mut app, base);
     // A long arm on a horizontal slider: gravity on the off-axis mass is a
     // steady torque about the anchor.
@@ -796,9 +815,9 @@ fn prismatic_locks_rotation_under_torque_load() {
         let entity = entity_of(&app, arm).unwrap();
         let mut angular = app
             .world_mut()
-            .get_mut::<avian2d::prelude::AngularVelocity>(entity)
+            .get_mut::<bevy_rapier3d::prelude::Velocity>(entity)
             .unwrap();
-        angular.0 = 5.0;
+        angular.angular = Vec3::new(0.0, 0.0, 5.0);
     }
     step(&mut app, 300);
 
@@ -884,7 +903,7 @@ fn world_pinned_tilted_motor_oscillates() {
 fn motorized_hinge_holds_its_pivot() {
     let mut app = headless_app();
     let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
-    anchor.physics.rigid_body = RigidBody::Static;
+    anchor.physics.kind = BodyKind::Static;
     let anchor_id = spawn_body(&mut app, anchor);
     let arm = box_record(Vec2::new(40.0, 0.0), 80.0, 10.0);
     let arm_id = spawn_body(&mut app, arm);
@@ -924,8 +943,8 @@ fn motorized_hinge_holds_its_pivot() {
 /// Reads a body's avian angular velocity (rad/s), or 0 before the solver runs.
 fn angular_velocity(app: &App, id: StableId) -> f32 {
     entity_of(app, id)
-        .and_then(|e| app.world().get::<avian2d::prelude::AngularVelocity>(e))
-        .map_or(0.0, |w| w.0)
+        .and_then(|e| app.world().get::<bevy_rapier3d::prelude::Velocity>(e))
+        .map_or(0.0, |w| w.angular.z)
 }
 
 /// A strut's stiffness must be scaled for SI: a body hung from a world-pinned
@@ -985,7 +1004,7 @@ fn strut_stiffness_keeps_a_hung_body_from_drooping() {
 fn motorized_slider_drives_body_along_its_axis() {
     let mut app = headless_app();
     let mut anchor = box_record(Vec2::ZERO, 20.0, 20.0);
-    anchor.physics.rigid_body = RigidBody::Static;
+    anchor.physics.kind = BodyKind::Static;
     let anchor_id = spawn_body(&mut app, anchor);
     let slider = box_record(Vec2::new(0.0, 0.0), 20.0, 20.0);
     let slider_id = spawn_body(&mut app, slider);

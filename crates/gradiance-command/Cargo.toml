@@ -11,10 +11,13 @@ workspace = true
 [dependencies]
 gradiance-core.workspace = true
 gradiance-domain.workspace = true
+# Physical continuity at a command boundary: the cut tool carries a severed
+# body's velocity onto its pieces, through the sanctioned read cut-point.
+gradiance-physics.workspace = true
+gradiance-units.workspace = true
 gradiance-geometry.workspace = true
 gradiance-scene.workspace = true
 gradiance-signal.workspace = true
-avian2d.workspace = true
 bevy.workspace = true
 thiserror.workspace = true
 

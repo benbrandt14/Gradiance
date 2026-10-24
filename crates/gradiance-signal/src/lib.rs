@@ -28,12 +28,12 @@
 
 pub mod compile;
 
-use avian2d::prelude::Physics;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_core::states::GameState;
 use gradiance_domain::Body;
+use gradiance_physics::clock::SimClock;
 use gradiance_physics::queries::PhysicsQueries;
 use std::collections::VecDeque;
 
@@ -234,7 +234,7 @@ pub fn publish_sensor_refs(
 pub fn evaluate_computed(
     params: Res<SignalParams>,
     computed: Res<CompiledSignals>,
-    time: Res<Time<Physics>>,
+    time: Res<SimClock>,
     game: Res<State<GameState>>,
     mut bus: ResMut<SignalBus>,
 ) {

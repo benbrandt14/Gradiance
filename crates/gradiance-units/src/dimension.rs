@@ -30,6 +30,10 @@ pub enum Dimension {
     AngularVelocity,
     /// Linear acceleration (`m/s²`).
     Acceleration,
+    /// Angular acceleration (`rad/s²`).
+    AngularAcceleration,
+    /// Moment of inertia about the simulation-plane normal (`kg·m²`).
+    MomentOfInertia,
     /// Force (`N`).
     Force,
     /// Torque (`N·m`).
@@ -40,6 +44,10 @@ pub enum Dimension {
     Damping,
     /// Frequency (`Hz`).
     Frequency,
+    /// Linear impulse (`N·s`).
+    Impulse,
+    /// Angular impulse (`N·m·s`).
+    AngularImpulse,
     /// Energy (`J`).
     Energy,
     /// Linear momentum (`kg·m/s`).
@@ -72,11 +80,15 @@ impl Dimension {
             Self::Velocity => "m/s",
             Self::AngularVelocity => "rad/s",
             Self::Acceleration => "m/s²",
+            Self::AngularAcceleration => "rad/s²",
+            Self::MomentOfInertia => "kg·m²",
             Self::Force => "N",
             Self::Torque => "N·m",
             Self::Stiffness => "N/m",
             Self::Damping => "N·s/m",
             Self::Frequency => "Hz",
+            Self::Impulse => "N·s",
+            Self::AngularImpulse => "N·m·s",
             Self::Energy => "J",
             Self::Momentum => "kg·m/s",
             Self::AngularMomentum => "kg·m²/s",

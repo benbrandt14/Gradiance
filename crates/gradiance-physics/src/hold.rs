@@ -3,12 +3,15 @@
 //!
 //! Tools put entities into [`KinematicHold`]; this seam swaps them to
 //! kinematic (so the solver neither fights the preview nor launches the
-//! body) and restores their authored body kind when released. Post-collapse
-//! `RigidBody` is both the authored and the live kind, so the pre-hold kind
-//! is remembered here rather than read from a separate mirror.
+//! body) and restores their engine body kind when released.
+//!
+//! The hold writes the *derived* engine role directly rather than the authored
+//! `BodyPhysics`: a preview gesture is transient physical state, never an edit,
+//! so it must not touch authored data or the undo stack (invariant #2). The
+//! pre-hold role is remembered here for the same reason.
 
-use avian2d::prelude::*;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 /// Entities temporarily excluded from dynamics during a preview gesture.
 #[derive(Resource, Default, Debug)]
@@ -24,7 +27,7 @@ pub fn apply_kinematic_hold(
     mut held: Local<Vec<(Entity, RigidBody)>>,
     mut commands: Commands,
     bodies: Query<&RigidBody>,
-    mut velocities: Query<(&mut LinearVelocity, &mut AngularVelocity)>,
+    mut velocities: Query<&mut Velocity>,
 ) {
     if !hold.is_changed() {
         return;
@@ -43,10 +46,11 @@ pub fn apply_kinematic_hold(
         if !held.iter().any(|(e, _)| *e == entity) {
             let kind = bodies.get(entity).copied().unwrap_or(RigidBody::Dynamic);
             held.push((entity, kind));
-            commands.entity(entity).try_insert(RigidBody::Kinematic);
-            if let Ok((mut lin, mut ang)) = velocities.get_mut(entity) {
-                lin.0 = Vec2::ZERO;
-                ang.0 = 0.0;
+            commands
+                .entity(entity)
+                .try_insert(RigidBody::KinematicPositionBased);
+            if let Ok(mut velocity) = velocities.get_mut(entity) {
+                *velocity = Velocity::zero();
             }
         }
     }

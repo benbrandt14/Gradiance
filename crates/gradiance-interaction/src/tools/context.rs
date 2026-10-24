@@ -45,7 +45,6 @@ use crate::selection::{SelectTransition, SelectedJoint, Selection, expand_groups
 use crate::snap::{SnapExclusions, SnappedCursor};
 use crate::tools::ActiveGesture;
 use crate::tools::handles::{ScaleFrame, SelectionBox, selection_box};
-use avian2d::prelude::RigidBody;
 use bevy::ecs::component::Mutable;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -60,6 +59,7 @@ use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::group::SelectionGroup;
+use gradiance_domain::props::{BodyKind, BodyPhysics};
 use gradiance_domain::settings::{SnapConfig, ToolDefaults};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::contours::point_in_ring;
@@ -173,7 +173,7 @@ pub enum ToolCommit {
         /// Target body.
         id: StableId,
         /// Its current kind, captured for undo.
-        old: RigidBody,
+        old: BodyKind,
     },
     /// Author a new behavior node (the tracer tool; future sensors/actuators).
     SpawnNode(Box<gradiance_scene::NodeRecord>),
@@ -379,8 +379,8 @@ impl ToolCommitWriters<'_> {
                 self.props.write(PropertyEditIntent {
                     changes: vec![PropertyChange {
                         id,
-                        old: PropertyValue::RigidBody(old),
-                        new: PropertyValue::RigidBody(RigidBody::Static),
+                        old: PropertyValue::BodyKind(old),
+                        new: PropertyValue::BodyKind(BodyKind::Static),
                     }],
                 });
             }
@@ -503,7 +503,7 @@ pub struct ToolWorld<'w, 's> {
     centers: Query<'w, 's, (Entity, &'static Transform), With<Body>>,
     ids: Query<'w, 's, &'static StableId>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
-    kinds: Query<'w, 's, &'static RigidBody, With<Body>>,
+    kinds: Query<'w, 's, &'static BodyPhysics, With<Body>>,
 }
 
 impl ToolWorld<'_, '_> {
@@ -531,9 +531,9 @@ impl ToolWorld<'_, '_> {
         self.ids.get(entity).ok().copied()
     }
 
-    /// A body entity's authored rigid-body kind.
-    pub fn body_kind(&self, entity: Entity) -> Option<RigidBody> {
-        self.kinds.get(entity).ok().copied()
+    /// A body entity's authored simulation role.
+    pub fn body_kind(&self, entity: Entity) -> Option<BodyKind> {
+        self.kinds.get(entity).ok().map(|p| p.kind)
     }
 
     /// A body entity's authored shape + pose (for ghost previews).

@@ -122,11 +122,11 @@ fn intent_registration_pulls_in_transitive_types() {
         "LinearMotorDef"
     );
     assert!(
-        has(std::any::TypeId::of::<avian2d::prelude::RigidBody>()),
+        has(std::any::TypeId::of::<bevy_rapier3d::prelude::RigidBody>()),
         "avian RigidBody (transitive, read-total path)"
     );
     assert!(
-        has(std::any::TypeId::of::<avian2d::prelude::Friction>()),
+        has(std::any::TypeId::of::<bevy_rapier3d::prelude::Friction>()),
         "avian Friction (transitive, read-total path)"
     );
 }

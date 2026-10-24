@@ -271,8 +271,8 @@ fn replay_joints() {
         PropertyEditIntent {
             changes: vec![PropertyChange {
                 id: a_id,
-                old: PropertyValue::Density(avian2d::prelude::ColliderDensity(1.0)),
-                new: PropertyValue::Density(avian2d::prelude::ColliderDensity(3.5)),
+                old: PropertyValue::Density(Density(1.0)),
+                new: PropertyValue::Density(Density(3.5)),
             }],
         },
     );

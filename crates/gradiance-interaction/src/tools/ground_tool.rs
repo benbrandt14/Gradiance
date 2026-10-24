@@ -2,7 +2,6 @@
 
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
-use avian2d::prelude::RigidBody;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
@@ -35,7 +34,7 @@ impl DraftTool for GroundTool {
                     ctx.constraints.apply_rotation(drag.to_angle(), ctx.snap)
                 };
                 let mut record = new_body_record(ShapeDef::HalfPlane, anchor, rot);
-                record.physics.rigid_body = RigidBody::Static;
+                record.physics = gradiance_domain::props::BodyPhysics::fixed();
                 record.appearance.fill = gradiance_domain::appearance::Rgba::rgb(0.35, 0.4, 0.35);
                 Some(ToolCommit::SpawnBody(Box::new(record)))
             }

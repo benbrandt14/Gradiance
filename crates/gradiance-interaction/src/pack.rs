@@ -152,7 +152,7 @@ type BodyQuery<'w, 's> = Query<
         &'static Transform,
         &'static DepthBand,
         Option<&'static SelectionGroup>,
-        Option<&'static avian2d::prelude::RigidBody>,
+        Option<&'static gradiance_domain::props::BodyPhysics>,
     ),
     With<Body>,
 >;
@@ -224,7 +224,10 @@ fn build_problem(
             group: group.and_then(SelectionGroup::outermost),
             // A static body is scenery the rest should pack around, which is
             // the same role the solver's "pinned" flag describes.
-            pinned: matches!(body_kind, Some(avian2d::prelude::RigidBody::Static)),
+            pinned: matches!(
+                body_kind.map(|p| p.kind),
+                Some(gradiance_domain::props::BodyKind::Static)
+            ),
         });
     }
 

@@ -15,7 +15,6 @@
 use crate::ports;
 use crate::widgets;
 use crate::widgets::{Commit, precise_drag, precise_drag_unit};
-use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -25,6 +24,7 @@ use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
+use gradiance_domain::props::{BodyKind, BodyPhysics, Density};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::selection::Selection;
 use gradiance_units::Dimension;
@@ -54,14 +54,11 @@ pub struct BodyProps<'w, 's> {
     /// Debug-overlay settings (config seam: the layers UI toggles the
     /// viewport layer visualization).
     debug: ResMut<'w, gradiance_domain::settings::DebugSettings>,
-    body_q: Query<'w, 's, &'static RigidBody, With<Body>>,
+    /// The authored physics of a body — one plain component in place of the
+    /// six engine components this panel used to query.
+    physics_q: Query<'w, 's, &'static BodyPhysics, With<Body>>,
     field_q: Query<'w, 's, &'static gradiance_domain::field::FieldSource, With<Body>>,
     tracer_q: Query<'w, 's, &'static gradiance_domain::tracer::Tracer, With<Body>>,
-    friction_q: Query<'w, 's, &'static Friction, With<Body>>,
-    restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
-    density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
-    gravity_q: Query<'w, 's, &'static GravityScale, With<Body>>,
-    flags_q: Query<'w, 's, (Has<Sensor>, Has<LockedAxes>), With<Body>>,
     shapes_q: Query<'w, 's, &'static ShapeDef, With<Body>>,
     appearance_q: Query<'w, 's, &'static Appearance, With<Body>>,
     /// Live physics reads for the sensor-port readouts (read-only facade).
@@ -89,7 +86,7 @@ impl BodyProps<'_, '_> {
     /// Whether `entity` is an inspectable rigid body (drives which sections
     /// render, so a non-body selection never shows dead headers).
     pub fn is_body(&self, entity: Entity) -> bool {
-        self.body_q.get(entity).is_ok()
+        self.physics_q.get(entity).is_ok()
     }
 
     /// The fixed-step seconds used to scale the contact-force readout.
@@ -145,22 +142,26 @@ fn commit_to_selection<C: Component + Clone>(
     }
 }
 
-/// Commits a boolean flag (marker-component presence) across the selection,
-/// reading each target's current value via `current`. Markers cannot use
-/// [`commit_to_selection`] because an absent marker has no `&C` to read.
-fn commit_flag(
+/// Commits one **field** of the authored [`BodyPhysics`] across the selection,
+/// capturing each target's own prior value for undo.
+///
+/// Every physics property is now a field of one component rather than a
+/// component of its own, so this replaces the per-component committer for
+/// them — and the marker-presence special case disappears with the markers.
+fn commit_physics_field<T: Copy>(
     selection: &Selection,
     ids: &Query<&StableId>,
-    current: impl Fn(Entity) -> Option<bool>,
-    wrap: impl Fn(bool) -> PropertyValue,
-    new: bool,
+    physics: &Query<&BodyPhysics, With<Body>>,
+    read: impl Fn(&BodyPhysics) -> T,
+    wrap: impl Fn(T) -> PropertyValue,
+    new: T,
     writer: &mut MessageWriter<PropertyEditIntent>,
 ) {
     let changes: Vec<PropertyChange> = selection
         .iter()
         .filter_map(|e| {
             let id = ids.get(e).ok().copied()?;
-            let old = current(e)?;
+            let old = read(physics.get(e).ok()?);
             Some(PropertyChange {
                 id,
                 old: wrap(old),
@@ -180,26 +181,27 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     let Some(primary) = selection.primary() else {
         return;
     };
-    let Ok(&rigid_body) = props.body_q.get(primary) else {
+    let Ok(&physics) = props.physics_q.get(primary) else {
         return;
     };
 
-    // Body kind (avian `RigidBody`).
-    let mut kind = rigid_body;
+    // Simulation role.
+    let mut kind = physics.kind;
     egui::ComboBox::from_id_salt(ui.id().with("body-kind"))
         .selected_text(format!("{kind:?}"))
         .show_ui(ui, |ui| {
-            for option in [RigidBody::Dynamic, RigidBody::Static, RigidBody::Kinematic] {
+            for option in [BodyKind::Dynamic, BodyKind::Static, BodyKind::Kinematic] {
                 if ui
                     .selectable_value(&mut kind, option, format!("{option:?}"))
                     .clicked()
                 {
-                    commit_to_selection(
+                    commit_physics_field(
                         selection,
                         &props.ids,
-                        &props.body_q,
-                        PropertyValue::RigidBody,
-                        move |_| option,
+                        &props.physics_q,
+                        |p| p.kind,
+                        PropertyValue::BodyKind,
+                        option,
                         &mut props.edits,
                     );
                 }
@@ -207,7 +209,7 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
         });
 
     // Density.
-    let mut density = props.density_q.get(primary).map_or(1.0, |d| d.0);
+    let mut density = physics.density.value();
     ui.horizontal(|ui| {
         ui.label("density");
         if let Commit::Done(_, new) = precise_drag_unit(
@@ -218,103 +220,95 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
             0.01,
             Dimension::Density.symbol(),
         ) {
-            commit_to_selection(
+            commit_physics_field(
                 selection,
                 &props.ids,
-                &props.density_q,
+                &props.physics_q,
+                |p| p.density,
                 PropertyValue::Density,
-                move |_| ColliderDensity(new),
+                Density(new),
                 &mut props.edits,
             );
         }
     });
 
     // Friction (a single coefficient drives both static and dynamic).
-    let mut friction = props
-        .friction_q
-        .get(primary)
-        .map_or(0.5, |f| f.dynamic_coefficient);
+    let mut friction = physics.friction;
     ui.horizontal(|ui| {
         ui.label("friction");
         if let Commit::Done(_, new) =
             precise_drag(ui, ui.id().with("friction"), &mut friction, 0.5, 0.01)
         {
-            commit_to_selection(
+            commit_physics_field(
                 selection,
                 &props.ids,
-                &props.friction_q,
+                &props.physics_q,
+                |p| p.friction,
                 PropertyValue::Friction,
-                move |old| Friction {
-                    dynamic_coefficient: new,
-                    static_coefficient: new,
-                    ..*old
-                },
+                new,
                 &mut props.edits,
             );
         }
     });
 
     // Restitution.
-    let mut restitution = props
-        .restitution_q
-        .get(primary)
-        .map_or(0.3, |r| r.coefficient);
+    let mut restitution = physics.restitution;
     ui.horizontal(|ui| {
         ui.label("restitution");
         if let Commit::Done(_, new) =
             precise_drag(ui, ui.id().with("restitution"), &mut restitution, 0.3, 0.01)
         {
-            commit_to_selection(
+            commit_physics_field(
                 selection,
                 &props.ids,
-                &props.restitution_q,
+                &props.physics_q,
+                |p| p.restitution,
                 PropertyValue::Restitution,
-                move |old| Restitution {
-                    coefficient: new,
-                    ..*old
-                },
+                new,
                 &mut props.edits,
             );
         }
     });
 
     // Gravity scale.
-    let mut gravity = props.gravity_q.get(primary).map_or(1.0, |g| g.0);
+    let mut gravity = physics.gravity_scale;
     ui.horizontal(|ui| {
         ui.label("gravity scale");
         if let Commit::Done(_, new) =
             precise_drag(ui, ui.id().with("gravity"), &mut gravity, 1.0, 0.01)
         {
-            commit_to_selection(
+            commit_physics_field(
                 selection,
                 &props.ids,
-                &props.gravity_q,
+                &props.physics_q,
+                |p| p.gravity_scale,
                 PropertyValue::GravityScale,
-                move |_| GravityScale(new),
+                new,
                 &mut props.edits,
             );
         }
     });
 
-    // Flags (marker-component presence).
-    let (sensor_now, locked_now) = props.flags_q.get(primary).unwrap_or((false, false));
-    let mut sensor = sensor_now;
+    // Flags.
+    let mut sensor = physics.sensor;
     if ui.checkbox(&mut sensor, "sensor").changed() {
-        commit_flag(
+        commit_physics_field(
             selection,
             &props.ids,
-            |e| props.flags_q.get(e).ok().map(|(s, _)| s),
+            &props.physics_q,
+            |p| p.sensor,
             PropertyValue::Sensor,
             sensor,
             &mut props.edits,
         );
     }
-    let mut locked = locked_now;
+    let mut locked = physics.rotation_locked;
     if ui.checkbox(&mut locked, "lock rotation").changed() {
-        commit_flag(
+        commit_physics_field(
             selection,
             &props.ids,
-            |e| props.flags_q.get(e).ok().map(|(_, l)| l),
+            &props.physics_q,
+            |p| p.rotation_locked,
             PropertyValue::RotationLock,
             locked,
             &mut props.edits,

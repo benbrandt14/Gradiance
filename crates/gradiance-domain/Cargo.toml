@@ -12,7 +12,6 @@ workspace = true
 gradiance-core.workspace = true
 gradiance-geometry.workspace = true
 gradiance-units.workspace = true
-avian2d.workspace = true
 bevy.workspace = true
 colorgrad.workspace = true
 serde.workspace = true
@@ -20,3 +19,8 @@ thiserror.workspace = true
 uuid.workspace = true
 # Features-only: serde impls for the bevy math types the components serialize.
 glam.workspace = true
+
+[dev-dependencies]
+# Round-trips the authored save struct in-crate; the format itself lives in
+# `gradiance-scene`.
+ron.workspace = true

@@ -82,7 +82,7 @@ fn severing_a_box_splits_it_into_two_recentered_pieces() {
 
 #[test]
 fn cut_pieces_inherit_velocity_and_spin() {
-    use avian2d::prelude::{AngularVelocity, LinearVelocity};
+    use bevy_rapier3d::prelude::Velocity;
     // Physics continuity (Algodoo 7.5): severing a moving, spinning body
     // hands each piece `v + ω × r` and the shared spin, so pieces keep
     // flying instead of freezing mid-air.
@@ -90,18 +90,25 @@ fn cut_pieces_inherit_velocity_and_spin() {
     let id = spawn_box_at(&mut app, Vec2::ZERO, 100.0, 20.0);
     let entity = entity_of(&app, id).unwrap();
     let (v, omega) = (Vec2::new(30.0, 0.0), 2.0);
-    app.world_mut()
-        .entity_mut(entity)
-        .insert((LinearVelocity(v), AngularVelocity(omega)));
+    app.world_mut().entity_mut(entity).insert(Velocity {
+        linear: Vec3::new(v.x, v.y, 0.0),
+        angular: Vec3::new(0.0, 0.0, omega),
+    });
 
     cut(&mut app, Vec2::new(0.0, -30.0), Vec2::new(0.0, 30.0), 4.0);
     assert_eq!(body_count(&mut app), 2);
 
     let mut pieces: Vec<(Vec2, Vec2, f32)> = app
         .world_mut()
-        .query_filtered::<(&Transform, &LinearVelocity, &AngularVelocity), With<Body>>()
+        .query_filtered::<(&Transform, &Velocity), With<Body>>()
         .iter(app.world())
-        .map(|(t, lv, av)| (t.translation.truncate(), lv.0, av.0))
+        .map(|(t, vel)| {
+            (
+                t.translation.truncate(),
+                vel.linear.truncate(),
+                vel.angular.z,
+            )
+        })
         .collect();
     pieces.sort_by(|a, b| a.0.x.total_cmp(&b.0.x));
     for (pos, piece_v, piece_omega) in &pieces {

@@ -16,5 +16,4 @@ gradiance-geometry.workspace = true
 gradiance-interaction.workspace = true
 gradiance-physics.workspace = true
 gradiance-signal.workspace = true
-avian2d.workspace = true
 bevy.workspace = true

@@ -20,13 +20,13 @@ use crate::selection::Selection;
 use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
-use avian2d::prelude::RigidBody;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::states::ToolState;
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
+use gradiance_domain::props::BodyKind;
 use gradiance_scene::JointRecord;
 
 /// Below this drag length a slider uses the body's local X axis.
@@ -126,7 +126,7 @@ fn build_weld(anchor: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
             let id = world.id_of(*single)?;
             let old = world.body_kind(*single)?;
             // Welding an already-static body is a no-op, not a dead command.
-            (old != RigidBody::Static).then_some(ToolCommit::MakeStatic { id, old })
+            (old != BodyKind::Static).then_some(ToolCommit::MakeStatic { id, old })
         }
         [a, b, ..] => Some(ToolCommit::Merge {
             targets: vec![world.id_of(*a)?, world.id_of(*b)?],

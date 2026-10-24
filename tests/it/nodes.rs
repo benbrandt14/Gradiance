@@ -60,7 +60,7 @@ fn spawning_a_tracer_node_is_undoable_and_persists() {
 fn an_attached_node_follows_its_body() {
     let mut app = paused_app();
     let mut body = box_record(Vec2::new(100.0, 0.0), 20.0, 20.0);
-    body.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    body.physics.kind = BodyKind::Static;
     let body_id = body.id;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: body });
@@ -193,7 +193,7 @@ fn duplicating_a_body_copies_its_attached_tracer_and_bindings() {
 
 #[test]
 fn a_speed_to_fill_binding_tints_the_target_body() {
-    use avian2d::prelude::LinearVelocity;
+    use bevy_rapier3d::prelude::Velocity;
     use gradiance::domain::signal::{GradientSpec, SignalMap};
     use gradiance::signal::{
         SignalBinding, SignalBindings, SignalColorOverride, SignalSink, SignalSource,
@@ -208,7 +208,7 @@ fn a_speed_to_fill_binding_tints_the_target_body() {
     // Body A moves; body B is tinted by A's speed through a binding (the
     // object-port model: a sensor port on A wired to an actuator port on B).
     let mut a = box_record(Vec2::ZERO, 20.0, 20.0);
-    a.physics.rigid_body = avian2d::prelude::RigidBody::Dynamic;
+    a.physics.kind = BodyKind::Dynamic;
     let a_id = a.id;
     app.world_mut().write_message(SpawnBodyIntent { record: a });
     let b = box_record(Vec2::new(200.0, 0.0), 20.0, 20.0);
@@ -233,9 +233,10 @@ fn a_speed_to_fill_binding_tints_the_target_body() {
 
     // Drive A; the binding reads its speed and tints B's fill.
     let a_entity = entity_of(&app, a_id).unwrap();
-    app.world_mut()
-        .entity_mut(a_entity)
-        .insert(LinearVelocity(Vec2::new(150.0, 0.0)));
+    app.world_mut().entity_mut(a_entity).insert(Velocity {
+        linear: Vec3::new(150.0, 0.0, 0.0),
+        angular: Vec3::ZERO,
+    });
     step(&mut app, 3);
 
     let b_entity = entity_of(&app, b_id).unwrap();
@@ -256,7 +257,7 @@ fn a_pos_x_to_tracer_binding_drives_the_trail_channel() {
 
     let mut app = paused_app();
     let mut body = box_record(Vec2::new(300.0, 0.0), 20.0, 20.0);
-    body.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    body.physics.kind = BodyKind::Static;
     let body_id = body.id;
     app.world_mut()
         .write_message(SpawnBodyIntent { record: body });

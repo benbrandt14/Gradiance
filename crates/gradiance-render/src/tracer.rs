@@ -13,7 +13,6 @@
 //! uniformly. An attached node's `Transform` is re-derived each frame from
 //! its target body by [`follow_node_attachments`].
 
-use avian2d::prelude::Physics;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
@@ -24,6 +23,7 @@ use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
 use gradiance_domain::tracer::Tracer;
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_interaction::selection::Selection;
+use gradiance_physics::clock::SimClock;
 use std::collections::VecDeque;
 
 /// Hard cap on samples per trail (a slow-fading fast body can't grow
@@ -72,7 +72,7 @@ pub fn follow_node_attachments(
 /// none to trace.
 pub fn sample_traces(
     mut commands: Commands,
-    time: Res<Time<Physics>>,
+    time: Res<SimClock>,
     mut traced: Query<(
         Entity,
         &Tracer,
@@ -128,7 +128,7 @@ pub fn cleanup_traces(mut commands: Commands, mut removed: RemovedComponents<Tra
 /// Draws each trail as a fading polyline in the body's own fill color —
 /// or the signal dataflow's trail tint when one is bound.
 pub fn draw_traces(
-    time: Res<Time<Physics>>,
+    time: Res<SimClock>,
     trails: Query<(
         &Tracer,
         &TraceTrail,

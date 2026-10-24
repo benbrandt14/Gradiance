@@ -1,65 +1,116 @@
-//! The authored physics of a body — avian's own components.
+//! The authored physics of a body — plain data, owned by the domain.
 //!
-//! The de-adapter collapse (`docs/physics-deadapter-decision.md`) removed the
-//! engine-agnostic `PhysicalProps` mirror and its per-frame translation. A
-//! body's live authored physics *is* the avian components on its entity
-//! (`RigidBody`, `Friction`, `Restitution`, `ColliderDensity`, `GravityScale`,
-//! and optional `Sensor` / `LockedAxes`); operations, queries, and scripts read
-//! and edit them directly. [`BodyPhysics`] is the grouped value object used only
-//! for capture, persistence, and undo — never a live component.
+//! [`BodyPhysics`] is a **live authored component** and the save content. The
+//! physics layer translates it to engine components on `Changed<BodyPhysics>`;
+//! that is the write path, and it is confined there.
+//!
+//! # Why this is not the engine's own components
+//!
+//! The de-adapter collapse (`docs/physics-deadapter-decision.md`) made authored
+//! physics *be* avian's components, serialized directly, on the argument that a
+//! mirror is framework cruft between the description of a body and the
+//! operations on it. Three of that decision's four arguments still hold, and
+//! nothing here reintroduces a per-frame translation or an engine-swap seam.
+//!
+//! The fourth does not survive: rapier's `Friction`, `Restitution`,
+//! `ColliderMassProperties`, `GravityScale` and `LockedAxes` derive `Reflect`
+//! but **not** `Serialize`, so engine components cannot be the save format.
+//! Given that, owning the authored data outright is better than hand-writing
+//! serde for someone else's types — and it is what lets `domain`, `command`,
+//! `interaction` and `ui` stop naming the physics engine at all.
+//!
+//! It stays flat, `Copy`, and reflective, so records, undo capture and the
+//! scripting registry all read it field-by-field exactly as before.
 
-use avian2d::prelude::*;
-use bevy::ecs::world::{EntityRef, EntityWorldMut};
 use serde::{Deserialize, Serialize};
 
-/// Default friction for a new body (matches the pre-collapse 0.5).
-pub fn default_friction() -> Friction {
-    Friction::new(0.5)
-}
-/// Default restitution for a new body (0.3).
-pub fn default_restitution() -> Restitution {
-    Restitution::new(0.3)
-}
-/// Default collider density for a new body (1.0).
-pub fn default_density() -> ColliderDensity {
-    ColliderDensity(1.0)
-}
-/// Default per-body gravity multiplier (1.0).
-pub fn default_gravity_scale() -> GravityScale {
-    GravityScale(1.0)
+/// Re-exported so consumers can name [`BodyPhysics::density`]'s type without
+/// taking a dependency on the units crate — the same courtesy `domain` extends
+/// for the shape tree.
+pub use gradiance_units::Density;
+
+/// How a body participates in the simulation.
+///
+/// The authored vocabulary, deliberately unchanged from what the editor has
+/// always shown: a body is dynamic, immovable, or animated by hand.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
+pub enum BodyKind {
+    /// Simulated: forces, gravity and contacts move it.
+    #[default]
+    Dynamic,
+    /// Immovable and infinitely massive — the ground, a pinned anchor.
+    Static,
+    /// Moved by the editor rather than the solver; pushes others, is not pushed.
+    Kinematic,
 }
 
-/// The authored physics of a body, grouped for capture / persistence / undo.
-///
-/// Not a live component: the entity carries these avian components directly.
-/// This value object assembles them ([`capture`](BodyPhysics::capture)) and
-/// applies them ([`insert_into`](BodyPhysics::insert_into)), so records and the
-/// scene file stay one flat struct.
-///
-/// Reflects structurally: the avian component fields all derive `Reflect`, so
-/// the scripting registry can inspect a captured body's physics field-by-field
-/// (the read-total path) and construct a `SpawnBodyIntent` that carries it.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+impl BodyKind {
+    /// Whether the solver integrates this body's motion.
+    #[must_use]
+    pub fn is_dynamic(self) -> bool {
+        matches!(self, Self::Dynamic)
+    }
+}
+
+/// Default friction for a new body.
+#[must_use]
+pub fn default_friction() -> f32 {
+    0.5
+}
+/// Default restitution (bounciness) for a new body.
+#[must_use]
+pub fn default_restitution() -> f32 {
+    0.3
+}
+/// Default areal mass density for a new body.
+#[must_use]
+pub fn default_density() -> Density {
+    Density(1.0)
+}
+/// Default per-body gravity multiplier.
+#[must_use]
+pub fn default_gravity_scale() -> f32 {
+    1.0
+}
+
+/// The authored physics of a body: the save content, the undo capture unit,
+/// and the live component the physics layer syncs from.
+#[derive(
+    bevy::prelude::Component,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    bevy::reflect::Reflect,
+)]
 pub struct BodyPhysics {
     /// Simulation role.
     #[serde(default)]
-    pub rigid_body: RigidBody,
-    /// Coulomb friction.
+    pub kind: BodyKind,
+    /// Coulomb friction coefficient (dimensionless).
     #[serde(default = "default_friction")]
-    pub friction: Friction,
-    /// Bounciness in `[0, 1]`.
+    pub friction: f32,
+    /// Bounciness in `[0, 1]` (dimensionless).
     #[serde(default = "default_restitution")]
-    pub restitution: Restitution,
-    /// Mass density (collider area × density = mass).
+    pub restitution: f32,
+    /// Areal mass density; mass is `density × area` (`units::mass_of`).
     #[serde(default = "default_density")]
-    pub density: ColliderDensity,
-    /// Per-body gravity multiplier.
+    pub density: Density,
+    /// Per-body gravity multiplier (dimensionless).
     #[serde(default = "default_gravity_scale")]
-    pub gravity_scale: GravityScale,
+    pub gravity_scale: f32,
     /// Detects overlaps without colliding.
     #[serde(default)]
     pub sensor: bool,
-    /// Prevents all rotation when set.
+    /// Prevents rotation in the simulation plane.
+    ///
+    /// Authored intent only. The engine's locked-axis set is *derived* from
+    /// this together with the body's simulation-plane constraint, composed in
+    /// one place in the physics layer — neither may clobber the other.
     #[serde(default)]
     pub rotation_locked: bool,
 }
@@ -67,7 +118,7 @@ pub struct BodyPhysics {
 impl Default for BodyPhysics {
     fn default() -> Self {
         Self {
-            rigid_body: RigidBody::Dynamic,
+            kind: BodyKind::Dynamic,
             friction: default_friction(),
             restitution: default_restitution(),
             density: default_density(),
@@ -80,60 +131,65 @@ impl Default for BodyPhysics {
 
 impl BodyPhysics {
     /// A fixed (non-simulating) body's physics — e.g. the ground. Everything
-    /// but the [`RigidBody`] role matches [`default`](BodyPhysics::default). A
-    /// domain-level constructor so callers that must not name avian (the
-    /// scripting layer) can still author a static body.
+    /// but the role matches [`default`](BodyPhysics::default).
+    #[must_use]
     pub fn fixed() -> Self {
         Self {
-            rigid_body: RigidBody::Static,
+            kind: BodyKind::Static,
             ..Self::default()
         }
     }
+}
 
-    /// Assembles the authored physics from an entity's avian components,
-    /// falling back to defaults for any that are absent.
-    pub fn capture(entity: &EntityRef) -> Self {
-        Self {
-            rigid_body: entity.get::<RigidBody>().copied().unwrap_or_default(),
-            friction: entity
-                .get::<Friction>()
-                .copied()
-                .unwrap_or_else(default_friction),
-            restitution: entity
-                .get::<Restitution>()
-                .copied()
-                .unwrap_or_else(default_restitution),
-            density: entity
-                .get::<ColliderDensity>()
-                .copied()
-                .unwrap_or_else(default_density),
-            gravity_scale: entity
-                .get::<GravityScale>()
-                .copied()
-                .unwrap_or_else(default_gravity_scale),
-            sensor: entity.contains::<Sensor>(),
-            rotation_locked: entity.contains::<LockedAxes>(),
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_match_the_editor_vocabulary() {
+        let p = BodyPhysics::default();
+        assert_eq!(p.kind, BodyKind::Dynamic);
+        assert!(p.kind.is_dynamic());
+        assert!(!p.sensor && !p.rotation_locked);
     }
 
-    /// Inserts the authored physics onto an entity (marker presence handled).
-    pub fn insert_into(&self, entity: &mut EntityWorldMut) {
-        entity.insert((
-            self.rigid_body,
-            self.friction,
-            self.restitution,
-            self.density,
-            self.gravity_scale,
-        ));
-        if self.sensor {
-            entity.insert(Sensor);
-        } else {
-            entity.remove::<Sensor>();
-        }
-        if self.rotation_locked {
-            entity.insert(LockedAxes::ROTATION_LOCKED);
-        } else {
-            entity.remove::<LockedAxes>();
-        }
+    #[test]
+    fn fixed_changes_only_the_role() {
+        let (a, b) = (BodyPhysics::default(), BodyPhysics::fixed());
+        assert_eq!(b.kind, BodyKind::Static);
+        assert!(!b.kind.is_dynamic());
+        assert_eq!(
+            BodyPhysics {
+                kind: BodyKind::Dynamic,
+                ..b
+            },
+            a
+        );
+    }
+
+    /// The save content must survive a round trip unchanged — this is the
+    /// struct the scene format is made of.
+    #[test]
+    fn round_trips_through_ron() {
+        let p = BodyPhysics {
+            kind: BodyKind::Kinematic,
+            friction: 0.25,
+            restitution: 0.9,
+            density: Density(2.5),
+            gravity_scale: 0.0,
+            sensor: true,
+            rotation_locked: true,
+        };
+        let text = ron::ser::to_string(&p).expect("serializes");
+        let back: BodyPhysics = ron::from_str(&text).expect("deserializes");
+        assert_eq!(back, p);
+    }
+
+    /// Every field is optional on load, so a hand-written or partial scene
+    /// still opens with sensible physics.
+    #[test]
+    fn missing_fields_fall_back_to_defaults() {
+        let back: BodyPhysics = ron::from_str("()").expect("deserializes from empty");
+        assert_eq!(back, BodyPhysics::default());
     }
 }

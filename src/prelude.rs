@@ -22,7 +22,7 @@ pub use crate::domain::appearance::{Appearance, Rgba};
 pub use crate::domain::depth::DepthBand;
 pub use crate::domain::group::SelectionGroup;
 pub use crate::domain::joint::{AngularMotorDef, JointCommon, JointDef, JointKind, LinearMotorDef};
-pub use crate::domain::props::BodyPhysics;
+pub use crate::domain::props::{BodyKind, BodyPhysics, Density};
 pub use crate::domain::settings::{
     GridSettings, GridSystem, RenderSettings, SnapConfig, SnapSources,
 };

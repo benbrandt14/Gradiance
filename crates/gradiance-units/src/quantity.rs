@@ -43,10 +43,22 @@ macro_rules! scalar_quantity {
             }
         }
 
+        impl core::ops::AddAssign for $name {
+            fn add_assign(&mut self, rhs: Self) {
+                self.0 += rhs.0;
+            }
+        }
+
         impl core::ops::Sub for $name {
             type Output = Self;
             fn sub(self, rhs: Self) -> Self {
                 Self(self.0 - rhs.0)
+            }
+        }
+
+        impl core::ops::SubAssign for $name {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.0 -= rhs.0;
             }
         }
 
@@ -117,10 +129,22 @@ macro_rules! vector_quantity {
             }
         }
 
+        impl core::ops::AddAssign for $name {
+            fn add_assign(&mut self, rhs: Self) {
+                self.0 += rhs.0;
+            }
+        }
+
         impl core::ops::Sub for $name {
             type Output = Self;
             fn sub(self, rhs: Self) -> Self {
                 Self(self.0 - rhs.0)
+            }
+        }
+
+        impl core::ops::SubAssign for $name {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.0 -= rhs.0;
             }
         }
 
@@ -188,6 +212,25 @@ scalar_quantity! {
     Acceleration, metres_per_second_squared, "m/s²"
 }
 scalar_quantity! {
+    /// An angular acceleration, in radians per second squared.
+    ///
+    /// Scalar **about the simulation-plane normal**, like every angular
+    /// quantity outside `gradiance-physics` — the engine's `Vec3` form is
+    /// lifted and projected at the sync seam and never escapes it
+    /// (`gradiance_core::units::PlaneFrame`).
+    AngularAcceleration, radians_per_second_squared, "rad/s²"
+}
+scalar_quantity! {
+    /// A moment of inertia about the simulation-plane normal, in
+    /// kilogram-metres squared.
+    ///
+    /// The rotational analogue of [`Mass`]: the pair a body's mass properties
+    /// are made of, both computed in 2D
+    /// ([`mass_of`](crate::mass::mass_of) and the geometry layer's polar
+    /// moment) and handed to the engine explicitly.
+    MomentOfInertia, kilogram_metres_squared, "kg·m²"
+}
+scalar_quantity! {
     /// A force, in newtons.
     Force, newtons, "N"
 }
@@ -211,6 +254,13 @@ scalar_quantity! {
     /// A linear impulse, in newton-seconds (force integrated over time; a
     /// contact's `normal_impulse`).
     Impulse, newton_seconds, "N·s"
+}
+scalar_quantity! {
+    /// An angular impulse, in newton-metre-seconds (torque integrated over
+    /// time — the rotational counterpart of [`Impulse`]).
+    ///
+    /// Scalar about the simulation-plane normal.
+    AngularImpulse, newton_metre_seconds, "N·m·s"
 }
 scalar_quantity! {
     /// Energy (kinetic / potential / work), in joules.
@@ -296,5 +346,31 @@ impl core::ops::Div<Time> for Impulse {
     /// contact impulse ÷ fixed dt reads as the contact force).
     fn div(self, rhs: Time) -> Force {
         Force(self.0 / rhs.0)
+    }
+}
+
+impl core::ops::Mul<AngularAcceleration> for MomentOfInertia {
+    type Output = Torque;
+    /// Newton's second law for rotation: `MomentOfInertia · AngularAcceleration
+    /// = Torque`.
+    fn mul(self, rhs: AngularAcceleration) -> Torque {
+        Torque(self.0 * rhs.0)
+    }
+}
+
+impl core::ops::Mul<AngularVelocity> for MomentOfInertia {
+    type Output = AngularMomentum;
+    /// `MomentOfInertia · AngularVelocity = AngularMomentum`.
+    fn mul(self, rhs: AngularVelocity) -> AngularMomentum {
+        AngularMomentum(self.0 * rhs.0)
+    }
+}
+
+impl core::ops::Div<Time> for AngularImpulse {
+    type Output = Torque;
+    /// Angular impulse over the timestep is torque — the rotational twin of
+    /// `Impulse / Time = Force`.
+    fn div(self, rhs: Time) -> Torque {
+        Torque(self.0 / rhs.0)
     }
 }

@@ -78,7 +78,7 @@ impl BodyRecord {
             id: *entity_ref.get::<StableId>()?,
             pose: PosRot::from_transform(entity_ref.get::<Transform>()?),
             shape: entity_ref.get::<ShapeDef>()?.clone(),
-            physics: BodyPhysics::capture(&entity_ref),
+            physics: entity_ref.get::<BodyPhysics>().copied().unwrap_or_default(),
             appearance: *entity_ref.get::<Appearance>()?,
             depth: *entity_ref.get::<DepthBand>()?,
             layers: None,
@@ -107,7 +107,7 @@ impl BodyRecord {
             self.appearance,
             self.depth.sanitized(),
         ));
-        self.physics.insert_into(&mut entity);
+        entity.insert(self.physics);
         if !self.groups.is_empty() {
             entity.insert(SelectionGroup(self.groups.clone()));
         }
@@ -147,7 +147,7 @@ impl BodyRecord {
             entity.insert(self.depth.sanitized());
         }
         if self.physics != prev.physics {
-            self.physics.insert_into(&mut entity);
+            entity.insert(self.physics);
         }
         if self.groups != prev.groups {
             if self.groups.is_empty() {

@@ -2,7 +2,7 @@
 //! zoom-adaptive spacing (line density stays comfortable on screen).
 
 use bevy::prelude::*;
-use gradiance_core::constants::INTERACTION_PLANE_Z;
+use gradiance_core::units::PlaneFrame;
 use gradiance_domain::settings::{GridSettings, GridSystem};
 use gradiance_interaction::overlay::GridGizmos;
 
@@ -24,6 +24,9 @@ pub fn draw_grid(
         return;
     };
     let scale = ortho.scale;
+    // The grid is drawn *on* the interaction plane, so every 2D grid coordinate
+    // is lifted through its frame rather than gaining a hard-coded z.
+    let plane = PlaneFrame::XY;
     let center = cam_transform.translation.truncate();
     // Visible half-extent (generous; gizmo lines are cheap).
     let half = 800.0 * scale;
@@ -40,6 +43,7 @@ pub fn draw_grid(
             for (i, angle) in dirs.into_iter().enumerate() {
                 line_family(
                     &mut gizmos,
+                    plane,
                     grid.origin,
                     angle,
                     spacing,
@@ -55,6 +59,7 @@ pub fn draw_grid(
             for offset in [30_f32.to_radians(), 150_f32.to_radians()] {
                 line_family(
                     &mut gizmos,
+                    plane,
                     grid.origin,
                     grid.rotation + offset,
                     spacing,
@@ -70,7 +75,7 @@ pub fn draw_grid(
             let mut r = spacing;
             while r <= max_radius {
                 gizmos.circle(
-                    Isometry3d::from_translation(grid.origin.extend(INTERACTION_PLANE_Z)),
+                    Isometry3d::from_translation(plane.point(grid.origin, 0.0)),
                     r,
                     minor,
                 );
@@ -80,8 +85,8 @@ pub fn draw_grid(
             for i in 0..angular_divisions.max(1) {
                 let dir = Vec2::from_angle(grid.rotation + step * i as f32);
                 gizmos.line(
-                    grid.origin.extend(INTERACTION_PLANE_Z),
-                    (grid.origin + dir * max_radius).extend(INTERACTION_PLANE_Z),
+                    plane.point(grid.origin, 0.0),
+                    plane.point(grid.origin + dir * max_radius, 0.0),
                     minor,
                 );
             }
@@ -111,6 +116,7 @@ fn adaptive_spacing(base: f32, camera_scale: f32) -> f32 {
 #[expect(clippy::too_many_arguments)]
 fn line_family(
     gizmos: &mut Gizmos<GridGizmos>,
+    plane: PlaneFrame,
     origin: Vec2,
     angle: f32,
     spacing: f32,
@@ -138,8 +144,8 @@ fn line_family(
             minor.into()
         };
         gizmos.line(
-            (base - dir * reach).extend(INTERACTION_PLANE_Z),
-            (base + dir * reach).extend(INTERACTION_PLANE_Z),
+            plane.point(base - dir * reach, 0.0),
+            plane.point(base + dir * reach, 0.0),
             color,
         );
     }

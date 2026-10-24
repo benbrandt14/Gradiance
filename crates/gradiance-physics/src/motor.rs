@@ -1,13 +1,18 @@
 //! Oscillating motors: flip the native motor's target velocity at the
 //! joint limits.
 //!
-//! Everything else about motors is handled natively by avian
+//! Everything else about motors is handled natively by the engine
 //! (velocity tracking, max force, damping); this system only implements
 //! the Algodoo "back and forth" behavior on top.
+//!
+//! The angle and reversal maths are pure domain functions and are untouched by
+//! the move to a 3D engine — the payoff of having put them in `domain`.
 
-use avian2d::prelude::{PrismaticJoint, RevoluteJoint};
+use crate::joint_sync::DerivedJoint;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 use gradiance_core::ids::IdIndex;
+use gradiance_core::units::PlaneFrame;
 use gradiance_domain::joint::{JointDef, JointKind};
 
 /// Angular/linear buffer before a limit at which the motor reverses.
@@ -19,25 +24,25 @@ pub fn drive_oscillating_motors(
     index: Res<IdIndex>,
     defs: Query<(Entity, &JointDef)>,
     transforms: Query<&GlobalTransform>,
-    mut revolutes: Query<&mut RevoluteJoint>,
-    mut prismatics: Query<&mut PrismaticJoint>,
+    derived: Query<&DerivedJoint>,
+    mut joints: Query<&mut ImpulseJoint>,
 ) {
+    let plane = PlaneFrame::XY;
     for (entity, def) in &defs {
         let Some(a) = index.entity(def.body_a) else {
             continue;
         };
+        // Projected through the plane rather than pulled out of the quaternion
+        // by hand, so the 2D-authoring seam has no exception.
         let rot = |e: Entity| {
-            transforms.get(e).map_or(0.0, |t| {
-                t.to_scale_rotation_translation()
-                    .1
-                    .to_euler(EulerRot::ZYX)
-                    .0
-            })
+            transforms
+                .get(e)
+                .map_or(0.0, |t| plane.pose(&t.compute_transform()).rot)
         };
         let pos = |e: Entity| {
             transforms
                 .get(e)
-                .map(|t| t.translation().truncate())
+                .map(|t| plane.project(t.translation()).0)
                 .unwrap_or_default()
         };
 
@@ -46,7 +51,7 @@ pub fn drive_oscillating_motors(
                 limits: Some([min, max]),
                 motor: Some(m),
             } if m.oscillate && m.enabled => {
-                let Ok(mut joint) = revolutes.get_mut(entity) else {
+                let Ok(mut joint) = derived_joint(&derived, &mut joints, entity) else {
                     continue;
                 };
                 let rot_b = def.body_b.and_then(|id| index.entity(id)).map_or(0.0, rot);
@@ -68,7 +73,7 @@ pub fn drive_oscillating_motors(
                     m.target_velocity.value(),
                     ANGLE_BUFFER,
                 ) {
-                    joint.motor.target_velocity = v;
+                    set_motor_velocity(&mut joint, JointAxis::AngX, v, m.damping);
                 }
             }
             JointKind::Slider {
@@ -76,7 +81,7 @@ pub fn drive_oscillating_motors(
                 limits: Some([min, max]),
                 motor: Some(m),
             } if m.oscillate && m.enabled => {
-                let Ok(mut joint) = prismatics.get_mut(entity) else {
+                let Ok(mut joint) = derived_joint(&derived, &mut joints, entity) else {
                     continue;
                 };
                 let Some(b) = def.body_b.and_then(|id| index.entity(id)) else {
@@ -93,10 +98,28 @@ pub fn drive_oscillating_motors(
                     m.target_velocity.value(),
                     TRANSLATION_BUFFER,
                 ) {
-                    joint.motor.target_velocity = v;
+                    set_motor_velocity(&mut joint, JointAxis::LinX, v, m.damping);
                 }
             }
             _ => {}
         }
     }
+}
+
+/// The engine joint derived from an authored joint entity.
+fn derived_joint<'a>(
+    derived: &Query<&DerivedJoint>,
+    joints: &'a mut Query<&mut ImpulseJoint>,
+    authored: Entity,
+) -> Result<Mut<'a, ImpulseJoint>, ()> {
+    let link = derived.get(authored).map_err(|_| ())?;
+    joints.get_mut(link.0).map_err(|_| ())
+}
+
+/// Retargets one motor axis, leaving every other joint parameter alone.
+fn set_motor_velocity(joint: &mut ImpulseJoint, axis: JointAxis, velocity: f32, damping: f32) {
+    joint
+        .data
+        .as_mut()
+        .set_motor_velocity(axis, velocity, damping);
 }

@@ -3,7 +3,7 @@ name = "gradiance-physics"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Gradiance physics: avian collider/joint derivation and the read facade"
+description = "Gradiance physics: collider/joint derivation, the plane seam, and the read facade"
 
 [lints]
 workspace = true
@@ -13,5 +13,5 @@ gradiance-core.workspace = true
 gradiance-units.workspace = true
 gradiance-domain.workspace = true
 gradiance-geometry.workspace = true
-avian2d.workspace = true
+bevy_rapier3d.workspace = true
 bevy.workspace = true
