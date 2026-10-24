@@ -5,7 +5,9 @@
 use bevy::prelude::*;
 use gradiance_core::constants::INTERACTION_PLANE_Z;
 use gradiance_domain::settings::{GridSettings, GridSystem};
-use gradiance_geometry::snapping::{CARTESIAN_LINE_DIRECTIONS, ISOMETRIC_LINE_DIRECTIONS, adaptive_step};
+use gradiance_geometry::snapping::{
+    CARTESIAN_LINE_DIRECTIONS, ISOMETRIC_LINE_DIRECTIONS, adaptive_step,
+};
 use gradiance_interaction::camera::{CameraRig, CameraScale};
 use gradiance_interaction::overlay::GridGizmos;
 

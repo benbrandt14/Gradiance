@@ -68,9 +68,22 @@ jobs:
           fi
 
       - name: Format
-        run: cargo fmt --all -- --check
+        # Unformatted files are re-emitted as annotations (agent sessions
+        # cannot read the log). Same gate: exit 1 on any diff.
+        shell: bash
+        run: |
+          out=$(cargo fmt --all -- --check -l 2>&1) && exit 0
+          while IFS= read -r f; do
+            case "$f" in
+              "") ;;
+              /*.rs) echo "::error file=${f#"$GITHUB_WORKSPACE"/}::not rustfmt-formatted: run cargo fmt --all" ;;
+              *) echo "::error::rustfmt: $f" ;;  # parse errors, not a file list
+            esac
+          done <<< "$out"
+          exit 1
 
       - name: Clippy
+        id: clippy
         # Short-format diagnostics are teed to a file so the step below can
         # re-emit them as annotations: agent sessions cannot download Actions
         # logs (403), but they can read annotations through the REST API
@@ -85,7 +98,10 @@ jobs:
         # GitHub keeps at most 10 error annotations per step, so the most
         # useful lines go first: located diagnostics, then a tail fallback
         # for failures that are not lints (build scripts, ICEs).
-        if: failure()
+        # Only when Clippy itself failed: `failure()` alone is true after
+        # *any* earlier failed step (e.g. Format), when clippy.txt does not
+        # exist and this step would bury the real failure under its own.
+        if: failure() && steps.clippy.outcome == 'failure'
         shell: bash
         run: |
           set +e

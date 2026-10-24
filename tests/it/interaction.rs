@@ -222,7 +222,8 @@ fn snap_at_zoom(world_per_px: f32, cursor: Vec2) -> SnappedCursor {
         grid.spacing = 1.0;
     }
     app.world_mut().insert_resource(CameraScale(world_per_px));
-    app.world_mut().insert_resource(CursorWorldPos(Some(cursor)));
+    app.world_mut()
+        .insert_resource(CursorWorldPos(Some(cursor)));
     let _ = app
         .world_mut()
         .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
@@ -235,7 +236,11 @@ fn zoomed_out_grid_snap_lands_on_the_drawn_adaptive_step() {
     // drawn every 2 m. Odd metres are invisible and must not attract.
     let snapped = snap_at_zoom(0.05, Vec2::new(3.1, 4.9));
     assert_eq!(snapped.kind, Some(SnapKind::Grid));
-    assert_eq!(snapped.position, Some(Vec2::new(4.0, 4.0)), "not the base (3, 5)");
+    assert_eq!(
+        snapped.position,
+        Some(Vec2::new(4.0, 4.0)),
+        "not the base (3, 5)"
+    );
 }
 
 #[test]

@@ -18,10 +18,8 @@ pub const GRID_MAX_SCREEN_STEP: f32 = 96.0;
 pub const CARTESIAN_LINE_DIRECTIONS: [Vec2; 2] = [Vec2::X, Vec2::Y];
 /// Unit directions (in the unrotated grid frame) of the two line families
 /// of an isometric grid: 30° and 150°.
-pub const ISOMETRIC_LINE_DIRECTIONS: [Vec2; 2] = [
-    Vec2::new(0.866_025_4, 0.5),
-    Vec2::new(-0.866_025_4, 0.5),
-];
+pub const ISOMETRIC_LINE_DIRECTIONS: [Vec2; 2] =
+    [Vec2::new(0.866_025_4, 0.5), Vec2::new(-0.866_025_4, 0.5)];
 
 /// The grid step actually in use at a given zoom: `base` scaled by a power
 /// of two so that the step measures between [`GRID_MIN_SCREEN_STEP`] and
@@ -258,7 +256,10 @@ mod tests {
                 assert_on_drawn_lines(q, origin, rotation, step, ISOMETRIC_LINE_DIRECTIONS);
                 let q = polar_snap(p, origin, rotation, step, 12);
                 let rings = (q - origin).length() / step;
-                assert!((rings - rings.round()).abs() < tolerance(rings), "polar {q}: {rings} rings");
+                assert!(
+                    (rings - rings.round()).abs() < tolerance(rings),
+                    "polar {q}: {rings} rings"
+                );
             }
             wpp *= 1.29;
         }
