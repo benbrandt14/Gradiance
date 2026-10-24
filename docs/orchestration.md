@@ -100,9 +100,11 @@ the per-package tests for crates they touched. The full
 `cargo test --workspace` is run **once**, at the end, as the gate. See the
 "Agent container" section of `CLAUDE.md` for disk recovery.
 
-CI is the authority, and it uses `@stable`, which is usually newer than the
-container's toolchain. Agent sessions **cannot download Actions logs**
-(403), so CI re-emits clippy diagnostics as annotations. To read a failure:
+CI is the authority. Its toolchain is pinned (`RUST_PIN` in `ci.yml`) to
+the version agent containers have, so local gates should match it; bumping
+the pin is an orchestrator-scheduled brief, never a side effect. Agent
+sessions **cannot download Actions logs** (403), so CI re-emits clippy
+diagnostics as annotations. To read a failure:
 
 ```sh
 gh api repos/benbrandt14/gradiance/commits/<branch>/check-runs \
@@ -171,6 +173,12 @@ decision note from Phase 1. These are the seams simulation planes consume.
 **Phase 6 — Testing & diagnostics.** `insta` golden + intent-replay
 snapshots, polygonize proptests, the diagnostics stack (audit section B).
 Some of this may be pulled earlier if a phase needs it; that's fine.
+
+**Recurring — toolchain bump.** Not a phase; a brief the orchestrator
+schedules at a phase gate when containers ship a newer rustc. Known debt for
+the next bump (found 2026-10 on a newer stable): a new lint against
+`assert!(x.is_empty())` / `assert!(!x.is_empty())` — ~21 single-line sites
+plus multi-line ones across the workspace. Bump `RUST_PIN`, fix in the same PR.
 
 **Deferred to the next planning stage** (not part of "roadmap complete"):
 `bevy_picking` interaction rework (audit D); dock and node-canvas layout
