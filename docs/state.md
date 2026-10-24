@@ -13,7 +13,8 @@ Last updated: 2026-10-24, Phase 1 (worker, brief 1-1).
   targets that sat off the drawn lines, draws the grid under perspective,
   guards a zero spacing, and fixes the CI annotate step (Format failures
   were reported as a missing `clippy.txt`). Local gates all green.
-  **Awaiting orchestrator review**, including two calls flagged in the
+  CI green (ci, coverage, coupling); ready for review. **Awaiting
+  orchestrator review**, including two calls flagged in the
   brief's Outcome: grid now drawn under perspective (vs. disabling snap
   there), and the isometric snap-target change.
 - **Next brief:** 1-2 major/minor lines — not yet written (orchestrator).
@@ -49,4 +50,7 @@ gate if nobody claims them.
   (~20 min); start it early.
 - The shallow clone tracks only `main`: after pushing a branch, add a fetch
   refspec for it, or the stop-hook reports "no remote branch".
+- `gh pr ready` / `gh pr merge --auto` use GraphQL and 403. The REST
+  routes work: `gh api -X POST repos/{o}/{r}/pulls/{n}/ccr/ready_for_review`
+  (also `…/ccr/convert_to_draft`, `PUT|DELETE …/ccr/auto_merge`).
 - Where `docs/agent-context.md` and `CLAUDE.md` disagree, `CLAUDE.md` wins.
