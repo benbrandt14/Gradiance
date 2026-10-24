@@ -225,7 +225,7 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
         .num_columns(2)
         .spacing([8.0, 2.0])
         .show(ui, |ui| {
-            changed |= drag_row(
+            changed |= widgets::labelled_drag(
                 ui,
                 "shrink",
                 &mut w.extent,
@@ -233,7 +233,7 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 0.05,
                 "make the overall bounding measure smaller",
             );
-            changed |= drag_row(
+            changed |= widgets::labelled_drag(
                 ui,
                 "fill",
                 &mut w.fill,
@@ -241,7 +241,7 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 0.05,
                 "drive the filled-area ÷ bounding-area ratio toward 1",
             );
-            changed |= drag_row(
+            changed |= widgets::labelled_drag(
                 ui,
                 "close gaps",
                 &mut w.gap,
@@ -249,7 +249,7 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 0.05,
                 "squeeze the leftover space between neighbours (negative pushes them apart)",
             );
-            changed |= drag_row(
+            changed |= widgets::labelled_drag(
                 ui,
                 "line up",
                 &mut w.parallel,
@@ -257,7 +257,7 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 0.05,
                 "reward edges pointing the same way — turns a dense pile into a tidy block",
             );
-            changed |= drag_row(
+            changed |= widgets::labelled_drag(
                 ui,
                 "contact",
                 &mut w.contact,
@@ -807,7 +807,7 @@ fn naive_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
         .num_columns(2)
         .spacing([8.0, 2.0])
         .show(ui, |ui| {
-            changed |= drag_row(
+            changed |= widgets::labelled_drag(
                 ui,
                 "separation",
                 &mut p.separation_gain,
@@ -815,7 +815,7 @@ fn naive_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 0.01,
                 "fraction of each overlap resolved per iteration",
             );
-            changed |= drag_row(
+            changed |= widgets::labelled_drag(
                 ui,
                 "attraction",
                 &mut p.attraction,
@@ -854,21 +854,4 @@ fn shelf_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     if changed {
         opt.config.shelf = p;
     }
-}
-
-/// One labelled `DragValue` row in a two-column grid.
-fn drag_row(
-    ui: &mut egui::Ui,
-    label: &str,
-    value: &mut f32,
-    range: std::ops::RangeInclusive<f32>,
-    speed: f32,
-    hover: &str,
-) -> bool {
-    ui.label(label).on_hover_text(hover);
-    let changed = ui
-        .add(egui::DragValue::new(value).speed(speed).range(range))
-        .changed();
-    ui.end_row();
-    changed
 }

@@ -79,6 +79,14 @@ pub fn body_count(app: &mut App) -> usize {
         .count()
 }
 
+/// Authored joints in the world — the observable for the joint verbs.
+pub fn joint_count(app: &mut App) -> usize {
+    app.world_mut()
+        .query_filtered::<Entity, With<gradiance::domain::Joint>>()
+        .iter(app.world())
+        .count()
+}
+
 /// Resolves a stable id to its live entity via the `IdIndex`.
 pub fn entity_of(app: &App, id: StableId) -> Option<Entity> {
     app.world().resource::<IdIndex>().entity(id)

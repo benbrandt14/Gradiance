@@ -175,7 +175,8 @@ they did before the split.
 - **`ShapeDef`** — the SDF tree above. Polygon vertices are centroid-relative at
   authoring time (CSG may leave the origin off-centroid).
 - **Joints** — `JointDef` references two bodies by `StableId` with local
-  anchors + rest rotations. `JointKind ∈ {Hinge, Weld, Slider, Spring}`; the
+  anchors + rest rotations. `JointKind ∈ {Hinge, Slider, Spring}` (there is no weld *joint* — welding is
+  `merge` into one CSG body, or make-static); the
   physics seam derives the avian joint via `Changed<>`. `Spring` (the **strut**
   tool) maps to avian's `DistanceJoint` + `JointDamping`: `rest_length`,
   `stiffness`, `damping`, optional `range` clamp; drawn as a non-colliding coil

@@ -38,13 +38,20 @@
 
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
+use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use gradiance_command::CommandDispatchSet;
-use gradiance_command::intent::{CutIntent, SpawnBodyIntent};
+use gradiance_command::intent::{
+    CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent, MergeIntent,
+    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
+    TransformChange, UndoIntent,
+};
+use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
+use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::settings::SimSettings;
 use gradiance_domain::shape::ShapeDef;
@@ -116,6 +123,13 @@ struct Shared {
     /// Workspace labels emitted by `label` → the [`WorkspaceLabels`] table
     /// (body-handle uuid string + display name).
     labels: Arc<Mutex<Vec<(String, String)>>>,
+    /// Panel visibility requests emitted by `panel-show`/`-hide`/`-toggle` →
+    /// the [`PanelRequests`] queue the UI drains. `None` means "flip it".
+    panel_requests: Arc<Mutex<Vec<(String, Option<bool>)>>>,
+    /// Read mirror of which panels are open → `panel-open?`. Published by the
+    /// UI each frame, because panel state lives in `gradiance-ui` and the
+    /// script layer sits below it.
+    panel_states: Arc<Mutex<HashMap<String, bool>>>,
     /// The operation catalog → the `ops`/`describe` meta verbs.
     catalog: Arc<OperationCatalog>,
 }
@@ -132,6 +146,8 @@ impl Shared {
             signal_values: Arc::new(Mutex::new(HashMap::new())),
             signal_defs: Arc::new(Mutex::new(Vec::new())),
             labels: Arc::new(Mutex::new(Vec::new())),
+            panel_requests: Arc::new(Mutex::new(Vec::new())),
+            panel_states: Arc::new(Mutex::new(HashMap::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
         }
     }
@@ -346,8 +362,51 @@ impl ScriptActions {
     }
 }
 
+/// Panel visibility changes a script asked for, drained by the UI.
+///
+/// The UI owns panel state (`gradiance-ui` is above `gradiance-script` in the
+/// layer graph), so a verb cannot write it directly — nor should it, since that
+/// is the same **`EditorState`** seam the View menu uses. The script queues a
+/// request by name; the UI applies it through
+/// `panels::PanelToggle::set_open`, exactly as a menu click does. That is what
+/// makes "a menu item is a registered op" true rather than aspirational.
+///
+/// An unknown name is reported once and dropped — a typo should say so, not
+/// fail silently and not abort the run.
+#[derive(Resource, Default, Debug)]
+pub struct PanelRequests(pub Vec<PanelRequest>);
+
+/// One queued panel change: the panel's name, and what to do to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelRequest {
+    /// The panel's script-facing name (lower-case, e.g. `"properties"`).
+    pub name: String,
+    /// `Some(true)` show, `Some(false)` hide, `None` flip.
+    pub shown: Option<bool>,
+}
+
+/// Which panels are currently open, published by the UI for `panel-open?`.
+///
+/// Reads are total, so a script may ask about any panel; the mirror is how a
+/// *read* crosses the layer boundary the other way. Rebuilt each frame, never
+/// persisted.
+#[derive(Resource, Default, Debug)]
+pub struct PanelStates(pub Vec<(String, bool)>);
+
 /// One body in a [`SceneView`] snapshot (world pose + authored shape).
 struct BodyView {
+    /// Durable identity — what an edit verb names as its target. Raw `Entity`
+    /// is never cross-referenced (invariant 3), and the snapshot outlives the
+    /// frame it was taken in, so the id is the only safe handle here.
+    id: StableId,
+    /// Authored physics — the *old* half of a property edit.
+    ///
+    /// `PropertyChange` carries both ends so it can reverse itself, and the
+    /// script layer has no live World access at verb time (the VM runs inside
+    /// one exclusive system, reading this snapshot). So the values a
+    /// `set-*` verb might change have to be *in* the snapshot; they double as
+    /// the `body-friction`-style reads, which is the read-total half.
+    physics: BodyPhysics,
     pos: Vec2,
     rot: f32,
     shape: ShapeDef,
@@ -371,6 +430,10 @@ impl BodyView {
 #[derive(Default)]
 pub struct SceneView {
     bodies: Vec<BodyView>,
+    /// The committed scene's joints, in `StableId` order. Ids rather than a
+    /// count so `delete-joint` can name one, using the same index vocabulary
+    /// the body verbs use.
+    joints: Vec<StableId>,
 }
 
 impl SceneView {
@@ -392,6 +455,41 @@ impl SceneView {
     /// Rotation (radians) of the `i`-th body, or NaN if out of range.
     fn rot(&self, i: usize) -> f64 {
         self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.rot))
+    }
+
+    /// Identity of the `i`-th body — the target an edit verb names.
+    fn id(&self, i: usize) -> Option<StableId> {
+        self.bodies.get(i).map(|b| b.id)
+    }
+
+    /// Identity **and pose** of the `i`-th body. Joint anchors are authored in
+    /// each body's *local* space, so a verb that places one needs the pose to
+    /// convert, exactly as the connector tool does.
+    fn body(&self, i: usize) -> Option<(StableId, PosRot)> {
+        self.bodies.get(i).map(|b| {
+            (
+                b.id,
+                PosRot {
+                    pos: b.pos,
+                    rot: b.rot,
+                },
+            )
+        })
+    }
+
+    /// Number of authored joints.
+    fn joint_count(&self) -> f64 {
+        self.joints.len() as f64
+    }
+
+    /// Identity of the `i`-th joint.
+    fn joint_id(&self, i: usize) -> Option<StableId> {
+        self.joints.get(i).copied()
+    }
+
+    /// The authored physics of the `i`-th body.
+    fn physics(&self, i: usize) -> Option<&BodyPhysics> {
+        self.bodies.get(i).map(|b| &b.physics)
     }
 
     /// How many bodies contain the world point `p`.
@@ -450,20 +548,55 @@ fn snapshot_scene(world: &mut World) -> SceneView {
             }
         }
     }
-    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize)> = world
-        .query_filtered::<(Entity, &StableId, &Transform, &ShapeDef), With<Body>>()
+    // Authored physics is spread across avian components (that is the
+    // de-adapter collapse — `docs/physics-deadapter-decision.md`), so the
+    // snapshot re-gathers them into the `BodyPhysics` bundle the records use.
+    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize, BodyPhysics)> = world
+        .query_filtered::<(
+            Entity,
+            &StableId,
+            &Transform,
+            &ShapeDef,
+            Option<&avian2d::prelude::RigidBody>,
+            Option<&avian2d::prelude::Friction>,
+            Option<&avian2d::prelude::Restitution>,
+            Option<&avian2d::prelude::ColliderDensity>,
+        ), With<Body>>()
         .iter(world)
-        .map(|(entity, id, transform, shape)| {
-            let pose = PosRot::from_transform(transform);
-            let touching = touch.get(&entity).copied().unwrap_or(0);
-            (*id, pose.pos, pose.rot, shape.clone(), touching)
-        })
+        .map(
+            |(entity, id, transform, shape, rigid_body, friction, restitution, density)| {
+                let pose = PosRot::from_transform(transform);
+                let touching = touch.get(&entity).copied().unwrap_or(0);
+                // The components are `Option` so that a body missing one is
+                // still *in* the snapshot: making them required would silently
+                // drop it from `body-count` and every index after it, which is
+                // a far worse failure than reading a default.
+                let defaults = BodyPhysics::default();
+                let physics = BodyPhysics {
+                    rigid_body: rigid_body.copied().unwrap_or(defaults.rigid_body),
+                    friction: friction.copied().unwrap_or(defaults.friction),
+                    restitution: restitution.copied().unwrap_or(defaults.restitution),
+                    density: density.copied().unwrap_or(defaults.density),
+                    ..defaults
+                };
+                (*id, pose.pos, pose.rot, shape.clone(), touching, physics)
+            },
+        )
         .collect();
     rows.sort_by_key(|(id, ..)| id.0);
+    let mut joints: Vec<StableId> = world
+        .query_filtered::<&StableId, With<gradiance_domain::Joint>>()
+        .iter(world)
+        .copied()
+        .collect();
+    joints.sort_by_key(|id| id.0);
     SceneView {
+        joints,
         bodies: rows
             .into_iter()
-            .map(|(_, pos, rot, shape, touching)| BodyView {
+            .map(|(id, pos, rot, shape, touching, physics)| BodyView {
+                id,
+                physics,
                 pos,
                 rot,
                 shape,
@@ -541,6 +674,20 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_CIRCLE),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_GROUND),
+        EditBinding::new::<DeleteIntent>(name::DELETE),
+        EditBinding::new::<UndoIntent>(name::UNDO),
+        EditBinding::new::<RedoIntent>(name::REDO),
+        EditBinding::new::<SpawnJointIntent>(name::HINGE),
+        EditBinding::new::<SpawnJointIntent>(name::SLIDER),
+        EditBinding::new::<SpawnJointIntent>(name::SPRING),
+        EditBinding::new::<CommitTransformIntent>(name::PLACE),
+        EditBinding::new::<PropertyEditIntent>(name::SET_FRICTION),
+        EditBinding::new::<PropertyEditIntent>(name::SET_RESTITUTION),
+        EditBinding::new::<PropertyEditIntent>(name::SET_DENSITY),
+        EditBinding::new::<PropertyEditIntent>(name::SET_STATIC),
+        EditBinding::new::<ScaleIntent>(name::SCALE),
+        EditBinding::new::<MergeIntent>(name::MERGE),
+        EditBinding::new::<DeleteJointIntent>(name::DELETE_JOINT),
     ]
 }
 
@@ -643,9 +790,13 @@ fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
 /// call in [`ScriptPlugin`].
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_edit_verbs(engine, &shared.ops);
+    register_lifecycle_verbs(engine, &shared.ops, &shared.view);
+    register_joint_verbs(engine, &shared.ops, &shared.view);
+    register_property_verbs(engine, &shared.ops, &shared.view);
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
+    register_panel_verbs(engine, &shared.panel_requests, &shared.panel_states);
     register_signal_verbs(
         engine,
         &shared.signal_writes,
@@ -739,6 +890,11 @@ fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
     let v = Arc::clone(view);
     engine.register_fn(name::BODY_COUNT, move || -> f64 {
         v.lock().map_or(f64::NAN, |view| view.count())
+    });
+
+    let v = Arc::clone(view);
+    engine.register_fn(name::JOINT_COUNT, move || -> f64 {
+        v.lock().map_or(f64::NAN, |view| view.joint_count())
     });
 
     let v = Arc::clone(view);
@@ -863,6 +1019,450 @@ fn register_editor_verbs(
     });
 }
 
+/// Panel verbs — the script side of the View menu.
+///
+/// Three writes (`panel-show`, `panel-hide`, `panel-toggle`) queue a request
+/// the UI drains; one read (`panel-open?`) consults the mirror the UI
+/// publishes. No verb touches panel state directly: the layer graph forbids it,
+/// and the `EditorState` seam is the point.
+fn register_panel_verbs(
+    engine: &mut Engine,
+    requests: &Arc<Mutex<Vec<(String, Option<bool>)>>>,
+    states: &Arc<Mutex<HashMap<String, bool>>>,
+) {
+    for (verb, shown) in [
+        (name::PANEL_SHOW, Some(true)),
+        (name::PANEL_HIDE, Some(false)),
+        (name::PANEL_TOGGLE, None),
+    ] {
+        let q = Arc::clone(requests);
+        engine.register_fn(verb, move |panel: String| {
+            if let Ok(mut queue) = q.lock() {
+                queue.push((panel, shown));
+            }
+        });
+    }
+
+    let m = Arc::clone(states);
+    engine.register_fn(name::PANEL_OPEN, move |panel: String| -> bool {
+        m.lock()
+            .ok()
+            .and_then(|states| states.get(panel.trim()).copied())
+            .unwrap_or(false)
+    });
+}
+
+/// Verbs over **existing** bodies — the history ops and the edits that move or
+/// remove something already authored.
+///
+/// Split from [`register_edit_verbs`] (which authors *new* geometry) because
+/// these all share one property: they name their target by index against the
+/// run's snapshot, and they need the *old* value to be reversible.
+fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // `(undo)` / `(redo)` — the history ops, the same steps Edit ▸ Undo/Redo
+    // take. No arguments and no targets: the stack knows what it did.
+    let undo_ops = Arc::clone(ops);
+    engine.register_fn(name::UNDO, move || {
+        emit(&undo_ops, Box::new(UndoIntent));
+    });
+    let redo_ops = Arc::clone(ops);
+    engine.register_fn(name::REDO, move || {
+        emit(&redo_ops, Box::new(RedoIntent));
+    });
+
+    // `(delete i)` — remove the i-th body, by the same index order as
+    // `body-x`/`body-y`. Indexed rather than selection-scoped: the selection
+    // lives in `gradiance-interaction`, which sits *above* this layer, and a
+    // script acting on "whatever happens to be selected" would be fragile
+    // anyway. `i` is resolved against the run's snapshot, so a delete composes
+    // with the reads above it in the same script.
+    let delete_ops = Arc::clone(ops);
+    let delete_view = Arc::clone(view);
+    engine.register_fn(name::DELETE, move |i: SteelVal| {
+        if let Some([i]) = nums([&i])
+            && i >= 0.0
+            && let Ok(view) = delete_view.lock()
+            && let Some(id) = view.id(i as usize)
+        {
+            emit(&delete_ops, Box::new(DeleteIntent { targets: vec![id] }));
+        }
+    });
+
+    // `(scale i fx fy)` — resize about the body's own centre, along its own
+    // axes. Local axes rather than global: "twice as wide" means along the
+    // body's width, and a global-axis scale of a rotated box would shear it
+    // into a polygon (`geometry::scale` handles that, but it is not what the
+    // caller meant).
+    let scale_ops = Arc::clone(ops);
+    let scale_view = Arc::clone(view);
+    engine.register_fn(
+        name::SCALE,
+        move |i: SteelVal, fx: SteelVal, fy: SteelVal| {
+            if let Some([i, fx, fy]) = nums([&i, &fx, &fy])
+                && i >= 0.0
+                // A zero or negative factor would collapse or mirror the body;
+                // neither is a resize, and zero is unrecoverable.
+                && fx > 0.0
+                && fy > 0.0
+                && let Ok(view) = scale_view.lock()
+                && let Some((id, pose)) = view.body(i as usize)
+            {
+                emit(
+                    &scale_ops,
+                    Box::new(ScaleIntent {
+                        targets: vec![id],
+                        pivot: pose.pos,
+                        frame_rot: pose.rot,
+                        factors: Vec2::new(fx as f32, fy as f32),
+                    }),
+                );
+            }
+        },
+    );
+
+    // `(merge a b)` — one CSG union; `a` survives carrying both shapes. This is
+    // what "weld" means in this engine (there is no weld joint).
+    let merge_ops = Arc::clone(ops);
+    let merge_view = Arc::clone(view);
+    engine.register_fn(name::MERGE, move |a: SteelVal, b: SteelVal| {
+        if let Some([a, b]) = nums([&a, &b])
+            && a >= 0.0
+            && b >= 0.0
+            && let Ok(view) = merge_view.lock()
+            && let (Some(id_a), Some(id_b)) = (view.id(a as usize), view.id(b as usize))
+            // Merging a body with itself would ask the command to fuse one
+            // body into one body — a no-op that still costs an undo step.
+            && id_a != id_b
+        {
+            emit(
+                &merge_ops,
+                Box::new(MergeIntent {
+                    targets: vec![id_a, id_b],
+                }),
+            );
+        }
+    });
+
+    // `(delete-joint i)` — unmake a relationship. Without this a script could
+    // create constraints and only undo them wholesale.
+    let unjoin_ops = Arc::clone(ops);
+    let unjoin_view = Arc::clone(view);
+    engine.register_fn(name::DELETE_JOINT, move |i: SteelVal| {
+        if let Some([i]) = nums([&i])
+            && i >= 0.0
+            && let Ok(view) = unjoin_view.lock()
+            && let Some(id) = view.joint_id(i as usize)
+        {
+            emit(&unjoin_ops, Box::new(DeleteJointIntent { id }));
+        }
+    });
+
+    // `(place i x y angle)` — move and rotate the i-th body. The *old* pose
+    // comes from the run's snapshot, which is what makes this one undoable
+    // step rather than a teleport: `CommitTransformCommand` needs both ends of
+    // the move to be able to reverse it.
+    let place_ops = Arc::clone(ops);
+    let place_view = Arc::clone(view);
+    engine.register_fn(
+        name::PLACE,
+        move |i: SteelVal, x: SteelVal, y: SteelVal, angle: SteelVal| {
+            if let Some([i, x, y, angle]) = nums([&i, &x, &y, &angle])
+                && i >= 0.0
+                && let Ok(view) = place_view.lock()
+                && let Some((id, old)) = view.body(i as usize)
+            {
+                let new = PosRot {
+                    pos: Vec2::new(x as f32, y as f32),
+                    rot: angle as f32,
+                };
+                // A move to where the body already is is not an edit; emitting
+                // it would put an empty step on the undo stack.
+                if new != old {
+                    emit(
+                        &place_ops,
+                        Box::new(CommitTransformIntent {
+                            changes: vec![TransformChange { id, old, new }],
+                        }),
+                    );
+                }
+            }
+        },
+    );
+}
+
+/// Body-property verbs — the inspector's fields as ops.
+///
+/// Every one is a [`PropertyEditIntent`], the same seam the inspector's
+/// `precise_drag` rows commit through, so a scripted change is one undo step
+/// and lands in the save file identically to a hand edit.
+///
+/// The reads are the other half and are deliberately symmetric: `set-friction`
+/// and `body-friction` name the same quantity, so a script can round-trip a
+/// value it did not author. Reads are total; writes are seam-mediated.
+fn register_property_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // Writes. Each closure turns the new scalar into the `PropertyValue` pair
+    // the command needs, reading `old` out of the snapshot.
+    for (verb, build) in [
+        (
+            name::SET_FRICTION,
+            (|physics: &BodyPhysics, v: f64| {
+                let old = PropertyValue::Friction(physics.friction);
+                let new = PropertyValue::Friction(Friction {
+                    // Both coefficients move together, as the inspector does:
+                    // authoring two numbers that are almost always equal is
+                    // friction the UI deliberately does not expose.
+                    dynamic_coefficient: v as f32,
+                    static_coefficient: v as f32,
+                    ..physics.friction
+                });
+                (old, new)
+            }) as fn(&BodyPhysics, f64) -> (PropertyValue, PropertyValue),
+        ),
+        (name::SET_RESTITUTION, |physics: &BodyPhysics, v: f64| {
+            let old = PropertyValue::Restitution(physics.restitution);
+            let new = PropertyValue::Restitution(Restitution {
+                coefficient: v as f32,
+                ..physics.restitution
+            });
+            (old, new)
+        }),
+        (name::SET_DENSITY, |physics: &BodyPhysics, v: f64| {
+            let old = PropertyValue::Density(physics.density);
+            let new = PropertyValue::Density(ColliderDensity(v as f32));
+            (old, new)
+        }),
+        (name::SET_STATIC, |physics: &BodyPhysics, v: f64| {
+            let old = PropertyValue::RigidBody(physics.rigid_body);
+            // Non-zero = static; anything else returns the body to dynamic, so
+            // the verb is a toggle with an explicit argument rather than two
+            // verbs that can disagree.
+            let new = PropertyValue::RigidBody(if v == 0.0 {
+                RigidBody::Dynamic
+            } else {
+                RigidBody::Static
+            });
+            (old, new)
+        }),
+    ] {
+        let prop_ops = Arc::clone(ops);
+        let prop_view = Arc::clone(view);
+        engine.register_fn(verb, move |i: SteelVal, v: SteelVal| {
+            if let Some([i, v]) = nums([&i, &v])
+                && i >= 0.0
+                && let Ok(view) = prop_view.lock()
+                && let Some(id) = view.id(i as usize)
+                && let Some(physics) = view.physics(i as usize)
+            {
+                let (old, new) = build(physics, v);
+                // Setting a value to what it already is would be an empty undo
+                // step — the same guard `place` has.
+                if old != new {
+                    emit(
+                        &prop_ops,
+                        Box::new(PropertyEditIntent {
+                            changes: vec![PropertyChange { id, old, new }],
+                        }),
+                    );
+                }
+            }
+        });
+    }
+
+    // Reads — the same quantities, so a script can inspect before it edits.
+    for (verb, read) in [
+        (
+            name::BODY_FRICTION,
+            (|p: &BodyPhysics| f64::from(p.friction.dynamic_coefficient))
+                as fn(&BodyPhysics) -> f64,
+        ),
+        (name::BODY_RESTITUTION, |p: &BodyPhysics| {
+            f64::from(p.restitution.coefficient)
+        }),
+        (name::BODY_DENSITY, |p: &BodyPhysics| f64::from(p.density.0)),
+        (name::BODY_STATIC, |p: &BodyPhysics| {
+            f64::from(u8::from(p.rigid_body == RigidBody::Static))
+        }),
+    ] {
+        let v = Arc::clone(view);
+        engine.register_fn(verb, move |i: SteelVal| -> f64 {
+            match (v.lock(), index_arg(&i)) {
+                (Ok(view), Some(i)) => view.physics(i).map_or(f64::NAN, read),
+                _ => f64::NAN,
+            }
+        });
+    }
+}
+
+/// Joint verbs — **relationships** between bodies, the half of the scene model
+/// a script could not touch at all before.
+///
+/// A joint's anchors are authored in each body's *local* space and its
+/// `rest_rot_*` capture the bodies' orientations at creation (welds hold that
+/// relative angle, sliders lock rotation to it, hinge limits measure from it).
+/// Getting that wrong makes joints between rotated bodies snap violently at
+/// spawn, so these verbs do exactly what `interaction::tools::connector_tool`
+/// does — [`joint_def`] is the one place the conversion lives.
+///
+/// Bodies are named by index, like every other edit verb, and `b < 0` means
+/// "pin to the world" — the same one-body case the tools produce by clicking
+/// where only one body sits.
+fn register_joint_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // `(hinge a b x y)` — revolute joint at a world point.
+    let hinge_ops = Arc::clone(ops);
+    let hinge_view = Arc::clone(view);
+    engine.register_fn(
+        name::HINGE,
+        move |a: SteelVal, b: SteelVal, x: SteelVal, y: SteelVal| -> String {
+            let Some([a, b, x, y]) = nums([&a, &b, &x, &y]) else {
+                return String::new();
+            };
+            let kind = JointKind::Hinge {
+                limits: None,
+                motor: None,
+            };
+            spawn_joint(
+                &hinge_ops,
+                &hinge_view,
+                a,
+                b,
+                Vec2::new(x as f32, y as f32),
+                kind,
+                false,
+            )
+        },
+    );
+
+    // `(slider a b x y ax ay)` — prismatic joint sliding along a world axis.
+    // The axis is stored body-A local, so it rotates with the body.
+    let slider_ops = Arc::clone(ops);
+    let slider_view = Arc::clone(view);
+    engine.register_fn(
+        name::SLIDER,
+        move |a: SteelVal,
+              b: SteelVal,
+              x: SteelVal,
+              y: SteelVal,
+              ax: SteelVal,
+              ay: SteelVal|
+              -> String {
+            let Some([a, b, x, y, ax, ay]) = nums([&a, &b, &x, &y, &ax, &ay]) else {
+                return String::new();
+            };
+            let world_axis = Vec2::new(ax as f32, ay as f32);
+            // A zero-length axis has no direction to slide along; fall back to
+            // body-A's local X, which is what a too-short tool drag does.
+            let anchor = Vec2::new(x as f32, y as f32);
+            let Some((_, pose_a)) = slider_view.lock().ok().and_then(|v| v.body(a as usize)) else {
+                return String::new();
+            };
+            let world_axis = if world_axis.length() < 1e-6 {
+                Vec2::from_angle(pose_a.rot)
+            } else {
+                world_axis.normalize()
+            };
+            let kind = JointKind::Slider {
+                axis: Vec2::from_angle(-pose_a.rot).rotate(world_axis),
+                limits: None,
+                motor: None,
+            };
+            spawn_joint(&slider_ops, &slider_view, a, b, anchor, kind, false)
+        },
+    );
+
+    // `(spring a b stiffness damping)` — a strut between the two bodies'
+    // centres. Unlike the tool, which sizes stiffness from the connected mass,
+    // a script states it: a fixture that depends on a mass heuristic is not
+    // reproducible when the shape changes.
+    let spring_ops = Arc::clone(ops);
+    let spring_view = Arc::clone(view);
+    engine.register_fn(
+        name::SPRING,
+        move |a: SteelVal, b: SteelVal, stiffness: SteelVal, damping: SteelVal| -> String {
+            let Some([a, b, stiffness, damping]) = nums([&a, &b, &stiffness, &damping]) else {
+                return String::new();
+            };
+            let Ok(view) = spring_view.lock() else {
+                return String::new();
+            };
+            let Some((_, pose_a)) = view.body(a as usize) else {
+                return String::new();
+            };
+            // Rest length is the *current* separation, so the strut starts
+            // relaxed — the same thing the tool's drag length means.
+            let far = (b >= 0.0).then(|| view.body(b as usize)).flatten();
+            let rest_length = far.map_or(0.0, |(_, pose_b)| pose_a.pos.distance(pose_b.pos));
+            drop(view);
+            let kind = JointKind::Spring {
+                rest_length,
+                stiffness: stiffness as f32,
+                damping: damping as f32,
+                range: None,
+            };
+            // Anchored at body A's centre; `spawn_joint` puts B's anchor at
+            // B's centre because that is where the anchor point resolves to.
+            let anchor = pose_a.pos;
+            // Struts collide by default (the tool's convention), so a spring
+            // between neighbours does not make them pass through each other.
+            spawn_joint(&spring_ops, &spring_view, a, b, anchor, kind, true)
+        },
+    );
+}
+
+/// Builds and emits one [`SpawnJointIntent`], returning the joint's handle (or
+/// an empty string when a body index does not resolve).
+///
+/// `anchor` is a **world** point; it is converted into each body's local frame
+/// here — the single place that conversion happens on the script side.
+fn spawn_joint(
+    ops: &OpQueue,
+    view: &SharedView,
+    a: f64,
+    b: f64,
+    anchor: Vec2,
+    kind: JointKind,
+    collide_connected: bool,
+) -> String {
+    if a < 0.0 {
+        return String::new();
+    }
+    let Ok(view) = view.lock() else {
+        return String::new();
+    };
+    let Some((id_a, pose_a)) = view.body(a as usize) else {
+        return String::new();
+    };
+    let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
+    let mut def = JointDef {
+        kind,
+        common: JointCommon { collide_connected },
+        body_a: id_a,
+        body_b: None,
+        // For a world pin the far anchor is the world point itself.
+        anchor_b: anchor,
+        anchor_a: to_local(pose_a, anchor),
+        rest_rot_a: pose_a.rot,
+        rest_rot_b: 0.0,
+    };
+    // `b < 0` is the world pin; otherwise resolve the second body. An index
+    // that does not resolve degrades to a world pin rather than dropping the
+    // joint, so a typo is visible in the scene instead of silent.
+    if b >= 0.0
+        && let Some((id_b, pose_b)) = view.body(b as usize)
+        && id_b != id_a
+    {
+        def.body_b = Some(id_b);
+        def.anchor_b = to_local(pose_b, anchor);
+        def.rest_rot_b = pose_b.rot;
+    }
+    let record = gradiance_scene::JointRecord {
+        id: StableId::new(),
+        def,
+    };
+    let handle = record.id.0.to_string();
+    emit(ops, Box::new(SpawnJointIntent { record }));
+    handle
+}
+
 /// Signal-dataflow verbs — the script side of the signal bus
 /// (`docs/signal-dataflow.md`). `signal-set` queues a named publish (the
 /// exclusive system moves it onto the `SignalBus`); `signal-get` reads the
@@ -977,6 +1577,7 @@ pub fn run_scripts(world: &mut World) {
         *guard = settings;
     }
     refresh_signal_mirror(world);
+    refresh_panel_mirror(world);
 
     for source in sources {
         // NonSend: the VM lives on the main thread (this exclusive system is
@@ -1048,6 +1649,7 @@ pub fn run_scripts(world: &mut World) {
 
     drain_labels(world);
     drain_actions(world);
+    drain_panel_requests(world);
     drain_signal_publishes(world);
     drain_signal_defs(world);
 }
@@ -1075,6 +1677,50 @@ fn drain_labels(world: &mut World) {
             } else {
                 warn!("(label …): `{handle}` is not a body handle");
             }
+        }
+    }
+}
+
+/// Moves queued panel requests onto the [`PanelRequests`] resource for the UI
+/// to apply. Appends rather than replaces: two scripts in one frame both get
+/// their say, and the UI clears the queue when it drains it.
+fn drain_panel_requests(world: &mut World) {
+    let requests: Vec<(String, Option<bool>)> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .panel_requests
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if !requests.is_empty()
+        && let Some(mut queue) = world.get_resource_mut::<PanelRequests>()
+    {
+        queue
+            .0
+            .extend(requests.into_iter().map(|(name, shown)| PanelRequest {
+                name: name.trim().to_lowercase(),
+                shown,
+            }));
+    }
+}
+
+/// Mirrors [`PanelStates`] into the `panel-open?` read snapshot (part of the
+/// per-run read refresh).
+fn refresh_panel_mirror(world: &mut World) {
+    if let (Some(mirror), Some(states)) = (
+        world
+            .get_non_send::<ScriptEngine>()
+            .map(|engine| Arc::clone(&engine.shared.panel_states)),
+        world.get_resource::<PanelStates>(),
+    ) && let Ok(mut mirror) = mirror.lock()
+    {
+        mirror.clear();
+        for (name, open) in &states.0 {
+            mirror.insert(name.clone(), *open);
         }
     }
 }
@@ -1207,6 +1853,8 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptLog>();
         app.init_resource::<OperationRegistry>();
         app.init_resource::<ScriptActions>();
+        app.init_resource::<PanelRequests>();
+        app.init_resource::<PanelStates>();
         app.init_resource::<WorkspaceLabels>();
         app.init_resource::<StartupScripts>();
         app.init_resource::<ScriptWatch>();
