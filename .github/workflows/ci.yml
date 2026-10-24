@@ -62,7 +62,23 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        # Short-format diagnostics are teed to a file so the step below can
+        # re-emit them as annotations: agent sessions cannot download Actions
+        # logs (403), but they can read annotations through the REST API
+        # (`gh api repos/{o}/{r}/check-runs/{id}/annotations`). Same gate,
+        # same exit code — only the reporting changes.
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked --workspace --all-targets --message-format=short -- -D warnings 2>&1 | tee clippy.txt
+
+      - name: Annotate clippy failures
+        if: failure()
+        shell: bash
+        run: |
+          grep -E '^[^ ]+:[0-9]+:[0-9]+: (error|warning)' clippy.txt | head -40 | while IFS= read -r line; do
+            echo "::error::${line//$'\n'/ }"
+          done
 
       - name: Architecture boundaries (crate DAG, confinement, pins)
         run: cargo test --locked --test boundaries
