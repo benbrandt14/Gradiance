@@ -283,8 +283,8 @@ mod tests {
         let step = adaptive_step(1.0, 0.05).expect("valid base");
         assert!((step - 2.0).abs() < f32::EPSILON);
         let q = cartesian_snap(Vec2::new(3.1, 0.0), Vec2::ZERO, 0.0, step);
-        assert_ne!(q.x, 3.0);
-        assert!((q.x / 2.0 - (q.x / 2.0).round()).abs() < 1e-5);
+        // 4 m, the nearest drawn line; not 3 m, the nearest base line.
+        assert!((q.x - 4.0).abs() < 1e-5, "{q}");
     }
 
     #[test]

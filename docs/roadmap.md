@@ -244,7 +244,9 @@ missing foundation:**
 ## M18 — Grids & snapping (CAD pass)
 
 - Major/minor grid lines; snap points provably on the grid at every
-  adaptive zoom level (3.3, 2.5)
+  adaptive zoom level (3.3, 2.5) — *snap half landed (brief 1-1):
+  `geometry::snapping::adaptive_step` is the one step renderer and snapper
+  share; major/minor styling is brief 1-2.*
 - Axis-lock basis follows the active grid system (2.5)
 - Light collinear/centerline snapping while dragging ("lightweight
   assemblies") — configurable in the snapping menu (3.1)
