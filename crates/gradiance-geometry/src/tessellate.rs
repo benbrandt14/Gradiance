@@ -24,12 +24,14 @@ impl Triangulation {
     #[cfg(test)]
     pub(crate) fn area(&self) -> f32 {
         self.indices
-            .chunks_exact(3)
-            .map(|t| {
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|&[i, j, k]| {
                 let (a, b, c) = (
-                    self.vertices[t[0] as usize],
-                    self.vertices[t[1] as usize],
-                    self.vertices[t[2] as usize],
+                    self.vertices[i as usize],
+                    self.vertices[j as usize],
+                    self.vertices[k as usize],
                 );
                 (b - a).perp_dot(c - a) / 2.0
             })

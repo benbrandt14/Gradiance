@@ -43,9 +43,9 @@ pub fn extrude_contours(contours: &Contours, z_front: f32, depth: f32) -> MeshBu
         mesh.positions.push([v.x, v.y, z_back]);
         mesh.normals.push([0.0, 0.0, -1.0]);
     }
-    for t in cap.indices.chunks_exact(3) {
+    for &[a, b, c] in cap.indices.as_chunks::<3>().0 {
         mesh.indices
-            .extend([back_base + t[0], back_base + t[2], back_base + t[1]]);
+            .extend([back_base + a, back_base + c, back_base + b]);
     }
     let _ = front_base;
 
