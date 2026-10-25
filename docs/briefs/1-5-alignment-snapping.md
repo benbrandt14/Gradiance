@@ -159,3 +159,7 @@ references would need to be published into the context by the driver.
 Gates: fmt, clippy `--workspace --all-targets -D warnings`, doc
 `-D warnings`, `-p gradiance-geometry/-domain/-interaction`, and the full
 `tests/it` binary (243 passed) green locally; rustc 1.97.0 = `RUST_PIN`.
+The local `cargo test --workspace` ran every unit/integration binary
+green but filled the disk while linking doctests (`ld` failure on the
+untouched `gradiance-core` doctest at 490 MB free); the workspace gate,
+doctests and `tests/boundaries.rs` are left to CI.
