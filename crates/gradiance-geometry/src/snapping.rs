@@ -72,6 +72,8 @@ pub fn adaptive_step(base: f32, world_per_px: f32) -> Option<f32> {
 /// majors appear elsewhere. Four, not eight, keeps several majors on
 /// screen: minors span 24–96 px, so majors span 96–384 px.
 pub const GRID_MAJOR_EVERY: i32 = 4;
+// The nesting argument above needs a power of two greater than one.
+const _: () = assert!(GRID_MAJOR_EVERY > 1 && GRID_MAJOR_EVERY.count_ones() == 1);
 
 /// The major-line interval for a grid drawn at `minor_step` (an
 /// [`adaptive_step`] result): `minor_step · GRID_MAJOR_EVERY`, so still
@@ -332,8 +334,6 @@ mod tests {
     /// renderer classifies major sits at a whole multiple of it.
     #[test]
     fn major_lines_sit_on_a_power_of_two_multiple_of_base() {
-        assert!(GRID_MAJOR_EVERY > 1);
-        assert_eq!(GRID_MAJOR_EVERY.count_ones(), 1, "ratio must be 2^m");
         for base in [0.01_f32, 0.25, 1.0, 100.0] {
             let mut wpp = 1e-4_f32;
             while wpp < 1e2 {
