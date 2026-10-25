@@ -1,33 +1,27 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-10-25, Phase 1 (orchestrator, briefs 1-2..1-4 reviewed).
+Last updated: 2026-10-25, Phase 1 (orchestrator, after #213–#215 merged).
 
 ## Position
 
 - **Phase:** 1 — M18 grids & snapping (`docs/orchestration.md` § The plan).
-- **main:** `5bb18b7` — PR #212 (brief 1-1, adaptive snap) merged. Both
-  orchestrator calls in its Outcome accepted: the grid draws under
-  perspective, and isometric snaps to drawn-line intersections.
-- **Reviewed, ready, awaiting merge by the owner** (all CI green: ci,
-  coverage, coupling; each brief's Outcome filled, status `done`):
-  - **#214** brief 1-2 major/minor lines — majors every 4th adaptive step
-    (`GRID_MAJOR_EVERY`, power of two ⇒ fixed world positions).
-  - **#213** brief 1-3 axis lock follows the visible grid's basis
-    (projection onto the lock axis; polar uses the grid's rotated frame).
-  - **#215** brief 1-4 steady circle snap glyph (`geometry::snap_features`,
-    analytic circle features) + hidden-grid-snaps-nothing test.
-  Code merges cleanly pairwise except two append-only spots: `docs/roadmap.md`
-  (1-2 vs 1-3) and `tests/it/interaction.rs` (1-3 vs 1-4). Whichever lands
-  later rebases; both are keep-both resolutions.
-- **Parallel-run rule:** workers do **not** edit this file (they would
-  conflict). Each hands off through its brief's Outcome and its PR; the
-  orchestrator folds results in here after review.
-- **Next briefs (not written):** 1-5 collinear/centreline snapping (after
-  #215 merges — same snap engine; also: CSG shapes containing arcs still
-  snap to tessellation points, per 1-4 Outcome), 1-6 alternate
-  constructors (3-point box, tangent circle; owns the tangent snap
-  kind/glyph — 1-4 Outcome has the formula and the reference-point gap).
+- **main:** `7b8c477` — briefs 1-1..1-4 merged: #212 adaptive snap, #214
+  major/minor lines (majors every 4th step, fixed world positions), #213
+  axis lock follows the visible grid's basis, #215 analytic circle snap
+  features + hidden-grid-snaps-nothing test.
+- **Next, serial (one worker at a time — see hazards):**
+  - **1-5** alignment snapping while moving — `docs/briefs/1-5-alignment-snapping.md`.
+  - **1-6** three-point box — `docs/briefs/1-6-three-point-box.md`.
+  - **1-7** tangent snap + tangent circle — `docs/briefs/1-7-tangent-snap.md`
+    (after 1-6, so its multi-click mode publishes the snap reference).
+  1-6 and 1-7 split the roadmap's "alternate constructors" bullet.
+- **Workers:** hand off through the brief's Outcome and the PR; the
+  orchestrator updates this file after review and merges.
+- **Open follow-ups (unbriefed):** CSG shapes containing arcs still snap to
+  contour vertices (1-4 Outcome: per-leaf features clipped to the CSG
+  boundary); alignment during creation tools (1-5 scope note); grid
+  coverage sized from the frustum (1-1 Outcome).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
@@ -54,7 +48,9 @@ gate if nobody claims them.
   sets: workspace vs `-p`). Shared target also races: one branch's build
   overwrites another's artefacts (a spurious local doc failure on #214).
   Prefer one worker per container, or serialize; leave the workspace test
-  gate to CI when `df` is under ~8 GB.
+  gate to CI when `df` is under ~8 GB. Between workers, free space with
+  `rm -rf target/debug/deps/*gradiance* target/debug/incremental/*` (keeps
+  the third-party build; ~15 GB back).
 - Container can't reach rust-lang.org (no toolchain update) and can't read
   Actions logs — read CI through annotations. Format failures now annotate
   too (file per error).
