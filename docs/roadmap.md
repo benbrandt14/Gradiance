@@ -259,7 +259,11 @@ missing foundation:**
 - Alternate constructors: 3-point box, tangent circle (3.1)
 - Curvilinear abstraction: tools operate in grid coordinates (polygon
   edges curve in polar grids) (3.3)
-- Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4)
+- Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4) —
+  *stability and snap-off landed (brief 1-4): circles snap to their exact
+  features (`geometry::snap_features`: quadrants, exact nearest point), not
+  tessellation vertices; a hidden grid snaps nothing (pinned). Tangent
+  kind/glyph deferred to brief 1-6.*
 
 ## V — Visuals & simulation (active branch: claude/visuals-roadmap)
 

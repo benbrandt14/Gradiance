@@ -1,6 +1,6 @@
 # Steady snap glyphs on curves
 Phase 1 · M18 · "Snap glyph stability, tangent glyph, snap-off-when-grid-
-hidden (3.4)" — stability + snap-off · status: ready
+hidden (3.4)" — stability + snap-off · status: done
 
 ## Goal
 
@@ -78,4 +78,57 @@ note anything you learn for it in the Outcome. Also out: grid line styling
 
 ## Outcome
 
-*(worker fills in)*
+**Landed — analytic features, not hysteresis.**
+
+- **Cause confirmed.** `circle_outline_snap_is_steady_along_the_curve`
+  (`tests/it/interaction.rs`) sweeps 1440 steps around an r = 50 circle,
+  2 px outside, at 1 world/px. On the pre-fix snapper (first commit of the
+  PR, CI red) it fails. The 48 tessellation vertices and 48 midpoints
+  alternate every ≈3.3 px along the outline, all inside the 12 px capture
+  radius, so the winner flips vertex / midpoint 96 times per revolution.
+  Edge never wins, because a vertex or midpoint is always within ~1.6 px
+  (offline replay of the old candidate set). With the fix: exactly 8
+  changes, `Edge` (exactly on the circle) except a `Vertex` run at each
+  quadrant.
+- **Fix at the source:** `geometry::snap_features` (new module, not
+  appended to `snapping.rs` so the parallel briefs don't conflict).
+  `snap_outline(&ShapeDef) -> SnapOutline` returns `Circle {center,
+  radius, rotation}` for a bare circle or a circle under any nesting of
+  `Placed`, else `Contours(polygonize(shape))`. `circle_quadrants()` and
+  `nearest_on_circle()` are the features. `snap.rs` matches on it: a circle
+  offers its quadrants as `Vertex`, the exact nearest point as `Edge`, no
+  midpoints; everything else keeps the old ring loop. Centre snap is
+  unchanged (body origin). The edge tie bias became a named const
+  `EDGE_TIE_BIAS`.
+- **Why not hysteresis:** the candidates were the bug, since none of
+  them lie on the true curve. A sticky kind would still have offered
+  points on the tessellation and still jumped between them. Hysteresis
+  would also need cross-frame state in a system that is pure per-frame
+  today.
+- **Snap-off pinned:** `grid_snap_is_off_while_the_grid_is_hidden`. The
+  behaviour already existed (`snap.rs` grid gate); no code change.
+- Roadmap M18 glyph bullet updated.
+- **Gates:** run locally: fmt, clippy `-D warnings`, doc `-D warnings`,
+  `cargo test -p gradiance-geometry`, and the `tests/it` interaction
+  module (14/14). **`cargo test --workspace` was run by CI, not locally**:
+  the shared container was down to ~3 GB of disk (orchestrator's call).
+  rustc 1.97.0 = `RUST_PIN`.
+
+**Not done / for later.**
+
+- CSG shapes that contain circles (a body with a bite, a smooth union)
+  still snap on contoured vertices, which come from the
+  `FIELD_CELLS` field contour: dense along arcs, same flicker class. The
+  fix there is per-leaf features clipped to the CSG boundary (keep a leaf
+  feature where `sdf::eval(root) ≈ 0`). That is a separate piece of work;
+  1-5 (same engine) is the natural home.
+- **For 1-6 (tangent snap):** `SnapOutline::Circle` already gives the
+  centre and radius in the shape frame. A tangent point from a reference
+  `q` outside the circle is `c + r·rot(±acos(r/|q−c|))·(q−c)/|q−c|`.
+  Compute it in the shape frame (inverse affine, the same as the edge
+  projection in `snap.rs`) and map back with `world_point`. A
+  `SnapKind::Tangent` row then needs a glyph arm in `draw_snap_indicator`
+  (exhaustive match: the compiler will find it). The reference point has
+  to reach `update_snapped_cursor`, likely via a small resource the tool
+  sets at the first click, like `SnapExclusions`.
+

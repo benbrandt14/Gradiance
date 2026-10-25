@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::settings::{GridSettings, GridSystem, SnapConfig};
 use gradiance_domain::shape::ShapeDef;
-use gradiance_geometry::polygonize::polygonize;
+use gradiance_geometry::snap_features::{SnapOutline, nearest_on_circle, snap_outline};
 use gradiance_geometry::snapping::{
     adaptive_step, cartesian_snap, isometric_snap, polar_snap, project_on_segment,
 };
@@ -30,6 +30,11 @@ pub enum SnapKind {
     /// Closest point on an edge.
     Edge,
 }
+
+/// Bare edge candidates are scored this fraction of the capture radius
+/// farther than they are, so a vertex or midpoint on the same edge wins
+/// the tie.
+const EDGE_TIE_BIAS: f32 = 0.05;
 
 /// Entities excluded from object snapping — the bodies currently being
 /// dragged (CAD behavior: you never snap to what you're moving). Tools
@@ -106,24 +111,50 @@ pub fn update_snapped_cursor(
             if !(config.sources.vertices || config.sources.midpoints || config.sources.edges) {
                 continue;
             }
-            let contours = polygonize(shape);
-            for ring in contours.rings() {
-                let n = ring.len();
-                for i in 0..n {
-                    let a = world_point(transform, ring[i]);
-                    if config.sources.vertices {
-                        consider(a.distance(p), a, SnapKind::Vertex);
-                    }
-                    let b = world_point(transform, ring[(i + 1) % n]);
-                    if config.sources.midpoints {
-                        let m = (a + b) / 2.0;
-                        consider(m.distance(p), m, SnapKind::Midpoint);
+            match snap_outline(shape) {
+                // An exact circle: its real features only. Tessellation
+                // vertices and midpoints are artifacts a few pixels apart
+                // and made the glyph flicker along the curve (3.4).
+                outline @ SnapOutline::Circle {
+                    center, radius: r, ..
+                } => {
+                    if config.sources.vertices
+                        && let Some(quadrants) = outline.circle_quadrants()
+                    {
+                        for q in quadrants {
+                            let a = world_point(transform, q);
+                            consider(a.distance(p), a, SnapKind::Vertex);
+                        }
                     }
                     if config.sources.edges {
-                        let e = project_on_segment(p, a, b);
-                        // Slightly deprioritize bare edges so vertices and
-                        // midpoints on the same edge win ties.
-                        consider(e.distance(p) + radius * 0.05, e, SnapKind::Edge);
+                        // Project in the shape's frame, where it is a circle.
+                        let local = transform
+                            .compute_affine()
+                            .inverse()
+                            .transform_point3(p.extend(0.0))
+                            .truncate();
+                        let e = world_point(transform, nearest_on_circle(local, center, r));
+                        consider(e.distance(p) + radius * EDGE_TIE_BIAS, e, SnapKind::Edge);
+                    }
+                }
+                SnapOutline::Contours(contours) => {
+                    for ring in contours.rings() {
+                        let n = ring.len();
+                        for i in 0..n {
+                            let a = world_point(transform, ring[i]);
+                            if config.sources.vertices {
+                                consider(a.distance(p), a, SnapKind::Vertex);
+                            }
+                            let b = world_point(transform, ring[(i + 1) % n]);
+                            if config.sources.midpoints {
+                                let m = (a + b) / 2.0;
+                                consider(m.distance(p), m, SnapKind::Midpoint);
+                            }
+                            if config.sources.edges {
+                                let e = project_on_segment(p, a, b);
+                                consider(e.distance(p) + radius * EDGE_TIE_BIAS, e, SnapKind::Edge);
+                            }
+                        }
                     }
                 }
             }
