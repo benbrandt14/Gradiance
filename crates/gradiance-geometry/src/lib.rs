@@ -14,6 +14,7 @@ pub mod sat;
 pub mod scale;
 pub mod sdf;
 pub mod shape;
+pub mod snap_features;
 pub mod snapping;
 pub mod tessellate;
 
