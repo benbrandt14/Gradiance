@@ -1,6 +1,6 @@
 # Axis lock follows the grid
 Phase 1 · M18 · "Axis-lock basis follows the active grid system (2.5)" ·
-status: ready
+status: done
 
 ## Goal
 
@@ -84,4 +84,44 @@ curvilinear tool coordinates, `docs/state.md` (orchestrator updates it).
 
 ## Outcome
 
-*(worker fills in)*
+**Landed (PR #213, branch `claude/1-3-axis-lock-basis`).**
+
+- `geometry::snapping`: `rotated_basis(directions, rotation)` (exactly
+  `directions` at rotation 0, so unrotated Cartesian = world X/Y bit-for-bit;
+  non-finite rotation also falls back to unrotated), `project_onto_axis`,
+  `dominant_axis`. `constrain_axis` and its test were removed (no remaining
+  callers) and replaced by tests per the Done-when list.
+- `interaction::gesture`: `GestureConstraints` gained `basis: [Vec2; 2]`
+  (default world X/Y) and `lock_axis(delta)`; `constrain` projects onto the
+  lock axis. `grid_basis(&GridSettings)` computes the basis;
+  `update_gesture_constraints` now reads `GridSettings` and writes the basis
+  each frame (only on change). The four `select.rs` call sites needed no
+  change — the basis rides inside the `GestureConstraints` they already
+  borrow, so `ToolContext`/`ManipContext` were not touched (neither carries
+  `GridSettings`).
+- `indicators::draw_constraint_guides` draws along `constraints.basis`.
+- Integration test `x_lock_on_a_rotated_grid_moves_along_the_grid_axis`
+  in `tests/it/interaction.rs`.
+
+**Judgment calls.**
+
+- *Lock definition (isometric / non-orthogonal):* a lock is the
+  **orthogonal projection** of the delta onto the lock axis
+  (`axis · (delta·axis)`) — the point on the guide line nearest the cursor.
+  Not the oblique two-axis decomposition: projection never overshoots the
+  cursor and doesn't depend on the other axis. Dominant = the axis with the
+  larger `|delta·axis|` (ties → first axis, matching the old `>=`). For
+  orthonormal bases this is identical to the old behaviour.
+- *Polar:* no straight families, so it locks along the grid's own frame —
+  world X/Y rotated by `grid.rotation` (spoke 0 and its perpendicular).
+  Radial/tangential about the origin was rejected for now: it depends on
+  the gesture-start position and is curvilinear-coordinates territory (out
+  of scope; M18 curvilinear item).
+- *When the basis follows the grid:* whenever `GridSettings::visible`;
+  world X/Y when hidden. `snap_enabled` is ignored — the lock follows what
+  is drawn, matching the guide lines.
+
+**Not done / notes.** Box tool uses the same `GestureConstraints` but does
+not call `constrain` today, so drafting is unaffected. The `X` key label
+"Horizontal"/"Vertical" enum names were kept (renaming is churn across
+prelude/tests); their docs now say "basis' first/second axis".

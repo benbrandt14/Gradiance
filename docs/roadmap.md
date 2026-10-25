@@ -250,7 +250,10 @@ missing foundation:**
   (`GRID_MAJOR_EVERY`, a power of two so majors nest with the doubling
   lattice) is major, so majors keep their world positions across zoom;
   polar rings follow the same rule.*
-- Axis-lock basis follows the active grid system (2.5)
+- Axis-lock basis follows the active grid system (2.5) — *landed (brief
+  1-3): `X`/`Y`/`X`+`Y` lock to the visible grid's line families rotated by
+  its rotation (projection onto the axis; polar uses its own frame; world
+  X/Y when the grid is hidden), and the guide lines draw the same axes.*
 - Light collinear/centerline snapping while dragging ("lightweight
   assemblies") — configurable in the snapping menu (3.1)
 - Alternate constructors: 3-point box, tangent circle (3.1)

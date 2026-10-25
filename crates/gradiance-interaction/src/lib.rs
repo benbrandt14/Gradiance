@@ -5,9 +5,9 @@
 //! - **Object snaps beat grid snaps** (vertex/midpoint/center/edge, nearest
 //!   wins) and every tool consumes the same [`snap::SnappedCursor`], so new
 //!   tools and gestures inherit snapping for free.
-//! - **Constrained motion**: hold `X`/`Y` for horizontal/vertical-only,
-//!   `X`+`Y` for dominant-axis lock; hold `Ctrl` while rotating for
-//!   quantized angle steps ([`gesture::GestureConstraints`]).
+//! - **Constrained motion**: hold `X`/`Y` to lock to the visible grid's
+//!   first/second axis, `X`+`Y` for dominant-axis lock; hold `Ctrl` while
+//!   rotating for quantized angle steps ([`gesture::GestureConstraints`]).
 //!   `Shift` is selection-only (toggle / additive band).
 //! - **Grids are coordinate systems**, not wallpaper: movable origin,
 //!   rotatable basis, and pluggable geometry (Cartesian / Isometric /

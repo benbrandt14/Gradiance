@@ -168,21 +168,43 @@ pub fn quantize_angle(angle: f32, step: f32) -> f32 {
     (angle / step).round() * step
 }
 
-/// Constrains a translation delta to an axis; `dominant` keeps only the
-/// larger component (CAD shift-drag behavior).
-pub fn constrain_axis(delta: Vec2, horizontal: bool, vertical: bool, dominant: bool) -> Vec2 {
-    if dominant {
-        if delta.x.abs() >= delta.y.abs() {
-            Vec2::new(delta.x, 0.0)
-        } else {
-            Vec2::new(0.0, delta.y)
-        }
-    } else if horizontal {
-        Vec2::new(delta.x, 0.0)
-    } else if vertical {
-        Vec2::new(0.0, delta.y)
+/// The two lock axes of a grid: its line-family `directions` (unit vectors
+/// in the unrotated grid frame, e.g. [`CARTESIAN_LINE_DIRECTIONS`]) rotated
+/// by the grid's `rotation` (radians) — the same description the renderer
+/// draws and the snapper snaps to, so a lock runs along a drawn line family.
+///
+/// A rotation of zero returns `directions` bit-for-bit, so an unrotated
+/// Cartesian basis is exactly world X/Y. A non-finite rotation also returns
+/// `directions` unrotated rather than NaN axes.
+pub fn rotated_basis(directions: [Vec2; 2], rotation: f32) -> [Vec2; 2] {
+    if rotation == 0.0 || !rotation.is_finite() {
+        return directions;
+    }
+    let rot = Vec2::from_angle(rotation);
+    directions.map(|d| rot.rotate(d))
+}
+
+/// Locks a translation `delta` to one axis: the orthogonal projection of
+/// `delta` onto the unit vector `axis`, i.e. the point on the guide line
+/// through the gesture start that is closest to the cursor.
+///
+/// Projection — not the oblique component in a two-axis decomposition — is
+/// the definition for non-orthogonal bases (isometric): it never overshoots
+/// the cursor, and it is independent of which other axis the grid pairs
+/// with. For an orthonormal basis the two definitions coincide.
+pub fn project_onto_axis(delta: Vec2, axis: Vec2) -> Vec2 {
+    axis * delta.dot(axis)
+}
+
+/// The axis of `basis` the delta favours: the one with the larger absolute
+/// projection (ties go to the first axis, as the old world-axis lock did).
+/// The dominant lock is [`project_onto_axis`] onto this axis. For unit axes
+/// that is the axis making the smaller angle with `delta`.
+pub fn dominant_axis(delta: Vec2, basis: [Vec2; 2]) -> Vec2 {
+    if delta.dot(basis[0]).abs() >= delta.dot(basis[1]).abs() {
+        basis[0]
     } else {
-        delta
+        basis[1]
     }
 }
 
@@ -445,16 +467,82 @@ mod tests {
         assert!((quantize_angle(1.0, 0.0) - 1.0).abs() < f32::EPSILON);
     }
 
+    /// Asserts `v` is parallel to the unit vector `axis` (zero cross term).
+    fn assert_parallel(v: Vec2, axis: Vec2) {
+        assert!(
+            v.perp_dot(axis).abs() < 1e-4 * v.length().max(1.0),
+            "{v} not parallel to {axis}"
+        );
+    }
+
     #[test]
-    fn axis_constraints() {
-        let d = Vec2::new(10.0, 4.0);
-        assert_eq!(constrain_axis(d, false, false, false), d);
-        assert_eq!(constrain_axis(d, true, false, false), Vec2::new(10.0, 0.0));
-        assert_eq!(constrain_axis(d, false, true, false), Vec2::new(0.0, 4.0));
-        assert_eq!(constrain_axis(d, false, false, true), Vec2::new(10.0, 0.0));
+    fn unrotated_cartesian_lock_is_exactly_the_world_axis_lock() {
+        let basis = rotated_basis(CARTESIAN_LINE_DIRECTIONS, 0.0);
+        assert_eq!(basis, [Vec2::X, Vec2::Y]);
+        for d in [
+            Vec2::new(10.0, 4.0),
+            Vec2::new(3.0, -9.0),
+            Vec2::new(-7.5, 7.5),
+        ] {
+            assert_eq!(project_onto_axis(d, basis[0]), Vec2::new(d.x, 0.0));
+            assert_eq!(project_onto_axis(d, basis[1]), Vec2::new(0.0, d.y));
+            let dominant = project_onto_axis(d, dominant_axis(d, basis));
+            let old = if d.x.abs() >= d.y.abs() {
+                Vec2::new(d.x, 0.0)
+            } else {
+                Vec2::new(0.0, d.y)
+            };
+            assert_eq!(dominant, old, "dominant for {d}");
+        }
+    }
+
+    #[test]
+    fn rotated_cartesian_x_lock_follows_the_rotated_first_axis() {
+        let rotation = 30_f32.to_radians();
+        let basis = rotated_basis(CARTESIAN_LINE_DIRECTIONS, rotation);
+        let x_axis = Vec2::from_angle(rotation);
+        let d = Vec2::new(100.0, 0.0);
+        let locked = project_onto_axis(d, basis[0]);
+        assert_parallel(locked, x_axis);
+        assert!((locked.length() - 100.0 * rotation.cos()).abs() < 1e-3);
+        assert_parallel(project_onto_axis(d, basis[1]), x_axis.perp());
+    }
+
+    #[test]
+    fn isometric_locks_follow_their_line_families() {
+        let rotation = 0.4;
+        let basis = rotated_basis(ISOMETRIC_LINE_DIRECTIONS, rotation);
+        let rot = Vec2::from_angle(rotation);
+        let d = Vec2::new(37.0, -12.0);
+        for (axis, family) in basis.iter().zip(ISOMETRIC_LINE_DIRECTIONS) {
+            let locked = project_onto_axis(d, *axis);
+            assert_parallel(locked, rot.rotate(family));
+            // Projection: the residual is perpendicular to the lock axis.
+            assert!((d - locked).dot(*axis).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn dominant_picks_the_larger_projection() {
+        let basis = ISOMETRIC_LINE_DIRECTIONS;
+        // Near the 30° family: it wins even though |x| > |y| would also
+        // have picked world X.
+        let d = Vec2::from_angle(25_f32.to_radians()) * 50.0;
+        assert_eq!(dominant_axis(d, basis), basis[0]);
+        // Straight up is equidistant (60° from both): tie goes to the first.
+        assert_eq!(dominant_axis(Vec2::Y, basis), basis[0]);
+        // Near the 150° family.
+        let d = Vec2::from_angle(140_f32.to_radians()) * 50.0;
+        assert_eq!(dominant_axis(d, basis), basis[1]);
+        // Pointing backwards along a family still selects it (|projection|).
+        assert_eq!(dominant_axis(-d, basis), basis[1]);
+    }
+
+    #[test]
+    fn degenerate_rotation_keeps_the_unrotated_basis() {
         assert_eq!(
-            constrain_axis(Vec2::new(3.0, -9.0), false, false, true),
-            Vec2::new(0.0, -9.0)
+            rotated_basis(ISOMETRIC_LINE_DIRECTIONS, f32::NAN),
+            ISOMETRIC_LINE_DIRECTIONS
         );
     }
 }

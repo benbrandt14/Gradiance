@@ -61,7 +61,8 @@ pub fn draw_snap_indicator(
 }
 
 /// Draws axis-constraint guide lines through the cursor while a
-/// constraint is active.
+/// constraint is active — along the constraint's basis (the active grid's
+/// axes), so the guide drawn is the axis enforced.
 pub fn draw_constraint_guides(
     constraints: Res<GestureConstraints>,
     snapped: Res<SnappedCursor>,
@@ -72,18 +73,15 @@ pub fn draw_constraint_guides(
         return;
     };
     let color = css::CORNFLOWER_BLUE.with_alpha(0.4);
-    match constraints.axis {
-        AxisConstraint::Horizontal => {
-            gizmos.line_2d(pos - Vec2::X * LEN, pos + Vec2::X * LEN, color);
-        }
-        AxisConstraint::Vertical => {
-            gizmos.line_2d(pos - Vec2::Y * LEN, pos + Vec2::Y * LEN, color);
-        }
-        AxisConstraint::Dominant => {
-            gizmos.line_2d(pos - Vec2::X * LEN, pos + Vec2::X * LEN, color);
-            gizmos.line_2d(pos - Vec2::Y * LEN, pos + Vec2::Y * LEN, color);
-        }
-        AxisConstraint::Free => {}
+    let [a, b] = constraints.basis;
+    let axes: &[Vec2] = match constraints.axis {
+        AxisConstraint::Horizontal => &[a],
+        AxisConstraint::Vertical => &[b],
+        AxisConstraint::Dominant => &[a, b],
+        AxisConstraint::Free => &[],
+    };
+    for axis in axes {
+        gizmos.line_2d(pos - *axis * LEN, pos + *axis * LEN, color);
     }
 }
 
