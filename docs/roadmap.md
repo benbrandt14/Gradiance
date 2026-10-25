@@ -231,7 +231,10 @@ missing foundation:**
   outlines every body in its front-most layer's hue (`layer_hue` is shared
   by the UI swatches and the overlay, so colors always match).
 - Joint config also reachable via right-click context menu (not only the
-  select-and-inspect flow landed in M15) (2.8)
+  select-and-inspect flow landed in M15) (2.8) — **landed** (found at the
+  Phase 1 gate, 2026-10-25): a joint glyph under the right-click shows its
+  kind, "Configure joint…" (selects it for the inspector), and the
+  connected-bodies-collide toggle (`ui/context_menu.rs`).
 - **Deferred (Bevy audit):** migrate tool gestures from polling
   `PointerButtons`/`SnappedCursor` to first-party `bevy_picking` observers
   (`On<Pointer<…>>`), as the original plan intended — large surface, best
@@ -275,7 +278,9 @@ missing foundation:**
   angle around the circle), shown with the tangent glyph at the touch
   point.*
 - Curvilinear abstraction: tools operate in grid coordinates (polygon
-  edges curve in polar grids) (3.3)
+  edges curve in polar grids) (3.3) — *moved out of M18: a Phase 5 decision note
+  (`docs/orchestration.md` § Phase 1), since it shares the seam with
+  simulation planes.*
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4) —
   *stability and snap-off landed (brief 1-4): circles snap to their exact
   features (`geometry::snap_features`: quadrants, exact nearest point), not
