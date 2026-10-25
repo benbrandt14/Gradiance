@@ -6,6 +6,7 @@
 
 pub mod align;
 pub mod array;
+pub mod construct;
 pub mod contour;
 pub mod contours;
 pub mod extrusion;

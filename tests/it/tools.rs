@@ -644,6 +644,7 @@ fn slider_limits_default_can_be_turned_off() {
     app.world_mut()
         .insert_resource(gradiance::domain::settings::ToolDefaults {
             slider_limits: false,
+            ..Default::default()
         });
     app.world_mut()
         .resource_mut::<NextState<ToolState>>()
