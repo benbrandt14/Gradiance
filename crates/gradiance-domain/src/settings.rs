@@ -97,6 +97,19 @@ pub struct SnapConfig {
     /// Rotation quantization step in degrees (applied while the quantize
     /// modifier is held, and by future gesture behaviors).
     pub rotation_step_deg: f32,
+    /// While moving a selection, lightly snap its edges collinear with
+    /// nearby bodies' edges along the grid axes (needs `objects_enabled`).
+    #[serde(default = "default_true")]
+    pub align_edges: bool,
+    /// While moving a selection, lightly snap its centre onto nearby
+    /// bodies' centre lines along the grid axes (needs `objects_enabled`).
+    #[serde(default)]
+    pub align_centers: bool,
+}
+
+/// Serde default for fields that were added defaulting on.
+fn default_true() -> bool {
+    true
 }
 
 impl Default for SnapConfig {
@@ -106,6 +119,8 @@ impl Default for SnapConfig {
             max_screen_distance: 12.0,
             sources: SnapSources::default(),
             rotation_step_deg: 15.0,
+            align_edges: true,
+            align_centers: false,
         }
     }
 }

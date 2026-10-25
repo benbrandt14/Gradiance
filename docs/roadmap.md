@@ -255,7 +255,14 @@ missing foundation:**
   its rotation (projection onto the axis; polar uses its own frame; world
   X/Y when the grid is hidden), and the guide lines draw the same axes.*
 - Light collinear/centerline snapping while dragging ("lightweight
-  assemblies") — configurable in the snapping menu (3.1)
+  assemblies") — configurable in the snapping menu (3.1) — *move half
+  landed (brief 1-5): a select-tool move lightly snaps the selection's
+  edges collinear with nearby bodies' edges (`SnapConfig::align_edges`,
+  on) and optionally its centre onto their centre lines
+  (`align_centers`, off), along the grid's axes in oblique coordinates
+  (`geometry::align`; isometric aligns along its own families); a faint
+  guide shows each holding alignment. Alignment during creation tools is
+  still open.*
 - Alternate constructors: 3-point box, tangent circle (3.1)
 - Curvilinear abstraction: tools operate in grid coordinates (polygon
   edges curve in polar grids) (3.3)

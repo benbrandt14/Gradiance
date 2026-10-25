@@ -15,6 +15,7 @@ use crate::tools::context::{
     ToolWorld, TwistState,
 };
 use crate::tools::handles::{HandleKind, SelectionBox, hit_handle};
+use crate::tools::move_align::{MoveAlignment, move_delta, preview_guides};
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_command::intent::TransformChange;
@@ -53,6 +54,9 @@ pub enum SelectGesture {
         start: Vec2,
         /// `(entity, id, original pose)` per moved body.
         bodies: Vec<(Entity, StableId, PosRot)>,
+        /// Alignment references measured at press (`None`: nothing near,
+        /// or playing) — see [`move_align`](crate::tools::move_align).
+        align: Option<MoveAlignment>,
     },
     /// Right-drag rotating the selection about its centroid.
     ///
@@ -190,6 +194,16 @@ impl ManipTool for SelectGesture {
 
     fn preview(&self, ctx: &ManipContext, out: &mut ToolPreview) {
         match self {
+            SelectGesture::Move {
+                start,
+                align: Some(align),
+                ..
+            } => {
+                if let Some(p) = ctx.cursor {
+                    let aligned = move_delta(ctx, p - *start, Some(align));
+                    preview_guides(align, &aligned, out);
+                }
+            }
             SelectGesture::BoxSelect { start, .. } => {
                 if let Some(p) = ctx.cursor {
                     let center = (*start + p) / 2.0;
@@ -414,7 +428,12 @@ impl SelectGesture {
             .filter_map(|e| Some((*e, world.id_of(*e)?, world.pose_of(*e)?)))
             .collect();
         let held: Vec<Entity> = bodies.iter().map(|(e, ..)| *e).collect();
-        *self = SelectGesture::Move { start: p, bodies };
+        let align = MoveAlignment::gather(ctx, world, &held);
+        *self = SelectGesture::Move {
+            start: p,
+            bodies,
+            align,
+        };
         ManipOutput {
             selection: Some(transition),
             hold: HoldState::Acquire(held),
@@ -450,9 +469,13 @@ impl SelectGesture {
     /// Advances the in-progress gesture's transient preview.
     fn drag(&mut self, ctx: &ManipContext) -> ManipOutput {
         match self {
-            SelectGesture::Move { start, bodies } => {
+            SelectGesture::Move {
+                start,
+                bodies,
+                align,
+            } => {
                 if let Some(p) = ctx.cursor {
-                    let delta = ctx.constraints.constrain(p - *start);
+                    let delta = move_delta(ctx, p - *start, align.as_ref()).delta;
                     let poses = bodies
                         .iter()
                         .map(|(e, _, original)| {
@@ -557,20 +580,11 @@ impl SelectGesture {
         let left_up = ctx.left == GesturePhase::Released;
         let right_up = ctx.right == GesturePhase::Released;
         match std::mem::take(self) {
-            SelectGesture::Move { start, bodies } if left_up => {
-                let changes = ctx.cursor.map_or_else(Vec::new, |p| {
-                    let delta = ctx.constraints.constrain(p - start);
-                    move_changes(&bodies, |old| PosRot {
-                        pos: old.pos + delta,
-                        rot: old.rot,
-                    })
-                });
-                ManipOutput {
-                    commit: (!changes.is_empty()).then_some(ToolCommit::Move(changes)),
-                    hold: HoldState::Clear,
-                    ..Default::default()
-                }
-            }
+            SelectGesture::Move {
+                start,
+                bodies,
+                align,
+            } if left_up => move_release(ctx, start, &bodies, align.as_ref()),
             SelectGesture::Rotate { .. } if right_up && ctx.playing => ManipOutput {
                 // Physical interaction (like the drag tool's spring): the
                 // twist just stops; nothing is committed or undoable.
@@ -657,6 +671,28 @@ impl SelectGesture {
                 ManipOutput::default()
             }
         }
+    }
+}
+
+/// Ends a move: one `Move` commit at the same (constrained, aligned) delta
+/// the preview held, and the hold released.
+fn move_release(
+    ctx: &ManipContext,
+    start: Vec2,
+    bodies: &[(Entity, StableId, PosRot)],
+    align: Option<&MoveAlignment>,
+) -> ManipOutput {
+    let changes = ctx.cursor.map_or_else(Vec::new, |p| {
+        let delta = move_delta(ctx, p - start, align).delta;
+        move_changes(bodies, |old| PosRot {
+            pos: old.pos + delta,
+            rot: old.rot,
+        })
+    });
+    ManipOutput {
+        commit: (!changes.is_empty()).then_some(ToolCommit::Move(changes)),
+        hold: HoldState::Clear,
+        ..Default::default()
     }
 }
 

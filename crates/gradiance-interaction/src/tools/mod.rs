@@ -21,6 +21,7 @@ pub mod cut_tool;
 pub mod drag_tool;
 pub mod ground_tool;
 pub mod handles;
+pub mod move_align;
 pub mod node_tools;
 pub mod polygon_tool;
 pub mod select;
