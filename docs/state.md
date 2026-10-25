@@ -1,7 +1,7 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-10-24, Phase 1 (orchestrator, after 1-1 merged).
+Last updated: 2026-10-25, Phase 1 (orchestrator, briefs 1-2..1-4 reviewed).
 
 ## Position
 
@@ -9,21 +9,25 @@ Last updated: 2026-10-24, Phase 1 (orchestrator, after 1-1 merged).
 - **main:** `5bb18b7` — PR #212 (brief 1-1, adaptive snap) merged. Both
   orchestrator calls in its Outcome accepted: the grid draws under
   perspective, and isometric snaps to drawn-line intersections.
-- **In flight — three workers in parallel** (file-disjoint by design):
-  - **1-2** major/minor lines — `docs/briefs/1-2-major-minor-lines.md`
-    (render `grid.rs` + geometry `snapping.rs`).
-  - **1-3** axis lock follows the grid — `docs/briefs/1-3-axis-lock-basis.md`
-    (interaction `gesture.rs`, `indicators.rs` guides, `tools/select.rs`).
-  - **1-4** steady snap glyphs + snap-off pin —
-    `docs/briefs/1-4-snap-glyph-stability.md` (interaction `snap.rs`,
-    geometry snap features).
-  All three may append to `geometry/snapping.rs`; expect trivial rebases.
+- **Reviewed, ready, awaiting merge by the owner** (all CI green: ci,
+  coverage, coupling; each brief's Outcome filled, status `done`):
+  - **#214** brief 1-2 major/minor lines — majors every 4th adaptive step
+    (`GRID_MAJOR_EVERY`, power of two ⇒ fixed world positions).
+  - **#213** brief 1-3 axis lock follows the visible grid's basis
+    (projection onto the lock axis; polar uses the grid's rotated frame).
+  - **#215** brief 1-4 steady circle snap glyph (`geometry::snap_features`,
+    analytic circle features) + hidden-grid-snaps-nothing test.
+  Code merges cleanly pairwise except two append-only spots: `docs/roadmap.md`
+  (1-2 vs 1-3) and `tests/it/interaction.rs` (1-3 vs 1-4). Whichever lands
+  later rebases; both are keep-both resolutions.
 - **Parallel-run rule:** workers do **not** edit this file (they would
   conflict). Each hands off through its brief's Outcome and its PR; the
   orchestrator folds results in here after review.
 - **Next briefs (not written):** 1-5 collinear/centreline snapping (after
-  1-4 lands — same snap engine), 1-6 alternate constructors (3-point box,
-  tangent circle; also owns the tangent snap kind/glyph deferred from 1-4).
+  #215 merges — same snap engine; also: CSG shapes containing arcs still
+  snap to tessellation points, per 1-4 Outcome), 1-6 alternate
+  constructors (3-point box, tangent circle; owns the tangent snap
+  kind/glyph — 1-4 Outcome has the formula and the reference-point gap).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
@@ -45,6 +49,12 @@ gate if nobody claims them.
 
 ## Known hazards
 
+- **Parallel workers on one container exhaust disk.** Three workers sharing
+  one `CARGO_TARGET_DIR` hit 94% (27 GB target, mostly two Bevy feature
+  sets: workspace vs `-p`). Shared target also races: one branch's build
+  overwrites another's artefacts (a spurious local doc failure on #214).
+  Prefer one worker per container, or serialize; leave the workspace test
+  gate to CI when `df` is under ~8 GB.
 - Container can't reach rust-lang.org (no toolchain update) and can't read
   Actions logs — read CI through annotations. Format failures now annotate
   too (file per error).
