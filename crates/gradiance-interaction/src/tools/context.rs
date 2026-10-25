@@ -109,6 +109,8 @@ pub struct ToolContext<'a> {
     pub constraints: &'a GestureConstraints,
     /// Snapping configuration (rotation quantization step).
     pub snap: &'a SnapConfig,
+    /// Tool-creation preferences (e.g. the box tool's constructor mode).
+    pub defaults: &'a ToolDefaults,
     /// World units per logical screen pixel at the current zoom.
     pub cam_scale: f32,
 }
@@ -423,6 +425,7 @@ pub fn run_draft_tool<T: DraftTool>(
     over_ui: Res<PointerOverUi>,
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
+    defaults: Res<ToolDefaults>,
     cam_scale: Res<crate::camera::CameraScale>,
     mut tool: ResMut<T>,
     mut active: ResMut<ActiveGesture>,
@@ -437,6 +440,7 @@ pub fn run_draft_tool<T: DraftTool>(
         cancel: keys.just_pressed(KeyCode::Escape),
         constraints: &constraints,
         snap: &snap,
+        defaults: &defaults,
         cam_scale: cam_scale.0,
     };
     if let Some(commit) = tool.update(&ctx) {
@@ -455,6 +459,7 @@ pub fn draw_draft_preview<T: DraftTool>(
     snapped: Res<SnappedCursor>,
     constraints: Res<GestureConstraints>,
     snap: Res<SnapConfig>,
+    defaults: Res<ToolDefaults>,
     tool: Res<T>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
@@ -470,6 +475,7 @@ pub fn draw_draft_preview<T: DraftTool>(
         cancel: false,
         constraints: &constraints,
         snap: &snap,
+        defaults: &defaults,
         cam_scale: 1.0,
     };
     let mut preview = ToolPreview::default();

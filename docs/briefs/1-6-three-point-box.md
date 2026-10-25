@@ -1,6 +1,6 @@
 # Three-point box
 Phase 1 · M18 · "Alternate constructors: 3-point box, tangent circle (3.1)"
-— the 3-point box · status: ready
+— the 3-point box · status: done
 
 ## Goal
 
@@ -78,4 +78,41 @@ toolbar/glyph changes, any other constructor, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**done** (2026-10-25).
+
+- **Geometry:** `gradiance-geometry::construct` — `RotatedBox {center,
+  width, height, rotation}` (+ `corners()`) and `three_point_box(a, b, c)`
+  as specified; `None` below a 1e-6 edge/height. 6 unit tests (axis-aligned,
+  rotated with corner check, either side, vertical edge, reversed edge
+  wraps to π, degenerate).
+- **Mode:** `ToolDefaults::box_three_point: bool` (default false), so it
+  shows in Grid & Snap → Tools with no UI code. The tool reads it through a
+  new `ToolContext::defaults: &ToolDefaults` field (both generic drivers
+  fill it from `Res<ToolDefaults>`); keeping the mode on the context keeps
+  the tool a pure function and the test ECS-free.
+- **Tool:** `BoxTool(pub BoxDraft)` with `Idle | Corner(a) | EdgeStart(a) |
+  Height(a, b)`. Two-corner behaviour unchanged. Three-point clicks are
+  presses (like polygon vertices); releases do nothing. Escape cancels in
+  either mode. A click that cannot advance (second on the first, third on
+  the edge's line, or under `MIN_SIDE`) is ignored rather than cancelling.
+  Switching the mode off drops a leftover 3-point draft.
+- **Constraints:** the a → b edge honours the axis lock
+  (`GestureConstraints::constrain`) and, with `Ctrl`, quantizes its angle to
+  `SnapConfig::rotation_step_deg`. The height click is unconstrained (only
+  its distance from the line matters).
+- **Preview:** after the first click, a line a → constrained cursor; after
+  the second, the full rotated rectangle as a closed polyline plus the
+  fixed edge. No new `PreviewPrim`.
+- **Not done — script reach:** `config` verbs today cover `SimSettings`
+  only (`sim-set`), so the mode is not scriptable yet; adding a
+  `ToolDefaults` verb was left out as a new verb outside this brief.
+- **For 1-7:** the clicked points live in `BoxDraft` (`EdgeStart(a)`,
+  `Height(a, b)`); a snap reference would be the last placed point. There
+  is no publish seam yet — `DraftTool` has no hook beyond
+  `update`/`drafting`/`preview`, so 1-7 needs to add one (e.g. a
+  `fn reference(&self) -> Option<Vec2>` default method the driver copies
+  into a resource the snapper reads).
+- Gates: fmt, clippy `-D warnings`, doc `-D warnings`, `-p
+  gradiance-geometry`, `-p gradiance-interaction`, `--test it tools`
+  green locally. Workspace test left to CI (16 GB free, under the 20 GB
+  bar). rustc 1.97.0 = `RUST_PIN`.

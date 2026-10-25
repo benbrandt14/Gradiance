@@ -263,7 +263,13 @@ missing foundation:**
   (`geometry::align`; isometric aligns along its own families); a faint
   guide shows each holding alignment. Alignment during creation tools is
   still open.*
-- Alternate constructors: 3-point box, tangent circle (3.1)
+- Alternate constructors: 3-point box, tangent circle (3.1) — *3-point
+  box landed (brief 1-6): with `ToolDefaults::box_three_point` on (Grid &
+  Snap → Tools), the box tool takes three clicks — two set one edge's
+  length and rotation (axis lock and `Ctrl` rotation step apply to that
+  edge), the third sets the height to either side
+  (`geometry::construct::three_point_box`) — and commits one rotated box.
+  Tangent circle deferred to brief 1-7.*
 - Curvilinear abstraction: tools operate in grid coordinates (polygon
   edges curve in polar grids) (3.3)
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4) —

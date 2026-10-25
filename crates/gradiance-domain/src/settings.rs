@@ -134,12 +134,17 @@ pub struct ToolDefaults {
     /// New sliders get travel limits `[0, drag length]` — the drag *draws*
     /// the allowed travel. Off = unlimited sliders (the old behavior).
     pub slider_limits: bool,
+    /// The box tool draws by three clicks — two set one edge (length and
+    /// rotation), the third sets the height to either side — instead of a
+    /// two-corner drag.
+    pub box_three_point: bool,
 }
 
 impl Default for ToolDefaults {
     fn default() -> Self {
         Self {
             slider_limits: true,
+            box_three_point: false,
         }
     }
 }
