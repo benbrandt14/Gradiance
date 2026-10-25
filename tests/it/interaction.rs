@@ -325,3 +325,72 @@ fn gesture_constraints_follow_modifier_keys() {
     let q = constraints.apply_rotation(17_f32.to_radians(), &config);
     assert!((q - 15_f32.to_radians()).abs() < 1e-5);
 }
+
+/// Axis lock follows the visible grid (feedback 2.5): with the grid rotated
+/// 30° and `X` held, a select-tool drag straight along world X commits a
+/// move along the grid's rotated first axis — the projection of the drag.
+#[test]
+fn x_lock_on_a_rotated_grid_moves_along_the_grid_axis() {
+    let mut app = paused_app();
+    let rotation = 30_f32.to_radians();
+    {
+        let mut grid = app.world_mut().resource_mut::<GridSettings>();
+        grid.visible = true;
+        grid.snap_enabled = false;
+        grid.rotation = rotation;
+    }
+    let id = spawn_box(&mut app, Vec2::ZERO);
+    app.update(); // colliders
+
+    let set_cursor = |app: &mut App, p: Vec2| {
+        app.world_mut().insert_resource(CursorWorldPos(Some(p)));
+        app.world_mut().insert_resource(SnappedCursor {
+            raw: Some(p),
+            position: Some(p),
+            kind: None,
+        });
+    };
+    let mouse = |app: &mut App, down: bool| {
+        let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+        if down {
+            input.press(MouseButton::Left);
+        } else {
+            input.release(MouseButton::Left);
+        }
+    };
+
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::KeyX);
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, true);
+    app.update();
+    let axis = Vec2::from_angle(rotation);
+    let constraints = *app.world().resource::<GestureConstraints>();
+    assert_eq!(constraints.axis, AxisConstraint::Horizontal);
+    assert!(
+        (constraints.basis[0] - axis).length() < 1e-6,
+        "basis follows the grid: {:?}",
+        constraints.basis
+    );
+
+    set_cursor(&mut app, Vec2::new(100.0, 0.0));
+    app.update();
+    mouse(&mut app, false);
+    app.update();
+
+    let entity = entity_of(&app, id).unwrap();
+    let pos = app
+        .world()
+        .get::<Transform>(entity)
+        .unwrap()
+        .translation
+        .truncate();
+    assert!(pos.length() > 50.0, "the body moved ({pos})");
+    assert!(
+        pos.perp_dot(axis).abs() < 1e-2,
+        "move {pos} is parallel to the grid axis {axis}"
+    );
+    let expected = axis * 100.0 * rotation.cos();
+    assert!((pos - expected).length() < 1e-2, "{pos} vs {expected}");
+}
