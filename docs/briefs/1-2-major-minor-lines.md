@@ -116,10 +116,11 @@ gradiance-geometry` (62 pass) — green. **CI ran the workspace gates**
 `222e640`. The local workspace test was skipped on the coordinator's
 instruction (shared disk under 4 GB free; the attempt died with an ICE
 and missing incremental files, the low-disk symptom). The local doc run
-failed with `no is_major_line in snapping`: the parallel worktrees
-(`gradiance-1-3`, `-1-4`) build into one shared target, and same-named
-workspace artifacts from another branch overwrote this one's. That's a
-parallel-run hazard to note for state.md, not a defect in this branch.
-The first CI run caught a constant `assert!` (clippy
+failed with `no is_major_line in snapping` even though the source has it
+and clippy over the same tree passed. Each worktree has its own `target/`,
+so this is not cross-branch sharing. Most likely a stale or half-written
+`gradiance-geometry` rmeta left by the low-disk failures. Not
+investigated further (that would mean deleting artifacts on a full disk).
+CI's doc gate on the same commit is green. The first CI run caught a constant `assert!` (clippy
 `assertions_on_constants`); the power-of-two check is now a `const _`
 compile-time assertion next to `GRID_MAJOR_EVERY`.
