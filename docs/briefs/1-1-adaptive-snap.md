@@ -1,6 +1,6 @@
 # Snap to the grid you can see
 Phase 1 · M18 · "snap points provably on the grid at every adaptive zoom
-level (3.3, 2.5)" · status: ready
+level (3.3, 2.5)" · status: done (PR #212)
 
 ## Goal
 
@@ -74,4 +74,60 @@ snap glyphs, curvilinear coordinates, any UI change.
 
 ## Outcome
 
-*(worker fills in at handoff)*
+**Landed (PR #212).** `geometry::snapping::adaptive_step(base, world_per_px)
+-> Option<f32>` replaces render's private `adaptive_spacing`, with the band
+as `GRID_MIN/MAX_SCREEN_STEP`. `draw_grid` and `update_snapped_cursor` both
+call it with `CameraScale`. The two grid line families are shared constants
+(`CARTESIAN_/ISOMETRIC_LINE_DIRECTIONS`), so the renderer and the snapper
+work from one description of the grid. The band test was re-homed in
+geometry and extended into the acceptance sweep
+(`snapped_points_lie_on_the_drawn_grid_at_every_zoom`). Integration tests
+`zoomed_out_*`, `zoomed_in_*` and `zero_grid_spacing_snaps_to_nothing` are in
+`tests/it/interaction.rs`.
+
+**Found beyond the brief. The next session would otherwise rediscover these:**
+
+- **Isometric snapping was off-grid at every zoom, not just adaptive ones.**
+  The snapper used lattice vectors of length `spacing`. The renderer spaces
+  lines `spacing` apart *perpendicular to the lines*, so their
+  intersections are `spacing / sin 120°` (about 1.155×) apart. Snapping
+  now solves for drawn-line intersections. The old geometry and
+  integration tests pinned the wrong lattice; they now check the point
+  against the drawn lines.
+- **Directions, not angles.** `from_angle(π/2)` is not exactly `(0, 1)` in
+  f32, which put an unrotated Cartesian snap at `400.00003`. The family
+  constants are therefore unit vectors.
+- **Perspective (the brief's unverified fact):** `draw_grid` is the only
+  grid drawer, and it returned early under perspective while snapping stayed
+  active. The grid now draws under both projections, centred on
+  `CameraRig.focus` rather than the camera's xy (identical in the flat
+  orthographic view; correct when orbited). *Orchestrator call:* this is a
+  visible change. The alternative was disabling grid snap under
+  perspective. Known limit: coverage is still a disc of `800·scale` around
+  the focus, so a strongly tilted view can show the grid's edge before the
+  horizon. Sizing it from the frustum is not done.
+- **Same frame, same value.** Snapping runs in `PreUpdate`, `apply_camera_rig`
+  in `Update`. `draw_grid` is now ordered `.before(InteractionSet)`, so both
+  read the same `CameraScale` on the frame a zoom crosses a doubling.
+- **Degenerate spacing (caught by the cold review).** The old function
+  clamped the base to `EPSILON`. The spacing field has no lower bound, so a
+  base of 0 hung the polar ring loop. `adaptive_step` returns `None` for a
+  non-positive or non-finite base: no grid is drawn and no grid snap.
+- **Existing tests encoded the defect.** At the default `CameraScale(1.0)`
+  a 100-unit grid draws every 50, so two integration tests asserted
+  snapping to points that were not drawn. They now set `CameraScale(2.0)`,
+  where the drawn step equals the base.
+- **Single-crate builds rebuild Bevy.** `cargo test -p gradiance-geometry`
+  resolves a different Bevy feature set from the workspace, so the first
+  `-p` run in a fresh container compiles a second Bevy (about 20 minutes
+  here). Start it early, or in parallel with the workspace build.
+
+**CI fix (outside the brief, needed to read this PR's CI):** the "Annotate
+clippy failures" step ran on `failure()` of *any* step, so a Format failure
+made it read a `clippy.txt` that was never written. It is now
+`failure() && steps.clippy.outcome == 'failure'`, and Format re-emits each
+unformatted file as an annotation.
+
+**Unchanged on purpose:** the major-line every-5th styling counts adaptive
+lattice steps, so majors fall on different world positions as the step
+doubles. That is for brief 1-2.

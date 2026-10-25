@@ -5,17 +5,71 @@
 
 use bevy::math::Vec2;
 
-/// Snaps `p` to a square grid with the given origin, rotation, and spacing.
-pub fn cartesian_snap(p: Vec2, origin: Vec2, rotation: f32, spacing: f32) -> Vec2 {
-    snap_in_basis(p, origin, rotation, spacing, Vec2::X, Vec2::Y)
+/// Lower edge of the preferred on-screen grid step, in logical pixels.
+pub const GRID_MIN_SCREEN_STEP: f32 = 24.0;
+/// Upper edge of the preferred on-screen grid step, in logical pixels.
+/// The band spans a factor of four (more than two), so doubling or halving
+/// from any start always lands inside it.
+pub const GRID_MAX_SCREEN_STEP: f32 = 96.0;
+
+/// Unit directions (in the unrotated grid frame) of the two line families
+/// of a Cartesian grid. Vectors rather than angles so an unrotated grid is
+/// exact: `from_angle(π/2)` is not exactly `(0, 1)` in f32.
+pub const CARTESIAN_LINE_DIRECTIONS: [Vec2; 2] = [Vec2::X, Vec2::Y];
+/// Unit directions (in the unrotated grid frame) of the two line families
+/// of an isometric grid: 30° and 150°.
+pub const ISOMETRIC_LINE_DIRECTIONS: [Vec2; 2] =
+    [Vec2::new(0.866_025_4, 0.5), Vec2::new(-0.866_025_4, 0.5)];
+
+/// The grid step actually in use at a given zoom: `base` scaled by a power
+/// of two so that the step measures between [`GRID_MIN_SCREEN_STEP`] and
+/// [`GRID_MAX_SCREEN_STEP`] logical pixels on screen.
+///
+/// `world_per_px` is the camera's world-units-per-logical-pixel at the
+/// sandbox plane (`CameraScale`). The renderer draws with this step and the
+/// snapper snaps to it, so the cursor lands on exactly the lines drawn.
+/// Because the result is `base · 2ᵏ` (exact in floating point), every
+/// adaptive lattice nests inside or around the authored one.
+///
+/// Returns `None` when `base` is not a positive, finite length: there is no
+/// grid to draw or snap to (a spacing field dragged to zero must not hang
+/// the ring loop or emit billions of lines). A degenerate `world_per_px`
+/// (non-finite or non-positive) leaves a valid `base` unadapted.
+pub fn adaptive_step(base: f32, world_per_px: f32) -> Option<f32> {
+    if !(base.is_finite() && base > 0.0) {
+        return None;
+    }
+    if !(world_per_px.is_finite() && world_per_px > 0.0) {
+        return Some(base);
+    }
+    // f32 exponents span about ±150, so 300 halvings/doublings is a bound
+    // that is never reached by real input but keeps the loop total.
+    let mut step = base;
+    let mut guard = 0;
+    while step / world_per_px < GRID_MIN_SCREEN_STEP && guard < 300 {
+        step *= 2.0;
+        guard += 1;
+    }
+    while step / world_per_px > GRID_MAX_SCREEN_STEP && guard < 300 {
+        step *= 0.5;
+        guard += 1;
+    }
+    // Only reachable with a subnormal scale: never hand back 0 or inf.
+    (step.is_finite() && step > 0.0).then_some(step)
 }
 
-/// Snaps `p` to an isometric grid (line families at ±30° from the grid's
-/// x-axis). Intersections form a rhombic lattice.
+/// Snaps `p` to a square grid with the given origin, rotation, and spacing.
+pub fn cartesian_snap(p: Vec2, origin: Vec2, rotation: f32, spacing: f32) -> Vec2 {
+    snap_to_line_families(p, origin, rotation, spacing, CARTESIAN_LINE_DIRECTIONS)
+}
+
+/// Snaps `p` to an isometric grid: two families of lines along
+/// [`ISOMETRIC_LINE_DIRECTIONS`], each spaced `spacing` apart (measured
+/// perpendicular to the lines, as the renderer draws them). The snap
+/// targets are the line intersections, a rhombic lattice whose edges are
+/// `spacing / sin 120°` long.
 pub fn isometric_snap(p: Vec2, origin: Vec2, rotation: f32, spacing: f32) -> Vec2 {
-    let a = Vec2::from_angle(30_f32.to_radians());
-    let b = Vec2::from_angle(150_f32.to_radians());
-    snap_in_basis(p, origin, rotation, spacing, a, b)
+    snap_to_line_families(p, origin, rotation, spacing, ISOMETRIC_LINE_DIRECTIONS)
 }
 
 /// Snaps `p` to a polar grid: rings every `spacing` and
@@ -33,27 +87,34 @@ pub fn polar_snap(p: Vec2, origin: Vec2, rotation: f32, spacing: f32, divisions:
     origin + Vec2::from_angle(snapped_angle) * snapped_radius
 }
 
-/// Snaps in an arbitrary (possibly non-orthogonal) 2D lattice basis.
-fn snap_in_basis(
+/// Snaps to the intersections of two families of parallel lines — the same
+/// description the renderer draws from: family `k` runs along
+/// `directions[k]` rotated by `rotation`, and its lines sit at whole multiples of
+/// `spacing` along that direction's left normal, measured from `origin`.
+fn snap_to_line_families(
     p: Vec2,
     origin: Vec2,
     rotation: f32,
     spacing: f32,
-    basis_a: Vec2,
-    basis_b: Vec2,
+    directions: [Vec2; 2],
 ) -> Vec2 {
+    if !(spacing.is_finite() && spacing > 0.0) {
+        return p;
+    }
     let rot = Vec2::from_angle(rotation);
-    let a = rot.rotate(basis_a) * spacing;
-    let b = rot.rotate(basis_b) * spacing;
-    let rel = p - origin;
-    // Solve rel = u·a + v·b, round (u, v) to the lattice.
-    let det = a.perp_dot(b);
+    let na = rot.rotate(directions[0]).perp();
+    let nb = rot.rotate(directions[1]).perp();
+    let det = na.perp_dot(nb);
     if det.abs() < f32::EPSILON {
         return p;
     }
-    let u = rel.perp_dot(b) / det;
-    let v = a.perp_dot(rel) / det;
-    origin + a * u.round() + b * v.round()
+    let rel = p - origin;
+    // Nearest line of each family, then the point lying on both:
+    // x·na = ca and x·nb = cb.
+    let ca = (rel.dot(na) / spacing).round() * spacing;
+    let cb = (rel.dot(nb) / spacing).round() * spacing;
+    let x = Vec2::new(ca * nb.y - cb * na.y, na.x * cb - nb.x * ca) / det;
+    origin + x
 }
 
 /// Closest point to `p` on segment `ab`.
@@ -118,18 +179,112 @@ mod tests {
         assert!((local.y - local.y.round()).abs() < 1e-4);
     }
 
+    /// Fraction-of-a-step tolerance for a point `k` steps out: a fixed
+    /// floor plus a few f32 ulps of `k` (far from the origin at deep zoom,
+    /// world coordinates themselves run out of resolution).
+    fn tolerance(k: f32) -> f32 {
+        1e-3 + k.abs() * 8.0 * f32::EPSILON
+    }
+
+    /// Asserts `q` lies on a drawn line of both families: its offset from
+    /// `origin` along each family's normal is a whole number of `step`s.
+    /// This is the renderer's description of the grid, not the snapper's.
+    fn assert_on_drawn_lines(q: Vec2, origin: Vec2, rotation: f32, step: f32, dirs: [Vec2; 2]) {
+        for dir in dirs {
+            let n = Vec2::from_angle(rotation).rotate(dir).perp();
+            let k = (q - origin).dot(n) / step;
+            assert!(
+                (k - k.round()).abs() < tolerance(k),
+                "{q} is {k} steps along the {dir} family normal (step {step})"
+            );
+        }
+    }
+
     #[test]
-    fn isometric_snap_lands_on_rhombic_lattice() {
+    fn isometric_snap_lands_on_drawn_line_intersections() {
         let snapped = isometric_snap(Vec2::new(90.0, 45.0), Vec2::ZERO, 0.0, 100.0);
-        // Must be expressible as u·(cos30,sin30)·100 + v·(cos150,sin150)·100
-        // with integral u,v.
-        let a = Vec2::from_angle(30_f32.to_radians()) * 100.0;
-        let b = Vec2::from_angle(150_f32.to_radians()) * 100.0;
-        let det = a.perp_dot(b);
-        let u = snapped.perp_dot(b) / det;
-        let v = a.perp_dot(snapped) / det;
-        assert!((u - u.round()).abs() < 1e-4, "u = {u}");
-        assert!((v - v.round()).abs() < 1e-4, "v = {v}");
+        assert_on_drawn_lines(snapped, Vec2::ZERO, 0.0, 100.0, ISOMETRIC_LINE_DIRECTIONS);
+        // Intersections along a line are spacing / sin 120° apart, so the
+        // first one out along the 30° line is not at distance `spacing`.
+        let along = Vec2::from_angle(30_f32.to_radians()) * 120.0;
+        let first = isometric_snap(along, Vec2::ZERO, 0.0, 100.0);
+        let edge = 100.0 / (120_f32.to_radians()).sin();
+        assert!((first.length() - edge).abs() < 1e-2, "{first}");
+    }
+
+    #[test]
+    fn adaptive_step_keeps_screen_size_in_band_and_is_a_power_of_two() {
+        let mut wpp = 1e-5_f32;
+        while wpp < 1e3 {
+            for base in [0.001_f32, 0.25, 1.0, 100.0] {
+                let step = adaptive_step(base, wpp).expect("valid base");
+                let screen = step / wpp;
+                assert!(
+                    (GRID_MIN_SCREEN_STEP..=GRID_MAX_SCREEN_STEP).contains(&screen),
+                    "screen step {screen} at base {base}, world/px {wpp}"
+                );
+                let k = (step / base).log2();
+                assert!((k - k.round()).abs() < 1e-4, "{step} is not base·2^k");
+            }
+            wpp *= 1.37;
+        }
+    }
+
+    #[test]
+    fn adaptive_step_rejects_a_degenerate_base_and_ignores_a_degenerate_scale() {
+        // No grid: a spacing dragged to (or past) zero, or garbage.
+        for base in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(adaptive_step(base, 0.01), None, "base {base}");
+        }
+        // A broken camera scale leaves a valid base as authored.
+        assert_eq!(adaptive_step(1.0, 0.0), Some(1.0));
+        assert_eq!(adaptive_step(1.0, f32::NAN), Some(1.0));
+    }
+
+    /// The brief's acceptance test: across a sweep of zooms, in every grid
+    /// system and with a rotated, offset origin, every snapped point lies on
+    /// the lines drawn at that zoom.
+    #[test]
+    fn snapped_points_lie_on_the_drawn_grid_at_every_zoom() {
+        let origin = Vec2::new(0.3, -0.7);
+        let rotation = 0.4;
+        let base = 1.0;
+        let probes = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(1.234, 5.678),
+            Vec2::new(-37.1, 12.9),
+            Vec2::new(0.0071, -0.0042),
+            Vec2::new(415.5, -230.25),
+        ];
+        let mut wpp = 1e-4_f32;
+        while wpp < 10.0 {
+            let step = adaptive_step(base, wpp).expect("valid base");
+            assert!((GRID_MIN_SCREEN_STEP..=GRID_MAX_SCREEN_STEP).contains(&(step / wpp)));
+            for p in probes {
+                let q = cartesian_snap(p, origin, rotation, step);
+                assert_on_drawn_lines(q, origin, rotation, step, CARTESIAN_LINE_DIRECTIONS);
+                let q = isometric_snap(p, origin, rotation, step);
+                assert_on_drawn_lines(q, origin, rotation, step, ISOMETRIC_LINE_DIRECTIONS);
+                let q = polar_snap(p, origin, rotation, step, 12);
+                let rings = (q - origin).length() / step;
+                assert!(
+                    (rings - rings.round()).abs() < tolerance(rings),
+                    "polar {q}: {rings} rings"
+                );
+            }
+            wpp *= 1.29;
+        }
+    }
+
+    #[test]
+    fn snapping_to_the_adaptive_step_differs_from_the_base_step_when_zoomed_out() {
+        // 1 m base, 0.05 m/px: the base step is 20 px on screen, under the
+        // band, so the drawn step is 2 m and odd metres are not grid points.
+        let step = adaptive_step(1.0, 0.05).expect("valid base");
+        assert!((step - 2.0).abs() < f32::EPSILON);
+        let q = cartesian_snap(Vec2::new(3.1, 0.0), Vec2::ZERO, 0.0, step);
+        // 4 m, the nearest drawn line; not 3 m, the nearest base line.
+        assert!((q.x - 4.0).abs() < 1e-5, "{q}");
     }
 
     #[test]

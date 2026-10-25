@@ -74,7 +74,11 @@ impl Plugin for GradianceRenderPlugin {
         app.add_systems(
             Update,
             (
-                grid::draw_grid,
+                // Before the camera update: snapping ran in PreUpdate on the
+                // previous `CameraScale`, so drawing from that same value keeps
+                // the drawn step and the snapped step identical on every frame,
+                // including the one where a zoom crosses a doubling boundary.
+                grid::draw_grid.before(gradiance_interaction::InteractionSet),
                 joint_viz::draw_joints,
                 decorations::draw_circle_radius_lines,
                 decorations::draw_body_borders,
