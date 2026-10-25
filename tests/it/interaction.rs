@@ -394,3 +394,82 @@ fn x_lock_on_a_rotated_grid_moves_along_the_grid_axis() {
     let expected = axis * 100.0 * rotation.cos();
     assert!((pos - expected).length() < 1e-2, "{pos} vs {expected}");
 }
+
+/// Sweeps the cursor once around a circle body's outline, a little outside
+/// it, and records what the snapper reports at each step.
+fn sweep_circle_outline(radius: f32, offset: f32, steps: usize) -> Vec<(f32, SnappedCursor)> {
+    let mut app = paused_app();
+    let mut record = box_record(Vec2::ZERO, 1.0, 1.0);
+    record.shape = ShapeDef::Circle { radius };
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    step(&mut app, 2); // let colliders build
+    app.world_mut().insert_resource(CameraScale(1.0));
+    (0..steps)
+        .map(|i| {
+            let theta = std::f32::consts::TAU * i as f32 / steps as f32;
+            let cursor = Vec2::from_angle(theta) * (radius + offset);
+            app.world_mut()
+                .insert_resource(CursorWorldPos(Some(cursor)));
+            let _ = app
+                .world_mut()
+                .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
+            (theta, *app.world().resource::<SnappedCursor>())
+        })
+        .collect()
+}
+
+#[test]
+fn circle_outline_snap_is_steady_along_the_curve() {
+    // Feedback 3.4: sliding along a circle flickered vertex / midpoint /
+    // edge, the tessellation's vertices showing through. The outline now
+    // snaps as one exact curve: `Edge` everywhere, except a `Vertex` at
+    // each of the four quadrant points — 8 kind changes per revolution.
+    let radius = 50.0;
+    let sweep = sweep_circle_outline(radius, 2.0, 1440);
+    let mut changes = 0;
+    for (i, (theta, snapped)) in sweep.iter().enumerate() {
+        let kind = snapped.kind;
+        let pos = snapped.position.unwrap();
+        match kind {
+            Some(SnapKind::Edge) => assert!(
+                (pos.length() - radius).abs() < 1e-3,
+                "edge snap off the exact circle at {theta}: {pos}"
+            ),
+            Some(SnapKind::Vertex) => {
+                let quadrant = (pos / radius).round() * radius;
+                assert!(
+                    (pos - quadrant).length() < 1e-3 && quadrant.length() > 0.0,
+                    "vertex snap is not a quadrant point at {theta}: {pos}"
+                );
+            }
+            other => panic!("unexpected snap {other:?} at {theta}: {snapped:?}"),
+        }
+        if kind != sweep[(i + 1) % sweep.len()].1.kind {
+            changes += 1;
+        }
+    }
+    assert_eq!(changes, 8, "one run in and out of each quadrant");
+}
+
+#[test]
+fn grid_snap_is_off_while_the_grid_is_hidden() {
+    // Invisible magnetism is disorienting: a hidden grid attracts nothing,
+    // even with grid snap enabled.
+    let mut app = paused_app();
+    {
+        let mut grid = app.world_mut().resource_mut::<GridSettings>();
+        grid.snap_enabled = true;
+        grid.visible = false;
+        grid.spacing = 100.0;
+    }
+    app.world_mut().insert_resource(CameraScale(2.0));
+    let raw = Vec2::new(430.0, 690.0);
+    app.world_mut().insert_resource(CursorWorldPos(Some(raw)));
+    let _ = app
+        .world_mut()
+        .run_system_cached(gradiance::interaction::snap::update_snapped_cursor);
+    let snapped = app.world().resource::<SnappedCursor>();
+    assert_eq!(snapped.kind, None);
+    assert_eq!(snapped.position, Some(raw));
+}
