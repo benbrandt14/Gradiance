@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use gradiance_core::constants::INTERACTION_PLANE_Z;
 use gradiance_domain::settings::{GridSettings, GridSystem};
 use gradiance_geometry::snapping::{
-    CARTESIAN_LINE_DIRECTIONS, ISOMETRIC_LINE_DIRECTIONS, adaptive_step,
+    CARTESIAN_LINE_DIRECTIONS, ISOMETRIC_LINE_DIRECTIONS, adaptive_step, is_major_line,
 };
 use gradiance_interaction::camera::{CameraRig, CameraScale};
 use gradiance_interaction::overlay::GridGizmos;
@@ -38,6 +38,9 @@ pub fn draw_grid(
     // Mid-value tint + low alpha: visible over the light backdrop without
     // clashing on dark bodies (the grid is an overlay, not a surface).
     let minor = Color::srgba(0.55, 0.57, 0.62, 0.14);
+    // Majors (`geometry::snapping::is_major_line`) sit at fixed world
+    // positions as the step doubles; same tint, stronger alpha.
+    let major = minor.with_alpha(0.35);
     let axis = Color::srgba(0.55, 0.57, 0.62, 0.4);
 
     let families = match grid.system {
@@ -55,21 +58,22 @@ pub fn draw_grid(
                 spacing,
                 center,
                 half,
-                minor,
-                axis,
+                [minor, major, axis],
             );
         }
     }
     if let GridSystem::Polar { angular_divisions } = grid.system {
         let max_radius = (center - grid.origin).length() + half * 1.5;
-        let mut r = spacing;
-        while r <= max_radius {
+        // Ring `i` at `i · spacing` (multiplied, not accumulated, so a major
+        // ring's radius is exact); majors by the same rule as lines.
+        let mut i = 1_i32;
+        while i as f32 * spacing <= max_radius {
             gizmos.circle(
                 Isometry3d::from_translation(grid.origin.extend(INTERACTION_PLANE_Z)),
-                r,
-                minor,
+                i as f32 * spacing,
+                if is_major_line(i) { major } else { minor },
             );
-            r += spacing;
+            i += 1;
         }
         let step = std::f32::consts::TAU / angular_divisions.max(1) as f32;
         for i in 0..angular_divisions.max(1) {
@@ -84,9 +88,9 @@ pub fn draw_grid(
 }
 
 /// Draws one family of parallel lines (unit direction `dir`) spaced
-/// `spacing` apart, covering a disc of `half` around `center`. The line
-/// through the grid origin draws in the `axis` color.
-#[expect(clippy::too_many_arguments)]
+/// `spacing` apart, covering a disc of `half` around `center`. `colors` is
+/// `[minor, major, axis]`: the line through the grid origin draws in the
+/// axis color, other major lines ([`is_major_line`]) in the major color.
 fn line_family(
     gizmos: &mut Gizmos<GridGizmos>,
     origin: Vec2,
@@ -94,8 +98,7 @@ fn line_family(
     spacing: f32,
     center: Vec2,
     half: f32,
-    minor: impl Into<Color> + Copy,
-    axis: impl Into<Color> + Copy,
+    [minor, major, axis]: [Color; 3],
 ) {
     let normal = dir.perp();
     // Signed distance of the view center from the origin along the normal.
@@ -105,14 +108,12 @@ fn line_family(
     let reach = half * 1.6;
     for i in first..=last {
         let base = origin + normal * (i as f32 * spacing);
-        // Major line every 5th lattice step; origin line in axis color.
-        let color: Color = if i == 0 {
-            axis.into()
-        } else if i.rem_euclid(5) == 0 {
-            let c: Color = minor.into();
-            c.with_alpha(c.alpha() * 2.5)
+        let color = if i == 0 {
+            axis
+        } else if is_major_line(i) {
+            major
         } else {
-            minor.into()
+            minor
         };
         gizmos.line(
             (base - dir * reach).extend(INTERACTION_PLANE_Z),

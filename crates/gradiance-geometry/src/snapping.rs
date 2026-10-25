@@ -58,6 +58,36 @@ pub fn adaptive_step(base: f32, world_per_px: f32) -> Option<f32> {
     (step.is_finite() && step > 0.0).then_some(step)
 }
 
+/// Minor lattice steps per major step: every `GRID_MAJOR_EVERY`-th line
+/// of the [`adaptive_step`] lattice (counted from the grid origin) is a
+/// major line.
+///
+/// A power of two, so the major interval [`major_step`] is itself
+/// `base · 2ʲ` — a lattice the grid draws as its *minor* step two zoom
+/// doublings further out. That is what makes majors nest with zoom: a
+/// line that is major at one zoom is a drawn line (major or minor) at
+/// every finer zoom and at the next coarser one, and it never moves. A
+/// non-power-of-two ratio (the former 5) puts majors at `5 · base · 2ᵏ`,
+/// which no coarser lattice contains, so zooming out deletes them and new
+/// majors appear elsewhere. Four, not eight, keeps several majors on
+/// screen: minors span 24–96 px, so majors span 96–384 px.
+pub const GRID_MAJOR_EVERY: i32 = 4;
+
+/// The major-line interval for a grid drawn at `minor_step` (an
+/// [`adaptive_step`] result): `minor_step · GRID_MAJOR_EVERY`, so still
+/// `base · 2ʲ` and exact in floating point.
+pub fn major_step(minor_step: f32) -> f32 {
+    minor_step * GRID_MAJOR_EVERY as f32
+}
+
+/// Whether the line `index` adaptive steps from the grid origin (along a
+/// family normal, or the `index`-th polar ring) is a major line. The
+/// origin line (`index == 0`) is major too; renderers give it the axis
+/// colour on top.
+pub fn is_major_line(index: i32) -> bool {
+    index.rem_euclid(GRID_MAJOR_EVERY) == 0
+}
+
 /// Snaps `p` to a square grid with the given origin, rotation, and spacing.
 pub fn cartesian_snap(p: Vec2, origin: Vec2, rotation: f32, spacing: f32) -> Vec2 {
     snap_to_line_families(p, origin, rotation, spacing, CARTESIAN_LINE_DIRECTIONS)
@@ -285,6 +315,101 @@ mod tests {
         let q = cartesian_snap(Vec2::new(3.1, 0.0), Vec2::ZERO, 0.0, step);
         // 4 m, the nearest drawn line; not 3 m, the nearest base line.
         assert!((q.x - 4.0).abs() < 1e-5, "{q}");
+    }
+
+    /// World offsets (from the origin, along one family normal) of the
+    /// major lines drawn at `step` within `extent` — the renderer's rule:
+    /// lattice index `i` at offset `i · step`, major per [`is_major_line`].
+    fn majors_within(step: f32, extent: f32) -> Vec<f64> {
+        let n = (extent / step).ceil() as i32;
+        (-n..=n)
+            .filter(|&i| is_major_line(i))
+            .map(|i| f64::from(i) * f64::from(step))
+            .collect()
+    }
+
+    /// The major interval is `base · 2ʲ` at every zoom, and every line the
+    /// renderer classifies major sits at a whole multiple of it.
+    #[test]
+    fn major_lines_sit_on_a_power_of_two_multiple_of_base() {
+        assert!(GRID_MAJOR_EVERY > 1);
+        assert_eq!(GRID_MAJOR_EVERY.count_ones(), 1, "ratio must be 2^m");
+        for base in [0.01_f32, 0.25, 1.0, 100.0] {
+            let mut wpp = 1e-4_f32;
+            while wpp < 1e2 {
+                let minor = adaptive_step(base, wpp).expect("valid base");
+                let major = major_step(minor);
+                let j = (major / base).log2();
+                assert!((j - j.round()).abs() < 1e-4, "{major} is not base·2^j");
+                for offset in majors_within(minor, 64.0 * major) {
+                    let k = offset / f64::from(major);
+                    assert!(
+                        (k - k.round()).abs() < 1e-9,
+                        "major at {offset}, interval {major}"
+                    );
+                }
+                wpp *= 1.37;
+            }
+        }
+    }
+
+    /// Majors stay put: across a sweep of zooms, every major line at one
+    /// zoom is still a drawn line, at the same world position, at every
+    /// finer zoom of the sweep and at the next coarser doubling — and it is
+    /// still *major* at every finer zoom. Under the old 5× rule the major
+    /// at `5·step` was not on the `2·step` lattice at all.
+    #[test]
+    fn major_lines_keep_their_world_positions_across_zoom() {
+        let base = 1.0_f32;
+        let mut zooms = Vec::new();
+        let mut wpp = 1e-3_f32;
+        while wpp < 10.0 {
+            zooms.push(adaptive_step(base, wpp).expect("valid base"));
+            wpp *= 1.29;
+        }
+        zooms.sort_by(f32::total_cmp);
+        zooms.dedup();
+        // A fixed window of world space, so every zoom is compared on the
+        // same lines.
+        let extent = 200.0 * major_step(*zooms.last().expect("non-empty sweep"));
+        for (a, &coarse) in zooms.iter().enumerate() {
+            for major in majors_within(coarse, extent) {
+                for &fine in &zooms[..a] {
+                    let i = major / f64::from(fine);
+                    assert!((i - i.round()).abs() < 1e-9, "{major} not drawn at {fine}");
+                    assert!(
+                        is_major_line(i.round() as i32),
+                        "{major} major at {coarse} but minor at {fine}"
+                    );
+                }
+                let next = f64::from(coarse) * 2.0;
+                let i = major / next;
+                assert!(
+                    (i - i.round()).abs() < 1e-9,
+                    "{major} vanishes at the next doubling"
+                );
+            }
+        }
+    }
+
+    /// Majors are a subset of the drawn lattice: a major offset is a whole
+    /// number of minor steps, at every zoom.
+    #[test]
+    fn every_major_line_is_a_drawn_line() {
+        let mut wpp = 1e-4_f32;
+        while wpp < 10.0 {
+            let minor = adaptive_step(1.0, wpp).expect("valid base");
+            let k = major_step(minor) / minor;
+            assert!((k - k.round()).abs() < f32::EPSILON && k >= 2.0);
+            for offset in majors_within(minor, 50.0 * major_step(minor)) {
+                let i = offset / f64::from(minor);
+                assert!(
+                    (i - i.round()).abs() < 1e-9,
+                    "{offset} off the {minor} lattice"
+                );
+            }
+            wpp *= 1.29;
+        }
     }
 
     #[test]
