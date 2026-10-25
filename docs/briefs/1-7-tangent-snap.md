@@ -38,8 +38,14 @@ outline snaps the radius so the new circle just touches it. Feedback 3.4:
   (`circle_tool.rs` ≈L25–38). A tangent radius against any outline is the
   distance from the centre to the nearest outline point (for a circle:
   `|c₂ − c| − r₂` outside, `r₂ − |c₂ − c|` inside).
-- Brief 1-6 adds a multi-click box mode; if it has landed, its second and
-  third clicks should publish the reference too. If not, skip it and say so.
+- Brief 1-6 landed (#217): the box tool's 3-point mode stores its placed
+  points in `BoxDraft::EdgeStart(a)` / `Height(a, b)`. `DraftTool` has only
+  `update`, `drafting`, `preview` — there is no way to publish a reference
+  yet. The 1-6 worker's suggestion: a default trait method
+  `fn snap_reference(&self) -> Option<Vec2> { None }` that `run_draft_tool`
+  copies into the reference resource each frame (cleared when none).
+  Implement it for the polygon (last vertex), box 3-point (last placed
+  point) and strut (first anchor, if it is a draft tool — check).
 
 ## Approach
 
@@ -73,7 +79,7 @@ features, alignment (1-5), `docs/state.md`.
   and to box outlines.
 - Integration test: a polygon draft with a first vertex placed, cursor near
   a circle's tangent point → `SnappedCursor.kind == Some(Tangent)` at the
-  tangent point. Integration or pure-tool test: a circle drawn near another
+  tangent point. Integration or pure-tool test (the tool tests in `box_tool.rs` show the hand-built-`ToolContext` pattern; `ToolContext` now also carries `defaults: &ToolDefaults`): a circle drawn near another
   commits a radius that touches it (distance between centres = r₁ + r₂).
 - fmt, clippy `-D warnings`, doc `-D warnings`, per-crate tests green;
   workspace tests via CI if disk is tight.

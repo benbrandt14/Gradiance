@@ -1,28 +1,29 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-10-25, Phase 1 (orchestrator, after #216 merged; 1-6 in flight).
+Last updated: 2026-10-25, Phase 1 (orchestrator, after #217 merged; 1-7 in flight).
 
 ## Position
 
 - **Phase:** 1 — M18 grids & snapping (`docs/orchestration.md` § The plan).
-- **main:** `ee4fe8a` — briefs 1-1..1-5 merged: #212 adaptive snap, #214
+- **main:** `b19dd7a` — briefs 1-1..1-6 merged: #212 adaptive snap, #214
   major/minor lines (majors every 4th step, fixed world positions), #213
   axis lock follows the visible grid's basis, #215 analytic circle snap
   features + hidden-grid-snaps-nothing test, #216 alignment snapping while
   moving (`geometry::align`, oblique grid coordinates; `SnapConfig.align_edges`
-  on, `align_centers` off).
+  on, `align_centers` off), #217 three-point box
+  (`geometry::construct`; `ToolDefaults.box_three_point`, off).
 - **Next, serial (one worker at a time — see hazards):**
-  - **1-6** three-point box — `docs/briefs/1-6-three-point-box.md` (in flight).
   - **1-7** tangent snap + tangent circle — `docs/briefs/1-7-tangent-snap.md`
-    (after 1-6, so its multi-click mode publishes the snap reference).
+    (in flight; last Phase 1 brief).
   1-6 and 1-7 split the roadmap's "alternate constructors" bullet.
 - **Workers:** hand off through the brief's Outcome and the PR; the
   orchestrator updates this file after review and merges.
 - **Open follow-ups (unbriefed):** CSG shapes containing arcs still snap to
   contour vertices (1-4 Outcome: per-leaf features clipped to the CSG
   boundary); alignment during creation tools (1-5 Outcome has the wiring); grid
-  coverage sized from the frustum (1-1 Outcome).
+  coverage sized from the frustum (1-1 Outcome); no script verb for
+  `ToolDefaults`/`SnapConfig` yet — only `sim-set` (1-6 Outcome; Phase 3).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
