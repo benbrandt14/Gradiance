@@ -263,7 +263,7 @@ missing foundation:**
   *stability and snap-off landed (brief 1-4): circles snap to their exact
   features (`geometry::snap_features`: quadrants, exact nearest point), not
   tessellation vertices; a hidden grid snaps nothing (pinned). Tangent
-  kind/glyph deferred to brief 1-6.*
+  kind/glyph deferred to brief 1-7.*
 
 ## V — Visuals & simulation (active branch: claude/visuals-roadmap)
 
