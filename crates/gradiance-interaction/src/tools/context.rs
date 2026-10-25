@@ -62,6 +62,7 @@ use gradiance_domain::depth::DepthBand;
 use gradiance_domain::group::SelectionGroup;
 use gradiance_domain::settings::{SnapConfig, ToolDefaults};
 use gradiance_domain::shape::ShapeDef;
+use gradiance_geometry::align::{AlignFrame, Extents};
 use gradiance_geometry::contours::point_in_ring;
 use gradiance_physics::grab::{Grab, MouseSpring, MouseTwist, Twist};
 use gradiance_physics::hold::KinematicHold;
@@ -568,6 +569,28 @@ impl ToolWorld<'_, '_> {
                 })
             })
             .collect()
+    }
+
+    /// Bodies whose live bounds touch the axis-aligned box, excluding the
+    /// infinite ground (alignment references gather from these).
+    pub fn finite_bodies_touching(&self, min: Vec2, max: Vec2) -> Vec<Entity> {
+        self.physics
+            .bodies_in_aabb(min, max)
+            .into_iter()
+            .filter(|e| {
+                self.shapes
+                    .get(*e)
+                    .is_ok_and(|(shape, _)| !shape.contains_half_plane())
+            })
+            .collect()
+    }
+
+    /// A body's extents in an alignment frame's oblique coordinates (exact
+    /// for circles; polygonized vertices otherwise).
+    pub fn body_extents(&self, frame: &AlignFrame, entity: Entity) -> Option<Extents> {
+        let (shape, transform) = self.shapes.get(entity).ok()?;
+        let pose = PosRot::from_transform(transform);
+        frame.shape_extents(shape, pose.pos, pose.rot)
     }
 
     /// Bodies whose center lies inside the closed loop `ring` (the lasso rule;

@@ -1,7 +1,7 @@
 # Line things up while moving them
 Phase 1 · M18 · "Light collinear/centerline snapping while dragging
 ('lightweight assemblies') — configurable in the snapping menu (3.1)" ·
-status: ready
+status: done
 
 ## Goal
 
@@ -102,4 +102,64 @@ tangent snap (1-7), `docs/state.md` (the orchestrator updates it).
 
 ## Outcome
 
-*(worker fills in)*
+**Done** (worker, 2026-10-25). Landed:
+
+- `geometry::align` (pure): `AlignFrame` builds oblique coordinates from
+  the basis via its dual vectors — `u` along `a0`, `v` along `a1` — so a
+  line parallel to `a0` is a level set of `v` and the two coordinates align
+  independently (a `v` correction is a move along `a1`; `u` is untouched).
+  That is what "measure along a non-orthogonal axis" turned out to need:
+  dual-basis coordinates, not orthogonal projection (they coincide for an
+  orthonormal basis). `shape_extents` is analytic for circles (through
+  `snap_outline`; `c·d ± r|d|`) and polygonized vertices otherwise.
+  `align_axis`/`align` return the smallest correction within tolerance
+  (ties keep the earliest), `guide_segment` the guide line. 10 unit tests,
+  including isometric and disabled features.
+- `interaction::tools::move_align`: `MoveAlignment::gather` measures the
+  selection and its neighbours once at press (bodies whose live AABB
+  touches the selection's bounds grown by 400 logical px, minus the moving
+  bodies and infinite ground); `move_delta` = constrain, then align — the
+  one helper the hold (`drag`), the commit (`move_release`) and the guide
+  preview all call, so preview == commit. Guides: faint hot-pink line
+  along each holding alignment, spanning selection and reference.
+- `SnapConfig::align_edges` (default on, `serde(default = "default_true")`)
+  and `align_centers` (default off, `serde(default)`); they appear in Grid
+  & Snap -> Snapping through the existing reflect grid, no UI code.
+  `pre_alignment_snap_configs_still_parse` pins old files; the four replay
+  goldens gained the two fields (regenerated, diff is only those lines).
+- Integration tests: edges collinear exactly on commit; `align_edges` off
+  (and `objects_enabled` off) commits the raw delta; opt-in centre
+  alignment.
+
+Judgment calls:
+
+- **Axis lock:** alignment only shifts the coordinate the lock leaves
+  free (`X` lock moves along `a0` -> only `u` aligns). Since a correction
+  in `u` is a move along `a0`, it never reintroduces locked motion. With
+  `X`+`Y` the dominant axis decides the same way.
+- **Tolerance:** `0.5 * max_screen_distance * cam_scale` (6 px at the
+  default 12), re-read each frame so zoom and config edits mid-drag apply.
+- **Gating:** skipped when `objects_enabled` is off *or* both align bools
+  are off (both conditions, as the brief suggested). Also skipped while
+  the simulation plays (references would go stale), and when the grid
+  basis changes mid-drag (the gathered coordinates would be in the old
+  frame).
+- References are the start-time neighbourhood: a body more than ~400 px
+  from where the selection started is not a reference even if the drag
+  brings the selection near it. Cheap and adequate for "line these up";
+  revisit if users drag across the whole screen and expect it.
+
+Notes for the creation-tool follow-up: the geometry half (`AlignFrame`,
+`align_axis`) is reusable as-is — a creation tool would align the cursor
+point (a zero-width interval) or the draft's extents against references
+gathered at press; the work is only wiring it into `ToolContext`, which
+today has no world reads (creation tools are pure `DraftTool`s), so the
+references would need to be published into the context by the driver.
+
+Gates: fmt, clippy `--workspace --all-targets -D warnings`, doc
+`-D warnings`, `-p gradiance-geometry/-domain/-interaction`, and the full
+`tests/it` binary (243 passed) green locally; rustc 1.97.0 = `RUST_PIN`.
+The local `cargo test --workspace` ran every unit/integration binary
+green but filled the disk while linking doctests (`ld` failure on the
+untouched `gradiance-core` doctest at 490 MB free); the workspace gate,
+doctests and `tests/boundaries.rs` are left to CI.

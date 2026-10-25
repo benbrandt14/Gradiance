@@ -241,6 +241,8 @@
                 edges: true,
             ),
             rotation_step_deg: 15.0,
+            align_edges: true,
+            align_centers: false,
         ),
         render: (
             toon_enabled: true,

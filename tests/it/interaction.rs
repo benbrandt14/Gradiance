@@ -473,3 +473,87 @@ fn grid_snap_is_off_while_the_grid_is_hidden() {
     assert_eq!(snapped.kind, None);
     assert_eq!(snapped.position, Some(raw));
 }
+
+/// Drags a 1 x 0.5 box from (3, 2) by `drag`, next to a resting box of the
+/// same size at the origin, with alignment configured by `configure`;
+/// returns the dragged box's committed position (`None`: it vanished).
+fn drag_next_to_a_box(drag: Vec2, configure: impl FnOnce(&mut SnapConfig)) -> Option<Vec2> {
+    let mut app = paused_app();
+    app.world_mut().resource_mut::<GridSettings>().snap_enabled = false;
+    configure(&mut app.world_mut().resource_mut::<SnapConfig>());
+    // 0.01 m per px: alignment tolerance is half the 12 px capture radius.
+    app.world_mut().insert_resource(CameraScale(0.01));
+    let spawn = |app: &mut App, pos: Vec2| {
+        let record = box_record(pos, 1.0, 0.5);
+        let id = record.id;
+        app.world_mut().write_message(SpawnBodyIntent { record });
+        app.update();
+        id
+    };
+    spawn(&mut app, Vec2::ZERO);
+    let start = Vec2::new(3.0, 2.0);
+    let moved = spawn(&mut app, start);
+    app.update(); // colliders
+
+    let set_cursor = |app: &mut App, p: Vec2| {
+        app.world_mut().insert_resource(CursorWorldPos(Some(p)));
+        app.world_mut().insert_resource(SnappedCursor {
+            raw: Some(p),
+            position: Some(p),
+            kind: None,
+        });
+    };
+    set_cursor(&mut app, start);
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.update();
+    set_cursor(&mut app, start + drag);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Left);
+    app.update();
+
+    let entity = entity_of(&app, moved)?;
+    Some(app.world().get::<Transform>(entity)?.translation.truncate())
+}
+
+/// A move whose bottom edge ends 0.03 m (3 px, inside the 6 px tolerance)
+/// off a neighbour's commits with the edges exactly collinear; `x`, far
+/// from any edge, keeps the raw delta.
+#[test]
+fn a_move_near_a_neighbour_commits_its_edges_collinear() {
+    let pos = drag_next_to_a_box(Vec2::new(0.5, -1.97), |_| {}).unwrap();
+    assert!(pos.y.abs() < 1e-4, "bottom edges collinear: {pos}");
+    assert!((pos.x - 3.5).abs() < 1e-4, "x untouched: {pos}");
+}
+
+/// With edge alignment off the same move commits the raw delta.
+#[test]
+fn a_move_with_edge_alignment_off_commits_the_raw_delta() {
+    let pos = drag_next_to_a_box(Vec2::new(0.5, -1.97), |snap| snap.align_edges = false).unwrap();
+    assert!((pos - Vec2::new(3.5, 0.03)).length() < 1e-4, "{pos}");
+    // Object snapping off disables alignment too.
+    let pos =
+        drag_next_to_a_box(Vec2::new(0.5, -1.97), |snap| snap.objects_enabled = false).unwrap();
+    assert!((pos - Vec2::new(3.5, 0.03)).length() < 1e-4, "{pos}");
+}
+
+/// Centre alignment is opt-in: with it on, a move whose centre ends
+/// near a neighbour's centre line lands on it.
+#[test]
+fn centre_alignment_snaps_onto_a_neighbours_centre_line() {
+    // x: centre 0.04 off the neighbour's. Edges off, since equal widths
+    // put the edges 0.04 off as well.
+    let drag = Vec2::new(-2.96, 1.0);
+    let pos = drag_next_to_a_box(drag, |snap| {
+        snap.align_edges = false;
+        snap.align_centers = true;
+    })
+    .unwrap();
+    assert!(pos.x.abs() < 1e-4, "centres aligned: {pos}");
+    assert!((pos.y - 3.0).abs() < 1e-4, "y untouched: {pos}");
+    let pos = drag_next_to_a_box(drag, |snap| snap.align_edges = false).unwrap();
+    assert!((pos.x - 0.04).abs() < 1e-4, "centres off by default: {pos}");
+}

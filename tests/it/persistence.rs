@@ -562,6 +562,28 @@ fn pre_tracer_files_still_parse() {
 }
 
 #[test]
+fn pre_alignment_snap_configs_still_parse() {
+    // `align_edges` / `align_centers` (brief 1-5) are serde-defaulted, so
+    // scenes saved before alignment snapping load with its defaults.
+    let scene = SceneRecord {
+        version: gradiance::scene::FORMAT_VERSION,
+        app_version: String::new(),
+        bodies: vec![],
+        joints: vec![],
+        nodes: vec![],
+        environment: EnvironmentRecord::default(),
+    };
+    let text = to_ron(&scene).unwrap();
+    let cut = text
+        .replace("align_edges: true,", "")
+        .replace("align_centers: false,", "");
+    assert!(!cut.contains("align_"), "fixture removed both fields");
+    let parsed = from_ron(&cut).expect("pre-alignment file parses");
+    assert_eq!(parsed.environment.snap, SnapConfig::default());
+    assert!(parsed.environment.snap.align_edges);
+}
+
+#[test]
 fn version_mismatch_is_rejected() {
     let text = to_ron(&SceneRecord {
         version: 99,

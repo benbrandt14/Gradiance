@@ -4,6 +4,7 @@
 //! polygon representation. The render and physics layers adapt these
 //! results into engine types.
 
+pub mod align;
 pub mod array;
 pub mod contour;
 pub mod contours;
