@@ -42,7 +42,7 @@ use crate::joint_edit::SuppressSelectPress;
 use crate::overlay::OverlayGizmos;
 use crate::pointer::PointerButtons;
 use crate::selection::{SelectTransition, SelectedJoint, Selection, expand_groups};
-use crate::snap::{SnapExclusions, SnappedCursor};
+use crate::snap::{DraftReference, SnapExclusions, SnapReference, SnappedCursor};
 use crate::tools::ActiveGesture;
 use crate::tools::handles::{ScaleFrame, SelectionBox, selection_box};
 use avian2d::prelude::RigidBody;
@@ -309,6 +309,21 @@ pub trait DraftTool: Resource<Mutability = Mutable> {
 
     /// Renders the in-progress preview from draft state.
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview);
+
+    /// The point the draft is drawing from, if any — published by
+    /// [`run_draft_tool`] to [`SnapReference`] so the snapper can offer
+    /// tangents. Defaults to none (single-gesture tools).
+    fn snap_reference(&self) -> Option<DraftReference> {
+        None
+    }
+}
+
+/// Copies a tool's reference into the snapper's resource, writing only on
+/// change (no spurious change detection).
+fn publish_reference(reference: &mut ResMut<SnapReference>, now: Option<DraftReference>) {
+    if reference.0 != now {
+        reference.0 = now;
+    }
 }
 
 /// Message writers a [`ToolCommit`] fans out to. Grouped so the generic
@@ -429,6 +444,7 @@ pub fn run_draft_tool<T: DraftTool>(
     cam_scale: Res<crate::camera::CameraScale>,
     mut tool: ResMut<T>,
     mut active: ResMut<ActiveGesture>,
+    mut reference: ResMut<SnapReference>,
     mut writers: ToolCommitWriters,
 ) {
     let ctx = ToolContext {
@@ -446,6 +462,7 @@ pub fn run_draft_tool<T: DraftTool>(
     if let Some(commit) = tool.update(&ctx) {
         writers.emit(commit);
     }
+    publish_reference(&mut reference, tool.snap_reference());
     // Avoid spurious change-detection: only write when the flag flips.
     let drafting = tool.drafting();
     if active.0 != drafting {
@@ -771,6 +788,12 @@ pub trait ManipTool: Resource<Mutability = Mutable> {
 
     /// Renders the in-progress preview from draft state.
     fn preview(&self, ctx: &ManipContext, out: &mut ToolPreview);
+
+    /// The point the gesture is drawing from, if any (see
+    /// [`DraftTool::snap_reference`]). Defaults to none.
+    fn snap_reference(&self) -> Option<DraftReference> {
+        None
+    }
 }
 
 /// Pointer/tool-state inputs for the manipulation drivers, bundled to stay
@@ -825,6 +848,7 @@ pub struct ManipEditor<'w, 's> {
     active: ResMut<'w, ActiveGesture>,
     hold: ResMut<'w, KinematicHold>,
     exclusions: ResMut<'w, SnapExclusions>,
+    reference: ResMut<'w, SnapReference>,
     spring: ResMut<'w, MouseSpring>,
     twist: ResMut<'w, MouseTwist>,
     selection: ResMut<'w, Selection>,
@@ -883,6 +907,8 @@ pub fn run_manip_tool<T: ManipTool>(
             }
         }
     }
+
+    publish_reference(&mut editor.reference, tool.snap_reference());
 
     let drafting = tool.drafting();
     if editor.active.0 != drafting {

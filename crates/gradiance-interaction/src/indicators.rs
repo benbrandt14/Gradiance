@@ -57,6 +57,12 @@ pub fn draw_snap_indicator(
         SnapKind::Edge => {
             gizmos.circle_2d(Isometry2d::from_translation(pos), s * 0.6, color);
         }
+        SnapKind::Tangent => {
+            // CAD's tangent marker: a circle with a line resting on top.
+            let r = s * 0.7;
+            gizmos.circle_2d(Isometry2d::from_translation(pos), r, color);
+            gizmos.line_2d(pos + Vec2::new(-s, r), pos + Vec2::new(s, r), color);
+        }
     }
 }
 

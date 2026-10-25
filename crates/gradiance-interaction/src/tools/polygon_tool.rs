@@ -1,6 +1,7 @@
 //! Polygon creation tool: click vertices, close near the start (or with
 //! Enter); Escape cancels.
 
+use crate::snap::DraftReference;
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
 use bevy::color::palettes::css;
@@ -67,6 +68,10 @@ impl DraftTool for PolygonTool {
 
     fn drafting(&self) -> bool {
         !self.0.is_empty()
+    }
+
+    fn snap_reference(&self) -> Option<DraftReference> {
+        self.0.last().copied().map(DraftReference::Line)
     }
 
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview) {

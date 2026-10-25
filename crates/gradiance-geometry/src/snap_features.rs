@@ -10,10 +10,15 @@
 //! analytic curve (boxes, polygons, CSG trees) take the polygonized path.
 //! Reading a leaf's own centre and radius is not contouring a field, so
 //! [`polygonize`] stays the single discretization point.
+//!
+//! Tangency lives here too: [`tangent_points`] (the line from a reference
+//! point that just grazes a circle) and [`tangent_radius`] (the radius at
+//! which a circle about a centre first touches an outline).
 
 use crate::contours::Contours;
 use crate::polygonize::polygonize;
 use crate::shape::ShapeDef;
+use crate::snapping::project_on_segment;
 use bevy::math::Vec2;
 
 /// The outline an object snapper queries for one shape, in the shape's
@@ -95,6 +100,71 @@ fn placed_circle(shape: &ShapeDef) -> Option<(Vec2, f32, f32)> {
 /// the 0° point, so the answer is total and deterministic.
 pub fn nearest_on_circle(p: Vec2, center: Vec2, radius: f32) -> Vec2 {
     center + (p - center).try_normalize().unwrap_or(Vec2::X) * radius
+}
+
+/// The two points on the circle (`center`, `radius`) where a line from `q`
+/// is tangent to it, or `None` when `q` is inside or on the circle (there
+/// is no tangent line from there) or the circle is degenerate.
+///
+/// Each point `t` satisfies `(t − center) · (t − q) = 0`: the radius to the
+/// touch point is perpendicular to the line. They are
+/// `c + r·rot(±acos(r/|q−c|))·(q−c)/|q−c|`, counter-clockwise first.
+pub fn tangent_points(q: Vec2, center: Vec2, radius: f32) -> Option<[Vec2; 2]> {
+    let d = q - center;
+    let dist = d.length();
+    if !(radius > 0.0 && dist > radius && dist.is_finite()) {
+        return None;
+    }
+    let u = d / dist * radius;
+    let half = (radius / dist).acos();
+    Some([
+        center + Vec2::from_angle(half).rotate(u),
+        center + Vec2::from_angle(-half).rotate(u),
+    ])
+}
+
+/// Where a circle grown about `center` first touches an outline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TangentTouch {
+    /// The touch point, in the outline's frame.
+    pub point: Vec2,
+    /// The circle's radius at first contact: `center.distance(point)`.
+    pub radius: f32,
+}
+
+/// The tangent radius from `center` to `outline`: the nearest outline point
+/// and its distance. A circle of that radius about `center` just touches
+/// the outline — externally when `center` is outside the shape (for a
+/// circle (c₂, r₂): `|c₂ − c| − r₂`), internally when inside
+/// (`r₂ − |c₂ − c|`).
+///
+/// `None` for an empty outline, when `center` lies on the outline (the
+/// radius would be zero), or at a circle's own centre (every point is
+/// equally near, so there is no single touch point).
+pub fn tangent_radius(center: Vec2, outline: &SnapOutline) -> Option<TangentTouch> {
+    let point = match outline {
+        SnapOutline::Circle {
+            center: c2,
+            radius: r2,
+            ..
+        } => {
+            let dir = (center - *c2).try_normalize()?;
+            *c2 + dir * *r2
+        }
+        SnapOutline::Contours(contours) => contours
+            .rings()
+            .flat_map(|ring| {
+                let n = ring.len();
+                (0..n).map(move |i| project_on_segment(center, ring[i], ring[(i + 1) % n]))
+            })
+            .min_by(|a, b| {
+                center
+                    .distance_squared(*a)
+                    .total_cmp(&center.distance_squared(*b))
+            })?,
+    };
+    let radius = center.distance(point);
+    (radius > f32::EPSILON).then_some(TangentTouch { point, radius })
 }
 
 #[cfg(test)]
@@ -190,5 +260,83 @@ mod tests {
             Vec2::new(1.0, 11.0)
         ));
         assert!(close(nearest_on_circle(c, c, 10.0), Vec2::new(11.0, 1.0)));
+    }
+
+    #[test]
+    fn tangent_points_lie_on_the_circle_perpendicular_to_the_radius() {
+        let c = Vec2::new(2.0, -1.0);
+        let r = 3.0;
+        for q in [
+            Vec2::new(10.0, 0.0),
+            Vec2::new(-4.0, 7.0),
+            Vec2::new(2.0, -4.5),
+        ] {
+            let [t0, t1] = tangent_points(q, c, r).unwrap();
+            assert!(!close(t0, t1), "two distinct points from {q}");
+            for t in [t0, t1] {
+                assert!((t.distance(c) - r).abs() < 1e-4, "{t} not on the circle");
+                let dot = (t - c).normalize().dot((t - q).normalize());
+                assert!(dot.abs() < 1e-4, "radius not perpendicular at {t}: {dot}");
+            }
+        }
+    }
+
+    #[test]
+    fn tangent_points_from_a_known_point() {
+        // From (2, 0) to the unit circle: acos(1/2) = 60°.
+        let [a, b] = tangent_points(Vec2::new(2.0, 0.0), Vec2::ZERO, 1.0).unwrap();
+        let h = 3f32.sqrt() / 2.0;
+        assert!(close(a, Vec2::new(0.5, h)), "{a}");
+        assert!(close(b, Vec2::new(0.5, -h)), "{b}");
+    }
+
+    #[test]
+    fn no_tangent_points_from_inside_or_on_the_circle() {
+        let c = Vec2::new(1.0, 1.0);
+        assert!(tangent_points(c, c, 2.0).is_none());
+        assert!(tangent_points(Vec2::new(2.0, 1.5), c, 2.0).is_none());
+        assert!(
+            tangent_points(Vec2::new(3.0, 1.0), c, 2.0).is_none(),
+            "on it"
+        );
+        assert!(
+            tangent_points(Vec2::new(9.0, 1.0), c, 0.0).is_none(),
+            "degenerate"
+        );
+    }
+
+    #[test]
+    fn tangent_radius_to_a_circle_outside_and_inside() {
+        let outline = snap_outline(&ShapeDef::Circle { radius: 2.0 });
+        // Outside: |c₂ − c| − r₂.
+        let t = tangent_radius(Vec2::new(5.0, 0.0), &outline).unwrap();
+        assert!((t.radius - 3.0).abs() < 1e-5);
+        assert!(close(t.point, Vec2::new(2.0, 0.0)));
+        // Inside: r₂ − |c₂ − c|.
+        let t = tangent_radius(Vec2::new(0.0, 0.5), &outline).unwrap();
+        assert!((t.radius - 1.5).abs() < 1e-5);
+        assert!(close(t.point, Vec2::new(0.0, 2.0)));
+        // Concentric or on the outline: no single touch.
+        assert!(tangent_radius(Vec2::ZERO, &outline).is_none());
+        assert!(tangent_radius(Vec2::new(0.0, 2.0), &outline).is_none());
+    }
+
+    #[test]
+    fn tangent_radius_to_a_box_is_the_nearest_side_or_corner() {
+        let outline = snap_outline(&ShapeDef::Box {
+            width: 4.0,
+            height: 2.0,
+        });
+        // Facing the right side: touches its middle.
+        let t = tangent_radius(Vec2::new(5.0, 0.0), &outline).unwrap();
+        assert!((t.radius - 3.0).abs() < 1e-4, "{}", t.radius);
+        assert!(close(t.point, Vec2::new(2.0, 0.0)), "{}", t.point);
+        // Diagonally off a corner: touches the corner.
+        let t = tangent_radius(Vec2::new(5.0, 5.0), &outline).unwrap();
+        assert!(close(t.point, Vec2::new(2.0, 1.0)), "{}", t.point);
+        assert!((t.radius - 5.0).abs() < 1e-4, "{}", t.radius);
+        // From inside: the nearest side, internally.
+        let t = tangent_radius(Vec2::new(0.0, 0.25), &outline).unwrap();
+        assert!((t.radius - 0.75).abs() < 1e-4, "{}", t.radius);
     }
 }

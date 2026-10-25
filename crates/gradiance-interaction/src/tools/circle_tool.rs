@@ -1,5 +1,10 @@
 //! Circle creation tool: press at the center, drag out the radius.
+//!
+//! Dragging the radius near the radius that would touch another body snaps
+//! to it (a tangent circle): the snapper reports the touch point as the
+//! cursor, so the committed radius is the centre's distance to it.
 
+use crate::snap::DraftReference;
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
 use bevy::color::palettes::css;
@@ -40,6 +45,12 @@ impl DraftTool for CircleTool {
 
     fn drafting(&self) -> bool {
         self.0.is_some()
+    }
+
+    /// While the radius is dragged, the snapper offers the radius that
+    /// just touches a nearby outline (a tangent circle, 3.1).
+    fn snap_reference(&self) -> Option<DraftReference> {
+        self.0.map(DraftReference::Radius)
     }
 
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview) {

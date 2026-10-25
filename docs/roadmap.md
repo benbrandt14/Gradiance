@@ -269,14 +269,21 @@ missing foundation:**
   length and rotation (axis lock and `Ctrl` rotation step apply to that
   edge), the third sets the height to either side
   (`geometry::construct::three_point_box`) — and commits one rotated box.
-  Tangent circle deferred to brief 1-7.*
+  Tangent circle landed (brief 1-7): dragging the circle tool's radius
+  within the capture radius of the radius that touches a nearby outline
+  snaps to it (`geometry::snap_features::tangent_radius`; any body, at any
+  angle around the circle), shown with the tangent glyph at the touch
+  point.*
 - Curvilinear abstraction: tools operate in grid coordinates (polygon
   edges curve in polar grids) (3.3)
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4) —
   *stability and snap-off landed (brief 1-4): circles snap to their exact
   features (`geometry::snap_features`: quadrants, exact nearest point), not
   tessellation vertices; a hidden grid snaps nothing (pinned). Tangent
-  kind/glyph deferred to brief 1-7.*
+  snap + glyph landed (brief 1-7): while a polygon, three-point box or
+  strut draft has a placed point, circles offer the points where the next
+  segment would be tangent (`SnapKind::Tangent`, a circle with a line on
+  top), ahead of other object snaps.*
 
 ## V — Visuals & simulation (active branch: claude/visuals-roadmap)
 
