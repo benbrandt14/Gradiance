@@ -1,25 +1,29 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-10-24, Phase 1 (worker, brief 1-1).
+Last updated: 2026-10-24, Phase 1 (orchestrator, after 1-1 merged).
 
 ## Position
 
 - **Phase:** 1 — M18 grids & snapping (`docs/orchestration.md` § The plan).
-- **main:** `d6b83f5` — PR #211 (Phase 0 reset) merged; Phase 0 gate passed.
-- **PR #212** `claude/1-1-adaptive-snap` (brief 1-1, status: done):
-  snapping uses the same adaptive step the grid is drawn at, in every grid
-  system (`geometry::snapping::adaptive_step`). Also fixes isometric snap
-  targets that sat off the drawn lines, draws the grid under perspective,
-  guards a zero spacing, and fixes the CI annotate step (Format failures
-  were reported as a missing `clippy.txt`). Local gates all green.
-  CI green (ci, coverage, coupling); ready for review. **Awaiting
-  orchestrator review**, including two calls flagged in the
-  brief's Outcome: grid now drawn under perspective (vs. disabling snap
-  there), and the isometric snap-target change.
-- **Next brief:** 1-2 major/minor lines — not yet written (orchestrator).
-  It reuses `adaptive_step`. The Outcome of 1-1 notes that majors currently
-  count adaptive steps, so they shift as the step doubles.
+- **main:** `5bb18b7` — PR #212 (brief 1-1, adaptive snap) merged. Both
+  orchestrator calls in its Outcome accepted: the grid draws under
+  perspective, and isometric snaps to drawn-line intersections.
+- **In flight — three workers in parallel** (file-disjoint by design):
+  - **1-2** major/minor lines — `docs/briefs/1-2-major-minor-lines.md`
+    (render `grid.rs` + geometry `snapping.rs`).
+  - **1-3** axis lock follows the grid — `docs/briefs/1-3-axis-lock-basis.md`
+    (interaction `gesture.rs`, `indicators.rs` guides, `tools/select.rs`).
+  - **1-4** steady snap glyphs + snap-off pin —
+    `docs/briefs/1-4-snap-glyph-stability.md` (interaction `snap.rs`,
+    geometry snap features).
+  All three may append to `geometry/snapping.rs`; expect trivial rebases.
+- **Parallel-run rule:** workers do **not** edit this file (they would
+  conflict). Each hands off through its brief's Outcome and its PR; the
+  orchestrator folds results in here after review.
+- **Next briefs (not written):** 1-5 collinear/centreline snapping (after
+  1-4 lands — same snap engine), 1-6 alternate constructors (3-point box,
+  tangent circle; also owns the tangent snap kind/glyph deferred from 1-4).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
@@ -36,8 +40,7 @@ gate if nobody claims them.
 ## Last verified
 
 - Agent container rustc 1.97.0 = `RUST_PIN`.
-- PR #212 locally (2026-10-24): fmt, clippy `-D warnings`, doc
-  `-D warnings`, `cargo test --workspace` (534 passed) all green.
+- main `5bb18b7` green in CI (PR #212: ci, coverage, coupling).
 - Pending toolchain-bump debt: `orchestration.md` § Recurring.
 
 ## Known hazards
