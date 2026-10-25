@@ -109,3 +109,17 @@ to a power of two) is the natural place; not needed now.
 
 **Polar rings** are now drawn at `i · spacing` (multiplied) rather than by
 accumulating `r += spacing`, so a major ring's radius has no drift.
+
+**Gates.** Local: fmt, clippy `-D warnings` (workspace), `cargo test -p
+gradiance-geometry` (62 pass) — green. **CI ran the workspace gates**
+(`cargo doc -D warnings` and `cargo test --workspace`) — green on
+`222e640`. The local workspace test was skipped on the coordinator's
+instruction (shared disk under 4 GB free; the attempt died with an ICE
+and missing incremental files, the low-disk symptom). The local doc run
+failed with `no is_major_line in snapping`: the parallel worktrees
+(`gradiance-1-3`, `-1-4`) build into one shared target, and same-named
+workspace artifacts from another branch overwrote this one's. That's a
+parallel-run hazard to note for state.md, not a defect in this branch.
+The first CI run caught a constant `assert!` (clippy
+`assertions_on_constants`); the power-of-two check is now a `const _`
+compile-time assertion next to `GRID_MAJOR_EVERY`.
