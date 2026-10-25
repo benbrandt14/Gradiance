@@ -1,6 +1,6 @@
 # Major lines that stay put
 Phase 1 · M18 · "Major/minor grid lines; snap points provably on the grid at
-every adaptive zoom level (3.3, 2.5)" — the major/minor half · status: ready
+every adaptive zoom level (3.3, 2.5)" — the major/minor half · status: done
 
 ## Goal
 
@@ -75,4 +75,52 @@ conflict).
 
 ## Outcome
 
-*(worker fills in)*
+**Landed.** `geometry::snapping` gains `GRID_MAJOR_EVERY = 4`,
+`major_step(minor_step)`, and `is_major_line(index)`; `render::grid` asks
+`is_major_line` for both line families and for polar rings (spokes
+unchanged). The origin line keeps the axis colour. Colours unchanged in
+value: minor α 0.14, major α 0.35 (the old 0.14 × 2.5), axis α 0.4.
+
+**Chosen multiple: 4 (= 2²).** Any power of two makes the major interval
+`base · 2ʲ`, which is itself an adaptive lattice: a major line at one zoom
+is a drawn line at every finer zoom and still major there, and is a drawn
+(minor) line at the next coarser doubling — it never moves. 5 fails because
+`5 · base · 2ᵏ` lies on no coarser lattice. 4 over 8 because minors span
+24–96 px on screen, so majors at 4× span 96–384 px — several stay on
+screen; 8× would leave as few as two or three majors in view at the
+coarse end of the band. 2 was too dense to read as a separate stratum.
+
+**Observable consequence.** As the step doubles, a major becomes minor
+(every other major survives as major), and majors appear only between
+existing ones — never at new world positions off the old lattice.
+
+**Tests (geometry crate):**
+`major_lines_sit_on_a_power_of_two_multiple_of_base` (interval is
+`base·2ʲ` and every major is a whole multiple of it, four bases × zoom
+sweep), `major_lines_keep_their_world_positions_across_zoom` (fixed world
+window; every major is drawn and major at every finer zoom, drawn at the
+next doubling), `every_major_line_is_a_drawn_line` (subset of lattice).
+
+**Unverified fact resolved:** no UI, script verb, or setting exposes a
+"major every N" — `GridSettings` users are the renderer, the snapper, the
+settings tab's reflect grid (spacing/origin), and persistence. No field
+added. If people want to tune it, a `GridSettings.major_every` (validated
+to a power of two) is the natural place; not needed now.
+
+**Polar rings** are now drawn at `i · spacing` (multiplied) rather than by
+accumulating `r += spacing`, so a major ring's radius has no drift.
+
+**Gates.** Local: fmt, clippy `-D warnings` (workspace), `cargo test -p
+gradiance-geometry` (62 pass) — green. **CI ran the workspace gates**
+(`cargo doc -D warnings` and `cargo test --workspace`) — green on
+`222e640`. The local workspace test was skipped on the coordinator's
+instruction (shared disk under 4 GB free; the attempt died with an ICE
+and missing incremental files, the low-disk symptom). The local doc run
+failed with `no is_major_line in snapping` even though the source has it
+and clippy over the same tree passed. Each worktree has its own `target/`,
+so this is not cross-branch sharing. Most likely a stale or half-written
+`gradiance-geometry` rmeta left by the low-disk failures. Not
+investigated further (that would mean deleting artifacts on a full disk).
+CI's doc gate on the same commit is green. The first CI run caught a constant `assert!` (clippy
+`assertions_on_constants`); the power-of-two check is now a `const _`
+compile-time assertion next to `GRID_MAJOR_EVERY`.
