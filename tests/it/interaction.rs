@@ -557,3 +557,127 @@ fn centre_alignment_snaps_onto_a_neighbours_centre_line() {
     let pos = drag_next_to_a_box(drag, |snap| snap.align_edges = false).unwrap();
     assert!((pos.x - 0.04).abs() < 1e-4, "centres off by default: {pos}");
 }
+
+/// A paused app at 1 world unit per pixel (12-unit capture radius), grid
+/// snap off, with a circle body of `radius` at `center`.
+fn app_with_circle(center: Vec2, radius: f32) -> App {
+    let mut app = paused_app();
+    app.world_mut().resource_mut::<GridSettings>().snap_enabled = false;
+    let mut record = box_record(center, 1.0, 1.0);
+    record.shape = ShapeDef::Circle { radius };
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    step(&mut app, 2); // let colliders build
+    app.world_mut().insert_resource(CameraScale(1.0));
+    app
+}
+
+fn select_tool(app: &mut App, tool: ToolState) {
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(tool);
+    app.update();
+}
+
+/// Moves the raw cursor and runs a frame (the snapper runs in `PreUpdate`).
+fn move_to(app: &mut App, p: Vec2) {
+    app.world_mut().insert_resource(CursorWorldPos(Some(p)));
+    app.update();
+}
+
+fn left(app: &mut App, down: bool) {
+    let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+    if down {
+        input.press(MouseButton::Left);
+    } else {
+        input.release(MouseButton::Left);
+    }
+    app.update();
+}
+
+#[test]
+fn a_polygon_edge_snaps_tangent_to_a_circle_from_its_last_vertex() {
+    // Feedback 3.4: with a vertex placed, the cursor near the point where
+    // the next edge would graze a circle snaps there, as `Tangent`.
+    let (c, r) = (Vec2::ZERO, 50.0);
+    let mut app = app_with_circle(c, r);
+    select_tool(&mut app, ToolState::Polygon);
+    let q = Vec2::new(150.0, 0.0);
+    // From (150, 0) to r = 50: acos(1/3) either side of the x axis.
+    let t = Vec2::new(r / 3.0, r * 8f32.sqrt() / 3.0);
+    let near = t + Vec2::new(3.0, 2.0);
+
+    // No reference yet: the same cursor is a plain edge snap.
+    move_to(&mut app, near);
+    assert_eq!(
+        app.world().resource::<SnappedCursor>().kind,
+        Some(SnapKind::Edge)
+    );
+
+    move_to(&mut app, q);
+    left(&mut app, true);
+    left(&mut app, false);
+    move_to(&mut app, near);
+    let snapped = *app.world().resource::<SnappedCursor>();
+    assert_eq!(snapped.kind, Some(SnapKind::Tangent), "{snapped:?}");
+    let pos = snapped.position.unwrap();
+    assert!(pos.distance(t) < 1e-3, "{pos} vs {t}");
+    assert!((pos - c).normalize().dot((pos - q).normalize()).abs() < 1e-4);
+
+    // Leaving the tool mid-draft leaves no reference behind.
+    select_tool(&mut app, ToolState::Select);
+    move_to(&mut app, near);
+    assert_eq!(
+        app.world().resource::<SnappedCursor>().kind,
+        Some(SnapKind::Edge)
+    );
+}
+
+/// Drags a circle from `center` to `cursor` with the circle tool beside a
+/// circle body (200, 0), r = 50; returns the drawn circle's radius (`None`:
+/// no circle there) and the snap seen at the release.
+fn draw_circle_beside_a_circle(center: Vec2, cursor: Vec2) -> (Option<f32>, Option<SnapKind>) {
+    let mut app = app_with_circle(Vec2::new(200.0, 0.0), 50.0);
+    select_tool(&mut app, ToolState::Circle);
+    move_to(&mut app, center);
+    left(&mut app, true);
+    move_to(&mut app, cursor);
+    let kind = app.world().resource::<SnappedCursor>().kind;
+    left(&mut app, false);
+    step(&mut app, 1);
+    assert_eq!(body_count(&mut app), 2, "one circle committed");
+    let mut q = app
+        .world_mut()
+        .query_filtered::<(&ShapeDef, &Transform), With<Body>>();
+    let radius = q
+        .iter(app.world())
+        .find(|(_, tf)| tf.translation.truncate().distance(center) < 1e-3)
+        .and_then(|(shape, _)| match shape {
+            ShapeDef::Circle { radius } => Some(*radius),
+            _ => None,
+        });
+    (radius, kind)
+}
+
+#[test]
+fn a_circle_dragged_near_a_neighbour_commits_the_radius_that_touches_it() {
+    // Feedback 3.1, the tangent circle: the radius snaps so the new circle
+    // just touches its neighbour — distance between centres = r1 + r2.
+    let (radius, kind) = draw_circle_beside_a_circle(Vec2::ZERO, Vec2::new(147.0, 4.0));
+    let radius = radius.unwrap();
+    assert_eq!(kind, Some(SnapKind::Tangent));
+    assert!((radius + 50.0 - 200.0).abs() < 1e-3, "r = {radius}");
+
+    // The radius holds anywhere around the circle, not only facing the
+    // neighbour: the snap is on the radius, its glyph at the touch point.
+    let (radius, kind) = draw_circle_beside_a_circle(Vec2::ZERO, Vec2::new(3.0, 147.0));
+    let radius = radius.unwrap();
+    assert_eq!(kind, Some(SnapKind::Tangent));
+    assert!((radius - 150.0).abs() < 1e-3, "r = {radius}");
+
+    // Outside the capture radius the drag is free.
+    let (radius, kind) = draw_circle_beside_a_circle(Vec2::ZERO, Vec2::new(0.0, 120.0));
+    let radius = radius.unwrap();
+    assert_eq!(kind, None);
+    assert!((radius - 120.0).abs() < 1e-3, "r = {radius}");
+}

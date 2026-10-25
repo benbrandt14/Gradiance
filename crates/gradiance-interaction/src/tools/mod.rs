@@ -68,6 +68,15 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<strut_tool::StrutDraft>();
         app.init_resource::<node_tools::TracerTool>();
 
+        // A draft abandoned by a tool switch must not leave its reference
+        // behind; the new tool's driver republishes its own this frame.
+        app.add_systems(
+            Update,
+            clear_snap_reference
+                .run_if(state_changed::<ToolState>)
+                .before(ToolDriverSet)
+                .in_set(InteractionSet),
+        );
         app.add_systems(
             Update,
             (
@@ -134,6 +143,11 @@ impl Plugin for ToolsPlugin {
             );
         }
     }
+}
+
+/// Drops the snapper's draft reference (on a tool change).
+fn clear_snap_reference(mut reference: ResMut<crate::snap::SnapReference>) {
+    reference.0 = None;
 }
 
 /// All authored bodies at `p`, topmost first.

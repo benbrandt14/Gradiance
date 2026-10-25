@@ -11,6 +11,7 @@
 //! the edge's line) is ignored so a stray double-click loses nothing. The
 //! a → b edge honours the axis lock and, with `Ctrl`, the rotation step.
 
+use crate::snap::DraftReference;
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
 use bevy::color::palettes::css;
@@ -139,6 +140,16 @@ impl DraftTool for BoxTool {
 
     fn drafting(&self) -> bool {
         self.0 != BoxDraft::Idle
+    }
+
+    /// The three-point draft's last placed point. The two-corner drag
+    /// spans an axis-aligned box, which has no segment to make tangent.
+    fn snap_reference(&self) -> Option<DraftReference> {
+        match self.0 {
+            BoxDraft::EdgeStart(a) => Some(DraftReference::Line(a)),
+            BoxDraft::Height(_, b) => Some(DraftReference::Line(b)),
+            BoxDraft::Idle | BoxDraft::Corner(_) => None,
+        }
     }
 
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview) {

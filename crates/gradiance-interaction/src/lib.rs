@@ -67,6 +67,7 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<joint_edit::JointLimitDrag>();
         app.init_resource::<snap::SnappedCursor>();
         app.init_resource::<snap::SnapExclusions>();
+        app.init_resource::<snap::SnapReference>();
         app.init_resource::<gesture::GestureConstraints>();
         app.init_resource::<gradiance_domain::settings::GridSettings>();
         app.init_resource::<gradiance_domain::settings::SnapConfig>();

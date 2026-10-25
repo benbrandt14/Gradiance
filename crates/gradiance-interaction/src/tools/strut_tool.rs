@@ -10,6 +10,7 @@
 //! joint leaves as a [`ToolCommit::SpawnJoint`] through the shared commit seam.
 
 use crate::selection::Selection;
+use crate::snap::DraftReference;
 use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
@@ -62,6 +63,11 @@ impl ManipTool for StrutDraft {
 
     fn drafting(&self) -> bool {
         self.0.is_some()
+    }
+
+    /// The first anchor: the strut is a segment drawn from it.
+    fn snap_reference(&self) -> Option<DraftReference> {
+        self.0.map(DraftReference::Line)
     }
 
     fn preview(&self, ctx: &ManipContext, out: &mut ToolPreview) {

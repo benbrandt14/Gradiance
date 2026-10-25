@@ -1,6 +1,6 @@
 # Tangent snap and tangent circle
 Phase 1 · M18 · "Alternate constructors: … tangent circle (3.1)" and "Snap
-glyph … tangent glyph (3.4)" · status: ready
+glyph … tangent glyph (3.4)" · status: done
 
 ## Goal
 
@@ -88,4 +88,66 @@ features, alignment (1-5), `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**Landed.**
+
+- **Math** (`geometry::snap_features`): `tangent_points(q, c, r) ->
+  Option<[Vec2; 2]>` (`None` from inside/on the circle or r ≤ 0) and
+  `tangent_radius(center, &SnapOutline) -> Option<TangentTouch {point,
+  radius}>` — the nearest outline point (circle: radial; contours: nearest
+  segment projection), so it is external from outside, internal from
+  inside. `None` at a circle's own centre or on the outline. Five unit
+  tests (on-circle + perpendicular, a known 60° case, none from inside,
+  circle outside/inside, box side/corner/inside).
+- **Reference seam** (`interaction::snap`): `SnapReference(Option<DraftReference>)`
+  with `DraftReference::Line(p)` (a segment drawn from `p`) and
+  `::Radius(c)` (a circle drawn about `c`). Both `DraftTool` and
+  `ManipTool` got a default `fn snap_reference(&self) -> Option<DraftReference>
+  { None }`; `run_draft_tool` / `run_manip_tool` copy it into the resource
+  each frame (write on change only), and a `clear_snap_reference` system
+  runs on `state_changed::<ToolState>` so an abandoned draft leaves none.
+  The snapper reads it one frame late (it runs in `PreUpdate`), which is
+  invisible in use.
+- **Publishers:** polygon (last vertex), box three-point (`EdgeStart(a)` →
+  a, `Height(a, b)` → b; the two-corner drag publishes nothing — an
+  axis-aligned box has no free segment), strut (first anchor; it is a
+  `ManipTool`, hence the second trait method), circle (`Radius(centre)`).
+- **Circle tool:** no change to its update or commit. In `Radius` mode the
+  snapper queries every body within `|p − c| + capture` of the centre and
+  scores each touch point by `||p − c| − r_touch|`, so the radius snaps at
+  any angle around the circle; the reported cursor *is* the touch point, so
+  the committed radius is exact and the glyph sits where the circles meet.
+- **Glyph:** `SnapKind::Tangent` draws CAD's tangent marker, a circle
+  (0.7 s) with a horizontal line resting on top.
+- **Integration tests** (`tests/it/interaction.rs`): polygon draft from
+  (150, 0) to an r = 50 circle → `Tangent` at the exact tangent point
+  (and `Edge` at the same cursor before the first click and after leaving
+  the tool); circle tool beside a circle at (200, 0) → committed r = 150 =
+  d − r₂, both facing the neighbour and from 90° away, and a free radius
+  outside the capture.
+
+**Judgment call — tangent priority, not the plain nearest rule.** The brief
+said tangents compete in the existing nearest-candidate rule. They cannot
+usefully: a circle's own `Edge` projection is the nearest point on the
+circle, so it is never farther than a tangent point, and the tangent would
+win only inside `EDGE_TIE_BIAS` (0.6 px at default capture). Tangents are
+therefore a tier above the other object snaps inside the capture radius
+(`Nearest::winner` in `snap.rs`). They are offered only while a draft has a
+reference, so this never changes plain snapping — every 1-4/1-5 test is
+unchanged.
+
+**Not done / for later.**
+
+- No `SnapSources.tangents` toggle: adding one changes the saved
+  `SnapConfig` and the Grid & Snap panel. Tangents are on whenever object
+  snaps are.
+- CSG shapes with circular leaves offer no line tangents (Contours path),
+  same follow-up as 1-4's. The tangent *radius* does work against any
+  outline, CSG included, because it uses the contour.
+- The radius-mode query scans the whole disc of the drag, polygonizing each
+  body in it each frame. Fine at sandbox scale; cache outlines if a big
+  scene shows it.
+- Gates: fmt, clippy `-D warnings`, doc `-D warnings`,
+  `cargo test -p gradiance-geometry -p gradiance-interaction`, and the whole
+  `tests/it` binary (245/245) run locally. `cargo test --workspace` was left
+  to CI (container had 11–17 GB free, under the 20 GB bar). rustc 1.97.0 =
+  `RUST_PIN`.
