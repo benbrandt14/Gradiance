@@ -38,6 +38,16 @@ pub fn body_sensors(id: StableId) -> [(&'static str, SignalSource); 9] {
     ]
 }
 
+/// A joint's **sensor ports** as `(label, source)` — its live length and
+/// angle (`JointDef::sensor_state`, read through `physics::queries`). The
+/// catalog behind the joint inspector's readouts.
+pub fn joint_sensors(id: StableId) -> [(&'static str, SignalSource); 2] {
+    [
+        ("length", SignalSource::JointLength(id)),
+        ("angle", SignalSource::JointAngle(id)),
+    ]
+}
+
 /// A body's **actuator ports** as `(label, sink)` — the writable color
 /// channels a bound signal can drive. The catalog behind the canvas input pins.
 pub fn body_actuators(id: StableId) -> [(&'static str, SignalSink); 2] {
@@ -68,7 +78,44 @@ pub fn sensor_readouts(
     dt: f32,
     bindings: &mut SignalBindings,
 ) {
-    for (label, source) in body_sensors(id) {
+    sensor_rows(
+        ui,
+        id,
+        body_sensors(id),
+        index,
+        physics,
+        transforms,
+        dt,
+        bindings,
+    );
+    ui.horizontal(|ui| {
+        ui.label("mass");
+        match index.entity(id).and_then(|e| physics.mass_of(e)) {
+            Some(mass) => ui.monospace(format!("{:.2} {}", mass.value(), Mass::UNIT)),
+            None => widgets::empty_state(ui, "—"),
+        };
+    });
+}
+
+/// Renders sensor ports as live read-only rows (name → value → a **plot**
+/// toggle) — shared by the body and joint inspectors. `owner` names the plot
+/// binding (`"{label}@{owner}"`); `dt` scales the impulse→force readout.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the read_source inputs + row context"
+)]
+pub fn sensor_rows(
+    ui: &mut egui::Ui,
+    owner: StableId,
+    sensors: impl IntoIterator<Item = (&'static str, SignalSource)>,
+    index: &IdIndex,
+    physics: &PhysicsQueries,
+    transforms: &Query<&Transform, With<Body>>,
+    dt: f32,
+    bindings: &mut SignalBindings,
+) {
+    let id = owner;
+    for (label, source) in sensors {
         ui.horizontal(|ui| {
             ui.label(label);
             match gradiance_signal::read_source(&source, index, physics, transforms, dt) {
@@ -97,13 +144,6 @@ pub fn sensor_readouts(
             }
         });
     }
-    ui.horizontal(|ui| {
-        ui.label("mass");
-        match index.entity(id).and_then(|e| physics.mass_of(e)) {
-            Some(mass) => ui.monospace(format!("{:.2} {}", mass.value(), Mass::UNIT)),
-            None => widgets::empty_state(ui, "—"),
-        };
-    });
 }
 
 /// Index of an existing plot-sink binding for `source`, if any.
@@ -131,5 +171,7 @@ mod tests {
             let _ = unit(&source);
         }
         assert_eq!(body_actuators(id).len(), 2, "fill + tracer actuator ports");
+        let joint_units: Vec<&str> = joint_sensors(id).iter().map(|(_, s)| unit(s)).collect();
+        assert_eq!(joint_units, ["m", "rad"], "joint ports carry SI units");
     }
 }

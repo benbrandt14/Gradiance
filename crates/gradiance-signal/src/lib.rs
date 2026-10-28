@@ -303,6 +303,12 @@ pub fn read_source(
         SignalSource::AngularMomentum(id) => index
             .entity(*id)
             .and_then(|e| Some(physics.angular_momentum_of(e)?.value())),
+        SignalSource::JointLength(id) => index
+            .entity(*id)
+            .and_then(|e| Some(physics.joint_length(e, index)?.value())),
+        SignalSource::JointAngle(id) => index
+            .entity(*id)
+            .and_then(|e| Some(physics.joint_angle(e, index)?.value())),
         SignalSource::Named(_) => None,
     }
 }

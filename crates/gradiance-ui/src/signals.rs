@@ -225,6 +225,8 @@ fn source_label(source: &SignalSource) -> &'static str {
         SignalSource::KineticEnergy(_) => "energy",
         SignalSource::Momentum(_) => "momentum",
         SignalSource::AngularMomentum(_) => "ang mom",
+        SignalSource::JointLength(_) => "joint length",
+        SignalSource::JointAngle(_) => "joint angle",
         SignalSource::Named(_) => "named",
     }
 }
@@ -327,7 +329,10 @@ fn binding_row(
                         | SignalSource::Momentum(id)
                         | SignalSource::AngularMomentum(id)
                         | SignalSource::Distance(id, _) => Some(*id),
-                        SignalSource::Named(_) => None,
+                        // A joint has no fill/tracer to recolor.
+                        SignalSource::JointLength(_)
+                        | SignalSource::JointAngle(_)
+                        | SignalSource::Named(_) => None,
                     },
                 };
                 if let Some(target) = target {

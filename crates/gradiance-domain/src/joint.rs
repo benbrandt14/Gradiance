@@ -29,6 +29,8 @@
 use bevy::math::Vec2;
 use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
+use gradiance_core::units::PosRot;
+use gradiance_units::{Angle, Length};
 use serde::{Deserialize, Serialize};
 
 // --- Motors ---------------------------------------------------------------
@@ -260,6 +262,23 @@ pub fn oscillate_target(rel: f32, min: f32, max: f32, speed: f32, buffer: f32) -
     }
 }
 
+/// The pose a world pin's "body B" sits at — the identity. See
+/// [`JointDef::sensor_state`].
+pub const WORLD_POSE: PosRot = PosRot {
+    pos: Vec2::ZERO,
+    rot: 0.0,
+};
+
+/// A joint's live sensor readings ([`JointDef::sensor_state`]) — typed SI
+/// quantities (`docs/units-decision.md`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct JointSensors {
+    /// Distance between the two world anchors.
+    pub length: Length,
+    /// Relative rotation minus the authored rest angle (hinge-limit frame).
+    pub angle: Angle,
+}
+
 /// The authored definition of one constraint between two bodies (or one
 /// body and the world).
 ///
@@ -325,6 +344,35 @@ impl JointDef {
             _ => body_a_rot,
         }
     }
+
+    /// The joint's live **sensor state** given both endpoint poses — the pure
+    /// math behind the `JointLength`/`JointAngle` signal sources (read through
+    /// `physics::queries`). Derived, never saved.
+    ///
+    /// - `length`: distance between the two **world** anchors (`anchor_a` on
+    ///   body A, `anchor_b` on body B).
+    /// - `angle`: relative rotation of B against A minus the authored rest
+    ///   angle, wrapped to `(-π, π]` — exactly [`hinge_limit_angle`], the frame
+    ///   avian's hinge limits and the oscillating motor measure in, so a plotted
+    ///   angle compares directly to the authored `[min, max]`.
+    ///
+    /// A **world pin** (`body_b == None`) passes [`WORLD_POSE`] for `pose_b`:
+    /// its `anchor_b` is already a world point and the derived static pin sits
+    /// at rotation 0, so the world *is* body B at the identity pose.
+    #[must_use]
+    pub fn sensor_state(&self, pose_a: PosRot, pose_b: PosRot) -> JointSensors {
+        let world_a = self.anchor_world(pose_a.pos, pose_a.rot);
+        let world_b = pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(self.anchor_b);
+        JointSensors {
+            length: Length(world_a.distance(world_b)),
+            angle: Angle(hinge_limit_angle(
+                pose_a.rot,
+                pose_b.rot,
+                self.rest_rot_a,
+                self.rest_rot_b,
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -356,6 +404,72 @@ mod tests {
         // angle is body A's deviation from its authored rest.
         let rest_a = 0.5;
         assert!((hinge_limit_angle(0.5 + 0.3, 0.0, rest_a, 0.0) - (-0.3)).abs() < 1e-6);
+    }
+
+    fn pose(x: f32, y: f32, rot: f32) -> PosRot {
+        PosRot {
+            pos: Vec2::new(x, y),
+            rot,
+        }
+    }
+
+    #[test]
+    fn a_hinge_at_rest_reads_zero_angle_and_zero_length() {
+        // Two bodies 2 m apart, hinged at the midpoint, both authored rotated.
+        let mut def = hinge(Some(StableId::new()), 0.4);
+        def.rest_rot_b = -0.2;
+        def.anchor_a = Vec2::new(1.0, 0.0);
+        def.anchor_b = Vec2::new(-1.0, 0.0);
+        // Body-local anchors in each body's rotated frame: place the bodies so
+        // both anchors land on the same world point.
+        let pivot = Vec2::new(3.0, 1.0);
+        let pa = pivot - Vec2::from_angle(0.4).rotate(def.anchor_a);
+        let pb = pivot - Vec2::from_angle(-0.2).rotate(def.anchor_b);
+        let s = def.sensor_state(pose(pa.x, pa.y, 0.4), pose(pb.x, pb.y, -0.2));
+        assert!(s.length.value() < 1e-5, "coincident anchors: {s:?}");
+        assert!(s.angle.value().abs() < 1e-6, "at rest: {s:?}");
+        // Rotate B by +0.3 about the pivot: angle reads +0.3, length stays 0.
+        let pb2 = pivot - Vec2::from_angle(0.1).rotate(def.anchor_b);
+        let s2 = def.sensor_state(pose(pa.x, pa.y, 0.4), pose(pb2.x, pb2.y, 0.1));
+        assert!(close(s2.angle.value(), 0.3), "{s2:?}");
+        assert!(s2.length.value() < 1e-5);
+    }
+
+    #[test]
+    fn a_slider_reads_its_extension_as_length() {
+        let def = JointDef {
+            kind: JointKind::Slider {
+                axis: Vec2::X,
+                limits: None,
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: StableId::new(),
+            body_b: Some(StableId::new()),
+            anchor_a: Vec2::ZERO,
+            anchor_b: Vec2::ZERO,
+            rest_rot_a: 0.0,
+            rest_rot_b: 0.0,
+        };
+        let s = def.sensor_state(pose(0.0, 0.0, 0.0), pose(1.5, 0.0, 0.0));
+        assert!(close(s.length.value(), 1.5), "{s:?}");
+        assert!(s.angle.value().abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_world_pin_measures_against_the_world_point() {
+        // Pinned at world (2, 0); body A's anchor is 1 m right of its centre.
+        let mut def = hinge(None, 0.5);
+        def.anchor_a = Vec2::new(1.0, 0.0);
+        def.anchor_b = Vec2::new(2.0, 0.0);
+        // At rest (rot 0.5) with the anchor 0.5 m short of the pin.
+        let a = Vec2::new(1.5, 0.0) - Vec2::from_angle(0.5).rotate(def.anchor_a);
+        let s = def.sensor_state(pose(a.x, a.y, 0.5), WORLD_POSE);
+        assert!(close(s.length.value(), 0.5), "{s:?}");
+        assert!(s.angle.value().abs() < 1e-6);
+        // Body A swings +0.3: the limit-frame angle is the pin relative to A.
+        let s2 = def.sensor_state(pose(a.x, a.y, 0.8), WORLD_POSE);
+        assert!(close(s2.angle.value(), -0.3), "{s2:?}");
     }
 
     #[test]
