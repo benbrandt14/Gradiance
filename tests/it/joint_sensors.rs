@@ -62,7 +62,7 @@ fn bus(app: &App, name: &str) -> f32 {
     app.world()
         .resource::<SignalBus>()
         .get(name)
-        .unwrap_or_else(|| panic!("{name} published on the bus"))
+        .expect("published on the bus")
 }
 
 /// Teleports a (static) body — test-only direct pose write.
