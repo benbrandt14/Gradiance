@@ -231,7 +231,8 @@ impl NodeGraph {
 
 /// The index of the sensor output pin a scene [`SignalSource`] maps to — must
 /// match the order of [`body_sensors`]. `None` for sources that aren't a
-/// single body's sensor port (distance, named).
+/// single body's sensor port (distance, named, joint sensors — joints have no
+/// canvas block yet).
 fn sensor_index(source: &SignalSource) -> Option<usize> {
     match source {
         SignalSource::Speed(_) => Some(0),
@@ -243,7 +244,10 @@ fn sensor_index(source: &SignalSource) -> Option<usize> {
         SignalSource::KineticEnergy(_) => Some(6),
         SignalSource::Momentum(_) => Some(7),
         SignalSource::AngularMomentum(_) => Some(8),
-        SignalSource::Distance(..) | SignalSource::Named(_) => None,
+        SignalSource::Distance(..)
+        | SignalSource::JointLength(_)
+        | SignalSource::JointAngle(_)
+        | SignalSource::Named(_) => None,
     }
 }
 
@@ -741,7 +745,8 @@ fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
             ids.push(*a);
             ids.push(*b);
         }
-        SignalSource::Named(_) => {}
+        // A joint sensor references a joint, not a body: no body block.
+        SignalSource::JointLength(_) | SignalSource::JointAngle(_) | SignalSource::Named(_) => {}
     }
     match &binding.sink {
         SignalSink::Fill(id) | SignalSink::TracerColor(id) => ids.push(*id),

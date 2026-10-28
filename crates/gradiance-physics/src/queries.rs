@@ -10,9 +10,12 @@
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use gradiance_core::ids::IdIndex;
 use gradiance_core::units::PosRot;
+use gradiance_domain::joint::{JointDef, JointSensors, WORLD_POSE};
 use gradiance_units::{
-    AngularMomentum, AngularVelocity, Energy, Impulse, Impulse2, Mass, Momentum, Velocity2,
+    Angle, AngularMomentum, AngularVelocity, Energy, Impulse, Impulse2, Length, Mass, Momentum,
+    Velocity2,
 };
 
 /// A world-space contact sample: the point, its unit normal, and the normal
@@ -50,6 +53,9 @@ pub struct PhysicsQueries<'w, 's> {
     inertias: Query<'w, 's, &'static ComputedAngularInertia>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
     contacts: Res<'w, ContactGraph>,
+    /// Authored joint definitions — read for the joint sensor reads; body
+    /// poses come from `colliders` (a body's collider is on the body entity).
+    joints: Query<'w, 's, &'static JointDef>,
 }
 
 impl PhysicsQueries<'_, '_> {
@@ -113,6 +119,38 @@ impl PhysicsQueries<'_, '_> {
                     .then_some(entity)
             })
             .collect()
+    }
+
+    /// A joint's live sensor state (length between its world anchors, angle
+    /// in the hinge-limit frame) — the read behind the `JointLength` /
+    /// `JointAngle` signal sources. Derived from the bodies' live poses and
+    /// the authored [`JointDef`] alone (`JointDef::sensor_state`), never from
+    /// avian's joint entity. A world pin measures against its world point.
+    /// `None` if `joint` isn't a joint or an endpoint body doesn't resolve.
+    pub fn joint_state(&self, joint: Entity, index: &IdIndex) -> Option<JointSensors> {
+        let def = self.joints.get(joint).ok()?;
+        let pose = |id| {
+            let (_, transform, _) = self.colliders.get(index.entity(id)?).ok()?;
+            Some(PosRot::from_transform(transform))
+        };
+        let pose_a = pose(def.body_a)?;
+        let pose_b = match def.body_b {
+            Some(id) => pose(id)?,
+            None => WORLD_POSE,
+        };
+        Some(def.sensor_state(pose_a, pose_b))
+    }
+
+    /// Distance between a joint's two world anchors (see
+    /// [`joint_state`](Self::joint_state)).
+    pub fn joint_length(&self, joint: Entity, index: &IdIndex) -> Option<Length> {
+        self.joint_state(joint, index).map(|s| s.length)
+    }
+
+    /// A joint's relative rotation minus its authored rest angle (see
+    /// [`joint_state`](Self::joint_state)).
+    pub fn joint_angle(&self, joint: Entity, index: &IdIndex) -> Option<Angle> {
+        self.joint_state(joint, index).map(|s| s.angle)
     }
 
     /// The entity's `(linear, angular)` velocity, if it simulates.

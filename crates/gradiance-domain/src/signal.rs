@@ -42,6 +42,12 @@ pub enum SignalSource {
     Momentum(StableId),
     /// Angular momentum of a body (I·ω, signed CCW-positive, kg·m²/s).
     AngularMomentum(StableId),
+    /// Distance between a **joint's** two world anchors (m) — keyed by the
+    /// joint's [`StableId`], read via `JointDef::sensor_state`.
+    JointLength(StableId),
+    /// A **joint's** relative rotation minus its authored rest angle (rad,
+    /// the hinge-limit frame) — keyed by the joint's [`StableId`].
+    JointAngle(StableId),
     /// A named value published on the `SignalBus` (in the `signal` layer)
     /// — by a script
     /// (`signal-set`), a future node, or another binding.
@@ -297,6 +303,8 @@ impl SignalSource {
             Self::KineticEnergy(id) => ("energy", id),
             Self::Momentum(id) => ("momentum", id),
             Self::AngularMomentum(id) => ("angmom", id),
+            Self::JointLength(id) => ("jlength", id),
+            Self::JointAngle(id) => ("jangle", id),
             Self::Distance(..) | Self::Named(_) => return None,
         };
         Some(format!("{tag}@{}", id.0))
@@ -312,7 +320,10 @@ impl SignalSource {
         match self {
             Self::Speed(_) => Dimension::Velocity,
             Self::Spin(_) => Dimension::AngularVelocity,
-            Self::Height(_) | Self::PosX(_) | Self::Distance(..) => Dimension::Length,
+            Self::Height(_) | Self::PosX(_) | Self::Distance(..) | Self::JointLength(_) => {
+                Dimension::Length
+            }
+            Self::JointAngle(_) => Dimension::Angle,
             Self::ContactForce(_) => Dimension::Force,
             Self::KineticEnergy(_) => Dimension::Energy,
             Self::Momentum(_) => Dimension::Momentum,
@@ -336,6 +347,8 @@ impl SignalSource {
             "energy" => Self::KineticEnergy(sid),
             "momentum" => Self::Momentum(sid),
             "angmom" => Self::AngularMomentum(sid),
+            "jlength" => Self::JointLength(sid),
+            "jangle" => Self::JointAngle(sid),
             _ => return None,
         })
     }
@@ -354,6 +367,8 @@ impl SignalSource {
             Self::KineticEnergy(a) => (Self::KineticEnergy(one(*a).0), one(*a).1),
             Self::Momentum(a) => (Self::Momentum(one(*a).0), one(*a).1),
             Self::AngularMomentum(a) => (Self::AngularMomentum(one(*a).0), one(*a).1),
+            Self::JointLength(a) => (Self::JointLength(one(*a).0), one(*a).1),
+            Self::JointAngle(a) => (Self::JointAngle(one(*a).0), one(*a).1),
             Self::Distance(a, b) => {
                 let (ra, ta) = one(*a);
                 let (rb, tb) = one(*b);
@@ -943,6 +958,8 @@ mod tests {
             SignalSource::KineticEnergy(id),
             SignalSource::Momentum(id),
             SignalSource::AngularMomentum(id),
+            SignalSource::JointLength(id),
+            SignalSource::JointAngle(id),
         ] {
             let name = source.bus_name().expect("has a bus name");
             assert_eq!(SignalSource::from_bus_name(&name), Some(source));

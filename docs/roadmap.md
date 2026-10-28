@@ -443,9 +443,12 @@ governance").
   to the plot sink*: a `SignalSink::Plot` binding, added with one click from a
   sensor port's **▸plot** toggle in the inspector. Recording pauses with the
   simulation. Hand-drawn with the egui painter, no plotting dependency. (The old
-  dual PlotHistory/sample_plot store was removed — one bus.) Next: joint sensor
-  sources (length/angle as `SignalSource`s so joints plot again) and the
-  script-driven `(measure …)` seam.
+  dual PlotHistory/sample_plot store was removed — one bus.) **Joint sensor
+  sources landed** (brief 2-1): `SignalSource::JointLength` / `JointAngle`
+  (keyed by the joint's `StableId`; math in `JointDef::sensor_state`, read via
+  `PhysicsQueries::joint_state`/`joint_length`/`joint_angle`), shown with ▸plot
+  in the joint inspector; scripts read a bound one with `signal-get`. Joints
+  have no node-graph block yet. Next: the script-driven `(measure …)` seam.
 - **Signal dataflow scaffolding** — **landed** (`docs/signal-dataflow.md`):
   the substrate for the time-series node editor. `SignalBindings` (config
   seam, persisted with the scene) wire **sources** (speed, spin, height,

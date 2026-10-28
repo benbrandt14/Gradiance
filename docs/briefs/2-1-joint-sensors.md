@@ -1,6 +1,6 @@
 # Joints you can plot
 Phase 2 · Tracers & plotters · "Next: joint sensor sources (length/angle as
-`SignalSource`s so joints plot again)" · status: ready
+`SignalSource`s so joints plot again)" · status: done
 
 ## Goal
 
@@ -78,4 +78,54 @@ layout work, joint inspector redesign, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**Status: done** — PR #219.
+
+What landed:
+- **Math** (`gradiance-domain/src/joint.rs`): `JointDef::sensor_state(pose_a,
+  pose_b) -> JointSensors { length: Length, angle: Angle }`, plus
+  `WORLD_POSE`. Pure, three unit tests (hinge at rest = 0 and +0.3 after a
+  rotation; slider extension; world pin). It lives in domain, not geometry,
+  because it needs `JointDef` and reuses `hinge_limit_angle`.
+- **Facade** (`physics::queries`): `joint_state(joint, &IdIndex)`,
+  `joint_length`, `joint_angle`. They take the index explicitly, so
+  `PhysicsQueries` gains only a read-only `Query<&JointDef>`. Body poses come
+  from the existing `colliders` query (the collider sits on the body entity),
+  so the param adds no new `Transform` access.
+- **Sources**: `SignalSource::JointLength(id)` / `JointAngle(id)`, keyed by the
+  **joint's** `StableId`. Each has a `read_source` arm, a `bus_name`
+  (`jlength@`/`jangle@`) with its `from_bus_name` inverse, a `dimension`
+  (Length/Angle), and remap support. The additions are additive in RON: no
+  format bump, and the golden replay files are unchanged.
+- **UI**: `ports::joint_sensors(id)` is a catalog next to `body_sensors`. The
+  body row renderer is now `ports::sensor_rows`, shared by both inspectors.
+  The joint inspector's private `joint_geometry` computation was deleted
+  (UI stays a consumer), and the joint inspector now shows the two ports with
+  ▸plot, in SI (`rad`, not degrees).
+- **Tests** (`tests/it/joint_sensors.rs`): hinge angle on a plot binding;
+  slider length; spring length against a world pin; a script reading a bound
+  sensor through `signal-get` (so no verb was needed).
+
+Judgment calls:
+- **Angle** = `hinge_limit_angle`, the frame avian's limits and the
+  oscillating motor use. A plotted angle compares directly with the authored
+  `[min, max]`. It is reported for every joint kind.
+- **World pin** = body B at the identity pose. `anchor_b` is a world point
+  and the derived pin has rotation 0, so the angle reads the *pin relative to
+  A*. When A swings +θ, the sensor reads −θ, which matches the existing domain
+  test. `limit_reference_angle`'s comment describes world-pin limits as
+  `rest_rot_a + [min, max]` in world angles, which is the opposite sign.
+  Nobody has checked this against avian; if the gizmo is wrong, that belongs
+  in a follow-up.
+- **Length** is an unsigned anchor distance, as the brief specifies. A signed
+  axial slider travel (the value the oscillate seam computes) would be a
+  separate source if one is wanted.
+- **Node-graph palette**: joint sensors get no canvas pins. The palette is a
+  per-*body* block (`sensor_index` ↔ `body_sensors`), and joints have no
+  block. TODO: add a joint block when node-graph work is scheduled.
+- Before this change the joint inspector showed degrees and `rot_b − rot_a`
+  with no rest term. It now shows the shared sensor value.
+
+For 2-2 (JointForce): add a variant and give it arms in the same places
+(`read_source`, bus name, `dimension`, remap, the three UI matches). Add a
+facade read beside `joint_state`, and a row to `ports::joint_sensors`. The
+inspector picks the new row up automatically.

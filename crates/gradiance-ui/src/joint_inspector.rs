@@ -13,12 +13,14 @@ use bevy_egui::{EguiContexts, egui};
 use gradiance_command::intent::{DeleteJointIntent, PropertyEditIntent};
 use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
-use gradiance_core::units::PosRot;
+use gradiance_domain::Body;
 use gradiance_domain::joint::{
     AngularMotorDef, DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind,
     LinearMotorDef,
 };
+use gradiance_domain::signal::SignalBindings;
 use gradiance_interaction::selection::SelectedJoint;
+use gradiance_physics::queries::PhysicsQueries;
 use gradiance_units::Dimension;
 
 /// Hinge motor speeds are authored in rad/s (SI) but shown in **rpm**, the
@@ -26,12 +28,16 @@ use gradiance_units::Dimension;
 const RAD_PER_S_TO_RPM: f32 = 60.0 / std::f32::consts::TAU;
 
 /// Renders the joint inspector for the currently selected joint.
+#[expect(clippy::too_many_arguments, reason = "one system param per read")]
 pub fn joint_inspector(
     mut contexts: EguiContexts,
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
-    transforms: Query<&Transform>,
+    transforms: Query<&Transform, With<Body>>,
     index: Res<IdIndex>,
+    physics: PhysicsQueries,
+    fixed: Res<Time<Fixed>>,
+    mut bindings: ResMut<SignalBindings>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut deletes: MessageWriter<DeleteJointIntent>,
 ) -> Result {
@@ -62,21 +68,21 @@ pub fn joint_inspector(
             );
             ui.separator();
 
-            // Sensor readouts: the joint's live geometry (its read-only ports).
-            if let Some((length, angle)) = joint_geometry(def, &transforms, &index) {
-                widgets::section_header(ui, "Sensors");
-                ui.horizontal(|ui| {
-                    ui.label("length");
-                    ui.monospace(format!("{length:.2} {}", Dimension::Length.symbol()));
-                });
-                if matches!(def.kind, JointKind::Hinge { .. }) {
-                    ui.horizontal(|ui| {
-                        ui.label("angle");
-                        ui.monospace(format!("{:.1}°", angle.to_degrees()));
-                    });
-                }
-                ui.separator();
-            }
+            // Sensor ports: the joint's live length/angle (read through the
+            // physics facade), each with the same plot toggle bodies have.
+            widgets::section_header(ui, "Sensors")
+                .on_hover_text("live read-only quantities — the joint's sensor ports");
+            crate::ports::sensor_rows(
+                ui,
+                id,
+                crate::ports::joint_sensors(id),
+                &index,
+                &physics,
+                &transforms,
+                fixed.timestep().as_secs_f32().max(1e-6),
+                &mut bindings,
+            );
+            ui.separator();
 
             // Struts collide by default and are governed by the collision-layer
             // menu, so they don't carry a per-joint collide toggle.
@@ -109,35 +115,6 @@ pub fn joint_inspector(
         });
     }
     Ok(())
-}
-
-/// The joint's live geometry — anchor-to-anchor `length` (px) and the relative
-/// `angle` (radians) of its bodies — the read-only sensor ports of a joint.
-/// `None` if an endpoint can't be resolved this frame.
-fn joint_geometry(
-    def: &JointDef,
-    transforms: &Query<&Transform>,
-    index: &IdIndex,
-) -> Option<(f32, f32)> {
-    let pose_a = index
-        .entity(def.body_a)
-        .and_then(|e| transforms.get(e).ok())
-        .map(PosRot::from_transform)?;
-    let world_a = def.anchor_world(pose_a.pos, pose_a.rot);
-    let (world_b, rot_b) = match def.body_b {
-        Some(id) => {
-            let pose_b = index
-                .entity(id)
-                .and_then(|e| transforms.get(e).ok())
-                .map(PosRot::from_transform)?;
-            (
-                pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b),
-                pose_b.rot,
-            )
-        }
-        None => (def.anchor_b, 0.0), // world pin
-    };
-    Some((world_a.distance(world_b), rot_b - pose_a.rot))
 }
 
 /// Renders the kind-specific config controls, writing any edit into `next.kind`.
