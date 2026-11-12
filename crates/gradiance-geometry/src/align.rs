@@ -132,7 +132,8 @@ impl AlignFrame {
         out
     }
 
-    /// Extents of `shape` placed at (`pos`, `rot`): exact for a circle,
+    /// Extents of `shape` placed at (`pos`, `rot`): exact for a circle or a
+    /// capsule,
     /// from the polygonized outline vertices otherwise.
     pub fn shape_extents(&self, shape: &ShapeDef, pos: Vec2, rot: f32) -> Option<Extents> {
         let r = Vec2::from_angle(rot);
@@ -148,6 +149,26 @@ impl AlignFrame {
                     }
                 };
                 let out = [ext(0, c.x), ext(1, c.y)];
+                out.iter()
+                    .all(|i| i.min.is_finite() && i.max.is_finite())
+                    .then_some(out)
+            }
+            SnapOutline::Capsule { a, b, radius } => {
+                // The union of the two end discs bounds the capsule exactly
+                // along any direction (the support of a convex hull).
+                let ends = [
+                    self.coords(pos + r.rotate(a)),
+                    self.coords(pos + r.rotate(b)),
+                ];
+                let ext = |k: usize| {
+                    let h = radius * self.duals[k].length();
+                    let at = |c: Vec2| if k == 0 { c.x } else { c.y };
+                    Interval {
+                        min: at(ends[0]).min(at(ends[1])) - h,
+                        max: at(ends[0]).max(at(ends[1])) + h,
+                    }
+                };
+                let out = [ext(0), ext(1)];
                 out.iter()
                     .all(|i| i.min.is_finite() && i.max.is_finite())
                     .then_some(out)

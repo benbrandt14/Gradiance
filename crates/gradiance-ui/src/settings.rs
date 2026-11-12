@@ -442,7 +442,7 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 range,
             } => {
                 let clamp = range.map_or(String::new(), |[lo, hi]| format!(" [{lo:.0},{hi:.0}]"));
-                format!("Strut rest={rest_length:.0} k={stiffness:.0} c={damping:.1}{clamp}")
+                format!("Spring rest={rest_length:.0} k={stiffness:.0} c={damping:.1}{clamp}")
             }
         };
         let target = def
@@ -464,6 +464,10 @@ fn shape_summary(shape: &ShapeDef) -> String {
         ShapeDef::Polygon { outline, holes } => {
             format!("Polygon {}v {}h", outline.len(), holes.len())
         }
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => format!("Capsule l={:.1} r={radius:.1}", 2.0 * half_length),
         ShapeDef::HalfPlane => "HalfPlane".to_owned(),
         ShapeDef::Csg { op, lhs, rhs } => {
             format!("({} {op:?} {})", shape_summary(lhs), shape_summary(rhs))

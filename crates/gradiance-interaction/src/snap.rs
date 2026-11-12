@@ -11,7 +11,8 @@ use gradiance_domain::Body;
 use gradiance_domain::settings::{GridSettings, GridSystem, SnapConfig};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::snap_features::{
-    SnapOutline, nearest_on_circle, snap_outline, tangent_points, tangent_radius,
+    SnapOutline, capsule_tangent_points, nearest_on_capsule, nearest_on_circle, snap_outline,
+    tangent_points, tangent_radius,
 };
 use gradiance_geometry::snapping::{
     adaptive_step, cartesian_snap, isometric_snap, polar_snap, project_on_segment,
@@ -266,6 +267,39 @@ fn body_candidates(
                 && let Some(points) = tangent_points(local_point(transform, q), center, r)
             {
                 for t in points {
+                    let t = world_point(transform, t);
+                    nearest.consider_tangent(t.distance(p), t);
+                }
+            }
+        }
+        // An exact capsule (the rod): its end centres are where a hinge
+        // goes, so they are the vertices; the axis is an edge alongside the
+        // surface, since a thin rod is attached along its centre line.
+        SnapOutline::Capsule { a, b, radius } => {
+            let (wa, wb) = (world_point(transform, a), world_point(transform, b));
+            if config.sources.vertices {
+                for end in [wa, wb] {
+                    nearest.consider(end.distance(p), end, SnapKind::Vertex);
+                }
+            }
+            if config.sources.midpoints {
+                let m = (wa + wb) / 2.0;
+                nearest.consider(m.distance(p), m, SnapKind::Midpoint);
+            }
+            if config.sources.edges {
+                let axis = project_on_segment(p, wa, wb);
+                nearest.consider(
+                    axis.distance(p) + capture * EDGE_TIE_BIAS,
+                    axis,
+                    SnapKind::Edge,
+                );
+                if let Some(e) = nearest_on_capsule(local_point(transform, p), a, b, radius) {
+                    let e = world_point(transform, e);
+                    nearest.consider(e.distance(p) + capture * EDGE_TIE_BIAS, e, SnapKind::Edge);
+                }
+            }
+            if let Some(q) = line_from {
+                for t in capsule_tangent_points(local_point(transform, q), a, b, radius) {
                     let t = world_point(transform, t);
                     nearest.consider_tangent(t.distance(p), t);
                 }

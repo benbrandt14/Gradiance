@@ -472,7 +472,7 @@ fn commit_fields(
 }
 
 /// Shape parameters (box size, circle radius; read-only summaries for
-/// polygons, ground, and CSG trees).
+/// polygons, rods, ground, and CSG trees).
 pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps) {
     let Some(primary) = selection.primary() else {
         return;
@@ -533,6 +533,17 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
         }
         ShapeDef::Polygon { outline, .. } => {
             ui.label(format!("polygon · {} vertices", outline.len()));
+        }
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => {
+            let m = Dimension::Length.symbol();
+            ui.label(format!(
+                "rod · length {:.3} {m} · thickness {:.3} {m}",
+                2.0 * half_length,
+                2.0 * radius
+            ));
         }
         ShapeDef::HalfPlane => {
             ui.label("infinite ground plane");

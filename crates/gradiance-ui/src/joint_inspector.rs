@@ -202,7 +202,7 @@ pub fn kind_name(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "Hinge (revolute)",
         JointKind::Slider { .. } => "Prismatic (slider)",
-        JointKind::Spring { .. } => "Strut (spring-damper)",
+        JointKind::Spring { .. } => "Spring (spring-damper)",
     }
 }
 

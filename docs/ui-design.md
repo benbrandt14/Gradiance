@@ -216,10 +216,11 @@ copy for reading; the code wins.
 |---|---|---|---|---|
 | `S` | Select | | `H` | Hinge |
 | `D` | Drag | | `R` | Prismatic |
-| `B` | Box | | `T` | Strut |
+| `B` | Box | | `T` | Spring |
 | `C` | Circle | | `W` | Weld |
 | `P` | Polygon | | `G` | Ground |
 | `K` | Cut | | `N` | Tracer |
+| | | | `L` | Rod |
 
 ### Editing and view
 

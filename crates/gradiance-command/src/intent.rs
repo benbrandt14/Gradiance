@@ -34,6 +34,8 @@ pub mod name {
     pub const ARRAY: &str = "array";
     /// [`SpawnJointIntent`](super::SpawnJointIntent) → `SpawnJointCommand`.
     pub const SPAWN_JOINT: &str = "spawn-joint";
+    /// [`SpawnRodIntent`](super::SpawnRodIntent) → `SpawnRodCommand`.
+    pub const SPAWN_ROD: &str = "spawn-rod";
     /// [`PropertyEditIntent`](super::PropertyEditIntent) → `PropertyEditCommand`.
     pub const PROPERTY_EDIT: &str = "property-edit";
     /// [`GroupIntent`](super::GroupIntent) → `GroupCommand`.
@@ -146,6 +148,17 @@ pub struct SpawnJointIntent {
     /// The complete authored joint (id minted by the tool, stable across
     /// redo).
     pub record: gradiance_scene::JointRecord,
+}
+
+/// Request to author a rigid rod: its capsule body and the hinges at the
+/// ends that landed on bodies, as one undo step.
+// Trace: dispatch.rs → SpawnRodCommand (rod_cmd.rs) → sync_colliders, sync_body_meshes, sync_joints.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SpawnRodIntent {
+    /// The rod body (a `ShapeDef::Capsule`; id minted by the tool).
+    pub body: BodyRecord,
+    /// End joints referencing the rod body (zero, one, or two).
+    pub joints: Vec<gradiance_scene::JointRecord>,
 }
 
 /// Batched property edit (one gesture across N targets = one undo step).

@@ -79,6 +79,14 @@ pub fn eval(shape: &ShapeDef, p: Vec2) -> f32 {
             }
             if inside { -dist } else { dist }
         }
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => {
+            // Exact distance to the x-axis segment, inflated by the radius.
+            let x = p.x.clamp(-half_length, *half_length);
+            (p - Vec2::new(x, 0.0)).length() - radius
+        }
         // Solid below the local y = 0 surface.
         ShapeDef::HalfPlane => p.y,
         ShapeDef::Csg { op, lhs, rhs } => {
@@ -146,6 +154,13 @@ pub fn aabb(shape: &ShapeDef) -> (Vec2, Vec2) {
                 (min, max)
             }
         }
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => (
+            Vec2::new(-half_length - radius, -radius),
+            Vec2::new(half_length + radius, *radius),
+        ),
         ShapeDef::HalfPlane => (
             Vec2::new(-GROUND_SLAB_WIDTH / 2.0, -GROUND_SLAB_DEPTH),
             Vec2::new(GROUND_SLAB_WIDTH / 2.0, 0.0),
@@ -199,6 +214,31 @@ pub fn aabb(shape: &ShapeDef) -> (Vec2, Vec2) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capsule_field_is_exact_at_caps_sides_and_inside() {
+        let rod = ShapeDef::Capsule {
+            half_length: 0.20,
+            radius: 0.025,
+        };
+        // Side: straight above the segment midpoint.
+        assert!((eval(&rod, Vec2::new(0.0, 0.05)) - 0.025).abs() < 1e-6);
+        // Cap: beyond the right endpoint along the axis.
+        assert!((eval(&rod, Vec2::new(0.30, 0.0)) - 0.075).abs() < 1e-6);
+        // Cap surface point at 45 deg off the left endpoint (past the
+        // segment end, where the cap arc is the nearest surface).
+        let offset = 0.025 / std::f32::consts::SQRT_2;
+        assert!(eval(&rod, Vec2::new(-0.20 - offset, offset)).abs() < 1e-6);
+        // Deep inside: on the segment itself.
+        assert!((eval(&rod, Vec2::new(0.10, 0.0)) + 0.025).abs() < 1e-6);
+        // Sign: just outside the side is positive, just inside negative.
+        assert!(eval(&rod, Vec2::new(0.0, 0.026)) > 0.0);
+        assert!(eval(&rod, Vec2::new(0.0, 0.024)) < 0.0);
+        // The bounding box is tight.
+        let (min, max) = aabb(&rod);
+        assert!((max - Vec2::new(0.225, 0.025)).length() < 1e-6);
+        assert!((min + Vec2::new(0.225, 0.025)).length() < 1e-6);
+    }
 
     #[test]
     fn leaf_fields_are_exact_distances() {

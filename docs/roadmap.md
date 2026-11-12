@@ -393,6 +393,16 @@ shadow items from M19. Design decisions in the slice PRs.
   other (drag length = rest length), configurable length bounds, spring
   constant, and damping; drawn as a non-colliding spring-coil gizmo. The three
   scalar knobs are the ones a future curve editor would let vary nonlinearly.
+  The tool is now labelled **Spring** (`ToolState::Spring`, still `T`;
+  brief 2-3).
+- Rigid rod — **landed** (brief 2-3, salvaged from the closed PR #194): the
+  **Rod** tool (`L`) draws a `ShapeDef::Capsule { half_length, radius }`
+  body (an exact analytic SDF leaf with an exact avian capsule collider and
+  analytic snap features — end centres, axis, surface) and hinges each end
+  that lands on a body, all in one `SpawnRodIntent` (one undo step). Ends
+  over empty space are free. **Fixed ends are not a joint:** a rod fixed to
+  a body is a merge (`MergeIntent`) — the follow-up shape if wanted.
+  #194's elastica/flexure solver is a separate spike after Phase 5 units.
 - Cams, planar contact, magnetism (SDF force fields), breaking limits,
   backlash (12) — **fields landed** (Algodoo attraction): authored
   `FieldSource` (signed repulsion, negative attracts; Linear/Quadratic

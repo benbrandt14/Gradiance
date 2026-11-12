@@ -38,6 +38,13 @@ pub fn polygonize(shape: &ShapeDef) -> Contours {
             outline: outline.clone(),
             holes: holes.clone(),
         },
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => Contours {
+            outline: stadium(*half_length, *radius),
+            holes: vec![],
+        },
         ShapeDef::HalfPlane => rectangle(
             GROUND_SLAB_WIDTH,
             GROUND_SLAB_DEPTH,
@@ -70,6 +77,27 @@ pub fn polygonize_components(shape: &ShapeDef) -> Vec<Contours> {
     }
 }
 
+/// The stadium outline of a capsule: a semicircle fan around each segment
+/// endpoint, counter-clockwise. Cap resolution reuses [`CIRCLE_SEGMENTS`]
+/// (half per cap) so rods discretize as finely as circles.
+fn stadium(half_length: f32, radius: f32) -> Vec<Vec2> {
+    let per_cap = CIRCLE_SEGMENTS / 2;
+    let step = std::f32::consts::PI / (per_cap as f32);
+    let cap = |center: Vec2, start: f32| {
+        (0..=per_cap).map(move |i| {
+            let theta = start + step * (i as f32);
+            center + Vec2::new(theta.cos(), theta.sin()) * radius
+        })
+    };
+    // Right cap -90 deg to +90 deg, then left cap +90 deg to +270 deg.
+    cap(Vec2::new(half_length, 0.0), -std::f32::consts::FRAC_PI_2)
+        .chain(cap(
+            Vec2::new(-half_length, 0.0),
+            std::f32::consts::FRAC_PI_2,
+        ))
+        .collect()
+}
+
 fn rectangle(width: f32, height: f32, center: Vec2) -> Contours {
     let (hw, hh) = (width / 2.0, height / 2.0);
     Contours {
@@ -87,6 +115,30 @@ fn rectangle(width: f32, height: f32, center: Vec2) -> Contours {
 mod tests {
     use super::*;
     use crate::contours::ring_signed_area;
+
+    #[test]
+    fn capsule_stadium_is_ccw_closed_and_spans_the_rod() {
+        let (hl, r) = (0.20, 0.025);
+        let rod = ShapeDef::Capsule {
+            half_length: hl,
+            radius: r,
+        };
+        let c = polygonize(&rod);
+        assert!(c.outline.len() >= CIRCLE_SEGMENTS, "cap resolution");
+        assert!(ring_signed_area(&c.outline) > 0.0, "counter-clockwise");
+        // Extreme points reach the inflated endpoints.
+        let max_x = c.outline.iter().map(|v| v.x).fold(f32::MIN, f32::max);
+        let min_x = c.outline.iter().map(|v| v.x).fold(f32::MAX, f32::min);
+        assert!((max_x - (hl + r)).abs() < 1e-6);
+        assert!((min_x + (hl + r)).abs() < 1e-6);
+        // Area ~ rectangle + full disc (inscribed caps lose a little).
+        let ideal = 2.0 * hl * 2.0 * r + std::f32::consts::PI * r * r;
+        assert!((c.area() - ideal).abs() / ideal < 0.01);
+        // Every vertex lies on the SDF zero level.
+        for v in &c.outline {
+            assert!(sdf::eval(&rod, *v).abs() < 1e-6);
+        }
+    }
 
     #[test]
     fn box_becomes_ccw_rectangle_of_right_area() {

@@ -31,6 +31,10 @@ fn shape_strategy() -> impl Strategy<Value = ShapeDef> {
                 holes: vec![],
             }
         }),
+        (0.05f32..200.0, 0.01f32..10.0).prop_map(|(half_length, radius)| ShapeDef::Capsule {
+            half_length,
+            radius
+        }),
         Just(ShapeDef::HalfPlane),
         // CSG trees: a leaf op a placed leaf (what cutting produces).
         (
