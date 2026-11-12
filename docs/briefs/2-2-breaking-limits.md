@@ -21,10 +21,12 @@ can be plotted and scripted like any other.
   `JointDisabled`, with avian's own "break a joint" example.
 - `crates/gradiance-command/src/lib.rs` ≈L170–190 — `push_boundary`: a run is
   one undo step that snapshots *authored* state at the play/pause boundary.
-- `docs/briefs/2-1-joint-sensors.md` — if it has landed, reuse its joint
-  read path; if not, this brief adds the force read itself.
+- `docs/briefs/2-1-joint-sensors.md` § Outcome — landed (#219). Its joint
+  read path is the pattern: `PhysicsQueries::joint_state(entity, &IdIndex)`,
+  `SignalSource::JointLength/JointAngle`, and the row table
+  `ui/ports.rs::joint_sensors` the joint inspector renders.
 
-## Facts (orchestrator, 2026-10-25, main `e631357`)
+## Facts (orchestrator, 2026-10-25, main `e631357`; updated after #219)
 
 - avian provides `JointForces` (opt-in component on the joint entity:
   reaction force/torque after the solve) and `JointDisabled` (a marker that
@@ -49,9 +51,11 @@ can be plotted and scripted like any other.
 2. Physics: add `JointForces` to live joint entities that have a break
    force; one system in the fixed step compares magnitude to the threshold
    and sets the authored broken state. Sync maps broken → `JointDisabled`.
-3. Read facade: `PhysicsQueries::joint_force(entity)` (typed); a
-   `SignalSource::JointForce(StableId)` if 2-1's joint-source pattern exists,
-   otherwise leave the source to the Outcome.
+3. Read facade: `PhysicsQueries::joint_force(entity)` (typed `Force`) next
+   to `joint_state`; `SignalSource::JointForce(StableId)` with arms in the
+   same places 2-1 touched (bus-name tag, dimension, `read_source`, UI arms)
+   and **one row** in `ports::joint_sensors` — the inspector picks it up
+   with no other UI code (2-1 Outcome).
 4. Editing: the break force is a field in the joint inspector (edit seam,
    `widgets::precise_drag`, `PropertyEditIntent`) — thinnest UI. A broken
    joint draws dashed/greyed in `render/joint_viz.rs`. "Repair" is out of

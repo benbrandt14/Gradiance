@@ -1,13 +1,14 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-10-25, Phase 1 gate passed → Phase 2 (orchestrator).
+Last updated: 2026-11-11, Phase 2 (orchestrator, after #219 merged; 2-2 next).
 
 ## Position
 
 - **Phase:** 2 — Constraints & substrate completion
   (`docs/orchestration.md` § The plan).
-- **main:** `73e1485`. **Phase 1 (M18) done:** #212 adaptive snap, #214
+- **main:** `ed3a29d` — #219 joint sensor sources (brief 2-1).
+  **Phase 1 (M18) done:** #212 adaptive snap, #214
   major/minor lines, #213 axis lock follows the grid, #215 analytic circle
   snap features, #216 alignment while moving, #217 three-point box, #218
   tangent snap + tangent circle. Curvilinear coordinates moved to a Phase 5
@@ -17,7 +18,6 @@ Last updated: 2026-10-25, Phase 1 gate passed → Phase 2 (orchestrator).
   ("continue as far as you can tonight"). The files are complete enough for
   a fresh orchestrator to take over at any point.
 - **Phase 2 briefs, run serially:**
-  - **2-1** joint sensor sources — `docs/briefs/2-1-joint-sensors.md`.
   - **2-2** breaking limits — `docs/briefs/2-2-breaking-limits.md` (uses
     avian 0.7 `JointForces` + `JointDisabled`; "broken" is authored state).
   - **2-3** rigid rod, salvaged from #194 — `docs/briefs/2-3-rigid-rod.md`.
@@ -31,7 +31,9 @@ Last updated: 2026-10-25, Phase 1 gate passed → Phase 2 (orchestrator).
   contour vertices and give no tangents (1-4, 1-7 Outcomes); alignment during
   creation tools (1-5 Outcome); grid coverage from the frustum (1-1); no
   script verb for `ToolDefaults`/`SnapConfig` — only `sim-set` (1-6; Phase
-  3); no on/off toggle for tangent snapping (1-7).
+  3); no on/off toggle for tangent snapping (1-7); world-pin joint-angle sign
+  vs `limit_reference_angle`'s comment unverified against avian, and joints
+  have no node-graph block (2-1 Outcome).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
