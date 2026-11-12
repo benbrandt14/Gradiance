@@ -37,6 +37,27 @@ pub fn draw_joints(
             continue;
         };
         let anchor = def.anchor_world(pose_a.pos, pose_a.rot);
+        if def.common.broken {
+            // A broken joint constrains nothing, so none of its kind glyph,
+            // limits, or motor applies: draw a greyed dashed ring on each
+            // half's anchor, which drift apart as the bodies separate.
+            let world_b = match def.body_b {
+                Some(id) => index
+                    .entity(id)
+                    .and_then(|e| transforms.get(e).ok())
+                    .map(PosRot::from_transform)
+                    .map(|pose_b| pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b)),
+                None => Some(def.anchor_b), // world pin
+            };
+            let r = HINGE_RING_PX * s;
+            for end in std::iter::once(anchor).chain(world_b) {
+                draw_dashed_ring(&mut gizmos, end, r, BROKEN);
+            }
+            if selected.0 == Some(entity) {
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 11.0 * s, css::YELLOW);
+            }
+            continue;
+        }
         // Grey glyphs with a dark under-stroke for contrast on any body
         // color (feedback 4.7); world pins keep their warning hue.
         let color = if def.body_b.is_none() {
@@ -134,6 +155,25 @@ pub fn draw_joints(
 
 /// Dark under-stroke color for glyph outlines.
 const OUTLINE: bevy::color::Srgba = css::DARK_SLATE_GRAY;
+
+/// The greyed color a broken joint's dashed rings draw in.
+const BROKEN: bevy::color::Srgba = css::DIM_GRAY;
+
+/// A ring of `DASHES` short chords with gaps between them — the broken-joint
+/// glyph (gizmos have no dash style).
+fn draw_dashed_ring(gizmos: &mut Gizmos<OverlayGizmos>, center: Vec2, r: f32, color: Srgba) {
+    const DASHES: u16 = 10;
+    let step = std::f32::consts::TAU / f32::from(DASHES);
+    for i in 0..DASHES {
+        let a0 = f32::from(i) * step;
+        let a1 = a0 + step * 0.55;
+        gizmos.line_2d(
+            center + Vec2::from_angle(a0) * r,
+            center + Vec2::from_angle(a1) * r,
+            color,
+        );
+    }
+}
 
 /// The limits to draw for `entity`: the live drag's tentative range when
 /// this joint's handle is being dragged (flagged `true`), else the

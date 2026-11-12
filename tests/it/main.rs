@@ -16,6 +16,7 @@ mod csg;
 mod editor_ops;
 mod history;
 mod interaction;
+mod joint_breaking;
 mod joint_edit;
 mod joint_sensors;
 mod joints;

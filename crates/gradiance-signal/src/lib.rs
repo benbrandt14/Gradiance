@@ -309,6 +309,9 @@ pub fn read_source(
         SignalSource::JointAngle(id) => index
             .entity(*id)
             .and_then(|e| Some(physics.joint_angle(e, index)?.value())),
+        SignalSource::JointForce(id) => index
+            .entity(*id)
+            .and_then(|e| Some(physics.joint_force(e)?.value())),
         SignalSource::Named(_) => None,
     }
 }

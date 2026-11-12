@@ -92,6 +92,12 @@ impl Plugin for GradiancePhysicsPlugin {
                 .in_set(BodySyncSet),
         );
         app.add_systems(Update, motor::drive_oscillating_motors);
+        app.add_systems(
+            FixedPostUpdate,
+            joint_sync::break_overloaded_joints
+                .in_set(PhysicsSystems::Last)
+                .run_if(in_state(GameState::Playing)),
+        );
     }
 }
 

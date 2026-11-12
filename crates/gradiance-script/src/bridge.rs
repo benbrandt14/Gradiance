@@ -1434,7 +1434,10 @@ fn spawn_joint(
     let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
     let mut def = JointDef {
         kind,
-        common: JointCommon { collide_connected },
+        common: JointCommon {
+            collide_connected,
+            ..JointCommon::default()
+        },
         body_a: id_a,
         body_b: None,
         // For a world pin the far anchor is the world point itself.

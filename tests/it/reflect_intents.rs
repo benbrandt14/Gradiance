@@ -181,6 +181,7 @@ fn spawn_joint_intent_round_trips_through_reflection() {
             },
             common: JointCommon {
                 collide_connected: true,
+                ..JointCommon::default()
             },
             body_a: StableId::new(),
             body_b: Some(StableId::new()),

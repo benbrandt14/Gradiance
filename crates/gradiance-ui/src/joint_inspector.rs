@@ -15,13 +15,13 @@ use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
 use gradiance_domain::joint::{
-    AngularMotorDef, DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS, JointDef, JointKind,
-    LinearMotorDef,
+    AngularMotorDef, DEFAULT_BREAK_FORCE, DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS,
+    JointCommon, JointDef, JointKind, LinearMotorDef,
 };
 use gradiance_domain::signal::SignalBindings;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_physics::queries::PhysicsQueries;
-use gradiance_units::Dimension;
+use gradiance_units::{Dimension, Force};
 
 /// Hinge motor speeds are authored in rad/s (SI) but shown in **rpm**, the
 /// familiar motor unit: `rpm = rad/s · 60 / 2π`.
@@ -95,6 +95,11 @@ pub fn joint_inspector(
                     next.common.collide_connected = collide;
                     changed = true;
                 }
+            }
+
+            if let Some(common) = break_section(ui, def.common) {
+                next.common = common;
+                changed = true;
             }
 
             changed |= configure_kind(ui, &def.kind, &mut next);
@@ -253,6 +258,43 @@ fn limit_section(
                 result = Some(Some([lo / scale, hi / scale]));
             }
         });
+    }
+    result
+}
+
+/// Breaking-limit UI: a "breakable" toggle plus the break-force field (edit
+/// seam: one undo step per gesture). A broken joint says so; undo is the
+/// repair. Returns the new common parameters only on the frame one changed.
+fn break_section(ui: &mut egui::Ui, current: JointCommon) -> Option<JointCommon> {
+    let mut result = None;
+    let mut breakable = current.break_force.is_some();
+    if ui.checkbox(&mut breakable, "breakable").changed() {
+        result = Some(JointCommon {
+            break_force: breakable.then_some(Force(DEFAULT_BREAK_FORCE)),
+            ..current
+        });
+    }
+    if let Some(limit) = current.break_force {
+        ui.horizontal(|ui| {
+            ui.label("break force");
+            let mut value = limit.value();
+            if let Commit::Done(..) = precise_drag_unit(
+                ui,
+                egui::Id::new("j-break"),
+                &mut value,
+                DEFAULT_BREAK_FORCE,
+                1.0,
+                Dimension::Force.symbol(),
+            ) {
+                result = Some(JointCommon {
+                    break_force: Some(Force(value.max(0.0))),
+                    ..current
+                });
+            }
+        });
+    }
+    if current.broken {
+        ui.label(egui::RichText::new("broken (undo the run to repair)").weak());
     }
     result
 }

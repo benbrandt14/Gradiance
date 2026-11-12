@@ -39,12 +39,14 @@ pub fn body_sensors(id: StableId) -> [(&'static str, SignalSource); 9] {
 }
 
 /// A joint's **sensor ports** as `(label, source)` — its live length and
-/// angle (`JointDef::sensor_state`, read through `physics::queries`). The
-/// catalog behind the joint inspector's readouts.
-pub fn joint_sensors(id: StableId) -> [(&'static str, SignalSource); 2] {
+/// angle (`JointDef::sensor_state`) and its linear reaction force (avian's
+/// `JointForces`), all read through `physics::queries`. The catalog behind
+/// the joint inspector's readouts.
+pub fn joint_sensors(id: StableId) -> [(&'static str, SignalSource); 3] {
     [
         ("length", SignalSource::JointLength(id)),
         ("angle", SignalSource::JointAngle(id)),
+        ("force", SignalSource::JointForce(id)),
     ]
 }
 
@@ -172,6 +174,6 @@ mod tests {
         }
         assert_eq!(body_actuators(id).len(), 2, "fill + tracer actuator ports");
         let joint_units: Vec<&str> = joint_sensors(id).iter().map(|(_, s)| unit(s)).collect();
-        assert_eq!(joint_units, ["m", "rad"], "joint ports carry SI units");
+        assert_eq!(joint_units, ["m", "rad", "N"], "joint ports carry SI units");
     }
 }

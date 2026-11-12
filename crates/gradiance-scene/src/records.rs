@@ -583,8 +583,9 @@ impl SceneRecord {
                 }
             }
         }
-        // Joints and nodes are light and have no simulation-evolved authored
-        // state, so any difference is restored by replacing the entity.
+        // Joints and nodes are light, so any difference is restored by
+        // replacing the entity. (A joint's one simulation-evolved field, the
+        // `broken` flag, has no live pose to preserve: replacing re-derives it.)
         restore_replaceable(&self.joints, &from.joints, world);
         restore_replaceable(&self.nodes, &from.nodes, world);
         if !self.environment.scene_content_eq(&from.environment) {

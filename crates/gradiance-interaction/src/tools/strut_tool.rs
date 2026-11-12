@@ -120,6 +120,7 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
         // Strut bodies collide by default; adjust via the collision-layer menu.
         common: JointCommon {
             collide_connected: true,
+            ..JointCommon::default()
         },
         body_a: id_a,
         body_b: None,

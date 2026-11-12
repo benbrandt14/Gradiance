@@ -5,13 +5,24 @@
 //! static anchor body as a *child* of the joint entity — it has **no
 //! collider**, so the classic pin-collision instability is
 //! unrepresentable, and recursive despawn cleans it up for free.
+//!
+//! **Breaking limits.** Every derived joint carries avian's [`JointForces`]
+//! (the post-solve reaction, read by `physics::queries::joint_force`). A joint
+//! with an authored `break_force` is checked after each step by
+//! [`break_overloaded_joints`], which sets the *authored* `broken` flag — a
+//! simulation result like a pose, so the run boundary records it and undo
+//! restores the joint. The sync then derives avian's [`JointDisabled`] from
+//! that flag; `JointDisabled` itself is never saved.
 
 use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
-use gradiance_domain::joint::{AngularMotorDef, JointDef, JointKind, LinearMotorDef};
+use gradiance_domain::joint::{
+    AngularMotorDef, JointDef, JointKind, LinearMotorDef, exceeds_break_force,
+};
+use gradiance_units::Force;
 
 /// Marker: this joint's referenced bodies were not all alive at last
 /// sync; retried every frame until they are (makes spawn order — e.g.
@@ -122,6 +133,17 @@ pub fn sync_joints(
 
         let mut entity_commands = commands.entity(entity);
         entity_commands.remove::<JointUnresolved>();
+        // Broken → disabled, derived from the authored flag. Inserted *before*
+        // the joint component so avian's on-add observer never puts a broken
+        // joint into its joint graph, even for a frame.
+        if def.common.broken {
+            entity_commands.insert(JointDisabled);
+        } else {
+            entity_commands.remove::<JointDisabled>();
+        }
+        // The reaction-force readout (sensor + break check). Fresh on every
+        // re-derive, so an edited joint never trips on a stale reading.
+        entity_commands.insert(JointForces::new());
 
         // Rest orientation: body A's basis stays identity (so authored
         // axes are body-A local) and body B's basis absorbs the authored
@@ -226,6 +248,24 @@ fn insert_derived_joint(
                     angular: 0.0,
                 },
             ));
+        }
+    }
+}
+
+/// Breaks every intact joint whose linear reaction force exceeds its authored
+/// `break_force` — by writing the **authored** `broken` flag, the same way the
+/// solver writes poses during a run (invariants 1–2 govern *editing*; this is
+/// simulation). [`sync_joints`] then derives [`JointDisabled`] from it. Runs
+/// after each physics step, only while the simulation plays.
+pub fn break_overloaded_joints(mut joints: Query<(&mut JointDef, &JointForces)>) {
+    for (mut def, forces) in &mut joints {
+        if def.common.broken {
+            continue;
+        }
+        let force = Force(forces.force().length());
+        if exceeds_break_force(def.common.break_force, force) {
+            debug!(force = force.value(), "joint broke");
+            def.common.broken = true;
         }
     }
 }
