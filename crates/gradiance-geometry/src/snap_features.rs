@@ -11,6 +11,11 @@
 //! Reading a leaf's own centre and radius is not contouring a field, so
 //! [`polygonize`] stays the single discretization point.
 //!
+//! A [`ShapeDef::Capsule`] (the rod) is analytic too: its features are the
+//! two **end centres** (where a hinge goes, offered as vertices), the axis
+//! midpoint, the nearest point on the axis and on the surface (edges), and
+//! tangents to its end caps — never the stadium's tessellation vertices.
+//!
 //! Tangency lives here too: [`tangent_points`] (the line from a reference
 //! point that just grazes a circle) and [`tangent_radius`] (the radius at
 //! which a circle about a centre first touches an outline).
@@ -38,6 +43,18 @@ pub enum SnapOutline {
         /// axes, radians (non-zero only for a rotated [`ShapeDef::Placed`]).
         rotation: f32,
     },
+    /// An exact capsule: the segment `a`–`b` inflated by `radius`. Its
+    /// snap features are the two end centres (as vertices), the axis
+    /// midpoint, and the nearest point on the axis and on the surface (as
+    /// edges).
+    Capsule {
+        /// One end centre in the shape's local frame.
+        a: Vec2,
+        /// The other end centre.
+        b: Vec2,
+        /// Inflation radius, same units as the shape.
+        radius: f32,
+    },
     /// A polygonal outline: features are ring vertices, edge midpoints,
     /// and the nearest point on each edge.
     Contours(Contours),
@@ -62,23 +79,80 @@ impl SnapOutline {
                     *center - u.perp(),
                 ])
             }
-            Self::Contours(_) => None,
+            Self::Capsule { .. } | Self::Contours(_) => None,
         }
     }
 }
 
 /// The outline a snapper should query for `shape`: an exact circle for a
-/// [`ShapeDef::Circle`] (bare, or rigidly [`Placed`](ShapeDef::Placed) at
-/// any nesting depth), otherwise the polygonized contours.
+/// [`ShapeDef::Circle`] and an exact capsule for a [`ShapeDef::Capsule`]
+/// (bare, or rigidly [`Placed`](ShapeDef::Placed) at any nesting depth),
+/// otherwise the polygonized contours.
 pub fn snap_outline(shape: &ShapeDef) -> SnapOutline {
-    match placed_circle(shape) {
-        Some((center, radius, rotation)) => SnapOutline::Circle {
+    if let Some((center, radius, rotation)) = placed_circle(shape) {
+        return SnapOutline::Circle {
             center,
             radius,
             rotation,
-        },
-        None => SnapOutline::Contours(polygonize(shape)),
+        };
     }
+    if let Some((a, b, radius)) = placed_capsule(shape) {
+        return SnapOutline::Capsule { a, b, radius };
+    }
+    SnapOutline::Contours(polygonize(shape))
+}
+
+/// `(a, b, radius)` when `shape` is a capsule under zero or more rigid
+/// placements: its end centres in the outermost frame.
+fn placed_capsule(shape: &ShapeDef) -> Option<(Vec2, Vec2, f32)> {
+    match shape {
+        ShapeDef::Capsule {
+            half_length,
+            radius,
+        } => Some((
+            Vec2::new(-half_length, 0.0),
+            Vec2::new(*half_length, 0.0),
+            *radius,
+        )),
+        ShapeDef::Placed { pos, rot, shape } => {
+            let (a, b, r) = placed_capsule(shape)?;
+            let m = Vec2::from_angle(*rot);
+            Some((*pos + m.rotate(a), *pos + m.rotate(b), r))
+        }
+        _ => None,
+    }
+}
+
+/// The point on the surface of the capsule (`a`–`b` inflated by `radius`)
+/// nearest to `p`, or `None` when `p` lies on the axis itself (every
+/// direction is then equally near).
+pub fn nearest_on_capsule(p: Vec2, a: Vec2, b: Vec2, radius: f32) -> Option<Vec2> {
+    let on_axis = project_on_segment(p, a, b);
+    let off = p - on_axis;
+    // Projection rounding leaves a sub-ulp offset for points on the axis.
+    if off.length() <= radius * 1e-4 {
+        return None;
+    }
+    Some(on_axis + off.normalize() * radius)
+}
+
+/// Whether `t` lies on the capsule's surface (within `tol`).
+fn on_capsule_surface(t: Vec2, a: Vec2, b: Vec2, radius: f32, tol: f32) -> bool {
+    (t.distance(project_on_segment(t, a, b)) - radius).abs() <= tol
+}
+
+/// Points on the capsule where a line from `q` is tangent to it: the
+/// tangent points to either end cap that lie on the capsule's surface (a
+/// tangent point on a cap's inner half is buried in the body). Empty when
+/// `q` is inside the capsule.
+pub fn capsule_tangent_points(q: Vec2, a: Vec2, b: Vec2, radius: f32) -> Vec<Vec2> {
+    let tol = radius * 1e-3;
+    [a, b]
+        .into_iter()
+        .filter_map(|c| tangent_points(q, c, radius))
+        .flatten()
+        .filter(|t| on_capsule_surface(*t, a, b, radius, tol))
+        .collect()
 }
 
 /// `(centre, radius, rotation)` when `shape` is a circle under zero or more
@@ -151,6 +225,7 @@ pub fn tangent_radius(center: Vec2, outline: &SnapOutline) -> Option<TangentTouc
             let dir = (center - *c2).try_normalize()?;
             *c2 + dir * *r2
         }
+        SnapOutline::Capsule { a, b, radius } => nearest_on_capsule(center, *a, *b, *radius)?,
         SnapOutline::Contours(contours) => contours
             .rings()
             .flat_map(|ring| {
@@ -245,6 +320,63 @@ mod tests {
             rhs: Box::new(boxed),
         };
         assert!(matches!(snap_outline(&csg), SnapOutline::Contours(_)));
+    }
+
+    #[test]
+    fn a_capsule_snaps_as_an_exact_capsule() {
+        let rod = ShapeDef::Capsule {
+            half_length: 2.0,
+            radius: 0.1,
+        };
+        assert_eq!(
+            snap_outline(&rod),
+            SnapOutline::Capsule {
+                a: Vec2::new(-2.0, 0.0),
+                b: Vec2::new(2.0, 0.0),
+                radius: 0.1
+            }
+        );
+        assert!(snap_outline(&rod).circle_quadrants().is_none());
+        // Under a placement the ends follow it.
+        let placed = ShapeDef::Placed {
+            pos: Vec2::new(1.0, 1.0),
+            rot: std::f32::consts::FRAC_PI_2,
+            shape: Box::new(rod),
+        };
+        let SnapOutline::Capsule { a, b, .. } = snap_outline(&placed) else {
+            panic!("expected an exact capsule");
+        };
+        assert!(close(a, Vec2::new(1.0, -1.0)), "{a}");
+        assert!(close(b, Vec2::new(1.0, 3.0)), "{b}");
+    }
+
+    #[test]
+    fn nearest_on_capsule_hits_the_sides_and_the_caps() {
+        let (a, b, r) = (Vec2::new(-2.0, 0.0), Vec2::new(2.0, 0.0), 0.5);
+        let side = nearest_on_capsule(Vec2::new(1.0, 3.0), a, b, r).unwrap();
+        assert!(close(side, Vec2::new(1.0, 0.5)), "{side}");
+        let cap = nearest_on_capsule(Vec2::new(5.0, 0.0), a, b, r).unwrap();
+        assert!(close(cap, Vec2::new(2.5, 0.0)), "{cap}");
+        assert!(nearest_on_capsule(Vec2::new(0.3, 0.0), a, b, r).is_none());
+        // Tangent radius from outside reaches the surface.
+        let outline = SnapOutline::Capsule { a, b, radius: r };
+        let t = tangent_radius(Vec2::new(0.0, 2.0), &outline).unwrap();
+        assert!((t.radius - 1.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn capsule_tangents_lie_on_its_surface() {
+        let (a, b, r) = (Vec2::new(-2.0, 0.0), Vec2::new(2.0, 0.0), 0.5);
+        // Straight off the right end, along the axis: both tangent points
+        // of the right cap are on the outer half; the left cap's are buried.
+        let ts = capsule_tangent_points(Vec2::new(6.0, 0.0), a, b, r);
+        assert_eq!(ts.len(), 2, "{ts:?}");
+        for t in ts {
+            assert!(t.x > 2.0, "{t}");
+            let d = t.distance(project_on_segment(t, a, b));
+            assert!((d - r).abs() < 1e-4);
+        }
+        assert!(capsule_tangent_points(Vec2::ZERO, a, b, r).is_empty());
     }
 
     #[test]
