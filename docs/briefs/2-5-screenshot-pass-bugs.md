@@ -1,6 +1,6 @@
 # Bugs found by the first screenshot pass
 Phase 2 · substrate correctness · from the 2026-11-12 lavapipe screenshot
-pass (`tools/screenshot/README.md`) · status: ready
+pass (`tools/screenshot/README.md`) · status: done (#223)
 
 ## Goal
 
@@ -97,4 +97,40 @@ repro + finding and return the brief.
 
 ## Outcome
 
-*(worker fills in)*
+**Done**, PR #223. Each fix has a regression test that failed before the fix.
+
+1. **`sim-set` — a timing bug, not a failed write.** The reflect write
+   landed. But `apply_sim_settings` (`SimSettings` → avian `Gravity`) ran in
+   `Update`, unordered against `run_scripts`, and physics runs at the start
+   of the next frame. So one step after the script still used the old
+   gravity. That step left freshly spawned bodies with a constant 1/6 m/s
+   downward velocity (more under lavapipe catch-up), which zero gravity never
+   removed. Fix: `apply_sim_settings` runs in `PostUpdate`, after every
+   `Update` writer. `sim-set` now trials the write on the mirror, so a bad
+   path or a non-number is a script error (warn + failed console entry). The
+   drain `warn!`s instead of dropping errors. Integer and float literals
+   already coerced alike; a test pins that. The `docs/scripting.md` examples
+   are now SI (`-5`, `-25`). Tests: `scripting::a_startup_script_zeroes_gravity`
+   (new `harness::headless_app_with` inserts `StartupScripts`),
+   `a_console_script_zeroes_gravity_while_playing`,
+   `integer_and_float_literals_both_write_a_float_setting`, and the unit test
+   `a_failed_sim_set_is_a_visible_script_error`.
+2. **Rotating boxes — caused by bug 1; reproduced headless.** The scene was
+   the zero-g scene. The drifting boxes touched the ground, picked up a
+   clockwise spin and a rightward velocity from the contact, and with no
+   gravity they turned forever, in lockstep. With bug 1 reverted,
+   `physics_sync::boxes_over_the_ground_in_zero_gravity_never_start_turning`
+   fails (`-0.008 rad` after 20 s); with the fix the boxes never move. Under
+   gravity, `a_box_dropped_flat_comes_to_rest_flat` (60 fps and ~5 fps
+   catch-up; fixed-step results are identical) shows a flat drop settles to
+   |rot| < 1e-3 and stops. **Not fixed, avian-internal:** a flat 2 m drop
+   bounces asymmetrically (sequential corner contacts) and lands 1–4 cm
+   sideways. The test bounds it at < 0.1 m. A follow-up would be a brief to
+   evaluate avian solver settings, if it matters.
+3. **Grey scripted bodies.** The hue rule moved to
+   `Appearance::for_id` (`gradiance-domain`). Tools and the script
+   `body_record` both call it. Test:
+   `tools::scripted_and_tool_drawn_bodies_are_coloured_by_the_same_rule`.
+
+Screenshots (lavapipe, before/after): paths are in the PR conversation and
+are not committed. `cargo test --workspace` was left to CI (14 GB free).
