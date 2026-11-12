@@ -191,19 +191,6 @@ pub fn topmost_body_at(
     bodies_at_sorted(p, physics, bodies).first().copied()
 }
 
-/// Default appearance for a newly authored body: a random pleasant hue
-/// derived from its stable id (Algodoo behavior — every new body gets
-/// its own color; deterministic per id, so undo/redo repaint the same).
-pub fn appearance_for_id(
-    id: gradiance_core::ids::StableId,
-) -> gradiance_domain::appearance::Appearance {
-    let hue = (id.0.as_u128() % 360) as f32;
-    gradiance_domain::appearance::Appearance {
-        fill: gradiance_domain::appearance::Rgba::from_hsl(hue, 0.65, 0.55),
-        ..Default::default()
-    }
-}
-
 /// Builds a fresh body record with default props/layers at `pose`.
 pub fn new_body_record(shape: ShapeDef, pos: Vec2, rot: f32) -> gradiance_scene::BodyRecord {
     let id = gradiance_core::ids::StableId::new();
@@ -212,7 +199,7 @@ pub fn new_body_record(shape: ShapeDef, pos: Vec2, rot: f32) -> gradiance_scene:
         pose: gradiance_core::units::PosRot { pos, rot },
         shape,
         physics: gradiance_domain::props::BodyPhysics::default(),
-        appearance: appearance_for_id(id),
+        appearance: gradiance_domain::appearance::Appearance::for_id(id),
         depth: DepthBand::default(),
         layers: None,
         groups: Vec::new(),

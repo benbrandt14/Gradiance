@@ -52,8 +52,15 @@ impl Plugin for GradiancePhysicsPlugin {
         app.init_resource::<gradiance_domain::settings::SimSettings>();
         // Reflected config seam for scripting (see script-lisp-decision.md).
         app.register_type::<gradiance_domain::settings::SimSettings>();
+        // `PostUpdate`, not `Update`: every writer of the settings (the
+        // settings window, the context menu, a script's `sim-set`) runs in
+        // `Update`, and the next physics step runs at the start of the next
+        // frame. Applying here guarantees that step already sees the edit;
+        // unordered in `Update`, a write that landed after this system ran
+        // let one step use the old gravity — enough to set freshly spawned
+        // bodies drifting under "zero" gravity (brief 2-5, bug 1).
         app.add_systems(
-            Update,
+            PostUpdate,
             apply_sim_settings.run_if(resource_changed::<gradiance_domain::settings::SimSettings>),
         );
         app.init_resource::<hold::KinematicHold>();

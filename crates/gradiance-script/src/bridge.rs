@@ -752,18 +752,21 @@ fn emit(ops: &OpQueue, op: Box<dyn Reflect>) {
     }
 }
 
-/// A default-styled body of `shape` centered at `(x, y)` — the record a
+/// A body of `shape`, styled like a tool-drawn one, centered at `(x, y)` — the record a
 /// `spawn-*` verb emits.
 fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
+    let id = StableId::new();
     BodyRecord {
-        id: StableId::new(),
+        id,
         pose: PosRot {
             pos: Vec2::new(x as f32, y as f32),
             rot: 0.0,
         },
         shape,
         physics: BodyPhysics::default(),
-        appearance: Appearance::default(),
+        // The tools' rule, not a grey default: a scripted scene and a
+        // hand-built one are indistinguishable.
+        appearance: Appearance::for_id(id),
         depth: DepthBand::default(),
         layers: None,
         groups: Vec::new(),
@@ -982,12 +985,31 @@ fn register_config_verbs(engine: &mut Engine, config: &ConfigQueue, sim: &Arc<Mu
     });
 
     // `(sim-set path value)` — queue a config write to a simulation setting.
+    // The write is trialled on a copy of the mirror first, so a bad path or a
+    // non-numeric value is a script error (logged and shown in the console)
+    // rather than a write that silently never lands. Integer and float
+    // literals both coerce to the leaf's type (`0` and `0.0` are the same).
     let c = Arc::clone(config);
-    engine.register_fn(name::SIM_SET, move |path: String, value: SteelVal| {
-        if let (Ok(mut queue), Some(value)) = (c.lock(), steel_to_f64(&value)) {
-            queue.push(ConfigWrite { path, value });
-        }
-    });
+    let s = Arc::clone(sim);
+    engine.register_fn(
+        name::SIM_SET,
+        move |path: String, value: SteelVal| -> Result<(), String> {
+            let Some(number) = steel_to_f64(&value) else {
+                return Err(format!("sim-set {path}: expected a number, got {value}"));
+            };
+            if let Ok(settings) = s.lock() {
+                let mut trial = settings.clone();
+                write_path(&mut trial, &path, number).map_err(|e| format!("sim-set: {e}"))?;
+            }
+            if let Ok(mut queue) = c.lock() {
+                queue.push(ConfigWrite {
+                    path,
+                    value: number,
+                });
+            }
+            Ok(())
+        },
+    );
 }
 
 /// Editor-state verbs — writes to non-authored editor resources. `register-action`
@@ -1646,7 +1668,11 @@ pub fn run_scripts(world: &mut World) {
         && let Some(mut settings) = world.get_resource_mut::<SimSettings>()
     {
         for write in writes {
-            let _ = write_path(&mut *settings, &write.path, write.value);
+            // Already trialled by the verb; a failure here means the
+            // resource and the mirror disagree on shape — say so.
+            if let Err(err) = write_path(&mut *settings, &write.path, write.value) {
+                warn!("sim-set: {err}");
+            }
         }
     }
 
@@ -2009,6 +2035,24 @@ mod tests {
         assert_eq!(settings.speed, 2.0);
         // A config write is not an authored edit — nothing reached the intent bus.
         assert!(app.world().resource::<Spawns>().0.is_empty());
+    }
+
+    #[test]
+    fn a_failed_sim_set_is_a_visible_script_error() {
+        let mut app = bus_app();
+        app.insert_resource(SimSettings::default());
+        for bad in [
+            "(sim-set \"gravity.z\" 0)",     // no such field
+            "(sim-set \"gravity\" 0)",       // not a scalar leaf
+            "(sim-set \"speed\" \"fast\")", // not a number
+        ] {
+            run(&mut app, bad);
+            let log = &app.world().resource::<ScriptLog>().0;
+            let entry = log.last().expect("the run is logged");
+            assert!(!entry.ok, "{bad} should fail visibly, got {:?}", entry.output);
+            assert!(entry.output.contains("sim-set"), "{}", entry.output);
+        }
+        assert_eq!(*app.world().resource::<SimSettings>(), SimSettings::default());
     }
 
     #[test]
