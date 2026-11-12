@@ -776,3 +776,80 @@ fn net_contact_impulse_reads_a_resting_bodys_weight() {
         "contact force approximates the weight ({force} vs {weight})"
     );
 }
+
+/// The `Body` marker's required components (brief 2-4): a bare
+/// `spawn(Body)` — no record, no companions — still yields the full authored
+/// archetype, with a **fresh** identity per body, and the derived sync
+/// builds its collider exactly as for an authored spawn.
+#[test]
+fn bare_body_spawn_gets_authored_archetype_and_collider() {
+    use avian2d::prelude::{Collider, ColliderDensity, Friction, GravityScale, Restitution};
+    use gradiance::domain::props::{
+        default_density, default_friction, default_gravity_scale, default_restitution,
+    };
+
+    let mut app = headless_app();
+    let a = app.world_mut().spawn(Body).id();
+    let b = app.world_mut().spawn(Body).id();
+    step(&mut app, 2);
+
+    let world = app.world();
+    let id_a = *world.get::<StableId>(a).expect("StableId required");
+    let id_b = *world.get::<StableId>(b).expect("StableId required");
+    assert_ne!(id_a, id_b, "each bare body mints its own identity");
+    assert_eq!(world.resource::<IdIndex>().entity(id_a), Some(a));
+
+    assert!(world.get::<Transform>(a).is_some());
+    assert_eq!(world.get::<ShapeDef>(a), Some(&ShapeDef::default()));
+    assert_eq!(world.get::<Appearance>(a), Some(&Appearance::default()));
+    assert_eq!(world.get::<DepthBand>(a), Some(&DepthBand::default()));
+    assert_eq!(world.get::<RigidBody>(a), Some(&RigidBody::Dynamic));
+    assert_eq!(world.get::<Friction>(a), Some(&default_friction()));
+    assert_eq!(world.get::<Restitution>(a), Some(&default_restitution()));
+    assert_eq!(world.get::<ColliderDensity>(a), Some(&default_density()));
+    assert_eq!(world.get::<GravityScale>(a), Some(&default_gravity_scale()));
+    assert!(
+        world.get::<Sensor>(a).is_none(),
+        "optional markers stay absent"
+    );
+    assert!(world.get::<LockedAxes>(a).is_none());
+
+    assert!(
+        world.get::<Collider>(a).is_some(),
+        "derived sync builds a collider for a bare body"
+    );
+    // The archetype is complete enough to round-trip through capture.
+    assert!(BodyRecord::capture(world, a).is_some());
+}
+
+/// An explicit spawn value always wins over a required default: the
+/// authoring path keeps its record's identity and physics.
+#[test]
+fn explicit_components_override_required_defaults() {
+    let mut app = headless_app();
+    let mut record = box_record(Vec2::ZERO, 0.4, 0.2);
+    record.physics = BodyPhysics::fixed();
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    step(&mut app, 2);
+
+    let entity = entity_of(&app, id).unwrap();
+    assert_eq!(
+        app.world().get::<RigidBody>(entity),
+        Some(&RigidBody::Static)
+    );
+}
+
+/// The `Joint` marker requires only its safe companions — a fresh
+/// `StableId` and the anchor-parent `Transform` — never a `JointDef`, which
+/// has no default that could name a real body.
+#[test]
+fn bare_joint_spawn_gets_identity_but_no_def() {
+    let mut app = headless_app();
+    let a = app.world_mut().spawn(Joint).id();
+    let b = app.world_mut().spawn(Joint).id();
+    let world = app.world();
+    assert_ne!(world.get::<StableId>(a), world.get::<StableId>(b));
+    assert!(world.get::<Transform>(a).is_some());
+    assert!(world.get::<JointDef>(a).is_none());
+}
