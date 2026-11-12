@@ -186,7 +186,7 @@ fn assert_floating(app: &mut App) {
     let before = dynamic_heights(app);
     assert_eq!(before.len(), 2, "both boxes spawned");
     step(app, 60);
-    assert_eq!(app.world().resource::<SimSettings>().gravity.y, 0.0);
+    assert!(app.world().resource::<SimSettings>().gravity.y.abs() < 1e-6);
     let after = dynamic_heights(app);
     for (b, a) in before.iter().zip(&after) {
         assert!(
@@ -222,9 +222,9 @@ fn integer_and_float_literals_both_write_a_float_setting() {
     let mut app = paused_app();
     let gravity_y = |app: &mut App| app.world().resource::<SimSettings>().gravity.y;
     run(&mut app, "(sim-set \"gravity.y\" 0)");
-    assert_eq!(gravity_y(&mut app), 0.0);
+    assert!(gravity_y(&mut app).abs() < 1e-6);
     run(&mut app, "(sim-set \"gravity.y\" -3.5)");
-    assert_eq!(gravity_y(&mut app), -3.5);
+    assert!((gravity_y(&mut app) - -3.5).abs() < 1e-6);
 }
 
 #[test]

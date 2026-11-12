@@ -880,6 +880,7 @@ fn scripted_boxes(app: &mut App, source: &str) -> Vec<Entity> {
 }
 
 /// `(x, y, angle)` of `entity` from its `Transform`.
+#[allow(clippy::unwrap_used)]
 fn pose(app: &App, entity: Entity) -> (f32, f32, f32) {
     let t = app.world().get::<Transform>(entity).unwrap();
     let (axis, angle) = t.rotation.to_axis_angle();
@@ -915,6 +916,7 @@ fn boxes_over_the_ground_in_zero_gravity_never_start_turning() {
 
 /// Drops the boxes under gravity and asserts they come to rest flat, on the
 /// ground, and stay put.
+#[allow(clippy::unwrap_used)]
 fn assert_boxes_land_flat(app: &mut App, settle_frames: usize, more_frames: usize) {
     use avian2d::prelude::{AngularVelocity, LinearVelocity};
     let boxes = scripted_boxes(app, DROPPED_BOXES);
