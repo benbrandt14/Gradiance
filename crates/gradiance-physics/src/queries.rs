@@ -14,8 +14,8 @@ use gradiance_core::ids::IdIndex;
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{JointDef, JointSensors, WORLD_POSE};
 use gradiance_units::{
-    Angle, AngularMomentum, AngularVelocity, Energy, Impulse, Impulse2, Length, Mass, Momentum,
-    Velocity2,
+    Angle, AngularMomentum, AngularVelocity, Energy, Force, Impulse, Impulse2, Length, Mass,
+    Momentum, Velocity2,
 };
 
 /// A world-space contact sample: the point, its unit normal, and the normal
@@ -56,6 +56,9 @@ pub struct PhysicsQueries<'w, 's> {
     /// Authored joint definitions — read for the joint sensor reads; body
     /// poses come from `colliders` (a body's collider is on the body entity).
     joints: Query<'w, 's, &'static JointDef>,
+    /// avian's post-solve reaction on each live joint (`joint_sync` inserts
+    /// [`JointForces`] on every derived joint) and whether it is disabled.
+    joint_forces: Query<'w, 's, (&'static JointForces, Has<JointDisabled>)>,
 }
 
 impl PhysicsQueries<'_, '_> {
@@ -151,6 +154,21 @@ impl PhysicsQueries<'_, '_> {
     /// [`joint_state`](Self::joint_state)).
     pub fn joint_angle(&self, joint: Entity, index: &IdIndex) -> Option<Angle> {
         self.joint_state(joint, index).map(|s| s.angle)
+    }
+
+    /// Magnitude of a joint's **linear** reaction force after the last solve
+    /// — the read behind the `JointForce` signal source and the quantity a
+    /// `break_force` is compared against. A disabled (broken) joint exerts
+    /// nothing and reads zero; avian keeps writing its last solve's stale
+    /// multipliers, so the zero is applied here rather than trusted from the
+    /// component. `None` if `joint` has no live derived joint.
+    pub fn joint_force(&self, joint: Entity) -> Option<Force> {
+        let (forces, disabled) = self.joint_forces.get(joint).ok()?;
+        Some(Force(if disabled {
+            0.0
+        } else {
+            forces.force().length()
+        }))
     }
 
     /// The entity's `(linear, angular)` velocity, if it simulates.

@@ -227,6 +227,7 @@ fn source_label(source: &SignalSource) -> &'static str {
         SignalSource::AngularMomentum(_) => "ang mom",
         SignalSource::JointLength(_) => "joint length",
         SignalSource::JointAngle(_) => "joint angle",
+        SignalSource::JointForce(_) => "joint force",
         SignalSource::Named(_) => "named",
     }
 }
@@ -332,6 +333,7 @@ fn binding_row(
                         // A joint has no fill/tracer to recolor.
                         SignalSource::JointLength(_)
                         | SignalSource::JointAngle(_)
+                        | SignalSource::JointForce(_)
                         | SignalSource::Named(_) => None,
                     },
                 };

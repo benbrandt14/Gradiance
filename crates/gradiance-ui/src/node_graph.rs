@@ -247,6 +247,7 @@ fn sensor_index(source: &SignalSource) -> Option<usize> {
         SignalSource::Distance(..)
         | SignalSource::JointLength(_)
         | SignalSource::JointAngle(_)
+        | SignalSource::JointForce(_)
         | SignalSource::Named(_) => None,
     }
 }
@@ -746,7 +747,10 @@ fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
             ids.push(*b);
         }
         // A joint sensor references a joint, not a body: no body block.
-        SignalSource::JointLength(_) | SignalSource::JointAngle(_) | SignalSource::Named(_) => {}
+        SignalSource::JointLength(_)
+        | SignalSource::JointAngle(_)
+        | SignalSource::JointForce(_)
+        | SignalSource::Named(_) => {}
     }
     match &binding.sink {
         SignalSink::Fill(id) | SignalSink::TracerColor(id) => ids.push(*id),

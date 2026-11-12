@@ -23,14 +23,15 @@
 //! landed this way. Further planned variants that slot in the same way:
 //! `PlanarContact`, `Cam { profile }`, `Magnet { strength, falloff }` (force
 //! field, not a joint — pairs with a `physics/forces.rs` seam). Per-joint
-//! `breaking force` and backlash are authored-parameter additions to
-//! [`JointCommon`] with enforcement in the seam.
+//! breaking force landed as an authored-parameter addition to [`JointCommon`]
+//! ([`JointCommon::break_force`]) with enforcement in the seam; backlash is
+//! planned the same way.
 
 use bevy::math::Vec2;
 use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
-use gradiance_units::{Angle, Length};
+use gradiance_units::{Angle, Force, Length};
 use serde::{Deserialize, Serialize};
 
 // --- Motors ---------------------------------------------------------------
@@ -123,6 +124,10 @@ impl Default for LinearMotorDef {
 }
 
 /// Parameters common to every joint kind.
+///
+/// The two breaking fields are skipped when at their defaults, so a scene
+/// without breakable joints serializes exactly as before they existed (no
+/// format bump; the replay goldens stay byte-identical).
 #[derive(
     Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, bevy::reflect::Reflect,
 )]
@@ -130,6 +135,31 @@ pub struct JointCommon {
     /// Whether the two connected bodies still collide with each other
     /// (off by default, the Algodoo convention).
     pub collide_connected: bool,
+    /// The **linear** reaction force above which the joint breaks during a
+    /// run; `None` (the default) = unbreakable. Compared against the
+    /// magnitude of avian's post-solve `JointForces::force` by
+    /// `physics::joint_sync::break_overloaded_joints` — see [`exceeds_break_force`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub break_force: Option<Force>,
+    /// Whether the joint has broken. **Authored** state, written by the
+    /// physics seam during a run exactly as the solver writes poses, so the
+    /// run boundary records it (undo restores the joint) and a save keeps it
+    /// broken. The live avian `JointDisabled` is *derived* from it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub broken: bool,
+}
+
+/// The break force a joint gets when "breakable" is first switched on (N) —
+/// ten times a 1 kg body's weight, so a typical light assembly holds until
+/// it is loaded on purpose.
+pub const DEFAULT_BREAK_FORCE: f32 = 100.0;
+
+/// Whether a joint's reaction-force magnitude `force` breaks a joint with
+/// threshold `break_force`: strictly above it, and never for an unbreakable
+/// (`None`) joint. A non-positive threshold breaks on any load. Pure.
+#[must_use]
+pub fn exceeds_break_force(break_force: Option<Force>, force: Force) -> bool {
+    break_force.is_some_and(|limit| force.value() > limit.value())
 }
 
 /// The kind-specific parameters of a joint.
@@ -470,6 +500,16 @@ mod tests {
         // Body A swings +0.3: the limit-frame angle is the pin relative to A.
         let s2 = def.sensor_state(pose(a.x, a.y, 0.8), WORLD_POSE);
         assert!(close(s2.angle.value(), -0.3), "{s2:?}");
+    }
+
+    #[test]
+    fn only_a_breakable_joint_over_its_threshold_breaks() {
+        assert!(
+            !exceeds_break_force(None, Force(1.0e9)),
+            "None never breaks"
+        );
+        assert!(!exceeds_break_force(Some(Force(10.0)), Force(10.0)));
+        assert!(exceeds_break_force(Some(Force(10.0)), Force(10.5)));
     }
 
     #[test]
