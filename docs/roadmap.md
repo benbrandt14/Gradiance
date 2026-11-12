@@ -401,8 +401,14 @@ shadow items from M19. Design decisions in the slice PRs.
   see `docs/field-architecture.md`) serves the solver forces, the
   vector-plot overlay (`show_fields`), and **"Set in orbit"** (context
   menu: `v = √(a·r)` about the dominant attractor). SDF-shaped by default
-  (surface distance + gradient). Cams/planar contact/breaking/backlash
-  open.
+  (surface distance + gradient). **Breaking limits landed** (brief 2-2):
+  `JointCommon.break_force: Option<Force>` (inspector field, edit seam) and
+  an authored `broken` flag set by `physics::joint_sync::break_overloaded_joints`
+  when avian's linear `JointForces` exceeds it; `JointDisabled` is derived, a
+  run's breaks undo with the run, a save keeps them, and a broken joint draws
+  as grey dashed rings. The reaction force is a sensor
+  (`SignalSource::JointForce`, `PhysicsQueries::joint_force`).
+  Cams/planar contact/backlash open.
 - Contact point & force debug overlays (2.6, 8.3) — **first cut landed**:
   `PhysicsQueries::contact_points()` reads avian's `ContactGraph` (read-only, so
   the facade stays complete for plotters/scripts), and `DebugSettings.show_contacts`
