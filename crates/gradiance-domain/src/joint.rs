@@ -206,9 +206,9 @@ pub enum JointKind {
     },
 }
 
-/// Fallback spring constant (N/m) for the inspector's reset (the strut tool
+/// Fallback spring constant (N/m) for the inspector's reset (the spring tool
 /// computes a mass-based value at creation; see
-/// `interaction::tools::strut_tool`). Sized for a typical ~1 kg body: at
+/// `interaction::tools::spring_tool`). Sized for a typical ~1 kg body: at
 /// `k = m·g / sag` with `g ≈ 10` and a ~0.1 m sag this is ~100 N/m, matching
 /// the tool's `SPRING_STIFFNESS_PER_MASS · mass`. (The earlier `0.1` was a
 /// mechanical ÷`PIXELS_PER_METER²` rescale of the pixel-era value — three

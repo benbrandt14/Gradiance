@@ -1,7 +1,8 @@
-//! The strut tool: a spring-damper connecting two anchor points.
+//! The spring tool (formerly "strut"): a spring-damper connecting two
+//! anchor points. The rigid counterpart is the rod tool (`rod_tool`).
 //!
 //! Unlike the connector tools (which link two bodies at a single shared
-//! point), a strut spans a *distance*: press on the first anchor, drag to the
+//! point), a spring spans a *distance*: press on the first anchor, drag to the
 //! second, release. The drag length becomes the rest length, so the spring
 //! starts relaxed. Endpoints resolve to the topmost body under each anchor —
 //! or a world pin when the far end sits on empty space.
@@ -22,21 +23,21 @@ use gradiance_domain::joint::{DEFAULT_SPRING_DAMPING, JointCommon, JointDef, Joi
 use gradiance_domain::shape::ShapeDef;
 use gradiance_scene::JointRecord;
 
-/// Shortest strut that will commit (world metres); a near-zero drag is a no-op.
-const MIN_STRUT_LENGTH: f32 = 0.05;
+/// Shortest spring that will commit (world metres); a near-zero drag is a no-op.
+const MIN_SPRING_LENGTH: f32 = 0.05;
 /// Spring stiffness per unit mass proxy (AABB area × unit density = kg).
 /// Tuned so a body sags ~0.1 m under the default gravity (|g| ≈ 10): from
 /// `k ≈ m·g / sag`, `k ≈ 100·m`, so heavier bodies get proportionally
-/// stiffer struts instead of drooping.
+/// stiffer springs instead of drooping.
 const SPRING_STIFFNESS_PER_MASS: f32 = 100.0;
-/// Floor for the mass-based stiffness so tiny bodies still get a firm strut.
+/// Floor for the mass-based stiffness so tiny bodies still get a firm spring.
 const MIN_SPRING_STIFFNESS: f32 = 0.01;
 
-/// In-progress strut gesture (the first anchor).
+/// In-progress spring gesture (the first anchor).
 #[derive(Resource, Default, Debug)]
-pub struct StrutDraft(pub Option<Vec2>);
+pub struct SpringDraft(pub Option<Vec2>);
 
-impl ManipTool for StrutDraft {
+impl ManipTool for SpringDraft {
     fn update(
         &mut self,
         ctx: &ManipContext,
@@ -50,11 +51,11 @@ impl ManipTool for StrutDraft {
             self.0 = Some(p);
         }
 
-        // Release: build the strut from the first anchor to the cursor.
+        // Release: build the spring from the first anchor to the cursor.
         if ctx.left == GesturePhase::Released
             && let Some(anchor_a) = self.0.take()
             && let Some(anchor_b) = ctx.cursor
-            && let Some(commit) = build_strut(anchor_a, anchor_b, world)
+            && let Some(commit) = build_spring(anchor_a, anchor_b, world)
         {
             return ManipOutput::commit(commit);
         }
@@ -65,7 +66,7 @@ impl ManipTool for StrutDraft {
         self.0.is_some()
     }
 
-    /// The first anchor: the strut is a segment drawn from it.
+    /// The first anchor: the spring is a segment drawn from it.
     fn snap_reference(&self) -> Option<DraftReference> {
         self.0.map(DraftReference::Line)
     }
@@ -84,15 +85,15 @@ impl ManipTool for StrutDraft {
     }
 }
 
-/// Builds the strut record for a completed gesture, or `None` if no body sits
+/// Builds the spring record for a completed gesture, or `None` if no body sits
 /// at the first anchor or the drag is too short.
-fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
+fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
     let rest = anchor_a.distance(anchor_b);
-    if rest < MIN_STRUT_LENGTH {
+    if rest < MIN_SPRING_LENGTH {
         return None;
     }
 
-    // The first anchor must land on a body (the strut's fixed end).
+    // The first anchor must land on a body (the spring's fixed end).
     let &hit_a = world.bodies_at(anchor_a).first()?;
     let (shape_a, pose_a) = world.shape_pose(hit_a)?;
     let id_a = world.id_of(hit_a)?;
@@ -105,7 +106,7 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
         .find(|&e| e != hit_a)
         .and_then(|e| Some((world.shape_pose(e)?, world.id_of(e)?)));
 
-    // Stiffness scales with the heavier connected body's mass so the strut
+    // Stiffness scales with the heavier connected body's mass so the spring
     // isn't too soft under gravity.
     let mass = mass_proxy(&shape_a).max(far.as_ref().map_or(0.0, |((s, _), _)| mass_proxy(s)));
     let stiffness = (SPRING_STIFFNESS_PER_MASS * mass).max(MIN_SPRING_STIFFNESS);
@@ -117,7 +118,7 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
             damping: DEFAULT_SPRING_DAMPING,
             range: None,
         },
-        // Strut bodies collide by default; adjust via the collision-layer menu.
+        // Spring bodies collide by default; adjust via the collision-layer menu.
         common: JointCommon {
             collide_connected: true,
             ..JointCommon::default()
@@ -142,7 +143,7 @@ fn build_strut(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Tool
     })))
 }
 
-/// A body's mass proxy for the default strut stiffness: its AABB area (× unit
+/// A body's mass proxy for the default spring stiffness: its AABB area (× unit
 /// density), in kg, or 0 for a ground half-plane (statics don't sag, so they
 /// never set the stiffness). The area is *not* floored — in SI a small body is
 /// legitimately < 1 m²; the pixel-era `.max(1.0)` floor over-stiffened

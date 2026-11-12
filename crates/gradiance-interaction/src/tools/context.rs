@@ -180,6 +180,14 @@ pub enum ToolCommit {
     },
     /// Author a new behavior node (the tracer tool; future sensors/actuators).
     SpawnNode(Box<gradiance_scene::NodeRecord>),
+    /// Author a rigid rod: its capsule body plus the hinges at its ends, as
+    /// one undo step (the rod tool).
+    SpawnRod {
+        /// The capsule body.
+        body: Box<BodyRecord>,
+        /// End hinges referencing `body` (zero, one, or two).
+        joints: Vec<JointRecord>,
+    },
 }
 
 /// One gizmo primitive for a tool's transient preview.
@@ -340,6 +348,7 @@ pub struct ToolCommitWriters<'w> {
     arrays: MessageWriter<'w, gradiance_command::intent::ArrayIntent>,
     merges: MessageWriter<'w, MergeIntent>,
     props: MessageWriter<'w, PropertyEditIntent>,
+    rods: MessageWriter<'w, gradiance_command::intent::SpawnRodIntent>,
 }
 
 impl ToolCommitWriters<'_> {
@@ -364,6 +373,12 @@ impl ToolCommitWriters<'_> {
             ToolCommit::SpawnNode(record) => {
                 self.spawn_node
                     .write(gradiance_command::intent::SpawnNodeIntent { record: *record });
+            }
+            ToolCommit::SpawnRod { body, joints } => {
+                self.rods.write(gradiance_command::intent::SpawnRodIntent {
+                    body: *body,
+                    joints,
+                });
             }
             ToolCommit::Cut { a, b, width } => {
                 self.cut.write(CutIntent { a, b, width });
@@ -540,6 +555,36 @@ impl ToolWorld<'_, '_> {
     /// Every authored body at a point, topmost first.
     pub fn bodies_at(&self, p: Vec2) -> Vec<Entity> {
         super::bodies_at_sorted(p, &self.physics, &self.hit)
+    }
+
+    /// Attachment candidates at `p`, tolerating boundary landings: exact
+    /// containment hits first (topmost order), then bodies whose surface is
+    /// within `tol` (SDF distance, nearest first), ground half-planes last.
+    /// A snapped point sits *exactly on* an edge or a rod end, where exact
+    /// containment is a coin flip — this is the rod tool's end hit-test.
+    pub fn attachment_bodies_at(&self, p: Vec2, tol: f32) -> Vec<Entity> {
+        let mut hits = self.bodies_at(p);
+        let mut near: Vec<(bool, f32, Entity)> = Vec::new();
+        for entity in self
+            .physics
+            .bodies_in_aabb(p - Vec2::splat(tol), p + Vec2::splat(tol))
+        {
+            if hits.contains(&entity) {
+                continue;
+            }
+            let Ok((shape, transform)) = self.shapes.get(entity) else {
+                continue;
+            };
+            let pose = PosRot::from_transform(transform);
+            let local = Vec2::from_angle(-pose.rot).rotate(p - pose.pos);
+            let dist = gradiance_geometry::sdf::eval(shape, local);
+            if dist <= tol {
+                near.push((shape.contains_half_plane(), dist, entity));
+            }
+        }
+        near.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        hits.extend(near.into_iter().map(|(_, _, entity)| entity));
+        hits
     }
 
     /// A body entity's authored pose.

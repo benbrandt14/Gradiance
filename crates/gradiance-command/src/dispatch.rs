@@ -13,11 +13,13 @@ use crate::intent::name;
 use crate::intent::{
     ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
     DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent, PropertyEditIntent, RedoIntent,
-    ScaleIntent, SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, UndoIntent, UngroupIntent,
+    ScaleIntent, SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent,
+    UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
 use crate::property::PropertyEditCommand;
+use crate::rod_cmd::SpawnRodCommand;
 use crate::scale_cmd::ScaleCommand;
 use crate::scene_cmd::LoadSceneCommand;
 use crate::spawn::{DeleteCommand, DuplicateCommand, SpawnCommand};
@@ -83,6 +85,7 @@ command_intents! {
         record: i.record,
         locked_before: None,
     }),
+    SpawnRodIntent => |i| Box::new(SpawnRodCommand::new(i.body, i.joints)),
     LoadSceneIntent => |i| Box::new(LoadSceneCommand::new(i.scene)),
     PropertyEditIntent => |i| Box::new(PropertyEditCommand { changes: i.changes }),
     GroupIntent => |i| Box::new(GroupCommand::new(i.targets)),

@@ -56,6 +56,7 @@ pub mod intent;
 pub mod joint_cmd;
 pub mod merge_cmd;
 pub mod property;
+pub mod rod_cmd;
 pub mod scale_cmd;
 pub mod scene_cmd;
 pub mod spawn;

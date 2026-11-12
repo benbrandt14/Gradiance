@@ -35,7 +35,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
         &[
             (ToolState::Hinge, "Hinge", "H", "tool_hinge"),
             (ToolState::Slider, "Prismatic", "R", "tool_prismatic"),
-            (ToolState::Strut, "Strut", "T", "tool_strut"),
+            (ToolState::Spring, "Spring", "T", "tool_strut"),
+            (ToolState::Rod, "Rod", "L", "wire"),
             (ToolState::Weld, "Weld", "W", "tool_weld"),
             (ToolState::Ground, "Ground", "G", "tool_ground"),
         ],
