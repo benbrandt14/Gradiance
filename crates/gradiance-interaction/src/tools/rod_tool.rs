@@ -25,7 +25,7 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_scene::{BodyRecord, JointRecord};
 
 /// Shortest rod that will commit (world metres); a near-zero drag is a no-op.
-const MIN_ROD_LENGTH: f32 = 0.05;
+pub const MIN_ROD_LENGTH: f32 = 0.05;
 /// Rod capsule radius (half the drawn thickness, metres) — reads as a thick
 /// line next to 1-px gizmo strokes at the default zoom.
 pub const ROD_RADIUS: f32 = 0.025;

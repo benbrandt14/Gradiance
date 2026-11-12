@@ -82,6 +82,8 @@ available later without touching geometry, physics, or tools.
   the tree (analytic), several ⇒ polygon-leaf pieces with recentering,
   velocity inheritance `v + ω × r`, joint reattach-or-delete.
 - Old scene files parse unchanged (new enum variants are additive for RON).
+  `Capsule { half_length, radius }` (the rod, brief 2-3) was added this way:
+  exact field, exact stadium contour, exact avian capsule collider.
 
 ## Build vs. reuse (ecosystem survey, 2026-07-06)
 
