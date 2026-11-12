@@ -7,7 +7,9 @@
 //! a scene fixture is a few lines of lisp, and the assertions are on the real
 //! authored world it produces.
 
-use crate::harness::{body_count, headless_app, headless_app_with, joint_count, paused_app, step, undo};
+use crate::harness::{
+    body_count, headless_app, headless_app_with, joint_count, paused_app, step, undo,
+};
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
 use gradiance::script::bridge::{
@@ -187,7 +189,10 @@ fn assert_floating(app: &mut App) {
     assert_eq!(app.world().resource::<SimSettings>().gravity.y, 0.0);
     let after = dynamic_heights(app);
     for (b, a) in before.iter().zip(&after) {
-        assert!((a - b).abs() < 1e-3, "a box fell under zero gravity: {b} -> {a}");
+        assert!(
+            (a - b).abs() < 1e-3,
+            "a box fell under zero gravity: {b} -> {a}"
+        );
     }
 }
 
@@ -196,7 +201,9 @@ fn a_startup_script_zeroes_gravity() {
     let path = std::env::temp_dir().join(format!("gradiance-zero-g-{}.scm", std::process::id()));
     std::fs::write(&path, ZERO_G_SCENE).unwrap();
     let mut app = headless_app_with(|app| {
-        app.insert_resource(gradiance::script::bridge::StartupScripts(vec![path.clone()]));
+        app.insert_resource(gradiance::script::bridge::StartupScripts(vec![
+            path.clone(),
+        ]));
     });
     app.update(); // the startup source runs on the first frame after start-up
     assert_floating(&mut app);

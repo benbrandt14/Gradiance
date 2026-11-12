@@ -2042,17 +2042,24 @@ mod tests {
         let mut app = bus_app();
         app.insert_resource(SimSettings::default());
         for bad in [
-            "(sim-set \"gravity.z\" 0)",     // no such field
-            "(sim-set \"gravity\" 0)",       // not a scalar leaf
+            "(sim-set \"gravity.z\" 0)",    // no such field
+            "(sim-set \"gravity\" 0)",      // not a scalar leaf
             "(sim-set \"speed\" \"fast\")", // not a number
         ] {
             run(&mut app, bad);
             let log = &app.world().resource::<ScriptLog>().0;
             let entry = log.last().expect("the run is logged");
-            assert!(!entry.ok, "{bad} should fail visibly, got {:?}", entry.output);
+            assert!(
+                !entry.ok,
+                "{bad} should fail visibly, got {:?}",
+                entry.output
+            );
             assert!(entry.output.contains("sim-set"), "{}", entry.output);
         }
-        assert_eq!(*app.world().resource::<SimSettings>(), SimSettings::default());
+        assert_eq!(
+            *app.world().resource::<SimSettings>(),
+            SimSettings::default()
+        );
     }
 
     #[test]
