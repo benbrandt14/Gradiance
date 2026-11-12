@@ -239,10 +239,14 @@ missing foundation:**
   `PointerButtons`/`SnappedCursor` to first-party `bevy_picking` observers
   (`On<Pointer<…>>`), as the original plan intended — large surface, best
   done as its own pass so the drag contract is ported wholesale.
-- **Deferred (Bevy audit):** enforce the authored `Body`/`Joint` archetype
-  with **required components** (`#[require(...)]`) once the domain types
-  carry sensible `Default`s (`ShapeDef` is a `Default`-less enum today), so
-  a body can never exist missing `LayerMask32`/`Appearance`/etc.
+- **Landed (brief 2-4):** the authored `Body`/`Joint` archetype is enforced
+  with **required components** (`#[require(...)]`, `domain::Body`/`Joint`).
+  `Body` requires `StableId` (fresh UUID per entity), `Transform`, `ShapeDef`
+  (new `Default`: a 1 m unit box), `Appearance`, `DepthBand`, and the authored
+  avian components at `BodyPhysics::default()` values. `Joint` requires only
+  `StableId` + `Transform` — `JointDef` has no safe default (it must name a
+  real body). (`LayerMask32` is no longer a body component — collision bits
+  are derived from `DepthBand`.)
 
 ## M18 — Grids & snapping (CAD pass)
 
