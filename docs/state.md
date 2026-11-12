@@ -1,7 +1,7 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-11, Phase 2 (orchestrator, after #220 merged; 2-3 in flight).
+Last updated: 2026-11-11, Phase 2 (orchestrator, after #221 merged; 2-4 next).
 
 ## Position
 
@@ -9,7 +9,9 @@ Last updated: 2026-11-11, Phase 2 (orchestrator, after #220 merged; 2-3 in fligh
   (`docs/orchestration.md` § The plan).
 - **main:** `592465d` — #219 joint sensor sources (2-1), #220 joint
   breaking limits (2-2: authored `JointCommon.break_force`/`broken`, avian
-  `JointForces`/`JointDisabled` derived).
+  `JointForces`/`JointDisabled` derived), #221 rigid rod (2-3: `ShapeDef::Capsule`,
+  rod tool `L` with hinged ends via one `SpawnRodCommand`; strut tool renamed
+  Spring).
   **Phase 1 (M18) done:** #212 adaptive snap, #214
   major/minor lines, #213 axis lock follows the grid, #215 analytic circle
   snap features, #216 alignment while moving, #217 three-point box, #218
@@ -20,8 +22,6 @@ Last updated: 2026-11-11, Phase 2 (orchestrator, after #220 merged; 2-3 in fligh
   ("continue as far as you can tonight"). The files are complete enough for
   a fresh orchestrator to take over at any point.
 - **Phase 2 briefs, run serially:**
-  - **2-3** rigid rod, salvaged from #194 — `docs/briefs/2-3-rigid-rod.md`
-    (in flight).
   - **2-4** required components on `Body`/`Joint` —
     `docs/briefs/2-4-required-components.md`.
   - Not yet briefed: backlash; cams / planar contact.
@@ -36,7 +36,8 @@ Last updated: 2026-11-11, Phase 2 (orchestrator, after #220 merged; 2-3 in fligh
   vs `limit_reference_angle`'s comment unverified against avian, and joints
   have no node-graph block (2-1 Outcome); no script verb edits joint
   properties (break force, limits, motors) — Phase 3 (2-2 Outcome);
-  torque-based breaking is one field away (2-2 Outcome).
+  torque-based breaking is one field away (2-2 Outcome); rod follow-ups:
+  fixed end = merge, `spawn-rod` verb, rod inspector (2-3 Outcome).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
@@ -68,6 +69,11 @@ gate if nobody claims them.
   gate to CI when `df` is under ~8 GB. Between workers, free space with
   `rm -rf target/debug/deps/*gradiance* target/debug/incremental/*` (keeps
   the third-party build; ~15 GB back).
+- **Possible flaky test (watch).** PR #221's first `ci` run failed in
+  `cargo test --workspace` (exit 101, no annotation); the re-run on the same
+  SHA passed, coverage (same tests) passed first time, and the full `it`
+  suite passed locally. First such case. If a first-run-only failure recurs,
+  brief a hunt for it (run the suite with `--test-threads=1` and repeated).
 - Container can't reach rust-lang.org (no toolchain update) and can't read
   Actions logs — read CI through annotations. Format failures now annotate
   too (file per error).
