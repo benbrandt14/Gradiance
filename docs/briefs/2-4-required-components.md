@@ -1,7 +1,7 @@
 # The body archetype, enforced
 Phase 2 · M16 residual · "Deferred (Bevy audit): enforce the authored
 `Body`/`Joint` archetype with **required components** (`#[require(...)]`)
-once the domain types carry sensible `Default`s" · status: ready
+once the domain types carry sensible `Default`s" · status: done
 
 ## Goal
 
@@ -59,4 +59,33 @@ derived-state sync, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**Status: done** (PR #222) — landed as briefed, with `Joint` deliberately
+narrower than `Body`.
+
+- `Body` requires: `StableId`, `Transform`, `ShapeDef`, `Appearance`,
+  `DepthBand`, and the authored avian components `RigidBody` (Dynamic),
+  `Friction`, `Restitution`, `ColliderDensity`, `GravityScale` at the
+  `BodyPhysics::default()` values (via the `props::default_*` fns), so a
+  bare body's live physics matches what `BodyPhysics::capture` records.
+  Optional markers (`Sensor`, `LockedAxes`) are absent-by-default, so not
+  required. No derived component is required (invariant 5).
+- `Joint` requires only `StableId` + `Transform`. `JointDef` is **not**
+  required: it must name a real `body_a`, and no default can — a defaulted
+  joint would silently reference nothing. Left visibly incomplete instead.
+- `StableId::default()` already mints a fresh UUID (`StableId::new`), so
+  requiring it is identity-safe (invariant 3); the test asserts two bare
+  spawns get distinct ids and both land in `IdIndex`.
+- `ShapeDef` gained `Default` = `Box { 1.0, 1.0 }` (1 m unit square,
+  documented in `geometry::shape`).
+- Grep found no existing code spawning `Body`/`Joint` outside
+  `BodyRecord::spawn` / `JointRecord::spawn`, so nothing is newly masked.
+  `BodyRecord::spawn` is unchanged; for static bodies the required
+  `RigidBody::Dynamic` is now inserted first and then replaced by
+  `insert_into` in the same exclusive call — avian handles a `RigidBody`
+  re-insert (its type-change observers), and the explicit-override test
+  pins the result.
+- Tests (`tests/it/physics_sync.rs`): bare `Body` spawn gets the full
+  archetype + a derived collider + round-trips through capture; explicit
+  values beat defaults; bare `Joint` gets identity but no `JointDef`.
+- Roadmap M16 line marked landed.
+

@@ -110,6 +110,23 @@ pub enum ShapeDef {
     },
 }
 
+/// The default shape: a 1 m × 1 m [`Box`](ShapeDef::Box).
+///
+/// A deliberate choice, made so the `Body` marker can `#[require]` a shape
+/// (`domain::Body`). It is only ever observed when something spawns a bare
+/// `Body` without a shape — every authoring path (`BodyRecord::spawn`) sets
+/// one explicitly. A unit square is valid for every derived consumer
+/// (polygonize, collider, mesh, snapping), well above `MIN_SHAPE_SIZE`, and
+/// centroid-at-origin like an authored box.
+impl Default for ShapeDef {
+    fn default() -> Self {
+        Self::Box {
+            width: 1.0,
+            height: 1.0,
+        }
+    }
+}
+
 /// Why a [`ShapeDef`] was rejected.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ShapeError {
