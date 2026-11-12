@@ -1,13 +1,15 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-11, Phase 2 (orchestrator, after #219 merged; 2-2 next).
+Last updated: 2026-11-11, Phase 2 (orchestrator, after #220 merged; 2-3 in flight).
 
 ## Position
 
 - **Phase:** 2 — Constraints & substrate completion
   (`docs/orchestration.md` § The plan).
-- **main:** `ed3a29d` — #219 joint sensor sources (brief 2-1).
+- **main:** `592465d` — #219 joint sensor sources (2-1), #220 joint
+  breaking limits (2-2: authored `JointCommon.break_force`/`broken`, avian
+  `JointForces`/`JointDisabled` derived).
   **Phase 1 (M18) done:** #212 adaptive snap, #214
   major/minor lines, #213 axis lock follows the grid, #215 analytic circle
   snap features, #216 alignment while moving, #217 three-point box, #218
@@ -18,9 +20,8 @@ Last updated: 2026-11-11, Phase 2 (orchestrator, after #219 merged; 2-2 next).
   ("continue as far as you can tonight"). The files are complete enough for
   a fresh orchestrator to take over at any point.
 - **Phase 2 briefs, run serially:**
-  - **2-2** breaking limits — `docs/briefs/2-2-breaking-limits.md` (uses
-    avian 0.7 `JointForces` + `JointDisabled`; "broken" is authored state).
-  - **2-3** rigid rod, salvaged from #194 — `docs/briefs/2-3-rigid-rod.md`.
+  - **2-3** rigid rod, salvaged from #194 — `docs/briefs/2-3-rigid-rod.md`
+    (in flight).
   - **2-4** required components on `Body`/`Joint` —
     `docs/briefs/2-4-required-components.md`.
   - Not yet briefed: backlash; cams / planar contact.
@@ -33,7 +34,9 @@ Last updated: 2026-11-11, Phase 2 (orchestrator, after #219 merged; 2-2 next).
   script verb for `ToolDefaults`/`SnapConfig` — only `sim-set` (1-6; Phase
   3); no on/off toggle for tangent snapping (1-7); world-pin joint-angle sign
   vs `limit_reference_angle`'s comment unverified against avian, and joints
-  have no node-graph block (2-1 Outcome).
+  have no node-graph block (2-1 Outcome); no script verb edits joint
+  properties (break force, limits, motors) — Phase 3 (2-2 Outcome);
+  torque-based breaking is one field away (2-2 Outcome).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
