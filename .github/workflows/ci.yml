@@ -129,7 +129,33 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
       - name: Test
-        run: cargo test --locked --workspace
+        id: test
+        # Teed for the annotate step below: like clippy, a test failure is
+        # otherwise a bare "exit code 101" to agent sessions, which can read
+        # annotations but not Actions logs (`docs/orchestration.md` § Gates
+        # and CI). Same gate, same exit code.
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked --workspace --color=never 2>&1 | tee test.txt
+
+      - name: Annotate test failures
+        # Names each failed test and its panic message (doctests included).
+        # Only when Test itself failed (see the clippy annotate step).
+        if: failure() && steps.test.outcome == 'failure'
+        shell: bash
+        run: |
+          set +e
+          # Failed test names: `test path::name ... FAILED` lines (unit,
+          # integration and doctest harnesses all print them).
+          grep -E '^test .* \.\.\. FAILED$' test.txt | head -5 \
+            | while IFS= read -r line; do echo "::error::$line"; done
+          # Panic sites and messages, first few.
+          grep -A3 -E "panicked at " test.txt | grep -v '^--$' | head -12 \
+            | tr '\n' '|' | cut -c1-1500 | sed 's/^/::error::panics: /'
+          echo
+          echo "::error::tail: $(tail -n 15 test.txt | tr '\n' '|' | cut -c1-1500)"
+          exit 0
 
   coverage:
     # Instrumented builds are too heavy for agent containers (see
