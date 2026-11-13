@@ -257,8 +257,12 @@ Agent-container hazards:
 - rust-lang.org is not reachable from the container, so the toolchain can't
   be updated there; that is why CI is pinned to the container's version.
   If `rustc --version` differs from `RUST_PIN`, say so in your handoff.
-  CI is the authority; read its failures through annotations
-  (`docs/orchestration.md` § Gates and CI), because Actions logs return 403
-  and GitHub GraphQL is unavailable.
+  CI is the authority. Read its failures through annotations first (clippy,
+  fmt and failed tests are annotated — `docs/orchestration.md` § Gates and
+  CI); the full log is `gh run view <run-id> --log-failed`. GitHub GraphQL
+  is unavailable (use REST).
+- **Visual checks:** `tools/screenshot/` runs the real app on lavapipe
+  (CPU Vulkan) under Xvfb. Screenshots never go in git — show them in the
+  conversation and describe them in the PR.
 - A fresh container may lack the native libs (the `alsa-sys` build script
   fails). `apt-get install` the list above.
