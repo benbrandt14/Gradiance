@@ -2,7 +2,7 @@
 Phase 3 · scripting P3 · "`group`/`ungroup` via list argument" (roadmap:
 "Still absent: set-shaped edits (`group`/`ungroup`), which want a list
 argument — … `SteelVal::ListV` makes `(group (list 0 1 2))` workable") ·
-status: ready
+status: done
 
 ## Goal
 
@@ -63,4 +63,33 @@ other verbs, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**Status: done** (2026-11-13, PR #227).
+
+- `(group (list i …))` / `(ungroup (list i …))` in `gradiance-script`
+  (`registry.rs` rows + `name::GROUP`/`UNGROUP`; `bridge.rs`
+  `register_group_verbs` + two `edit_bindings` rows). They emit
+  `GroupIntent` / `UngroupIntent` unchanged.
+- `body_ids_arg` resolves a `SteelVal::ListV` through the run snapshot
+  (first-occurrence order, duplicates collapsed). A non-list, a non-index
+  element (non-number, negative, fractional) or an out-of-range index
+  returns `Err`, so the run fails (warn + a failed console entry, the 2-5
+  pattern) and, per 3-1, commits nothing.
+- **The unverified fact:** `GroupCommand::apply` returns
+  `CommandError::NoEffect` for fewer than two targets, and Ctrl+G
+  (`interaction::input`) emits nothing unless two or more bodies are
+  selected. `group` matches: fewer than two *distinct* bodies is a quiet
+  no-op (no error, no undo step). (The Edit-menu and context-menu Group
+  entries emit for one body, and the command rejects it; same end state.)
+  `ungroup` emits for any non-empty set; the command rejects an all-ungrouped
+  set as no effect, as Ctrl+Shift+G does.
+- Tests: two bridge unit tests (list resolution; bad lists name the verb);
+  four `tests/it/scripting.rs` cases (shared outermost id in a scene
+  capture + one undo; ungroup peels the outer level of a nested group + one
+  undo; one-distinct-body no-op; bad arguments error and commit nothing).
+- Docs: `docs/scripting.md` verb reference and the `(delete i)` rationale;
+  roadmap P3 line marked landed; `docs/ui-shell-decision.md` "still open"
+  line updated.
+- Local: fmt, clippy `-D warnings`, rustdoc `-D warnings`,
+  `cargo test -p gradiance-script`, `--test it scripting` and
+  `registry_validation` green. Workspace tests left to CI (13 GB free).
+  rustc 1.97.0 = `RUST_PIN`.

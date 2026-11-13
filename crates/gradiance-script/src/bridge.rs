@@ -904,6 +904,7 @@ fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_edit_verbs(engine, &shared.ops);
     register_lifecycle_verbs(engine, &shared.ops, &shared.view);
+    register_group_verbs(engine, &shared.ops, &shared.view);
     register_joint_verbs(engine, &shared.ops, &shared.view);
     register_property_verbs(engine, &shared.ops, &shared.view);
     register_query_verbs(engine, &shared.view);
@@ -1289,38 +1290,6 @@ fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedVie
         }
     });
 
-    // `(group (list i …))` / `(ungroup (list i …))` — the set-shaped edits.
-    // steel's variadic `RestArgs` is private, so the set arrives as one list
-    // argument. They emit exactly what Ctrl+G / Ctrl+Shift+G emit, so a
-    // scripted group and a hand-made one are the same save file and the same
-    // undo step. Ctrl+G with fewer than two bodies selected emits nothing
-    // (and `GroupCommand` would reject it as no effect), so `group` matches:
-    // a one-body list is a quiet no-op, not an error.
-    let group_ops = Arc::clone(ops);
-    let group_view = Arc::clone(view);
-    engine.register_fn(name::GROUP, move |set: SteelVal| -> Result<(), String> {
-        let targets = match group_view.lock() {
-            Ok(view) => body_ids_arg(name::GROUP, &set, &view)?,
-            Err(_) => return Ok(()),
-        };
-        if targets.len() >= 2 {
-            emit(&group_ops, Box::new(GroupIntent { targets }));
-        }
-        Ok(())
-    });
-    let ungroup_ops = Arc::clone(ops);
-    let ungroup_view = Arc::clone(view);
-    engine.register_fn(name::UNGROUP, move |set: SteelVal| -> Result<(), String> {
-        let targets = match ungroup_view.lock() {
-            Ok(view) => body_ids_arg(name::UNGROUP, &set, &view)?,
-            Err(_) => return Ok(()),
-        };
-        if !targets.is_empty() {
-            emit(&ungroup_ops, Box::new(UngroupIntent { targets }));
-        }
-        Ok(())
-    });
-
     // `(place i x y angle)` — move and rotate the i-th body. The *old* pose
     // comes from the run's snapshot, which is what makes this one undoable
     // step rather than a teleport: `CommitTransformCommand` needs both ends of
@@ -1352,6 +1321,42 @@ fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedVie
             }
         },
     );
+}
+
+/// Set-shaped edits — `(group (list i …))` / `(ungroup (list i …))`.
+///
+/// steel's variadic `RestArgs` is private, so the set arrives as one list
+/// argument, resolved through [`body_ids_arg`] against the run's snapshot.
+/// They emit exactly what Ctrl+G / Ctrl+Shift+G emit, so a scripted group and
+/// a hand-made one are the same save file and the same undo step.
+fn register_group_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // Ctrl+G with fewer than two bodies selected emits nothing (and
+    // `GroupCommand` would reject it as no effect), so `group` matches: a
+    // one-body list is a quiet no-op, not an error.
+    let group_ops = Arc::clone(ops);
+    let group_view = Arc::clone(view);
+    engine.register_fn(name::GROUP, move |set: SteelVal| -> Result<(), String> {
+        let targets = match group_view.lock() {
+            Ok(view) => body_ids_arg(name::GROUP, &set, &view)?,
+            Err(_) => return Ok(()),
+        };
+        if targets.len() >= 2 {
+            emit(&group_ops, Box::new(GroupIntent { targets }));
+        }
+        Ok(())
+    });
+    let ungroup_ops = Arc::clone(ops);
+    let ungroup_view = Arc::clone(view);
+    engine.register_fn(name::UNGROUP, move |set: SteelVal| -> Result<(), String> {
+        let targets = match ungroup_view.lock() {
+            Ok(view) => body_ids_arg(name::UNGROUP, &set, &view)?,
+            Err(_) => return Ok(()),
+        };
+        if !targets.is_empty() {
+            emit(&ungroup_ops, Box::new(UngroupIntent { targets }));
+        }
+        Ok(())
+    });
 }
 
 /// Body-property verbs — the inspector's fields as ops.

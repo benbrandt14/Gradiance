@@ -61,10 +61,9 @@ separates "a weekend" from "an R&D project."
   The op is the registered thing; the row is a projection of it plus history
   state.
 
-  Still open: set-shaped edits (`group`, `ungroup`). Their natural argument is a
-  selection, which lives *above* this layer, and a fixed-arity `(group i j)`
-  would be an arbitrary restriction. They wait for a list-argument convention —
-  see `docs/scripting.md`.
+  Set-shaped edits (`group`, `ungroup`) landed with a list-argument convention:
+  their natural argument is a selection, which lives *above* this layer, so
+  they take an indexed set, `(group (list 0 1))` — see `docs/scripting.md`.
 - Keep the `dev` dynamic-linking loop; widen `egui_kittest` headless coverage.
 
 ## What landed (option A, by accretion)
