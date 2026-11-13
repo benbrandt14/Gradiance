@@ -1102,10 +1102,9 @@ fn defparam_and_defsignal_build_the_dataflow() {
 // --- The run budget and all-or-nothing runs (brief 3-1) ---
 
 /// The newest console entry: (ok, output).
-fn last_entry(app: &App) -> (bool, String) {
+fn last_entry(app: &App) -> Option<(bool, String)> {
     let log = &app.world().resource::<ScriptLog>().0;
-    let entry = log.last().expect("the run is logged");
-    (entry.ok, entry.output.clone())
+    log.last().map(|entry| (entry.ok, entry.output.clone()))
 }
 
 /// A script that never ends is stopped by the budget, reported like any other
@@ -1117,7 +1116,7 @@ fn a_runaway_script_is_stopped_and_reported() {
     assert_eq!(body_count(&mut app), 1);
 
     run(&mut app, "(define (spin) (spin)) (spin)");
-    let (ok, output) = last_entry(&app);
+    let (ok, output) = last_entry(&app).expect("the run is logged");
     assert!(!ok, "a stopped run is an error");
     assert!(
         output.contains("budget exceeded") && output.contains("ms"),
@@ -1127,7 +1126,7 @@ fn a_runaway_script_is_stopped_and_reported() {
 
     // The engine is reusable: the next run works as normal.
     run(&mut app, "(spawn-box 60 0 20 20)");
-    assert!(last_entry(&app).0);
+    assert!(last_entry(&app).expect("logged").0);
     assert_eq!(body_count(&mut app), 2);
 }
 
@@ -1140,7 +1139,12 @@ fn a_script_that_spawns_then_loops_forever_spawns_nothing() {
         &mut app,
         "(spawn-box 0 0 40 20) (spawn-circle 50 0 10) (let loop () (loop))",
     );
-    assert!(last_entry(&app).1.contains("budget exceeded"));
+    assert!(
+        last_entry(&app)
+            .expect("logged")
+            .1
+            .contains("budget exceeded")
+    );
     assert_eq!(body_count(&mut app), 0);
     // Nothing was queued for later frames either.
     step(&mut app, 2);
@@ -1165,7 +1169,7 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
          (panel-show \"properties\")
          (car (list))",
     );
-    assert!(!last_entry(&app).0, "the run failed");
+    assert!(!last_entry(&app).expect("logged").0, "the run failed");
     assert_eq!(body_count(&mut app), 0);
     let world = app.world();
     assert!((world.resource::<SimSettings>().gravity.y - gravity).abs() < 1e-6);

@@ -29,7 +29,7 @@
 //!   that one builtin takes, not forever. Memory limits are out of scope.
 //! - **The engine is reusable after a trip**: a tripped run unwinds the VM
 //!   stack, and after `resume()` the next run evaluates normally (pinned by
-//!   [`tests::engine_is_reusable_after_a_trip`]).
+//!   `tests::engine_is_reusable_after_a_trip`).
 
 use std::sync::mpsc;
 use std::time::Duration;
@@ -96,8 +96,8 @@ mod tests {
     /// for a loaded CI runner.
     const STOP_WITHIN: Duration = Duration::from_secs(5);
 
-    /// Runs `source` on `engine` under [`TEST_BUDGET`]; returns (is_err,
-    /// fired, elapsed).
+    /// Runs `source` on `engine` under [`TEST_BUDGET`]; returns `(is_err,
+    /// fired, elapsed)`.
     fn run(engine: &mut Engine, source: &'static str) -> (bool, bool, Duration) {
         let controller = engine.get_thread_state_controller();
         let start = Instant::now();
@@ -116,8 +116,7 @@ mod tests {
 
     fn assert_reusable(engine: &mut Engine) {
         let controller = engine.get_thread_state_controller();
-        let (result, fired) =
-            run_with_budget(&controller, TEST_BUDGET, || engine.run("(+ 1 2)"));
+        let (result, fired) = run_with_budget(&controller, TEST_BUDGET, || engine.run("(+ 1 2)"));
         assert!(!fired);
         let values = result.expect("engine evaluates after a trip");
         assert_eq!(values.last().map(ToString::to_string).as_deref(), Some("3"));

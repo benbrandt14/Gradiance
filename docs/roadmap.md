@@ -609,7 +609,7 @@ a normal dependency, not a cargo feature — see the decision doc's
   substrate (opaque `StableId`/`ShapeDef`, registered intents), `ScriptError`
   (thiserror) + a `catch_unwind` eval boundary, and `ScriptPlugin`. Remaining
   P0 nicety: `src/script/values.rs` (`ShapeDef` foreign type + geometry
-  constructor builtins) and a fuel/step budget.
+  constructor builtins). (The run budget landed with P1, below.)
 - **P1 — scripted editing + reads: landed.** `src/script/bridge.rs` runs the
   exclusive `run_scripts` doorway (before `CommandDispatchSet`, so one run =
   one batch of undoable commands), and both halves of the governance model are
@@ -639,7 +639,10 @@ a normal dependency, not a cargo feature — see the decision doc's
     or resource-supplied `.scm` files are read and run through the ordinary
     doorway on boot — the "author from a file" path (scene setup, helpers,
     `register-action`). Doubles as a test-fixture runner.
-  - **Remaining P1:** a fuel/step budget for runaway authoring scripts.
+  - **Run budget: landed** (brief 3-1). Each run gets a 2 s wall-clock
+    budget (`script::budget`, a watchdog on steel's thread-state controller)
+    and becomes `ScriptError::Budget` past it; any failed run discards all it
+    queued, so a run is all or nothing. See `docs/scripting.md`.
 - **P2 — drivers as named-signal dataflow** over the Tier-B `kernel` seam
   — **first cut landed** (`docs/signal-dataflow.md`): `defparam` (tunable
   slider knobs) and `defsignal` (computed **modulator** signals authored as a

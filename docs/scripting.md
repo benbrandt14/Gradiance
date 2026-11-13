@@ -33,6 +33,26 @@ exclusive doorway (`run_scripts`, which dispatches before the command stack, so
   becomes a few lines of lisp asserted against the real authored world (see
   `tests/it/scripting.rs`).
 
+### The run budget, and all-or-nothing runs
+
+Each run (a console line, a `--script` file, a hot reload) gets a
+**wall-clock budget of 2 s** (`script::budget::SCRIPT_BUDGET`). A script that
+runs past it — `(define (f) (f)) (f)`, a loop with no exit — is stopped and
+reported in the console like any other error: `stopped after 2000 ms: budget
+exceeded`. The editor keeps running and the next line evaluates normally.
+
+A run is **all or nothing**, like its one undo batch: if it fails for any
+reason (evaluation error, panic, budget), nothing it queued is applied — no
+edits, `sim-set` writes, labels, actions, panel requests, `signal-set`
+publishes or `defparam`/`defsignal` declarations. Other runs in the same frame
+are unaffected. (`define`s the failed run made before it stopped do stay in the
+VM — they are interpreter state, not scene state.)
+
+The budget is a guard, not a scheduler: the VM checks it between bytecode
+instructions, so one *native* builtin call (a `(range 0 n)` with a huge `n`)
+finishes before the stop lands. A script can stall the editor for as long as
+that one call takes, then fails. Memory is not limited.
+
 ### Hot reload
 
 Every `--script` file is watched while the app runs: **save the file and it
@@ -352,4 +372,5 @@ up.
   sensor is a query, a modulator is a kernel, an actuator is a config/edit op.
   **Landed** as `gradiance-signal` — bindings, params, and computed signals all
   compile through `signal::compile` to a `Kernel` tape.
-- **A fuel/step budget** for runaway authoring scripts.
+- **A run budget** for runaway authoring scripts — **landed** (a wall-clock
+  budget per run; failed runs commit nothing). See *The run budget* above.

@@ -208,7 +208,7 @@ pub enum ScriptError {
     #[error("script panicked")]
     Panicked,
     /// The script ran past its wall-clock budget
-    /// ([`SCRIPT_BUDGET`](crate::budget::SCRIPT_BUDGET)) and was stopped.
+    /// ([`SCRIPT_BUDGET`]) and was stopped.
     #[error("stopped after {ms} ms: budget exceeded")]
     Budget {
         /// The budget the run exceeded, in milliseconds.
