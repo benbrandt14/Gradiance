@@ -14,10 +14,10 @@ Last updated: 2026-11-12, Phase 2 done → Phase 3 next (orchestrator).
   scripted-body colour, and the CI flake), #224 CI test-failure annotations.
 - **Phase 3 briefs:** **3-1** script step budget —
   `docs/briefs/3-1-script-budget.md` (steel 0.8.2 has `with_interrupted` +
-  `InterruptHandler`). Still to brief: group/ungroup via list args,
-  `register-action` click point + folding context-menu buttons into the
-  action table, `reflect_functions` + BRP (the external control surface),
-  user tools from `.scm`.
+  `InterruptHandler`; in flight). Then **3-2** group/ungroup verbs,
+  **3-3** action table (click point + folded context-menu commands),
+  **3-4** remote control surface (BRP over the op registry). Still to
+  brief: user tools from `.scm` (after 3-3).
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
 - **Workers:** hand off through the brief's Outcome and the PR; the
