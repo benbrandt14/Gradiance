@@ -12,28 +12,39 @@ Last updated: 2026-11-12, Phase 2 done → Phase 3 next (orchestrator).
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
   components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
   scripted-body colour, and the CI flake), #224 CI test-failure annotations.
-- **Phase 2 items needing an owner decision (not briefed):** backlash, cams,
-  planar contact. The roadmap/feedback only name them; what each should do
-  is unspecified.
 - **Phase 3 briefs:** **3-1** script step budget —
   `docs/briefs/3-1-script-budget.md` (steel 0.8.2 has `with_interrupted` +
   `InterruptHandler`). Still to brief: group/ungroup via list args,
   `register-action` click point + folding context-menu buttons into the
   action table, `reflect_functions` + BRP (the external control surface),
-  user tools from `.scm`, and verbs for `ToolDefaults`/`SnapConfig`/joint
-  properties (follow-ups from 1-6 and 2-2).
+  user tools from `.scm`.
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
 - **Workers:** hand off through the brief's Outcome and the PR; the
   orchestrator updates this file after review and merges.
-- **Open follow-ups (unbriefed):** CSG arcs snap to contour vertices and give
-  no tangents (1-4, 1-7); alignment during creation tools (1-5); grid
-  coverage from the frustum (1-1); no tangent-snap toggle (1-7); world-pin
-  joint-angle sign vs `limit_reference_angle`'s comment unverified, joints have
-  no node-graph block (2-1); torque-based breaking (2-2); rod: fixed end =
+## Retained for future planning — do not work on these
+
+Owner instruction (2026-11-13): **no unbriefed work.** Everything below is
+kept for the next planning stage; workers and orchestrators must not pick
+it up, and briefs must not absorb it. Defined roadmap items (the phases in
+`docs/orchestration.md`) continue.
+
+- **Undefined Phase 2 items:** backlash, cams, planar contact (named in the
+  roadmap/feedback only; behaviour unspecified).
+- **Follow-ups from briefs' Outcomes:** CSG arcs snap to contour vertices
+  and give no tangents (1-4, 1-7); alignment during creation tools (1-5);
+  grid coverage from the frustum (1-1); no tangent-snap toggle (1-7); verbs
+  for `ToolDefaults`/`SnapConfig` and joint properties (1-6, 2-2); world-pin
+  joint-angle sign vs `limit_reference_angle`'s comment, and a joint
+  node-graph block (2-1); torque-based breaking (2-2); rod: fixed end =
   merge, `spawn-rod` verb, rod inspector (2-3); a 2 m flat drop lands 1–4 cm
-  sideways inside avian (2-5, bounded by a test); other systems may share the
+  sideways inside avian (2-5); other systems may share the
   despawned-entity `insert` panic pattern fixed in 2-5 (unaudited).
+- **Elastica / flexure** from #194 (after Phase 5).
+
+A **bug found by a screenshot or test** in a landed feature is not
+"unbriefed work": it gets a brief (as 2-5 did) because it is the defined
+item not yet meeting its brief.
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
