@@ -682,9 +682,10 @@ a normal dependency, not a cargo feature — see the decision doc's
     before it started. Writes to different properties compose; two writes to the
     same property need two runs. `docs/scripting.md` has the worked example.
 
-    Still absent: set-shaped edits (`group`/`ungroup`), which want a list
-    argument — `steel`'s `RestArgs` is private so true variadics are out, but
-    `SteelVal::ListV` makes `(group (list 0 1 2))` workable when wanted.
+    Set-shaped edits (`group`/`ungroup`) **landed** (brief 3-2) with a list
+    argument — `steel`'s `RestArgs` is private so true variadics are out;
+    `(group (list 0 1 2))` takes a `SteelVal::ListV` of indices and emits the
+    same `GroupIntent`/`UngroupIntent` Ctrl+G/Ctrl+Shift+G do.
   - **History and delete as ops (landed).** `(undo)`, `(redo)` and `(delete i)`
     route through the same `UndoIntent`/`RedoIntent`/`DeleteIntent` the Edit menu
     emits, so a script can walk the stack it just wrote to — the loop a `.scm`

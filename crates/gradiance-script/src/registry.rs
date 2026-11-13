@@ -80,6 +80,10 @@ pub mod name {
     pub const MERGE: &str = "merge";
     /// `(delete-joint i)` — remove the i-th joint.
     pub const DELETE_JOINT: &str = "delete-joint";
+    /// `(group (list i …))` — wrap the listed bodies in one fresh group.
+    pub const GROUP: &str = "group";
+    /// `(ungroup (list i …))` — peel the listed bodies' outermost group.
+    pub const UNGROUP: &str = "ungroup";
     /// `(hinge a b x y)` — pin two bodies at a world point.
     pub const HINGE: &str = "hinge";
     /// `(slider a b x y ax ay)` — prismatic joint along an axis.
@@ -265,6 +269,20 @@ fn mutate_specs() -> Vec<OpSpec> {
             name: name::DELETE_JOINT,
             signature: "(delete-joint i)",
             doc: "Remove the i-th joint (id order, as joint-count) — undoable.",
+            category: Edit,
+            args: 1,
+        },
+        OpSpec {
+            name: name::GROUP,
+            signature: "(group (list i …))",
+            doc: "Group the listed bodies (id order) like Ctrl+G; fewer than two distinct bodies is a no-op.",
+            category: Edit,
+            args: 1,
+        },
+        OpSpec {
+            name: name::UNGROUP,
+            signature: "(ungroup (list i …))",
+            doc: "Peel the listed bodies' outermost group (id order) like Ctrl+Shift+G; inner groups survive.",
             category: Edit,
             args: 1,
         },

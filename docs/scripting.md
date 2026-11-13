@@ -118,6 +118,13 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (merge a b)                  ; fuse into one CSG union; a survives
 (delete-joint i)             ; remove the i-th joint
 
+;; edit — sets of bodies (one list argument; Ctrl+G / Ctrl+Shift+G as ops)
+(group (list 0 2 3))         ; wrap the listed bodies in one fresh group
+(ungroup (list 0 2))         ; peel the listed bodies' outermost group
+;; duplicates collapse; fewer than two distinct bodies is a quiet no-op
+;; (as Ctrl+G with one body selected). A non-list, a non-index element or
+;; an out-of-range index is a script error, and the run commits nothing.
+
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
 (sim-set "gravity.y" -5)     ; write one (any scalar field, by path; m/s², SI)
@@ -340,9 +347,21 @@ reads and edits compose within one script:
 The snapshot is taken once per **run**, not per call — see the ⚠ note under
 Properties for the case where that matters.
 
-Group/ungroup are deliberately absent: their natural argument *is* a set, and a
-fixed-arity `(group i j)` would be an arbitrary restriction rather than the op.
-They wait for a list-shaped argument convention.
+Group/ungroup follow the same rule with a **set** of indices: their natural
+argument is a set, and a fixed-arity `(group i j)` would be an arbitrary
+restriction. steel's variadic `RestArgs` is private, so the set is one list
+argument — `(group (list 0 1 2))`. They emit exactly the `GroupIntent` /
+`UngroupIntent` Ctrl+G / Ctrl+Shift+G emit, so a scripted group is the same
+save file and the same single undo step as a hand-made one. Unlike the scalar
+index verbs (where a bad index no-ops), a bad member of the set is a script
+error: a set edit that silently dropped one member would author a different
+set than the script says, with nothing in the scene to show it.
+
+```scheme
+(group (list 0 1))           ; 0 and 1 now select together
+(group (list 0 1 2))         ; nest: {0 1} inside {0 1 2}
+(ungroup (list 0 1 2))       ; peel the outer level; {0 1} survives
+```
 
 ### Panels are registered ops
 

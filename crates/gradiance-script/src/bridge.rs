@@ -42,9 +42,9 @@ use crate::registry::{OperationCatalog, name};
 use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use gradiance_command::CommandDispatchSet;
 use gradiance_command::intent::{
-    CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent, MergeIntent,
+    CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent, GroupIntent, MergeIntent,
     PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
-    TransformChange, UndoIntent,
+    TransformChange, UndoIntent, UngroupIntent,
 };
 use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::StableId;
@@ -740,6 +740,8 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<ScaleIntent>(name::SCALE),
         EditBinding::new::<MergeIntent>(name::MERGE),
         EditBinding::new::<DeleteJointIntent>(name::DELETE_JOINT),
+        EditBinding::new::<GroupIntent>(name::GROUP),
+        EditBinding::new::<UngroupIntent>(name::UNGROUP),
     ]
 }
 
@@ -820,6 +822,39 @@ fn index_arg(v: &SteelVal) -> Option<usize> {
         .map(|n| n as usize)
 }
 
+/// Resolves a set-shaped argument — a steel list of body indices — to the
+/// distinct [`StableId`]s it names in the run's snapshot, first occurrence
+/// first.
+///
+/// Unlike the scalar index verbs (which no-op on a bad index), every failure
+/// here is an error the caller surfaces as a failed run: a set edit that
+/// quietly drops one member would author a *different* set than the script
+/// says, and nothing in the scene would show it. `verb` prefixes the message
+/// so the console names the call that failed.
+fn body_ids_arg(verb: &str, arg: &SteelVal, view: &SceneView) -> Result<Vec<StableId>, String> {
+    let SteelVal::ListV(items) = arg else {
+        return Err(format!(
+            "{verb}: expected a list of body indices, got {arg}"
+        ));
+    };
+    let mut ids = Vec::new();
+    for item in items {
+        let index = steel_to_f64(item)
+            .filter(|n| n.is_finite() && *n >= 0.0 && n.fract() == 0.0)
+            .ok_or_else(|| format!("{verb}: {item} is not a body index"))?;
+        let id = view.id(index as usize).ok_or_else(|| {
+            format!(
+                "{verb}: no body {index} (the scene has {})",
+                view.bodies.len()
+            )
+        })?;
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
+
 /// Pushes one reflected operation record onto the shared queue.
 fn emit(ops: &OpQueue, op: Box<dyn Reflect>) {
     if let Ok(mut queue) = ops.lock() {
@@ -869,6 +904,7 @@ fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_edit_verbs(engine, &shared.ops);
     register_lifecycle_verbs(engine, &shared.ops, &shared.view);
+    register_group_verbs(engine, &shared.ops, &shared.view);
     register_joint_verbs(engine, &shared.ops, &shared.view);
     register_property_verbs(engine, &shared.ops, &shared.view);
     register_query_verbs(engine, &shared.view);
@@ -1285,6 +1321,42 @@ fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedVie
             }
         },
     );
+}
+
+/// Set-shaped edits — `(group (list i …))` / `(ungroup (list i …))`.
+///
+/// steel's variadic `RestArgs` is private, so the set arrives as one list
+/// argument, resolved through [`body_ids_arg`] against the run's snapshot.
+/// They emit exactly what Ctrl+G / Ctrl+Shift+G emit, so a scripted group and
+/// a hand-made one are the same save file and the same undo step.
+fn register_group_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // Ctrl+G with fewer than two bodies selected emits nothing (and
+    // `GroupCommand` would reject it as no effect), so `group` matches: a
+    // one-body list is a quiet no-op, not an error.
+    let group_ops = Arc::clone(ops);
+    let group_view = Arc::clone(view);
+    engine.register_fn(name::GROUP, move |set: SteelVal| -> Result<(), String> {
+        let targets = match group_view.lock() {
+            Ok(view) => body_ids_arg(name::GROUP, &set, &view)?,
+            Err(_) => return Ok(()),
+        };
+        if targets.len() >= 2 {
+            emit(&group_ops, Box::new(GroupIntent { targets }));
+        }
+        Ok(())
+    });
+    let ungroup_ops = Arc::clone(ops);
+    let ungroup_view = Arc::clone(view);
+    engine.register_fn(name::UNGROUP, move |set: SteelVal| -> Result<(), String> {
+        let targets = match ungroup_view.lock() {
+            Ok(view) => body_ids_arg(name::UNGROUP, &set, &view)?,
+            Err(_) => return Ok(()),
+        };
+        if !targets.is_empty() {
+            emit(&ungroup_ops, Box::new(UngroupIntent { targets }));
+        }
+        Ok(())
+    });
 }
 
 /// Body-property verbs — the inspector's fields as ops.
@@ -2017,6 +2089,61 @@ mod tests {
             .resource_mut::<ScriptInputs>()
             .submit(source);
         app.update();
+    }
+
+    /// A snapshot of `n` bodies with fresh ids, in id order like the real one.
+    fn view_of(n: usize) -> SceneView {
+        let mut bodies: Vec<BodyView> = (0..n)
+            .map(|_| BodyView {
+                id: StableId::new(),
+                physics: BodyPhysics::default(),
+                pos: Vec2::ZERO,
+                rot: 0.0,
+                shape: ShapeDef::Circle { radius: 1.0 },
+                touching: 0,
+            })
+            .collect();
+        bodies.sort_by_key(|b| b.id.0);
+        SceneView {
+            bodies,
+            joints: Vec::new(),
+        }
+    }
+
+    fn ints(xs: &[isize]) -> SteelVal {
+        SteelVal::ListV(xs.iter().map(|&x| SteelVal::IntV(x)).collect())
+    }
+
+    #[test]
+    fn a_body_list_resolves_in_order_without_duplicates() {
+        let view = view_of(3);
+        let ids = body_ids_arg("group", &ints(&[2, 0, 2]), &view).expect("valid list");
+        assert_eq!(ids, vec![view.bodies[2].id, view.bodies[0].id]);
+        // Whole floats are indices too, like every other indexed verb.
+        let float = SteelVal::ListV(std::iter::once(SteelVal::NumV(1.0)).collect());
+        assert_eq!(
+            body_ids_arg("group", &float, &view).expect("1.0 is an index"),
+            vec![view.bodies[1].id]
+        );
+    }
+
+    #[test]
+    fn a_bad_body_list_is_an_error_naming_the_verb() {
+        let view = view_of(2);
+        let not_a_list = SteelVal::IntV(0);
+        let not_a_number =
+            SteelVal::ListV(std::iter::once(SteelVal::StringV("a".into())).collect());
+        let fractional = SteelVal::ListV(std::iter::once(SteelVal::NumV(0.5)).collect());
+        for bad in [
+            not_a_list,
+            not_a_number,
+            fractional,
+            ints(&[0, 2]),
+            ints(&[-1]),
+        ] {
+            let err = body_ids_arg("ungroup", &bad, &view).expect_err("should be rejected");
+            assert!(err.starts_with("ungroup:"), "{err}");
+        }
     }
 
     #[test]
