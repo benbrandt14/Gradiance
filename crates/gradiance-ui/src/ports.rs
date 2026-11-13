@@ -135,7 +135,7 @@ pub fn sensor_rows(
                         bindings.0.remove(i);
                     }
                     None => bindings.0.push(SignalBinding {
-                        name: format!("{label}@{id:.4}"),
+                        name: format!("{label}@{}", crate::labels::short_id(&id)),
                         source: source.clone(),
                         map: SignalMap::default(),
                         curve: None,

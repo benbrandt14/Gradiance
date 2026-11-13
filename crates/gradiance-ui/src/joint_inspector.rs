@@ -6,6 +6,7 @@
 //! carrying [`PropertyValue::Joint`] — the same undoable path body edits
 //! use, so joint configuration composes with undo/redo for free.
 
+use crate::labels::body_label;
 use crate::widgets;
 use crate::widgets::{Commit, precise_drag_unit};
 use bevy::prelude::*;
@@ -18,6 +19,7 @@ use gradiance_domain::joint::{
     AngularMotorDef, DEFAULT_BREAK_FORCE, DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS,
     JointCommon, JointDef, JointKind, LinearMotorDef,
 };
+use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::SignalBindings;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_physics::queries::PhysicsQueries;
@@ -34,6 +36,7 @@ pub fn joint_inspector(
     selected: Res<SelectedJoint>,
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform, With<Body>>,
+    shapes: Query<&ShapeDef, With<Body>>,
     index: Res<IdIndex>,
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
@@ -59,13 +62,12 @@ pub fn joint_inspector(
         .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
         .show(ctx, |ui| {
             widgets::section_header(ui, kind_name(&def.kind));
-            ui.label(
-                egui::RichText::new(match def.body_b {
-                    Some(b) => format!("{:.8} to {b:.8}", def.body_a),
-                    None => format!("{:.8} to world pin", def.body_a),
-                })
-                .weak(),
-            );
+            let body = |b: StableId| {
+                let shape = index.entity(b).and_then(|e| shapes.get(e).ok());
+                body_label(shape, &b)
+            };
+            let target = def.body_b.map_or_else(|| "world pin".to_owned(), body);
+            ui.label(egui::RichText::new(format!("{} to {target}", body(def.body_a))).weak());
             ui.separator();
 
             // Sensor ports: the joint's live length/angle (read through the

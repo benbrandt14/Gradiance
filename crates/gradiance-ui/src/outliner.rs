@@ -12,6 +12,7 @@
 //! the recorded click afterward — the same prepare/render/apply shape the
 //! node-graph pane uses.
 
+use crate::labels::object_label;
 use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -79,11 +80,6 @@ pub(crate) struct OutlinerClick {
     toggle: bool,
 }
 
-/// A short, stable id suffix so same-kind rows are distinguishable.
-fn short_id(id: &StableId) -> String {
-    id.to_string().chars().take(6).collect()
-}
-
 fn joint_label(kind: &JointKind) -> &'static str {
     match kind {
         JointKind::Hinge { .. } => "hinge",
@@ -107,7 +103,7 @@ pub(crate) fn build_model(op: &OutlinerParams, selection: &Selection) -> Outline
         .iter()
         .map(|(entity, id, shape)| OutlinerRow {
             entity,
-            label: format!("{} · {}", shape.kind_label(), short_id(id)),
+            label: object_label(shape.kind_label(), id),
             selected: selection.contains(entity),
             is_joint: false,
         })
@@ -117,7 +113,7 @@ pub(crate) fn build_model(op: &OutlinerParams, selection: &Selection) -> Outline
         .iter()
         .map(|(entity, id, def)| OutlinerRow {
             entity,
-            label: format!("{} · {}", joint_label(&def.kind), short_id(id)),
+            label: object_label(joint_label(&def.kind), id),
             selected: op.selected_joint.0 == Some(entity),
             is_joint: true,
         })
@@ -127,7 +123,7 @@ pub(crate) fn build_model(op: &OutlinerParams, selection: &Selection) -> Outline
         .iter()
         .map(|(entity, id, kind)| OutlinerRow {
             entity,
-            label: format!("{} · {}", node_label(kind), short_id(id)),
+            label: object_label(node_label(kind), id),
             selected: selection.contains(entity),
             is_joint: false,
         })
@@ -209,16 +205,6 @@ pub(crate) fn apply_click(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_short_id_is_a_stable_six_char_prefix() {
-        let id = StableId::new();
-        let short = short_id(&id);
-        assert_eq!(short.chars().count(), 6);
-        assert!(id.to_string().starts_with(&short));
-        // Same id → same suffix (stable across frames).
-        assert_eq!(short_id(&id), short);
-    }
 
     #[test]
     fn rows_sort_by_label_then_entity() {

@@ -5,7 +5,8 @@
 //! explicit rows; that is the sanctioned escape hatch.
 
 use crate::fonts::glyph;
-use crate::reflect_grid::{reflect_grid, reflect_grid_units};
+use crate::labels::short_id;
+use crate::reflect_grid::{reflect_grid, reflect_grid_except, reflect_grid_units};
 use crate::widgets;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
@@ -140,6 +141,10 @@ pub fn settings_window(
     Ok(())
 }
 
+/// `GridSettings` fields [`grid_snap_tab`] draws by hand, so the reflect
+/// grid below them leaves them out.
+pub(crate) const GRID_HAND_DRAWN: &[&str] = &["system"];
+
 /// The Grid & Snap tab: the grid-system picker (an enum escape hatch) plus
 /// the grid, snapping, and tool-default reflect grids with SI unit labels.
 fn grid_snap_tab(
@@ -167,7 +172,7 @@ fn grid_snap_tab(
                 );
             });
     });
-    reflect_grid_units(
+    reflect_grid_except(
         ui,
         egui::Id::new("grid"),
         grid.bypass_change_detection(),
@@ -175,6 +180,7 @@ fn grid_snap_tab(
             ("spacing", Dimension::Length.symbol()),
             ("origin", Dimension::Length.symbol()),
         ],
+        GRID_HAND_DRAWN,
     );
     grid.set_changed();
     ui.separator();
@@ -412,7 +418,7 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
         .selection
         .iter()
         .filter_map(|e| r.ids.get(e).ok())
-        .map(|id| format!("{id:.8}"))
+        .map(short_id)
         .collect();
     ui.label(format!("{} selected: {}", ids.len(), ids.join(", ")));
     if let Some(primary) = r.selection.primary()
@@ -445,13 +451,12 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 format!("Spring rest={rest_length:.0} k={stiffness:.0} c={damping:.1}{clamp}")
             }
         };
-        let target = def
-            .body_b
-            .map_or("world pin".to_owned(), |b| format!("{b:.8}"));
+        let target = def.body_b.map_or("world pin".to_owned(), |b| short_id(&b));
         ui.label(format!(
-            "{id:.8}: {kind} {} {:.8} to {target}",
+            "{}: {kind} {} {} to {target}",
+            short_id(id),
             glyph::MIDDOT,
-            def.body_a
+            short_id(&def.body_a)
         ));
     }
 }
