@@ -1,6 +1,6 @@
 # No raw UUIDs, no stray rows
 Phase 2 · polish of landed UI · from the 2026-11-13 screenshot pass
-(`tools/screenshot/`) · status: ready
+(`tools/screenshot/`) · status: done
 
 ## Goal
 
@@ -73,4 +73,33 @@ nodes, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**done** (PR #226).
+
+- **Label rule:** `gradiance-ui/src/labels.rs` now owns `short_id` (6-char
+  prefix), `object_label(kind, id)` → `"box · 0e8593"`, and
+  `body_label(Option<&ShapeDef>, id)` (falls back to "body"). The outliner,
+  the joint inspector title ("box · b0c9d8 to world pin") and the context
+  menu's "Select from" all use it. Workspace-labelled bodies put their
+  script name in the kind slot ("wheel · fc45ee"); the outliner does not
+  read workspace labels, unchanged. The "body {i}" index in "Select from"
+  is gone (it was the under-cursor order, not a script index).
+- **Display vs precision:** chose to *stop using `{:.N}`* on `StableId`;
+  its `Display` is unchanged (forwards to the UUID). Other sites found and
+  moved to `short_id`: `ports.rs` plot-binding name (`{label}@{id:.4}`) and
+  three in the Debug tab's readouts (`settings.rs`: selection ids, authored
+  joint list). No log line used `{:.N}` on an id. `signal.rs`'s
+  `"{tag}@{id}"` is a machine key and keeps the full id.
+- **Stray row:** `reflect_grid_except(…, skip)` (`reflect_grid_units` is it
+  with no skip); Grid & Snap passes `settings::GRID_HAND_DRAWN = ["system"]`.
+- **Tests:** `labels::tests` (label is kind + short id, never the full
+  UUID; short id stable), `reflect_grid::tests` (the row list for
+  `GridSettings` drops `system` and keeps `spacing`; tested on the pure
+  `grid_rows`, no egui context needed).
+- **Gates:** fmt, workspace clippy, `cargo doc -D warnings`,
+  `cargo test -p gradiance-ui` green locally (rustc 1.97.0 = `RUST_PIN`).
+  `cargo test --workspace` left to CI (under 20 GB free).
+- **Screenshots** (not committed): context menu on a box and on a labelled
+  circle, the joint inspector, the Grid & Snap tab; paths in the PR.
+- Harness note: on this pass `xdotool click` worked for egui widgets and
+  mousedown/up did not; scene picks and right-click needed mousedown,
+  one second, mouseup. Spawn verbs take metres.
