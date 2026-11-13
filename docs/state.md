@@ -1,25 +1,25 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-13, Phase 3 (orchestrator; #225 merged; 2-6 then 3-2 next).
+Last updated: 2026-11-13, Phase 3 (orchestrator; #226 merged; 3-2 in flight).
 
 ## Position
 
 - **Phase:** 2 complete except three undefined items (below) → **Phase 3**
   (scripting & the op surface) next. Orchestrator rotation skipped again at
   the owner's instruction ("continue as far as you can").
-- **main:** `f9c4702` (#225 script budget). Phase 2 merged: #219 joint sensors (2-1), #220
+- **main:** `f99892b` (#225 script budget, #226 UI label polish). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
   components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
   scripted-body colour, and the CI flake), #224 CI test-failure annotations.
 - **Screenshot pass 2 (2026-11-13), Phase 1 + 2 features validated
   visually:** tangent snap + glyph (1-7), alignment guide and exact commit
   (1-5), three-point box (1-6), grid across zoom (1-1/1-2), rod (2-3), joint
-  inspector sensors + breakable (2-1/2-2), budget error (3-1). Defects →
-  **2-6** UI label polish (`docs/briefs/2-6-ui-label-polish.md`).
+  inspector sensors + breakable (2-1/2-2), budget error (3-1). Defects fixed in
+  **2-6** (#226: one "kind · short id" label rule; no stray settings row).
 - **Phase 3 briefs:** **3-1** script step budget —
   `docs/briefs/3-1-script-budget.md` (steel 0.8.2 has `with_interrupted` +
-  `InterruptHandler`; merged #225). Then **3-2** group/ungroup verbs,
+  `InterruptHandler`; merged #225). Then **3-2** group/ungroup verbs (in flight),
   **3-3** action table (click point + folded context-menu commands),
   **3-4** remote control surface (BRP over the op registry). Still to
   brief: user tools from `.scm` (after 3-3).
