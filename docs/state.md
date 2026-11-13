@@ -1,20 +1,25 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-12, Phase 2 done → Phase 3 next (orchestrator).
+Last updated: 2026-11-13, Phase 3 (orchestrator; #225 merged; 2-6 then 3-2 next).
 
 ## Position
 
 - **Phase:** 2 complete except three undefined items (below) → **Phase 3**
   (scripting & the op surface) next. Orchestrator rotation skipped again at
   the owner's instruction ("continue as far as you can").
-- **main:** `7614ca3`. Phase 2 merged: #219 joint sensors (2-1), #220
+- **main:** `f9c4702` (#225 script budget). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
   components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
   scripted-body colour, and the CI flake), #224 CI test-failure annotations.
+- **Screenshot pass 2 (2026-11-13), Phase 1 + 2 features validated
+  visually:** tangent snap + glyph (1-7), alignment guide and exact commit
+  (1-5), three-point box (1-6), grid across zoom (1-1/1-2), rod (2-3), joint
+  inspector sensors + breakable (2-1/2-2), budget error (3-1). Defects →
+  **2-6** UI label polish (`docs/briefs/2-6-ui-label-polish.md`).
 - **Phase 3 briefs:** **3-1** script step budget —
   `docs/briefs/3-1-script-budget.md` (steel 0.8.2 has `with_interrupted` +
-  `InterruptHandler`; in flight). Then **3-2** group/ungroup verbs,
+  `InterruptHandler`; merged #225). Then **3-2** group/ungroup verbs,
   **3-3** action table (click point + folded context-menu commands),
   **3-4** remote control surface (BRP over the op registry). Still to
   brief: user tools from `.scm` (after 3-3).
@@ -41,6 +46,14 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
   sideways inside avian (2-5); other systems may share the
   despawned-entity `insert` panic pattern fixed in 2-5 (unaudited).
 - **Elastica / flexure** from #194 (after Phase 5).
+- **Polish observations (screenshot pass 2):** the tangent glyph's bar is
+  always horizontal, not along the tangent; the alignment guide is very faint
+  (α 0.45); the floating Joint window covers the docked Properties tab
+  (where the joint inspector lives is a design call); two `--script` files at
+  start-up share one pre-run snapshot, so an indexed verb in the second
+  can't see the first's spawns and silently no-ops.
+- **For Phase 5 (units P4):** the joint inspector shows "angle limits (deg)"
+  next to an angle sensor in rad.
 
 A **bug found by a screenshot or test** in a landed feature is not
 "unbriefed work": it gets a brief (as 2-5 did) because it is the defined
