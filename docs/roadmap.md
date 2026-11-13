@@ -663,12 +663,16 @@ a normal dependency, not a cargo feature — see the decision doc's
 - **P3 — the extension surface (the tool authored in its own DSL).** Because
   edits, config, and reads all route through one registry, the editor's own
   chrome can be *authored as data over that registry*:
-  - **Data-driven context-menu actions (first cut landed).** `register-action`
+  - **Data-driven context-menu actions (landed).** `register-action`
     (the `EditorState` seam) lets a `.scm` add a labelled action to the
     `ScriptActions` table; the context menu's "Scripts" section surfaces them
-    and invoking one runs its source through `ScriptInputs`. Next: pass the
-    click point / selection into the action, and fold the existing hard-coded
-    `ui::context_menu` buttons into the same table as the built-in seed.
+    and invoking one runs its source through `ScriptInputs`, with the click
+    point readable as `(action-x)` / `(action-y)` (NaN outside an action).
+    The menu's built-in gravity commands are seeded entries in the same table
+    (`actions::builtin_seed`), rendered from it under a no-drift test. The
+    selection stays out (rule 2). Remaining hard-wired commands wait on
+    verbs (`set-depth`, `set-color`, `joint-at`, `set-orbit`, node indexing)
+    or are UI-local; see brief 3-3's Outcome.
   - **The scene model is reachable (landed).** Objects: `spawn-*`, `delete`,
     `cut`, `place`, `scale`, `merge`, and the physics properties
     (`set-friction`/`-restitution`/`-density`/`-static`) each with a matching

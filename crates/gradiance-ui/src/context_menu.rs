@@ -29,11 +29,13 @@ use gradiance_interaction::pointer::PointerButtons;
 use gradiance_interaction::selection::{SelectTransition, SelectedJoint, Selection};
 use gradiance_interaction::tools::bodies_at_sorted;
 use gradiance_physics::queries::PhysicsQueries;
+use gradiance_script::actions::builtin;
 use gradiance_script::bridge::{ScriptActions, ScriptInputs};
 
-/// Script-action access, bundled into one `SystemParam` to keep `context_menu`
-/// under Bevy's system-parameter count limit. Reads the registered actions and
-/// submits an invoked one's source through the shared `ScriptInputs` queue.
+/// Action-table access, bundled into one `SystemParam` to keep `context_menu`
+/// under Bevy's system-parameter count limit. Reads the action table (built-in
+/// seed + user entries) and submits an invoked entry, with the click point,
+/// through the shared `ScriptInputs` queue.
 #[derive(SystemParam)]
 pub struct ScriptMenu<'w> {
     actions: Res<'w, ScriptActions>,
@@ -52,10 +54,27 @@ pub struct BackgroundMenu<'w> {
     settings_window: ResMut<'w, crate::settings::SettingsWindow>,
 }
 
+/// The built-in actions the menu renders, all in the background section.
+/// Every built-in in the action table's seed appears here and nothing else
+/// does (pinned by `every_builtin_has_a_menu_place`), so the menu and the
+/// table cannot drift.
+const BACKGROUND_BUILTINS: [&str; 2] = [builtin::RESTORE_GRAVITY, builtin::TOP_DOWN];
+
+/// Whether a background built-in is offered right now: the two gravity
+/// entries are alternatives, keyed on whether gravity is already off.
+fn background_builtin_shown(name: &str, top_down: bool) -> bool {
+    match name {
+        builtin::RESTORE_GRAVITY => top_down,
+        builtin::TOP_DOWN => !top_down,
+        _ => false,
+    }
+}
+
 impl BackgroundMenu<'_> {
     /// Renders the empty-canvas section; returns true when the menu should
-    /// close.
-    fn section(&mut self, ui: &mut egui::Ui) -> bool {
+    /// close. The built-in entries come from the action table and are invoked
+    /// at `at` (the click point) like any action.
+    fn section(&mut self, ui: &mut egui::Ui, script: &mut ScriptMenu, at: Vec2) -> bool {
         let mut close = false;
         ui.label(egui::RichText::new("Background").weak());
         ui.horizontal(|ui| {
@@ -68,21 +87,19 @@ impl BackgroundMenu<'_> {
             .on_hover_text("top-down mode: bodies rub on the back plane (0 = off)");
         });
         let top_down = self.sim.gravity.length() < 1e-3;
-        if top_down {
-            if ui.button("Restore gravity (side view)").clicked() {
-                self.sim.gravity = gradiance_core::constants::GRAVITY;
+        for action in script.actions.builtins() {
+            let Some(name) = action.builtin else { continue };
+            if !BACKGROUND_BUILTINS.contains(&name) || !background_builtin_shown(name, top_down) {
+                continue;
+            }
+            let mut button = ui.button(&action.label);
+            if !action.hint.is_empty() {
+                button = button.on_hover_text(&action.hint);
+            }
+            if button.clicked() {
+                script.inputs.invoke(action, at);
                 close = true;
             }
-        } else if ui
-            .button("Top-down mode (gravity into screen)")
-            .on_hover_text("zeroes in-plane gravity; give the plane some friction")
-            .clicked()
-        {
-            self.sim.gravity = Vec2::ZERO;
-            if self.sim.plane_friction <= 0.0 {
-                self.sim.plane_friction = 0.3;
-            }
-            close = true;
         }
         let scenery = self.scenery.bypass_change_detection();
         let mut touched = ui
@@ -176,6 +193,9 @@ pub struct ContextMenu {
     pub fresh: bool,
     /// Screen position (logical px) to anchor at.
     pub screen: Vec2,
+    /// World-space click point — passed to an invoked action, which reads
+    /// it with `(action-x)` / `(action-y)`.
+    pub world: Vec2,
     /// Bodies under the click, topmost first.
     pub under: Vec<StableId>,
     /// Joint whose anchor is under the click, if any.
@@ -270,6 +290,7 @@ pub fn open_context_menu(
             .min_by(|(a, _), (b, _)| a.total_cmp(b))
             .map(|(_, id)| id);
         menu.screen = now;
+        menu.world = world;
         menu.open = true;
         menu.fresh = true;
     }
@@ -333,6 +354,7 @@ pub fn context_menu(
         .filter_map(|e| props.ids.get(e).ok().copied())
         .collect();
 
+    let at = menu.world;
     let mut close = false;
     let response = egui::Area::new(egui::Id::new("context-menu"))
         .fixed_pos(egui::pos2(menu.screen.x, menu.screen.y))
@@ -581,7 +603,7 @@ pub fn context_menu(
 
                 // Empty-canvas click: the scene/background actions.
                 if menu.under.is_empty() && menu.joint.is_none() {
-                    close |= background.section(ui);
+                    close |= background.section(ui, &mut script, at);
                     ui.separator();
                 }
 
@@ -697,14 +719,15 @@ pub fn context_menu(
                 }
 
                 // User-registered script actions (added from `.scm` via
-                // `register-action`). Invoking one submits its source through
-                // the same `ScriptInputs` seam a REPL line uses.
-                if !script.actions.0.is_empty() {
+                // `register-action`). Invoking one submits its source, with
+                // the click point, through the same `ScriptInputs` seam a
+                // REPL line uses.
+                if script.actions.user().next().is_some() {
                     ui.separator();
                     ui.label(egui::RichText::new("Scripts").weak());
-                    for action in &script.actions.0 {
+                    for action in script.actions.user() {
                         if ui.button(&action.label).clicked() {
-                            script.inputs.submit(action.source.clone());
+                            script.inputs.invoke(action, at);
                             close = true;
                         }
                     }
@@ -782,6 +805,27 @@ mod tests {
     fn nearest_joint_none_outside_radius() {
         let cands = [(StableId::new(), 50.0)];
         assert_eq!(nearest_joint(5.0, cands.iter().copied()), None);
+    }
+
+    /// The no-drift test: the menu places exactly the table's built-ins.
+    #[test]
+    fn every_builtin_has_a_menu_place() {
+        let mut seeded: Vec<&str> = gradiance_script::actions::builtin_seed()
+            .iter()
+            .filter_map(|a| a.builtin)
+            .collect();
+        let mut placed = BACKGROUND_BUILTINS.to_vec();
+        seeded.sort_unstable();
+        placed.sort_unstable();
+        assert_eq!(seeded, placed);
+        // Each placed entry is offered in exactly one gravity state.
+        for name in placed {
+            assert_ne!(
+                background_builtin_shown(name, true),
+                background_builtin_shown(name, false),
+                "{name} has no visibility rule"
+            );
+        }
     }
 
     #[test]
