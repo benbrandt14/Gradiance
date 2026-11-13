@@ -1324,18 +1324,19 @@ fn body_positions(app: &mut App) -> Vec<Vec2> {
 }
 
 /// Invokes the user action labelled `label` at `at`, exactly as the context
-/// menu does, and advances one frame.
+/// menu does, and advances one frame. An unknown label invokes nothing.
 fn invoke(app: &mut App, label: &str, at: Vec2) {
     let action = app
         .world()
         .resource::<ScriptActions>()
         .user()
         .find(|a| a.label == label)
-        .cloned()
-        .expect("registered");
-    app.world_mut()
-        .resource_mut::<ScriptInputs>()
-        .invoke(&action, at);
+        .cloned();
+    if let Some(action) = action {
+        app.world_mut()
+            .resource_mut::<ScriptInputs>()
+            .invoke(&action, at);
+    }
     app.update();
 }
 
@@ -1365,9 +1366,12 @@ fn an_action_spawns_at_its_click_point() {
 #[test]
 fn a_repl_read_of_the_click_point_is_nan() {
     let mut app = paused_app();
-    run(&mut app, "(register-action \"Mark\" \"(action-x)\")");
+    run(
+        &mut app,
+        "(register-action \"Mark\" \"(if (= (action-x) 7) (if (= (action-y) 8) 1 0) 0)\")",
+    );
     invoke(&mut app, "Mark", Vec2::new(7.0, 8.0));
-    assert_eq!(last_entry(&app), Some((true, "7".to_string())));
+    assert_eq!(last_entry(&app), Some((true, "1".to_string())));
     run(&mut app, "(if (nan? (action-x)) 1 0)");
     assert_eq!(last_entry(&app), Some((true, "1".to_string())));
     run(&mut app, "(if (nan? (action-y)) 1 0)");

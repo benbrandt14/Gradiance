@@ -192,6 +192,7 @@ impl OperationCatalog {
         ops.extend(property_specs());
         ops.extend(query_specs());
         ops.extend(property_query_specs());
+        ops.extend(action_specs());
         ops.extend(config_specs());
         ops.extend(editor_specs());
         ops.extend(meta_specs());
@@ -419,16 +420,10 @@ fn property_query_specs() -> Vec<OpSpec> {
     ]
 }
 
-fn query_specs() -> Vec<OpSpec> {
+/// Invocation-context reads: where the running action was invoked.
+fn action_specs() -> Vec<OpSpec> {
     use OpCategory::Query;
     vec![
-        OpSpec {
-            name: name::PANEL_OPEN,
-            signature: "(panel-open? name)",
-            doc: "Whether an editor panel is currently shown (reads are total).",
-            category: Query,
-            args: 1,
-        },
         OpSpec {
             name: name::ACTION_X,
             signature: "(action-x)",
@@ -442,6 +437,19 @@ fn query_specs() -> Vec<OpSpec> {
             doc: "World y of the point the running action was invoked at (the click); NaN outside an action.",
             category: Query,
             args: 0,
+        },
+    ]
+}
+
+fn query_specs() -> Vec<OpSpec> {
+    use OpCategory::Query;
+    vec![
+        OpSpec {
+            name: name::PANEL_OPEN,
+            signature: "(panel-open? name)",
+            doc: "Whether an editor panel is currently shown (reads are total).",
+            category: Query,
+            args: 1,
         },
         OpSpec {
             name: name::JOINT_COUNT,
