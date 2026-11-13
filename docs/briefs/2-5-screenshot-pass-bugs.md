@@ -98,6 +98,8 @@ repro + finding and return the brief.
 ## Outcome
 
 **Done**, PR #223. Each fix has a regression test that failed before the fix.
+Gates: fmt, clippy, rustdoc, the `it` suite (3x threaded, 1x `--test-threads=1`),
+workspace doctests, and the other crates' tests, all local; the full workspace run is in CI.
 
 1. **`sim-set` — a timing bug, not a failed write.** The reflect write
    landed. But `apply_sim_settings` (`SimSettings` → avian `Gravity`) ran in
@@ -132,5 +134,21 @@ repro + finding and return the brief.
    `body_record` both call it. Test:
    `tools::scripted_and_tool_drawn_bodies_are_coloured_by_the_same_rule`.
 
-Screenshots (lavapipe, before/after): paths are in the PR conversation and
-are not committed. `cargo test --workspace` was left to CI (14 GB free).
+4. **CI flake found on the way, and fixed (pre-existing; likely #221's
+   first-run failure too).** `ci` failed once on this PR:
+   `nodes::duplicating_a_body_copies_its_attached_tracer_and_bindings`
+   panicked inserting `SignalColorOverride` on a despawned entity.
+   `signal::evaluate_signals` is unordered against the command dispatcher
+   in `Update`. When the executor ran it first in an undo frame, it queued
+   the override insert for the clone, the dispatcher despawned the clone,
+   and the insert then hit a dead entity. Fix: `try_insert`/`try_remove`
+   (the override is derived, so a dead body needs none). Pinned
+   deterministically by
+   `nodes::a_body_despawned_while_its_override_is_queued_does_not_panic`,
+   which drives the system by hand: run, despawn, then apply. The same
+   unordered-derived-insert pattern may exist in other sync systems; I did
+   not audit it.
+
+Screenshots (lavapipe, after only; the orchestrator holds the before set):
+`/tmp/gradiance-shots/after-*.png`, described in the PR conversation and not
+committed.
