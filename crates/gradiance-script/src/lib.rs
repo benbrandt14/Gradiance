@@ -29,12 +29,16 @@
 //!   (the World-integration constraint — scripts emit intent *data*, never
 //!   `&mut World`; reads come from a per-run [`bridge::SceneView`] snapshot).
 //!
-//! `steel` may be imported only in [`bridge`]/[`reflect_bridge`] (enforced by
+//! - [`budget`] — the wall-clock budget one script run gets before it is
+//!   stopped (a guard against runaway scripts, not a scheduler).
+//!
+//! `steel` may be imported only in this crate (enforced by
 //! `tests/boundaries.rs`). Later phases (see the decision record): the driver
 //! component + named-signal dataflow seam over the kernel, and menus / tools
 //! authored as `.scm` over the same registry.
 
 pub mod bridge;
+pub mod budget;
 pub mod reflect_bridge;
 pub mod registry;
 
