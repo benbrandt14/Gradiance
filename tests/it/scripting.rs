@@ -13,7 +13,7 @@ use crate::harness::{
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
 use gradiance::script::bridge::{
-    PanelRequest, PanelRequests, PanelStates, ScriptActions, ScriptInputs,
+    PanelRequest, PanelRequests, PanelStates, ScriptActions, ScriptInputs, ScriptLog,
 };
 
 /// Submits `source` and advances one frame: `run_scripts` emits the intents,
@@ -1097,4 +1097,99 @@ fn defparam_and_defsignal_build_the_dataflow() {
     assert_eq!(app.world().resource::<SignalParams>().0.len(), 1);
     crate::harness::step(&mut app, 2);
     assert_eq!(app.world().resource::<SignalBus>().get("osc"), Some(15.0));
+}
+
+// --- The run budget and all-or-nothing runs (brief 3-1) ---
+
+/// The newest console entry: (ok, output).
+fn last_entry(app: &App) -> Option<(bool, String)> {
+    let log = &app.world().resource::<ScriptLog>().0;
+    log.last().map(|entry| (entry.ok, entry.output.clone()))
+}
+
+/// A script that never ends is stopped by the budget, reported like any other
+/// script error, and leaves the scene as it was; the editor keeps running.
+#[test]
+fn a_runaway_script_is_stopped_and_reported() {
+    let mut app = paused_app();
+    run(&mut app, "(spawn-box 0 0 40 20)");
+    assert_eq!(body_count(&mut app), 1);
+
+    run(&mut app, "(define (spin) (spin)) (spin)");
+    let (ok, output) = last_entry(&app).expect("the run is logged");
+    assert!(!ok, "a stopped run is an error");
+    assert!(
+        output.contains("budget exceeded") && output.contains("ms"),
+        "the console says what happened: {output}"
+    );
+    assert_eq!(body_count(&mut app), 1, "the scene is unchanged");
+
+    // The engine is reusable: the next run works as normal.
+    run(&mut app, "(spawn-box 60 0 20 20)");
+    assert!(last_entry(&app).expect("logged").0);
+    assert_eq!(body_count(&mut app), 2);
+}
+
+/// A run is all or nothing: a script that spawns and then loops forever
+/// spawns nothing.
+#[test]
+fn a_script_that_spawns_then_loops_forever_spawns_nothing() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(spawn-box 0 0 40 20) (spawn-circle 50 0 10) (let loop () (loop))",
+    );
+    assert!(
+        last_entry(&app)
+            .expect("logged")
+            .1
+            .contains("budget exceeded")
+    );
+    assert_eq!(body_count(&mut app), 0);
+    // Nothing was queued for later frames either.
+    step(&mut app, 2);
+    assert_eq!(body_count(&mut app), 0);
+}
+
+/// All or nothing holds for every effect a run can queue, and for every kind
+/// of failure — here an evaluation error after a spawn, a config write, a
+/// signal publish, a parameter, an action and a panel request.
+#[test]
+fn a_failed_run_commits_none_of_its_queued_effects() {
+    use gradiance::signal::{SignalBus, SignalParams};
+    let mut app = paused_app();
+    let gravity = app.world().resource::<SimSettings>().gravity.y;
+    run(
+        &mut app,
+        "(spawn-box 0 0 40 20)
+         (sim-set \"gravity.y\" -250)
+         (signal-set \"half-run\" 1)
+         (defparam \"half-param\" 1 0 2)
+         (register-action \"Half\" \"(spawn-box 0 0 10 10)\")
+         (panel-show \"properties\")
+         (car (list))",
+    );
+    assert!(!last_entry(&app).expect("logged").0, "the run failed");
+    assert_eq!(body_count(&mut app), 0);
+    let world = app.world();
+    assert!((world.resource::<SimSettings>().gravity.y - gravity).abs() < 1e-6);
+    assert_eq!(world.resource::<SignalBus>().get("half-run"), None);
+    assert!(world.resource::<SignalParams>().0.is_empty());
+    assert!(world.resource::<ScriptActions>().0.is_empty());
+    assert!(world.resource::<PanelRequests>().0.is_empty());
+}
+
+/// Rolling back a failed run does not reach into a successful run queued in
+/// the same frame: each run is its own all-or-nothing unit.
+#[test]
+fn a_failed_run_does_not_discard_an_earlier_run_in_the_same_frame() {
+    let mut app = paused_app();
+    {
+        let mut inputs = app.world_mut().resource_mut::<ScriptInputs>();
+        inputs.submit("(spawn-box 0 0 40 20)");
+        inputs.submit("(spawn-box 60 0 20 20) (car (list))");
+        inputs.submit("(spawn-circle -60 0 10)");
+    }
+    app.update();
+    assert_eq!(body_count(&mut app), 2, "the two good runs land");
 }

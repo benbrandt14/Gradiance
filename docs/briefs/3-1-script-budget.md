@@ -1,6 +1,6 @@
 # A runaway script can't hang the editor
 Phase 3 · Scripting P0/P1 remainder · "a fuel/step budget for runaway
-authoring scripts" · status: ready
+authoring scripts" · status: done
 
 ## Goal
 
@@ -79,4 +79,50 @@ per-verb quotas, memory limits, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**Status: done** (PR #225).
+
+Landed:
+- `crates/gradiance-script/src/budget.rs`: `SCRIPT_BUDGET` (2 s, a
+  constant) and `run_with_budget(controller, budget, f)`, a scoped watchdog
+  thread per run that trips the engine's `ThreadStateController` on timeout.
+  Seven bare-engine tests: tail loop, named-let loop, deep non-tail recursion,
+  `map` over a 10M `range` with a slow callback, engine reuse after one and
+  two trips, a quick run untouched, a late trip not poisoning the next run.
+- `ScriptEngine::run` arms it; a trip is `ScriptError::Budget { ms }`
+  ("stopped after 2000 ms: budget exceeded"), shown in the console log like
+  any error. `--script` files and hot reloads go through the same `run`.
+- All or nothing: `Shared::mark`/`rollback` truncate all seven write queues
+  (ops, config, actions, signal writes, signal defs, labels, panel requests)
+  back to their pre-run length on any error (eval, panic, budget), so an
+  earlier successful run in the same frame keeps its effects.
+- Integration tests in `tests/it/scripting.rs` (runaway stopped + scene
+  unchanged + engine reusable; spawn-then-loop spawns nothing; a failed run
+  commits none of seven effect kinds; per-run rollback within one frame).
+- `docs/scripting.md` § The run budget; roadmap P1 marked landed.
+
+The three unverified facts:
+1. **Poll frequency.** `Engine::with_interrupted(Arc<AtomicBool>)` is
+   **inert** in steel 0.8.2: the flag is stored (`vm.rs` L924) and never
+   read. The live mechanism is `ThreadStateController::interrupt()`, checked
+   by `safepoint_or_interrupt` once per bytecode dispatch (top of the
+   instruction loop, `vm.rs` ~L2518): per instruction.
+2. **Native loops.** A single native builtin is **not** interruptible
+   mid-call: `(length (range 0 20000000))` took 728 ms unguarded and 808 ms
+   with a 1 ms budget, then failed with the trip. So a huge native call
+   stalls the editor for its own duration (or exhausts memory), then is
+   reported as a budget error. Native higher-order builtins (`map`) are
+   stopped in their bytecode callback. No workaround built (memory limits
+   out of scope).
+3. **Engine reuse.** Reusable: after a trip and `resume()` the same engine
+   evaluates `(+ 1 2)` = 3, also after a second trip. steel's own
+   `InterruptHandler` is not used because its watchdog can `interrupt()`
+   after `run_with_timeout` has `resume()`d (a run ending at the deadline),
+   leaving the engine tripped; ours joins the watchdog before resetting.
+
+All-or-nothing finding: **yes, failed runs committed partial edits before.**
+`run_scripts` drained every queue after the loop regardless of the result.
+With rollback disabled, the new tests fail (a spawn-then-loop script spawned
+2 bodies; a spawn-then-error script spawned 1).
+
+Note: `define`s a failed run made before stopping remain in the VM
+(interpreter state, not scene state); documented in `docs/scripting.md`.
