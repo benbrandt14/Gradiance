@@ -2,6 +2,7 @@
 //! layer operations.
 
 use crate::joint_inspector::kind_name;
+use crate::labels::{body_label, object_label};
 use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -587,12 +588,20 @@ pub fn context_menu(
                 // Pick from overlapping bodies under the click.
                 if !menu.under.is_empty() {
                     ui.label(egui::RichText::new("Select from").weak());
-                    for (i, id) in menu.under.clone().into_iter().enumerate() {
-                        // Workspace-labelled bodies show their script name.
+                    for id in menu.under.clone() {
+                        // Workspace-labelled bodies show their script name
+                        // in place of the kind word.
                         let title = script.labels.name_of(id).map_or_else(
-                            || format!("· body {i} ({id:.8})"),
-                            |name| format!("· {name} ({id:.8})"),
+                            || {
+                                let shape = index
+                                    .entity(id)
+                                    .and_then(|e| bodies_q.get(e).ok())
+                                    .map(|(shape, ..)| shape);
+                                body_label(shape, &id)
+                            },
+                            |name| object_label(name, &id),
                         );
+                        let title = format!("· {title}");
                         if ui.button(title).clicked() {
                             if let Some(entity) = index.entity(id) {
                                 gradiance_interaction::selection::SelectTransition::SetBodies(

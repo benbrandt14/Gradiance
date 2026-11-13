@@ -25,13 +25,24 @@ pub fn reflect_grid_units(
     value: &mut dyn Reflect,
     units: &[(&str, &str)],
 ) -> bool {
+    reflect_grid_except(ui, id, value, units, &[])
+}
+
+/// [`reflect_grid_units`] minus the fields named in `skip` — the ones the
+/// caller already drew by hand (an escape-hatch row such as the grid-system
+/// picker), so they don't appear a second time as "(unsupported)".
+pub fn reflect_grid_except(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut dyn Reflect,
+    units: &[(&str, &str)],
+    skip: &[&str],
+) -> bool {
     let mut changed = false;
     let ReflectMut::Struct(s) = value.reflect_mut() else {
         return false;
     };
-    let names: Vec<String> = (0..s.field_len())
-        .filter_map(|i| s.name_at(i).map(str::to_owned))
-        .collect();
+    let names = grid_rows(s, skip);
     egui::Grid::new(id).num_columns(2).show(ui, |ui| {
         for name in &names {
             let Some(field) = s.field_mut(name) else {
@@ -52,6 +63,16 @@ pub fn reflect_grid_units(
         }
     });
     changed
+}
+
+/// The field names the grid draws a row for: every field of `s` in
+/// declaration order, minus `skip`.
+fn grid_rows(s: &dyn bevy::reflect::structs::Struct, skip: &[&str]) -> Vec<String> {
+    (0..s.field_len())
+        .filter_map(|i| s.name_at(i))
+        .filter(|name| !skip.contains(name))
+        .map(str::to_owned)
+        .collect()
 }
 
 fn leaf_widget(ui: &mut Ui, id: egui::Id, field: &mut dyn bevy::reflect::PartialReflect) -> bool {
@@ -90,4 +111,24 @@ fn leaf_widget(ui: &mut Ui, id: egui::Id, field: &mut dyn bevy::reflect::Partial
     }
     ui.label(egui::RichText::new("(unsupported)").weak());
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::GRID_HAND_DRAWN;
+    use bevy::reflect::PartialReflect;
+    use gradiance_domain::settings::GridSettings;
+
+    #[test]
+    fn grid_snap_rows_skip_the_hand_drawn_system_picker() {
+        let grid = GridSettings::default();
+        let ReflectRef::Struct(s) = grid.reflect_ref() else {
+            panic!("GridSettings reflects as a struct");
+        };
+        assert!(grid_rows(s, &[]).iter().any(|n| n == "system"));
+        let rows = grid_rows(s, GRID_HAND_DRAWN);
+        assert!(!rows.iter().any(|n| n == "system"), "rows: {rows:?}");
+        assert!(rows.iter().any(|n| n == "spacing"), "rows: {rows:?}");
+    }
 }
