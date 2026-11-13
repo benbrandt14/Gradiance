@@ -1193,3 +1193,113 @@ fn a_failed_run_does_not_discard_an_earlier_run_in_the_same_frame() {
     app.update();
     assert_eq!(body_count(&mut app), 2, "the two good runs land");
 }
+
+// --- Set-shaped edits: group / ungroup (brief 3-2) ---
+
+/// Each body's group stack, in the same id order the script indexes by.
+fn group_stacks(app: &mut App) -> Vec<Vec<u32>> {
+    gradiance::scene::SceneRecord::capture(app.world_mut())
+        .bodies
+        .into_iter()
+        .map(|b| b.groups)
+        .collect()
+}
+
+/// `(group (list …))` emits the same `GroupIntent` Ctrl+G does: the scene
+/// capture shows the listed bodies sharing one outermost id, the unlisted one
+/// untouched, and one undo takes it back.
+#[test]
+fn a_script_groups_listed_bodies_as_one_undo_step() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 10 10) (spawn-box 30 0 10 10) (spawn-box 60 0 10 10))",
+    );
+    run(&mut app, "(group (list 0 2))");
+    let stacks = group_stacks(&mut app);
+    assert_eq!(stacks[0].len(), 1, "{stacks:?}");
+    assert_eq!(stacks[0].last(), stacks[2].last(), "a shared outermost id");
+    assert!(stacks[1].is_empty(), "an unlisted body stays ungrouped");
+
+    undo(&mut app);
+    assert!(group_stacks(&mut app).iter().all(Vec::is_empty));
+    assert_eq!(
+        body_count(&mut app),
+        3,
+        "undo reverted the group, not a spawn"
+    );
+}
+
+/// Grouping nests; `(ungroup (list i))` peels only the outermost level of the
+/// listed bodies (the onion rule of `SelectionGroup`), and undo restores it.
+#[test]
+fn a_scripted_ungroup_peels_the_outermost_group() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 10 10) (spawn-box 30 0 10 10) (spawn-box 60 0 10 10))",
+    );
+    run(&mut app, "(group (list 0 1))");
+    run(&mut app, "(group (list 0 1 2))");
+    let nested = group_stacks(&mut app);
+    assert_eq!(nested[0].len(), 2, "{nested:?}");
+
+    run(&mut app, "(ungroup (list 0))");
+    let peeled = group_stacks(&mut app);
+    assert_eq!(peeled[0], nested[0][..1], "the inner group survives");
+    assert_eq!(peeled[1], nested[1], "an unlisted body keeps its stack");
+
+    undo(&mut app);
+    assert_eq!(
+        group_stacks(&mut app),
+        nested,
+        "one undo reverts the ungroup"
+    );
+}
+
+/// Ctrl+G with one body selected emits nothing, so `group` matches: a list
+/// that names fewer than two distinct bodies is a quiet no-op, not a step.
+#[test]
+fn grouping_fewer_than_two_distinct_bodies_does_nothing() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 10 10) (spawn-box 30 0 10 10))",
+    );
+    run(&mut app, "(group (list 1 1))");
+    assert!(last_entry(&app).expect("logged").0, "not an error");
+    assert!(group_stacks(&mut app).iter().all(Vec::is_empty));
+    undo(&mut app);
+    assert_eq!(
+        body_count(&mut app),
+        1,
+        "no step, so undo reached the second spawn"
+    );
+}
+
+/// A bad set argument is a visible script error, and the run commits none of
+/// its effects: the spawn queued before the bad call never lands.
+#[test]
+fn a_bad_group_argument_is_a_script_error_and_changes_nothing() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 10 10) (spawn-box 30 0 10 10))",
+    );
+    for bad in [
+        "(begin (spawn-box 90 0 10 10) (group 0))",
+        "(begin (spawn-box 90 0 10 10) (group (list 0 \"one\")))",
+        "(begin (spawn-box 90 0 10 10) (group (list 0 5)))",
+        "(begin (spawn-box 90 0 10 10) (ungroup (list -1)))",
+    ] {
+        run(&mut app, bad);
+        let (ok, output) = last_entry(&app).expect("the run is logged");
+        assert!(!ok, "{bad} should fail visibly, got {output}");
+        assert!(
+            output.contains("group"),
+            "the error names the verb: {output}"
+        );
+        assert_eq!(body_count(&mut app), 2, "{bad} committed nothing");
+        assert!(group_stacks(&mut app).iter().all(Vec::is_empty));
+    }
+}
