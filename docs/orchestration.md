@@ -104,7 +104,8 @@ CI is the authority. Its toolchain is pinned (`RUST_PIN` in `ci.yml`) to
 the version agent containers have, so local gates should match it; bumping
 the pin is an orchestrator-scheduled brief, never a side effect. Agent
 sessions **cannot download Actions logs** (403), so CI re-emits clippy
-diagnostics as annotations. To read a failure:
+diagnostics and **test failures** (failed test names, panic messages, and
+the output tail) as annotations. To read a failure:
 
 ```sh
 gh api repos/benbrandt14/gradiance/commits/<branch>/check-runs \
