@@ -1,5 +1,5 @@
 //! How the editor names things: the one "kind · short id" label rule every
-//! user-facing body/joint reference uses ([`object_label`]), and workspace
+//! user-facing body/joint reference uses (`object_label`), and workspace
 //! name tags — script-labelled bodies wear their name in the viewport
 //! (`(label b "crate")` — see [`WorkspaceLabels`]).
 //!
