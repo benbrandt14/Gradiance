@@ -36,6 +36,7 @@
 //! engine itself is the cold-path VM and lives as a `NonSend` resource on the
 //! main thread, so it never needs to be `Send`.
 
+use crate::budget::{SCRIPT_BUDGET, run_with_budget};
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
 use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
@@ -151,6 +152,50 @@ impl Shared {
             catalog: Arc::new(OperationCatalog::builtin()),
         }
     }
+
+    /// How far each write queue has filled — taken before a run, so a failed
+    /// run can be [rolled back](Self::rollback) to exactly here without
+    /// touching what earlier runs in the same frame queued.
+    fn mark(&self) -> QueueMark {
+        QueueMark([
+            queue_len(&self.ops),
+            queue_len(&self.config),
+            queue_len(&self.actions),
+            queue_len(&self.signal_writes),
+            queue_len(&self.signal_defs),
+            queue_len(&self.labels),
+            queue_len(&self.panel_requests),
+        ])
+    }
+
+    /// Discards everything queued since `mark`: a run is all or nothing, like
+    /// its one undo batch, so a script that fails (eval error, panic, budget)
+    /// half-way commits none of its edits, config writes, labels, actions,
+    /// panel requests or signal publishes.
+    fn rollback(&self, mark: &QueueMark) {
+        let [ops, config, actions, writes, defs, labels, panels] = mark.0;
+        queue_truncate(&self.ops, ops);
+        queue_truncate(&self.config, config);
+        queue_truncate(&self.actions, actions);
+        queue_truncate(&self.signal_writes, writes);
+        queue_truncate(&self.signal_defs, defs);
+        queue_truncate(&self.labels, labels);
+        queue_truncate(&self.panel_requests, panels);
+    }
+}
+
+/// The fill level of every [`Shared`] write queue at one instant (see
+/// [`Shared::mark`]).
+struct QueueMark([usize; 7]);
+
+fn queue_len<T>(queue: &Mutex<Vec<T>>) -> usize {
+    queue.lock().map_or(0, |q| q.len())
+}
+
+fn queue_truncate<T>(queue: &Mutex<Vec<T>>, len: usize) {
+    if let Ok(mut q) = queue.lock() {
+        q.truncate(len);
+    }
 }
 
 /// Why a script could not run.
@@ -162,6 +207,13 @@ pub enum ScriptError {
     /// The script panicked (caught at the eval boundary).
     #[error("script panicked")]
     Panicked,
+    /// The script ran past its wall-clock budget
+    /// ([`SCRIPT_BUDGET`](crate::budget::SCRIPT_BUDGET)) and was stopped.
+    #[error("stopped after {ms} ms: budget exceeded")]
+    Budget {
+        /// The budget the run exceeded, in milliseconds.
+        ms: u128,
+    },
 }
 
 /// Pending script source to run on the next [`run_scripts`] pass (REPL input,
@@ -707,18 +759,41 @@ impl ScriptEngine {
         Self { engine, shared }
     }
 
-    /// Runs one script source, converting steel errors to [`ScriptError`].
-    /// Wrapped in `catch_unwind` so a panicking script never takes down the
-    /// app. Returns the run's last value, which is also bound to the global
-    /// `ans` (MATLAB-style) so the next REPL line can reuse it.
+    /// Runs one script source under the [wall-clock budget](crate::budget),
+    /// converting steel errors to [`ScriptError`]. All or nothing: if the run
+    /// fails, everything it queued is discarded before this returns. Wrapped
+    /// in `catch_unwind` so a panicking script never takes down the app.
+    /// Returns the run's last value, which is also bound to the global `ans`
+    /// (MATLAB-style) so the next REPL line can reuse it.
     fn run(&mut self, source: &str) -> Result<Option<SteelVal>, ScriptError> {
+        let mark = self.shared.mark();
+        let result = self.run_guarded(source);
+        if result.is_err() {
+            self.shared.rollback(&mark);
+        }
+        result
+    }
+
+    fn run_guarded(&mut self, source: &str) -> Result<Option<SteelVal>, ScriptError> {
         let engine = &mut self.engine;
         // `Engine::run` wants an owned/`'static` source (`Into<Cow<'static,
         // str>>`), so hand it an owned copy.
         let owned = source.to_owned();
-        let values = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| engine.run(owned)))
-            .map_err(|_| ScriptError::Panicked)?
-            .map_err(|e| ScriptError::Eval(e.to_string()))?;
+        let controller = engine.get_thread_state_controller();
+        let (outcome, tripped) = run_with_budget(&controller, SCRIPT_BUDGET, || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| engine.run(owned)))
+        });
+        let values = match outcome {
+            Err(_) => return Err(ScriptError::Panicked),
+            // A trip surfaces as a steel error; the watchdog says which.
+            Ok(Err(_)) if tripped => {
+                return Err(ScriptError::Budget {
+                    ms: SCRIPT_BUDGET.as_millis(),
+                });
+            }
+            Ok(Err(e)) => return Err(ScriptError::Eval(e.to_string())),
+            Ok(Ok(values)) => values,
+        };
         let last = values.into_iter().next_back();
         if let Some(value) = &last
             && !matches!(value, SteelVal::Void)
