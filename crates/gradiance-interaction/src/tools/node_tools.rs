@@ -7,7 +7,6 @@
 //! [`NodeKind`] entity, through the shared [`ToolCommit::SpawnNode`] seam.
 
 use crate::selection::Selection;
-use crate::tools::appearance_for_id;
 use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
@@ -44,7 +43,7 @@ fn place_node(ctx: &ManipContext, world: &ToolWorld, kind: NodeKind) -> ManipOut
         pose: PosRot { pos: p, rot: 0.0 },
         attachment,
         kind,
-        appearance: appearance_for_id(id),
+        appearance: gradiance_domain::appearance::Appearance::for_id(id),
     };
     ManipOutput::commit(ToolCommit::SpawnNode(Box::new(record)))
 }

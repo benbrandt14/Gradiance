@@ -68,6 +68,24 @@ fn default_border() -> Rgba {
     }
 }
 
+impl Appearance {
+    /// Default appearance for a newly authored body: a random pleasant hue
+    /// derived from its stable id (Algodoo behavior — every new body gets
+    /// its own color; deterministic per id, so undo/redo repaint the same).
+    ///
+    /// The one rule for every authoring surface — the drawing tools and the
+    /// scripting verbs both call it, so a scripted scene and a hand-built
+    /// one are indistinguishable.
+    #[must_use]
+    pub fn for_id(id: gradiance_core::ids::StableId) -> Self {
+        let hue = (id.0.as_u128() % 360) as f32;
+        Self {
+            fill: Rgba::from_hsl(hue, 0.65, 0.55),
+            ..Default::default()
+        }
+    }
+}
+
 impl Default for Appearance {
     fn default() -> Self {
         Self {

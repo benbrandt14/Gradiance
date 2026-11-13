@@ -7,7 +7,9 @@
 //! a scene fixture is a few lines of lisp, and the assertions are on the real
 //! authored world it produces.
 
-use crate::harness::{body_count, joint_count, paused_app, undo};
+use crate::harness::{
+    body_count, headless_app, headless_app_with, joint_count, paused_app, step, undo,
+};
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
 use gradiance::script::bridge::{
@@ -161,6 +163,68 @@ fn a_script_configures_the_simulation() {
     // And an undo does not revert it (it was never a command).
     undo(&mut app);
     assert!((gravity_y(&mut app) - (-250.0)).abs() < 1e-3);
+}
+
+/// The dynamic bodies' heights, in spawn order of their entities.
+fn dynamic_heights(app: &mut App) -> Vec<f32> {
+    app.world_mut()
+        .query::<(&Transform, &avian2d::prelude::RigidBody)>()
+        .iter(app.world())
+        .filter(|(_, rb)| rb.is_dynamic())
+        .map(|(t, _)| t.translation.y)
+        .collect()
+}
+
+/// The zero-gravity scene from the screenshot pass (brief 2-5, bug 1).
+const ZERO_G_SCENE: &str = "(sim-set \"gravity.y\" 0.0)
+    (spawn-ground 0 -2.5 0)
+    (spawn-box -2 0 1 1)
+    (spawn-box 2 0 1 1)";
+
+/// Asserts the zero-gravity scene's boxes have not fallen after a second of play.
+fn assert_floating(app: &mut App) {
+    let before = dynamic_heights(app);
+    assert_eq!(before.len(), 2, "both boxes spawned");
+    step(app, 60);
+    assert!(app.world().resource::<SimSettings>().gravity.y.abs() < 1e-6);
+    let after = dynamic_heights(app);
+    for (b, a) in before.iter().zip(&after) {
+        assert!(
+            (a - b).abs() < 1e-3,
+            "a box fell under zero gravity: {b} -> {a}"
+        );
+    }
+}
+
+#[test]
+fn a_startup_script_zeroes_gravity() {
+    let path = std::env::temp_dir().join(format!("gradiance-zero-g-{}.scm", std::process::id()));
+    std::fs::write(&path, ZERO_G_SCENE).unwrap();
+    let mut app = headless_app_with(|app| {
+        app.insert_resource(gradiance::script::bridge::StartupScripts(vec![
+            path.clone(),
+        ]));
+    });
+    app.update(); // the startup source runs on the first frame after start-up
+    assert_floating(&mut app);
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_console_script_zeroes_gravity_while_playing() {
+    let mut app = headless_app();
+    run(&mut app, ZERO_G_SCENE);
+    assert_floating(&mut app);
+}
+
+#[test]
+fn integer_and_float_literals_both_write_a_float_setting() {
+    let mut app = paused_app();
+    let gravity_y = |app: &mut App| app.world().resource::<SimSettings>().gravity.y;
+    run(&mut app, "(sim-set \"gravity.y\" 0)");
+    assert!(gravity_y(&mut app).abs() < 1e-6);
+    run(&mut app, "(sim-set \"gravity.y\" -3.5)");
+    assert!((gravity_y(&mut app) - -3.5).abs() < 1e-6);
 }
 
 #[test]

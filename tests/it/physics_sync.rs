@@ -853,3 +853,116 @@ fn bare_joint_spawn_gets_identity_but_no_def() {
     assert!(world.get::<Transform>(a).is_some());
     assert!(world.get::<JointDef>(a).is_none());
 }
+
+// --- brief 2-5, bug 2: boxes "rotating on flat ground" ----------------------
+//
+// The screenshot pass saw two unrotated boxes over flat ground tilt, then keep
+// turning clockwise in lockstep while drifting right. The scene was the bug-1
+// scene: `sim-set` zeroed gravity, but one physics step still ran with the old
+// gravity, so the boxes drifted down at constant speed, touched the ground,
+// picked up a sliver of spin from the contact, and — with no gravity to press
+// them back flat — kept turning forever. These pin both halves: the zero-g
+// scene stays perfectly still, and a box dropped under gravity settles flat
+// and stops.
+
+/// The dynamic bodies `source` spawns, after its run.
+fn scripted_boxes(app: &mut App, source: &str) -> Vec<Entity> {
+    app.world_mut()
+        .resource_mut::<gradiance::script::bridge::ScriptInputs>()
+        .submit(source);
+    app.update();
+    app.world_mut()
+        .query::<(Entity, &RigidBody)>()
+        .iter(app.world())
+        .filter(|(_, rb)| rb.is_dynamic())
+        .map(|(e, _)| e)
+        .collect()
+}
+
+/// `(x, y, angle)` of `entity` from its `Transform`.
+#[allow(clippy::unwrap_used)]
+fn pose(app: &App, entity: Entity) -> (f32, f32, f32) {
+    let t = app.world().get::<Transform>(entity).unwrap();
+    let (axis, angle) = t.rotation.to_axis_angle();
+    (t.translation.x, t.translation.y, angle * axis.z.signum())
+}
+
+/// Ground half-plane at y = -2.5 and two unrotated 1 m boxes at y = 0.
+const DROPPED_BOXES: &str =
+    "(begin (spawn-ground 0 -2.5 0) (spawn-box -2 0 1 1) (spawn-box 2 0 1 1))";
+
+#[test]
+fn boxes_over_the_ground_in_zero_gravity_never_start_turning() {
+    let mut app = headless_app();
+    let boxes = scripted_boxes(
+        &mut app,
+        "(begin (sim-set \"gravity.y\" 0.0)
+            (spawn-ground 0 -2.5 0) (spawn-box -2 0 1 1) (spawn-box 2 0 1 1))",
+    );
+    assert_eq!(boxes.len(), 2);
+    let start: Vec<_> = boxes.iter().map(|&e| pose(&app, e)).collect();
+    // 20 simulated seconds: before the fix the boxes reached the ground at
+    // ~12 s and were turning clockwise by ~15 s.
+    step(&mut app, 1200);
+    for (&e, &(x0, y0, _)) in boxes.iter().zip(&start) {
+        let (x, y, rot) = pose(&app, e);
+        assert!(rot.abs() < 1e-4, "box turned to {rot} rad");
+        assert!(
+            (x - x0).abs() < 1e-4 && (y - y0).abs() < 1e-4,
+            "box moved ({x0}, {y0}) -> ({x}, {y})"
+        );
+    }
+}
+
+/// Drops the boxes under gravity and asserts they come to rest flat, on the
+/// ground, and stay put.
+#[allow(clippy::unwrap_used)]
+fn assert_boxes_land_flat(app: &mut App, settle_frames: usize, more_frames: usize) {
+    use avian2d::prelude::{AngularVelocity, LinearVelocity};
+    let boxes = scripted_boxes(app, DROPPED_BOXES);
+    assert_eq!(boxes.len(), 2);
+    let start: Vec<_> = boxes.iter().map(|&e| pose(app, e)).collect();
+    step(app, settle_frames);
+    let settled: Vec<_> = boxes.iter().map(|&e| pose(app, e)).collect();
+    step(app, more_frames);
+    for ((&e, &(x0, _, _)), &(xs, ys, _)) in boxes.iter().zip(&start).zip(&settled) {
+        let (x, y, rot) = pose(app, e);
+        assert!(rot.abs() < 1e-3, "box rests tilted at {rot} rad");
+        assert!((y - -2.0).abs() < 2e-2, "box rests on the ground (y = {y})");
+        let w = app.world().get::<AngularVelocity>(e).unwrap().0;
+        let v = app.world().get::<LinearVelocity>(e).unwrap().0;
+        assert!(
+            w.abs() < 1e-4 && v.length() < 1e-3,
+            "box still moving: v = {v}, w = {w}"
+        );
+        assert!(
+            (x - xs).abs() < 1e-4 && (y - ys).abs() < 1e-4,
+            "a resting box crept ({xs}, {ys}) -> ({x}, {y})"
+        );
+        // The landing itself is not perfectly symmetric: avian resolves the
+        // two corner contacts of a flat impact sequentially, so a 2 m drop
+        // bounces with a little spin and lands a few cm sideways before it
+        // settles (brief 2-5 Outcome). Bound it so a regression shows.
+        assert!(
+            (x - x0).abs() < 0.1,
+            "landing knocked the box sideways {x0} -> {x}"
+        );
+    }
+}
+
+#[test]
+fn a_box_dropped_flat_comes_to_rest_flat() {
+    let mut app = headless_app();
+    assert_boxes_land_flat(&mut app, 300, 300); // 5 s to settle, 5 s at rest
+}
+
+#[test]
+fn a_box_dropped_flat_comes_to_rest_flat_at_a_low_frame_rate() {
+    // lavapipe ran the app at a few frames per second, so each frame ran
+    // several catch-up fixed steps: ~5 fps of virtual time per update.
+    let mut app = headless_app();
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+        std::time::Duration::from_millis(200),
+    ));
+    assert_boxes_land_flat(&mut app, 25, 25); // 5 s + 5 s at 5 fps
+}

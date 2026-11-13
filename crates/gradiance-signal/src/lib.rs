@@ -392,14 +392,20 @@ pub fn evaluate_signals(
                     *current = *next;
                 }
             }
+            // `try_`: this system is unordered against the command
+            // dispatcher, so an undo/delete can despawn the body between
+            // queuing this insert and applying it. A derived override on a
+            // dead body is moot — skip it rather than panic (the #223 CI
+            // flake, pinned by `nodes::a_body_despawned_while_its_override_
+            // is_queued_does_not_panic`).
             Err(_) => {
-                commands.entity(*entity).insert(*next);
+                commands.entity(*entity).try_insert(*next);
             }
         }
     }
     for entity in &overridden {
         if !desired.contains_key(&entity) {
-            commands.entity(entity).remove::<SignalColorOverride>();
+            commands.entity(entity).try_remove::<SignalColorOverride>();
         }
     }
 }

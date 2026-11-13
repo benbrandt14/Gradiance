@@ -100,7 +100,9 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
-(sim-set "gravity.y" -500)   ; write one (any scalar field, by path)
+(sim-set "gravity.y" -5)     ; write one (any scalar field, by path; m/s², SI)
+;; 0 and 0.0 are the same value; a bad path or a non-number is a script
+;; error in the console, never a silent no-op. The next physics step sees it.
 
 ;; editor — the chrome, through the EditorState seam
 (panel-show "properties")    ; open a panel — the same toggle the View menu drives
@@ -173,7 +175,7 @@ Extend the right-click menu from an init script (`--script init.scm`):
 
 ```scheme
 (register-action "Drop a ball"      "(spawn-circle 0 200 12)")
-(register-action "Heavy gravity"    "(sim-set \"gravity.y\" -2500)")
+(register-action "Heavy gravity"    "(sim-set \"gravity.y\" -25)")
 (register-action "Fill a shelf"
   "(let loop ((i 0)) (when (< i 8) (spawn-box (* i 30) 0 24 24) (loop (+ i 1))))")
 ```

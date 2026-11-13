@@ -17,6 +17,12 @@ pub const FRAME: Duration = Duration::from_micros(16_667);
 /// Builds a headless app with the full Gradiance stack (including physics)
 /// and a deterministic, manually-advanced clock.
 pub fn headless_app() -> App {
+    headless_app_with(|_| {})
+}
+
+/// [`headless_app`] with `setup` run on the app before start-up — where the
+/// binary inserts its CLI resources (`StartupScripts`, `StartupScene`).
+pub fn headless_app_with(setup: impl FnOnce(&mut App)) -> App {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
@@ -28,6 +34,7 @@ pub fn headless_app() -> App {
     // Advance exactly one frame of virtual time per update, regardless of
     // wall-clock speed, so physics assertions are reproducible.
     app.insert_resource(TimeUpdateStrategy::ManualDuration(FRAME));
+    setup(&mut app);
     // Without a runner, plugin `finish`/`cleanup` never run — avian
     // registers diagnostics resources there, so run them explicitly.
     app.finish();

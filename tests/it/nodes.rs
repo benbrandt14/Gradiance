@@ -335,3 +335,44 @@ fn a_free_tracer_node_does_nothing() {
         "a free tracer accumulates no trail"
     );
 }
+
+#[test]
+fn a_body_despawned_while_its_override_is_queued_does_not_panic() {
+    // The flake CI hit on #223 (and likely #221's first-run failure):
+    // `evaluate_signals` and the command dispatcher are unordered in
+    // `Update`, so an undo can despawn a bound body after the evaluator
+    // queued its colour-override insert and before that insert is applied.
+    // Replay that order deterministically by driving the system by hand.
+    use bevy::ecs::system::System;
+    use gradiance::signal::{SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource};
+    let mut app = paused_app();
+    let body = box_record(Vec2::ZERO, 20.0, 20.0);
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+    let entity = entity_of(&app, body_id).unwrap();
+    app.world_mut()
+        .resource_mut::<SignalBindings>()
+        .0
+        .push(SignalBinding {
+            name: "speed".into(),
+            source: SignalSource::Speed(body_id),
+            map: SignalMap::default(),
+            curve: None,
+            gradient: gradiance::signal::GradientSpec::default(),
+            sink: SignalSink::Fill(body_id),
+        });
+
+    let mut evaluate = IntoSystem::into_system(gradiance::signal::evaluate_signals);
+    let world = app.world_mut();
+    evaluate.initialize(world);
+    // The evaluator sees the live body and queues its override insert...
+    evaluate.run_without_applying_deferred((), world).unwrap();
+    // ...the dispatcher's undo despawns the body...
+    world.despawn(entity);
+    // ...and the queued insert lands on a dead entity. Panicked before.
+    evaluate.apply_deferred(world);
+    assert!(app.world().get_entity(entity).is_err());
+    app.update(); // the next ordinary frame is clean too
+}

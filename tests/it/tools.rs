@@ -824,3 +824,39 @@ fn right_drag_past_deadzone_still_rotates() {
         "quarter turn, got {rot}"
     );
 }
+
+#[test]
+fn scripted_and_tool_drawn_bodies_are_coloured_by_the_same_rule() {
+    // Brief 2-5, bug 3: a scripted scene and a hand-built one are
+    // indistinguishable — both get the id-derived hue, neither the grey default.
+    let mut app = paused_app();
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Box);
+    app.update();
+    set_cursor(&mut app, Vec2::new(0.0, 0.0));
+    mouse(&mut app, MouseButton::Left, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(0.6, 0.4));
+    app.update();
+    mouse(&mut app, MouseButton::Left, false);
+    app.update();
+
+    app.world_mut()
+        .resource_mut::<gradiance::script::bridge::ScriptInputs>()
+        .submit("(begin (spawn-box 3 0 1 1) (spawn-circle -3 0 0.5))");
+    app.update();
+    assert_eq!(body_count(&mut app), 3);
+
+    let mut q = app
+        .world_mut()
+        .query_filtered::<(&StableId, &Appearance), With<Body>>();
+    for (id, appearance) in q.iter(app.world()) {
+        assert_ne!(
+            appearance.fill,
+            Appearance::default().fill,
+            "body {id:?} is the grey default"
+        );
+        assert_eq!(*appearance, Appearance::for_id(*id), "body {id:?}");
+    }
+}
