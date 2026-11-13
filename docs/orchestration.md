@@ -102,8 +102,9 @@ the per-package tests for crates they touched. The full
 
 CI is the authority. Its toolchain is pinned (`RUST_PIN` in `ci.yml`) to
 the version agent containers have, so local gates should match it; bumping
-the pin is an orchestrator-scheduled brief, never a side effect. Agent
-sessions **cannot download Actions logs** (403), so CI re-emits clippy
+the pin is an orchestrator-scheduled brief, never a side effect. Actions
+logs used to 403 for agent sessions (`gh run view <id> --log-failed` works
+as of 2026-11-12), so CI also re-emits clippy
 diagnostics and **test failures** (failed test names, panic messages, and
 the output tail) as annotations. To read a failure:
 

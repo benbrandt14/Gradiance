@@ -1,43 +1,39 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-11, Phase 2 (orchestrator, after #221 merged; 2-4 next).
+Last updated: 2026-11-12, Phase 2 done → Phase 3 next (orchestrator).
 
 ## Position
 
-- **Phase:** 2 — Constraints & substrate completion
-  (`docs/orchestration.md` § The plan).
-- **main:** `592465d` — #219 joint sensor sources (2-1), #220 joint
-  breaking limits (2-2: authored `JointCommon.break_force`/`broken`, avian
-  `JointForces`/`JointDisabled` derived), #221 rigid rod (2-3: `ShapeDef::Capsule`,
-  rod tool `L` with hinged ends via one `SpawnRodCommand`; strut tool renamed
-  Spring).
-  **Phase 1 (M18) done:** #212 adaptive snap, #214
-  major/minor lines, #213 axis lock follows the grid, #215 analytic circle
-  snap features, #216 alignment while moving, #217 three-point box, #218
-  tangent snap + tangent circle. Curvilinear coordinates moved to a Phase 5
-  decision note, as planned. Every PR's CI was green at merge (CI runs on
-  PRs only; main has no push CI).
-- **Orchestrator rotation skipped at this gate** on the owner's instruction
-  ("continue as far as you can tonight"). The files are complete enough for
-  a fresh orchestrator to take over at any point.
-- **Phase 2 briefs, run serially:**
-  - **2-4** required components on `Body`/`Joint` —
-    `docs/briefs/2-4-required-components.md`.
-  - Not yet briefed: backlash; cams / planar contact.
-  - Already landed (found at the gate): joint config in the context menu.
+- **Phase:** 2 complete except three undefined items (below) → **Phase 3**
+  (scripting & the op surface) next. Orchestrator rotation skipped again at
+  the owner's instruction ("continue as far as you can").
+- **main:** `7614ca3`. Phase 2 merged: #219 joint sensors (2-1), #220
+  breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
+  components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
+  scripted-body colour, and the CI flake), #224 CI test-failure annotations.
+- **Phase 2 items needing an owner decision (not briefed):** backlash, cams,
+  planar contact. The roadmap/feedback only name them; what each should do
+  is unspecified.
+- **Phase 3 briefs:** **3-1** script step budget —
+  `docs/briefs/3-1-script-budget.md` (steel 0.8.2 has `with_interrupted` +
+  `InterruptHandler`). Still to brief: group/ungroup via list args,
+  `register-action` click point + folding context-menu buttons into the
+  action table, `reflect_functions` + BRP (the external control surface),
+  user tools from `.scm`, and verbs for `ToolDefaults`/`SnapConfig`/joint
+  properties (follow-ups from 1-6 and 2-2).
+- **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
+  git; show them in the conversation and describe them in PR comments.
 - **Workers:** hand off through the brief's Outcome and the PR; the
   orchestrator updates this file after review and merges.
-- **Open follow-ups (unbriefed):** CSG shapes containing arcs still snap to
-  contour vertices and give no tangents (1-4, 1-7 Outcomes); alignment during
-  creation tools (1-5 Outcome); grid coverage from the frustum (1-1); no
-  script verb for `ToolDefaults`/`SnapConfig` — only `sim-set` (1-6; Phase
-  3); no on/off toggle for tangent snapping (1-7); world-pin joint-angle sign
-  vs `limit_reference_angle`'s comment unverified against avian, and joints
-  have no node-graph block (2-1 Outcome); no script verb edits joint
-  properties (break force, limits, motors) — Phase 3 (2-2 Outcome);
-  torque-based breaking is one field away (2-2 Outcome); rod follow-ups:
-  fixed end = merge, `spawn-rod` verb, rod inspector (2-3 Outcome).
+- **Open follow-ups (unbriefed):** CSG arcs snap to contour vertices and give
+  no tangents (1-4, 1-7); alignment during creation tools (1-5); grid
+  coverage from the frustum (1-1); no tangent-snap toggle (1-7); world-pin
+  joint-angle sign vs `limit_reference_angle`'s comment unverified, joints have
+  no node-graph block (2-1); torque-based breaking (2-2); rod: fixed end =
+  merge, `spawn-rod` verb, rod inspector (2-3); a 2 m flat drop lands 1–4 cm
+  sideways inside avian (2-5, bounded by a test); other systems may share the
+  despawned-entity `insert` panic pattern fixed in 2-5 (unaudited).
 
 ## Parked PRs — do not merge, rebase, or close without the orchestrator
 
@@ -69,13 +65,9 @@ gate if nobody claims them.
   gate to CI when `df` is under ~8 GB. Between workers, free space with
   `rm -rf target/debug/deps/*gradiance* target/debug/incremental/*` (keeps
   the third-party build; ~15 GB back).
-- **Possible flaky test (watch).** PR #221's first `ci` run failed in
-  `cargo test --workspace` (exit 101, no annotation); the re-run on the same
-  SHA passed, coverage (same tests) passed first time, and the full `it`
-  suite passed locally. First such case. If a first-run-only failure recurs,
-  brief a hunt for it (run the suite with `--test-threads=1` and repeated).
-- Container can't reach rust-lang.org (no toolchain update) and can't read
-  Actions logs — read CI through annotations. Format failures now annotate
+- Container can't reach rust-lang.org (no toolchain update). CI failures:
+  annotations first (clippy, fmt and now test failures are annotated); full
+  logs via `gh run view <run-id> --log-failed` (works as of 2026-11-12). Format failures now annotate
   too (file per error).
 - A fresh container needs `apt-get update` before the native-lib install.
   The first `cargo test -p <crate>` compiles a second Bevy feature set
