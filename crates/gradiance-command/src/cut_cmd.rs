@@ -19,7 +19,7 @@ use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::joint::JointDef;
 use gradiance_domain::shape::{CsgOp, ShapeDef};
-use gradiance_geometry::contours::point_in_ring;
+use gradiance_geometry::contours::{Contours, point_in_ring};
 use gradiance_geometry::polygonize::polygonize_components;
 use gradiance_geometry::sdf;
 use gradiance_scene::{BodyRecord, JointRecord};
@@ -111,40 +111,14 @@ impl CutCommand {
 
             // Cuts only *sever*: a stroke that fails to pass fully through
             // leaves the body untouched (no notches, no microscopic thin
-            // features). CSG modeling (boolean ops between bodies) is a
-            // separate planned feature.
+            // features). Deliberate notches are body booleans instead
+            // (subtract / intersect / xor between bodies, `merge_cmd`).
             let replacement = if components.is_empty() {
                 Replacement::Destroy
             } else if components.len() == 1 {
                 continue;
             } else {
-                let pieces = components
-                    .into_iter()
-                    .map(|mut piece| {
-                        let centroid = piece.recenter();
-                        BodyRecord {
-                            id: StableId::new(),
-                            pose: gradiance_core::units::PosRot {
-                                pos: original.pose.pos
-                                    + Vec2::from_angle(original.pose.rot).rotate(centroid),
-                                rot: original.pose.rot,
-                            },
-                            shape: ShapeDef::Polygon {
-                                outline: piece.outline,
-                                holes: piece.holes,
-                            },
-                            physics: original.physics,
-                            appearance: original.appearance,
-                            depth: original.depth,
-                            layers: None,
-                            groups: original.groups.clone(),
-                            // Cut pieces inherit the parent's field source
-                            // and tracer.
-                            field: original.field,
-                            tracer: original.tracer,
-                        }
-                    })
-                    .collect();
+                let pieces = piece_records(&original, components);
                 Replacement::Split { pieces }
             };
 
@@ -164,6 +138,72 @@ impl CutCommand {
         }
         outcomes
     }
+}
+
+/// Fresh polygon-leaf bodies for the connected `components` of a shape
+/// in `original`'s local frame: each recentred on its centroid, posed at
+/// that centroid in the world, and inheriting `original`'s properties,
+/// appearance, depth, groups, field source and tracer under a new id.
+/// Shared by cuts and by booleans that split a body.
+pub(crate) fn piece_records(original: &BodyRecord, components: Vec<Contours>) -> Vec<BodyRecord> {
+    components
+        .into_iter()
+        .map(|mut piece| {
+            let centroid = piece.recenter();
+            BodyRecord {
+                id: StableId::new(),
+                pose: gradiance_core::units::PosRot {
+                    pos: original.pose.pos + Vec2::from_angle(original.pose.rot).rotate(centroid),
+                    rot: original.pose.rot,
+                },
+                shape: ShapeDef::Polygon {
+                    outline: piece.outline,
+                    holes: piece.holes,
+                },
+                physics: original.physics,
+                appearance: original.appearance,
+                depth: original.depth,
+                layers: None,
+                groups: original.groups.clone(),
+                // Pieces inherit the parent's field source and tracer.
+                field: original.field,
+                tracer: original.tracer,
+            }
+        })
+        .collect()
+}
+
+/// Replaces the body `original` with `pieces`: despawns it and spawns
+/// each piece.
+///
+/// Physics continuity (Algodoo 7.5): pieces of a moving body keep
+/// flying — each inherits `v + ω × r` (r = its centroid offset) and the
+/// shared spin. Read live at apply time and never recorded: velocities
+/// are simulation state, not authored state, exactly like the grab
+/// spring's writes.
+pub(crate) fn replace_with_pieces(
+    world: &mut World,
+    original: &BodyRecord,
+    pieces: &[BodyRecord],
+) -> Result<(), CommandError> {
+    let entity = resolve(world, original.id)?;
+    let motion = world.get::<LinearVelocity>(entity).copied().map(|lv| {
+        (
+            lv.0,
+            world.get::<AngularVelocity>(entity).map_or(0.0, |a| a.0),
+        )
+    });
+    world.despawn(entity);
+    for piece in pieces {
+        let spawned = piece.spawn(world);
+        if let Some((v, omega)) = motion {
+            let r = piece.pose.pos - original.pose.pos;
+            world
+                .entity_mut(spawned)
+                .insert((LinearVelocity(v + omega * r.perp()), AngularVelocity(omega)));
+        }
+    }
+    Ok(())
 }
 
 /// Reattaches each joint on a split body to the piece containing its
@@ -209,7 +249,7 @@ fn rewire_joints(
 }
 
 /// Even-odd containment against a polygon-leaf shape.
-fn shape_contains(shape: &ShapeDef, p: Vec2) -> bool {
+pub(crate) fn shape_contains(shape: &ShapeDef, p: Vec2) -> bool {
     let ShapeDef::Polygon { outline, holes } = shape else {
         return false;
     };
@@ -222,7 +262,7 @@ fn shape_contains(shape: &ShapeDef, p: Vec2) -> bool {
     inside
 }
 
-fn aabbs_overlap(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
+pub(crate) fn aabbs_overlap(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
     a.0.x <= b.1.x && b.0.x <= a.1.x && a.0.y <= b.1.y && b.0.y <= a.1.y
 }
 
@@ -235,30 +275,7 @@ impl GameCommand for CutCommand {
         for outcome in &outcomes {
             match &outcome.replacement {
                 Replacement::Split { pieces } => {
-                    let entity = resolve(world, outcome.original.id)?;
-                    // Physics continuity (Algodoo 7.5): pieces of a severed
-                    // moving body keep flying — each inherits `v + ω × r`
-                    // (r = its centroid offset) and the shared spin. Read
-                    // live at apply time and never recorded: velocities are
-                    // simulation state, not authored state, exactly like
-                    // the grab spring's writes.
-                    let motion = world.get::<LinearVelocity>(entity).copied().map(|lv| {
-                        (
-                            lv.0,
-                            world.get::<AngularVelocity>(entity).map_or(0.0, |a| a.0),
-                        )
-                    });
-                    world.despawn(entity);
-                    for piece in pieces {
-                        let spawned = piece.spawn(world);
-                        if let Some((v, omega)) = motion {
-                            let r = piece.pose.pos - outcome.original.pose.pos;
-                            world.entity_mut(spawned).insert((
-                                LinearVelocity(v + omega * r.perp()),
-                                AngularVelocity(omega),
-                            ));
-                        }
-                    }
+                    replace_with_pieces(world, &outcome.original, pieces)?;
                     apply_joint_changes(world, &outcome.joint_changes)?;
                 }
                 Replacement::Destroy => {

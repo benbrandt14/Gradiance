@@ -48,6 +48,12 @@ pub mod name {
     pub const DELETE_JOINT: &str = "delete-joint";
     /// [`MergeIntent`](super::MergeIntent) → `MergeCommand`.
     pub const MERGE: &str = "merge";
+    /// [`BooleanIntent`](super::BooleanIntent) with `CsgOp::Subtract`.
+    pub const SUBTRACT: &str = "subtract";
+    /// [`BooleanIntent`](super::BooleanIntent) with `CsgOp::Intersect`.
+    pub const INTERSECT: &str = "intersect";
+    /// [`BooleanIntent`](super::BooleanIntent) with `CsgOp::Xor`.
+    pub const XOR: &str = "xor";
     /// [`LoadSceneIntent`](super::LoadSceneIntent) → `LoadSceneCommand`.
     pub const LOAD_SCENE: &str = "load-scene";
     /// [`UndoIntent`](super::UndoIntent) → `CommandStack::undo`.
@@ -225,6 +231,18 @@ pub struct CutIntent {
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct MergeIntent {
     /// Bodies to merge; the first survives with the union of all shapes.
+    pub targets: Vec<StableId>,
+}
+
+/// Request to combine bodies with a CSG boolean — subtract, intersect or
+/// xor (or union, which is what [`MergeIntent`] means). The first target
+/// hosts the result; every other target is consumed.
+// Trace: dispatch.rs → MergeCommand (merge_cmd.rs) → sync_colliders, sync_body_meshes (host ShapeDef tree, or polygon pieces when the result splits; other targets despawn).
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct BooleanIntent {
+    /// The boolean folding each operand onto the host, left to right.
+    pub op: gradiance_domain::shape::CsgOp,
+    /// Bodies to combine; the first is the host.
     pub targets: Vec<StableId>,
 }
 

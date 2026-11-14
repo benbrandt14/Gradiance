@@ -3,7 +3,7 @@
 pub use crate::command::array_cmd::ArrayMode;
 pub use crate::command::intent::LoadSceneIntent;
 pub use crate::command::intent::{
-    ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
+    ArrayIntent, BooleanIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
     DuplicateIntent, GroupIntent, MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent,
     SpawnBodyIntent, SpawnJointIntent, TransformChange, UndoIntent, UngroupIntent,
 };

@@ -47,10 +47,24 @@ fn collider_for(shape: &ShapeDef) -> Option<Collider> {
 
 /// Convex-decomposes closed rings (outline + holes) into one collider;
 /// concavity and holes are handled alike.
+///
+/// Rings are first decimated to [`DECIMATE_FRACTION`] of their extent:
+/// a contoured curve keeps one vertex per field cell, and a fine
+/// near-circular ring would otherwise decompose to no convex part (parry
+/// reads its gently turning edges as collinear) and panic — see
+/// `geometry::contours::decimate_ring`.
 fn decomposition_collider<'a>(rings: impl Iterator<Item = &'a Vec<Vec2>>) -> Option<Collider> {
+    let rings: Vec<&Vec<Vec2>> = rings.collect();
+    let (mut min, mut max) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+    for v in rings.iter().copied().flatten() {
+        min = min.min(*v);
+        max = max.max(*v);
+    }
+    let tol = (max - min).max_element().max(0.0) * DECIMATE_FRACTION;
     let mut vertices: Vec<Vector> = Vec::new();
     let mut indices: Vec<[u32; 2]> = Vec::new();
     for ring in rings {
+        let ring = gradiance_geometry::contours::decimate_ring(ring, tol);
         let start = vertices.len() as u32;
         let n = ring.len() as u32;
         if n < 3 {
@@ -64,6 +78,11 @@ fn decomposition_collider<'a>(rings: impl Iterator<Item = &'a Vec<Vec2>>) -> Opt
     }
     Some(Collider::convex_decomposition(vertices, indices))
 }
+
+/// Collider decimation tolerance as a fraction of the shape's extent
+/// (1 mm on a 1 m body): small against contact slop, large enough that a
+/// circle keeps some 50 vertices rather than hundreds.
+const DECIMATE_FRACTION: f32 = 1e-3;
 
 /// Regenerates colliders for bodies whose shape changed.
 pub fn sync_colliders(

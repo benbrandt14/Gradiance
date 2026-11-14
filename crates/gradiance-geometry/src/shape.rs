@@ -21,7 +21,10 @@ pub const MIN_SHAPE_SIZE: f32 = 0.0001;
 pub const MAX_CSG_DEPTH: u32 = 8;
 
 /// A CSG boolean operator over two SDF subtrees.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+///
+/// Reflects as a plain enum: it is the `op` field of the body-boolean
+/// intent (`command::intent::BooleanIntent`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub enum CsgOp {
     /// Material in either operand (`min` of fields).
     Union,
@@ -29,6 +32,11 @@ pub enum CsgOp {
     Subtract,
     /// Material in both operands (`max` of fields).
     Intersect,
+    /// Material in exactly one operand — the symmetric difference,
+    /// `max(min(a, b), -max(a, b))`. One node rather than the equivalent
+    /// `Subtract(Union(a, b), Intersect(a, b))`, which would copy both
+    /// operands and so double the tree at every repeated xor.
+    Xor,
     /// Union with a fillet of the given radius (polynomial smooth-min) —
     /// blends the operands where they meet.
     SmoothUnion {

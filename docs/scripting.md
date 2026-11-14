@@ -123,6 +123,11 @@ across and ±3.5 m up and down); angles are radians.
 (set-static i on)            ; non-zero = static, 0 = dynamic
 (scale i fx fy)              ; resize about the body's own centre, own axes
 (merge a b)                  ; fuse into one CSG union; a survives
+(subtract a b)               ; cut b's shape out of a; b is consumed
+(intersect a b)              ; keep only the overlap, on a; b is consumed
+(xor a b)                    ; keep what is in exactly one of a and b, on a
+;; booleans: a hosts the analytic tree; a subtract/xor that splits a becomes
+;; polygon pieces (like a severing cut); an empty or missing result does nothing
 (delete-joint i)             ; remove the i-th joint
 
 ;; edit — sets of bodies (one list argument; Ctrl+G / Ctrl+Shift+G as ops)

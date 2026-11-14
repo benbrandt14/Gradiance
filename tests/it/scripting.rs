@@ -8,7 +8,8 @@
 //! authored world it produces.
 
 use crate::harness::{
-    body_count, headless_app, headless_app_with, joint_count, paused_app, step, undo,
+    body_count, box_record, entity_of, headless_app, headless_app_with, joint_count, paused_app,
+    step, undo,
 };
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
@@ -326,6 +327,49 @@ fn a_script_merges_two_bodies_into_one() {
     assert_eq!(body_count(&mut app), 1, "two bodies became one");
     undo(&mut app);
     assert_eq!(body_count(&mut app), 2, "and the merge was undoable");
+}
+
+/// `(subtract a b)` / `(intersect a b)` / `(xor a b)` emit the same
+/// `BooleanIntent` as the context menu: `a` hosts, `b` is consumed, one
+/// undo step each.
+#[test]
+fn scripts_run_the_body_booleans() {
+    use gradiance::prelude::CsgOp;
+    for (verb, op) in [
+        ("subtract", CsgOp::Subtract),
+        ("intersect", CsgOp::Intersect),
+        ("xor", CsgOp::Xor),
+    ] {
+        let mut app = paused_app();
+        let host = box_record(Vec2::ZERO, 2.0, 2.0);
+        let mut tool = box_record(Vec2::ZERO, 1.0, 1.0);
+        tool.shape = gradiance::prelude::ShapeDef::Circle { radius: 0.4 };
+        let (host_id, tool_id) = (host.id, tool.id);
+        for record in [host, tool] {
+            app.world_mut()
+                .write_message(gradiance::prelude::SpawnBodyIntent { record });
+        }
+        app.update();
+        // Verbs index bodies in id order.
+        let (i, j) = if host_id.0 < tool_id.0 {
+            (0, 1)
+        } else {
+            (1, 0)
+        };
+        run(&mut app, &format!("({verb} {i} {j})"));
+        assert_eq!(body_count(&mut app), 1, "{verb}: the tool is consumed");
+        let entity = entity_of(&app, host_id).expect("the host survives");
+        let shape = app
+            .world()
+            .get::<gradiance::prelude::ShapeDef>(entity)
+            .expect("a shape");
+        assert!(
+            matches!(shape, gradiance::prelude::ShapeDef::Csg { op: o, .. } if *o == op),
+            "{verb}: got {shape:?}"
+        );
+        undo(&mut app);
+        assert_eq!(body_count(&mut app), 2, "{verb}: undoable");
+    }
 }
 
 /// Merging a body with itself would ask the command to fuse one body into one

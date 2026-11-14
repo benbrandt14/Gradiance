@@ -49,6 +49,7 @@ fn shape_strategy() -> impl Strategy<Value = ShapeDef> {
                 Just(CsgOp::Union),
                 Just(CsgOp::Subtract),
                 Just(CsgOp::Intersect),
+                Just(CsgOp::Xor),
                 (0.5f32..20.0).prop_map(|radius| CsgOp::SmoothUnion { radius }),
             ],
         )
