@@ -147,6 +147,10 @@ fn curated(all: &RemoteMethods) -> RemoteMethods {
 }
 
 /// `gradiance.ops`: the catalog as a JSON array.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "a BRP method handler must return `BrpResult`"
+)]
 fn list_ops(In(_params): In<Option<Value>>, registry: Res<OperationRegistry>) -> BrpResult {
     Ok(Value::Array(registry.0.ops().iter().map(op_json).collect()))
 }
@@ -217,13 +221,10 @@ fn parse_params(params: Option<Value>) -> Result<(String, Vec<Value>), BrpError>
             "params must be an object: {\"name\": <op>, \"args\": [...]}",
         ));
     };
-    let name = match fields.remove("name") {
-        Some(Value::String(name)) => name,
-        _ => {
-            return Err(invalid_params(
-                "`name` must be the operation's name, a string",
-            ));
-        }
+    let Some(Value::String(name)) = fields.remove("name") else {
+        return Err(invalid_params(
+            "`name` must be the operation's name, a string",
+        ));
     };
     let args = match fields.remove("args") {
         None | Some(Value::Null) => Vec::new(),

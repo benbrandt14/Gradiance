@@ -1788,6 +1788,18 @@ fn steel_to_json(value: &SteelVal) -> serde_json::Value {
     }
 }
 
+/// Leaves one run's outcome in its caller's slot: the value as JSON, or the
+/// console's error text.
+fn fill_reply(reply: &RunReply, result: &Result<Option<SteelVal>, ScriptError>, output: &str) {
+    if let Ok(mut slot) = reply.lock() {
+        *slot = Some(match result {
+            Ok(Some(value)) => Ok(steel_to_json(value)),
+            Ok(None) => Ok(serde_json::Value::Null),
+            Err(_) => Err(output.to_owned()),
+        });
+    }
+}
+
 /// Exclusive: refreshes the read snapshot, runs any pending script source, then
 /// dispatches the operation records it emitted through the intent bus. Ordered
 /// before [`CommandDispatchSet`] so a script's edits become commands in the same
@@ -1846,14 +1858,8 @@ pub fn run_scripts(world: &mut World) {
                 err.to_string()
             }
         };
-        if let Some(reply) = reply
-            && let Ok(mut slot) = reply.lock()
-        {
-            *slot = Some(match &result {
-                Ok(Some(value)) => Ok(steel_to_json(value)),
-                Ok(None) => Ok(serde_json::Value::Null),
-                Err(_) => Err(output.clone()),
-            });
+        if let Some(reply) = reply {
+            fill_reply(&reply, &result, &output);
         }
         if let Some(mut log) = world.get_resource_mut::<ScriptLog>() {
             log.record(ScriptEntry {

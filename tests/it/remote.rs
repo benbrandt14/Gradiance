@@ -34,10 +34,9 @@ fn call(app: &mut App, name: &str, params: Value) -> Option<BrpResult> {
 }
 
 fn ok(app: &mut App, name: &str, params: Value) -> Value {
-    match call(app, name, params) {
-        Some(Ok(value)) => value,
-        other => panic!("{name} failed: {other:?}"),
-    }
+    let result = call(app, name, params);
+    assert!(matches!(result, Some(Ok(_))), "{name} failed: {result:?}");
+    result.and_then(Result::ok).unwrap_or_default()
 }
 
 fn undo_depth(app: &App) -> usize {
