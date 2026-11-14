@@ -205,25 +205,54 @@ pub fn contour_components(
 /// Removes vertices that deviate less than `tol` from the line through
 /// their neighbors (refined vertices on straight boundaries collapse to
 /// the segment endpoints).
+///
+/// Greedy from a fixed anchor: each vertex is measured against the chord
+/// from the last *kept* vertex, so deviation accumulates along a curve and
+/// the curve keeps its vertices. The anchor is the ring's sharpest vertex
+/// (one that is kept anyway). Starting instead at an arbitrary vertex
+/// with nothing kept yet compared each vertex only to its immediate
+/// neighbours, which dropped a whole curved run at the start of a ring —
+/// an intersect's lower arc came out as one straight chord.
 fn simplify_ring(ring: &mut Vec<Vec2>, tol: f32) {
-    let mut out: Vec<Vec2> = Vec::with_capacity(ring.len());
     let n = ring.len();
-    for i in 0..n {
-        let prev = *out.last().unwrap_or(&ring[(i + n - 1) % n]);
-        let cur = ring[i];
-        let nxt = ring[(i + 1) % n];
+    if n < 4 {
+        return;
+    }
+    let deviation = |prev: Vec2, cur: Vec2, nxt: Vec2| {
         let chord = nxt - prev;
-        let deviation = if chord.length_squared() > 0.0 {
+        if chord.length_squared() > 0.0 {
             (chord.perp_dot(cur - prev)).abs() / chord.length()
         } else {
             f32::MAX
-        };
-        if deviation > tol {
-            out.push(cur);
+        }
+    };
+    let sharpest = (0..n)
+        .max_by(|&a, &b| {
+            let d = |i: usize| deviation(ring[(i + n - 1) % n], ring[i], ring[(i + 1) % n]);
+            d(a).total_cmp(&d(b))
+        })
+        .unwrap_or(0);
+    let at = |i: usize| ring[(sharpest + i) % n];
+    // Kept vertices with their original indices.
+    let mut out: Vec<(usize, Vec2)> = Vec::with_capacity(n);
+    out.push((sharpest, at(0)));
+    for i in 1..n {
+        let prev = out[out.len() - 1].1;
+        let (cur, nxt) = (at(i), at(i + 1));
+        if deviation(prev, cur, nxt) > tol {
+            out.push(((sharpest + i) % n, cur));
         }
     }
     if out.len() >= 3 {
-        *ring = out;
+        // Keep the contour's own starting order (first kept vertex at or
+        // after the original start), so outputs stay stable.
+        let first = out
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, (orig, _))| *orig)
+            .map_or(0, |(k, _)| k);
+        out.rotate_left(first);
+        *ring = out.into_iter().map(|(_, p)| p).collect();
     }
 }
 
@@ -347,5 +376,35 @@ mod tests {
             "axis-aligned box should collapse to near-4 vertices, got {}",
             components[0].outline.len()
         );
+    }
+
+    #[test]
+    fn a_curve_at_the_start_of_a_ring_keeps_its_vertices() {
+        // Box ∩ disc: the ring starts at its leftmost crossing, on the
+        // lower arc. Every boundary point must lie on the true boundary
+        // (the old simplifier cut that arc into one straight chord).
+        let field = |p: Vec2| {
+            let q = p.abs() - Vec2::ONE;
+            let bx = q.max(Vec2::ZERO).length() + q.x.max(q.y).min(0.0);
+            let disc = (p - Vec2::new(1.0, 0.0)).length() - 1.2;
+            bx.max(disc)
+        };
+        let comps = contour_components(
+            field,
+            Vec2::new(-0.2, -1.0),
+            Vec2::new(1.0, 1.0),
+            2.0 / 96.0,
+        );
+        assert_eq!(comps.len(), 1);
+        let ring = &comps[0].outline;
+        let n = ring.len();
+        for i in 0..n {
+            let mid = (ring[i] + ring[(i + 1) % n]) / 2.0;
+            assert!(
+                field(mid).abs() < 0.01,
+                "edge midpoint {mid} is off the boundary by {}",
+                field(mid)
+            );
+        }
     }
 }
