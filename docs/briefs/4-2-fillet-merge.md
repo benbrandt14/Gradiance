@@ -46,6 +46,12 @@ This brief makes it a modelling operation that is:
   that works (`docs/orchestration.md` § Future intent 1: invest in the op
   surface, not the chrome).
 
+- **4-1 landed (#232):** `BooleanIntent { op: CsgOp, targets }` →
+  `MergeCommand::with_op`; `CsgOp` derives `Reflect`. A `SmoothUnion` already
+  flows through it mechanically but is labelled `merge` in undo, and union
+  ops refuse disconnected results. 4-1's Outcome has the operand and joint
+  rules; fillet inherits them.
+
 ## Approach
 
 1. Add the fillet op to 4-1's boolean intent, with radius > 0 validated:
