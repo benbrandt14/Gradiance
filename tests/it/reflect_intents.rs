@@ -92,6 +92,7 @@ fn authored_intents_are_registered() {
         "DeleteJointIntent",
     );
     registered(std::any::TypeId::of::<MergeIntent>(), "MergeIntent");
+    registered(std::any::TypeId::of::<BooleanIntent>(), "BooleanIntent");
     registered(std::any::TypeId::of::<LoadSceneIntent>(), "LoadSceneIntent");
 }
 

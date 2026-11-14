@@ -572,7 +572,11 @@ the two interpolation modes cover the shapes in practice.
 ## M21 — CSG modeling & pieces
 
 - Boolean operations between bodies via context menu (join / subtract /
-  intersect / xor) producing analytic trees (7.3)
+  intersect / xor) producing analytic trees (7.3) — **landed** (brief 4-1):
+  one `BooleanIntent { op, targets }` → `MergeCommand` (merge keeps
+  `MergeIntent`); the first-selected body hosts the tree, the others are
+  consumed; a split result becomes polygon pieces as a cut does; `CsgOp::Xor`
+  is a new variant; verbs `(subtract a b)`, `(intersect a b)`, `(xor a b)`
 - Piece velocity inheritance `v + ω × r` on severing cuts (7.5) — **landed**:
   `CutCommand` reads the severed body's live velocity at apply time and each
   piece inherits `v + ω × r` plus the shared spin (physics continuity, like

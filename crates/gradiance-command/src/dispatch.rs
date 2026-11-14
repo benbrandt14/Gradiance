@@ -11,7 +11,7 @@ use crate::cut_cmd::CutCommand;
 use crate::group_cmd::{GroupCommand, UngroupCommand};
 use crate::intent::name;
 use crate::intent::{
-    ArrayIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
+    ArrayIntent, BooleanIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
     DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent, PropertyEditIntent, RedoIntent,
     ScaleIntent, SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent,
     UngroupIntent,
@@ -95,6 +95,7 @@ command_intents! {
     CutIntent => |i| Box::new(CutCommand::new(i.a, i.b, i.width)),
     DeleteJointIntent => |i| Box::new(DeleteJointCommand::new(i.id)),
     MergeIntent => |i| Box::new(MergeCommand::new(i.targets)),
+    BooleanIntent => |i| Box::new(MergeCommand::with_op(i.op, i.targets)),
     DuplicateIntent => |i| Box::new(DuplicateCommand::new(i.sources, i.offset)),
     DeleteIntent => |i| Box::new(DeleteCommand::new(i.targets)),
 }

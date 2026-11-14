@@ -96,6 +96,8 @@ pub fn eval(shape: &ShapeDef, p: Vec2) -> f32 {
                 CsgOp::Union => a.min(b),
                 CsgOp::Subtract => a.max(-b),
                 CsgOp::Intersect => a.max(b),
+                // Union minus intersection, in one pass over the fields.
+                CsgOp::Xor => a.min(b).max(-a.max(b)),
                 CsgOp::SmoothUnion { radius } => {
                     // Polynomial smooth-min (quadratic), C1 everywhere.
                     let h = (0.5 + 0.5 * (b - a) / radius).clamp(0.0, 1.0);
@@ -132,7 +134,8 @@ fn ring_distance(p: Vec2, ring: &[Vec2]) -> f32 {
 /// region, in shape-local space.
 ///
 /// Boolean bounds compose conservatively (`Subtract` keeps the left
-/// operand's box; `SmoothUnion` inflates by the blend radius). The
+/// operand's box; `Xor` takes the union's; `SmoothUnion` inflates by the
+/// blend radius). The
 /// infinite half-plane reports its rendered slab.
 pub fn aabb(shape: &ShapeDef) -> (Vec2, Vec2) {
     match shape {
@@ -169,7 +172,9 @@ pub fn aabb(shape: &ShapeDef) -> (Vec2, Vec2) {
             let (amin, amax) = aabb(lhs);
             match op {
                 CsgOp::Subtract => (amin, amax),
-                CsgOp::Union => {
+                // Xor's solid lies inside the union, so the union's box
+                // bounds it (conservative where the operands overlap).
+                CsgOp::Union | CsgOp::Xor => {
                     let (bmin, bmax) = aabb(rhs);
                     (amin.min(bmin), amax.max(bmax))
                 }
@@ -338,6 +343,75 @@ mod tests {
             for iy in -50..=50 {
                 let p = Vec2::new(ix as f32, iy as f32);
                 if eval(&shape, p) < 0.0 {
+                    assert!(
+                        p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y,
+                        "{p} escapes aabb {min}..{max}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Two 20×20 boxes overlapping in a 10×20 band: xor is solid in each
+    /// box's private half and empty in the shared band and outside both.
+    fn overlapping_pair(op: CsgOp) -> ShapeDef {
+        ShapeDef::Csg {
+            op,
+            lhs: Box::new(ShapeDef::Box {
+                width: 20.0,
+                height: 20.0,
+            }),
+            rhs: Box::new(ShapeDef::Placed {
+                pos: Vec2::new(10.0, 0.0),
+                rot: 0.0,
+                shape: Box::new(ShapeDef::Box {
+                    width: 20.0,
+                    height: 20.0,
+                }),
+            }),
+        }
+    }
+
+    #[test]
+    fn xor_is_solid_in_exactly_one_operand() {
+        let xor = overlapping_pair(CsgOp::Xor);
+        assert!(eval(&xor, Vec2::new(-7.0, 0.0)) < 0.0, "lhs only");
+        assert!(eval(&xor, Vec2::new(17.0, 0.0)) < 0.0, "rhs only");
+        assert!(eval(&xor, Vec2::new(5.0, 0.0)) > 0.0, "in both: empty");
+        assert!(eval(&xor, Vec2::new(-15.0, 0.0)) > 0.0, "in neither");
+        assert!(eval(&xor, Vec2::new(0.0, 0.0)).abs() < 1e-5, "rhs edge");
+        assert!(eval(&xor, Vec2::new(-10.0, 0.0)).abs() < 1e-5, "lhs edge");
+    }
+
+    #[test]
+    fn xor_matches_union_minus_intersection_everywhere() {
+        let xor = overlapping_pair(CsgOp::Xor);
+        let composed = ShapeDef::Csg {
+            op: CsgOp::Subtract,
+            lhs: Box::new(overlapping_pair(CsgOp::Union)),
+            rhs: Box::new(overlapping_pair(CsgOp::Intersect)),
+        };
+        for ix in -30..=40 {
+            for iy in -15..=15 {
+                let p = Vec2::new(ix as f32 * 0.7, iy as f32 * 0.9);
+                assert!(
+                    (eval(&xor, p) - eval(&composed, p)).abs() < 1e-5,
+                    "xor field differs from its composition at {p}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn xor_bounds_cover_its_solid() {
+        let xor = overlapping_pair(CsgOp::Xor);
+        let (min, max) = aabb(&xor);
+        assert!((min - Vec2::new(-10.0, -10.0)).length() < 1e-5);
+        assert!((max - Vec2::new(20.0, 10.0)).length() < 1e-5);
+        for ix in -40..=40 {
+            for iy in -20..=20 {
+                let p = Vec2::new(ix as f32 * 0.5, iy as f32 * 0.5);
+                if eval(&xor, p) < 0.0 {
                     assert!(
                         p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y,
                         "{p} escapes aabb {min}..{max}"

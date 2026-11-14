@@ -43,8 +43,8 @@ use crate::registry::{OperationCatalog, name};
 use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use gradiance_command::CommandDispatchSet;
 use gradiance_command::intent::{
-    CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent, GroupIntent, MergeIntent,
-    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
+    BooleanIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent, GroupIntent,
+    MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
     TransformChange, UndoIntent, UngroupIntent,
 };
 use gradiance_command::property::{PropertyChange, PropertyValue};
@@ -57,7 +57,7 @@ use gradiance_domain::depth::DepthBand;
 use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::settings::SimSettings;
-use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::shape::{CsgOp, ShapeDef};
 use gradiance_domain::signal::{ComputedSignal, SignalExpr, SignalParam};
 use gradiance_geometry::sdf;
 use gradiance_scene::BodyRecord;
@@ -800,6 +800,9 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<PropertyEditIntent>(name::SET_STATIC),
         EditBinding::new::<ScaleIntent>(name::SCALE),
         EditBinding::new::<MergeIntent>(name::MERGE),
+        EditBinding::new::<BooleanIntent>(name::SUBTRACT),
+        EditBinding::new::<BooleanIntent>(name::INTERSECT),
+        EditBinding::new::<BooleanIntent>(name::XOR),
         EditBinding::new::<DeleteJointIntent>(name::DELETE_JOINT),
         EditBinding::new::<GroupIntent>(name::GROUP),
         EditBinding::new::<UngroupIntent>(name::UNGROUP),
@@ -979,6 +982,7 @@ fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_edit_verbs(engine, &shared.ops);
     register_lifecycle_verbs(engine, &shared.ops, &shared.view);
+    register_boolean_verbs(engine, &shared.ops, &shared.view);
     register_group_verbs(engine, &shared.ops, &shared.view);
     register_joint_verbs(engine, &shared.ops, &shared.view);
     register_property_verbs(engine, &shared.ops, &shared.view);
@@ -1373,6 +1377,44 @@ fn register_panel_verbs(
     });
 }
 
+/// The body booleans, indexed like every lifecycle verb: `(merge a b)`,
+/// `(subtract a b)`, `(intersect a b)`, `(xor a b)`.
+fn register_boolean_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
+    // `(merge a b)` — one CSG union; `a` survives carrying both shapes. This is
+    // what "weld" means in this engine (there is no weld joint).
+    // `(subtract a b)` / `(intersect a b)` / `(xor a b)` — the other body
+    // booleans, the context menu's entries as ops: `a` hosts the result and
+    // `b` is consumed, exactly as the menu does with the first-selected body.
+    for (verb, op) in [
+        (name::MERGE, None),
+        (name::SUBTRACT, Some(CsgOp::Subtract)),
+        (name::INTERSECT, Some(CsgOp::Intersect)),
+        (name::XOR, Some(CsgOp::Xor)),
+    ] {
+        let bool_ops = Arc::clone(ops);
+        let bool_view = Arc::clone(view);
+        engine.register_fn(verb, move |a: SteelVal, b: SteelVal| {
+            if let Some([a, b]) = nums([&a, &b])
+                && a >= 0.0
+                && b >= 0.0
+                && let Ok(view) = bool_view.lock()
+                && let (Some(id_a), Some(id_b)) = (view.id(a as usize), view.id(b as usize))
+                // A boolean of a body with itself would ask the command to
+                // fold one body onto itself — refused, but still noise.
+                && id_a != id_b
+            {
+                let targets = vec![id_a, id_b];
+                // Merge keeps its own intent (the weld tool emits it too).
+                let intent: Box<dyn Reflect> = match op {
+                    None => Box::new(MergeIntent { targets }),
+                    Some(op) => Box::new(BooleanIntent { op, targets }),
+                };
+                emit(&bool_ops, intent);
+            }
+        });
+    }
+}
+
 /// Verbs over **existing** bodies — the history ops and the edits that move or
 /// remove something already authored.
 ///
@@ -1440,29 +1482,6 @@ fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedVie
             }
         },
     );
-
-    // `(merge a b)` — one CSG union; `a` survives carrying both shapes. This is
-    // what "weld" means in this engine (there is no weld joint).
-    let merge_ops = Arc::clone(ops);
-    let merge_view = Arc::clone(view);
-    engine.register_fn(name::MERGE, move |a: SteelVal, b: SteelVal| {
-        if let Some([a, b]) = nums([&a, &b])
-            && a >= 0.0
-            && b >= 0.0
-            && let Ok(view) = merge_view.lock()
-            && let (Some(id_a), Some(id_b)) = (view.id(a as usize), view.id(b as usize))
-            // Merging a body with itself would ask the command to fuse one
-            // body into one body — a no-op that still costs an undo step.
-            && id_a != id_b
-        {
-            emit(
-                &merge_ops,
-                Box::new(MergeIntent {
-                    targets: vec![id_a, id_b],
-                }),
-            );
-        }
-    });
 
     // `(delete-joint i)` — unmake a relationship. Without this a script could
     // create constraints and only undo them wholesale.

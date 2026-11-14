@@ -9,8 +9,8 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_command::intent::{
-    CommitTransformIntent, DeleteIntent, DeleteJointIntent, GroupIntent, MergeIntent,
-    PropertyEditIntent, UngroupIntent,
+    BooleanIntent, CommitTransformIntent, DeleteIntent, DeleteJointIntent, GroupIntent,
+    MergeIntent, PropertyEditIntent, UngroupIntent,
 };
 use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
@@ -20,7 +20,7 @@ use gradiance_domain::appearance::{Appearance, Rgba};
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::joint::JointDef;
 use gradiance_domain::node::{BehaviorNode, NodeKind};
-use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::shape::{CsgOp, ShapeDef};
 use gradiance_interaction::PointerOverUi;
 use gradiance_interaction::align::{AlignItem, AlignOp, align_changes};
 use gradiance_interaction::cursor::CursorWorldPos;
@@ -161,6 +161,8 @@ pub struct GroupWriters<'w> {
     group: MessageWriter<'w, GroupIntent>,
     ungroup: MessageWriter<'w, UngroupIntent>,
     merge: MessageWriter<'w, MergeIntent>,
+    /// Subtract / intersect / xor (the body booleans beside Merge).
+    booleans: MessageWriter<'w, BooleanIntent>,
     orbits: MessageWriter<'w, gradiance_physics::fields::SetOrbitRequest>,
     /// Probe-pin target (the "Pin probe" menu action); bundled here to
     /// keep `context_menu` under Bevy's system-parameter count limit.
@@ -525,6 +527,37 @@ pub fn context_menu(
                         targets: selected_ids.clone(),
                     });
                     close = true;
+                }
+                // The other body booleans: the first-selected body hosts the
+                // result and the rest are consumed (`command::merge_cmd`).
+                for (label, op, hint) in [
+                    (
+                        "Subtract from first selected",
+                        CsgOp::Subtract,
+                        "cut the other bodies' shapes out of the first-selected body",
+                    ),
+                    (
+                        "Intersect",
+                        CsgOp::Intersect,
+                        "keep only where the selected bodies overlap, on the first-selected body",
+                    ),
+                    (
+                        "Xor",
+                        CsgOp::Xor,
+                        "keep what lies in exactly one selected body; the overlap is removed",
+                    ),
+                ] {
+                    if ui
+                        .add_enabled(selected_ids.len() >= 2, egui::Button::new(label))
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        writers.booleans.write(BooleanIntent {
+                            op,
+                            targets: selected_ids.clone(),
+                        });
+                        close = true;
+                    }
                 }
                 ui.separator();
 

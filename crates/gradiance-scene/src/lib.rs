@@ -37,6 +37,10 @@ pub use records::{
 /// pixel world at 100 px/m). Older files are not loaded; a units-only v5→v6
 /// migration (÷100, with `ShapeDef` tree scaling) is a planned follow-up
 /// (`docs/units-decision.md`).
+///
+/// Additive within v6: `CsgOp::Xor` (body booleans, brief 4-1). Every
+/// existing v6 file still loads, so the version is not bumped; a file that
+/// uses xor fails to parse ("unknown variant") in a build that predates it.
 pub const FORMAT_VERSION: u32 = 6;
 
 /// What went wrong while serializing, parsing, or migrating a scene.

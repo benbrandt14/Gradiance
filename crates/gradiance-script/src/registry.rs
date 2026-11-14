@@ -93,6 +93,12 @@ pub mod name {
     pub const SCALE: &str = "scale";
     /// `(merge a b)` — fuse two bodies into one CSG union.
     pub const MERGE: &str = "merge";
+    /// `(subtract a b)` — cut body b's shape out of body a.
+    pub const SUBTRACT: &str = "subtract";
+    /// `(intersect a b)` — keep only the overlap of bodies a and b.
+    pub const INTERSECT: &str = "intersect";
+    /// `(xor a b)` — keep what is in exactly one of bodies a and b.
+    pub const XOR: &str = "xor";
     /// `(delete-joint i)` — remove the i-th joint.
     pub const DELETE_JOINT: &str = "delete-joint";
     /// `(group (list i …))` — wrap the listed bodies in one fresh group.
@@ -200,6 +206,7 @@ impl OperationCatalog {
         let mut ops = Vec::new();
         ops.extend(spawn_specs());
         ops.extend(mutate_specs());
+        ops.extend(boolean_specs());
         ops.extend(property_specs());
         ops.extend(query_specs());
         ops.extend(property_query_specs());
@@ -268,6 +275,41 @@ fn spawn_specs() -> Vec<OpSpec> {
     ]
 }
 
+/// The body booleans: two indexed bodies, the first hosting the result.
+fn boolean_specs() -> Vec<OpSpec> {
+    use OpCategory::Edit;
+    vec![
+        OpSpec {
+            name: name::MERGE,
+            signature: "(merge a b)",
+            doc: "Fuse bodies a and b into one CSG union; a survives.",
+            category: Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::SUBTRACT,
+            signature: "(subtract a b)",
+            doc: "Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces.",
+            category: Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::INTERSECT,
+            signature: "(intersect a b)",
+            doc: "Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed.",
+            category: Edit,
+            args: 2,
+        },
+        OpSpec {
+            name: name::XOR,
+            signature: "(xor a b)",
+            doc: "Keep what lies in exactly one of bodies a and b (CSG xor) on a; b is consumed, a split result becomes pieces.",
+            category: Edit,
+            args: 2,
+        },
+    ]
+}
+
 /// Edits over **existing bodies**: their pose, their properties, their
 /// relationships, and the history ops. Split from [`spawn_specs`] to mirror the
 /// bridge's own split — these all name their target by index.
@@ -280,13 +322,6 @@ fn mutate_specs() -> Vec<OpSpec> {
             doc: "Resize the i-th body by (fx, fy) about its own centre, along its own axes.",
             category: Edit,
             args: 3,
-        },
-        OpSpec {
-            name: name::MERGE,
-            signature: "(merge a b)",
-            doc: "Fuse bodies a and b into one CSG union; a survives.",
-            category: Edit,
-            args: 2,
         },
         OpSpec {
             name: name::DELETE_JOINT,
