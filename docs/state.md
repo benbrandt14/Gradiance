@@ -25,7 +25,13 @@ Last updated: 2026-11-14, Phase 3 (orchestrator; #229 merged; 3-5 in flight).
   built-ins folded; see its Outcome for the per-button classification),
   **3-4** remote control surface (merged #229: `--remote [port]`, 127.0.0.1,
   `gradiance.ops`/`op`/`query`; `world.*` writes removed). Now **3-5** script
-  tools (`docs/briefs/3-5-script-tools.md`; last Phase 3 brief; in flight).
+  tools (`docs/briefs/3-5-script-tools.md`; in flight).
+  Then **3-6** metre examples (polish: console placeholder + docs examples
+  are pixel-era, found by screenshot pass 2 and 3-4).
+- **Phase 4 briefs (written, ready):** **4-1** body booleans (subtract /
+  intersect / xor via Merge's path), **4-2** filleted merge (`SmoothUnion`,
+  after 4-1), **4-3** M19 chrome functional (palette, camera settings,
+  gravity widget; confirms emissive/borders/AO, which already exist).
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
 - **Workers:** hand off through the brief's Outcome and the PR; the
@@ -53,9 +59,6 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
   (Delete joint), node indexing for `delete` / `node-at` (Delete node),
   `set-orbit` (Set in orbit), `set-depth` (Depth front/forward/backward),
   `set-color` (Random colors). Those buttons stay hand-wired until then.
-- **From 3-4:** `docs/scripting.md` examples use pixel-era sizes
-  (`spawn-ground 0 -200 0`, 20-unit boxes) that land off-screen in metres;
-  queued with the console placeholder for the next polish brief.
 - **Polish observations (screenshot pass 2):** the tangent glyph's bar is
   always horizontal, not along the tangent; the alignment guide is very faint
   (α 0.45); the floating Joint window covers the docked Properties tab
