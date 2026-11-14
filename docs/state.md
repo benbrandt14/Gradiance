@@ -23,8 +23,8 @@ Last updated: 2026-11-13, Phase 3 (orchestrator; #228 merged; 3-4 in flight).
   `InterruptHandler`; merged #225). Then **3-2** group/ungroup verbs (merged #227),
   **3-3** action table (merged #228: `(action-x)`/`(action-y)`; gravity
   built-ins folded; see its Outcome for the per-button classification),
-  **3-4** remote control surface (BRP over the op registry; in flight). Still to
-  brief: user tools from `.scm` (after 3-3).
+  **3-4** remote control surface (BRP over the op registry; in flight). Then **3-5** script tools
+  (`docs/briefs/3-5-script-tools.md`; last Phase 3 brief).
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
 - **Workers:** hand off through the brief's Outcome and the PR; the
