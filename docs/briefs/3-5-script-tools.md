@@ -189,6 +189,19 @@ script tool, so the built-in tools' cancel rules are unchanged.
 ui_panels, registry_validation, remote, tools). The workspace test run was
 left to CI (about 12 GB free on the container, under the 20 GB bar).
 
+**Screenshot** (PR #230 comment): the palette shows a "ramp" button
+(sketch icon, caption) after a separator below Tracer. The first click
+snapped to the ground surface and drew a gold point marker and a rubber band,
+with nothing spawned. The second click produced one thin box lying exactly on
+the segment.
+
+**Learned:** in the headless harness, `ButtonInput<KeyCode>::press` loses
+`just_pressed` to the input plugin's per-frame clear before `Update`. So
+`keys.just_pressed(Escape)` never fires that way, which also means no existing
+test exercised the polygon's Escape cancel. Send a `KeyboardInput` message
+instead (`tests/it/script_tools.rs::escape`). Mouse presses work because the
+tools read `PointerButtons`.
+
 **Follow-ups (not done; out of scope):**
 - A run with several edits is several undo steps (one per command), as for
   any script run; "one gesture = one undo batch" holds for single-edit tools
