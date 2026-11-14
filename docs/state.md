@@ -5,10 +5,10 @@ Last updated: 2026-11-14, Phase 4 (orchestrator; Phase 3 complete with #231; 4-1
 
 ## Position
 
-- **Phase:** 2 complete except three undefined items (below) → **Phase 3**
-  (scripting & the op surface) next. Orchestrator rotation skipped again at
+- **Phase:** 3 complete → **Phase 4** (geometry & render). Phase 2 is
+  complete except three undefined items (below). Rotation skipped at
   the owner's instruction ("continue as far as you can").
-- **main:** `afb198f` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools, #231 metre examples).
+- **main:** `d25a42a` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools, #231 metre examples).
   **Phase 3 complete** (gate 2026-11-14; rotation skipped, owner's
   instruction). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
