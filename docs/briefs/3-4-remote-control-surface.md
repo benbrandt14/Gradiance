@@ -107,14 +107,13 @@ crate edge.
   client needs only it); `gradiance.ops` lists the catalog.
 - **A call becomes a run:** the name must be a catalog entry; each JSON arg
   is rendered as a Scheme literal (`null`/objects refused), and the call
-  `(spawn-box 0 300 80 80)` is submitted with `ScriptInputs::submit_with_reply`
+  `(spawn-box 0 1 1.6 1.2)` is submitted with `ScriptInputs::submit_with_reply`
   and run through `run_scripts` — lowering to the script path because verbs
   exist only as steel builtins (a direct Rust path would duplicate their
   coercion and rollback rules). `ScriptRun` gained an optional `reply` slot
-  (`RunOutcome = Result<serde_json::Value, String>`). The handler then calls
-  `command::dispatch::dispatch_intents` so the reply reflects committed state
-  (read-your-writes for the next call). Same budget, all-or-nothing, one
-  undo batch, one console log line.
+  (`RunOutcome = Result<serde_json::Value, String>`). The intents wait for
+  the ordinary dispatcher (next frame's `Update`). Same budget,
+  all-or-nothing, one undo batch, one console log line.
 - **Errors:** `-32602` for unknown op / bad params / an arg with no Scheme
   form / a non-query op on `gradiance.query`; `-32000` for a failed run,
   `message` = the console text verbatim, `data.source` = the run's source.
@@ -140,6 +139,16 @@ crate edge.
 - **`reflect_functions`:** separable and left out; the design did not need it.
 
 Learned: BRP instant handlers are exclusive systems run in `RemoteLast`
-(after `Last`), so a remote call runs outside `Update`; that is why the
-handler dispatches its own intents. Two calls are two snapshots; atomic
-multi-step edits go through a `register-action` helper.
+(after `Last`). A first version also called `dispatch_intents` there, for
+read-your-writes within the same frame; it was dropped so the handler adds
+no second dispatch site and a remote run's commands land exactly when a
+console line's do (next `Update`). The next call, a frame later, still reads
+the write (`a_remote_spawn_simulates_like_a_console_spawn` and the curl
+session both show it). Two calls are two snapshots; atomic multi-step edits
+go through a `register-action` helper.
+
+Manual-check trap: at start-up one script unit is 100 screen px (the view
+spans about 12.8 x 7 units); a first curl with `scripting.md`'s
+pixel-looking sizes (`spawn-box 0 0 160 160`) put the box far off-screen.
+The `scripting.md` examples (`spawn-ground 0 -200 0`, 20-unit boxes) may be
+stale for the same reason; not touched here (out of scope).

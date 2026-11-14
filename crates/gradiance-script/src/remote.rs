@@ -12,8 +12,10 @@
 //!   [`ScriptInputs`] and run through the one doorway, [`run_scripts`] — so
 //!   it inherits everything a console line has: the per-run snapshot, the
 //!   2 s budget, all-or-nothing, one batch of undoable commands, a line in
-//!   the console log. Its intents are then dispatched before the reply is
-//!   sent, so a client reads its own writes on the next call.
+//!   the console log. Its intents go through the ordinary dispatcher in the
+//!   next frame's `Update`, exactly like a console line's: the handler adds
+//!   no second dispatch site. A client's next call, a frame later, reads the
+//!   write.
 //! - [`method::QUERY`] — the same, restricted to `query` ops: a client
 //!   holding only this method cannot change anything.
 //!
@@ -42,7 +44,6 @@ use bevy::remote::builtin_methods::{
 };
 use bevy::remote::http::RemoteHttpPlugin;
 use bevy::remote::{BrpError, BrpResult, RemoteMethods, RemotePlugin, error_codes};
-use gradiance_command::dispatch::dispatch_intents;
 use serde_json::{Value, json};
 use std::fmt::Write as _;
 use std::net::Ipv4Addr;
@@ -175,8 +176,8 @@ fn invoke_query(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     invoke(params, world, Some(OpCategory::Query))
 }
 
-/// Lowers one call to one script run, runs it through the doorway, then
-/// dispatches the intents it emitted so the reply reflects committed state.
+/// Lowers one call to one script run and runs it through the doorway; the
+/// intents it emitted wait for the dispatcher like any other run's.
 fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) -> BrpResult {
     let (name, args) = parse_params(params)?;
     let spec = world
@@ -200,7 +201,6 @@ fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) ->
         .map(|mut inputs| inputs.submit_with_reply(source.clone()))
         .ok_or_else(|| internal("the script plugin is not installed"))?;
     run_scripts(world);
-    dispatch_intents(world);
 
     let outcome = reply
         .lock()

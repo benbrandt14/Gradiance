@@ -432,19 +432,21 @@ authentication: the local machine is the boundary.
 
 ```sh
 curl -s localhost:15702 -d '{"jsonrpc":"2.0","id":1,"method":"gradiance.op",
-  "params":{"name":"spawn-box","args":[0,300,80,80]}}'
+  "params":{"name":"spawn-box","args":[0,1,1.6,1.2]}}'
 # {"jsonrpc":"2.0","id":1,"result":"6f1c…"}   (the new body's handle)
 ```
 
 **A call is one script run.** `gradiance.op` checks the name against the
 catalog, renders each argument as a Scheme literal (numbers, strings,
 booleans; arrays become `(list …)`; `null` and objects are refused), and
-submits `(spawn-box 0 300 80 80)` to `ScriptInputs`, then runs it through
+submits `(spawn-box 0 1 1.6 1.2)` to `ScriptInputs`, then runs it through
 `run_scripts` like a console line: same snapshot rule, same 2 s budget, same
 all-or-nothing, one batch of undoable commands, and a line in the console
-log. Its intents are dispatched before the reply goes out, so the client's
-next call reads its own write. Two calls are two runs (two snapshots); to
-compose edits atomically, `register-action` a helper and call it instead.
+log. The reply comes back at the end of the frame the run happened in (BRP
+handles requests after `Last`); the run's intents become commands in the
+next frame's `Update`, as a console line's do, so a client's next call reads
+the write. Two calls are two runs (two snapshots); to compose edits
+atomically, `register-action` a helper and call it instead.
 
 **Errors** are JSON-RPC errors:
 

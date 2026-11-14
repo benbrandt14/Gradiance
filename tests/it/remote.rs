@@ -2,7 +2,7 @@
 //! methods are called through Bevy's own `RemoteMethods` table — the one the
 //! HTTP transport dispatches into — without opening a socket.
 
-use crate::harness::{body_count, headless_app_with, undo};
+use crate::harness::{body_count, headless_app_with, step, undo};
 use bevy::prelude::*;
 use bevy::remote::{BrpResult, RemoteMethodSystemId, RemoteMethods, error_codes};
 use gradiance::command::HistoryInfo;
@@ -67,9 +67,10 @@ fn an_op_call_is_one_run_one_body_one_undo_step() {
         method::OP,
         json!({"name": "spawn-box", "args": [0, 200, 40, 20.5]}),
     );
-    // The reply is the verb's value (the new body's handle), and the body is
-    // already committed — the call dispatched its intents before replying.
+    // The reply is the verb's value (the new body's handle). The intent is
+    // queued; the next frame's dispatcher commits it, like a console line.
     assert!(handle.as_str().is_some_and(|h| h.len() == 36), "{handle}");
+    app.update();
     assert_eq!(body_count(&mut app), 1);
     assert_eq!(undo_depth(&app), before + 1);
     // A follow-up read sees the write.
@@ -180,4 +181,27 @@ fn raw_world_mutation_is_not_served() {
     let discovered = ok(&mut app, "rpc.discover", Value::Null).to_string();
     assert!(discovered.contains(method::OP));
     assert!(!discovered.contains("world.insert_components"));
+}
+
+#[test]
+fn a_remote_spawn_simulates_like_a_console_spawn() {
+    // While the simulation runs, a remotely spawned body must get its
+    // collider before physics steps it (the run's intents are dispatched in
+    // `Update`, not where BRP handles the request).
+    let mut app = headless_app_with(|app| {
+        app.add_plugins(RemoteControlPlugin { port: None });
+    });
+    ok(
+        &mut app,
+        method::OP,
+        json!({"name": "spawn-box", "args": [0, 0, 40, 40]}),
+    );
+    step(&mut app, 10);
+    let mut bodies = app
+        .world_mut()
+        .query_filtered::<&Transform, With<gradiance::domain::Body>>();
+    let ys: Vec<f32> = bodies.iter(app.world()).map(|t| t.translation.y).collect();
+    assert_eq!(ys.len(), 1);
+    // Finite, and falling under gravity.
+    assert!(ys[0].is_finite() && ys[0] < 0.0, "{ys:?}");
 }
