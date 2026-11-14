@@ -26,6 +26,7 @@ mod persistence;
 mod physics_sync;
 mod reflect_intents;
 mod registry_validation;
+mod remote;
 mod replay;
 mod rod;
 mod scripting;

@@ -14,7 +14,7 @@ read that for the *why*.
 
 ## Running scripts
 
-Three ways in, all funnelling through one queue (`ScriptInputs`) and one
+Four ways in, all funnelling through one queue (`ScriptInputs`) and one
 exclusive doorway (`run_scripts`, which dispatches before the command stack, so
 **one run = one batch of undoable commands**):
 
@@ -29,6 +29,8 @@ exclusive doorway (`run_scripts`, which dispatches before the command stack, so
   runs it on the first frame — the natural place for scene setup, helper
   definitions, or `register-action` calls. Repeat `--script` for several files.
   Missing files warn and are skipped.
+- **A remote client.** `gradiance --remote` serves the op registry over
+  JSON-RPC on localhost; each call is one run (see *Remote control*).
 - **Tests.** Submit source to `ScriptInputs` and step a frame. A scene fixture
   becomes a few lines of lisp asserted against the real authored world (see
   `tests/it/scripting.rs`).
@@ -411,6 +413,56 @@ up.
 `steel` may be declared only by `crates/gradiance-script` and `egui` only by
 `crates/gradiance-ui` — the package graph enforces both, and
 `tests/boundaries.rs` re-checks the manifests and the source text.
+
+## Remote control
+
+A process outside the app can drive Gradiance through **the same operation
+registry** over Bevy's remote protocol (BRP: JSON-RPC 2.0 over HTTP). It is
+the door an external UI or an MCP server binds to.
+
+**Off by default.** Start the app with `gradiance --remote` (port 15702) or
+`gradiance --remote 15800`. The server binds **127.0.0.1 only** and has no
+authentication: the local machine is the boundary.
+
+| Method | Params | Result |
+|---|---|---|
+| `gradiance.ops` | none | every op: `name`, `signature`, `doc`, `category`, `args` |
+| `gradiance.op` | `{"name": "<op>", "args": [...]}` (`args` optional) | the op's value as JSON |
+| `gradiance.query` | same | same, but only `query` ops are accepted |
+
+```sh
+curl -s localhost:15702 -d '{"jsonrpc":"2.0","id":1,"method":"gradiance.op",
+  "params":{"name":"spawn-box","args":[0,300,80,80]}}'
+# {"jsonrpc":"2.0","id":1,"result":"6f1c…"}   (the new body's handle)
+```
+
+**A call is one script run.** `gradiance.op` checks the name against the
+catalog, renders each argument as a Scheme literal (numbers, strings,
+booleans; arrays become `(list …)`; `null` and objects are refused), and
+submits `(spawn-box 0 300 80 80)` to `ScriptInputs`, then runs it through
+`run_scripts` like a console line: same snapshot rule, same 2 s budget, same
+all-or-nothing, one batch of undoable commands, and a line in the console
+log. Its intents are dispatched before the reply goes out, so the client's
+next call reads its own write. Two calls are two runs (two snapshots); to
+compose edits atomically, `register-action` a helper and call it instead.
+
+**Errors** are JSON-RPC errors:
+
+| Code | When | `message` |
+|---|---|---|
+| `-32602` (invalid params) | unknown op, bad params shape, an argument with no Scheme form, a non-query op sent to `gradiance.query` | what was wrong |
+| `-32000` (script error) | the run failed (evaluation error, panic, budget) | the console's text, verbatim; `data.source` is the run's source |
+
+**Writes stay seam-mediated.** Bevy's built-in world-mutation methods
+(`world.spawn_entity`, `world.insert_components`, `world.mutate_components`,
+`world.remove_components`, `world.despawn_entity`, `world.reparent_entities`,
+`world.insert_resources`, `world.mutate_resources`, `world.remove_resources`,
+`world.trigger_event`, `world.write_message`) are removed, as are the `+watch`
+streams and `schedule.*`. The reflection **reads** stay: `rpc.discover`,
+`world.query`, `world.get_components`, `world.list_components`,
+`world.get_resources`, `world.list_resources`, `registry.schema` (reads are
+total). With a renderer, Bevy also opens a render-world port (15703); its
+method table is emptied, so it answers nothing.
 
 ## What's next (see the roadmap)
 
