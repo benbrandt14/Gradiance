@@ -5,6 +5,7 @@ use crate::fonts::glyph;
 use crate::icons::{self, Icon};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use gradiance_core::script_tools::{ScriptToolSpec, ScriptTools};
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
 
@@ -50,12 +51,19 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
     ),
 ];
 
+/// The icon every script-registered tool shows (an existing one: custom
+/// icons for script tools are out of scope). Its name is the hover text and
+/// the caption under the icon.
+const SCRIPT_TOOL_ICON: &str = "sketch";
+
 /// egui texture ids for each tool's icon, registered at startup from
 /// `assets/icons/tool_*.png`. Empty until [`load_tool_icons`] runs (and headless,
 /// where there's no render); the palette falls back to text labels then.
 #[derive(Resource, Default)]
 pub struct ToolIcons {
     map: std::collections::HashMap<ToolState, egui::TextureId>,
+    /// The shared icon of every script tool.
+    script: Option<egui::TextureId>,
 }
 
 /// Loads each tool's PNG and registers it with egui, filling [`ToolIcons`]. The
@@ -72,6 +80,8 @@ pub fn load_tool_icons(
             icons.map.insert(*state, id);
         }
     }
+    let handle: Handle<Image> = asset_server.load(format!("icons/{SCRIPT_TOOL_ICON}.png"));
+    icons.script = Some(user_textures.add_image(bevy_egui::EguiTextureHandle::Strong(handle)));
 }
 
 /// Left tool palette and top transport strip.
@@ -86,6 +96,7 @@ pub fn toolbar(
     panel_rects: Res<crate::PanelRects>,
     tool_icons: Res<ToolIcons>,
     icons: Res<crate::icons::Icons>,
+    script_tools: Res<ScriptTools>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -169,7 +180,9 @@ pub fn toolbar(
             // A single column about twice the icon width (icons ~26px), so each
             // sits in a roomy cell — a compact Blender-style T-panel strip.
             ui.set_max_width(52.0);
-            if let Some(state) = tools_palette_ui(ui, *tool.get(), Some(&tool_icons)) {
+            if let Some(state) =
+                tools_palette_ui(ui, *tool.get(), Some(&tool_icons), &script_tools.0)
+            {
                 next_tool.set(state);
             }
         });
@@ -181,10 +194,15 @@ pub fn toolbar(
 /// image button (from [`ToolIcons`]) with its name+key on hover; when no icons
 /// are registered (headless test) it falls back to a text label. Host-agnostic
 /// (pure `Ui` in, choice out) so `tests/it/ui_panels.rs` can exercise it.
+///
+/// Tools a script registered (`register-tool`) follow the built-ins in a
+/// "Scripts" section: one shared icon each, captioned with the tool's name,
+/// selecting `ToolState::Script(i)`.
 pub fn tools_palette_ui(
     ui: &mut egui::Ui,
     current: ToolState,
     icons: Option<&ToolIcons>,
+    script_tools: &[ScriptToolSpec],
 ) -> Option<ToolState> {
     let mut clicked = None;
     for (i, (_group, tools)) in TOOL_GROUPS.iter().enumerate() {
@@ -207,6 +225,47 @@ pub fn tools_palette_ui(
                 if resp.on_hover_text(format!("{name} ({key})")).clicked() {
                     clicked = Some(*state);
                 }
+            }
+        });
+    }
+    if let Some(state) = script_tools_ui(ui, current, icons.and_then(|ic| ic.script), script_tools)
+    {
+        clicked = Some(state);
+    }
+    clicked
+}
+
+/// The palette's "Scripts" section (nothing when no tool is registered).
+fn script_tools_ui(
+    ui: &mut egui::Ui,
+    current: ToolState,
+    icon: Option<egui::TextureId>,
+    script_tools: &[ScriptToolSpec],
+) -> Option<ToolState> {
+    let mut clicked = None;
+    for (i, tool) in script_tools.iter().enumerate() {
+        // The state carries a u16 index; the script layer never registers
+        // past it, but a palette must not wrap around to another tool.
+        let Ok(index) = u16::try_from(i) else { break };
+        if i == 0 {
+            ui.separator();
+        }
+        let state = ToolState::Script(index);
+        let selected = current == state;
+        let hover = format!("{} (script tool, {} clicks)", tool.name, tool.points);
+        ui.vertical_centered(|ui| {
+            let resp = match icon {
+                Some(id) => {
+                    let img =
+                        egui::Image::new(egui::load::SizedTexture::new(id, egui::vec2(26.0, 26.0)));
+                    let resp = ui.add(egui::Button::image(img).selected(selected));
+                    ui.small(&tool.name);
+                    resp
+                }
+                None => ui.selectable_label(selected, &tool.name),
+            };
+            if resp.on_hover_text(hover).clicked() {
+                clicked = Some(state);
             }
         });
     }

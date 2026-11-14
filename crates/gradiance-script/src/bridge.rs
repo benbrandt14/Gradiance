@@ -49,6 +49,7 @@ use gradiance_command::intent::{
 };
 use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::StableId;
+use gradiance_core::script_tools::{ScriptToolFired, ScriptToolSpec, ScriptTools};
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
@@ -137,7 +138,16 @@ struct Shared {
     /// The world-space point the current run's action was invoked at →
     /// `action-x`/`action-y`. Set by [`run_scripts`] around one run only.
     action_point: Arc<Mutex<Option<Vec2>>>,
+    /// Tools emitted by `register-tool` → the [`ScriptTools`] table.
+    tools: Arc<Mutex<Vec<ScriptToolSpec>>>,
+    /// The points the current run's script tool collected →
+    /// `tool-count`/`tool-x`/`tool-y`. Set by [`run_scripts`] around one run
+    /// only.
+    tool_points: ToolPoints,
 }
+
+/// The current run's script-tool points (`None` outside a tool run).
+type ToolPoints = Arc<Mutex<Option<Vec<Vec2>>>>;
 
 impl Shared {
     fn new() -> Self {
@@ -155,6 +165,8 @@ impl Shared {
             panel_states: Arc::new(Mutex::new(HashMap::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
             action_point: Arc::new(Mutex::new(None)),
+            tools: Arc::new(Mutex::new(Vec::new())),
+            tool_points: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -170,15 +182,16 @@ impl Shared {
             queue_len(&self.signal_defs),
             queue_len(&self.labels),
             queue_len(&self.panel_requests),
+            queue_len(&self.tools),
         ])
     }
 
     /// Discards everything queued since `mark`: a run is all or nothing, like
     /// its one undo batch, so a script that fails (eval error, panic, budget)
     /// half-way commits none of its edits, config writes, labels, actions,
-    /// panel requests or signal publishes.
+    /// tools, panel requests or signal publishes.
     fn rollback(&self, mark: &QueueMark) {
-        let [ops, config, actions, writes, defs, labels, panels] = mark.0;
+        let [ops, config, actions, writes, defs, labels, panels, tools] = mark.0;
         queue_truncate(&self.ops, ops);
         queue_truncate(&self.config, config);
         queue_truncate(&self.actions, actions);
@@ -186,12 +199,13 @@ impl Shared {
         queue_truncate(&self.signal_defs, defs);
         queue_truncate(&self.labels, labels);
         queue_truncate(&self.panel_requests, panels);
+        queue_truncate(&self.tools, tools);
     }
 }
 
 /// The fill level of every [`Shared`] write queue at one instant (see
 /// [`Shared::mark`]).
-struct QueueMark([usize; 7]);
+struct QueueMark([usize; 8]);
 
 fn queue_len<T>(queue: &Mutex<Vec<T>>) -> usize {
     queue.lock().map_or(0, |q| q.len())
@@ -231,6 +245,10 @@ pub struct ScriptRun {
     /// click point); `None` for a REPL line, a file, or a test submission.
     /// Readable during this run only, via `(action-x)` / `(action-y)`.
     pub at: Option<Vec2>,
+    /// The points a script tool collected (world space, click order), for a
+    /// tool's run; `None` for every other run. Readable during this run only,
+    /// via `(tool-count)` / `(tool-x i)` / `(tool-y i)`.
+    pub points: Option<Vec<Vec2>>,
     /// Where to leave this run's outcome for a caller that waits on it (the
     /// remote control surface); `None` for every other submission, whose
     /// outcome reaches the user through the [`ScriptLog`] only.
@@ -257,6 +275,7 @@ impl ScriptInputs {
         self.0.push(ScriptRun {
             source: source.into(),
             at: None,
+            points: None,
             reply: None,
         });
     }
@@ -268,6 +287,7 @@ impl ScriptInputs {
         self.0.push(ScriptRun {
             source: source.into(),
             at: None,
+            points: None,
             reply: Some(Arc::clone(&reply)),
         });
         reply
@@ -280,6 +300,19 @@ impl ScriptInputs {
         self.0.push(ScriptRun {
             source: action.source.clone(),
             at: Some(at),
+            points: None,
+            reply: None,
+        });
+    }
+
+    /// Queues a script tool's body to run next frame, with the points its
+    /// gesture collected. This is the tool's **one** VM entry per gesture:
+    /// the per-frame work (collecting, snapping, previewing) is Rust's.
+    pub fn invoke_tool(&mut self, tool: &ScriptToolSpec, points: Vec<Vec2>) {
+        self.0.push(ScriptRun {
+            source: tool.source.clone(),
+            at: None,
+            points: Some(points),
             reply: None,
         });
     }
@@ -753,6 +786,7 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_CIRCLE),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_GROUND),
+        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX_ROT),
         EditBinding::new::<DeleteIntent>(name::DELETE),
         EditBinding::new::<UndoIntent>(name::UNDO),
         EditBinding::new::<RedoIntent>(name::REDO),
@@ -798,6 +832,13 @@ impl ScriptEngine {
     fn set_action_point(&self, at: Option<Vec2>) {
         if let Ok(mut point) = self.shared.action_point.lock() {
             *point = at;
+        }
+    }
+
+    /// Sets (or clears) the script-tool points the next run reads.
+    fn set_tool_points(&self, points: Option<Vec<Vec2>>) {
+        if let Ok(mut slot) = self.shared.tool_points.lock() {
+            *slot = points;
         }
     }
 
@@ -945,6 +986,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
     register_action_reads(engine, &shared.action_point);
+    register_tool_verbs(engine, &shared.tools, &shared.tool_points);
     register_panel_verbs(engine, &shared.panel_requests, &shared.panel_states);
     register_signal_verbs(
         engine,
@@ -1025,6 +1067,29 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
                 let record = ground_record(x, y, angle);
                 let handle = record.id.0.to_string();
                 emit(&ground_ops, Box::new(SpawnBodyIntent { record }));
+                handle
+            } else {
+                String::new()
+            }
+        },
+    );
+
+    // `(spawn-box-rot x y w h angle)` — `spawn-box`, rotated by `angle`
+    // radians. A separate verb because `place` indexes the pre-run snapshot,
+    // so a run cannot rotate a box it has just spawned (one snapshot per run).
+    let rot_ops = Arc::clone(ops);
+    engine.register_fn(
+        name::SPAWN_BOX_ROT,
+        move |x: SteelVal, y: SteelVal, w: SteelVal, h: SteelVal, angle: SteelVal| -> String {
+            if let Some([x, y, w, h, angle]) = nums([&x, &y, &w, &h, &angle]) {
+                let shape = ShapeDef::Box {
+                    width: w as f32,
+                    height: h as f32,
+                };
+                let mut record = body_record(shape, x, y);
+                record.pose.rot = angle as f32;
+                let handle = record.id.0.to_string();
+                emit(&rot_ops, Box::new(SpawnBodyIntent { record }));
                 handle
             } else {
                 String::new()
@@ -1205,6 +1270,74 @@ fn register_action_reads(engine: &mut Engine, point: &Arc<Mutex<Option<Vec2>>>) 
             Err(_) => f64::NAN,
         }
     });
+}
+
+/// Most points one script tool may collect: a tool that asks for more is a
+/// typo, not a gesture anyone will finish.
+const MAX_TOOL_POINTS: usize = 64;
+
+/// Script-tool verbs: `register-tool` (editor state — queues a palette entry
+/// the exclusive system moves into [`ScriptTools`]) and the per-run reads of
+/// the points a tool's gesture collected. The reads are NaN outside a tool
+/// run, like `(action-x)`; inside one, an index past the last point is an
+/// error, because it can only be a bug in the tool's body.
+fn register_tool_verbs(
+    engine: &mut Engine,
+    tools: &Arc<Mutex<Vec<ScriptToolSpec>>>,
+    points: &ToolPoints,
+) {
+    let t = Arc::clone(tools);
+    engine.register_fn(
+        name::REGISTER_TOOL,
+        move |tool_name: String, count: SteelVal, source: String| -> Result<(), String> {
+            let tool_name = tool_name.trim().to_string();
+            if tool_name.is_empty() {
+                return Err(format!("{}: the name is empty", name::REGISTER_TOOL));
+            }
+            let needed = steel_to_f64(&count)
+                .filter(|n| n.fract() == 0.0 && *n >= 1.0 && *n <= MAX_TOOL_POINTS as f64)
+                .ok_or_else(|| {
+                    format!(
+                        "{}: points must be a whole number from 1 to {MAX_TOOL_POINTS}, got {count}",
+                        name::REGISTER_TOOL
+                    )
+                })?;
+            if let Ok(mut queue) = t.lock() {
+                queue.push(ScriptToolSpec {
+                    name: tool_name,
+                    points: needed as usize,
+                    source,
+                });
+            }
+            Ok(())
+        },
+    );
+
+    let p = Arc::clone(points);
+    engine.register_fn(name::TOOL_COUNT, move || -> f64 {
+        p.lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|pts| pts.len() as f64))
+            .unwrap_or(f64::NAN)
+    });
+    for (verb, axis) in [(name::TOOL_X, 0_usize), (name::TOOL_Y, 1)] {
+        let p = Arc::clone(points);
+        engine.register_fn(verb, move |i: SteelVal| -> Result<f64, String> {
+            let Ok(guard) = p.lock() else {
+                return Ok(f64::NAN);
+            };
+            let Some(pts) = guard.as_ref() else {
+                return Ok(f64::NAN);
+            };
+            let point = steel_to_f64(&i)
+                .filter(|n| n.fract() == 0.0 && *n >= 0.0)
+                .and_then(|n| pts.get(n as usize))
+                .ok_or_else(|| {
+                    format!("{verb}: no point {i} (the tool collected {})", pts.len())
+                })?;
+            Ok(f64::from(point[axis]))
+        });
+    }
 }
 
 /// Panel verbs — the script side of the View menu.
@@ -1805,6 +1938,7 @@ fn fill_reply(reply: &RunReply, result: &Result<Option<SteelVal>, ScriptError>, 
 /// before [`CommandDispatchSet`] so a script's edits become commands in the same
 /// frame — one script run therefore collapses to one batch of undoable edits.
 pub fn run_scripts(world: &mut World) {
+    queue_tool_runs(world);
     let sources: Vec<ScriptRun> = world
         .get_resource_mut::<ScriptInputs>()
         .map(|mut inputs| std::mem::take(&mut inputs.0))
@@ -1836,38 +1970,8 @@ pub fn run_scripts(world: &mut World) {
     refresh_signal_mirror(world);
     refresh_panel_mirror(world);
 
-    for ScriptRun { source, at, reply } in sources {
-        // NonSend: the VM lives on the main thread (this exclusive system is
-        // already there). Errors are surfaced (log + console), never fatal.
-        // The invocation point is visible to this run only.
-        let result = match world.get_non_send_mut::<ScriptEngine>() {
-            Some(mut engine) => {
-                engine.set_action_point(at);
-                let result = engine.run(&source);
-                engine.set_action_point(None);
-                result
-            }
-            None => continue,
-        };
-        let output = match &result {
-            // MATLAB-style echo: the run's last value (bound to `ans`).
-            Ok(Some(value)) if !matches!(value, SteelVal::Void) => value.to_string(),
-            Ok(_) => "ok".to_string(),
-            Err(err) => {
-                warn!("{err}");
-                err.to_string()
-            }
-        };
-        if let Some(reply) = reply {
-            fill_reply(&reply, &result, &output);
-        }
-        if let Some(mut log) = world.get_resource_mut::<ScriptLog>() {
-            log.record(ScriptEntry {
-                input: source,
-                output,
-                ok: result.is_ok(),
-            });
-        }
+    for run in sources {
+        run_one(world, run);
     }
 
     // Drain the op queue (releasing the engine borrow first), then dispatch
@@ -1919,6 +2023,7 @@ pub fn run_scripts(world: &mut World) {
 
     drain_labels(world);
     drain_actions(world);
+    drain_tools(world);
     drain_panel_requests(world);
     drain_signal_publishes(world);
     drain_signal_defs(world);
@@ -2014,6 +2119,108 @@ fn drain_actions(world: &mut World) {
     {
         for action in actions {
             table.upsert(action);
+        }
+    }
+}
+
+/// Runs one queued source with its invocation context (click point, tool
+/// points) visible to it alone, then records the outcome (console log, and
+/// the caller's reply slot if it waits on one).
+fn run_one(world: &mut World, run: ScriptRun) {
+    let ScriptRun {
+        source,
+        at,
+        points,
+        reply,
+    } = run;
+    // NonSend: the VM lives on the main thread (this exclusive system is
+    // already there). Errors are surfaced (log + console), never fatal.
+    // The invocation point is visible to this run only.
+    let result = match world.get_non_send_mut::<ScriptEngine>() {
+        Some(mut engine) => {
+            engine.set_action_point(at);
+            engine.set_tool_points(points);
+            let result = engine.run(&source);
+            engine.set_action_point(None);
+            engine.set_tool_points(None);
+            result
+        }
+        None => return,
+    };
+    let output = match &result {
+        // MATLAB-style echo: the run's last value (bound to `ans`).
+        Ok(Some(value)) if !matches!(value, SteelVal::Void) => value.to_string(),
+        Ok(_) => "ok".to_string(),
+        Err(err) => {
+            warn!("{err}");
+            err.to_string()
+        }
+    };
+    if let Some(reply) = reply {
+        fill_reply(&reply, &result, &output);
+    }
+    if let Some(mut log) = world.get_resource_mut::<ScriptLog>() {
+        log.record(ScriptEntry {
+            input: source,
+            output,
+            ok: result.is_ok(),
+        });
+    }
+}
+
+/// Turns each completed script-tool gesture ([`ScriptToolFired`], sent by the
+/// interaction layer's tool driver) into one queued run of that tool's body,
+/// with the gesture's points as the run's context. A gesture for an index the
+/// table does not hold is dropped with a warning.
+fn queue_tool_runs(world: &mut World) {
+    let fired = gradiance_core::messages::drain::<ScriptToolFired>(world);
+    if fired.is_empty() {
+        return;
+    }
+    let runs: Vec<(ScriptToolSpec, Vec<Vec2>)> = {
+        let Some(table) = world.get_resource::<ScriptTools>() else {
+            return;
+        };
+        fired
+            .into_iter()
+            .filter_map(|f| {
+                let spec = table.get(f.tool);
+                if spec.is_none() {
+                    warn!("script tool {} is not registered", f.tool);
+                }
+                spec.map(|spec| (spec.clone(), f.points))
+            })
+            .collect()
+    };
+    if let Some(mut inputs) = world.get_resource_mut::<ScriptInputs>() {
+        for (spec, points) in runs {
+            inputs.invoke_tool(&spec, points);
+        }
+    }
+}
+
+/// Drains the `register-tool` queue into the [`ScriptTools`] table (upsert
+/// by name, so a hot reload re-registers in place and indices stay valid).
+fn drain_tools(world: &mut World) {
+    let tools: Vec<ScriptToolSpec> = world
+        .get_non_send::<ScriptEngine>()
+        .and_then(|engine| {
+            engine
+                .shared
+                .tools
+                .lock()
+                .ok()
+                .map(|mut q| std::mem::take(&mut *q))
+        })
+        .unwrap_or_default();
+    if !tools.is_empty()
+        && let Some(mut table) = world.get_resource_mut::<ScriptTools>()
+    {
+        for tool in tools {
+            let index = table.upsert(tool);
+            if u16::try_from(index).is_err() {
+                warn!("script tool {index} is past the palette's index range");
+            }
         }
     }
 }
@@ -2123,6 +2330,8 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptLog>();
         app.init_resource::<OperationRegistry>();
         app.init_resource::<ScriptActions>();
+        app.init_resource::<ScriptTools>();
+        app.add_message::<ScriptToolFired>();
         app.init_resource::<PanelRequests>();
         app.init_resource::<PanelStates>();
         app.init_resource::<WorkspaceLabels>();
@@ -2382,6 +2591,68 @@ mod tests {
         assert_eq!(table.len(), 1);
         assert_eq!(table[0].label, "Fill");
         assert_eq!(table[0].source, "(spawn-box 0 0 10 10)");
+    }
+
+    #[test]
+    fn register_tool_publishes_the_tool_table_and_upserts_by_name() {
+        let mut app = bus_app();
+        run(
+            &mut app,
+            "(register-tool \"ramp\" 2 \"(spawn-box 0 0 1 1)\")",
+        );
+        run(
+            &mut app,
+            "(register-tool \"peg\" 1 \"(spawn-circle 0 0 1)\")",
+        );
+        run(&mut app, "(register-tool \"ramp\" 3 \"(undo)\")");
+        let table = &app.world().resource::<ScriptTools>().0;
+        assert_eq!(table.len(), 2);
+        assert_eq!((table[0].name.as_str(), table[0].points), ("ramp", 3));
+        assert_eq!(table[0].source, "(undo)");
+    }
+
+    #[test]
+    fn a_fired_tool_runs_its_body_once_with_its_points() {
+        let mut app = bus_app();
+        run(
+            &mut app,
+            "(register-tool \"dot\" 2 \"(spawn-box-rot (tool-x 1) (tool-y 1) (tool-count) 1 0.5)\")",
+        );
+        app.world_mut().write_message(ScriptToolFired {
+            tool: 0,
+            points: vec![Vec2::new(1.0, 2.0), Vec2::new(3.0, 4.0)],
+        });
+        app.update();
+        let spawns = &app.world().resource::<Spawns>().0;
+        assert_eq!(spawns.len(), 1);
+        let record = &spawns[0].record;
+        assert_eq!(record.pose.pos, Vec2::new(3.0, 4.0));
+        assert_eq!(record.pose.rot, 0.5);
+        assert_eq!(
+            record.shape,
+            ShapeDef::Box {
+                width: 2.0,
+                height: 1.0
+            }
+        );
+    }
+
+    #[test]
+    fn a_tool_point_past_the_last_is_an_error() {
+        let mut app = bus_app();
+        run(&mut app, "(register-tool \"t\" 1 \"(tool-x 1)\")");
+        app.world_mut().write_message(ScriptToolFired {
+            tool: 0,
+            points: vec![Vec2::ZERO],
+        });
+        app.update();
+        let last = app.world().resource::<ScriptLog>().0.last().cloned();
+        let last = last.expect("the tool ran");
+        assert!(
+            !last.ok && last.output.contains("no point 1"),
+            "{}",
+            last.output
+        );
     }
 
     #[test]

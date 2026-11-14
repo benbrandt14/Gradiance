@@ -221,6 +221,7 @@ mod tests {
             over_ui: false,
             confirm: false,
             cancel: false,
+            secondary: GesturePhase::Idle,
             constraints,
             snap,
             defaults,
