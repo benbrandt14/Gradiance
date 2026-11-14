@@ -74,10 +74,18 @@ fn an_op_call_is_one_run_one_body_one_undo_step() {
     assert_eq!(body_count(&mut app), 1);
     assert_eq!(undo_depth(&app), before + 1);
     // A follow-up read sees the write.
-    assert_eq!(ok(&mut app, method::QUERY, json!({"name": "body-count"})), 1);
+    // (Query verbs answer in floats, as in the console.)
+    let count = ok(&mut app, method::QUERY, json!({"name": "body-count"}));
+    assert!(
+        count.as_f64().is_some_and(|n| (n - 1.0).abs() < 1e-9),
+        "{count}"
+    );
     // It shows in the console like any other run.
     let log = &app.world().resource::<ScriptLog>().0;
-    assert!(log.iter().any(|e| e.ok && e.input == "(spawn-box 0 200 40 20.5)"));
+    assert!(
+        log.iter()
+            .any(|e| e.ok && e.input == "(spawn-box 0 200 40 20.5)")
+    );
 
     app.update();
     undo(&mut app);
@@ -98,9 +106,13 @@ fn an_unknown_op_is_an_invalid_params_error() {
 fn a_failing_run_returns_the_consoles_message() {
     let mut app = remote_app();
     // Wrong arity: steel refuses the call; nothing is spawned.
-    let err = call(&mut app, method::OP, json!({"name": "spawn-box", "args": [1]}))
-        .and_then(Result::err)
-        .unwrap_or_else(|| panic!("expected an error"));
+    let err = call(
+        &mut app,
+        method::OP,
+        json!({"name": "spawn-box", "args": [1]}),
+    )
+    .and_then(Result::err)
+    .unwrap_or_else(|| panic!("expected an error"));
     assert_eq!(err.code, SCRIPT_ERROR);
     let log = &app.world().resource::<ScriptLog>().0;
     let entry = log.last().unwrap_or_else(|| panic!("no log entry"));

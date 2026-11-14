@@ -219,7 +219,11 @@ fn parse_params(params: Option<Value>) -> Result<(String, Vec<Value>), BrpError>
     };
     let name = match fields.remove("name") {
         Some(Value::String(name)) => name,
-        _ => return Err(invalid_params("`name` must be the operation's name, a string")),
+        _ => {
+            return Err(invalid_params(
+                "`name` must be the operation's name, a string",
+            ));
+        }
     };
     let args = match fields.remove("args") {
         None | Some(Value::Null) => Vec::new(),
@@ -306,7 +310,13 @@ mod tests {
 
     #[test]
     fn args_render_as_scheme_literals() {
-        let args = [json!(0), json!(-2.5), json!(true), json!("a \"b\"\n"), json!([1, "x"])];
+        let args = [
+            json!(0),
+            json!(-2.5),
+            json!(true),
+            json!("a \"b\"\n"),
+            json!([1, "x"]),
+        ];
         assert_eq!(
             call_source("f", &args).ok().as_deref(),
             Some(r#"(f 0 -2.5 #t "a \"b\"\n" (list 1 "x"))"#)
@@ -316,7 +326,10 @@ mod tests {
 
     #[test]
     fn whole_floats_stay_floats() {
-        assert_eq!(call_source("f", &[json!(1.0)]).ok().as_deref(), Some("(f 1.0)"));
+        assert_eq!(
+            call_source("f", &[json!(1.0)]).ok().as_deref(),
+            Some("(f 1.0)")
+        );
     }
 
     #[test]
@@ -333,8 +346,8 @@ mod tests {
         assert!(parse_params(Some(json!([1, 2]))).is_err());
         assert!(parse_params(Some(json!({"args": []}))).is_err());
         assert!(parse_params(Some(json!({"name": "f", "args": 3}))).is_err());
-        let (name, args) = parse_params(Some(json!({"name": "body-count"})))
-            .unwrap_or_else(|e| panic!("{e:?}"));
+        let (name, args) =
+            parse_params(Some(json!({"name": "body-count"}))).unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!((name.as_str(), args.len()), ("body-count", 0));
     }
 }

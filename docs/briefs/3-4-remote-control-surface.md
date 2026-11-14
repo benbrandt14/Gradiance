@@ -2,7 +2,7 @@
 Phase 3 · adoption audit rows 7/17 · "`reflect_functions` + an app-level
 `bevy_remote` (BRP) seam exposing reads and `gradiance.op.*`. This is the
 MCP door — design it as the *external* control surface, not a debug toy."
-· status: ready
+· status: done
 
 ## Goal
 
@@ -93,4 +93,53 @@ subscriptions, new verbs, UI, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+**Landed (PR #229).** `crates/gradiance-script/src/remote.rs`:
+`RemoteControlPlugin` adds Bevy's `RemotePlugin` (+ `RemoteHttpPlugin` on
+`127.0.0.1`) with three methods over the op registry. Placed in
+`gradiance-script` because it owns the registry and the doorway; no new
+crate edge.
+
+- **Method shape:** one `gradiance.op` with `{"name", "args"}` rather than
+  `gradiance.op.<name>`: BRP's method table is fixed at plugin build, while
+  the catalog is data that will grow (user tools from `.scm`); one method
+  keeps `rpc.discover` small and the op names in one place.
+  `gradiance.query` is the same call restricted to `query` ops (a read-only
+  client needs only it); `gradiance.ops` lists the catalog.
+- **A call becomes a run:** the name must be a catalog entry; each JSON arg
+  is rendered as a Scheme literal (`null`/objects refused), and the call
+  `(spawn-box 0 300 80 80)` is submitted with `ScriptInputs::submit_with_reply`
+  and run through `run_scripts` — lowering to the script path because verbs
+  exist only as steel builtins (a direct Rust path would duplicate their
+  coercion and rollback rules). `ScriptRun` gained an optional `reply` slot
+  (`RunOutcome = Result<serde_json::Value, String>`). The handler then calls
+  `command::dispatch::dispatch_intents` so the reply reflects committed state
+  (read-your-writes for the next call). Same budget, all-or-nothing, one
+  undo batch, one console log line.
+- **Errors:** `-32602` for unknown op / bad params / an arg with no Scheme
+  form / a non-query op on `gradiance.query`; `-32000` for a failed run,
+  `message` = the console text verbatim, `data.source` = the run's source.
+- **Built-ins:** `RemotePlugin` has no empty constructor, so `finish()`
+  rebuilds `RemoteMethods` keeping only ours plus the reflection reads
+  `rpc.discover`, `world.query`, `world.get_components`,
+  `world.list_components`, `world.get_resources`, `world.list_resources`,
+  `registry.schema` (reads are total). Every `world.*` write is removed,
+  **including `world.trigger_event` and `world.write_message`** (the roadmap
+  row had kept `trigger_event`; both are mutation paths around the registry —
+  `write_message` could even emit raw intents unchecked). `+watch` streams
+  (out of scope) and `schedule.*` also go. With a renderer Bevy serves the
+  render world on 15703; that table is emptied.
+- **On:** `gradiance --remote [port]` (default 15702). Compiled always
+  (bevy's `bevy_remote` feature, enabled in `gradiance-script`'s manifest):
+  a cargo feature would leave the code uncompiled in CI.
+- **Lockfile:** deliberate, additive: `bevy_remote` + `hyper`, `http`,
+  `http-body(-util)`, `httpdate`, `smol-hyper`, a featureless `tokio`
+  (hyper's trait dep), and a direct `serde_json` dep (already locked). No
+  existing version changed. Enabling the feature also turns on
+  `bevy_dev_tools`/`serialize` paths in bevy, so the first build after this
+  recompiles much of bevy.
+- **`reflect_functions`:** separable and left out; the design did not need it.
+
+Learned: BRP instant handlers are exclusive systems run in `RemoteLast`
+(after `Last`), so a remote call runs outside `Update`; that is why the
+handler dispatches its own intents. Two calls are two snapshots; atomic
+multi-step edits go through a `register-action` helper.
