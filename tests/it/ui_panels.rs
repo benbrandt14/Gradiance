@@ -26,7 +26,7 @@ use std::collections::VecDeque;
 fn toolbar_palette_lists_all_tools_and_reports_clicks() {
     let clicked: Cell<Option<ToolState>> = Cell::new(None);
     let mut harness = Harness::new_ui(|ui| {
-        if let Some(tool) = tools_palette_ui(ui, ToolState::Select, None) {
+        if let Some(tool) = tools_palette_ui(ui, ToolState::Select, None, &[]) {
             clicked.set(Some(tool));
         }
     });
@@ -54,6 +54,26 @@ fn toolbar_palette_lists_all_tools_and_reports_clicks() {
     harness.get_by_label("Box (B)").click();
     harness.run();
     assert_eq!(clicked.get(), Some(ToolState::Box));
+}
+
+/// A script-registered tool appears after the built-ins and selects its state.
+#[test]
+fn toolbar_palette_lists_script_tools_after_the_builtins() {
+    let tools = [gradiance::core::script_tools::ScriptToolSpec {
+        name: "ramp".into(),
+        points: 2,
+        source: String::new(),
+    }];
+    let clicked: Cell<Option<ToolState>> = Cell::new(None);
+    let mut harness = Harness::new_ui(|ui| {
+        if let Some(tool) = tools_palette_ui(ui, ToolState::Select, None, &tools) {
+            clicked.set(Some(tool));
+        }
+    });
+    harness.run();
+    harness.get_by_label("ramp").click();
+    harness.run();
+    assert_eq!(clicked.get(), Some(ToolState::Script(0)));
 }
 
 /// The inspector's committing drag widget renders and commits an edit once.

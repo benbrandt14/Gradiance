@@ -706,10 +706,15 @@ a normal dependency, not a cargo feature — see the decision doc's
     script layer, `panel-open?` reads a mirror the UI publishes rather than a
     dependency edge upward. The menu's *intent*-emitting items (undo, delete,
     group) are still hand-wired — that is the rest of the action layer.
-  - **User tools from `.scm`:** a tool is a `ToolContext → (preview,
-    commit-intent)` (M17's `DraftTool`) / `ManipTool` closure; the registry
-    lets one be authored in lisp and registered by name, reusing the exact
-    press/drag/release driver the built-in tools use.
+  - **User tools from `.scm` (landed, brief 3-5).** `(register-tool name
+    points src)` adds a palette tool. Not a per-frame lisp closure (the VM
+    never runs per frame): one Rust `ScriptTool` `DraftTool` collects the
+    clicks through the built-in driver (snapping, tangent reference,
+    preview), and the body runs once on the last point, reading
+    `(tool-x i)`/`(tool-y i)`. Selected by `ToolState::Script(i)`; the
+    script and tool layers meet in `core::script_tools`. Drag-based and
+    `ManipTool` script tools are not built (`docs/scripting.md` § Script
+    tools).
   - **Targeted symbolic ops** (`grad`/`solve`, symbolic **field forces** over
     the SDF substrate — the flagship demo). Optional parametric `.scm` scene
     export (RON stays canonical regardless).

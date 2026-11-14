@@ -28,6 +28,8 @@ pub mod name {
     pub const SPAWN_CIRCLE: &str = "spawn-circle";
     /// `(spawn-ground x y angle)` — author a fixed ground half-plane.
     pub const SPAWN_GROUND: &str = "spawn-ground";
+    /// `(spawn-box-rot x y w h angle)` — author a box rotated by `angle`.
+    pub const SPAWN_BOX_ROT: &str = "spawn-box-rot";
     /// `(body-count)` — how many bodies exist.
     pub const BODY_COUNT: &str = "body-count";
     /// `(body-x i)` — x of the i-th body (id order).
@@ -54,6 +56,15 @@ pub mod name {
     pub const ACTION_X: &str = "action-x";
     /// `(action-y)` — y of the point the running action was invoked at.
     pub const ACTION_Y: &str = "action-y";
+    /// `(register-tool name points src)` — add a click-collecting tool to the
+    /// palette.
+    pub const REGISTER_TOOL: &str = "register-tool";
+    /// `(tool-count)` — points the running tool collected.
+    pub const TOOL_COUNT: &str = "tool-count";
+    /// `(tool-x i)` — world x of the running tool's i-th point.
+    pub const TOOL_X: &str = "tool-x";
+    /// `(tool-y i)` — world y of the running tool's i-th point.
+    pub const TOOL_Y: &str = "tool-y";
     /// `(touch-count i)` — how many bodies the i-th body is touching.
     pub const TOUCH_COUNT: &str = "touch-count";
     /// `(signal-set name value)` — publish a named value on the signal bus.
@@ -247,6 +258,13 @@ fn spawn_specs() -> Vec<OpSpec> {
             category: Edit,
             args: 3,
         },
+        OpSpec {
+            name: name::SPAWN_BOX_ROT,
+            signature: "(spawn-box-rot x y w h angle)",
+            doc: "Author a w×h box centred at (x, y), rotated by angle radians; returns its handle.",
+            category: Edit,
+            args: 5,
+        },
     ]
 }
 
@@ -438,6 +456,27 @@ fn action_specs() -> Vec<OpSpec> {
             category: Query,
             args: 0,
         },
+        OpSpec {
+            name: name::TOOL_COUNT,
+            signature: "(tool-count)",
+            doc: "How many points the running script tool collected; NaN outside a tool run.",
+            category: Query,
+            args: 0,
+        },
+        OpSpec {
+            name: name::TOOL_X,
+            signature: "(tool-x i)",
+            doc: "World x of the running tool's i-th point (click order); NaN outside a tool run.",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::TOOL_Y,
+            signature: "(tool-y i)",
+            doc: "World y of the running tool's i-th point (click order); NaN outside a tool run.",
+            category: Query,
+            args: 1,
+        },
     ]
 }
 
@@ -562,6 +601,13 @@ fn editor_specs() -> Vec<OpSpec> {
             doc: "Surface a named action (label + lisp source) in the editor's menus.",
             category: OpCategory::EditorState,
             args: 2,
+        },
+        OpSpec {
+            name: name::REGISTER_TOOL,
+            signature: "(register-tool name points src)",
+            doc: "Add a palette tool that collects `points` clicks, then runs src once (read them with tool-x/tool-y).",
+            category: OpCategory::EditorState,
+            args: 3,
         },
         OpSpec {
             name: name::SIGNAL_SET,

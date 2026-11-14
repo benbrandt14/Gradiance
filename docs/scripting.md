@@ -101,6 +101,7 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (spawn-box x y w h)          ; a box centred at (x, y) → its handle
 (spawn-circle x y r)         ; a circle centred at (x, y) → its handle
 (spawn-ground x y angle)     ; a fixed ground half-plane → its handle
+(spawn-box-rot x y w h angle) ; spawn-box, rotated by angle radians
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
 (delete i)                   ; delete the i-th body (id order, as body-x)
 (undo) (redo)                ; walk the command stack — Edit ▸ Undo/Redo as ops
@@ -153,9 +154,12 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (touch-count i)              ; how many bodies the i-th body is touching
 (signal-get name)            ; current value of a named bus signal (NaN if unset)
 (action-x) (action-y)        ; where the running action was invoked (NaN otherwise)
+(tool-count)                 ; points the running script tool collected (NaN otherwise)
+(tool-x i) (tool-y i)        ; its i-th point, click order (NaN outside a tool run)
 
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
+(register-tool name n src)   ; add a palette tool: n clicks, then src runs once
 (signal-set name value)      ; publish a named value on the signal bus
                              ; (drives color/plot bindings — docs/signal-dataflow.md)
 (defparam name value min max); a tunable slider knob, published on the bus
@@ -202,6 +206,53 @@ places every seeded entry and no other. `register-action` adds user entries
 (shown under "Scripts") and never replaces a built-in. Menu commands that need
 the selection or a verb that does not exist yet stay hand-wired; the list and
 the reasons are in `docs/briefs/3-3-action-table.md`.
+
+### Script tools
+
+`(register-tool name points src)` adds a tool to the palette. It appears
+after the built-ins, under a separator, with a shared icon and its name as
+caption and hover text. Select it, and it collects `points` clicks (1 to 64)
+the way the polygon tool does: the same snapping, the tangent snap from the
+last point, a preview of the points and the polyline through them. Escape or
+a right-click cancels. The last click runs `src` **once**; the run reads the
+points with `(tool-count)`, `(tool-x i)` and `(tool-y i)`, in the units the
+`spawn-*` verbs take. A two-click ramp:
+
+```scheme
+(register-tool "ramp" 2
+  "(let* ((ax (tool-x 0)) (ay (tool-y 0))
+          (bx (tool-x 1)) (by (tool-y 1))
+          (dx (- bx ax)) (dy (- by ay)))
+     (spawn-box-rot (/ (+ ax bx) 2) (/ (+ ay by) 2)
+                    (sqrt (+ (* dx dx) (* dy dy))) 0.1
+                    (angle (make-rectangular dx dy))))")
+```
+
+`spawn-box-rot` exists for this: `place` indexes the pre-run snapshot, so a
+run cannot rotate a box it has just spawned (one snapshot per run). steel
+has no two-argument `atan`; `(angle (make-rectangular dx dy))` is atan2.
+
+Why it is shaped this way:
+
+- **The VM runs once per gesture, never per frame.** A tool's `update` and
+  `preview` run every frame, so they are Rust: one generic `ScriptTool`
+  draft (`interaction::tools::script_tool`) behind every registered tool,
+  driven by the same `run_draft_tool` as box, circle and polygon. Only the
+  completed gesture enters the VM. One gesture is one run, so it is
+  all-or-nothing and, for a single edit, one undo step.
+- **No upward edge.** `gradiance-interaction` and `gradiance-script` may not
+  depend on each other. They meet in `gradiance-core::script_tools`: the
+  script layer publishes the `ScriptTools` table, the tool reads it (how many
+  points) and sends `ScriptToolFired { tool, points }` on the last click, and
+  `run_scripts` turns that message into the run (`ScriptInputs::invoke_tool`).
+- **Selection is `ToolState::Script(i)`**, `i` an index into `ScriptTools`.
+  Re-registering a name (a hot reload) updates the entry in place, and
+  entries are never removed, so an index stays valid for the session.
+
+Tools are not saved with the scene (like actions and labels): they live
+while their script is loaded. In a run that is not a tool's, `(tool-count)`,
+`(tool-x i)` and `(tool-y i)` read NaN; inside one, an index past the last
+point is an error.
 
 ### The workspace
 
@@ -468,8 +519,9 @@ method table is emptied, so it answers nothing.
 
 ## What's next (see the roadmap)
 
-- **User tools from `.scm`** — a scripted tool as a `ToolContext → (preview,
-  commit-intent)` closure, reusing the same driver the built-in tools use.
+- **User tools from `.scm`** — **landed** (brief 3-5) as `register-tool`: a
+  Rust-side draft collects the points with the built-in tools' driver and the
+  script body runs once per gesture. See *Script tools* above.
 - **Driver dataflow (sensors / modulators / actuators)** — named-signal bindings
   lowered to the allocation-free Tier-B kernel (`gradiance-kernel`); a
   sensor is a query, a modulator is a kernel, an actuator is a config/edit op.
