@@ -29,6 +29,7 @@ mod registry_validation;
 mod remote;
 mod replay;
 mod rod;
+mod script_examples;
 mod script_tools;
 mod scripting;
 mod signals;

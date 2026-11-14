@@ -96,6 +96,10 @@ component directly — the same guarantee the tools and UI live under.
 The authoritative list is the console's **Reference** panel (and `(ops)` /
 `(describe "name")` from inside a script). At time of writing:
 
+Lengths and positions are in **metres** (1 m = 100 px at start-up zoom,
+world (0, 0) at the view centre, so the start-up view spans about ±6 m
+across and ±3.5 m up and down); angles are radians.
+
 ```scheme
 ;; edit — author the scene (undoable)
 (spawn-box x y w h)          ; a box centred at (x, y) → its handle
@@ -182,14 +186,14 @@ the future driver dataflow uses.
 
 The context menu invokes an action **at the right-click point**: the UI passes
 the world-space point in with the invocation (`ScriptInputs::invoke`), and the
-run reads it with `(action-x)` / `(action-y)`, in the same world units the
+run reads it with `(action-x)` / `(action-y)`, in metres, the units the
 `spawn-*` verbs take. The point is visible to that run only. Anything that is
 not an invoked action (a REPL line, a `--script` file, a hot reload) reads
 **NaN**, so a dual-use script tests it with `nan?`:
 
 ```scheme
 (register-action "Drop a ball here"
-  "(spawn-circle (action-x) (action-y) 12)")
+  "(spawn-circle (action-x) (action-y) 0.12)")
 (if (nan? (action-x)) "not invoked from the menu" (action-x))
 ```
 
@@ -260,7 +264,7 @@ Spawn verbs return an opaque **handle** (the body's stable id), so a scene
 built from the REPL stays addressable, MATLAB-workspace style:
 
 ```scheme
-(define ball (spawn-circle 0 200 12))
+(define ball (spawn-circle 0 2 0.12))
 (label ball "ball")          ; the body now wears a "ball" tag in the viewport
 (label ans "latest")         ; ans = the last run's value, handles included
 ```
@@ -274,20 +278,20 @@ durable identity.
 A floor with a stack of boxes:
 
 ```scheme
-(spawn-ground 0 -200 0)
+(spawn-ground 0 -2.5 0)
 (let loop ((i 0))
   (when (< i 5)
-    (spawn-box 0 (* i 30) 20 20)
+    (spawn-box 0 (- (* i 0.3) 2.3) 0.25 0.25)
     (loop (+ i 1))))
 ```
 
 Extend the right-click menu from an init script (`--script init.scm`):
 
 ```scheme
-(register-action "Drop a ball"      "(spawn-circle (action-x) (action-y) 12)")
+(register-action "Drop a ball"      "(spawn-circle (action-x) (action-y) 0.12)")
 (register-action "Heavy gravity"    "(sim-set \"gravity.y\" -25)")
 (register-action "Fill a shelf"
-  "(let loop ((i 0)) (when (< i 8) (spawn-box (* i 30) 0 24 24) (loop (+ i 1))))")
+  "(let loop ((i 0)) (when (< i 8) (spawn-box (* i 0.3) 0 0.24 0.24) (loop (+ i 1))))")
 ```
 
 A script-computed value driving a body's color (bind *named* `touches` to the
@@ -303,7 +307,7 @@ Reads driving edits (a marker under every existing body):
 ```scheme
 (let loop ((i 0))
   (when (< i (body-count))
-    (spawn-circle (body-x i) (- (body-y i) 40) 4)
+    (spawn-circle (body-x i) (- (body-y i) 0.4) 0.05)
     (loop (+ i 1))))
 ```
 
@@ -339,8 +343,8 @@ engine's joint kinds are reachable:
 
 ```scheme
 ;; a three-link chain, hinged at the shared edges
-(begin (spawn-box 0 0 20 6) (spawn-box 30 0 20 6) (spawn-box 60 0 20 6))
-(begin (hinge 0 1 15 0) (hinge 1 2 45 0))
+(begin (spawn-box 0 0 0.3 0.08) (spawn-box 0.3 0 0.3 0.08) (spawn-box 0.6 0 0.3 0.08))
+(begin (hinge 0 1 0.15 0) (hinge 1 2 0.45 0))
 ```
 
 Two things the verbs handle for you, because getting them wrong is subtle:
