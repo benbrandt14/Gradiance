@@ -50,6 +50,10 @@ pub mod name {
     pub const SIM_SET: &str = "sim-set";
     /// `(register-action label source)` — surface a named action in the editor.
     pub const REGISTER_ACTION: &str = "register-action";
+    /// `(action-x)` — x of the point the running action was invoked at.
+    pub const ACTION_X: &str = "action-x";
+    /// `(action-y)` — y of the point the running action was invoked at.
+    pub const ACTION_Y: &str = "action-y";
     /// `(touch-count i)` — how many bodies the i-th body is touching.
     pub const TOUCH_COUNT: &str = "touch-count";
     /// `(signal-set name value)` — publish a named value on the signal bus.
@@ -188,6 +192,7 @@ impl OperationCatalog {
         ops.extend(property_specs());
         ops.extend(query_specs());
         ops.extend(property_query_specs());
+        ops.extend(action_specs());
         ops.extend(config_specs());
         ops.extend(editor_specs());
         ops.extend(meta_specs());
@@ -411,6 +416,27 @@ fn property_query_specs() -> Vec<OpSpec> {
             doc: "Whether the i-th body is static (1) or not (0).",
             category: Query,
             args: 1,
+        },
+    ]
+}
+
+/// Invocation-context reads: where the running action was invoked.
+fn action_specs() -> Vec<OpSpec> {
+    use OpCategory::Query;
+    vec![
+        OpSpec {
+            name: name::ACTION_X,
+            signature: "(action-x)",
+            doc: "World x of the point the running action was invoked at (the click); NaN outside an action.",
+            category: Query,
+            args: 0,
+        },
+        OpSpec {
+            name: name::ACTION_Y,
+            signature: "(action-y)",
+            doc: "World y of the point the running action was invoked at (the click); NaN outside an action.",
+            category: Query,
+            args: 0,
         },
     ]
 }

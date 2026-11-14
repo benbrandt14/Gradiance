@@ -37,6 +37,7 @@
 //! component + named-signal dataflow seam over the kernel, and menus / tools
 //! authored as `.scm` over the same registry.
 
+pub mod actions;
 pub mod bridge;
 pub mod budget;
 pub mod reflect_bridge;

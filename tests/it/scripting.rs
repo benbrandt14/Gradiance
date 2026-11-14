@@ -261,7 +261,14 @@ fn a_registered_action_runs_when_invoked() {
     );
     // Registering an action does not run it.
     assert_eq!(body_count(&mut app), 0);
-    let source = app.world().resource::<ScriptActions>().0[0].source.clone();
+    let source = app
+        .world()
+        .resource::<ScriptActions>()
+        .user()
+        .next()
+        .expect("registered")
+        .source
+        .clone();
     run(&mut app, &source);
     assert_eq!(body_count(&mut app), 3);
 }
@@ -1175,7 +1182,7 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
     assert!((world.resource::<SimSettings>().gravity.y - gravity).abs() < 1e-6);
     assert_eq!(world.resource::<SignalBus>().get("half-run"), None);
     assert!(world.resource::<SignalParams>().0.is_empty());
-    assert!(world.resource::<ScriptActions>().0.is_empty());
+    assert_eq!(world.resource::<ScriptActions>().user().count(), 0);
     assert!(world.resource::<PanelRequests>().0.is_empty());
 }
 
@@ -1302,4 +1309,106 @@ fn a_bad_group_argument_is_a_script_error_and_changes_nothing() {
         assert_eq!(body_count(&mut app), 2, "{bad} committed nothing");
         assert!(group_stacks(&mut app).iter().all(Vec::is_empty));
     }
+}
+
+// --- The action table: click point + built-in seed (brief 3-3) ---
+
+/// The world position of every body.
+fn body_positions(app: &mut App) -> Vec<Vec2> {
+    let world = app.world_mut();
+    world
+        .query_filtered::<&Transform, With<gradiance::domain::Body>>()
+        .iter(world)
+        .map(|t| t.translation.truncate())
+        .collect()
+}
+
+/// Invokes the user action labelled `label` at `at`, exactly as the context
+/// menu does, and advances one frame. An unknown label invokes nothing.
+fn invoke(app: &mut App, label: &str, at: Vec2) {
+    let action = app
+        .world()
+        .resource::<ScriptActions>()
+        .user()
+        .find(|a| a.label == label)
+        .cloned();
+    if let Some(action) = action {
+        app.world_mut()
+            .resource_mut::<ScriptInputs>()
+            .invoke(&action, at);
+    }
+    app.update();
+}
+
+/// "Drop a ball here": an action reads the click point it was invoked at,
+/// spawns there, and the spawn is one undo step.
+#[test]
+fn an_action_spawns_at_its_click_point() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(register-action \"Ball here\" \"(spawn-circle (action-x) (action-y) 10)\")",
+    );
+    invoke(&mut app, "Ball here", Vec2::new(120.0, -45.0));
+    let positions = body_positions(&mut app);
+    assert_eq!(positions.len(), 1);
+    assert!(
+        positions[0].distance(Vec2::new(120.0, -45.0)) < 1e-3,
+        "spawned at the click, got {:?}",
+        positions[0]
+    );
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 0, "one undo reverts the action");
+}
+
+/// The click point belongs to the invoked run only: a REPL line (no
+/// invocation) reads NaN, including one submitted right after an action.
+#[test]
+fn a_repl_read_of_the_click_point_is_nan() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(register-action \"Mark\" \"(if (= (action-x) 7) (if (= (action-y) 8) 1 0) 0)\")",
+    );
+    invoke(&mut app, "Mark", Vec2::new(7.0, 8.0));
+    assert_eq!(last_entry(&app), Some((true, "1".to_string())));
+    run(&mut app, "(if (nan? (action-x)) 1 0)");
+    assert_eq!(last_entry(&app), Some((true, "1".to_string())));
+    run(&mut app, "(if (nan? (action-y)) 1 0)");
+    assert_eq!(last_entry(&app), Some((true, "1".to_string())));
+}
+
+/// The context menu's folded gravity commands are table entries: invoking
+/// one does what the hand-wired button did, as one undo step.
+#[test]
+fn the_builtin_gravity_actions_round_trip() {
+    use gradiance::script::actions::builtin;
+    let mut app = paused_app();
+    let invoke_builtin = |app: &mut App, name: &str| {
+        let action = app
+            .world()
+            .resource::<ScriptActions>()
+            .builtin(name)
+            .cloned()
+            .expect("seeded");
+        app.world_mut()
+            .resource_mut::<ScriptInputs>()
+            .invoke(&action, Vec2::ZERO);
+        app.update();
+        app.update(); // let the settings edit settle into one undo step
+    };
+    let side = app.world().resource::<SimSettings>().gravity;
+    invoke_builtin(&mut app, builtin::TOP_DOWN);
+    let settings = app.world().resource::<SimSettings>().clone();
+    assert_eq!(settings.gravity, Vec2::ZERO);
+    assert!((settings.plane_friction - 0.3).abs() < 1e-6);
+    invoke_builtin(&mut app, builtin::RESTORE_GRAVITY);
+    assert_eq!(app.world().resource::<SimSettings>().gravity, side);
+    undo(&mut app);
+    app.update();
+    assert_eq!(
+        app.world().resource::<SimSettings>().gravity,
+        Vec2::ZERO,
+        "restoring gravity was one undo step"
+    );
 }

@@ -150,6 +150,7 @@ The authoritative list is the console's **Reference** panel (and `(ops)` /
 (body-index-at x y)          ; index of a body containing the point (-1 if none)
 (touch-count i)              ; how many bodies the i-th body is touching
 (signal-get name)            ; current value of a named bus signal (NaN if unset)
+(action-x) (action-y)        ; where the running action was invoked (NaN otherwise)
 
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
@@ -170,6 +171,35 @@ Reads observe **last-committed** state: a script's own `spawn-*` calls are
 pending intents that land *after* the run, so `(body-count)` within the same run
 does not yet see them. This is deliberate — it is the last-frame-read discipline
 the future driver dataflow uses.
+
+### Actions: the click point and the built-in table
+
+The context menu invokes an action **at the right-click point**: the UI passes
+the world-space point in with the invocation (`ScriptInputs::invoke`), and the
+run reads it with `(action-x)` / `(action-y)`, in the same world units the
+`spawn-*` verbs take. The point is visible to that run only. Anything that is
+not an invoked action (a REPL line, a `--script` file, a hot reload) reads
+**NaN**, so a dual-use script tests it with `nan?`:
+
+```scheme
+(register-action "Drop a ball here"
+  "(spawn-circle (action-x) (action-y) 12)")
+(if (nan? (action-x)) "not invoked from the menu" (action-x))
+```
+
+The script does not reach up for the point (scripting rule 2): the UI owns the
+click and hands it down. The selection is deliberately *not* passed; resolve
+a target from the point instead, e.g. `(body-index-at (action-x) (action-y))`.
+
+The same table (`gradiance_script::actions::ScriptActions`) also holds the
+context menu's **built-in** entries, seeded by `actions::builtin_seed()` and
+named by `actions::builtin` (`restore-gravity`, `top-down`). Their bodies are
+ordinary verb calls, so a script does the same thing by evaluating the same
+text; the menu renders them from the table, and a test pins that the menu
+places every seeded entry and no other. `register-action` adds user entries
+(shown under "Scripts") and never replaces a built-in. Menu commands that need
+the selection or a verb that does not exist yet stay hand-wired; the list and
+the reasons are in `docs/briefs/3-3-action-table.md`.
 
 ### The workspace
 
@@ -201,7 +231,7 @@ A floor with a stack of boxes:
 Extend the right-click menu from an init script (`--script init.scm`):
 
 ```scheme
-(register-action "Drop a ball"      "(spawn-circle 0 200 12)")
+(register-action "Drop a ball"      "(spawn-circle (action-x) (action-y) 12)")
 (register-action "Heavy gravity"    "(sim-set \"gravity.y\" -25)")
 (register-action "Fill a shelf"
   "(let loop ((i 0)) (when (< i 8) (spawn-box (* i 30) 0 24 24) (loop (+ i 1))))")

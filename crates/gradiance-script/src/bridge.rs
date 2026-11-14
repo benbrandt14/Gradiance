@@ -36,6 +36,7 @@
 //! engine itself is the cold-path VM and lives as a `NonSend` resource on the
 //! main thread, so it never needs to be `Send`.
 
+pub use crate::actions::{ScriptAction, ScriptActions};
 use crate::budget::{SCRIPT_BUDGET, run_with_budget};
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
@@ -133,6 +134,9 @@ struct Shared {
     panel_states: Arc<Mutex<HashMap<String, bool>>>,
     /// The operation catalog → the `ops`/`describe` meta verbs.
     catalog: Arc<OperationCatalog>,
+    /// The world-space point the current run's action was invoked at →
+    /// `action-x`/`action-y`. Set by [`run_scripts`] around one run only.
+    action_point: Arc<Mutex<Option<Vec2>>>,
 }
 
 impl Shared {
@@ -150,6 +154,7 @@ impl Shared {
             panel_requests: Arc::new(Mutex::new(Vec::new())),
             panel_states: Arc::new(Mutex::new(HashMap::new())),
             catalog: Arc::new(OperationCatalog::builtin()),
+            action_point: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -216,15 +221,41 @@ pub enum ScriptError {
     },
 }
 
-/// Pending script source to run on the next [`run_scripts`] pass (REPL input,
-/// a `--script` file, or a test). Drained each frame.
+/// One queued run: the source, plus the invocation context it was submitted
+/// with.
+#[derive(Debug, Clone)]
+pub struct ScriptRun {
+    /// The lisp source.
+    pub source: String,
+    /// The world-space point an action was invoked at (the context menu's
+    /// click point); `None` for a REPL line, a file, or a test submission.
+    /// Readable during this run only, via `(action-x)` / `(action-y)`.
+    pub at: Option<Vec2>,
+}
+
+/// Pending script runs for the next [`run_scripts`] pass (REPL input, a
+/// `--script` file, an invoked action, or a test). Drained each frame.
 #[derive(Resource, Default)]
-pub struct ScriptInputs(pub Vec<String>);
+pub struct ScriptInputs(Vec<ScriptRun>);
 
 impl ScriptInputs {
-    /// Queues one script source to run next frame.
+    /// Queues one script source to run next frame, with no invocation
+    /// context (`(action-x)` reads NaN).
     pub fn submit(&mut self, source: impl Into<String>) {
-        self.0.push(source.into());
+        self.0.push(ScriptRun {
+            source: source.into(),
+            at: None,
+        });
+    }
+
+    /// Queues an action's source to run next frame, invoked at the
+    /// world-space point `at`. The point is passed *in* by the caller (the
+    /// UI owns the click), never read up the layer graph by the script.
+    pub fn invoke(&mut self, action: &ScriptAction, at: Vec2) {
+        self.0.push(ScriptRun {
+            source: action.source.clone(),
+            at: Some(at),
+        });
     }
 }
 
@@ -356,19 +387,6 @@ impl ScriptLog {
     }
 }
 
-/// A user-registered named action: a label plus the lisp source it runs.
-/// Invoking one submits its source through the same [`ScriptInputs`] seam a
-/// REPL line uses, so a script-authored action is governed exactly like any
-/// other script — no new mutation path. This is the seam that lets a user add
-/// menu entries from a `.scm` file.
-#[derive(Debug, Clone)]
-pub struct ScriptAction {
-    /// The label the editor shows.
-    pub label: String,
-    /// The lisp source the action runs when invoked.
-    pub source: String,
-}
-
 /// Script-given names on scene bodies — the **workspace** (MATLAB cue):
 /// `(define b (spawn-box …))` + `(label b "crate")` makes the body wear a
 /// name tag in the viewport and in pick lists. `EditorState`: never
@@ -394,23 +412,6 @@ impl WorkspaceLabels {
             .iter()
             .find(|(_, i)| *i == id)
             .map(|(n, _)| n.as_str())
-    }
-}
-
-/// The table of user-registered actions, surfaced by the UI (e.g. the context
-/// menu). Populated by the `register-action` builtin; re-registering a label
-/// replaces its source, so re-running a registration script is idempotent.
-#[derive(Resource, Default)]
-pub struct ScriptActions(pub Vec<ScriptAction>);
-
-impl ScriptActions {
-    /// Inserts or updates an action by label.
-    fn upsert(&mut self, action: ScriptAction) {
-        if let Some(existing) = self.0.iter_mut().find(|a| a.label == action.label) {
-            existing.source = action.source;
-        } else {
-            self.0.push(action);
-        }
     }
 }
 
@@ -767,6 +768,13 @@ impl ScriptEngine {
     /// in `catch_unwind` so a panicking script never takes down the app.
     /// Returns the run's last value, which is also bound to the global `ans`
     /// (MATLAB-style) so the next REPL line can reuse it.
+    /// Sets (or clears) the invocation point the next run reads.
+    fn set_action_point(&self, at: Option<Vec2>) {
+        if let Ok(mut point) = self.shared.action_point.lock() {
+            *point = at;
+        }
+    }
+
     fn run(&mut self, source: &str) -> Result<Option<SteelVal>, ScriptError> {
         let mark = self.shared.mark();
         let result = self.run_guarded(source);
@@ -910,6 +918,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
+    register_action_reads(engine, &shared.action_point);
     register_panel_verbs(engine, &shared.panel_requests, &shared.panel_states);
     register_signal_verbs(
         engine,
@@ -1137,7 +1146,7 @@ fn register_editor_verbs(
         name::REGISTER_ACTION,
         move |label: String, source: String| {
             if let Ok(mut queue) = a.lock() {
-                queue.push(ScriptAction { label, source });
+                queue.push(ScriptAction::user(label, source));
             }
         },
     );
@@ -1148,6 +1157,26 @@ fn register_editor_verbs(
     engine.register_fn(name::LABEL, move |body: String, label_name: String| {
         if let Ok(mut queue) = l.lock() {
             queue.push((body, label_name));
+        }
+    });
+}
+
+/// Invocation-context reads: where the running action was invoked. The UI
+/// passes the click point in with the invocation ([`ScriptInputs::invoke`]);
+/// a run with no invocation (a REPL line, a file) reads NaN.
+fn register_action_reads(engine: &mut Engine, point: &Arc<Mutex<Option<Vec2>>>) {
+    let p = Arc::clone(point);
+    engine.register_fn(name::ACTION_X, move || -> f64 {
+        match p.lock() {
+            Ok(guard) => guard.map_or(f64::NAN, |v| f64::from(v.x)),
+            Err(_) => f64::NAN,
+        }
+    });
+    let p = Arc::clone(point);
+    engine.register_fn(name::ACTION_Y, move || -> f64 {
+        match p.lock() {
+            Ok(guard) => guard.map_or(f64::NAN, |v| f64::from(v.y)),
+            Err(_) => f64::NAN,
         }
     });
 }
@@ -1720,7 +1749,7 @@ fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<OperationCatalog>) {
 /// before [`CommandDispatchSet`] so a script's edits become commands in the same
 /// frame — one script run therefore collapses to one batch of undoable edits.
 pub fn run_scripts(world: &mut World) {
-    let sources: Vec<String> = world
+    let sources: Vec<ScriptRun> = world
         .get_resource_mut::<ScriptInputs>()
         .map(|mut inputs| std::mem::take(&mut inputs.0))
         .unwrap_or_default();
@@ -1751,11 +1780,17 @@ pub fn run_scripts(world: &mut World) {
     refresh_signal_mirror(world);
     refresh_panel_mirror(world);
 
-    for source in sources {
+    for ScriptRun { source, at } in sources {
         // NonSend: the VM lives on the main thread (this exclusive system is
         // already there). Errors are surfaced (log + console), never fatal.
+        // The invocation point is visible to this run only.
         let result = match world.get_non_send_mut::<ScriptEngine>() {
-            Some(mut engine) => engine.run(&source),
+            Some(mut engine) => {
+                engine.set_action_point(at);
+                let result = engine.run(&source);
+                engine.set_action_point(None);
+                result
+            }
             None => continue,
         };
         let output = match &result {
@@ -2284,7 +2319,7 @@ mod tests {
             &mut app,
             "(register-action \"Fill\" \"(spawn-box 0 0 10 10)\")",
         );
-        let table = &app.world().resource::<ScriptActions>().0;
+        let table: Vec<_> = app.world().resource::<ScriptActions>().user().collect();
         assert_eq!(table.len(), 1);
         assert_eq!(table[0].label, "Fill");
         assert_eq!(table[0].source, "(spawn-box 0 0 10 10)");
@@ -2295,7 +2330,7 @@ mod tests {
         let mut app = bus_app();
         run(&mut app, "(register-action \"A\" \"(spawn-box 0 0 1 1)\")");
         run(&mut app, "(register-action \"A\" \"(spawn-circle 0 0 1)\")");
-        let table = &app.world().resource::<ScriptActions>().0;
+        let table: Vec<_> = app.world().resource::<ScriptActions>().user().collect();
         assert_eq!(table.len(), 1);
         assert_eq!(table[0].source, "(spawn-circle 0 0 1)");
     }
@@ -2354,7 +2389,7 @@ mod tests {
             .expect("bump mtime");
         app.update(); // watch re-submits; run_scripts applies the same frame
 
-        let table = &app.world().resource::<ScriptActions>().0;
+        let table: Vec<_> = app.world().resource::<ScriptActions>().user().collect();
         let _ = std::fs::remove_file(&path);
         assert_eq!(table.len(), 1, "reload must upsert, not duplicate");
         assert_eq!(table[0].source, "(spawn-circle 0 0 2)");
