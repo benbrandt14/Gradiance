@@ -29,6 +29,11 @@
 //!   (the World-integration constraint — scripts emit intent *data*, never
 //!   `&mut World`; reads come from a per-run [`bridge::SceneView`] snapshot).
 //!
+//! - [`remote`] — the **external control surface**: Bevy's remote protocol
+//!   (JSON-RPC over HTTP, localhost, off unless `--remote`) bound to the
+//!   operation registry. A remote call is one script run through the same
+//!   doorway; Bevy's built-in world-mutation methods are removed.
+//!
 //! - [`budget`] — the wall-clock budget one script run gets before it is
 //!   stopped (a guard against runaway scripts, not a scheduler).
 //!
@@ -42,5 +47,6 @@ pub mod bridge;
 pub mod budget;
 pub mod reflect_bridge;
 pub mod registry;
+pub mod remote;
 
 pub use bridge::ScriptPlugin;

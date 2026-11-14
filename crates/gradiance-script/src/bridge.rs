@@ -231,7 +231,19 @@ pub struct ScriptRun {
     /// click point); `None` for a REPL line, a file, or a test submission.
     /// Readable during this run only, via `(action-x)` / `(action-y)`.
     pub at: Option<Vec2>,
+    /// Where to leave this run's outcome for a caller that waits on it (the
+    /// remote control surface); `None` for every other submission, whose
+    /// outcome reaches the user through the [`ScriptLog`] only.
+    pub reply: Option<RunReply>,
 }
+
+/// One run's outcome as a caller outside the console sees it: the run's last
+/// value as JSON (`null` for no value), or the same error text the console
+/// log shows.
+pub type RunOutcome = Result<serde_json::Value, String>;
+
+/// A slot [`run_scripts`] fills with one run's [`RunOutcome`].
+pub type RunReply = Arc<Mutex<Option<RunOutcome>>>;
 
 /// Pending script runs for the next [`run_scripts`] pass (REPL input, a
 /// `--script` file, an invoked action, or a test). Drained each frame.
@@ -245,7 +257,20 @@ impl ScriptInputs {
         self.0.push(ScriptRun {
             source: source.into(),
             at: None,
+            reply: None,
         });
+    }
+
+    /// Queues one script source like [`submit`](Self::submit), and returns
+    /// the slot its [`RunOutcome`] lands in once [`run_scripts`] has run it.
+    pub fn submit_with_reply(&mut self, source: impl Into<String>) -> RunReply {
+        let reply = RunReply::default();
+        self.0.push(ScriptRun {
+            source: source.into(),
+            at: None,
+            reply: Some(Arc::clone(&reply)),
+        });
+        reply
     }
 
     /// Queues an action's source to run next frame, invoked at the
@@ -255,6 +280,7 @@ impl ScriptInputs {
         self.0.push(ScriptRun {
             source: action.source.clone(),
             at: Some(at),
+            reply: None,
         });
     }
 }
@@ -1744,6 +1770,36 @@ fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<OperationCatalog>) {
     });
 }
 
+/// A run's value as JSON, for callers outside the console: numbers, booleans,
+/// strings and lists map to their JSON forms, `void` to `null`, and anything
+/// else (a procedure, a hash map, …) to the text the console would echo.
+fn steel_to_json(value: &SteelVal) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        SteelVal::Void => Value::Null,
+        SteelVal::BoolV(b) => Value::Bool(*b),
+        SteelVal::IntV(i) => Value::from(*i),
+        SteelVal::NumV(n) => serde_json::Number::from_f64(*n)
+            .map_or_else(|| Value::String(n.to_string()), Value::Number),
+        SteelVal::StringV(s) => Value::String(s.to_string()),
+        SteelVal::ListV(items) => Value::Array(items.iter().map(steel_to_json).collect()),
+        SteelVal::VectorV(items) => Value::Array(items.iter().map(steel_to_json).collect()),
+        other => Value::String(other.to_string()),
+    }
+}
+
+/// Leaves one run's outcome in its caller's slot: the value as JSON, or the
+/// console's error text.
+fn fill_reply(reply: &RunReply, result: &Result<Option<SteelVal>, ScriptError>, output: &str) {
+    if let Ok(mut slot) = reply.lock() {
+        *slot = Some(match result {
+            Ok(Some(value)) => Ok(steel_to_json(value)),
+            Ok(None) => Ok(serde_json::Value::Null),
+            Err(_) => Err(output.to_owned()),
+        });
+    }
+}
+
 /// Exclusive: refreshes the read snapshot, runs any pending script source, then
 /// dispatches the operation records it emitted through the intent bus. Ordered
 /// before [`CommandDispatchSet`] so a script's edits become commands in the same
@@ -1780,7 +1836,7 @@ pub fn run_scripts(world: &mut World) {
     refresh_signal_mirror(world);
     refresh_panel_mirror(world);
 
-    for ScriptRun { source, at } in sources {
+    for ScriptRun { source, at, reply } in sources {
         // NonSend: the VM lives on the main thread (this exclusive system is
         // already there). Errors are surfaced (log + console), never fatal.
         // The invocation point is visible to this run only.
@@ -1802,6 +1858,9 @@ pub fn run_scripts(world: &mut World) {
                 err.to_string()
             }
         };
+        if let Some(reply) = reply {
+            fill_reply(&reply, &result, &output);
+        }
         if let Some(mut log) = world.get_resource_mut::<ScriptLog>() {
             log.record(ScriptEntry {
                 input: source,

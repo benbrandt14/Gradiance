@@ -27,7 +27,10 @@ fn main() {
     //                                   startup (scene setup, `register-action`,
     //                                   helpers) and hot-reloads them on change;
     //   `gradiance --resume`            reopens the exit autosave
-    //                                   (`.gradiance-session.ron`).
+    //                                   (`.gradiance-session.ron`);
+    //   `gradiance --remote [port]`     serves the remote control surface
+    //                                   (BRP over the op registry) on
+    //                                   127.0.0.1 (default port 15702).
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut scripts = Vec::new();
     let mut i = 0;
@@ -37,6 +40,15 @@ fn main() {
                 scripts.push(PathBuf::from(path));
                 i += 2;
                 continue;
+            }
+        } else if args[i] == "--remote" {
+            // Optional port: `--remote 15800`; bare `--remote` uses the default.
+            let port = args.get(i + 1).and_then(|p| p.parse::<u16>().ok());
+            app.add_plugins(gradiance::script::remote::RemoteControlPlugin {
+                port: Some(port.unwrap_or(gradiance::script::remote::DEFAULT_PORT)),
+            });
+            if port.is_some() {
+                i += 1;
             }
         } else if args[i] == "--resume" {
             let autosave = PathBuf::from(gradiance::persist::AUTOSAVE_FILE);

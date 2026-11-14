@@ -839,6 +839,12 @@ Land as each seam is touched:
   test that every op resolves in `FunctionRegistry` (keep intent dispatch —
   steel builtins take `SteelVal`); expose an app-level `bevy_remote` seam (read
   methods + `trigger_event` + `gradiance.op.*`; exclude insert/mutate/despawn).
+  **BRP half landed (brief 3-4):** `script::remote` serves `gradiance.ops`,
+  `gradiance.op` and `gradiance.query` over the op registry (one call = one
+  script run), localhost-only behind `--remote`; every built-in `world.*`
+  write is removed — `trigger_event` and `write_message` included, since
+  both are mutation paths around the registry. The `reflect_functions` half
+  is separable and still open (the remote design did not need it).
 - **bevy_math::curve / bounding** (rows 12, 24): curve sampling infra for the
   editor (keep the custom monotone eval `domain/signal.rs`); `Aabb2d` for point-
   cloud bounds/future broadphase (keep CSG-tree `sdf::aabb` custom).
