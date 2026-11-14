@@ -1,14 +1,14 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-13, Phase 3 (orchestrator; #227 merged; 3-3 in flight).
+Last updated: 2026-11-13, Phase 3 (orchestrator; #228 merged; 3-4 in flight).
 
 ## Position
 
 - **Phase:** 2 complete except three undefined items (below) → **Phase 3**
   (scripting & the op surface) next. Orchestrator rotation skipped again at
   the owner's instruction ("continue as far as you can").
-- **main:** `d8deb55` (#225 script budget, #226 UI label polish, #227 group verbs). Phase 2 merged: #219 joint sensors (2-1), #220
+- **main:** `d8deb55` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
   components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
   scripted-body colour, and the CI flake), #224 CI test-failure annotations.
@@ -21,9 +21,9 @@ Last updated: 2026-11-13, Phase 3 (orchestrator; #227 merged; 3-3 in flight).
 - **Phase 3 briefs:** **3-1** script step budget —
   `docs/briefs/3-1-script-budget.md` (steel 0.8.2 has `with_interrupted` +
   `InterruptHandler`; merged #225). Then **3-2** group/ungroup verbs (merged #227),
-  **3-3** action table (click point + folded context-menu commands; in
-  flight),
-  **3-4** remote control surface (BRP over the op registry). Still to
+  **3-3** action table (merged #228: `(action-x)`/`(action-y)`; gravity
+  built-ins folded; see its Outcome for the per-button classification),
+  **3-4** remote control surface (BRP over the op registry; in flight). Still to
   brief: user tools from `.scm` (after 3-3).
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
@@ -48,6 +48,10 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
   sideways inside avian (2-5); other systems may share the
   despawned-entity `insert` panic pattern fixed in 2-5 (unaudited).
 - **Elastica / flexure** from #194 (after Phase 5).
+- **Verbs missing for context-menu folding (3-3 Outcome):** `joint-at x y`
+  (Delete joint), node indexing for `delete` / `node-at` (Delete node),
+  `set-orbit` (Set in orbit), `set-depth` (Depth front/forward/backward),
+  `set-color` (Random colors). Those buttons stay hand-wired until then.
 - **Polish observations (screenshot pass 2):** the tangent glyph's bar is
   always horizontal, not along the tangent; the alignment guide is very faint
   (α 0.45); the floating Joint window covers the docked Properties tab
