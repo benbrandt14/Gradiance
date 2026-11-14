@@ -1,14 +1,14 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-14, Phase 3 (orchestrator; #229 merged; 3-5 in flight).
+Last updated: 2026-11-14, Phase 3 (orchestrator; #230 merged; 3-6 in flight).
 
 ## Position
 
 - **Phase:** 2 complete except three undefined items (below) → **Phase 3**
   (scripting & the op surface) next. Orchestrator rotation skipped again at
   the owner's instruction ("continue as far as you can").
-- **main:** `afb198f` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control). Phase 2 merged: #219 joint sensors (2-1), #220
+- **main:** `afb198f` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
   components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
   scripted-body colour, and the CI flake), #224 CI test-failure annotations.
@@ -24,10 +24,11 @@ Last updated: 2026-11-14, Phase 3 (orchestrator; #229 merged; 3-5 in flight).
   **3-3** action table (merged #228: `(action-x)`/`(action-y)`; gravity
   built-ins folded; see its Outcome for the per-button classification),
   **3-4** remote control surface (merged #229: `--remote [port]`, 127.0.0.1,
-  `gradiance.ops`/`op`/`query`; `world.*` writes removed). Now **3-5** script
-  tools (`docs/briefs/3-5-script-tools.md`; in flight).
-  Then **3-6** metre examples (polish: console placeholder + docs examples
-  are pixel-era, found by screenshot pass 2 and 3-4).
+  `gradiance.ops`/`op`/`query`; `world.*` writes removed). **3-5** script tools
+  (merged #230: `register-tool`, `ToolState::Script(u16)`, table in
+  `core::script_tools`; also `spawn-box-rot`).
+  Now **3-6** metre examples (in flight) (polish: console placeholder + docs examples
+  are pixel-era, found by screenshot pass 2 and 3-4). Last Phase 3 brief.
 - **Phase 4 briefs (written, ready):** **4-1** body booleans (subtract /
   intersect / xor via Merge's path), **4-2** filleted merge (`SmoothUnion`,
   after 4-1), **4-3** M19 chrome functional (palette, camera settings,
@@ -59,6 +60,11 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
   (Delete joint), node indexing for `delete` / `node-at` (Delete node),
   `set-orbit` (Set in orbit), `set-depth` (Depth front/forward/backward),
   `set-color` (Random colors). Those buttons stay hand-wired until then.
+- **From 3-5:** multi-edit script tools give one undo step per command, not
+  per gesture; no `unregister-tool` (a renamed tool lingers until restart);
+  palette scrolling for many script tools; drag/`ManipTool` script tools,
+  script previews, icons, shortcuts. Headless `ButtonInput` presses lose
+  `just_pressed` (polygon Escape cancel was untested).
 - **Polish observations (screenshot pass 2):** the tangent glyph's bar is
   always horizontal, not along the tangent; the alignment guide is very faint
   (α 0.45); the floating Joint window covers the docked Properties tab
