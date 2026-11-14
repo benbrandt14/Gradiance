@@ -29,6 +29,11 @@ const SCHEME_FORMS: &[&str] = &[
     "string?", "number?", "ans",
 ];
 
+/// The example the empty input shows. Spawn verbs take metres (1 m = 100 px
+/// at start-up zoom), so this lands a 0.4 m box 1 m above the view centre;
+/// `tests/it/script_examples.rs` runs it and asserts the body is on screen.
+pub const PLACEHOLDER: &str = "(spawn-box 0 1 0.4 0.4)";
+
 /// Console state (visibility, the editor buffer, and the MATLAB-style
 /// history walker).
 #[derive(bevy::prelude::Resource, Default)]
@@ -282,7 +287,7 @@ pub fn console_section(
             .desired_rows(3)
             .desired_width(f32::INFINITY)
             .font(egui::FontId::monospace(13.0))
-            .hint_text("(spawn-box 0 200 40 40)")
+            .hint_text(PLACEHOLDER)
             .layouter(&mut layouter),
     );
 
