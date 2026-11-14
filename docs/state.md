@@ -1,14 +1,14 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-13, Phase 3 (orchestrator; #228 merged; 3-4 in flight).
+Last updated: 2026-11-14, Phase 3 (orchestrator; #229 merged; 3-5 in flight).
 
 ## Position
 
 - **Phase:** 2 complete except three undefined items (below) → **Phase 3**
   (scripting & the op surface) next. Orchestrator rotation skipped again at
   the owner's instruction ("continue as far as you can").
-- **main:** `d8deb55` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table). Phase 2 merged: #219 joint sensors (2-1), #220
+- **main:** `afb198f` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
   components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
   scripted-body colour, and the CI flake), #224 CI test-failure annotations.
@@ -23,8 +23,9 @@ Last updated: 2026-11-13, Phase 3 (orchestrator; #228 merged; 3-4 in flight).
   `InterruptHandler`; merged #225). Then **3-2** group/ungroup verbs (merged #227),
   **3-3** action table (merged #228: `(action-x)`/`(action-y)`; gravity
   built-ins folded; see its Outcome for the per-button classification),
-  **3-4** remote control surface (BRP over the op registry; in flight). Then **3-5** script tools
-  (`docs/briefs/3-5-script-tools.md`; last Phase 3 brief).
+  **3-4** remote control surface (merged #229: `--remote [port]`, 127.0.0.1,
+  `gradiance.ops`/`op`/`query`; `world.*` writes removed). Now **3-5** script
+  tools (`docs/briefs/3-5-script-tools.md`; last Phase 3 brief; in flight).
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
 - **Workers:** hand off through the brief's Outcome and the PR; the
@@ -52,6 +53,9 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
   (Delete joint), node indexing for `delete` / `node-at` (Delete node),
   `set-orbit` (Set in orbit), `set-depth` (Depth front/forward/backward),
   `set-color` (Random colors). Those buttons stay hand-wired until then.
+- **From 3-4:** `docs/scripting.md` examples use pixel-era sizes
+  (`spawn-ground 0 -200 0`, 20-unit boxes) that land off-screen in metres;
+  queued with the console placeholder for the next polish brief.
 - **Polish observations (screenshot pass 2):** the tangent glyph's bar is
   always horizontal, not along the tangent; the alignment guide is very faint
   (α 0.45); the floating Joint window covers the docked Properties tab
