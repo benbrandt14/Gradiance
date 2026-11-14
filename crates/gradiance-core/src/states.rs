@@ -52,4 +52,16 @@ pub enum ToolState {
     /// Place tracer nodes (a placeable trajectory probe; attaches to a body
     /// under the cursor, else free).
     Tracer,
+    /// A tool a script registered (`register-tool`): the index of its entry in
+    /// [`ScriptTools`](crate::script_tools::ScriptTools). It collects clicks
+    /// like the polygon tool and, on the last one, runs the script's body once.
+    Script(u16),
+}
+
+impl ToolState {
+    /// Whether this is a script-registered tool.
+    #[must_use]
+    pub fn is_script(self) -> bool {
+        matches!(self, Self::Script(_))
+    }
 }

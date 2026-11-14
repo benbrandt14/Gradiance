@@ -105,6 +105,10 @@ pub struct ToolContext<'a> {
     pub confirm: bool,
     /// `Escape` pressed this frame (cancel the draft).
     pub cancel: bool,
+    /// The secondary (right) button's phase this frame. Only the script tool
+    /// reads it (a right-click cancels its draft); the built-in creation tools
+    /// keep their own cancel rules.
+    pub secondary: GesturePhase,
     /// Axis/rotation gesture constraints.
     pub constraints: &'a GestureConstraints,
     /// Snapping configuration (rotation quantization step).
@@ -187,6 +191,15 @@ pub enum ToolCommit {
         body: Box<BodyRecord>,
         /// End hinges referencing `body` (zero, one, or two).
         joints: Vec<JointRecord>,
+    },
+    /// A script tool's gesture completed: run its body once with these
+    /// points (the script tool). Not an authoring intent itself — the script
+    /// run emits intents through the ordinary verbs.
+    Script {
+        /// Index into `ScriptTools`.
+        tool: u16,
+        /// The collected points, world space, in click order.
+        points: Vec<Vec2>,
     },
 }
 
@@ -349,6 +362,7 @@ pub struct ToolCommitWriters<'w> {
     merges: MessageWriter<'w, MergeIntent>,
     props: MessageWriter<'w, PropertyEditIntent>,
     rods: MessageWriter<'w, gradiance_command::intent::SpawnRodIntent>,
+    script_tools: MessageWriter<'w, gradiance_core::script_tools::ScriptToolFired>,
 }
 
 impl ToolCommitWriters<'_> {
@@ -379,6 +393,10 @@ impl ToolCommitWriters<'_> {
                     body: *body,
                     joints,
                 });
+            }
+            ToolCommit::Script { tool, points } => {
+                self.script_tools
+                    .write(gradiance_core::script_tools::ScriptToolFired { tool, points });
             }
             ToolCommit::Cut { a, b, width } => {
                 self.cut.write(CutIntent { a, b, width });
@@ -469,6 +487,7 @@ pub fn run_draft_tool<T: DraftTool>(
         over_ui: over_ui.0,
         confirm: keys.just_pressed(KeyCode::Enter),
         cancel: keys.just_pressed(KeyCode::Escape),
+        secondary: phase_of_button(*buttons, MouseButton::Right, over_ui.0),
         constraints: &constraints,
         snap: &snap,
         defaults: &defaults,
@@ -505,6 +524,7 @@ pub fn draw_draft_preview<T: DraftTool>(
         over_ui: false,
         confirm: false,
         cancel: false,
+        secondary: GesturePhase::Idle,
         constraints: &constraints,
         snap: &snap,
         defaults: &defaults,
