@@ -1,14 +1,14 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-14, Phase 4 (orchestrator; #232 merged; 4-2 in flight).
+Last updated: 2026-11-14, Phase 4 (orchestrator; #233 merged; 4-3 in flight).
 
 ## Position
 
 - **Phase:** 3 complete → **Phase 4** (geometry & render). Phase 2 is
   complete except three undefined items (below). Rotation skipped at
   the owner's instruction ("continue as far as you can").
-- **main:** `491e0e4` (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools, #231 metre examples, #232 body booleans).
+- **main:** (see git) (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools, #231 metre examples, #232 body booleans, #233 fillet merge).
   **Phase 3 complete** (gate 2026-11-14; rotation skipped, owner's
   instruction). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
@@ -33,7 +33,8 @@ Last updated: 2026-11-14, Phase 4 (orchestrator; #232 merged; 4-2 in flight).
   are pixel-era, found by screenshot pass 2 and 3-4). Last Phase 3 brief.
 - **Phase 4:** **4-1** body booleans (merged #232: `BooleanIntent { op: CsgOp }`,
   new `CsgOp::Xor` additive in v6, splits via cut's piece path; also fixed a
-  collider panic on fine rings and a contour lost-arc bug), **4-2** filleted merge (`SmoothUnion`; in flight), **4-3** M19 chrome functional (palette, camera settings,
+  collider panic on fine rings and a contour lost-arc bug), **4-2** filleted merge (merged #233: `(fillet-merge a b r)`, menu radius
+  field; joins gaps < r/2), **4-3** M19 chrome functional (in flight; last Phase 4 brief) (palette, camera settings,
   gravity widget; confirms emissive/borders/AO, which already exist).
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
@@ -64,6 +65,9 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
   `set-color` (Random colors). Those buttons stay hand-wired until then.
 - **From 4-1:** split pieces lose analytic geometry (polygon leaves); the
   boolean miss-check is AABB-level (a rotated miss still consumes the operand).
+- **From 4-2:** the polynomial smooth-min bulges flush faces outward (≤ r/4);
+  a fillet-merged body's selection box ignores the bulge; smooth
+  subtract/intersect, chamfers, single-body corner fillets.
 - **From 3-6:** the start-up scene has no ground, so the placeholder box
   falls out of view while playing (product decision); `tests/it/scripting.rs`
   and bridge unit tests still use pixel-era sizes (not user-facing).
