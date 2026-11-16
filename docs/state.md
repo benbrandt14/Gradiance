@@ -1,14 +1,15 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-14, Phase 4 (orchestrator; #234 merged; 4-4 in flight, then Phase 5).
+Last updated: 2026-11-14, Phase 5 (orchestrator; Phase 4 complete with #235; 5-1 in flight).
 
 ## Position
 
 - **Phase:** 3 complete → **Phase 4** (geometry & render). Phase 2 is
   complete except three undefined items (below). Rotation skipped at
   the owner's instruction ("continue as far as you can").
-- **main:** (see git) (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools, #231 metre examples, #232 body booleans, #233 fillet merge, #234 M19 chrome).
+- **main:** (see git) (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools, #231 metre examples, #232 body booleans, #233 fillet merge, #234 M19 chrome, #235 SSAO strip).
+  **Phase 4 complete** (gate 2026-11-16; rotation skipped, owner's instruction).
   **Phase 3 complete** (gate 2026-11-14; rotation skipped, owner's
   instruction). Phase 2 merged: #219 joint sensors (2-1), #220
   breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
@@ -35,10 +36,11 @@ Last updated: 2026-11-14, Phase 4 (orchestrator; #234 merged; 4-4 in flight, the
   new `CsgOp::Xor` additive in v6, splits via cut's piece path; also fixed a
   collider panic on fine rings and a contour lost-arc bug), **4-2** filleted merge (merged #233: `(fillet-merge a b r)`, menu radius
   field; joins gaps < r/2), **4-3** M19 chrome functional (merged #234; also fixed SSAO blanking the
-  viewport via overlay MSAA). **4-4** SSAO bottom strip (screenshot-found
-  bug; in flight; last Phase 4 brief) (palette, camera settings,
+  viewport via overlay MSAA). **4-4** SSAO bottom strip (merged #235: Bevy
+  SSAO assumes a full-window viewport; SSAO now uses a full-window
+  `SubCameraView` instead of the offset viewport) (palette, camera settings,
   gravity widget; confirms emissive/borders/AO, which already exist).
-- **Phase 5 briefs (written, ready, serial):** **5-1** units P2·types
+- **Phase 5 (serial):** **5-1** units P2·types (in flight)
   (authored scalars → newtypes, format unchanged), **5-2** named quantity
   catalog (P3), **5-3** unit-aware input + deg/rad preference (P4),
   **5-4** units in scripts (P6), **5-5** frames + curvilinear decision
@@ -72,6 +74,9 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
   `set-color` (Random colors). Those buttons stay hand-wired until then.
 - **From 4-1:** split pieces lose analytic geometry (polygon leaves); the
   boolean miss-check is AABB-level (a rotated miss still consumes the operand).
+- **From 4-4:** report Bevy's SSAO-viewport bug upstream (then drop the
+  workaround); later screen-space effects may need the same sub-view;
+  `world_per_pixel` uses window height where perspective FOV spans the pane.
 - **From 4-3:** "random colours within a grouped selection" read as one
   colour per outermost group (owner to confirm); SSAO nearly invisible at
   scene scale (tune or drop: design call); `set-color` needs `Appearance`
