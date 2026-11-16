@@ -139,6 +139,53 @@ pub fn scene_viewport(
     })
 }
 
+/// The full-window equivalent of a scene-pane `viewport`: the
+/// [`SubCameraView`](bevy::camera::SubCameraView) that, on a camera with **no**
+/// viewport, frames the scene exactly as `projection` would inside `viewport`
+/// — same scale, same pane centre, every world point on the same window pixel.
+/// The window around the pane is simply more of the same view (it lies under
+/// the opaque docks). `None` for a custom projection, whose sub-view maths we
+/// cannot know; the caller keeps the viewport then.
+///
+/// Why it exists: Bevy 0.19's SSAO assumes the camera's viewport *is* its
+/// render target. Its textures are viewport-sized, but the depth/normal
+/// prepass textures are target-sized and the PBR shader reads the AO texture
+/// at framebuffer coordinates (`in.position.xy`, which include the viewport
+/// offset). With the pane below the menu bar, every row past the AO texture's
+/// height read as zero (full occlusion: a black strip the bar's height at the
+/// bottom) and the AO above it was shifted. Rendering full-window with an
+/// off-centre projection gives SSAO the only layout it supports.
+///
+/// The two projection kinds need different sub-views because Bevy feeds
+/// `Projection::update` the *logical viewport size* — the window, once the
+/// viewport is gone. An orthographic area then already has the right
+/// world-per-pixel scale, so the "full" view is window-sized and only
+/// re-centred on the pane. A perspective field of view spans the full view's
+/// height, so the full view is the pane itself and the window is a larger
+/// sub-rect around it. Pure, so the equivalence is unit-tested.
+pub fn full_window_sub_view(
+    projection: &bevy::camera::Projection,
+    viewport: &bevy::camera::Viewport,
+    window_physical: bevy::math::UVec2,
+) -> Option<bevy::camera::SubCameraView> {
+    use bevy::camera::{Projection, SubCameraView};
+    let origin = viewport.physical_position.as_vec2();
+    let pane = viewport.physical_size.as_vec2();
+    match projection {
+        Projection::Orthographic(_) => Some(SubCameraView {
+            full_size: window_physical,
+            offset: window_physical.as_vec2() * 0.5 - (origin + pane * 0.5),
+            size: window_physical,
+        }),
+        Projection::Perspective(_) => Some(SubCameraView {
+            full_size: viewport.physical_size,
+            offset: -origin,
+            size: window_physical,
+        }),
+        Projection::Custom(_) => None,
+    }
+}
+
 /// Whether `pos` falls inside any recorded background-layer panel rect — pure,
 /// so the click-through gate is unit-testable without a window.
 fn pointer_over_panels(rects: &[egui::Rect], pos: Option<egui::Pos2>) -> bool {
@@ -257,11 +304,24 @@ fn spawn_ui_camera(mut commands: Commands) {
 /// routed; egui lives on its own full-window camera (`spawn_ui_camera`), so
 /// shrinking this viewport no longer shrinks the UI. Runs after the docks have
 /// pushed their rects (before `capture_pointer_over_ui` clears them).
+///
+/// A camera with SSAO gets the same framing a different way — no viewport,
+/// and a [`full_window_sub_view`] — because Bevy's SSAO breaks under a
+/// viewport offset (see that function). Picking is unaffected either way:
+/// `viewport_to_world` maps window coordinates through whichever projection
+/// the camera has.
 pub fn apply_scene_viewport(
     mut contexts: EguiContexts,
     panels: Res<PanelRects>,
     windows: Query<&bevy::window::Window, With<bevy::window::PrimaryWindow>>,
-    mut cameras: Query<&mut Camera, With<Camera3d>>,
+    mut cameras: Query<
+        (
+            &mut Camera,
+            &bevy::camera::Projection,
+            Has<bevy::pbr::ScreenSpaceAmbientOcclusion>,
+        ),
+        With<Camera3d>,
+    >,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let scene = panels.scene_rect(ctx.viewport_rect());
@@ -270,8 +330,17 @@ pub fn apply_scene_viewport(
     };
     let phys = bevy::math::UVec2::new(window.physical_width(), window.physical_height());
     let viewport = scene_viewport(scene, window.scale_factor(), phys);
-    for mut camera in &mut cameras {
-        camera.viewport.clone_from(&viewport);
+    for (mut camera, projection, ssao) in &mut cameras {
+        let sub_view = viewport
+            .as_ref()
+            .filter(|_| ssao)
+            .and_then(|vp| full_window_sub_view(projection, vp, phys));
+        if sub_view.is_some() {
+            camera.viewport = None;
+        } else {
+            camera.viewport.clone_from(&viewport);
+        }
+        camera.sub_camera_view = sub_view;
     }
     Ok(())
 }
@@ -297,8 +366,9 @@ fn capture_pointer_over_ui(
 
 #[cfg(test)]
 mod tests {
-    use super::{PanelRects, pointer_over_panels, scene_viewport};
-    use bevy::math::UVec2;
+    use super::{PanelRects, full_window_sub_view, pointer_over_panels, scene_viewport};
+    use bevy::camera::{OrthographicProjection, PerspectiveProjection, Projection, Viewport};
+    use bevy::math::{Mat4, UVec2, Vec2, Vec3};
     use bevy_egui::egui::{Pos2, Rect};
 
     #[test]
@@ -396,5 +466,61 @@ mod tests {
         assert!(!pointer_over_panels(&rects, None));
         // No panels drawn this frame.
         assert!(!pointer_over_panels(&[], Some(Pos2::new(150.0, 100.0))));
+    }
+
+    /// Window pixel (physical) of a view-space point under `clip`, for a
+    /// render rect at `origin` of `size`.
+    fn pixel(clip: Mat4, point: Vec3, origin: Vec2, size: Vec2) -> Vec2 {
+        let ndc = clip.project_point3(point);
+        origin + Vec2::new((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5) * size
+    }
+
+    /// The SSAO framing: a full-window camera with [`full_window_sub_view`]
+    /// puts every point on the same window pixel as the pane-viewport camera,
+    /// for both projection kinds and at a non-unit scale factor.
+    #[test]
+    fn the_full_window_sub_view_frames_like_the_pane_viewport() {
+        let window = UVec2::new(1280, 720);
+        let scale_factor = 2.0;
+        // The menu bar above (44 px physical) and a right dock (280 px).
+        let viewport = Viewport {
+            physical_position: UVec2::new(0, 44),
+            physical_size: UVec2::new(1000, 676),
+            ..Default::default()
+        };
+        let ortho = Projection::Orthographic(OrthographicProjection {
+            near: -50.0,
+            far: 50.0,
+            scale: 0.01,
+            ..OrthographicProjection::default_3d()
+        });
+        let persp = Projection::Perspective(PerspectiveProjection::default());
+        let points = [
+            Vec3::new(0.0, 0.0, -6.0),
+            Vec3::new(1.5, -2.0, -6.0),
+            Vec3::new(-3.0, 1.0, -9.0),
+        ];
+        for base in [ortho, persp] {
+            // Bevy updates the projection with the logical viewport size: the
+            // pane with a viewport, the window without one.
+            let mut in_pane = base.clone();
+            let pane = viewport.physical_size.as_vec2();
+            in_pane.update(pane.x / scale_factor, pane.y / scale_factor);
+            let pane_clip = in_pane.get_clip_from_view();
+
+            let mut full = base.clone();
+            let win = window.as_vec2();
+            full.update(win.x / scale_factor, win.y / scale_factor);
+            let Some(sub) = full_window_sub_view(&full, &viewport, window) else {
+                panic!("built-in projections always have a sub-view");
+            };
+            let full_clip = full.get_clip_from_view_for_sub(&sub);
+
+            for point in points {
+                let a = pixel(pane_clip, point, viewport.physical_position.as_vec2(), pane);
+                let b = pixel(full_clip, point, Vec2::ZERO, win);
+                assert!(a.distance(b) < 1e-2, "{point}: pane {a} vs full window {b}");
+            }
+        }
     }
 }
