@@ -2656,7 +2656,7 @@ mod tests {
             "(begin (sim-set \"gravity.y\" -250) (sim-set \"speed\" 2))",
         );
         let settings = app.world().resource::<SimSettings>();
-        assert_eq!(settings.gravity.y, -250.0);
+        assert_eq!(settings.gravity.value().y, -250.0);
         assert_eq!(settings.speed, 2.0);
         // A config write is not an authored edit — nothing reached the intent bus.
         assert!(app.world().resource::<Spawns>().0.is_empty());

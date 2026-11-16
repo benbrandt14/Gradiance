@@ -202,7 +202,7 @@ fn a_speed_to_fill_binding_tints_the_target_body() {
     let mut app = paused_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     // Body A moves; body B is tinted by A's speed through a binding (the

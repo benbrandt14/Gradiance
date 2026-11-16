@@ -352,7 +352,7 @@ fn sim_settings_gravity_is_applied_by_the_physics_seam() {
         let mut sim = app
             .world_mut()
             .resource_mut::<gradiance::domain::settings::SimSettings>();
-        sim.gravity = Vec2::new(0.0, 800.0); // upward!
+        sim.gravity = gradiance::units::Acceleration2(Vec2::new(0.0, 800.0)); // upward!
     }
     step(&mut app, 120);
     let entity = entity_of(&app, id).unwrap();

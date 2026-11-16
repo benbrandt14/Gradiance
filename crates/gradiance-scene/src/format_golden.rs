@@ -39,6 +39,15 @@ fn id(n: u8) -> StableId {
     ron::from_str(&text).expect("a fixed StableId parses")
 }
 
+/// A `gradiance-units` quantity from its base-SI text (`"0.25"`,
+/// `"1.5, -9.75"`), typed by inference from the field it is assigned to — so
+/// this crate builds typed values without a `gradiance-units` dependency edge.
+/// Parses the quantity's own (wrapped) serde form, independent of the
+/// `serde_bare` adapters under test.
+fn q<T: serde::de::DeserializeOwned>(si: &str) -> T {
+    ron::from_str(&format!("({si})")).expect("a quantity parses")
+}
+
 fn body(n: u8, depth: DepthBand) -> BodyRecord {
     BodyRecord {
         id: id(n),
@@ -64,9 +73,7 @@ fn joint(n: u8, kind: JointKind) -> JointRecord {
             kind,
             common: JointCommon {
                 collide_connected: false,
-                // Already a `Force`; parsed (inferred from the field) so this crate
-                // needs no `gradiance-units` dependency edge.
-                break_force: Some(ron::from_str("(250.0)").expect("a Force parses")),
+                break_force: Some(q("250.0")),
                 broken: false,
             },
             body_a: id(1),
@@ -123,13 +130,13 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
     };
 
     let mut environment = EnvironmentRecord::default();
-    environment.sim.gravity = Vec2::new(1.5, -9.75);
-    environment.sim.timestep_hz = 120.0;
-    environment.grid.spacing = 0.25;
-    environment.grid.origin = Vec2::new(0.5, -1.5);
-    environment.grid.rotation = 0.125;
-    environment.lighting.shadow_distance = 42.5;
-    environment.scenery.back_offset = 0.375;
+    environment.sim.gravity = q("(1.5, -9.75)");
+    environment.sim.timestep_hz = q("120.0");
+    environment.grid.spacing = q("0.25");
+    environment.grid.origin = q("(0.5, -1.5)");
+    environment.grid.rotation = q("0.125");
+    environment.lighting.shadow_distance = q("42.5");
+    environment.scenery.back_offset = q("0.375");
 
     SceneRecord {
         version: FORMAT_VERSION,

@@ -79,7 +79,7 @@ pub fn apply_lighting(
     let cascade = CascadeShadowConfigBuilder {
         num_cascades: 1,
         minimum_distance: 0.01,
-        maximum_distance: settings.shadow_distance.max(1.0),
+        maximum_distance: settings.shadow_distance.value().max(1.0),
         ..default()
     }
     .build();
@@ -188,7 +188,7 @@ pub fn track_scene_depth(
         .iter()
         .map(|band| -band.sanitized().far)
         .fold(-gradiance_core::constants::LAYER_HEIGHT, f32::min);
-    let target = deepest_back - settings.back_offset.max(0.0);
+    let target = deepest_back - settings.back_offset.value().max(0.0);
     for (material, mut transform) in &mut planes {
         if (transform.translation.z - target).abs() > 1e-3 {
             transform.translation.z = target;

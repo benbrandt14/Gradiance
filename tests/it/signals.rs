@@ -29,7 +29,7 @@ fn a_speed_binding_tints_the_body_and_cleans_up_when_removed() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
     let record = box_record(Vec2::ZERO, 20.0, 20.0);
     let id = record.id;
@@ -272,7 +272,7 @@ fn a_body_sensor_feeds_a_modulation_block_over_the_canonical_bus_name() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
     let record = box_record(Vec2::ZERO, 20.0, 20.0);
     let id = record.id;

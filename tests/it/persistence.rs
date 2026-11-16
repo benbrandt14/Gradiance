@@ -255,7 +255,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                 nodes: vec![],
                 environment: EnvironmentRecord {
                     sim: SimSettings {
-                        gravity: Vec2::new(gravity.0, gravity.1),
+                        gravity: gradiance::units::Acceleration2(Vec2::new(gravity.0, gravity.1)),
                         speed,
                         ..SimSettings::default()
                     },

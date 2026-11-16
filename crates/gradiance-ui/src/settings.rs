@@ -175,8 +175,12 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
                     "gravity magnitude; 0 = weightless",
                 );
                 ui.label(
-                    egui::RichText::new(format!("x {:.2}  y {:.2}", sim.gravity.x, sim.gravity.y))
-                        .weak(),
+                    egui::RichText::new(format!(
+                        "x {:.2}  y {:.2}",
+                        sim.gravity.value().x,
+                        sim.gravity.value().y
+                    ))
+                    .weak(),
                 );
                 ui.end_row();
             });
@@ -207,7 +211,7 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
             widgets::labelled_drag(
                 ui,
                 &format!("timestep ({})", Dimension::Frequency.symbol()),
-                &mut sim.timestep_hz,
+                &mut sim.timestep_hz.0,
                 10.0..=480.0,
                 1.0,
                 "physics steps per second",
@@ -453,7 +457,7 @@ fn lighting_tab(
         ui.label("shadow reach");
         changed |= ui
             .add(
-                egui::DragValue::new(&mut settings.shadow_distance)
+                egui::DragValue::new(&mut settings.shadow_distance.0)
                     .speed(2.0)
                     .suffix(" m"),
             )

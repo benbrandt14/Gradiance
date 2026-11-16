@@ -86,7 +86,7 @@ impl BackgroundMenu<'_> {
             )
             .on_hover_text("top-down mode: bodies rub on the back plane (0 = off)");
         });
-        let top_down = self.sim.gravity.length() < 1e-3;
+        let top_down = self.sim.gravity.value().length() < 1e-3;
         for action in script.actions.builtins() {
             let Some(name) = action.builtin else { continue };
             if !BACKGROUND_BUILTINS.contains(&name) || !background_builtin_shown(name, top_down) {
@@ -115,14 +115,14 @@ impl BackgroundMenu<'_> {
         }
         // Reset the grid's user coordinate system to world axes (undoes an
         // "align grid to body").
-        if (self.grid.origin != Vec2::ZERO || self.grid.rotation != 0.0)
+        if (self.grid.origin.value() != Vec2::ZERO || self.grid.rotation.value() != 0.0)
             && ui
                 .button("Reset grid to world")
                 .on_hover_text("clear a local-frame alignment")
                 .clicked()
         {
-            self.grid.origin = Vec2::ZERO;
-            self.grid.rotation = 0.0;
+            self.grid.origin = gradiance_units::Displacement(Vec2::ZERO);
+            self.grid.rotation = gradiance_units::Angle(0.0);
             close = true;
         }
         if ui.button("Scene & lighting settings…").clicked() {
@@ -138,8 +138,8 @@ impl BackgroundMenu<'_> {
     /// body's rotation, so sketching against a tilted structure snaps in
     /// that structure's axes (CAD "align UCS to face").
     fn align_grid_to(&mut self, pose: PosRot) {
-        self.grid.origin = pose.pos;
-        self.grid.rotation = pose.rot;
+        self.grid.origin = gradiance_units::Displacement(pose.pos);
+        self.grid.rotation = gradiance_units::Angle(pose.rot);
     }
 }
 

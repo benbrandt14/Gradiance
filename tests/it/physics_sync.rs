@@ -246,7 +246,7 @@ fn timestep_setting_applies_to_the_fixed_clock() {
     let mut app = paused_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .timestep_hz = 120.0;
+        .timestep_hz = gradiance::units::Frequency(120.0);
     app.update();
 
     let dt = app
@@ -318,7 +318,7 @@ fn attraction_clusters_and_repulsion_scatters() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
     let a = spawn_field_circle(&mut app, -80.0, -2000.0);
     let b = spawn_field_circle(&mut app, 80.0, -2000.0);
@@ -334,7 +334,7 @@ fn attraction_clusters_and_repulsion_scatters() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
     let a = spawn_field_circle(&mut app, -40.0, 2000.0);
     let b = spawn_field_circle(&mut app, 40.0, 2000.0);
@@ -354,7 +354,7 @@ fn a_field_acts_on_plain_bodies_too() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     let mut attractor = box_record(Vec2::ZERO, 40.0, 40.0);
@@ -388,7 +388,7 @@ fn set_in_orbit_produces_a_limit_cycle() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     let mut sun = box_record(Vec2::ZERO, 60.0, 60.0);
@@ -512,7 +512,7 @@ fn field_forces_are_equal_and_opposite() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     let mut attractor = box_record(Vec2::new(-60.0, 0.0), 60.0, 60.0);

@@ -320,9 +320,9 @@ mod tests {
 
         let final_settings = settings.lock().expect("lock").clone();
         assert_eq!(final_settings.speed, 2.0);
-        assert_eq!(final_settings.gravity.y, -500.0);
+        assert_eq!(final_settings.gravity.value().y, -500.0);
         assert_eq!(final_settings.substeps, 12);
-        assert_eq!(final_settings.gravity.x, 0.0);
+        assert_eq!(final_settings.gravity.value().x, 0.0);
         assert!(matches!(results.last(), Some(SteelVal::ListV(_))));
     }
 
