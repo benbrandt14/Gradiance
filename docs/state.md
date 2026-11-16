@@ -1,153 +1,116 @@
 # State — where the project is right now
 
-Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-14, Phase 5/4b (orchestrator; 5-1 in flight; owner direction 4b queued next).
+Overwritten at every handoff; history lives in git and in each brief's
+Outcome (`docs/briefs/`). Keep it to about a screen.
+Last updated: 2026-11-16 (orchestrator; 5-1 in flight).
 
 ## Position
 
-- **Phase:** 3 complete → **Phase 4** (geometry & render). Phase 2 is
-  complete except three undefined items (below). Rotation skipped at
-  the owner's instruction ("continue as far as you can").
-- **main:** (see git) (#225 script budget, #226 UI label polish, #227 group verbs, #228 action table, #229 remote control, #230 script tools, #231 metre examples, #232 body booleans, #233 fillet merge, #234 M19 chrome, #235 SSAO strip).
-  **Phase 4 complete** (gate 2026-11-16; rotation skipped, owner's instruction).
-  **Phase 3 complete** (gate 2026-11-14; rotation skipped, owner's
-  instruction). Phase 2 merged: #219 joint sensors (2-1), #220
-  breaking limits (2-2), #221 rigid rod + Spring rename (2-3), #222 required
-  components (2-4), #223 screenshot-pass bugs (2-5: `sim-set` timing,
-  scripted-body colour, and the CI flake), #224 CI test-failure annotations.
-- **Screenshot pass 2 (2026-11-13), Phase 1 + 2 features validated
-  visually:** tangent snap + glyph (1-7), alignment guide and exact commit
-  (1-5), three-point box (1-6), grid across zoom (1-1/1-2), rod (2-3), joint
-  inspector sensors + breakable (2-1/2-2), budget error (3-1), scripted group
-  (3-2). Defects fixed in
-  **2-6** (#226: one "kind · short id" label rule; no stray settings row).
-- **Phase 3 briefs:** **3-1** script step budget —
-  `docs/briefs/3-1-script-budget.md` (steel 0.8.2 has `with_interrupted` +
-  `InterruptHandler`; merged #225). Then **3-2** group/ungroup verbs (merged #227),
-  **3-3** action table (merged #228: `(action-x)`/`(action-y)`; gravity
-  built-ins folded; see its Outcome for the per-button classification),
-  **3-4** remote control surface (merged #229: `--remote [port]`, 127.0.0.1,
-  `gradiance.ops`/`op`/`query`; `world.*` writes removed). **3-5** script tools
-  (merged #230: `register-tool`, `ToolState::Script(u16)`, table in
-  `core::script_tools`; also `spawn-box-rot`).
-  **3-6** metre examples (merged #231) (polish: console placeholder + docs examples
-  are pixel-era, found by screenshot pass 2 and 3-4). Last Phase 3 brief.
-- **Phase 4:** **4-1** body booleans (merged #232: `BooleanIntent { op: CsgOp }`,
-  new `CsgOp::Xor` additive in v6, splits via cut's piece path; also fixed a
-  collider panic on fine rings and a contour lost-arc bug), **4-2** filleted merge (merged #233: `(fillet-merge a b r)`, menu radius
-  field; joins gaps < r/2), **4-3** M19 chrome functional (merged #234; also fixed SSAO blanking the
-  viewport via overlay MSAA). **4-4** SSAO bottom strip (merged #235: Bevy
-  SSAO assumes a full-window viewport; SSAO now uses a full-window
-  `SubCameraView` instead of the offset viewport) (palette, camera settings,
-  gravity widget; confirms emissive/borders/AO, which already exist).
-- **Owner direction 2026-11-16 → Phase 4b** (`orchestration.md`): **4b-1**
-  group op surface, **4b-2** groups panel, **4b-3** art direction + SSAO
-  options (show the owner), **4b-4** mass-scaled defaults + behaviour tests.
-  Runs after 5-1, before 5-2. **Format and UI may change freely** (owner):
-  5-1 switched to transparent quantities + v7.
-- **Phase 5 (serial):** **5-1** units P2·types (in flight)
-  (authored scalars → newtypes, format unchanged), **5-2** named quantity
-  catalog (P3), **5-3** unit-aware input + deg/rad preference (P4),
-  **5-4** units in scripts (P6), **5-5** frames + curvilinear decision
-  proposals (owner ratifies).
-- **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
-  git; show them in the conversation and describe them in PR comments.
-- **Workers:** hand off through the brief's Outcome and the PR; the
-  orchestrator updates this file after review and merges.
+- **Done:** Phases 0–4 (M18 grids/snap, constraints, scripting & op surface,
+  CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
+  planar contact are still undefined (retained below). PRs #212–#235. Each
+  brief's Outcome records its decisions; read it before touching that area.
+- **Now:** **5-1** units P2·types. Owner ruling: quantities serialize bare
+  (`#[serde(transparent)]`), format v7, older files rejected.
+- **Next, in order:**
+  - **Phase 4b** (owner direction 2026-11-16, `orchestration.md`):
+    - **4b-1** group op surface;
+    - **4b-2** groups panel;
+    - **4b-3** art direction (2–3 presets, SSAO options; show the owner);
+    - **4b-4** parameters scaled to body mass, with behaviour tests.
+  - **Phase 5:**
+    - **5-2** named quantity catalog (P3);
+    - **5-3** unit-aware input + deg/rad preference (P4);
+    - **5-4** units in scripts (P6);
+    - **5-5** frames + curvilinear proposals (owner ratifies).
+  - Then **Phase 6** (testing & diagnostics). No briefs yet.
+- **Owner rulings in force:**
+  - **No unbriefed work** (2026-11-13).
+  - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
+    reject older files, regenerate goldens, no migrations.
+  - **Merge freely when CI is green** and no tests or checks were removed to
+    get there (2026-11-16).
+  - **Orchestrator rotation at gates is skipped.**
+- **Process:** one worker at a time (shared disk). The worker hands off via
+  the brief's Outcome + PR. The orchestrator reviews, merges (REST squash),
+  updates this file, and sends screenshots to the owner.
+- **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). They never go in
+  git; they are shown in the conversation and described in PR comments.
+
 ## Retained for future planning — do not work on these
 
-Owner instruction (2026-11-13): **no unbriefed work.** Everything below is
-kept for the next planning stage; workers and orchestrators must not pick
-it up, and briefs must not absorb it. Defined roadmap items (the phases in
-`docs/orchestration.md`) continue.
+Kept for the next planning stage. Workers must not pick these up, and briefs
+must not absorb them. A **bug found by a screenshot or test** in a landed
+feature is different: it gets a brief, as 2-5 and 4-4 did.
 
-- **Undefined Phase 2 items:** backlash, cams, planar contact (named in the
-  roadmap/feedback only; behaviour unspecified).
-- **Follow-ups from briefs' Outcomes:** CSG arcs snap to contour vertices
-  and give no tangents (1-4, 1-7); alignment during creation tools (1-5);
-  grid coverage from the frustum (1-1); no tangent-snap toggle (1-7); verbs
-  for `ToolDefaults`/`SnapConfig` and joint properties (1-6, 2-2); world-pin
-  joint-angle sign vs `limit_reference_angle`'s comment, and a joint
-  node-graph block (2-1); torque-based breaking (2-2); rod: fixed end =
-  merge, `spawn-rod` verb, rod inspector (2-3); a 2 m flat drop lands 1–4 cm
-  sideways inside avian (2-5); other systems may share the
-  despawned-entity `insert` panic pattern fixed in 2-5 (unaudited).
-- **Elastica / flexure** from #194 (after Phase 5).
-- **Verbs missing for context-menu folding (3-3 Outcome):** `joint-at x y`
-  (Delete joint), node indexing for `delete` / `node-at` (Delete node),
-  `set-orbit` (Set in orbit), `set-depth` (Depth front/forward/backward)
-  (`set-color` is now in 4b-1). Those buttons stay hand-wired until then.
-- **From 4-1:** split pieces lose analytic geometry (polygon leaves); the
-  boolean miss-check is AABB-level (a rotated miss still consumes the operand).
-- **From 4-4:** report Bevy's SSAO-viewport bug upstream (then drop the
-  workaround); later screen-space effects may need the same sub-view;
-  `world_per_pixel` uses window height where perspective FOV spans the pane.
-- **From 4-2:** the polynomial smooth-min bulges flush faces outward (≤ r/4);
-  a fillet-merged body's selection box ignores the bulge; smooth
-  subtract/intersect, chamfers, single-body corner fillets.
-- **From 3-6:** the start-up scene has no ground, so the placeholder box
-  falls out of view while playing (product decision); `tests/it/scripting.rs`
-  and bridge unit tests still use pixel-era sizes (not user-facing).
-- **From 3-5:** multi-edit script tools give one undo step per command, not
-  per gesture; no `unregister-tool` (a renamed tool lingers until restart);
-  palette scrolling for many script tools; drag/`ManipTool` script tools,
-  script previews, icons, shortcuts. Headless `ButtonInput` presses lose
-  `just_pressed` (polygon Escape cancel was untested).
-- **Polish observations (screenshot pass 2):** the tangent glyph's bar is
-  always horizontal, not along the tangent; the alignment guide is very faint
-  (α 0.45); the floating Joint window covers the docked Properties tab
-  (where the joint inspector lives is a design call); two `--script` files at
-  start-up share one pre-run snapshot, so an indexed verb in the second
-  can't see the first's spawns and silently no-ops.
-- **For Phase 5 (units P4):** the joint inspector shows "angle limits (deg)"
-  next to an angle sensor in rad.
+- **Physics/constraints:**
+  - backlash, cams, planar contact (undefined);
+  - torque-based breaking (2-2);
+  - rod fixed end = merge, `spawn-rod`, rod inspector (2-3);
+  - world-pin angle sign, joint node-graph block (2-1);
+  - a 2 m flat drop lands 1–4 cm sideways in avian (2-5);
+  - unaudited despawned-entity `insert` pattern (2-5);
+  - elastica/flexure from #194 (after Phase 5).
+- **Geometry:**
+  - CSG arcs snap to contour vertices and give no tangents (1-4, 1-7);
+  - split boolean pieces become polygon leaves; the AABB-level miss check
+    (4-1);
+  - smooth-min bulges flush faces (≤ r/4); the fillet body's selection box
+    ignores the bulge; smooth subtract/intersect, chamfers, corner fillets
+    (4-2).
+- **Snapping/tools:**
+  - alignment during creation tools (1-5);
+  - grid coverage from the frustum (1-1);
+  - tangent-snap toggle and the tangent glyph bar always horizontal (1-7);
+  - faint alignment guide.
+- **Scripting:**
+  - verbs for `ToolDefaults`/`SnapConfig`/joint props;
+  - `joint-at`, `node-at`/node indexing, `set-orbit`, `set-depth` (3-3);
+  - script tools:
+    - multi-edit gives one undo step per command;
+    - no `unregister-tool`;
+    - palette scrolling;
+    - drag/`ManipTool` tools, previews, icons, shortcuts (3-5);
+  - two start-up scripts share one snapshot;
+  - pixel-era sizes in `tests/it/scripting.rs` (3-6).
+- **UI/render:**
+  - start-up scene has no ground (product decision, 3-6);
+  - Joint window covers the Properties dock;
+  - report Bevy's SSAO-viewport bug upstream (then drop the sub-view
+    workaround); `world_per_pixel` uses window height for the perspective
+    FOV (4-4).
+  - Headless `ButtonInput` presses lose `just_pressed` (3-5).
 
-A **bug found by a screenshot or test** in a landed feature is not
-"unbriefed work": it gets a brief (as 2-5 did) because it is the defined
-item not yet meeting its brief.
+## Parked — do not merge, rebase or close
 
-## Parked PRs — do not merge, rebase, or close without the orchestrator
-
-- **#208** (draft, 2026-07-29) avian2d → bevy_rapier3d + simulation-plane
-  groundwork. Input to the post-roadmap 3D planning stage.
-- **#194** — **closed at the Phase 1 gate**, salvaged into brief 2-3
-  (pre-crate-split, reintroduces the removed weld joint, conflicting v6).
-  Its elastica/flexure solver is a later spike (after Phase 5 units). The
-  branch is kept for reference.
-
-Stale branches with no open PR (`claude/sim-spike`,
-`claude/scripting-reflection-unify-*`, `claude/project-architecture-rewrite-*`,
-`claude/gradiance-crate-adoption-audit-*`) are left alone; prune at a phase
-gate if nobody claims them.
-
-## Last verified
-
-- Agent container rustc 1.97.0 = `RUST_PIN`.
-- Last merged PR #218 green in CI (ci, coverage, coupling) on its head.
-- Pending toolchain-bump debt: `orchestration.md` § Recurring.
+- **#208** (draft) avian2d → bevy_rapier3d + simulation planes: input to the
+  3D planning stage and to 5-5 (read only).
+- **#194** closed and salvaged into 2-3; its branch is kept for the elastica
+  spike.
+- Stale branches without PRs: left alone; prune at a gate if unclaimed.
 
 ## Known hazards
 
-- **Parallel workers on one container exhaust disk.** Three workers sharing
-  one `CARGO_TARGET_DIR` hit 94% (27 GB target, mostly two Bevy feature
-  sets: workspace vs `-p`). Shared target also races: one branch's build
-  overwrites another's artefacts (a spurious local doc failure on #214).
-  Prefer one worker per container, or serialize; leave the workspace test
-  gate to CI when `df` is under ~8 GB. Between workers, free space with
-  `rm -rf target/debug/deps/*gradiance* target/debug/incremental/*` (keeps
-  the third-party build; ~15 GB back).
-- Container can't reach rust-lang.org (no toolchain update). CI failures:
-  annotations first (clippy, fmt and now test failures are annotated); full
-  logs via `gh run view <run-id> --log-failed` (works as of 2026-11-12). Format failures now annotate
-  too (file per error).
-- A fresh container needs `apt-get update` before the native-lib install.
-  The first `cargo test -p <crate>` compiles a second Bevy feature set
-  (~20 min); start it early.
-- The shallow clone tracks only `main`: after pushing a branch, add a fetch
-  refspec for it, or the stop-hook reports "no remote branch".
-- `gh pr ready` / `gh pr merge --auto` use GraphQL and 403. The REST
-  routes work: `gh api -X POST repos/{o}/{r}/pulls/{n}/ccr/ready_for_review`
-  (also `…/ccr/convert_to_draft`, `PUT|DELETE …/ccr/auto_merge`).
-- Screenshot harness: egui drops clicks held > 0.8 s. For egui buttons use
-  `mousedown 1; sleep 0.3; mouseup 1`; scene picks still want a longer hold.
+- **Disk:** one worker at a time. Between workers run
+  `rm -rf target/debug/deps/*gradiance* target/debug/incremental/*
+  target/debug/gradiance`. If still short, delete
+  `find target/debug/deps -atime +2`. Never `cargo clean`. Run
+  `cargo test --workspace` locally only above ~20 GB free; otherwise leave
+  it to CI.
+- **Toolchain:** rustc 1.97.0 = `RUST_PIN`; rust-lang.org is unreachable.
+  Pending bump debt: `orchestration.md` § Recurring.
+- **CI:** read annotations first (fmt, clippy and test failures are
+  annotated); full logs via `gh run view <id> --log-failed`. GraphQL 403s:
+  merge with `gh api -X PUT …/pulls/N/merge -f merge_method=squash -f
+  sha=…`. Ready-for-review: `POST …/pulls/N/ccr/ready_for_review`.
+- **Shallow clone:** after pushing a branch, add a fetch refspec for it.
+- **Screenshot harness:**
+  - keyboard input doesn't reach the app;
+  - egui buttons: `mousedown 1; sleep 0.3; mouseup 1` (egui drops clicks
+    held > 0.8 s); scene picks want a ~1 s hold;
+  - pause the sim at screen (60,42);
+  - world (0,0) is screen (640,370) at 100 px/m;
+  - open panels with `(panel-show …)`;
+  - indexed verbs in one run read the pre-run snapshot, so apply them from a
+    second, hot-reloaded script.
 - Where `docs/agent-context.md` and `CLAUDE.md` disagree, `CLAUDE.md` wins.
