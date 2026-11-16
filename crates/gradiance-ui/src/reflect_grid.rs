@@ -1,8 +1,10 @@
 //! Reflection-driven property grid: renders any `Reflect` struct's fields
 //! as widgets — backend settings get UI for free, no hand-built menus.
 //!
-//! Supported leaf types: `f32`, `bool`, `u32`, `Vec2`. Nested structs
-//! recurse; unsupported fields render read-only (the explicit escape
+//! Supported leaf types: `f32`, `bool`, `u32`, `Vec2`, and any single-field
+//! newtype over one of them (a `gradiance-units` quantity such as
+//! `Length(f32)` or `Acceleration2(Vec2)` edits as the number it wraps, the
+//! way the script bridge reads it). Nested structs recurse; unsupported fields render read-only (the explicit escape
 //! hatch is a hand-written row next to the grid — see the grid-system
 //! picker in `settings.rs`).
 
@@ -99,6 +101,14 @@ fn leaf_widget(ui: &mut Ui, id: egui::Id, field: &mut dyn bevy::reflect::Partial
         });
         return changed;
     }
+    // Dimensional newtype (`Length(f32)`, `Acceleration2(Vec2)`): edit the
+    // value it wraps, so a typed quantity renders as the number it was.
+    if let ReflectMut::TupleStruct(ts) = field.reflect_mut()
+        && ts.field_len() == 1
+        && let Some(inner) = ts.field_mut(0)
+    {
+        return leaf_widget(ui, id, inner);
+    }
     // Nested struct: recurse in an indented block.
     if matches!(field.reflect_ref(), ReflectRef::Struct(_)) {
         let mut changed = false;
@@ -130,5 +140,52 @@ mod tests {
         let rows = grid_rows(s, GRID_HAND_DRAWN);
         assert!(!rows.iter().any(|n| n == "system"), "rows: {rows:?}");
         assert!(rows.iter().any(|n| n == "spacing"), "rows: {rows:?}");
+    }
+
+    /// Every text the grid paints for `value` in one headless frame.
+    fn painted_text(value: &mut dyn Reflect) -> Vec<String> {
+        let ctx = egui::Context::default();
+        // Two frames: a grid's first frame may be an invisible sizing pass.
+        let mut output = egui::FullOutput::default();
+        for _ in 0..2 {
+            output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                reflect_grid(ui, egui::Id::new("probe"), value);
+            });
+        }
+        output
+            .shapes
+            .iter()
+            .filter_map(|clipped| match &clipped.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_string()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[derive(bevy::reflect::Reflect, Default)]
+    struct Probe {
+        length: gradiance_units::Length,
+        gravity: gradiance_units::Acceleration2,
+    }
+
+    #[derive(bevy::reflect::Reflect, Default)]
+    struct Unsupported {
+        name: String,
+    }
+
+    #[test]
+    fn a_quantity_newtype_renders_as_its_number() {
+        let mut probe = Probe {
+            length: gradiance_units::Length(1.25),
+            gravity: gradiance_units::Acceleration2(Vec2::new(0.5, -9.75)),
+        };
+        let text = painted_text(&mut probe);
+        assert!(!text.iter().any(|t| t.contains("unsupported")), "{text:?}");
+        for number in ["1.25", "0.5", "-9.75"] {
+            assert!(text.iter().any(|t| t == number), "no {number} in {text:?}");
+        }
+        // The detector itself: a genuinely unsupported field says so.
+        let text = painted_text(&mut Unsupported::default());
+        assert!(text.iter().any(|t| t.contains("unsupported")), "{text:?}");
     }
 }
