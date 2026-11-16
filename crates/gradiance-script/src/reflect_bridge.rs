@@ -289,6 +289,70 @@ mod tests {
         assert!(write_path(&mut settings, "gravity", 0.0).is_err());
     }
 
+    /// Brief 5-1: the real retyped authored types read and write as plain
+    /// numbers through the bridge ("reads are total"), by the paths they had
+    /// as bare `f32`/`Vec2` fields.
+    #[test]
+    fn retyped_domain_quantities_stay_numbers() {
+        use gradiance_domain::depth::DepthBand;
+        use gradiance_domain::joint::{JointDef, JointKind};
+        use gradiance_domain::settings::GridSettings;
+        use gradiance_domain::tracer::Tracer;
+
+        let mut sim = SimSettings::default();
+        assert_eq!(read_path(&sim, "gravity.y"), Some(-10.0));
+        assert_eq!(read_path(&sim, "timestep_hz"), Some(60.0));
+        write_path(&mut sim, "timestep_hz", 90.0).expect("Frequency writable");
+        assert_eq!(sim.timestep_hz.value(), 90.0);
+
+        let mut grid = GridSettings::default();
+        write_path(&mut grid, "spacing", 0.25).expect("Length writable");
+        write_path(&mut grid, "origin.x", 2.0).expect("Displacement writable");
+        assert_eq!(read_path(&grid, "spacing"), Some(0.25));
+        assert_eq!(read_path(&grid, "origin.x"), Some(2.0));
+
+        let band = DepthBand::metres(0.1, 0.3);
+        assert!(matches!(
+            reflect_to_steel(&band as &dyn PartialReflect),
+            SteelVal::ListV(_)
+        ));
+        let near = read_path(&band, "near").expect("near reads");
+        assert!((near - 0.1).abs() < 1e-6);
+
+        let tracer = Tracer::default();
+        assert_eq!(read_path(&tracer, "fade_secs"), Some(3.0));
+
+        let mut def = JointDef {
+            kind: JointKind::Spring {
+                rest_length: gradiance_units::Length(1.0),
+                stiffness: gradiance_units::Stiffness(100.0),
+                damping: gradiance_units::Damping(0.0),
+                range: None,
+            },
+            common: gradiance_domain::joint::JointCommon::default(),
+            body_a: gradiance_core::ids::StableId::new(),
+            body_b: None,
+            anchor_a: gradiance_units::Displacement(bevy::math::Vec2::ZERO),
+            anchor_b: gradiance_units::Displacement(bevy::math::Vec2::ZERO),
+            rest_rot_a: gradiance_units::Angle(0.5),
+            rest_rot_b: gradiance_units::Angle(0.0),
+        };
+        assert_eq!(read_path(&def, "rest_rot_a"), Some(0.5));
+        write_path(&mut def, "anchor_a.y", -1.5).expect("anchor writable");
+        assert_eq!(def.anchor_a.value().y, -1.5);
+        assert!(matches!(
+            scalar_to_steel(&def.rest_rot_a as &dyn PartialReflect),
+            Some(SteelVal::NumV(v)) if (v - 0.5).abs() < 1e-9
+        ));
+        let JointKind::Spring { stiffness, .. } = def.kind else {
+            panic!("a spring");
+        };
+        assert!(matches!(
+            scalar_to_steel(&stiffness as &dyn PartialReflect),
+            Some(SteelVal::NumV(v)) if (v - 100.0).abs() < 1e-9
+        ));
+    }
+
     #[test]
     fn steel_drives_real_sim_settings_through_reflection() {
         let settings = Arc::new(Mutex::new(SimSettings::default()));

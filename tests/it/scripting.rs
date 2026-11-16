@@ -712,6 +712,57 @@ fn every_joint_kind_lands_and_is_undoable() {
     assert_eq!(joint_count(&mut app), 0);
 }
 
+/// Brief 5-1: retyping authored scalars to `gradiance-units` quantities must
+/// not change what a script sees. `sim-get`/`sim-set` read and write typed
+/// settings (`gravity: Acceleration2`, `timestep_hz: Frequency`) as plain
+/// numbers by their old paths, and the `spring` verb's numeric arguments land
+/// in the typed spring parameters unchanged.
+#[test]
+fn retyped_quantities_read_and_write_as_numbers() {
+    use gradiance::domain::joint::{JointDef, JointKind};
+    use gradiance::units::{Acceleration2, Damping, Frequency, Length, Stiffness};
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (sim-set \"timestep_hz\" 120) (sim-set \"gravity.x\" 1.5) \
+                (sim-set \"gravity.y\" -9.5))",
+    );
+    let sim = app.world().resource::<SimSettings>().clone();
+    assert_eq!(sim.timestep_hz, Frequency(120.0));
+    assert_eq!(sim.gravity, Acceleration2(Vec2::new(1.5, -9.5)));
+
+    // Reads come back as numbers a script can compare and do arithmetic on.
+    run(
+        &mut app,
+        "(when (and (= (sim-get \"timestep_hz\") 120) \
+                    (< (+ (sim-get \"gravity.y\") (sim-get \"gravity.x\")) -7.9)) \
+            (spawn-box 0 0 1 1))",
+    );
+    assert_eq!(body_count(&mut app), 1, "sim-get returned numbers");
+
+    run(&mut app, "(spawn-box 3 0 1 1)");
+    run(&mut app, "(spring 0 1 150 0.25)");
+    let mut q = app.world_mut().query::<&JointDef>();
+    let defs: Vec<JointDef> = q.iter(app.world()).cloned().collect();
+    assert_eq!(defs.len(), 1);
+    let JointKind::Spring {
+        rest_length,
+        stiffness,
+        damping,
+        range,
+    } = defs[0].kind
+    else {
+        panic!("expected a spring, got {:?}", defs[0].kind);
+    };
+    assert_eq!(stiffness, Stiffness(150.0));
+    assert_eq!(damping, Damping(0.25));
+    assert!(
+        (rest_length - Length(3.0)).value().abs() < 1e-5,
+        "{rest_length:?}"
+    );
+    assert_eq!(range, None);
+}
+
 /// Bad body indices must not produce a half-built joint. A first index that
 /// does not resolve emits nothing at all; a bad *second* index degrades to a
 /// world pin, so a typo shows up in the scene rather than silently vanishing.
