@@ -1,7 +1,7 @@
 # State — where the project is right now
 
 Overwritten at every handoff; history lives in git. Keep it under a screen.
-Last updated: 2026-11-14, Phase 5 (orchestrator; Phase 4 complete with #235; 5-1 in flight).
+Last updated: 2026-11-14, Phase 5/4b (orchestrator; 5-1 in flight; owner direction 4b queued next).
 
 ## Position
 
@@ -40,6 +40,11 @@ Last updated: 2026-11-14, Phase 5 (orchestrator; Phase 4 complete with #235; 5-1
   SSAO assumes a full-window viewport; SSAO now uses a full-window
   `SubCameraView` instead of the offset viewport) (palette, camera settings,
   gravity widget; confirms emissive/borders/AO, which already exist).
+- **Owner direction 2026-11-16 → Phase 4b** (`orchestration.md`): **4b-1**
+  group op surface, **4b-2** groups panel, **4b-3** art direction + SSAO
+  options (show the owner), **4b-4** mass-scaled defaults + behaviour tests.
+  Runs after 5-1, before 5-2. **Format and UI may change freely** (owner):
+  5-1 switched to transparent quantities + v7.
 - **Phase 5 (serial):** **5-1** units P2·types (in flight)
   (authored scalars → newtypes, format unchanged), **5-2** named quantity
   catalog (P3), **5-3** unit-aware input + deg/rad preference (P4),
@@ -70,17 +75,13 @@ it up, and briefs must not absorb it. Defined roadmap items (the phases in
 - **Elastica / flexure** from #194 (after Phase 5).
 - **Verbs missing for context-menu folding (3-3 Outcome):** `joint-at x y`
   (Delete joint), node indexing for `delete` / `node-at` (Delete node),
-  `set-orbit` (Set in orbit), `set-depth` (Depth front/forward/backward),
-  `set-color` (Random colors). Those buttons stay hand-wired until then.
+  `set-orbit` (Set in orbit), `set-depth` (Depth front/forward/backward)
+  (`set-color` is now in 4b-1). Those buttons stay hand-wired until then.
 - **From 4-1:** split pieces lose analytic geometry (polygon leaves); the
   boolean miss-check is AABB-level (a rotated miss still consumes the operand).
 - **From 4-4:** report Bevy's SSAO-viewport bug upstream (then drop the
   workaround); later screen-space effects may need the same sub-view;
   `world_per_pixel` uses window height where perspective FOV spans the pane.
-- **From 4-3:** "random colours within a grouped selection" read as one
-  colour per outermost group (owner to confirm); SSAO nearly invisible at
-  scene scale (tune or drop: design call); `set-color` needs `Appearance`
-  in the script snapshot.
 - **From 4-2:** the polynomial smooth-min bulges flush faces outward (≤ r/4);
   a fillet-merged body's selection box ignores the bulge; smooth
   subtract/intersect, chamfers, single-body corner fillets.

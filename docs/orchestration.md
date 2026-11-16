@@ -168,6 +168,15 @@ items that are render work (emissive, AO/contact shadows, body borders).
 **M19's chrome items** (palette picker, camera settings section, sim-settings
 widgets) are built *functional, not polished* — see below.
 
+**Phase 4b — Owner direction (2026-11-16).** Groups as editing layers
+(4b-1 op surface: names, group-scoped edits, distribute within bounds,
+filters, decompose; 4b-2 the panel), one art direction with selectable
+presets and SSAO options (4b-3), and parameters scaled to the body so
+defaults behave and only slider extremes misbehave (4b-4), each locked in
+with behaviour tests. The owner also ruled that the **save format and UI may
+change freely** while the project is experimental: bump `FORMAT_VERSION`,
+reject older files, regenerate goldens; no migrations.
+
 **Phase 5 — Units & frames, the 3D on-ramp.** Units P2·types → P3 → P4 → P6.
 Then write `docs/frames-decision.md` properly, and the curvilinear-tools
 decision note from Phase 1. These are the seams simulation planes consume.
