@@ -56,7 +56,7 @@ use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_domain::props::BodyPhysics;
-use gradiance_domain::settings::SimSettings;
+use gradiance_domain::settings::{CameraSettings, SimSettings};
 use gradiance_domain::shape::{CsgOp, ShapeDef};
 use gradiance_domain::signal::{ComputedSignal, SignalExpr, SignalParam};
 use gradiance_geometry::sdf;
@@ -93,8 +93,20 @@ type SharedView = Arc<Mutex<SceneView>>;
 /// applied to the settings resource after the run — the invariant-#4 seam, not
 /// the command stack.
 struct ConfigWrite {
+    /// Which settings resource the path is into.
+    target: ConfigTarget,
     path: String,
     value: f64,
+}
+
+/// The settings resources the config verbs reach.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigTarget {
+    /// `SimSettings` (`sim-set`) — scene content, so a settled write is one
+    /// undo step via `commit_settings_edits`.
+    Sim,
+    /// `CameraSettings` (`camera-set`) — workstation config, never undone.
+    Camera,
 }
 
 /// A queue of config writes, shared between the config builtins (producers) and
@@ -112,6 +124,8 @@ struct Shared {
     view: SharedView,
     /// Read mirror of `SimSettings` → `sim-get`.
     sim: Arc<Mutex<SimSettings>>,
+    /// Read mirror of `CameraSettings` → `camera-get`.
+    camera: Arc<Mutex<CameraSettings>>,
     /// Config writes emitted by `sim-set` → the settings resource.
     config: ConfigQueue,
     /// Named actions emitted by `register-action` → the `ScriptActions` table.
@@ -155,6 +169,7 @@ impl Shared {
             ops: Arc::new(Mutex::new(Vec::new())),
             view: Arc::new(Mutex::new(SceneView::default())),
             sim: Arc::new(Mutex::new(SimSettings::default())),
+            camera: Arc::new(Mutex::new(CameraSettings::default())),
             config: Arc::new(Mutex::new(Vec::new())),
             actions: Arc::new(Mutex::new(Vec::new())),
             signal_writes: Arc::new(Mutex::new(Vec::new())),
@@ -988,7 +1003,7 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_joint_verbs(engine, &shared.ops, &shared.view);
     register_property_verbs(engine, &shared.ops, &shared.view);
     register_query_verbs(engine, &shared.view);
-    register_config_verbs(engine, &shared.config, &shared.sim);
+    register_config_verbs(engine, &shared.config, &shared.sim, &shared.camera);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
     register_action_reads(engine, &shared.action_point);
     register_tool_verbs(engine, &shared.tools, &shared.tool_points);
@@ -1189,36 +1204,67 @@ fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
 /// `sim-set` queues a reflect-path write applied to the settings resource (the
 /// invariant-#4 seam, never the command stack). Both name fields only by
 /// reflect-path, so any `SimSettings` scalar is reachable with no per-field
-/// builtin.
-fn register_config_verbs(engine: &mut Engine, config: &ConfigQueue, sim: &Arc<Mutex<SimSettings>>) {
-    // `(sim-get path)` — read a simulation setting by reflect-path.
-    let s = Arc::clone(sim);
-    engine.register_fn(name::SIM_GET, move |path: String| -> f64 {
-        s.lock()
+/// builtin. `camera-get` / `camera-set` are the same pair over
+/// `CameraSettings`.
+fn register_config_verbs(
+    engine: &mut Engine,
+    config: &ConfigQueue,
+    sim: &Arc<Mutex<SimSettings>>,
+    camera: &Arc<Mutex<CameraSettings>>,
+) {
+    register_config_pair(
+        engine,
+        config,
+        sim,
+        (name::SIM_GET, name::SIM_SET),
+        ConfigTarget::Sim,
+    );
+    register_config_pair(
+        engine,
+        config,
+        camera,
+        (name::CAMERA_GET, name::CAMERA_SET),
+        ConfigTarget::Camera,
+    );
+}
+
+/// One `(…-get path)` / `(…-set path value)` pair over a settings mirror.
+fn register_config_pair<T: Reflect + Clone>(
+    engine: &mut Engine,
+    config: &ConfigQueue,
+    mirror: &Arc<Mutex<T>>,
+    (get, set): (&'static str, &'static str),
+    target: ConfigTarget,
+) {
+    // `(…-get path)` — read a setting by reflect-path.
+    let m = Arc::clone(mirror);
+    engine.register_fn(get, move |path: String| -> f64 {
+        m.lock()
             .ok()
             .and_then(|settings| read_path(&*settings, &path))
             .unwrap_or(f64::NAN)
     });
 
-    // `(sim-set path value)` — queue a config write to a simulation setting.
-    // The write is trialled on a copy of the mirror first, so a bad path or a
-    // non-numeric value is a script error (logged and shown in the console)
-    // rather than a write that silently never lands. Integer and float
-    // literals both coerce to the leaf's type (`0` and `0.0` are the same).
+    // `(…-set path value)` — queue a config write to a setting. The write is
+    // trialled on a copy of the mirror first, so a bad path or a non-numeric
+    // value is a script error (logged and shown in the console) rather than a
+    // write that silently never lands. Integer and float literals both coerce
+    // to the leaf's type (`0` and `0.0` are the same).
     let c = Arc::clone(config);
-    let s = Arc::clone(sim);
+    let m = Arc::clone(mirror);
     engine.register_fn(
-        name::SIM_SET,
+        set,
         move |path: String, value: SteelVal| -> Result<(), String> {
             let Some(number) = steel_to_f64(&value) else {
-                return Err(format!("sim-set {path}: expected a number, got {value}"));
+                return Err(format!("{set} {path}: expected a number, got {value}"));
             };
-            if let Ok(settings) = s.lock() {
+            if let Ok(settings) = m.lock() {
                 let mut trial = settings.clone();
-                write_path(&mut trial, &path, number).map_err(|e| format!("sim-set: {e}"))?;
+                write_path(&mut trial, &path, number).map_err(|e| format!("{set}: {e}"))?;
             }
             if let Ok(mut queue) = c.lock() {
                 queue.push(ConfigWrite {
+                    target,
                     path,
                     value: number,
                 });
@@ -2026,6 +2072,15 @@ pub fn run_scripts(world: &mut World) {
     {
         *guard = settings;
     }
+    if let (Some(camera), Some(settings)) = (
+        world
+            .get_non_send::<ScriptEngine>()
+            .map(|e| Arc::clone(&e.shared.camera)),
+        world.get_resource::<CameraSettings>().cloned(),
+    ) && let Ok(mut guard) = camera.lock()
+    {
+        *guard = settings;
+    }
     refresh_signal_mirror(world);
     refresh_panel_mirror(world);
 
@@ -2068,15 +2123,21 @@ pub fn run_scripts(world: &mut World) {
                 .map(|mut q| std::mem::take(&mut *q))
         })
         .unwrap_or_default();
-    if !writes.is_empty()
-        && let Some(mut settings) = world.get_resource_mut::<SimSettings>()
-    {
-        for write in writes {
-            // Already trialled by the verb; a failure here means the
-            // resource and the mirror disagree on shape — say so.
-            if let Err(err) = write_path(&mut *settings, &write.path, write.value) {
-                warn!("sim-set: {err}");
-            }
+    for write in writes {
+        // Already trialled by the verb; a failure here means the resource
+        // and the mirror disagree on shape — say so. Each write touches only
+        // its own resource, so a script that never calls `camera-set` leaves
+        // `CameraSettings` change detection alone (and likewise for sim).
+        let result = match write.target {
+            ConfigTarget::Sim => world
+                .get_resource_mut::<SimSettings>()
+                .map(|mut s| write_path(&mut *s, &write.path, write.value)),
+            ConfigTarget::Camera => world
+                .get_resource_mut::<CameraSettings>()
+                .map(|mut s| write_path(&mut *s, &write.path, write.value)),
+        };
+        if let Some(Err(err)) = result {
+            warn!("{:?} config write: {err}", write.target);
         }
     }
 
@@ -2599,6 +2660,33 @@ mod tests {
         assert_eq!(settings.speed, 2.0);
         // A config write is not an authored edit — nothing reached the intent bus.
         assert!(app.world().resource::<Spawns>().0.is_empty());
+    }
+
+    #[test]
+    fn camera_verbs_read_and_write_camera_settings() {
+        let mut app = bus_app();
+        app.insert_resource(SimSettings::default());
+        app.insert_resource(CameraSettings::default());
+        run(
+            &mut app,
+            "(camera-set \"zoom_step\" (- (camera-get \"zoom_step\") 0.04))",
+        );
+        let camera = app.world().resource::<CameraSettings>();
+        assert!((camera.zoom_step - 0.90).abs() < 1e-6, "{camera:?}");
+        // Only the camera moved: the sim settings saw no write.
+        assert_eq!(
+            *app.world().resource::<SimSettings>(),
+            SimSettings::default()
+        );
+
+        run(&mut app, "(camera-set \"no_such_field\" 1)");
+        let log = app.world().resource::<ScriptLog>();
+        let entry = log.0.last().expect("logged");
+        assert!(
+            !entry.ok && entry.output.contains("camera-set"),
+            "{}",
+            entry.output
+        );
     }
 
     #[test]

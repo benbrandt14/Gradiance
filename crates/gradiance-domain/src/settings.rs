@@ -125,6 +125,56 @@ impl Default for SnapConfig {
     }
 }
 
+/// Camera feel (the "Camera" section of the Grid & Snap settings tab).
+///
+/// **Workstation config**, like [`GridSettings`]: it describes the person
+/// driving the editor, not the scene, so it is saved with the scene but never
+/// enters undo (`EnvironmentRecord::scene_content_eq` leaves it out). The
+/// camera reads it through [`sanitized`](Self::sanitized), so a value typed
+/// out of range cannot freeze or invert the view.
+#[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+#[serde(default)]
+pub struct CameraSettings {
+    /// Zoom multiplier per scroll notch, in `(0, 1)`: closer to 1 is
+    /// gentler, smaller zooms faster.
+    pub zoom_step: f32,
+    /// Keyboard (arrow-key) pan speed in screen pixels per second, so it
+    /// feels the same at every zoom.
+    pub pan_speed: f32,
+    /// Middle-drag orbit sensitivity in degrees per screen pixel.
+    pub orbit_speed_deg: f32,
+}
+
+impl Default for CameraSettings {
+    fn default() -> Self {
+        Self {
+            zoom_step: 0.94,
+            pan_speed: 600.0,
+            orbit_speed_deg: 0.3,
+        }
+    }
+}
+
+impl CameraSettings {
+    /// Smallest / largest zoom step the camera will use.
+    pub const ZOOM_STEP_RANGE: (f32, f32) = (0.5, 0.995);
+
+    /// The settings clamped to values the camera can use: a zoom step
+    /// inside [`ZOOM_STEP_RANGE`](Self::ZOOM_STEP_RANGE), non-negative
+    /// speeds, and the default for anything non-finite.
+    #[must_use]
+    pub fn sanitized(&self) -> Self {
+        let d = Self::default();
+        let finite = |v: f32, fallback: f32| if v.is_finite() { v } else { fallback };
+        let (lo, hi) = Self::ZOOM_STEP_RANGE;
+        Self {
+            zoom_step: finite(self.zoom_step, d.zoom_step).clamp(lo, hi),
+            pan_speed: finite(self.pan_speed, d.pan_speed).max(0.0),
+            orbit_speed_deg: finite(self.orbit_speed_deg, d.orbit_speed_deg).max(0.0),
+        }
+    }
+}
+
 /// Tool-creation defaults (editor configuration, the Config seam).
 ///
 /// Non-authored, non-persisted workstation preferences the tools consult at
@@ -189,6 +239,35 @@ impl Default for SimSettings {
             substeps: 6,
             timestep_hz: 60.0,
         }
+    }
+}
+
+impl SimSettings {
+    /// Direction reported for zero gravity, where the angle is undefined:
+    /// straight down, so raising the magnitude from zero falls the usual way.
+    pub const DEFAULT_GRAVITY_ANGLE_DEG: f32 = -90.0;
+
+    /// Gravity as `(angle, magnitude)`: the angle in degrees counter-clockwise
+    /// from +x (straight down is −90°), the magnitude in m/s². Zero gravity
+    /// reports [`DEFAULT_GRAVITY_ANGLE_DEG`](Self::DEFAULT_GRAVITY_ANGLE_DEG).
+    ///
+    /// The gravity-direction widget edits these two numbers; the seam is still
+    /// the `gravity` vector, so one settled edit is one undo step.
+    #[must_use]
+    pub fn gravity_polar(&self) -> (f32, f32) {
+        let magnitude = self.gravity.length();
+        if magnitude <= f32::EPSILON {
+            return (Self::DEFAULT_GRAVITY_ANGLE_DEG, 0.0);
+        }
+        (self.gravity.y.atan2(self.gravity.x).to_degrees(), magnitude)
+    }
+
+    /// The gravity vector for `(angle_deg, magnitude)` — the inverse of
+    /// [`gravity_polar`](Self::gravity_polar). A negative magnitude is
+    /// treated as zero.
+    #[must_use]
+    pub fn gravity_from_polar(angle_deg: f32, magnitude: f32) -> Vec2 {
+        Vec2::from_angle(angle_deg.to_radians()) * magnitude.max(0.0)
     }
 }
 
@@ -379,5 +458,70 @@ impl Default for ScenerySettings {
             ground_visible: true,
             perspective_deg: 0.0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // float_cmp: the defaults are copied through exactly.
+    #![allow(clippy::float_cmp)]
+    use super::*;
+
+    #[test]
+    fn gravity_polar_round_trips() {
+        let sim = SimSettings::default();
+        let (angle, magnitude) = sim.gravity_polar();
+        assert!((angle - -90.0).abs() < 1e-4, "default points down: {angle}");
+        assert!((magnitude - 10.0).abs() < 1e-5);
+        let back = SimSettings::gravity_from_polar(angle, magnitude);
+        assert!((back - sim.gravity).length() < 1e-5, "{back}");
+
+        for (angle, magnitude) in [(0.0, 3.0), (45.0, 9.81), (180.0, 1.0), (-135.0, 25.0)] {
+            let g = SimSettings::gravity_from_polar(angle, magnitude);
+            let (a, m) = SimSettings {
+                gravity: g,
+                ..SimSettings::default()
+            }
+            .gravity_polar();
+            assert!((m - magnitude).abs() < 1e-4, "{magnitude} -> {m}");
+            let wrapped = (a - angle + 540.0).rem_euclid(360.0) - 180.0;
+            assert!(wrapped.abs() < 1e-3, "{angle} -> {a}");
+        }
+
+        let zero = SimSettings {
+            gravity: Vec2::ZERO,
+            ..SimSettings::default()
+        };
+        assert_eq!(
+            zero.gravity_polar(),
+            (SimSettings::DEFAULT_GRAVITY_ANGLE_DEG, 0.0)
+        );
+        assert_eq!(SimSettings::gravity_from_polar(30.0, -2.0), Vec2::ZERO);
+    }
+
+    #[test]
+    fn camera_settings_sanitize_into_a_usable_range() {
+        let ok = CameraSettings::default();
+        assert_eq!(ok.sanitized(), ok, "defaults are already sane");
+
+        let bad = CameraSettings {
+            zoom_step: 1.5,
+            pan_speed: -3.0,
+            orbit_speed_deg: f32::NAN,
+        }
+        .sanitized();
+        assert_eq!(bad.zoom_step, CameraSettings::ZOOM_STEP_RANGE.1);
+        assert_eq!(bad.pan_speed, 0.0);
+        assert_eq!(bad.orbit_speed_deg, ok.orbit_speed_deg);
+        assert_eq!(
+            CameraSettings {
+                zoom_step: 0.0,
+                ..ok
+            }
+            .sanitized()
+            .zoom_step,
+            CameraSettings::ZOOM_STEP_RANGE.0,
+            "a zero step would zoom to the limit in one notch"
+        );
     }
 }

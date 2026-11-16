@@ -6,7 +6,7 @@
 use crate::harness::*;
 use bevy::prelude::*;
 use gradiance::prelude::*;
-use gradiance_domain::settings::{LightingSettings, SimSettings};
+use gradiance_domain::settings::{CameraSettings, LightingSettings, SimSettings};
 
 /// Spawns a box and lets the stack settle, returning its id.
 fn spawn_settled(app: &mut App) -> StableId {
@@ -199,6 +199,44 @@ fn a_drag_gesture_collapses_into_one_step() {
     );
 }
 
+/// The gravity-direction widget edits `(angle, magnitude)` and writes the
+/// vector back through `SimSettings::gravity_from_polar`; a whole dial drag
+/// (many frames of polar edits) settles into one undo step. The egui dial
+/// itself is not driven headless — this pins the seam it writes through.
+#[test]
+fn a_gravity_direction_drag_is_one_undo_step() {
+    let mut app = paused_app();
+    spawn_settled(&mut app);
+    let original = app.world().resource::<SimSettings>().gravity;
+    let (angle, magnitude) = app.world().resource::<SimSettings>().gravity_polar();
+
+    // Sweep the dial a quarter turn, then raise the strength.
+    for i in 1..=10 {
+        let a = angle + i as f32 * 9.0;
+        app.world_mut().resource_mut::<SimSettings>().gravity =
+            SimSettings::gravity_from_polar(a, magnitude);
+        app.update();
+    }
+    app.world_mut().resource_mut::<SimSettings>().gravity =
+        SimSettings::gravity_from_polar(angle + 90.0, magnitude * 2.0);
+    app.update();
+    app.update(); // settles
+    let aimed = app.world().resource::<SimSettings>().gravity;
+    assert!((aimed - Vec2::new(20.0, 0.0)).length() < 1e-3, "{aimed}");
+
+    undo(&mut app);
+    let back = app.world().resource::<SimSettings>().gravity;
+    assert!(
+        (back - original).length() < 1e-5,
+        "the whole dial gesture is one undo step ({back} vs {original})"
+    );
+    assert_eq!(
+        body_count(&mut app),
+        1,
+        "the undo stopped at the gravity edit"
+    );
+}
+
 #[test]
 fn workstation_config_stays_out_of_history() {
     let mut app = paused_app();
@@ -219,6 +257,40 @@ fn workstation_config_stays_out_of_history() {
         (app.world().resource::<GridSettings>().spacing - tweaked).abs() < 1e-6,
         "undo never moves the grid out from under the user"
     );
+}
+
+#[test]
+fn camera_settings_are_workstation_config() {
+    let mut app = paused_app();
+    spawn_settled(&mut app);
+
+    let tweaked = CameraSettings {
+        zoom_step: 0.7,
+        pan_speed: 123.0,
+        orbit_speed_deg: 1.0,
+    };
+    *app.world_mut().resource_mut::<CameraSettings>() = tweaked.clone();
+    app.update();
+    app.update();
+
+    // Undo reverts the spawn — the camera edit never entered history.
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 0, "undo reached past the camera edit");
+    assert_eq!(
+        *app.world().resource::<CameraSettings>(),
+        tweaked,
+        "undo never changes how the person's camera feels"
+    );
+
+    // The classification itself: two environments differing only in camera
+    // feel are the same scene content.
+    let a = EnvironmentRecord::default();
+    let b = EnvironmentRecord {
+        camera: tweaked,
+        ..EnvironmentRecord::default()
+    };
+    assert!(a.scene_content_eq(&b));
+    assert_ne!(a, b, "but the camera is still saved");
 }
 
 #[test]

@@ -359,13 +359,30 @@ shadow items from M19. Design decisions in the slice PRs.
 ## M19 — Rendering & camera polish
 
 - Emissive material option; ambient occlusion / contact shadows for the
-  clay-matte look (9.3)
+  clay-matte look (9.3) — **landed**: per-body `Appearance::emissive`
+  (inspector + context menu) glows in the fill's hue; contact shadows and
+  SSAO are Lighting-tab toggles (V1). Screenshot-verified in 4-3, which also
+  fixed SSAO blanking the whole viewport (the egui overlay camera kept 4x
+  MSAA while SSAO set the scene camera to `Msaa::Off`, so the two stopped
+  sharing a main texture — `render::scenery::match_overlay_msaa`).
 - Body borders: default dark-gray outline, per-body border color and
-  transparency via context menu (1.5)
+  transparency via context menu (1.5) — **landed**
+  (`render::decorations::draw_body_borders`; alpha 0 hides the outline).
 - Themed default palette; quantized color picker; random colors within a
-  grouped selection (1.5)
-- Camera settings section (zoom sensitivity etc.) (10.2)
-- Sim-settings UI: scrub-drag values, gravity direction widget (8.2)
+  grouped selection (1.5) — **landed** (4-3): `domain::appearance::PALETTE`
+  (ten named swatches) is the one table — `Appearance::for_id` picks from it,
+  the inspector's Appearance section is a swatch row (free picker behind a
+  "custom fill" disclosure), and "Random colors (per group | per body)"
+  hands out palette colors via `appearance::random_fills`, one undo step.
+  No `set-color` verb yet (retained).
+- Camera settings section (zoom sensitivity etc.) (10.2) — **landed** (4-3):
+  `CameraSettings` (zoom step, pan speed, orbit speed) is workstation config
+  (saved, never undone), edited on a Camera settings tab and by
+  `camera-get`/`camera-set`.
+- Sim-settings UI: scrub-drag values, gravity direction widget (8.2) —
+  **landed** (4-3): a gravity dial plus direction/strength rows over
+  `SimSettings::gravity_polar`; the scalars are `labelled_drag` rows. One
+  settled edit is one undo step.
 
 ## M20 — Constraints II
 

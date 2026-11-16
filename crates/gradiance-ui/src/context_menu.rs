@@ -16,7 +16,7 @@ use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
-use gradiance_domain::appearance::{Appearance, Rgba};
+use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::joint::JointDef;
 use gradiance_domain::node::{BehaviorNode, NodeKind};
@@ -774,27 +774,37 @@ pub fn context_menu(
                     close = true;
                 }
                 ui.separator();
-                if ui.button("Random colors (per body)").clicked() {
-                    let changes: Vec<PropertyChange> = selection
+                // Random palette colors: one per body, or one per group
+                // (bodies sharing an outermost group match). The palette
+                // walk is `appearance::random_fills`; this is one intent.
+                let grouped_click = ui
+                    .button("Random colors (per group)")
+                    .on_hover_text("grouped bodies share one color")
+                    .clicked();
+                let per_body_click = ui.button("Random colors (per body)").clicked();
+                if grouped_click || per_body_click {
+                    let members: Vec<_> = selection
                         .iter()
-                        .enumerate()
-                        .filter_map(|(index, e)| {
+                        .filter_map(|e| {
                             let id = props.ids.get(e).ok().copied()?;
                             let (_, _, old) = bodies_q.get(e).ok()?;
-                            // Golden-angle hue walk from each body's id.
-                            let base = (id.0.as_u128() % 360) as f32;
-                            let hue = base + 137.5 * (index as f32 + 1.0);
-                            let new = Appearance {
-                                fill: Rgba::from_hsl(hue, 0.65, 0.55),
-                                ..*old
-                            };
-                            Some(PropertyChange {
+                            let group = groups
+                                .get(e)
+                                .ok()
+                                .and_then(|(_, g)| g.outermost());
+                            Some((id, group, *old))
+                        })
+                        .collect();
+                    let changes: Vec<PropertyChange> =
+                        gradiance_domain::appearance::random_fills(&members, grouped_click)
+                            .into_iter()
+                            .zip(&members)
+                            .map(|((id, new), (_, _, old))| PropertyChange {
                                 id,
                                 old: PropertyValue::Appearance(*old),
                                 new: PropertyValue::Appearance(new),
                             })
-                        })
-                        .collect();
+                            .collect();
                     if !changes.is_empty() {
                         props.edits.write(PropertyEditIntent { changes });
                     }

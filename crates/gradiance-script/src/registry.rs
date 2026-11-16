@@ -50,6 +50,10 @@ pub mod name {
     pub const SIM_GET: &str = "sim-get";
     /// `(sim-set path value)` — write a simulation setting by reflect-path.
     pub const SIM_SET: &str = "sim-set";
+    /// `(camera-get path)` — read a camera-feel setting by reflect-path.
+    pub const CAMERA_GET: &str = "camera-get";
+    /// `(camera-set path value)` — write one (workstation config, not undoable).
+    pub const CAMERA_SET: &str = "camera-set";
     /// `(register-action label source)` — surface a named action in the editor.
     pub const REGISTER_ACTION: &str = "register-action";
     /// `(action-x)` — x of the point the running action was invoked at.
@@ -636,8 +640,26 @@ fn config_specs() -> Vec<OpSpec> {
             category: Config,
             args: 2,
         },
+        OpSpec {
+            name: name::CAMERA_GET,
+            signature: "(camera-get path)",
+            doc: "Read a camera-feel setting: \"zoom_step\", \"pan_speed\", \"orbit_speed_deg\".",
+            category: Query,
+            args: 1,
+        },
+        OpSpec {
+            name: name::CAMERA_SET,
+            signature: "(camera-set path value)",
+            doc: "Set a camera-feel setting by reflect-path (workstation config, never undone).",
+            category: Config,
+            args: 2,
+        },
     ]
 }
+
+/// The `CameraSettings` reflect paths `camera-get`/`camera-set` advertise;
+/// the validation test resolves each.
+pub const CAMERA_SETTING_PATHS: &[&str] = &["zoom_step", "pan_speed", "orbit_speed_deg"];
 
 /// Editor-state verbs (write non-authored editor resources).
 fn editor_specs() -> Vec<OpSpec> {

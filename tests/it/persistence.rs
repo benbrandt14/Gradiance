@@ -5,7 +5,7 @@ use crate::harness::{body_count, box_record, entity_of, paused_app, undo};
 use avian2d::prelude::{ColliderDensity, Friction, GravityScale, Restitution, RigidBody};
 use bevy::prelude::*;
 use gradiance::domain::settings::{
-    GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
+    CameraSettings, GridSettings, GridSystem, RenderSettings, SimSettings, SnapConfig,
 };
 use gradiance::prelude::*;
 use gradiance::scene::{from_ron, to_ron};
@@ -264,6 +264,10 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                         ..GridSettings::default()
                     },
                     snap: SnapConfig::default(),
+                    camera: CameraSettings {
+                        zoom_step: 0.8,
+                        ..CameraSettings::default()
+                    },
                     render: RenderSettings {
                         toon_enabled: render.0,
                         bands: render.1,
@@ -621,6 +625,40 @@ fn pre_render_settings_files_still_parse() {
     let parsed = from_ron(&legacy).expect("legacy files without render settings must load");
     assert_eq!(parsed.environment.render, RenderSettings::default());
     assert_eq!(parsed.bodies.len(), 1);
+}
+
+#[test]
+fn camera_settings_round_trip_and_pre_camera_files_parse() {
+    let camera = CameraSettings {
+        zoom_step: 0.8,
+        pan_speed: 250.0,
+        orbit_speed_deg: 0.75,
+    };
+    let scene = SceneRecord {
+        version: gradiance::scene::FORMAT_VERSION,
+        app_version: String::new(),
+        bodies: vec![],
+        joints: vec![],
+        nodes: vec![],
+        environment: EnvironmentRecord {
+            camera: camera.clone(),
+            ..EnvironmentRecord::default()
+        },
+    };
+    let text = to_ron(&scene).unwrap();
+    // Workstation config still travels with the file.
+    let mut world = bare_world();
+    from_ron(&text).unwrap().apply(&mut world);
+    assert_eq!(*world.resource::<CameraSettings>(), camera);
+    assert_eq!(SceneRecord::capture(&mut world).environment.camera, camera);
+
+    // A file written before the camera section existed loads with defaults.
+    let start = text.find("camera:").expect("camera field serialized");
+    let end = start + text[start..].find("),").expect("camera block closes") + 2;
+    let legacy = format!("{}{}", &text[..start], &text[end..]);
+    assert!(!legacy.contains("zoom_step"), "{legacy}");
+    let parsed = from_ron(&legacy).expect("pre-camera files must load");
+    assert_eq!(parsed.environment.camera, CameraSettings::default());
 }
 
 #[test]

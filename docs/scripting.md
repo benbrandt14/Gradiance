@@ -81,7 +81,7 @@ exactly one sanctioned seam:
 | Category      | Verbs (examples)                       | Seam it uses                                  |
 |---------------|----------------------------------------|-----------------------------------------------|
 | **edit**      | `spawn-box`, `spawn-circle`, `spawn-ground`, `cut` | emits an undoable **intent** (the command choke point) |
-| **config**    | `sim-set`                              | writes a **settings resource** (the invariant-#4 seam) |
+| **config**    | `sim-set`, `camera-set`                | writes a **settings resource** (the invariant-#4 seam) |
 | **query**     | `body-count`, `body-x`, `count-at`, `sim-get`, … | **reads** a per-run snapshot — mutates nothing |
 | **editor**    | `register-action`, `label`             | writes a **non-authored editor resource**      |
 
@@ -148,6 +148,9 @@ across and ±3.5 m up and down); angles are radians.
 (sim-set "gravity.y" -5)     ; write one (any scalar field, by path; m/s², SI)
 ;; 0 and 0.0 are the same value; a bad path or a non-number is a script
 ;; error in the console, never a silent no-op. The next physics step sees it.
+;; camera feel — workstation config: saved with the scene, never undone
+(camera-get "zoom_step")     ; zoom multiplier per scroll notch (0.5..0.995)
+(camera-set "pan_speed" 900) ; arrow-key pan, screen px/s; also "orbit_speed_deg"
 
 ;; editor — the chrome, through the EditorState seam
 (panel-show "properties")    ; open a panel — the same toggle the View menu drives
