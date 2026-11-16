@@ -123,20 +123,17 @@ crate::impl_panel_toggle!(DepthPanel, open);
 /// The band a body drag produces for a pointer at `depth`, snapped and sane.
 fn dragged_band(drag: &BandDrag, depth: f32) -> DepthBand {
     let band = match drag.grab {
-        Grab::Near => DepthBand {
-            near: depth.min(drag.current.far - DepthBand::MIN_THICKNESS),
-            far: drag.current.far,
-        },
-        Grab::Far => DepthBand {
-            near: drag.current.near,
-            far: depth.max(drag.current.near + DepthBand::MIN_THICKNESS),
-        },
+        Grab::Near => DepthBand::metres(
+            depth.min(drag.current.far.value() - DepthBand::MIN_THICKNESS),
+            drag.current.far.value(),
+        ),
+        Grab::Far => DepthBand::metres(
+            drag.current.near.value(),
+            depth.max(drag.current.near.value() + DepthBand::MIN_THICKNESS),
+        ),
         Grab::Whole | Grab::Line => {
             let near = (depth - drag.offset).max(0.0);
-            DepthBand {
-                near,
-                far: near + drag.start.thickness(),
-            }
+            DepthBand::metres(near, near + drag.start.thickness())
         }
     };
     band.snapped()
@@ -149,7 +146,7 @@ fn dragged_band(drag: &BandDrag, depth: f32) -> DepthBand {
 fn depth_lines(rows: &[PlanRow]) -> Vec<f32> {
     let mut depths: Vec<f32> = rows
         .iter()
-        .flat_map(|r| [r.band.near, r.band.far])
+        .flat_map(|r| [r.band.near.value(), r.band.far.value()])
         .collect();
     depths.sort_by(f32::total_cmp);
     depths.dedup_by(|a, b| (*a - *b).abs() < LINE_EPSILON);
@@ -162,8 +159,16 @@ fn edges_at(rows: &[PlanRow], depth: f32) -> Vec<(StableId, DepthBand, Grab)> {
     rows.iter()
         .flat_map(|r| {
             [
-                ((r.band.near - depth).abs() < LINE_EPSILON).then_some((r.id, r.band, Grab::Near)),
-                ((r.band.far - depth).abs() < LINE_EPSILON).then_some((r.id, r.band, Grab::Far)),
+                ((r.band.near.value() - depth).abs() < LINE_EPSILON).then_some((
+                    r.id,
+                    r.band,
+                    Grab::Near,
+                )),
+                ((r.band.far.value() - depth).abs() < LINE_EPSILON).then_some((
+                    r.id,
+                    r.band,
+                    Grab::Far,
+                )),
             ]
         })
         .flatten()
@@ -184,14 +189,15 @@ fn line_changes(rows: &[PlanRow], from: f32, to: f32) -> Vec<PropertyChange> {
         let entry = moved.iter_mut().find(|(other, _, _)| *other == id);
         let current = entry.as_ref().map_or(band, |(_, _, b)| *b);
         let next = match edge {
-            Grab::Near => DepthBand {
-                near: to.min(current.far - DepthBand::MIN_THICKNESS).max(0.0),
-                far: current.far,
-            },
-            _ => DepthBand {
-                near: current.near,
-                far: to.max(current.near + DepthBand::MIN_THICKNESS),
-            },
+            Grab::Near => DepthBand::metres(
+                to.min(current.far.value() - DepthBand::MIN_THICKNESS)
+                    .max(0.0),
+                current.far.value(),
+            ),
+            _ => DepthBand::metres(
+                current.near.value(),
+                to.max(current.near.value() + DepthBand::MIN_THICKNESS),
+            ),
         }
         .snapped();
         match entry {
@@ -242,8 +248,8 @@ pub fn depth_section(
     // The axis grows to fit the content (and stays grown while dragging).
     let content_deepest = rows
         .iter()
-        .map(|r| r.band.far)
-        .chain(panel.drag.iter().map(|d| d.current.far))
+        .map(|r| r.band.far.value())
+        .chain(panel.drag.iter().map(|d| d.current.far.value()))
         .fold(DEFAULT_VIEW_DEPTH, f32::max);
     panel.view_depth = panel
         .view_depth
@@ -400,8 +406,8 @@ fn draw_footprints(
             _ => row.band,
         };
         let footprint = egui::Rect::from_min_max(
-            egui::pos2(view.x_of(row.x_extent.0), view.y_of(shown.near)),
-            egui::pos2(view.x_of(row.x_extent.1), view.y_of(shown.far)),
+            egui::pos2(view.x_of(row.x_extent.0), view.y_of(shown.near.value())),
+            egui::pos2(view.x_of(row.x_extent.1), view.y_of(shown.far.value())),
         );
         painter.rect_filled(
             footprint,
@@ -435,8 +441,8 @@ fn start_drag(
     let p = pointer?;
     for row in rows {
         let footprint = egui::Rect::from_min_max(
-            egui::pos2(view.x_of(row.x_extent.0), view.y_of(row.band.near)),
-            egui::pos2(view.x_of(row.x_extent.1), view.y_of(row.band.far)),
+            egui::pos2(view.x_of(row.x_extent.0), view.y_of(row.band.near.value())),
+            egui::pos2(view.x_of(row.x_extent.1), view.y_of(row.band.far.value())),
         );
         if !footprint.expand(EDGE_GRAB_PX).contains(p) {
             continue;
@@ -453,7 +459,7 @@ fn start_drag(
             grab,
             start: row.band,
             current: row.band,
-            offset: view.depth_of(p.y) - row.band.near,
+            offset: view.depth_of(p.y) - row.band.near.value(),
             line_depth: 0.0,
         });
     }
@@ -466,14 +472,8 @@ fn start_drag(
     Some(BandDrag {
         id: None,
         grab: Grab::Line,
-        start: DepthBand {
-            near: line,
-            far: line,
-        },
-        current: DepthBand {
-            near: line,
-            far: line,
-        },
+        start: DepthBand::metres(line, line),
+        current: DepthBand::metres(line, line),
         offset: depth - line,
         line_depth: line,
     })
@@ -495,10 +495,7 @@ fn update_drag(
         if drag.grab == Grab::Line {
             let moved = ((depth - drag.offset).max(0.0) / (0.25 * LAYER_HEIGHT)).round()
                 * (0.25 * LAYER_HEIGHT);
-            drag.current = DepthBand {
-                near: moved,
-                far: moved,
-            };
+            drag.current = DepthBand::metres(moved, moved);
         } else {
             drag.current = dragged_band(&drag, depth);
         }
@@ -512,7 +509,7 @@ fn update_drag(
         return;
     }
     let changes = if drag.grab == Grab::Line {
-        line_changes(rows, drag.line_depth, drag.current.near)
+        line_changes(rows, drag.line_depth, drag.current.near.value())
     } else if drag.current == drag.start {
         Vec::new()
     } else {
@@ -540,7 +537,7 @@ mod tests {
         PlanRow {
             id: StableId::new(),
             x_extent: (-1.0, 1.0),
-            band: DepthBand { near, far },
+            band: DepthBand::metres(near, far),
             color: egui::Color32::WHITE,
             selected: false,
         }
@@ -557,16 +554,16 @@ mod tests {
             line_depth: 0.0,
         };
         let band = dragged_band(&drag, 0.234);
-        assert!((band.far - 0.225).abs() < 1e-4, "snaps to quarter layers");
-        assert!(band.near.abs() < 1e-6, "near end untouched");
+        assert!(
+            (band.far.value() - 0.225).abs() < 1e-4,
+            "snaps to quarter layers"
+        );
+        assert!(band.near.value().abs() < 1e-6, "near end untouched");
     }
 
     #[test]
     fn near_drag_cannot_cross_the_far_edge() {
-        let start = DepthBand {
-            near: 0.0,
-            far: 0.1,
-        };
+        let start = DepthBand::metres(0.0, 0.1);
         let drag = BandDrag {
             id: Some(StableId::new()),
             grab: Grab::Near,
@@ -576,16 +573,13 @@ mod tests {
             line_depth: 0.0,
         };
         let band = dragged_band(&drag, 0.5);
-        assert!(band.near < band.far);
+        assert!(band.near.value() < band.far.value());
         assert!(band.thickness() >= DepthBand::MIN_THICKNESS - 1e-4);
     }
 
     #[test]
     fn whole_drag_preserves_thickness_and_clamps_front() {
-        let start = DepthBand {
-            near: 0.1,
-            far: 0.25,
-        };
+        let start = DepthBand::metres(0.1, 0.25);
         let drag = BandDrag {
             id: Some(StableId::new()),
             grab: Grab::Whole,
@@ -597,7 +591,10 @@ mod tests {
         let moved = dragged_band(&drag, 0.425);
         assert!((moved.thickness() - start.thickness()).abs() < 1e-4);
         let clamped = dragged_band(&drag, -1.0);
-        assert!(clamped.near.abs() < 1e-6, "cannot go in front of the plane");
+        assert!(
+            clamped.near.value().abs() < 1e-6,
+            "cannot go in front of the plane"
+        );
     }
 
     /// Bodies snapped to the same layer share one rule; distinct depths keep
@@ -630,10 +627,13 @@ mod tests {
                 _ => panic!("depth change"),
             })
             .collect();
-        assert!((bands[0].far - 0.2).abs() < 1e-4);
-        assert!((bands[0].near - 0.0).abs() < 1e-6, "other edge untouched");
-        assert!((bands[1].near - 0.2).abs() < 1e-4);
-        assert!((bands[1].far - 0.3).abs() < 1e-4);
+        assert!((bands[0].far.value() - 0.2).abs() < 1e-4);
+        assert!(
+            (bands[0].near.value() - 0.0).abs() < 1e-6,
+            "other edge untouched"
+        );
+        assert!((bands[1].near.value() - 0.2).abs() < 1e-4);
+        assert!((bands[1].far.value() - 0.3).abs() < 1e-4);
     }
 
     /// Dragging a rule onto (or past) the opposite edge must not invert or

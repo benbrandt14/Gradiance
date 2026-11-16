@@ -113,7 +113,7 @@ pub fn grid_basis(grid: &GridSettings) -> [Vec2; 2] {
         GridSystem::Cartesian | GridSystem::Polar { .. } => CARTESIAN_LINE_DIRECTIONS,
         GridSystem::Isometric => ISOMETRIC_LINE_DIRECTIONS,
     };
-    rotated_basis(directions, grid.rotation)
+    rotated_basis(directions, grid.rotation.value())
 }
 
 /// Reads modifier keys (and the grid's frame) into [`GestureConstraints`].

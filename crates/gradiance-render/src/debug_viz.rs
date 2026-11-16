@@ -208,13 +208,13 @@ fn draw_joint_anchors(
         let world_a = index
             .entity(def.body_a)
             .and_then(|e| poses.get(e).ok())
-            .map(|t| world_point(t, def.anchor_a));
+            .map(|t| world_point(t, def.anchor_a.value()));
         let world_b = match def.body_b {
             Some(id) => index
                 .entity(id)
                 .and_then(|e| poses.get(e).ok())
-                .map(|t| world_point(t, def.anchor_b)),
-            None => Some(def.anchor_b), // world pin
+                .map(|t| world_point(t, def.anchor_b.value())),
+            None => Some(def.anchor_b.value()), // world pin
         };
         if let Some(a) = world_a {
             gizmos.circle_2d(Isometry2d::from_translation(a), 4.0 * px, color);
@@ -312,7 +312,7 @@ fn draw_field_marker(
     px: f32,
 ) {
     let p = transform.translation.truncate();
-    let color = if source.strength < 0.0 {
+    let color = if source.strength.value() < 0.0 {
         css::CORNFLOWER_BLUE
     } else {
         css::INDIAN_RED

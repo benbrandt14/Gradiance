@@ -628,7 +628,9 @@ fn slider_drag_defaults_travel_limits_to_the_drag_length() {
     let JointKind::Slider { limits, .. } = &def.kind else {
         panic!("expected a slider, got {:?}", def.kind);
     };
-    let [min, max] = limits.expect("drag length becomes the default travel");
+    let [min, max] = limits
+        .expect("drag length becomes the default travel")
+        .map(gradiance::units::Length::value);
     assert!(min.abs() < 1e-3, "travel starts at the anchor ({min})");
     assert!(
         (max - 120.0).abs() < 15.0,
@@ -732,16 +734,19 @@ fn play_mode_rotate_cannot_twist_through_a_prismatic() {
             def: JointDef {
                 kind: JointKind::Slider {
                     axis: Vec2::X,
-                    limits: Some([0.0, 100.0]),
+                    limits: Some([
+                        gradiance::units::Length(0.0),
+                        gradiance::units::Length(100.0),
+                    ]),
                     motor: None,
                 },
                 common: JointCommon::default(),
                 body_a: base_id,
                 body_b: Some(arm),
-                anchor_a: Vec2::new(20.0, 0.0),
-                anchor_b: Vec2::new(-50.0, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(20.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-50.0, 0.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });

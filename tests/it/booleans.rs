@@ -45,10 +45,10 @@ fn pin(app: &mut App, body: StableId, anchor: Vec2, world: Vec2) -> StableId {
                 common: JointCommon::default(),
                 body_a: body,
                 body_b: None,
-                anchor_a: anchor,
-                anchor_b: world,
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(anchor),
+                anchor_b: gradiance::units::Displacement(world),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -137,7 +137,7 @@ fn subtracting_a_circle_punches_an_analytic_hole() {
         ],
     );
     assert_eq!(
-        joint(&mut app, kept).map(|d| (d.body_a, d.anchor_a)),
+        joint(&mut app, kept).map(|d| (d.body_a, d.anchor_a.value())),
         Some((host, Vec2::new(0.85, 0.0))),
         "a pin on surviving material is untouched"
     );
@@ -180,10 +180,10 @@ fn intersect_keeps_the_overlap_and_rewires_the_operands_joints() {
                 common: JointCommon::default(),
                 body_a: other,
                 body_b: Some(third),
-                anchor_a: Vec2::new(-0.5, 0.5),
-                anchor_b: Vec2::new(0.0, -2.5),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(-0.5, 0.5)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(0.0, -2.5)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -201,10 +201,10 @@ fn intersect_keeps_the_overlap_and_rewires_the_operands_joints() {
                 common: JointCommon::default(),
                 body_a: host,
                 body_b: Some(other),
-                anchor_a: Vec2::new(0.5, 0.0),
-                anchor_b: Vec2::new(-0.5, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(0.5, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-0.5, 0.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -231,9 +231,9 @@ fn intersect_keeps_the_overlap_and_rewires_the_operands_joints() {
     let rewired = joint(&mut app, hinge).expect("the operand's hinge survives");
     assert_eq!(rewired.body_a, host, "rewired onto the host");
     assert!(
-        (rewired.anchor_a - Vec2::new(0.5, 0.5)).length() < 1e-4,
+        (rewired.anchor_a.value() - Vec2::new(0.5, 0.5)).length() < 1e-4,
         "at the same world point, in host space (got {})",
-        rewired.anchor_a
+        rewired.anchor_a.value()
     );
     assert_eq!(rewired.body_b, Some(third), "the other end is untouched");
     assert!(
@@ -322,12 +322,12 @@ fn xor_of_overlapping_boxes_splits_into_pieces() {
     let l = joint(&mut app, left).expect("the left pin follows its piece");
     assert_eq!(l.body_a, piece_at(-0.5));
     assert!(
-        l.anchor_a.length() < 0.02,
+        l.anchor_a.value().length() < 0.02,
         "anchored at that piece's centre"
     );
     let r = joint(&mut app, right).expect("the right pin follows its piece");
     assert_eq!(r.body_a, piece_at(1.5));
-    assert!(r.anchor_a.length() < 0.02);
+    assert!(r.anchor_a.value().length() < 0.02);
     assert!(
         joint(&mut app, shared).is_none(),
         "a pin in the removed overlap is deleted"

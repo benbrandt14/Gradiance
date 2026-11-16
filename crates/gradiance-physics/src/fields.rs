@@ -150,7 +150,7 @@ impl Fields<'_, '_> {
                 // gradient. Negative attracts. Coupling scales with the
                 // source's field mass, so a cut redistributes the field
                 // across the pieces instead of duplicating it.
-                let coupling = source.strength * (field_mass.0 / REFERENCE_FIELD_MASS);
+                let coupling = source.strength.value() * (field_mass.0 / REFERENCE_FIELD_MASS);
                 let accel = away
                     * (coupling * falloff_factor(source.falloff, d))
                         .clamp(-MAX_FIELD_ACCEL, MAX_FIELD_ACCEL);

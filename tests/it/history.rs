@@ -106,7 +106,8 @@ fn a_settled_run_that_moved_nothing_records_no_step() {
     let mut app = paused_app();
     // Zero gravity first, and let that settle as its own step, so the only
     // thing under test is whether a motionless run adds one.
-    app.world_mut().resource_mut::<SimSettings>().gravity = Vec2::ZERO;
+    app.world_mut().resource_mut::<SimSettings>().gravity =
+        gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
     app.update();
     let id = spawn_settled(&mut app);
@@ -160,7 +161,7 @@ fn a_settled_gravity_edit_is_one_undo_step() {
     let mut app = paused_app();
     spawn_settled(&mut app); // establish a baseline
     let original = app.world().resource::<SimSettings>().gravity;
-    let edited = original + Vec2::new(0.0, 250.0);
+    let edited = original + gradiance::units::Acceleration2(Vec2::new(0.0, 250.0));
 
     app.world_mut().resource_mut::<SimSettings>().gravity = edited;
     app.update(); // change seen: dirty
@@ -186,7 +187,7 @@ fn a_drag_gesture_collapses_into_one_step() {
     // Ten frames of continuous change, as a slider drag produces.
     for i in 1..=10 {
         app.world_mut().resource_mut::<SimSettings>().gravity =
-            original + Vec2::new(0.0, i as f32 * 10.0);
+            original + gradiance::units::Acceleration2(Vec2::new(0.0, i as f32 * 10.0));
         app.update();
     }
     app.update(); // settles
@@ -222,13 +223,14 @@ fn a_gravity_direction_drag_is_one_undo_step() {
     app.update();
     app.update(); // settles
     let aimed = app.world().resource::<SimSettings>().gravity;
+    let aimed = aimed.value();
     assert!((aimed - Vec2::new(20.0, 0.0)).length() < 1e-3, "{aimed}");
 
     undo(&mut app);
     let back = app.world().resource::<SimSettings>().gravity;
     assert!(
-        (back - original).length() < 1e-5,
-        "the whole dial gesture is one undo step ({back} vs {original})"
+        (back - original).value().length() < 1e-5,
+        "the whole dial gesture is one undo step ({back:?} vs {original:?})"
     );
     assert_eq!(
         body_count(&mut app),
@@ -244,7 +246,7 @@ fn workstation_config_stays_out_of_history() {
 
     let tweaked = {
         let mut grid = app.world_mut().resource_mut::<GridSettings>();
-        grid.spacing += 25.0;
+        grid.spacing = grid.spacing + gradiance::units::Length(25.0);
         grid.spacing
     };
     app.update();
@@ -254,7 +256,10 @@ fn workstation_config_stays_out_of_history() {
     undo(&mut app);
     assert_eq!(body_count(&mut app), 0, "undo reached past the grid edit");
     assert!(
-        (app.world().resource::<GridSettings>().spacing - tweaked).abs() < 1e-6,
+        (app.world().resource::<GridSettings>().spacing - tweaked)
+            .value()
+            .abs()
+            < 1e-6,
         "undo never moves the grid out from under the user"
     );
 }

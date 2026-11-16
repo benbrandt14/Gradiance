@@ -105,10 +105,7 @@ fn depth_band_edit_round_trips_and_undoes() {
     let a = spawn_box(&mut app, Vec2::ZERO);
     let entity = entity_of(&app, a).unwrap();
     let old_band = *app.world().get::<DepthBand>(entity).unwrap();
-    let new_band = DepthBand {
-        near: 10.0,
-        far: 32.5, // non-integer depth is first-class
-    };
+    let new_band = DepthBand::metres(10.0, 32.5); // non-integer depth is first-class
 
     app.world_mut().write_message(PropertyEditIntent {
         changes: vec![PropertyChange {
@@ -138,7 +135,7 @@ fn field_property_edit_round_trips_and_undoes() {
     assert!(app.world().get::<FieldSource>(entity).is_none());
 
     let field = FieldSource {
-        strength: -750.0,
+        strength: gradiance::units::Acceleration(-750.0),
         falloff: FieldFalloff::Linear,
     };
     app.world_mut().write_message(PropertyEditIntent {
@@ -278,10 +275,10 @@ fn box_selected_assembly_deletes_and_restores_with_its_constraints() {
                 common: JointCommon::default(),
                 body_a: a,
                 body_b: Some(b),
-                anchor_a: Vec2::new(15.0, 0.0),
-                anchor_b: Vec2::new(-15.0, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(15.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-15.0, 0.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -325,10 +322,10 @@ fn box_selected_assembly_duplicates_with_its_constraints() {
                 common: JointCommon::default(),
                 body_a: a,
                 body_b: Some(b),
-                anchor_a: Vec2::new(15.0, 0.0),
-                anchor_b: Vec2::new(-15.0, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(15.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-15.0, 0.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -352,7 +349,7 @@ fn sim_settings_gravity_is_applied_by_the_physics_seam() {
         let mut sim = app
             .world_mut()
             .resource_mut::<gradiance::domain::settings::SimSettings>();
-        sim.gravity = Vec2::new(0.0, 800.0); // upward!
+        sim.gravity = gradiance::units::Acceleration2(Vec2::new(0.0, 800.0)); // upward!
     }
     step(&mut app, 120);
     let entity = entity_of(&app, id).unwrap();

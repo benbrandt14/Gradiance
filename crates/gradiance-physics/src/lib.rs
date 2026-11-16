@@ -121,11 +121,11 @@ fn apply_sim_settings(
     mut fixed: ResMut<Time<Fixed>>,
     mut substeps: ResMut<SubstepCount>,
 ) {
-    gravity.0 = settings.gravity;
+    gravity.0 = settings.gravity.value();
     time.set_relative_speed(settings.speed.clamp(0.0, 10.0));
     substeps.0 = settings.substeps.clamp(1, 64);
     // The physics schedule runs on the fixed clock; this is the timestep.
-    fixed.set_timestep_hz(f64::from(settings.timestep_hz.clamp(15.0, 240.0)));
+    fixed.set_timestep_hz(f64::from(settings.timestep_hz.value().clamp(15.0, 240.0)));
 }
 
 /// Per-substep positions of dynamic bodies from the most recent physics

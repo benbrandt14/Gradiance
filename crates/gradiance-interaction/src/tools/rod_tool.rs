@@ -166,10 +166,10 @@ pub fn end_hinge(
             common: JointCommon::default(),
             body_a: rod.id,
             body_b: Some(id),
-            anchor_a: rod_anchor,
-            anchor_b: Vec2::from_angle(-rot).rotate(point - pos),
-            rest_rot_a: rod.pose.rot,
-            rest_rot_b: rot,
+            anchor_a: gradiance_units::Displacement(rod_anchor),
+            anchor_b: gradiance_units::Displacement(Vec2::from_angle(-rot).rotate(point - pos)),
+            rest_rot_a: gradiance_units::Angle(rod.pose.rot),
+            rest_rot_b: gradiance_units::Angle(rot),
         },
     }
 }
@@ -215,7 +215,7 @@ mod tests {
         assert_eq!(hinge.def.body_a, rod.id);
         assert_eq!(hinge.def.body_b, Some(other));
         assert!(!hinge.def.common.broken && hinge.def.common.break_force.is_none());
-        let on_b = pos + Vec2::from_angle(rot).rotate(hinge.def.anchor_b);
+        let on_b = pos + Vec2::from_angle(rot).rotate(hinge.def.anchor_b.value());
         assert!((on_b - point).length() < 1e-5);
     }
 }

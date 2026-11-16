@@ -922,10 +922,12 @@ and rulings live in `docs/units-decision.md`; status:
 - [x] **P2·flip** atomic SI value + format rebase — world is metres, camera
       absorbs the ×PPM render factor, scene format **v6** (older files
       rejected; no migration). Merged.
-- [ ] **P2·types** thread the newtypes through geometry/physics/domain (by
-      accretion). *In progress:* `physics::queries` returns typed quantities
-      (`Velocity2`/`Mass`/`Impulse2`/…) and the probe/plot UI reads unit labels
-      off the types (caught the post-flip "px/s" label drift).
+- [x] **P2·types** thread the newtypes through physics/domain. `physics::queries`
+      returns typed quantities, and every authored physical scalar in the
+      domain and settings resources is a quantity (brief 5-1; scene format
+      **v7**: quantities serialize bare, v6 rejected). *Not done, by design:*
+      a crate-wide `geometry` retype (shape dimensions, `PosRot`) — separate
+      work if wanted.
 - [ ] **P3** `PhysicalQuantity` catalog + signal/plotter binding (unit axes).
 - [ ] **P4** inspector/settings SI display + input.
 - [ ] **P6** units in the parameter-linking / expression DSL.

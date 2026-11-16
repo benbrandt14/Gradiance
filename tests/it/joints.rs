@@ -49,10 +49,10 @@ fn hinge(body_a: StableId, body_b: Option<StableId>, anchor_a: Vec2, anchor_b: V
         common: JointCommon::default(),
         body_a,
         body_b,
-        anchor_a,
-        anchor_b,
-        rest_rot_a: 0.0,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance::units::Displacement(anchor_a),
+        anchor_b: gradiance::units::Displacement(anchor_b),
+        rest_rot_a: gradiance::units::Angle(0.0),
+        rest_rot_b: gradiance::units::Angle(0.0),
     }
 }
 
@@ -73,7 +73,7 @@ fn motorized_hinge_oscillates_between_its_limits() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some(limits),
+                limits: Some(limits.map(gradiance::units::Angle)),
                 motor: Some(AngularMotorDef {
                     target_velocity: gradiance::units::AngularVelocity(3.0),
                     oscillate: true,
@@ -83,10 +83,10 @@ fn motorized_hinge_oscillates_between_its_limits() {
             common: JointCommon::default(),
             body_a: anchor_id,
             body_b: Some(arm_id),
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::new(-40.0, 0.0),
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+            anchor_b: gradiance::units::Displacement(Vec2::new(-40.0, 0.0)),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
 
@@ -174,16 +174,19 @@ fn slider_constrains_motion_to_the_axis_and_respects_limits() {
         JointDef {
             kind: JointKind::Slider {
                 axis: Vec2::Y,
-                limits: Some([-120.0, 0.0]),
+                limits: Some([
+                    gradiance::units::Length(-120.0),
+                    gradiance::units::Length(0.0),
+                ]),
                 motor: None,
             },
             common: JointCommon::default(),
             body_a: rail_id,
             body_b: Some(cart_id),
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::ZERO,
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+            anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
 
@@ -287,7 +290,7 @@ fn duplicating_a_world_pinned_body_moves_the_pin_anchor() {
     assert_eq!(defs.len(), 2);
     let clone = defs.iter().find(|d| d.body_a != a).unwrap();
     assert_eq!(
-        clone.anchor_b,
+        clone.anchor_b.value(),
         Vec2::new(105.0, 5.0),
         "world anchor translated with the clone"
     );
@@ -343,7 +346,7 @@ fn hinge_tool_connects_the_two_topmost_bodies_with_local_anchors() {
     );
     // Anchors express the same world point in each body's local frame.
     let pa = pose_of(&app, def.body_a);
-    let world_a = pa.pos + Vec2::from_angle(pa.rot).rotate(def.anchor_a);
+    let world_a = pa.pos + Vec2::from_angle(pa.rot).rotate(def.anchor_a.value());
     assert!((world_a - Vec2::new(20.0, 0.0)).length() < 1e-3);
 
     undo(&mut app);
@@ -366,7 +369,11 @@ fn hinge_tool_pins_a_single_body_to_the_world() {
     let mut q = app.world_mut().query::<&JointDef>();
     let def = q.iter(app.world()).next().unwrap().clone();
     assert_eq!(def.body_b, None, "single body → world pin");
-    assert_eq!(def.anchor_b, Vec2::new(10.0, 5.0), "world anchor point");
+    assert_eq!(
+        def.anchor_b.value(),
+        Vec2::new(10.0, 5.0),
+        "world anchor point"
+    );
 }
 
 // ---------- Combinatorial invariant (the old project's blind spot) ----------
@@ -431,10 +438,10 @@ fn random_command_sequences_never_leave_dangling_joints() {
                                     common: JointCommon::default(),
                                     body_a: a,
                                     body_b: Some(b),
-                                    anchor_a: Vec2::ZERO,
-                                    anchor_b: Vec2::ZERO,
-                                    rest_rot_a: 0.0,
-                                    rest_rot_b: 0.0,
+                                    anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+                                    anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+                                    rest_rot_a: gradiance::units::Angle(0.0),
+                                    rest_rot_b: gradiance::units::Angle(0.0),
                                 },
                             };
                             app.world_mut().write_message(SpawnJointIntent { record });
@@ -452,10 +459,10 @@ fn random_command_sequences_never_leave_dangling_joints() {
                                     common: JointCommon::default(),
                                     body_a: a,
                                     body_b: None,
-                                    anchor_a: Vec2::ZERO,
-                                    anchor_b: Vec2::ZERO,
-                                    rest_rot_a: 0.0,
-                                    rest_rot_b: 0.0,
+                                    anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+                                    anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+                                    rest_rot_a: gradiance::units::Angle(0.0),
+                                    rest_rot_b: gradiance::units::Angle(0.0),
                                 },
                             };
                             app.world_mut().write_message(SpawnJointIntent { record });
@@ -556,16 +563,16 @@ fn hinge_angle_limit_stops_a_free_arm_under_gravity() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some(limits),
+                limits: Some(limits.map(gradiance::units::Angle)),
                 motor: None,
             },
             common: JointCommon::default(),
             body_a: block,
             body_b: Some(arm),
-            anchor_a: Vec2::new(10.0, 0.0),
-            anchor_b: Vec2::new(-30.0, 0.0),
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::new(10.0, 0.0)),
+            anchor_b: gradiance::units::Displacement(Vec2::new(-30.0, 0.0)),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
     step(&mut app, 240);
@@ -594,16 +601,16 @@ fn world_pin_hinge_limit_holds_the_swing() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some([-0.3, 0.3]),
+                limits: Some([gradiance::units::Angle(-0.3), gradiance::units::Angle(0.3)]),
                 motor: None,
             },
             common: JointCommon::default(),
             body_a: rod_id,
             body_b: None,
-            anchor_a: Vec2::new(-40.0, 0.0),
-            anchor_b: Vec2::ZERO,
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::new(-40.0, 0.0)),
+            anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
     step(&mut app, 240);
@@ -646,10 +653,10 @@ fn rotated_world_pin_slider_stays_stable_and_rotation_locked() {
             common: JointCommon::default(),
             body_a: body,
             body_b: None,
-            anchor_a: Vec2::ZERO,
-            anchor_b: start,
-            rest_rot_a: rot,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+            anchor_b: gradiance::units::Displacement(start),
+            rest_rot_a: gradiance::units::Angle(rot),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
     step(&mut app, 300);
@@ -681,18 +688,18 @@ fn rotated_world_pin_slider_stays_stable_and_rotation_locked() {
 fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, stiffness: f32) -> JointDef {
     JointDef {
         kind: JointKind::Spring {
-            rest_length,
-            stiffness,
-            damping: 5.0,
+            rest_length: gradiance::units::Length(rest_length),
+            stiffness: gradiance::units::Stiffness(stiffness),
+            damping: gradiance::units::Damping(5.0),
             range: None,
         },
         common: JointCommon::default(),
         body_a,
         body_b,
-        anchor_a: Vec2::ZERO,
-        anchor_b: Vec2::ZERO,
-        rest_rot_a: 0.0,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+        anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+        rest_rot_a: gradiance::units::Angle(0.0),
+        rest_rot_b: gradiance::units::Angle(0.0),
     }
 }
 
@@ -779,16 +786,19 @@ fn prismatic_locks_rotation_under_torque_load() {
         JointDef {
             kind: JointKind::Slider {
                 axis: Vec2::X,
-                limits: Some([0.0, 100.0]),
+                limits: Some([
+                    gradiance::units::Length(0.0),
+                    gradiance::units::Length(100.0),
+                ]),
                 motor: None,
             },
             common: JointCommon::default(),
             body_a: a,
             body_b: Some(arm),
-            anchor_a: Vec2::new(20.0, 0.0),
-            anchor_b: Vec2::new(-100.0, 0.0),
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::new(20.0, 0.0)),
+            anchor_b: gradiance::units::Displacement(Vec2::new(-100.0, 0.0)),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
     // Kick it with spin as well: the constraint must absorb it.
@@ -828,7 +838,7 @@ fn world_pinned_tilted_motor_oscillates() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some(limits),
+                limits: Some(limits.map(gradiance::units::Angle)),
                 motor: Some(AngularMotorDef {
                     target_velocity: gradiance::units::AngularVelocity(3.0),
                     oscillate: true,
@@ -838,10 +848,10 @@ fn world_pinned_tilted_motor_oscillates() {
             common: JointCommon::default(),
             body_a: rod_id,
             body_b: None,
-            anchor_a: Vec2::ZERO,           // rod centre (local)
-            anchor_b: Vec2::new(40.0, 0.0), // world point == rod centre
-            rest_rot_a: 0.3,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO), // rod centre (local)
+            anchor_b: gradiance::units::Displacement(Vec2::new(40.0, 0.0)), // world point == rod centre
+            rest_rot_a: gradiance::units::Angle(0.3),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
 
@@ -901,10 +911,10 @@ fn motorized_hinge_holds_its_pivot() {
             common: JointCommon::default(),
             body_a: anchor_id,
             body_b: Some(arm_id),
-            anchor_a: Vec2::ZERO, // anchor-body centre == world origin
-            anchor_b: Vec2::new(-40.0, 0.0), // arm's left end (local)
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO), // anchor-body centre == world origin
+            anchor_b: gradiance::units::Displacement(Vec2::new(-40.0, 0.0)), // arm's left end (local)
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
     step(&mut app, 240);
@@ -945,18 +955,18 @@ fn strut_stiffness_keeps_a_hung_body_from_drooping() {
         &mut app,
         JointDef {
             kind: JointKind::Spring {
-                rest_length: 50.0,
-                stiffness,
-                damping: 0.0,
+                rest_length: gradiance::units::Length(50.0),
+                stiffness: gradiance::units::Stiffness(stiffness),
+                damping: gradiance::units::Damping(0.0),
                 range: None,
             },
             common: JointCommon::default(),
             body_a: body_id,
             body_b: None,
-            anchor_a: Vec2::ZERO, // body centre
-            anchor_b: Vec2::ZERO, // world anchor
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO), // body centre
+            anchor_b: gradiance::units::Displacement(Vec2::ZERO), // world anchor
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
 
@@ -994,7 +1004,10 @@ fn motorized_slider_drives_body_along_its_axis() {
         JointDef {
             kind: JointKind::Slider {
                 axis: Vec2::X,
-                limits: Some([0.0, 200.0]),
+                limits: Some([
+                    gradiance::units::Length(0.0),
+                    gradiance::units::Length(200.0),
+                ]),
                 motor: Some(LinearMotorDef {
                     target_velocity: gradiance::units::Velocity(30.0), // along +X; auto ceiling (max_force = 0)
                     ..default()
@@ -1003,10 +1016,10 @@ fn motorized_slider_drives_body_along_its_axis() {
             common: JointCommon::default(),
             body_a: anchor_id,
             body_b: Some(slider_id),
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::ZERO,
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+            anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
     let start_x = pose_of(&app, slider_id).pos.x;

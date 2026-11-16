@@ -9,6 +9,8 @@
 //! change to *one* module — the command layer consumes records, the
 //! `persist` layer moves bytes, and neither owns the format.
 
+#[cfg(test)]
+mod format_golden;
 mod records;
 
 pub use records::{
@@ -41,7 +43,15 @@ pub use records::{
 /// Additive within v6: `CsgOp::Xor` (body booleans, brief 4-1). Every
 /// existing v6 file still loads, so the version is not bumped; a file that
 /// uses xor fails to parse ("unknown variant") in a build that predates it.
-pub const FORMAT_VERSION: u32 = 6;
+///
+/// v7: **typed quantities save bare** (units P2·types, brief 5-1). Authored
+/// physical scalars are `gradiance-units` newtypes, which are
+/// `#[serde(transparent)]`: every quantity saves as the number it holds
+/// (`near: 0.5`), including the joint motor fields and `break_force` that v6
+/// wrote wrapped (`target_velocity: (2.0)`). Values are unchanged; v6 files
+/// are rejected, not migrated (the format is pre-release). avian's own
+/// components keep avian's spelling (`density: (1.0)`).
+pub const FORMAT_VERSION: u32 = 7;
 
 /// What went wrong while serializing, parsing, or migrating a scene.
 #[derive(Debug, thiserror::Error)]

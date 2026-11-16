@@ -341,7 +341,7 @@ fn tracer_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps,
     let Some(tracer) = current else {
         return;
     };
-    let mut fade = tracer.fade_secs;
+    let mut fade = tracer.fade_secs.value();
     ui.horizontal(|ui| {
         ui.label("fade (s)");
         if let Commit::Done(_, new) =
@@ -351,7 +351,7 @@ fn tracer_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps,
                 selection,
                 props,
                 Some(Tracer {
-                    fade_secs: new.max(0.05),
+                    fade_secs: gradiance_units::Time(new.max(0.05)),
                     ..tracer
                 }),
             );
@@ -401,7 +401,7 @@ fn field_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, 
     let Some(field) = current else {
         return;
     };
-    let mut strength = field.strength;
+    let mut strength = field.strength.value();
     ui.horizontal(|ui| {
         ui.label("repulsion")
             .on_hover_text("negative = attraction (Algodoo convention)");
@@ -416,7 +416,7 @@ fn field_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, 
                 selection,
                 props,
                 Some(FieldSource {
-                    strength: new,
+                    strength: gradiance_units::Acceleration(new),
                     ..field
                 }),
             );
@@ -663,8 +663,8 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
     let Ok(band) = props.depths.get(primary).copied() else {
         return;
     };
-    let mut near = band.near;
-    let mut far = band.far;
+    let mut near = band.near.value();
+    let mut far = band.far.value();
     ui.horizontal(|ui| {
         ui.label("front")
             .on_hover_text("depth of the front face (0 = the interaction plane)");
@@ -686,7 +686,7 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
                 &props.ids,
                 &props.depths,
                 PropertyValue::Depth,
-                move |_| DepthBand { near, far }.sanitized(),
+                move |_| DepthBand::metres(near, far).sanitized(),
                 &mut props.edits,
             );
         }

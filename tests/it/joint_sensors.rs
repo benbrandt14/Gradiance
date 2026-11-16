@@ -32,10 +32,10 @@ fn spawn_joint(app: &mut App, kind: JointKind, a: StableId, b: Option<StableId>)
             common: JointCommon::default(),
             body_a: a,
             body_b: b,
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::ZERO,
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+            anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     };
     let id = record.id;
@@ -125,9 +125,9 @@ fn a_spring_length_reads_against_a_world_pin() {
     let mut app = headless_app();
     let a = spawn_static(&mut app, Vec2::new(0.0, 0.75));
     let spring = JointKind::Spring {
-        rest_length: 0.75,
-        stiffness: 100.0,
-        damping: 1.0,
+        rest_length: gradiance::units::Length(0.75),
+        stiffness: gradiance::units::Stiffness(100.0),
+        damping: gradiance::units::Damping(1.0),
         range: None,
     };
     let joint = spawn_joint(&mut app, spring, a, None);

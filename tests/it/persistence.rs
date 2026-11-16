@@ -126,10 +126,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                     fill: Rgba { r, g, b, a },
                     ..Appearance::default()
                 },
-                depth: DepthBand {
-                    near,
-                    far: near + thickness,
-                },
+                depth: DepthBand::metres(near, near + thickness),
                 layers: None,
                 groups,
                 field: None,
@@ -218,17 +215,17 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                     };
                     let kind = match kind {
                         0 => JointKind::Hinge {
-                            limits,
+                            limits: limits.map(|l| l.map(gradiance::units::Angle)),
                             motor: motor.map(seed_angular_motor),
                         },
                         1 => JointKind::Slider {
                             axis: Vec2::Y,
-                            limits,
+                            limits: limits.map(|l| l.map(gradiance::units::Length)),
                             motor: motor.map(seed_linear_motor),
                         },
                         _ => JointKind::Slider {
                             axis: Vec2::X,
-                            limits,
+                            limits: limits.map(|l| l.map(gradiance::units::Length)),
                             motor: motor.map(seed_linear_motor),
                         },
                     };
@@ -239,10 +236,10 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                             common: JointCommon::default(),
                             body_a,
                             body_b,
-                            anchor_a: Vec2::new(5.0, -3.0),
-                            anchor_b: Vec2::new(-2.0, 4.0),
-                            rest_rot_a: 0.0,
-                            rest_rot_b: 0.0,
+                            anchor_a: gradiance::units::Displacement(Vec2::new(5.0, -3.0)),
+                            anchor_b: gradiance::units::Displacement(Vec2::new(-2.0, 4.0)),
+                            rest_rot_a: gradiance::units::Angle(0.0),
+                            rest_rot_b: gradiance::units::Angle(0.0),
                         },
                     })
                 })
@@ -255,7 +252,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                 nodes: vec![],
                 environment: EnvironmentRecord {
                     sim: SimSettings {
-                        gravity: Vec2::new(gravity.0, gravity.1),
+                        gravity: gradiance::units::Acceleration2(Vec2::new(gravity.0, gravity.1)),
                         speed,
                         ..SimSettings::default()
                     },
@@ -470,16 +467,16 @@ fn joints_survive_files_and_resolve_after_load() {
             id: StableId::new(),
             def: JointDef {
                 kind: JointKind::Hinge {
-                    limits: Some([-1.0, 1.0]),
+                    limits: Some([gradiance::units::Angle(-1.0), gradiance::units::Angle(1.0)]),
                     motor: Some(AngularMotorDef::default()),
                 },
                 common: JointCommon::default(),
                 body_a: a,
                 body_b: Some(b),
-                anchor_a: Vec2::new(15.0, 0.0),
-                anchor_b: Vec2::new(-15.0, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(15.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-15.0, 0.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -548,6 +545,30 @@ fn pre_si_files_are_rejected() {
             Err(gradiance::scene::PersistError::Version(5))
         ),
         "pre-SI (v5) files are rejected, not silently loaded"
+    );
+}
+
+#[test]
+fn v6_files_are_rejected() {
+    // v7 saves every typed quantity bare (`near: 0.5`); v6 wrote the joint
+    // motor fields and `break_force` wrapped (`target_velocity: (2.0)`). The
+    // format is pre-release, so v6 is rejected rather than migrated
+    // (`docs/units-decision.md` ruling 2).
+    let scene = SceneRecord {
+        version: 6,
+        app_version: String::new(),
+        bodies: vec![box_record(Vec2::ZERO, 0.1, 0.1)],
+        joints: vec![],
+        nodes: vec![],
+        environment: EnvironmentRecord::default(),
+    };
+    let text = to_ron(&scene).unwrap();
+    assert!(
+        matches!(
+            from_ron(&text),
+            Err(gradiance::scene::PersistError::Version(6))
+        ),
+        "v6 files are rejected, not silently loaded"
     );
 }
 

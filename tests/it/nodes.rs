@@ -22,7 +22,7 @@ fn tracer_record(pos: Vec2, attach: NodeAttachment) -> NodeRecord {
         pose: PosRot { pos, rot: 0.0 },
         attachment: attach,
         kind: NodeKind::Tracer(Tracer {
-            fade_secs: 2.0,
+            fade_secs: gradiance::units::Time(2.0),
             ..Default::default()
         }),
         appearance: gradiance::domain::appearance::Appearance::default(),
@@ -202,7 +202,7 @@ fn a_speed_to_fill_binding_tints_the_target_body() {
     let mut app = paused_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     // Body A moves; body B is tinted by A's speed through a binding (the

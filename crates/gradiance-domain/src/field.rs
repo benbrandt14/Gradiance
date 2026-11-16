@@ -14,6 +14,7 @@
 //! commitment; future non-body sources plug into the same sampling seam.)
 
 use bevy::prelude::Component;
+use gradiance_units::Acceleration;
 use serde::{Deserialize, Serialize};
 
 /// Field falloff over surface distance — Algodoo offers exactly these two.
@@ -41,7 +42,7 @@ pub struct FieldSource {
     /// orbits work), couples through the source's own mass (cutting a
     /// source conserves its field), and reacts equally and oppositely on
     /// the source (momentum conserves). See `docs/field-architecture.md`.
-    pub strength: f32,
+    pub strength: Acceleration,
     /// Falloff over surface distance.
     pub falloff: FieldFalloff,
 }
@@ -49,7 +50,7 @@ pub struct FieldSource {
 impl Default for FieldSource {
     fn default() -> Self {
         Self {
-            strength: -2000.0, // attract by default: "select circles, they cluster"
+            strength: Acceleration(-2000.0), // attract by default: "select circles, they cluster"
             falloff: FieldFalloff::Quadratic,
         }
     }

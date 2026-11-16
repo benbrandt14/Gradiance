@@ -23,6 +23,7 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::SignalBindings;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_physics::queries::PhysicsQueries;
+use gradiance_units::{Angle, Length};
 use gradiance_units::{Dimension, Force};
 
 /// Hinge motor speeds are authored in rad/s (SI) but shown in **rpm**, the
@@ -130,9 +131,11 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
     let mut changed = false;
     match kind {
         JointKind::Hinge { limits, motor } => {
-            if let Some(k) = limit_section(ui, *limits, "angle limits (deg)", true) {
+            if let Some(k) =
+                limit_section(ui, raw(*limits, Angle::value), "angle limits (deg)", true)
+            {
                 next.kind = JointKind::Hinge {
-                    limits: k,
+                    limits: k.map(|[lo, hi]| [Angle(lo), Angle(hi)]),
                     motor: *motor,
                 };
                 changed = true;
@@ -148,7 +151,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 // Re-read limits from `next` in case both changed.
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Hinge {
-                    limits: cur_limits,
+                    limits: cur_limits.map(|[lo, hi]| [Angle(lo), Angle(hi)]),
                     motor: m.map(MotorView::into_angular),
                 };
                 changed = true;
@@ -159,10 +162,12 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
             limits,
             motor,
         } => {
-            if let Some(k) = limit_section(ui, *limits, "travel limits (m)", false) {
+            if let Some(k) =
+                limit_section(ui, raw(*limits, Length::value), "travel limits (m)", false)
+            {
                 next.kind = JointKind::Slider {
                     axis: *axis,
-                    limits: k,
+                    limits: k.map(|[lo, hi]| [Length(lo), Length(hi)]),
                     motor: *motor,
                 };
                 changed = true;
@@ -178,7 +183,7 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
                     axis: *axis,
-                    limits: cur_limits,
+                    limits: cur_limits.map(|[lo, hi]| [Length(lo), Length(hi)]),
                     motor: m.map(MotorView::into_linear),
                 };
                 changed = true;
@@ -190,7 +195,13 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
             damping,
             range,
         } => {
-            if let Some(new_kind) = spring_section(ui, *rest_length, *stiffness, *damping, *range) {
+            if let Some(new_kind) = spring_section(
+                ui,
+                rest_length.value(),
+                stiffness.value(),
+                damping.value(),
+                raw(*range, Length::value),
+            ) {
                 next.kind = new_kind;
                 changed = true;
             }
@@ -208,13 +219,20 @@ pub fn kind_name(kind: &JointKind) -> &'static str {
     }
 }
 
+/// The current limits' base-SI values (radians for a hinge, metres for a
+/// slider) — the units the limit widgets edit in.
 fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
     match kind {
-        JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => *limits,
+        JointKind::Hinge { limits, .. } => raw(*limits, Angle::value),
+        JointKind::Slider { limits, .. } => raw(*limits, Length::value),
         JointKind::Spring { .. } => None,
     }
 }
 
+/// A typed `[min, max]` pair's base-SI values (what the drag widgets edit).
+fn raw<T: Copy>(pair: Option<[T; 2]>, si: fn(T) -> f32) -> Option<[f32; 2]> {
+    pair.map(|[lo, hi]| [si(lo), si(hi)])
+}
 /// Limits UI: a toggle plus min/max drags. `degrees` shows/edits in
 /// degrees but stores radians.
 ///
@@ -533,9 +551,9 @@ fn spring_section(
         return None;
     }
     Some(JointKind::Spring {
-        rest_length: rest.max(0.0),
-        stiffness: k.max(0.0),
-        damping: c.max(0.0),
-        range: new_range,
+        rest_length: Length(rest.max(0.0)),
+        stiffness: gradiance_units::Stiffness(k.max(0.0)),
+        damping: gradiance_units::Damping(c.max(0.0)),
+        range: new_range.map(|[lo, hi]| [Length(lo), Length(hi)]),
     })
 }

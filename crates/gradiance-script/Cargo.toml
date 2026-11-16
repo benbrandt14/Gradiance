@@ -15,6 +15,7 @@ gradiance-domain.workspace = true
 gradiance-geometry.workspace = true
 gradiance-scene.workspace = true
 gradiance-signal.workspace = true
+gradiance-units.workspace = true
 avian2d.workspace = true
 # `bevy_remote`: the external control surface (`remote.rs`, BRP over the
 # operation registry). Compiled always, started only by `--remote`.

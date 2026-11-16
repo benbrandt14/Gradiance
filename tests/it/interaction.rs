@@ -171,7 +171,7 @@ fn grid_snap_applies_when_no_object_nearby() {
     {
         let mut grid = app.world_mut().resource_mut::<GridSettings>();
         grid.snap_enabled = true;
-        grid.spacing = 100.0;
+        grid.spacing = gradiance::units::Length(100.0);
     }
     // 2 world/px: the 100-unit base draws at 50 px, inside the adaptive
     // band, so the drawn (and snapped) step is the base itself.
@@ -194,7 +194,7 @@ fn isometric_grid_snaps_to_rhombic_lattice() {
         let mut grid = app.world_mut().resource_mut::<GridSettings>();
         grid.snap_enabled = true;
         grid.system = GridSystem::Isometric;
-        grid.spacing = 100.0;
+        grid.spacing = gradiance::units::Length(100.0);
     }
     app.world_mut().insert_resource(CameraScale(2.0));
     app.world_mut()
@@ -219,7 +219,7 @@ fn snap_at_zoom(world_per_px: f32, cursor: Vec2) -> SnappedCursor {
     {
         let mut grid = app.world_mut().resource_mut::<GridSettings>();
         grid.snap_enabled = true;
-        grid.spacing = 1.0;
+        grid.spacing = gradiance::units::Length(1.0);
     }
     app.world_mut().insert_resource(CameraScale(world_per_px));
     app.world_mut()
@@ -260,7 +260,7 @@ fn zero_grid_spacing_snaps_to_nothing() {
     {
         let mut grid = app.world_mut().resource_mut::<GridSettings>();
         grid.snap_enabled = true;
-        grid.spacing = 0.0;
+        grid.spacing = gradiance::units::Length(0.0);
         grid.system = GridSystem::Polar {
             angular_divisions: 8,
         };
@@ -337,7 +337,7 @@ fn x_lock_on_a_rotated_grid_moves_along_the_grid_axis() {
         let mut grid = app.world_mut().resource_mut::<GridSettings>();
         grid.visible = true;
         grid.snap_enabled = false;
-        grid.rotation = rotation;
+        grid.rotation = gradiance::units::Angle(rotation);
     }
     let id = spawn_box(&mut app, Vec2::ZERO);
     app.update(); // colliders
@@ -461,7 +461,7 @@ fn grid_snap_is_off_while_the_grid_is_hidden() {
         let mut grid = app.world_mut().resource_mut::<GridSettings>();
         grid.snap_enabled = true;
         grid.visible = false;
-        grid.spacing = 100.0;
+        grid.spacing = gradiance::units::Length(100.0);
     }
     app.world_mut().insert_resource(CameraScale(2.0));
     let raw = Vec2::new(430.0, 690.0);

@@ -58,13 +58,13 @@ pub fn drive_oscillating_motors(
                 let rel = gradiance_domain::joint::hinge_limit_angle(
                     rot(a),
                     rot_b,
-                    def.rest_rot_a,
-                    def.rest_rot_b,
+                    def.rest_rot_a.value(),
+                    def.rest_rot_b.value(),
                 );
                 if let Some(v) = gradiance_domain::joint::oscillate_target(
                     rel,
-                    *min,
-                    *max,
+                    min.value(),
+                    max.value(),
                     m.target_velocity.value(),
                     ANGLE_BUFFER,
                 ) {
@@ -83,13 +83,13 @@ pub fn drive_oscillating_motors(
                     continue;
                 };
                 let dir = Vec2::from_angle(rot(a)).rotate(*axis);
-                let anchor_a_world = pos(a) + Vec2::from_angle(rot(a)).rotate(def.anchor_a);
-                let anchor_b_world = pos(b) + Vec2::from_angle(rot(b)).rotate(def.anchor_b);
+                let anchor_a_world = pos(a) + Vec2::from_angle(rot(a)).rotate(def.anchor_a.value());
+                let anchor_b_world = pos(b) + Vec2::from_angle(rot(b)).rotate(def.anchor_b.value());
                 let t = (anchor_b_world - anchor_a_world).dot(dir);
                 if let Some(v) = gradiance_domain::joint::oscillate_target(
                     t,
-                    *min,
-                    *max,
+                    min.value(),
+                    max.value(),
                     m.target_velocity.value(),
                     TRANSLATION_BUFFER,
                 ) {

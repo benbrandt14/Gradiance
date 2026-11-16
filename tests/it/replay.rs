@@ -71,8 +71,8 @@ fn normalize_ids(scene: &mut SceneRecord) {
         let d = &scene.joints[i].def;
         (
             d.body_a.0,
-            (d.anchor_a.x * 1000.0).round() as i64,
-            (d.anchor_a.y * 1000.0).round() as i64,
+            (d.anchor_a.value().x * 1000.0).round() as i64,
+            (d.anchor_a.value().y * 1000.0).round() as i64,
         )
     });
     for (new_index, &old_index) in joint_order.iter().enumerate() {
@@ -114,16 +114,16 @@ fn assert_golden(name: &str, actual: &str) {
 fn hinge(a: StableId, b: StableId, anchor_a: Vec2, anchor_b: Vec2) -> JointDef {
     JointDef {
         kind: JointKind::Hinge {
-            limits: Some([-1.0, 1.0]),
+            limits: Some([gradiance::units::Angle(-1.0), gradiance::units::Angle(1.0)]),
             motor: Some(AngularMotorDef::default()),
         },
         common: JointCommon::default(),
         body_a: a,
         body_b: Some(b),
-        anchor_a,
-        anchor_b,
-        rest_rot_a: 0.0,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance::units::Displacement(anchor_a),
+        anchor_b: gradiance::units::Displacement(anchor_b),
+        rest_rot_a: gradiance::units::Angle(0.0),
+        rest_rot_b: gradiance::units::Angle(0.0),
     }
 }
 
@@ -251,18 +251,22 @@ fn replay_joints() {
         id(11),
         JointDef {
             kind: JointKind::Spring {
-                rest_length: 50.0,
-                stiffness: gradiance::domain::joint::DEFAULT_SPRING_STIFFNESS,
-                damping: gradiance::domain::joint::DEFAULT_SPRING_DAMPING,
+                rest_length: gradiance::units::Length(50.0),
+                stiffness: gradiance::units::Stiffness(
+                    gradiance::domain::joint::DEFAULT_SPRING_STIFFNESS,
+                ),
+                damping: gradiance::units::Damping(
+                    gradiance::domain::joint::DEFAULT_SPRING_DAMPING,
+                ),
                 range: None,
             },
             common: JointCommon::default(),
             body_a: b_id,
             body_b: None,
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::new(100.0, 80.0),
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+            anchor_b: gradiance::units::Displacement(Vec2::new(100.0, 80.0)),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     );
     // Property edit through the same seam the inspector uses.
