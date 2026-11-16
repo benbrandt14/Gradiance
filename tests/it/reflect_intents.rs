@@ -150,7 +150,7 @@ fn spawn_body_intent_round_trips_through_reflection() {
         layers: None,
         groups: vec![7],
         field: Some(gradiance::domain::field::FieldSource {
-            strength: -12.5,
+            strength: gradiance::units::Acceleration(-12.5),
             falloff: gradiance::domain::field::FieldFalloff::Linear,
         }),
         tracer: Some(gradiance::domain::tracer::Tracer {

@@ -91,7 +91,7 @@ fn joint(n: u8, kind: JointKind) -> JointRecord {
 pub(crate) fn every_quantity_scene() -> SceneRecord {
     let mut field_body = body(1, DepthBand::metres(0.75, 3.5));
     field_body.field = Some(FieldSource {
-        strength: -12.5,
+        strength: q("-12.5"),
         falloff: FieldFalloff::Quadratic,
     });
     let mut tracer_body = body(2, DepthBand::metres(0.0, 1.25));

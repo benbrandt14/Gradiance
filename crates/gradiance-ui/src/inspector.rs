@@ -401,7 +401,7 @@ fn field_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, 
     let Some(field) = current else {
         return;
     };
-    let mut strength = field.strength;
+    let mut strength = field.strength.value();
     ui.horizontal(|ui| {
         ui.label("repulsion")
             .on_hover_text("negative = attraction (Algodoo convention)");
@@ -416,7 +416,7 @@ fn field_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, 
                 selection,
                 props,
                 Some(FieldSource {
-                    strength: new,
+                    strength: gradiance_units::Acceleration(new),
                     ..field
                 }),
             );

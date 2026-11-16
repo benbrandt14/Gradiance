@@ -312,7 +312,7 @@ fn draw_field_marker(
     px: f32,
 ) {
     let p = transform.translation.truncate();
-    let color = if source.strength < 0.0 {
+    let color = if source.strength.value() < 0.0 {
         css::CORNFLOWER_BLUE
     } else {
         css::INDIAN_RED

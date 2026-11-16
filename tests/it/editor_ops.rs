@@ -135,7 +135,7 @@ fn field_property_edit_round_trips_and_undoes() {
     assert!(app.world().get::<FieldSource>(entity).is_none());
 
     let field = FieldSource {
-        strength: -750.0,
+        strength: gradiance::units::Acceleration(-750.0),
         falloff: FieldFalloff::Linear,
     };
     app.world_mut().write_message(PropertyEditIntent {

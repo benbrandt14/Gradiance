@@ -286,7 +286,7 @@ fn attraction_clusters_and_repulsion_scatters() {
         let mut record = box_record(Vec2::new(x, 0.0), 30.0, 30.0);
         record.shape = ShapeDef::Circle { radius: 15.0 };
         record.field = Some(FieldSource {
-            strength,
+            strength: gradiance::units::Acceleration(strength),
             falloff: FieldFalloff::Quadratic,
         });
         let id = record.id;
@@ -357,7 +357,7 @@ fn a_field_acts_on_plain_bodies_too() {
     let mut attractor = box_record(Vec2::ZERO, 40.0, 40.0);
     attractor.physics.rigid_body = RigidBody::Static;
     attractor.field = Some(FieldSource {
-        strength: -2000.0,
+        strength: gradiance::units::Acceleration(-2000.0),
         falloff: FieldFalloff::Quadratic,
     });
     app.world_mut()
@@ -392,7 +392,7 @@ fn set_in_orbit_produces_a_limit_cycle() {
     sun.shape = ShapeDef::Circle { radius: 30.0 };
     sun.physics.rigid_body = RigidBody::Static;
     sun.field = Some(FieldSource {
-        strength: -4000.0,
+        strength: gradiance::units::Acceleration(-4000.0),
         falloff: FieldFalloff::Quadratic,
     });
     app.world_mut()
@@ -515,7 +515,7 @@ fn field_forces_are_equal_and_opposite() {
     let mut attractor = box_record(Vec2::new(-60.0, 0.0), 60.0, 60.0);
     attractor.shape = ShapeDef::Circle { radius: 30.0 };
     attractor.field = Some(FieldSource {
-        strength: -20_000.0,
+        strength: gradiance::units::Acceleration(-20_000.0),
         falloff: FieldFalloff::Quadratic,
     });
     let attractor_id = attractor.id;
@@ -568,7 +568,7 @@ fn cutting_a_field_source_conserves_its_field() {
     let mut app = paused_app();
     let mut source = box_record(Vec2::ZERO, 80.0, 40.0);
     source.field = Some(FieldSource {
-        strength: -10_000.0,
+        strength: gradiance::units::Acceleration(-10_000.0),
         falloff: FieldFalloff::Quadratic,
     });
     app.world_mut()
