@@ -93,7 +93,7 @@ multi-unit parsing, not pulled in speculatively; base-SI-only conversions
 until then are trivial and hand-written. (Candidate crates evaluated at
 that point; the API is designed so the choice is swappable.)
 
-### 2. Source of truth → **SI-authored; persistence revved (format v6)**
+### 2. Source of truth → **SI-authored; persistence revved (format v6, then v7)**
 
 Owner intent: *take advantage of the strong typing, which means revving
 persistence to accommodate.* So the typed quantities are the **stored**
@@ -195,7 +195,7 @@ gradiance-script
                         (P0; makes typed quantities read-total-native).
 
 domain / scene     authored components carry typed quantities;
-                   records serialize base-SI scalars; format v6.
+                   records serialize base-SI scalars (bare); format v7.
 physics            touches avian world-units ONLY through core::world;
                    queries.rs returns typed quantities; catalog readers here.
 signal             SignalSource → catalog quantity; values carry dimension.
@@ -262,17 +262,31 @@ extension, not a rewrite:
    threading yet — signatures stay `f32`-SI; the newtypes remain available
    for the retype below. Physics behaviour is preserved up to the unit
    relabel (world ÷100 × camera ×100 = identical pixels).
-3. **P2·types — retype geometry/physics/domain** (in progress, by accretion).
-   Thread the `gradiance-units` newtypes through the pure layers and the
-   physics boundary so `physics::queries` returns typed quantities. Pure
-   refactor over the already-SI values from the flip — no value or format
-   change. *Landed:* the `physics::queries` read facade returns typed
+3. **P2·types — retype geometry/physics/domain** (domain + settings landed,
+   brief 5-1). Thread the `gradiance-units` newtypes through the pure layers
+   and the physics boundary so `physics::queries` returns typed quantities.
+   *Landed first:* the `physics::queries` read facade returns typed
    quantities (`velocity_of → (Velocity2, AngularVelocity)`, `mass_of → Mass`,
    `net_contact_impulse → Impulse2`, `ContactSample::normal_impulse →
    Impulse`); the probe/plot UI reads unit labels off the quantity types
    (`Velocity::UNIT`, …) instead of hard-coded strings — which is how the
    post-flip "px/s" label drift was caught and fixed. The `ui → units` DAG
    edge was added for it (reviewed in `tests/boundaries.rs`).
+   *Landed in 5-1:* every authored physical scalar in `gradiance-domain` and
+   the settings resources is a quantity — `DepthBand` near/far, the field
+   source's strength, the tracer's fade and size, a node's attachment
+   offset, the joint anchors / rest angles / limits / spring parameters, and
+   gravity, timestep, grid spacing/origin/rotation, shadow reach and back-plane
+   offset (classification table: `docs/briefs/5-1-units-types.md`). The
+   quantities serialize bare (format v7, ruling 2), `reflect_grid` edits a
+   newtype as its number, and script paths step through a newtype
+   (`"gravity.y"`), so scripts and the settings UI see the same numbers as
+   before. The `command`/`interaction`/`script → units` edges were added.
+   *Left on purpose:* `geometry` signatures (`ShapeDef` dimensions, snapping,
+   `PosRot`) stay `f32`/`Vec2` — a crate-wide geometry retype is its own
+   piece of work; consumers convert with `.value()` at that boundary.
+   Non-physical settings (colours, UI factors, degree-valued UI angles,
+   dimensionless ratios, signal-graph values) stay `f32` by classification.
 4. **P3 — `PhysicalQuantity` catalog + signal/plotter binding** (first slice
    landed). The `Dimension` enum is the catalog's runtime face;
    `SignalSource::dimension()` binds each sensor variant to it (adding the
