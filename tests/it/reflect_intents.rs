@@ -154,7 +154,7 @@ fn spawn_body_intent_round_trips_through_reflection() {
             falloff: gradiance::domain::field::FieldFalloff::Linear,
         }),
         tracer: Some(gradiance::domain::tracer::Tracer {
-            fade_secs: 1.5,
+            fade_secs: gradiance::units::Time(1.5),
             ..Default::default()
         }),
     };

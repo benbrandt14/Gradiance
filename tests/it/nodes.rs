@@ -22,7 +22,7 @@ fn tracer_record(pos: Vec2, attach: NodeAttachment) -> NodeRecord {
         pose: PosRot { pos, rot: 0.0 },
         attachment: attach,
         kind: NodeKind::Tracer(Tracer {
-            fade_secs: 2.0,
+            fade_secs: gradiance::units::Time(2.0),
             ..Default::default()
         }),
         appearance: gradiance::domain::appearance::Appearance::default(),

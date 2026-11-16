@@ -610,7 +610,7 @@ fn tracers_sample_fading_trails_and_toggle_undoably() {
     let mut app = headless_app();
     let mut record = box_record(Vec2::new(0.0, 300.0), 20.0, 20.0);
     record.tracer = Some(Tracer {
-        fade_secs: 0.5,
+        fade_secs: gradiance::units::Time(0.5),
         ..Default::default()
     });
     let id = record.id;

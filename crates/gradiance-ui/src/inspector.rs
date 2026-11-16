@@ -341,7 +341,7 @@ fn tracer_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps,
     let Some(tracer) = current else {
         return;
     };
-    let mut fade = tracer.fade_secs;
+    let mut fade = tracer.fade_secs.value();
     ui.horizontal(|ui| {
         ui.label("fade (s)");
         if let Commit::Done(_, new) =
@@ -351,7 +351,7 @@ fn tracer_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps,
                 selection,
                 props,
                 Some(Tracer {
-                    fade_secs: new.max(0.05),
+                    fade_secs: gradiance_units::Time(new.max(0.05)),
                     ..tracer
                 }),
             );

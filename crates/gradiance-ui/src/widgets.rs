@@ -271,10 +271,10 @@ pub fn node_kind_editor(
         NodeKind::Tracer(tracer) => {
             ui.horizontal(|ui| {
                 ui.label("fade (s)");
-                ui.add(egui::DragValue::new(&mut tracer.fade_secs).speed(0.05));
+                ui.add(egui::DragValue::new(&mut tracer.fade_secs.0).speed(0.05));
                 ui.label("size");
                 ui.add(
-                    egui::DragValue::new(&mut tracer.size)
+                    egui::DragValue::new(&mut tracer.size.0)
                         .speed(0.1)
                         .range(0.5..=20.0),
                 );

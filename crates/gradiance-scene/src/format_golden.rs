@@ -96,8 +96,8 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
     });
     let mut tracer_body = body(2, DepthBand::metres(0.0, 1.25));
     tracer_body.tracer = Some(Tracer {
-        fade_secs: 2.75,
-        size: 0.0625,
+        fade_secs: q("2.75"),
+        size: q("0.0625"),
         pattern: TracePattern::Dots,
     });
 
@@ -139,11 +139,11 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
             },
             attachment: NodeAttachment {
                 target: Some(id(1)),
-                offset: Vec2::new(0.1875, -0.8125),
+                offset: q("(0.1875, -0.8125)"),
             },
             kind: NodeKind::Tracer(Tracer {
-                fade_secs: 4.5,
-                size: 0.03125,
+                fade_secs: q("4.5"),
+                size: q("0.03125"),
                 pattern: TracePattern::Line,
             }),
             appearance: Appearance::default(),

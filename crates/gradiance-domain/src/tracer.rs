@@ -9,6 +9,7 @@
 //! so traced bodies stay visually identifiable.
 
 use bevy::prelude::Component;
+use gradiance_units::{Length, Time};
 use serde::{Deserialize, Serialize};
 
 /// How a trail is drawn.
@@ -35,24 +36,25 @@ impl TracePattern {
 pub struct Tracer {
     /// How long a sample stays visible, in simulated seconds (the trail
     /// ages on the physics clock, so pausing freezes it).
-    pub fade_secs: f32,
+    #[serde(with = "gradiance_units::serde_bare::scalar")]
+    pub fade_secs: Time,
     /// Trail thickness: dot radius (`Dots`) / point size (world metres).
-    #[serde(default = "default_size")]
-    pub size: f32,
+    #[serde(default = "default_size", with = "gradiance_units::serde_bare::scalar")]
+    pub size: Length,
     /// How the trail is rendered.
     #[serde(default)]
     pub pattern: TracePattern,
 }
 
 /// Default trail size (world metres) — for `serde` on pre-config saves.
-fn default_size() -> f32 {
-    0.02
+fn default_size() -> Length {
+    Length(0.02)
 }
 
 impl Default for Tracer {
     fn default() -> Self {
         Self {
-            fade_secs: 3.0,
+            fade_secs: Time(3.0),
             size: default_size(),
             pattern: TracePattern::default(),
         }
