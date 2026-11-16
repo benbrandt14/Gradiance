@@ -85,6 +85,7 @@ impl crate::menu::Panels<'_> {
             ("array", &mut *self.array),
             ("optimizer", &mut *self.optimizer),
             ("settings", &mut *self.settings),
+            ("review", &mut *self.review),
         ]
     }
 }
@@ -178,6 +179,7 @@ mod tests {
             "array",
             "optimizer",
             "settings",
+            "review",
         ] {
             assert_ne!(
                 crate::menu::menu_label(name),
@@ -204,6 +206,7 @@ mod tests {
             "array",
             "optimizer",
             "settings",
+            "review",
         ] {
             assert!(
                 name.chars().all(|c| c.is_ascii_lowercase()),

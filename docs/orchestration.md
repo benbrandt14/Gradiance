@@ -119,6 +119,57 @@ GitHub GraphQL is unavailable from sessions; `gh pr list` fails. Use REST
 (`gh api repos/{o}/{r}/pulls`). PR CI runs only on pull requests, so open a
 draft PR early to get a CI read.
 
+## Review mode — questions for the owner
+
+Product decisions reach the owner **in the running app, not in chat**
+(owner direction 2026-11-16, brief 4b-0). The owner runs
+
+```sh
+cargo run -- --review            # docs/review/questions.ron
+```
+
+flips between each question's options (or views them side by side), plays
+with the live scenes, and saves a choice plus a note. The app writes
+`docs/review/answers.ron`; the owner commits it. Schema:
+`gradiance_scene::review`.
+
+**Asking (orchestrators and workers).** Never ask a product question in
+chat or leave it in an Outcome as "owner to decide". Add it to
+`docs/review/questions.ron` instead, in the same PR:
+
+- a stable `id` (lower-case, `-`), a title, a description that says why it
+  matters and what each choice implies, and `source` (brief / `state.md`
+  item);
+- 2–4 options, each with a label, a caption saying what to try, and a real
+  scene under `docs/review/scenes/<id>/`. Prefer `.scm` scripts (they
+  survive `FORMAT_VERSION` bumps; a `.ron` scene does not). An option's
+  scripts run one frame apart, so a second script can `body-index-at`
+  what the first spawned;
+- settings differences go in the option's `settings` override (A/B only);
+  set `side_by_side: true` only when options differ in bodies, not settings;
+- add the question's expected body counts to `tests/it/review.rs`
+  (`expected_bodies`) — the guard loads every option and fails on a script
+  error or a wrong count.
+
+A question whose alternative cannot be shown yet (it needs code that does not
+exist) is not a review question: record it as a follow-up until a scene can
+show both sides.
+
+**Ingesting (orchestrator, at each phase start).**
+
+1. Read `docs/review/answers.ron`. For each answer:
+   - turn it into the roadmap/brief change it implies (a new brief, a scope
+     change in a planned one, or a `state.md` ruling);
+   - move the question and its answer to `docs/review/archive.ron`
+     (`Archive` schema: `question`, `answer`, `ingested_as` = what it
+     became), and delete its entry from `questions.ron` and `answers.ron`.
+     Keep its `scenes/<id>/` files; the archive entry still points at them,
+     and drop its row from `expected_bodies`.
+2. An answer of "none of these" is still an answer: its free text and note
+   are the owner's direction; if it opens a new question, ask it as a new
+   question with scenes.
+3. Commit the ingestion as its own change ("review: ingest <ids>").
+
 ## The plan: resolving the existing roadmap
 
 Phases are ordered by dependency and by the future intent below. Each phase

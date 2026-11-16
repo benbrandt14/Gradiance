@@ -157,7 +157,7 @@ across and ±3.5 m up and down); angles are radians.
 (panel-hide "console")       ; close one
 (panel-toggle "plot")        ; flip one
 (panel-open? "depth")        ; #t / #f — whether it is showing
-;; names: outliner properties depth plot nodes console probe array optimizer settings
+;; names: outliner properties depth plot nodes console probe array optimizer settings review
 
 ;; query — read the committed scene (reads are total)
 (body-count)                 ; number of bodies

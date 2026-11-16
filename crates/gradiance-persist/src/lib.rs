@@ -19,6 +19,8 @@ use gradiance_core::messages::drain;
 use gradiance_scene::{PersistError, SceneRecord, from_ron, to_ron};
 use std::path::{Path, PathBuf};
 
+pub mod review;
+
 /// Request to save the scene (`path: None` → remembered path, then dialog).
 #[derive(Message, Debug, Clone)]
 pub struct SaveSceneRequest {
@@ -77,6 +79,12 @@ impl Plugin for PersistPlugin {
         app.add_systems(
             Update,
             handle_persist_requests.before(gradiance_command::CommandDispatchSet),
+        );
+        app.add_message::<review::ReviewShowRequest>();
+        app.add_message::<review::ReviewAnswerRequest>();
+        app.add_systems(
+            Update,
+            review::handle_review_answers.run_if(resource_exists::<review::ReviewSession>),
         );
         app.add_systems(Last, autosave_on_exit);
     }
@@ -159,12 +167,18 @@ pub fn handle_persist_requests(world: &mut World) {
 /// `--resume` reopens it, so a rebuild lands back in the same scene).
 ///
 /// An empty scene is not written — closing immediately after launch must not
-/// clobber the previous session.
+/// clobber the previous session. Neither is a **review** scene: while a
+/// [`review::ReviewSession`] is open the scene on screen is a question's
+/// demonstration, not the owner's work.
 pub fn autosave_on_exit(world: &mut World) {
     let exiting = world
         .get_resource::<Messages<AppExit>>()
         .is_some_and(|m| !m.is_empty());
     if !exiting {
+        return;
+    }
+    if world.contains_resource::<review::ReviewSession>() {
+        info!("review mode: session autosave skipped");
         return;
     }
     let scene = SceneRecord::capture(world);

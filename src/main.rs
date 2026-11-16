@@ -30,7 +30,11 @@ fn main() {
     //                                   (`.gradiance-session.ron`);
     //   `gradiance --remote [port]`     serves the remote control surface
     //                                   (BRP over the op registry) on
-    //                                   127.0.0.1 (default port 15702).
+    //                                   127.0.0.1 (default port 15702);
+    //   `gradiance --review [file.ron]` opens review mode over a questions
+    //                                   file (default
+    //                                   `docs/review/questions.ron`); answers
+    //                                   go to `answers.ron` beside it.
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut scripts = Vec::new();
     let mut i = 0;
@@ -49,6 +53,25 @@ fn main() {
             });
             if port.is_some() {
                 i += 1;
+            }
+        } else if args[i] == "--review" {
+            // Optional questions file: the next argument, unless it is a flag.
+            let file = args.get(i + 1).filter(|a| !a.starts_with("--"));
+            let path = file.map_or_else(
+                || PathBuf::from(gradiance::persist::review::DEFAULT_QUESTIONS_FILE),
+                PathBuf::from,
+            );
+            if file.is_some() {
+                i += 1;
+            }
+            match gradiance::persist::review::ReviewSession::open(&path) {
+                Ok(session) => {
+                    app.insert_resource(session);
+                }
+                Err(e) => {
+                    eprintln!("--review: {e}");
+                    std::process::exit(2);
+                }
             }
         } else if args[i] == "--resume" {
             let autosave = PathBuf::from(gradiance::persist::AUTOSAVE_FILE);

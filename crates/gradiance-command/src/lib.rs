@@ -435,6 +435,7 @@ impl Plugin for CommandPlugin {
         // Undo/redo are meta-intents (they drive the stack, not a command).
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
+        app.add_message::<intent::ClearHistoryIntent>();
         app.register_type::<intent::UndoIntent>();
         app.register_type::<intent::RedoIntent>();
         // Marker components that only appear inside `Option`al record
