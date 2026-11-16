@@ -36,6 +36,11 @@ Last updated: 2026-11-14, Phase 4 (orchestrator; #233 merged; 4-3 in flight).
   collider panic on fine rings and a contour lost-arc bug), **4-2** filleted merge (merged #233: `(fillet-merge a b r)`, menu radius
   field; joins gaps < r/2), **4-3** M19 chrome functional (in flight; last Phase 4 brief) (palette, camera settings,
   gravity widget; confirms emissive/borders/AO, which already exist).
+- **Phase 5 briefs (written, ready, serial):** **5-1** units P2·types
+  (authored scalars → newtypes, format unchanged), **5-2** named quantity
+  catalog (P3), **5-3** unit-aware input + deg/rad preference (P4),
+  **5-4** units in scripts (P6), **5-5** frames + curvilinear decision
+  proposals (owner ratifies).
 - **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Images stay out of
   git; show them in the conversation and describe them in PR comments.
 - **Workers:** hand off through the brief's Outcome and the PR; the
