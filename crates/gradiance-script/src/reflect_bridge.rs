@@ -12,7 +12,7 @@
 //! seam that dispatches through intents/settings resources builds on top of
 //! it.
 
-use bevy::reflect::{GetPath, PartialReflect, Reflect, ReflectMut, ReflectRef};
+use bevy::reflect::{PartialReflect, Reflect, ReflectMut, ReflectPath, ReflectRef};
 use steel::rvals::SteelVal;
 
 /// Why a reflect-path write could not be applied.
@@ -41,6 +41,61 @@ fn unwrap_newtype(value: &dyn PartialReflect) -> &dyn PartialReflect {
         return unwrap_newtype(inner);
     }
     value
+}
+
+/// One `.`-separated segment of a script path, as a reflect-path access
+/// (`y` -> `.y`, `0` -> `.0`, `lights[1]` -> `.lights[1]`).
+fn segments(path: &str) -> impl Iterator<Item = String> + '_ {
+    path.split('.')
+        .filter(|s| !s.is_empty())
+        .map(|s| format!(".{s}"))
+}
+
+/// Resolves a script path, stepping *through* a dimensional newtype wherever
+/// the next segment names a field of the value it wraps — so `"gravity.y"`
+/// reaches the `y` of `gravity: Acceleration2(Vec2)` exactly as it did when
+/// the field was a bare `Vec2`. A segment that resolves on the newtype itself
+/// (`"gravity.0"`) still does.
+fn resolve<'r>(root: &'r dyn PartialReflect, path: &str) -> Option<&'r dyn PartialReflect> {
+    let mut current = root;
+    for segment in segments(path) {
+        current = match segment.as_str().reflect_element(current) {
+            Ok(next) => next,
+            Err(_) => segment
+                .as_str()
+                .reflect_element(unwrap_newtype(current))
+                .ok()?,
+        };
+    }
+    Some(current)
+}
+
+/// [`resolve`], mutably.
+fn resolve_mut<'r>(
+    root: &'r mut dyn PartialReflect,
+    path: &str,
+) -> Option<&'r mut dyn PartialReflect> {
+    let mut current = root;
+    for segment in segments(path) {
+        while segment.as_str().reflect_element(&*current).is_err() && is_newtype(&*current) {
+            current = newtype_inner_mut(current)?;
+        }
+        current = segment.as_str().reflect_element_mut(current).ok()?;
+    }
+    Some(current)
+}
+
+/// Whether `value` is a single-field tuple struct (a dimensional newtype).
+fn is_newtype(value: &dyn PartialReflect) -> bool {
+    matches!(value.reflect_ref(), ReflectRef::TupleStruct(ts) if ts.field_len() == 1)
+}
+
+/// The wrapped field of a single-field tuple struct.
+fn newtype_inner_mut(value: &mut dyn PartialReflect) -> Option<&mut dyn PartialReflect> {
+    match value.reflect_mut() {
+        ReflectMut::TupleStruct(ts) if ts.field_len() == 1 => ts.field_mut(0),
+        _ => None,
+    }
 }
 
 /// A reflected leaf scalar -> a steel value, if it is a supported scalar
@@ -92,7 +147,7 @@ pub fn reflect_to_steel(value: &dyn PartialReflect) -> SteelVal {
 /// satisfy it). Returns `None` if the path is missing or the leaf is not a
 /// numeric scalar.
 pub fn read_path<T: Reflect>(root: &T, path: &str) -> Option<f64> {
-    let leaf = unwrap_newtype(root.reflect_path(path).ok()?);
+    let leaf = unwrap_newtype(resolve(root.as_partial_reflect(), path)?);
     let any = leaf.try_as_reflect()?.as_any();
     any.downcast_ref::<f32>()
         .map(|v| f64::from(*v))
@@ -106,9 +161,8 @@ pub fn read_path<T: Reflect>(root: &T, path: &str) -> Option<f64> {
 /// dimensional newtype wrapper (`Mass(f32)`) to its inner scalar. Never names
 /// a field, so it works for any reflected type.
 pub fn write_path<T: Reflect>(root: &mut T, path: &str, val: f64) -> Result<(), BridgeError> {
-    let leaf = root
-        .reflect_path_mut(path)
-        .map_err(|_| BridgeError::Path(path.to_string()))?;
+    let leaf = resolve_mut(root.as_partial_reflect_mut(), path)
+        .ok_or_else(|| BridgeError::Path(path.to_string()))?;
     apply_scalar(leaf, val).map_err(|()| BridgeError::UnsupportedLeaf(path.to_string()))
 }
 
@@ -196,6 +250,43 @@ mod tests {
             scalar_to_steel(&body.mass as &dyn PartialReflect),
             Some(SteelVal::NumV(v)) if (v - 4.0).abs() < 1e-9
         ));
+    }
+
+    /// A vector-quantity stand-in (`Acceleration2(Vec2)`'s shape).
+    #[derive(bevy::reflect::Reflect, Clone, Copy, PartialEq, Debug)]
+    struct SpikeAccel(bevy::math::Vec2);
+
+    #[derive(bevy::reflect::Reflect, Clone, Debug)]
+    struct SpikeSettings {
+        gravity: SpikeAccel,
+        lights: Vec<SpikeMass>,
+    }
+
+    #[test]
+    fn paths_step_through_a_vector_newtype() {
+        // `"gravity.y"` must keep resolving when `gravity` goes from a bare
+        // `Vec2` to `Acceleration2(Vec2)` (brief 5-1): the path steps through
+        // the wrapper, and the explicit `.0` spelling still works.
+        let mut settings = SpikeSettings {
+            gravity: SpikeAccel(bevy::math::Vec2::new(0.5, -9.75)),
+            lights: vec![SpikeMass(1.0), SpikeMass(2.0)],
+        };
+        assert_eq!(read_path(&settings, "gravity.y"), Some(-9.75));
+        assert_eq!(read_path(&settings, "gravity.0.x"), Some(0.5));
+        assert_eq!(read_path(&settings, "lights[1]"), Some(2.0));
+        write_path(&mut settings, "gravity.y", -3.0).expect("through the newtype");
+        write_path(&mut settings, "gravity.0.x", 1.5).expect("explicit .0");
+        write_path(&mut settings, "lights[0]", 7.0).expect("indexed newtype");
+        assert_eq!(
+            settings.gravity,
+            SpikeAccel(bevy::math::Vec2::new(1.5, -3.0))
+        );
+        assert_eq!(settings.lights[0], SpikeMass(7.0));
+        // Misses stay misses.
+        assert_eq!(read_path(&settings, "gravity.z"), None);
+        assert!(write_path(&mut settings, "gravity.z", 0.0).is_err());
+        // A vector newtype is not a scalar leaf.
+        assert!(write_path(&mut settings, "gravity", 0.0).is_err());
     }
 
     #[test]
