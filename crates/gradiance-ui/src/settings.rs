@@ -616,8 +616,15 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
                 damping,
                 range,
             } => {
-                let clamp = range.map_or(String::new(), |[lo, hi]| format!(" [{lo:.0},{hi:.0}]"));
-                format!("Spring rest={rest_length:.0} k={stiffness:.0} c={damping:.1}{clamp}")
+                let clamp = range.map_or(String::new(), |[lo, hi]| {
+                    format!(" [{:.0},{:.0}]", lo.value(), hi.value())
+                });
+                format!(
+                    "Spring rest={:.0} k={:.0} c={:.1}{clamp}",
+                    rest_length.value(),
+                    stiffness.value(),
+                    damping.value()
+                )
             }
         };
         let target = def.body_b.map_or("world pin".to_owned(), |b| short_id(&b));

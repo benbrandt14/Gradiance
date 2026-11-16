@@ -32,6 +32,7 @@ use gradiance_domain::Body;
 use gradiance_domain::group::SelectionGroup;
 use gradiance_domain::joint::{JointDef, JointKind};
 use gradiance_geometry::snapping::project_on_segment;
+use gradiance_units::{Angle, Length};
 
 /// Screen-space radius (logical px) for clicking a joint glyph. Shared with
 /// the context menu so left-click picking and right-click config agree.
@@ -81,7 +82,12 @@ pub fn glyph_distance(
         JointKind::Hinge { .. } => (anchor.distance(p) - HINGE_RING_PX * s).max(0.0),
         JointKind::Slider { axis, limits, .. } => {
             let dir = Vec2::from_angle(rot_a).rotate(*axis);
-            let (from, to) = slider_span(anchor, dir, *limits, s);
+            let (from, to) = slider_span(
+                anchor,
+                dir,
+                limits.map(|[lo, hi]| [lo.value(), hi.value()]),
+                s,
+            );
             p.distance(project_on_segment(p, from, to))
         }
         JointKind::Spring { .. } => match world_b {
@@ -106,8 +112,14 @@ pub fn limit_handles(
         } => {
             let r = HINGE_LIMIT_RADIUS_PX * s;
             Some([
-                (anchor + Vec2::from_angle(rot_a + min) * r, LimitEnd::Min),
-                (anchor + Vec2::from_angle(rot_a + max) * r, LimitEnd::Max),
+                (
+                    anchor + Vec2::from_angle(rot_a + min.value()) * r,
+                    LimitEnd::Min,
+                ),
+                (
+                    anchor + Vec2::from_angle(rot_a + max.value()) * r,
+                    LimitEnd::Max,
+                ),
             ])
         }
         JointKind::Slider {
@@ -117,8 +129,8 @@ pub fn limit_handles(
         } => {
             let dir = Vec2::from_angle(rot_a).rotate(*axis);
             Some([
-                (anchor + dir * *min, LimitEnd::Min),
-                (anchor + dir * *max, LimitEnd::Max),
+                (anchor + dir * min.value(), LimitEnd::Min),
+                (anchor + dir * max.value(), LimitEnd::Max),
             ])
         }
         _ => None,
@@ -143,9 +155,10 @@ pub fn dragged_limits(
         } => {
             let dir = Vec2::from_angle(rot_a).rotate(*axis);
             let t = (p - anchor).dot(dir);
+            let (min, max) = (min.value(), max.value());
             Some(match end {
-                LimitEnd::Min => [t.min(*max - 1.0), *max],
-                LimitEnd::Max => [*min, t.max(*min + 1.0)],
+                LimitEnd::Min => [t.min(max - 1.0), max],
+                LimitEnd::Max => [min, t.max(min + 1.0)],
             })
         }
         JointKind::Hinge {
@@ -153,22 +166,28 @@ pub fn dragged_limits(
             ..
         } => {
             let a = gradiance_geometry::wrap_angle((p - anchor).to_angle() - rot_a);
+            let (min, max) = (min.value(), max.value());
             Some(match end {
-                LimitEnd::Min => [a.min(*max - 0.05), *max],
-                LimitEnd::Max => [*min, a.max(*min + 0.05)],
+                LimitEnd::Min => [a.min(max - 0.05), max],
+                LimitEnd::Max => [min, a.max(min + 0.05)],
             })
         }
         _ => None,
     }
 }
 
-/// A copy of `def` with its limits replaced (kinds without limits pass
-/// through unchanged).
+/// A copy of `def` with its limits replaced — base-SI values, radians for a
+/// hinge and metres for a slider (kinds without limits pass through
+/// unchanged).
 fn with_limits(def: &JointDef, new_limits: [f32; 2]) -> JointDef {
     let mut new = def.clone();
+    let [lo, hi] = new_limits;
     match &mut new.kind {
-        JointKind::Hinge { limits, .. } | JointKind::Slider { limits, .. } => {
-            *limits = Some(new_limits);
+        JointKind::Hinge { limits, .. } => {
+            *limits = Some([Angle(lo), Angle(hi)]);
+        }
+        JointKind::Slider { limits, .. } => {
+            *limits = Some([Length(lo), Length(hi)]);
         }
         JointKind::Spring { .. } => {}
     }

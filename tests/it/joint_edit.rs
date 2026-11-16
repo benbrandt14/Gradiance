@@ -181,7 +181,7 @@ fn prismatic_pin(body_a: StableId, limits: Option<[f32; 2]>) -> JointDef {
     JointDef {
         kind: JointKind::Slider {
             axis: Vec2::X,
-            limits,
+            limits: limits.map(|l| l.map(gradiance::units::Length)),
             motor: None,
         },
         common: JointCommon::default(),
@@ -233,7 +233,9 @@ fn dragging_a_travel_cap_resizes_prismatic_limits() {
     let JointKind::Slider { limits, .. } = def.kind else {
         panic!("kind changed: {:?}", def.kind);
     };
-    let [min, max] = limits.expect("limits kept");
+    let [min, max] = limits
+        .expect("limits kept")
+        .map(gradiance::units::Length::value);
     assert!(min.abs() < 1.0, "min untouched ({min})");
     assert!(
         (max - 200.0).abs() < 10.0,
@@ -251,7 +253,11 @@ fn dragging_a_travel_cap_resizes_prismatic_limits() {
     let JointKind::Slider { limits, .. } = def.kind else {
         panic!("kind changed: {:?}", def.kind);
     };
-    assert_eq!(limits, Some([0.0, 120.0]), "undo restores the old travel");
+    assert_eq!(
+        limits,
+        Some([0.0, 120.0].map(gradiance::units::Length)),
+        "undo restores the old travel"
+    );
 }
 
 #[test]
@@ -260,7 +266,7 @@ fn dragging_a_hinge_arc_handle_changes_angle_limits() {
     let body = spawn_box_at(&mut app, Vec2::ZERO, 20.0, 20.0);
     let mut def = hinge_pin(body, Vec2::ZERO, Vec2::ZERO);
     def.kind = JointKind::Hinge {
-        limits: Some([-0.5, 0.5]),
+        limits: Some([gradiance::units::Angle(-0.5), gradiance::units::Angle(0.5)]),
         motor: None,
     };
     let joint = spawn_joint(&mut app, def);
@@ -282,7 +288,9 @@ fn dragging_a_hinge_arc_handle_changes_angle_limits() {
     let JointKind::Hinge { limits, .. } = def.kind else {
         panic!("kind changed: {:?}", def.kind);
     };
-    let [min, max] = limits.expect("limits kept");
+    let [min, max] = limits
+        .expect("limits kept")
+        .map(gradiance::units::Angle::value);
     assert!((min + 0.5).abs() < 1e-3, "min untouched ({min})");
     assert!((max - 1.2).abs() < 0.15, "max followed the cursor ({max})");
     assert_eq!(

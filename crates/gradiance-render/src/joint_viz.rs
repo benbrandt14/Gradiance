@@ -68,7 +68,11 @@ pub fn draw_joints(
                 // Exact allowed-rotation range (relative to body A), with
                 // grab handles at the ends when the joint is selected. A
                 // live handle drag previews its tentative range instead.
-                let (limits, live) = tentative_or(&limit_drag, entity, *limits);
+                let (limits, live) = tentative_or(
+                    &limit_drag,
+                    entity,
+                    limits.map(|[lo, hi]| [lo.value(), hi.value()]),
+                );
                 if let Some([min, max]) = limits {
                     let arc_color = if live {
                         css::AQUAMARINE
@@ -99,7 +103,11 @@ pub fn draw_joints(
                 // travel (plus end caps); unlimited prismatics keep the
                 // long reference line. A live handle drag previews its
                 // tentative travel instead.
-                let (limits, live) = tentative_or(&limit_drag, entity, *limits);
+                let (limits, live) = tentative_or(
+                    &limit_drag,
+                    entity,
+                    limits.map(|[lo, hi]| [lo.value(), hi.value()]),
+                );
                 let span_color = if live { css::AQUAMARINE } else { color };
                 let (from, to) = slider_span(anchor, dir, limits, s);
                 let perp = Vec2::new(-dir.y, dir.x) * 4.0 * s;

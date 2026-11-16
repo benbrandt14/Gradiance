@@ -114,7 +114,7 @@ fn assert_golden(name: &str, actual: &str) {
 fn hinge(a: StableId, b: StableId, anchor_a: Vec2, anchor_b: Vec2) -> JointDef {
     JointDef {
         kind: JointKind::Hinge {
-            limits: Some([-1.0, 1.0]),
+            limits: Some([gradiance::units::Angle(-1.0), gradiance::units::Angle(1.0)]),
             motor: Some(AngularMotorDef::default()),
         },
         common: JointCommon::default(),
@@ -251,9 +251,13 @@ fn replay_joints() {
         id(11),
         JointDef {
             kind: JointKind::Spring {
-                rest_length: 50.0,
-                stiffness: gradiance::domain::joint::DEFAULT_SPRING_STIFFNESS,
-                damping: gradiance::domain::joint::DEFAULT_SPRING_DAMPING,
+                rest_length: gradiance::units::Length(50.0),
+                stiffness: gradiance::units::Stiffness(
+                    gradiance::domain::joint::DEFAULT_SPRING_STIFFNESS,
+                ),
+                damping: gradiance::units::Damping(
+                    gradiance::domain::joint::DEFAULT_SPRING_DAMPING,
+                ),
                 range: None,
             },
             common: JointCommon::default(),

@@ -101,19 +101,19 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
     });
 
     let hinge = JointKind::Hinge {
-        limits: Some([-1.5, 0.875]),
+        limits: Some([q("-1.5"), q("0.875")]),
         motor: Some(AngularMotorDef::default()),
     };
     let slider = JointKind::Slider {
         axis: Vec2::new(0.6, 0.8),
-        limits: Some([-0.25, 1.75]),
+        limits: Some([q("-0.25"), q("1.75")]),
         motor: Some(LinearMotorDef::default()),
     };
     let spring = JointKind::Spring {
-        rest_length: 1.375,
-        stiffness: 420.0,
-        damping: 3.5,
-        range: Some([0.5, 2.25]),
+        rest_length: q("1.375"),
+        stiffness: q("420.0"),
+        damping: q("3.5"),
+        range: Some([q("0.5"), q("2.25")]),
     };
 
     let mut environment = EnvironmentRecord::default();

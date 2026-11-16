@@ -193,7 +193,7 @@ fn insert_derived_joint(
                 .with_local_anchor2(Vector::from(anchor_b))
                 .with_local_basis2(basis_b);
             if let Some([min, max]) = limits {
-                joint = joint.with_angle_limits(*min, *max);
+                joint = joint.with_angle_limits(min.value(), max.value());
             }
             if let Some(m) = motor {
                 joint = joint.with_motor(angular_motor(m, inertia));
@@ -211,7 +211,7 @@ fn insert_derived_joint(
                 .with_local_basis2(basis_b)
                 .with_slider_axis(Vector::from(*axis));
             if let Some([min, max]) = limits {
-                joint = joint.with_limits(*min, *max);
+                joint = joint.with_limits(min.value(), max.value());
             }
             if let Some(m) = motor {
                 joint = joint.with_motor(linear_motor(m, mass));
@@ -227,14 +227,14 @@ fn insert_derived_joint(
             // compliance = 1 / stiffness (0 = rigid); an unbounded strut pins
             // the distance limit to rest_length (a pure spring), a ranged one
             // uses the [min, max] band. Damping is a separate joint component.
-            let compliance = if *stiffness > 0.0 {
-                1.0 / stiffness
+            let compliance = if stiffness.value() > 0.0 {
+                1.0 / stiffness.value()
             } else {
                 0.0
             };
             let (min, max) = match range {
-                Some([lo, hi]) => (*lo, *hi),
-                None => (*rest_length, *rest_length),
+                Some([lo, hi]) => (lo.value(), hi.value()),
+                None => (rest_length.value(), rest_length.value()),
             };
             let joint = DistanceJoint::new(body_a, body_b)
                 .with_local_anchor1(Vector::from(def.anchor_a))
@@ -244,7 +244,7 @@ fn insert_derived_joint(
             entity_commands.insert((
                 joint,
                 JointDamping {
-                    linear: *damping,
+                    linear: damping.value(),
                     angular: 0.0,
                 },
             ));

@@ -215,17 +215,17 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                     };
                     let kind = match kind {
                         0 => JointKind::Hinge {
-                            limits,
+                            limits: limits.map(|l| l.map(gradiance::units::Angle)),
                             motor: motor.map(seed_angular_motor),
                         },
                         1 => JointKind::Slider {
                             axis: Vec2::Y,
-                            limits,
+                            limits: limits.map(|l| l.map(gradiance::units::Length)),
                             motor: motor.map(seed_linear_motor),
                         },
                         _ => JointKind::Slider {
                             axis: Vec2::X,
-                            limits,
+                            limits: limits.map(|l| l.map(gradiance::units::Length)),
                             motor: motor.map(seed_linear_motor),
                         },
                     };
@@ -467,7 +467,7 @@ fn joints_survive_files_and_resolve_after_load() {
             id: StableId::new(),
             def: JointDef {
                 kind: JointKind::Hinge {
-                    limits: Some([-1.0, 1.0]),
+                    limits: Some([gradiance::units::Angle(-1.0), gradiance::units::Angle(1.0)]),
                     motor: Some(AngularMotorDef::default()),
                 },
                 common: JointCommon::default(),

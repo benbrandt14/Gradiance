@@ -177,7 +177,7 @@ fn spawn_joint_intent_round_trips_through_reflection() {
         id: StableId::new(),
         def: JointDef {
             kind: JointKind::Hinge {
-                limits: Some([-1.0, 1.0]),
+                limits: Some([gradiance::units::Angle(-1.0), gradiance::units::Angle(1.0)]),
                 motor: Some(AngularMotorDef::default()),
             },
             common: JointCommon {

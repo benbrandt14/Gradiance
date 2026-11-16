@@ -63,8 +63,8 @@ pub fn drive_oscillating_motors(
                 );
                 if let Some(v) = gradiance_domain::joint::oscillate_target(
                     rel,
-                    *min,
-                    *max,
+                    min.value(),
+                    max.value(),
                     m.target_velocity.value(),
                     ANGLE_BUFFER,
                 ) {
@@ -88,8 +88,8 @@ pub fn drive_oscillating_motors(
                 let t = (anchor_b_world - anchor_a_world).dot(dir);
                 if let Some(v) = gradiance_domain::joint::oscillate_target(
                     t,
-                    *min,
-                    *max,
+                    min.value(),
+                    max.value(),
                     m.target_velocity.value(),
                     TRANSLATION_BUFFER,
                 ) {

@@ -161,8 +161,10 @@ fn build_joint(
             // Default travel limits (ToolDefaults option): the drag *draws*
             // the allowed travel, `[0, drag length]` along the axis. A short
             // drag never carried travel intent, so it stays unlimited.
-            let limits = (defaults.slider_limits && drag.length() >= AXIS_THRESHOLD)
-                .then_some([0.0, drag.length()]);
+            let limits = (defaults.slider_limits && drag.length() >= AXIS_THRESHOLD).then_some([
+                gradiance_units::Length(0.0),
+                gradiance_units::Length(drag.length()),
+            ]);
             JointKind::Slider {
                 // Authored in body-A local space.
                 axis: Vec2::from_angle(-pose_a.rot).rotate(world_axis),

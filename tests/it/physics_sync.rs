@@ -452,7 +452,10 @@ fn world_pin_prismatic_locks_rotation_by_default() {
             def: JointDef {
                 kind: JointKind::Slider {
                     axis: Vec2::Y,
-                    limits: Some([-80.0, 80.0]),
+                    limits: Some([
+                        gradiance::units::Length(-80.0),
+                        gradiance::units::Length(80.0),
+                    ]),
                     motor: None,
                 },
                 common: JointCommon::default(),

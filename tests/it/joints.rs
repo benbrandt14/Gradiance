@@ -73,7 +73,7 @@ fn motorized_hinge_oscillates_between_its_limits() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some(limits),
+                limits: Some(limits.map(gradiance::units::Angle)),
                 motor: Some(AngularMotorDef {
                     target_velocity: gradiance::units::AngularVelocity(3.0),
                     oscillate: true,
@@ -174,7 +174,10 @@ fn slider_constrains_motion_to_the_axis_and_respects_limits() {
         JointDef {
             kind: JointKind::Slider {
                 axis: Vec2::Y,
-                limits: Some([-120.0, 0.0]),
+                limits: Some([
+                    gradiance::units::Length(-120.0),
+                    gradiance::units::Length(0.0),
+                ]),
                 motor: None,
             },
             common: JointCommon::default(),
@@ -556,7 +559,7 @@ fn hinge_angle_limit_stops_a_free_arm_under_gravity() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some(limits),
+                limits: Some(limits.map(gradiance::units::Angle)),
                 motor: None,
             },
             common: JointCommon::default(),
@@ -594,7 +597,7 @@ fn world_pin_hinge_limit_holds_the_swing() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some([-0.3, 0.3]),
+                limits: Some([gradiance::units::Angle(-0.3), gradiance::units::Angle(0.3)]),
                 motor: None,
             },
             common: JointCommon::default(),
@@ -681,9 +684,9 @@ fn rotated_world_pin_slider_stays_stable_and_rotation_locked() {
 fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, stiffness: f32) -> JointDef {
     JointDef {
         kind: JointKind::Spring {
-            rest_length,
-            stiffness,
-            damping: 5.0,
+            rest_length: gradiance::units::Length(rest_length),
+            stiffness: gradiance::units::Stiffness(stiffness),
+            damping: gradiance::units::Damping(5.0),
             range: None,
         },
         common: JointCommon::default(),
@@ -779,7 +782,10 @@ fn prismatic_locks_rotation_under_torque_load() {
         JointDef {
             kind: JointKind::Slider {
                 axis: Vec2::X,
-                limits: Some([0.0, 100.0]),
+                limits: Some([
+                    gradiance::units::Length(0.0),
+                    gradiance::units::Length(100.0),
+                ]),
                 motor: None,
             },
             common: JointCommon::default(),
@@ -828,7 +834,7 @@ fn world_pinned_tilted_motor_oscillates() {
         &mut app,
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some(limits),
+                limits: Some(limits.map(gradiance::units::Angle)),
                 motor: Some(AngularMotorDef {
                     target_velocity: gradiance::units::AngularVelocity(3.0),
                     oscillate: true,
@@ -945,9 +951,9 @@ fn strut_stiffness_keeps_a_hung_body_from_drooping() {
         &mut app,
         JointDef {
             kind: JointKind::Spring {
-                rest_length: 50.0,
-                stiffness,
-                damping: 0.0,
+                rest_length: gradiance::units::Length(50.0),
+                stiffness: gradiance::units::Stiffness(stiffness),
+                damping: gradiance::units::Damping(0.0),
                 range: None,
             },
             common: JointCommon::default(),
@@ -994,7 +1000,10 @@ fn motorized_slider_drives_body_along_its_axis() {
         JointDef {
             kind: JointKind::Slider {
                 axis: Vec2::X,
-                limits: Some([0.0, 200.0]),
+                limits: Some([
+                    gradiance::units::Length(0.0),
+                    gradiance::units::Length(200.0),
+                ]),
                 motor: Some(LinearMotorDef {
                     target_velocity: gradiance::units::Velocity(30.0), // along +X; auto ceiling (max_force = 0)
                     ..default()

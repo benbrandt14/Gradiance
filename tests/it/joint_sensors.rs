@@ -125,9 +125,9 @@ fn a_spring_length_reads_against_a_world_pin() {
     let mut app = headless_app();
     let a = spawn_static(&mut app, Vec2::new(0.0, 0.75));
     let spring = JointKind::Spring {
-        rest_length: 0.75,
-        stiffness: 100.0,
-        damping: 1.0,
+        rest_length: gradiance::units::Length(0.75),
+        stiffness: gradiance::units::Stiffness(100.0),
+        damping: gradiance::units::Damping(1.0),
         range: None,
     };
     let joint = spawn_joint(&mut app, spring, a, None);

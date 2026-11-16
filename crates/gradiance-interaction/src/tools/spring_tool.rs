@@ -113,9 +113,9 @@ fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Too
 
     let mut def = JointDef {
         kind: JointKind::Spring {
-            rest_length: rest,
-            stiffness,
-            damping: DEFAULT_SPRING_DAMPING,
+            rest_length: gradiance_units::Length(rest),
+            stiffness: gradiance_units::Stiffness(stiffness),
+            damping: gradiance_units::Damping(DEFAULT_SPRING_DAMPING),
             range: None,
         },
         // Spring bodies collide by default; adjust via the collision-layer menu.

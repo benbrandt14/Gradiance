@@ -1855,9 +1855,9 @@ fn register_joint_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
             let rest_length = far.map_or(0.0, |(_, pose_b)| pose_a.pos.distance(pose_b.pos));
             drop(view);
             let kind = JointKind::Spring {
-                rest_length,
-                stiffness: stiffness as f32,
-                damping: damping as f32,
+                rest_length: gradiance_units::Length(rest_length),
+                stiffness: gradiance_units::Stiffness(stiffness as f32),
+                damping: gradiance_units::Damping(damping as f32),
                 range: None,
             };
             // Anchored at body A's centre; `spawn_joint` puts B's anchor at

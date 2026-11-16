@@ -31,7 +31,7 @@ use bevy::math::Vec2;
 use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
-use gradiance_units::{Angle, Force, Length};
+use gradiance_units::{Angle, Damping, Force, Length, Stiffness};
 use serde::{Deserialize, Serialize};
 
 // --- Motors ---------------------------------------------------------------
@@ -167,8 +167,8 @@ pub fn exceeds_break_force(break_force: Option<Force>, force: Force) -> bool {
 pub enum JointKind {
     /// Revolute: bodies rotate freely about the shared anchor.
     Hinge {
-        /// Optional `[min, max]` relative-angle limits (radians).
-        limits: Option<[f32; 2]>,
+        /// Optional `[min, max]` relative-angle limits.
+        limits: Option<[Angle; 2]>,
         /// Optional angular motor (rad/s driven, torque capped).
         motor: Option<AngularMotorDef>,
     },
@@ -176,8 +176,8 @@ pub enum JointKind {
     Slider {
         /// Slide axis in body-A local space (unit length).
         axis: Vec2,
-        /// Optional `[min, max]` translation limits (m).
-        limits: Option<[f32; 2]>,
+        /// Optional `[min, max]` translation limits.
+        limits: Option<[Length; 2]>,
         /// Optional linear motor (m/s driven, force capped).
         motor: Option<LinearMotorDef>,
     },
@@ -187,22 +187,22 @@ pub enum JointKind {
     /// unbounded the distance limit pins to `rest_length` (a pure spring), and
     /// when a [`range`](Self::Spring::range) is set the limit becomes that band.
     Spring {
-        /// The length the spring relaxes to (m) — the creation distance.
-        rest_length: f32,
-        /// Spring constant (stiffness, N/m); the joint's compliance is
+        /// The length the spring relaxes to — the creation distance.
+        rest_length: Length,
+        /// Spring constant; the joint's compliance is
         /// `1 / stiffness`, and `<= 0` is treated as rigid. Set from the
         /// connected mass at creation so the strut isn't too soft. The scalar a
         /// future curve editor would generalize to a nonlinear
         /// force-vs-displacement curve.
-        stiffness: f32,
+        stiffness: Stiffness,
         /// Linear velocity damping applied by the joint (default 0). The scalar
         /// a future curve editor would generalize to a nonlinear damping curve.
-        damping: f32,
-        /// Optional hard length clamp `[min, max]` in metres; `None` (the
+        damping: Damping,
+        /// Optional hard length clamp `[min, max]`; `None` (the
         /// default) leaves travel unbounded, so the spring is the only
         /// restoring force. When set, the strut floats freely within the band
         /// and springs back past either end.
-        range: Option<[f32; 2]>,
+        range: Option<[Length; 2]>,
     },
 }
 
@@ -527,7 +527,7 @@ mod tests {
     fn hinge(body_b: Option<StableId>, rest_rot_a: f32) -> JointDef {
         JointDef {
             kind: JointKind::Hinge {
-                limits: Some([-0.5, 0.5]),
+                limits: Some([Angle(-0.5), Angle(0.5)]),
                 motor: None,
             },
             common: JointCommon::default(),
@@ -565,7 +565,7 @@ mod tests {
         let def = JointDef {
             kind: JointKind::Slider {
                 axis: Vec2::X,
-                limits: Some([-1.0, 1.0]),
+                limits: Some([Length(-1.0), Length(1.0)]),
                 motor: None,
             },
             common: JointCommon::default(),
