@@ -36,6 +36,15 @@ macro_rules! scalar_quantity {
             pub const UNIT: &'static str = $unit;
         }
 
+        impl ScalarQuantity for $name {
+            fn from_si(value: f32) -> Self {
+                Self(value)
+            }
+            fn si(self) -> f32 {
+                self.0
+            }
+        }
+
         impl core::ops::Add for $name {
             type Output = Self;
             fn add(self, rhs: Self) -> Self {
@@ -110,6 +119,15 @@ macro_rules! vector_quantity {
             pub const UNIT: &'static str = $unit;
         }
 
+        impl VectorQuantity for $name {
+            fn from_si(value: Vec2) -> Self {
+                Self(value)
+            }
+            fn si(self) -> Vec2 {
+                self.0
+            }
+        }
+
         impl core::ops::Add for $name {
             type Output = Self;
             fn add(self, rhs: Self) -> Self {
@@ -138,6 +156,24 @@ macro_rules! vector_quantity {
             }
         }
     };
+}
+
+/// A scalar quantity: a newtype over one base-SI `f32`. Generic code (the
+/// [`serde_bare`](crate::serde_bare) adapters) reaches the raw value through
+/// it without naming each quantity.
+pub trait ScalarQuantity: Copy {
+    /// Wraps a base-SI magnitude.
+    fn from_si(value: f32) -> Self;
+    /// The base-SI magnitude.
+    fn si(self) -> f32;
+}
+
+/// A planar vector quantity: a newtype over one base-SI [`Vec2`].
+pub trait VectorQuantity: Copy {
+    /// Wraps a base-SI vector.
+    fn from_si(value: Vec2) -> Self;
+    /// The base-SI vector.
+    fn si(self) -> Vec2;
 }
 
 scalar_quantity! {

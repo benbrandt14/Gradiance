@@ -18,3 +18,7 @@ serde.workspace = true
 thiserror.workspace = true
 # Features-only: serde impls for the bevy math types the vector quantities wrap.
 glam.workspace = true
+
+[dev-dependencies]
+# Round-trip tests of the `serde_bare` adapters in the scene format.
+ron.workspace = true
