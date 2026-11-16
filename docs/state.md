@@ -14,6 +14,8 @@ Last updated: 2026-11-16 (orchestrator; 5-1 in flight).
   (`#[serde(transparent)]`), format v7, older files rejected.
 - **Next, in order:**
   - **Phase 4b** (owner direction 2026-11-16, `orchestration.md`):
+    - **4b-0** review mode: open questions as live scenes; answers file
+      the owner commits, ingested at each phase start;
     - **4b-1** group op surface;
     - **4b-2** groups panel;
     - **4b-3** art direction (2–3 presets, SSAO options; show the owner);
@@ -26,6 +28,8 @@ Last updated: 2026-11-16 (orchestrator; 5-1 in flight).
   - Then **Phase 6** (testing & diagnostics). No briefs yet.
 - **Owner rulings in force:**
   - **No unbriefed work** (2026-11-13).
+  - **Questions go to review mode, not chat** (2026-11-16): once 4b-0
+    lands, add them to its questions file with scenes.
   - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
     reject older files, regenerate goldens, no migrations.
   - **Merge freely when CI is green** and no tests or checks were removed to

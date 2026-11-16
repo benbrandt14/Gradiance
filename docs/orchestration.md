@@ -169,7 +169,8 @@ items that are render work (emissive, AO/contact shadows, body borders).
 widgets) are built *functional, not polished* — see below.
 
 **Phase 4b — Owner direction (2026-11-16).** Groups as editing layers
-(4b-1 op surface: names, group-scoped edits, distribute within bounds,
+(4b-0 review mode — open questions as live scenes the owner answers in the
+app, answers committed and ingested at each phase start; 4b-1 op surface: names, group-scoped edits, distribute within bounds,
 filters, decompose; 4b-2 the panel), one art direction with selectable
 presets and SSAO options (4b-3), and parameters scaled to the body so
 defaults behave and only slider extremes misbehave (4b-4), each locked in
