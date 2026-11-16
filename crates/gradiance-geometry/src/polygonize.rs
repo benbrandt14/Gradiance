@@ -169,4 +169,91 @@ mod tests {
         assert!(c.outline.iter().all(|v| v.y <= 0.0));
         assert!(ring_signed_area(&c.outline) > 0.0);
     }
+
+    /// Two boxes in an L (a 2 x 0.5 bar and a 0.5 x 1.5 post on its left
+    /// end), joined by a smooth union of `radius`; the concave corner is
+    /// at `(-0.5, 0.25)`.
+    fn filleted_l(radius: f32) -> ShapeDef {
+        ShapeDef::Csg {
+            op: crate::shape::CsgOp::SmoothUnion { radius },
+            lhs: Box::new(ShapeDef::Box {
+                width: 2.0,
+                height: 0.5,
+            }),
+            rhs: Box::new(ShapeDef::Placed {
+                pos: Vec2::new(-0.75, 1.0),
+                rot: 0.0,
+                shape: Box::new(ShapeDef::Box {
+                    width: 0.5,
+                    height: 1.5,
+                }),
+            }),
+        }
+    }
+
+    /// The contour vertices that sit on the blend of [`filleted_l`].
+    fn blend_vertices(radius: f32) -> usize {
+        let corner = Vec2::new(-0.5, 0.25);
+        polygonize(&filleted_l(radius))
+            .outline
+            .iter()
+            .filter(|v| {
+                let d = **v - corner;
+                d.min_element() > -0.01 && d.max_element() < radius * 1.05
+            })
+            .count()
+    }
+
+    #[test]
+    fn a_fillet_of_four_cells_resolves_into_a_curve() {
+        // The contour samples the field every `extent / FIELD_CELLS`
+        // (about 2.3 cm here). Vertices are refined onto the true blend,
+        // so the chord error stays near a millimetre at every radius;
+        // what the radius buys is how many vertices the arc gets. Below
+        // ~2 cells the fillet reads as a chamfer (1-3 vertices); from
+        // ~4 cells (0.1 m here) it is a curve.
+        let (min, max) = sdf::aabb(&filleted_l(0.1));
+        let cell = (max - min).max_element() / FIELD_CELLS;
+        assert!(0.1 / cell >= 4.0, "0.1 m is {} cells", 0.1 / cell);
+        assert!(blend_vertices(0.1) >= 5, "{}", blend_vertices(0.1));
+        assert!(blend_vertices(0.3) >= 8, "{}", blend_vertices(0.3));
+        // Every edge midpoint on the blend lies within 2 mm of it.
+        let tree = filleted_l(0.3);
+        let ring = polygonize(&tree).outline;
+        let corner = Vec2::new(-0.5, 0.25);
+        for (i, a) in ring.iter().enumerate() {
+            let m = (*a + ring[(i + 1) % ring.len()]) / 2.0;
+            if (m - corner).min_element() < 0.0 || (m - corner).length() > 0.45 {
+                continue; // not on the blend
+            }
+            assert!(
+                sdf::eval(&tree, m).abs() < 2e-3,
+                "edge at {m} off the blend"
+            );
+        }
+    }
+
+    #[test]
+    fn a_smooth_union_bridges_a_gap_under_half_its_radius() {
+        // At the midpoint of a gap g between parallel faces both fields
+        // are g/2, and the quadratic smooth-min lowers that by radius/4:
+        // the blend closes the gap exactly when g < radius / 2.
+        let pair = |gap: f32| ShapeDef::Csg {
+            op: crate::shape::CsgOp::SmoothUnion { radius: 1.0 },
+            lhs: Box::new(ShapeDef::Box {
+                width: 1.0,
+                height: 1.0,
+            }),
+            rhs: Box::new(ShapeDef::Placed {
+                pos: Vec2::new(1.0 + gap, 0.0),
+                rot: 0.0,
+                shape: Box::new(ShapeDef::Box {
+                    width: 1.0,
+                    height: 1.0,
+                }),
+            }),
+        };
+        assert_eq!(polygonize_components(&pair(0.45)).len(), 1);
+        assert_eq!(polygonize_components(&pair(0.55)).len(), 2);
+    }
 }

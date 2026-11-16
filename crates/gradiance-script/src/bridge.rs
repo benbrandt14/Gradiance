@@ -803,6 +803,7 @@ pub fn edit_bindings() -> Vec<EditBinding> {
         EditBinding::new::<BooleanIntent>(name::SUBTRACT),
         EditBinding::new::<BooleanIntent>(name::INTERSECT),
         EditBinding::new::<BooleanIntent>(name::XOR),
+        EditBinding::new::<BooleanIntent>(name::FILLET_MERGE),
         EditBinding::new::<DeleteJointIntent>(name::DELETE_JOINT),
         EditBinding::new::<GroupIntent>(name::GROUP),
         EditBinding::new::<UngroupIntent>(name::UNGROUP),
@@ -1378,7 +1379,8 @@ fn register_panel_verbs(
 }
 
 /// The body booleans, indexed like every lifecycle verb: `(merge a b)`,
-/// `(subtract a b)`, `(intersect a b)`, `(xor a b)`.
+/// `(subtract a b)`, `(intersect a b)`, `(xor a b)`, and
+/// `(fillet-merge a b radius)`.
 fn register_boolean_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
     // `(merge a b)` — one CSG union; `a` survives carrying both shapes. This is
     // what "weld" means in this engine (there is no weld joint).
@@ -1413,6 +1415,44 @@ fn register_boolean_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView)
             }
         });
     }
+
+    // `(fillet-merge a b radius)` — merge with a fillet: the same boolean
+    // intent carrying `CsgOp::SmoothUnion`. The radius is checked here, as a
+    // visible error that aborts the run (so nothing it queued commits); the
+    // command refuses a bad radius too, for every other surface. Bad indices
+    // are the quiet no-op every indexed verb uses.
+    let fillet_ops = Arc::clone(ops);
+    let fillet_view = Arc::clone(view);
+    engine.register_fn(
+        name::FILLET_MERGE,
+        move |a: SteelVal, b: SteelVal, radius: SteelVal| -> Result<(), String> {
+            let op = steel_to_f64(&radius)
+                .map(|r| CsgOp::SmoothUnion { radius: r as f32 })
+                .filter(|op| op.validate().is_ok())
+                .ok_or_else(|| {
+                    format!(
+                        "{}: the radius must be a finite number of metres > 0, got {radius}",
+                        name::FILLET_MERGE
+                    )
+                })?;
+            if let Some([a, b]) = nums([&a, &b])
+                && a >= 0.0
+                && b >= 0.0
+                && let Ok(view) = fillet_view.lock()
+                && let (Some(id_a), Some(id_b)) = (view.id(a as usize), view.id(b as usize))
+                && id_a != id_b
+            {
+                emit(
+                    &fillet_ops,
+                    Box::new(BooleanIntent {
+                        op,
+                        targets: vec![id_a, id_b],
+                    }),
+                );
+            }
+            Ok(())
+        },
+    );
 }
 
 /// Verbs over **existing** bodies — the history ops and the edits that move or

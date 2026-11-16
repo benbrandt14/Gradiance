@@ -126,8 +126,14 @@ across and ±3.5 m up and down); angles are radians.
 (subtract a b)               ; cut b's shape out of a; b is consumed
 (intersect a b)              ; keep only the overlap, on a; b is consumed
 (xor a b)                    ; keep what is in exactly one of a and b, on a
+(fillet-merge a b 0.25)      ; merge with a 0.25 m fillet where they meet; a survives
 ;; booleans: a hosts the analytic tree; a subtract/xor that splits a becomes
 ;; polygon pieces (like a severing cut); an empty or missing result does nothing
+;; fillet-merge: the radius (metres) must be a finite number > 0, else a
+;; script error and the run commits nothing. The blend also joins bodies
+;; less than radius/2 apart, which a plain merge refuses as disconnected.
+;; Fillets render as a curve from ~4 contour cells (shape extent / 96 each:
+;; about 0.1 m on a 2 m body); smaller radii read as a chamfer.
 (delete-joint i)             ; remove the i-th joint
 
 ;; edit — sets of bodies (one list argument; Ctrl+G / Ctrl+Shift+G as ops)

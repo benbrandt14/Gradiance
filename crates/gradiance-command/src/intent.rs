@@ -54,6 +54,9 @@ pub mod name {
     pub const INTERSECT: &str = "intersect";
     /// [`BooleanIntent`](super::BooleanIntent) with `CsgOp::Xor`.
     pub const XOR: &str = "xor";
+    /// [`BooleanIntent`](super::BooleanIntent) with `CsgOp::SmoothUnion`
+    /// (a merge with a fillet) → script verb `(fillet-merge …)`.
+    pub const FILLET_MERGE: &str = "fillet-merge";
     /// [`LoadSceneIntent`](super::LoadSceneIntent) → `LoadSceneCommand`.
     pub const LOAD_SCENE: &str = "load-scene";
     /// [`UndoIntent`](super::UndoIntent) → `CommandStack::undo`.
@@ -234,9 +237,11 @@ pub struct MergeIntent {
     pub targets: Vec<StableId>,
 }
 
-/// Request to combine bodies with a CSG boolean — subtract, intersect or
-/// xor (or union, which is what [`MergeIntent`] means). The first target
-/// hosts the result; every other target is consumed.
+/// Request to combine bodies with a CSG boolean — subtract, intersect,
+/// xor, or a filleted merge (`SmoothUnion { radius }`; a plain union is
+/// what [`MergeIntent`] means). The first target hosts the result; every
+/// other target is consumed. An op with an invalid parameter (a smooth
+/// union's radius not finite and positive) is refused and records nothing.
 // Trace: dispatch.rs → MergeCommand (merge_cmd.rs) → sync_colliders, sync_body_meshes (host ShapeDef tree, or polygon pieces when the result splits; other targets despawn).
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct BooleanIntent {
