@@ -372,6 +372,52 @@ fn scripts_run_the_body_booleans() {
     }
 }
 
+/// `(fillet-merge a b radius)` emits the smooth-union boolean: one body, one
+/// undo step. A radius that is not a positive finite number is a visible
+/// error naming the verb, and the run commits nothing it queued.
+#[test]
+fn fillet_merge_blends_two_bodies_and_rejects_a_bad_radius() {
+    use gradiance::prelude::{CsgOp, ShapeDef};
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (spawn-box 0 0 2 0.5) (spawn-box -0.75 0.9 0.5 1.5))",
+    );
+    for bad in [
+        "(begin (spawn-box 5 0 1 1) (fillet-merge 0 1 0))",
+        "(begin (spawn-box 5 0 1 1) (fillet-merge 0 1 -0.2))",
+        "(begin (spawn-box 5 0 1 1) (fillet-merge 0 1 (/ 0.0 0.0)))",
+        "(begin (spawn-box 5 0 1 1) (fillet-merge 0 1 \"wide\"))",
+    ] {
+        run(&mut app, bad);
+        let (ok, output) = last_entry(&app).expect("the run is logged");
+        assert!(!ok, "{bad} should fail visibly, got {output}");
+        assert!(
+            output.contains("fillet-merge"),
+            "the error names the verb: {output}"
+        );
+        assert_eq!(body_count(&mut app), 2, "{bad} committed nothing");
+    }
+
+    run(&mut app, "(fillet-merge 0 1 0.25)");
+    assert!(last_entry(&app).expect("logged").0, "not an error");
+    assert_eq!(body_count(&mut app), 1, "one body");
+    let mut shapes = app.world_mut().query::<&ShapeDef>();
+    let shape = shapes.iter(app.world()).next().expect("a body");
+    assert!(
+        matches!(
+            shape,
+            ShapeDef::Csg {
+                op: CsgOp::SmoothUnion { radius },
+                ..
+            } if (*radius - 0.25).abs() < 1e-6
+        ),
+        "a smooth union of radius 0.25, got {shape:?}"
+    );
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 2, "one undo restores both");
+}
+
 /// Merging a body with itself would ask the command to fuse one body into one
 /// body — a no-op that would still cost an undo step.
 #[test]

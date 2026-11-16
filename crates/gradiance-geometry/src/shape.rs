@@ -38,9 +38,13 @@ pub enum CsgOp {
     /// operands and so double the tree at every repeated xor.
     Xor,
     /// Union with a fillet of the given radius (polynomial smooth-min) —
-    /// blends the operands where they meet.
+    /// blends the operands where they meet. The blend reaches `radius`
+    /// along each face from a corner (close to a circular fillet of that
+    /// radius), and bridges a gap between parallel faces narrower than
+    /// `radius / 2`.
     SmoothUnion {
-        /// Blend radius in metres (> 0).
+        /// Blend radius in metres (at least [`MIN_SHAPE_SIZE`]; see
+        /// [`CsgOp::validate`]).
         radius: f32,
     },
 }
@@ -149,6 +153,19 @@ pub enum ShapeError {
     NonFinite,
 }
 
+impl CsgOp {
+    /// Validates the operator's own parameters: a smooth union's blend
+    /// radius must be finite and at least [`MIN_SHAPE_SIZE`]. The other
+    /// operators carry none and always pass.
+    pub fn validate(&self) -> Result<(), ShapeError> {
+        match self {
+            Self::SmoothUnion { radius } if !radius.is_finite() => Err(ShapeError::NonFinite),
+            Self::SmoothUnion { radius } if *radius < MIN_SHAPE_SIZE => Err(ShapeError::Degenerate),
+            _ => Ok(()),
+        }
+    }
+}
+
 impl ShapeDef {
     /// A short type label for the shape — the node-graph block title and other
     /// terse readouts. Composite trees report their outermost operator.
@@ -213,11 +230,7 @@ impl ShapeDef {
             }
             Self::HalfPlane => Ok(()),
             Self::Csg { op, lhs, rhs } => {
-                if let CsgOp::SmoothUnion { radius } = op
-                    && !(radius.is_finite() && *radius > 0.0)
-                {
-                    return Err(ShapeError::Degenerate);
-                }
+                op.validate()?;
                 lhs.validate()?;
                 rhs.validate()
             }
@@ -260,6 +273,17 @@ impl ShapeDef {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_smooth_union_needs_a_finite_positive_radius() {
+        let smooth = |radius| CsgOp::SmoothUnion { radius }.validate();
+        assert_eq!(smooth(0.25), Ok(()));
+        assert_eq!(smooth(0.0), Err(ShapeError::Degenerate));
+        assert_eq!(smooth(-1.0), Err(ShapeError::Degenerate));
+        assert_eq!(smooth(f32::NAN), Err(ShapeError::NonFinite));
+        assert_eq!(smooth(f32::INFINITY), Err(ShapeError::NonFinite));
+        assert_eq!(CsgOp::Xor.validate(), Ok(()));
+    }
 
     #[test]
     fn boxes_and_circles_validate_by_size() {

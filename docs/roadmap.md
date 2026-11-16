@@ -581,7 +581,12 @@ the two interpolation modes cover the shapes in practice.
   `CutCommand` reads the severed body's live velocity at apply time and each
   piece inherits `v + ω × r` plus the shared spin (physics continuity, like
   the grab spring's writes — nothing velocity-shaped enters the undo record)
-- Smooth-union (fillet) modeling tools (12)
+- Smooth-union (fillet) modeling tools (12) — **landed** (brief 4-2): the
+  same `BooleanIntent` carrying `CsgOp::SmoothUnion { radius }` (undo label
+  `fillet-merge`; a non-finite or non-positive radius is refused); verb
+  `(fillet-merge a b radius)`; context-menu "Merge with fillet" with a
+  menu-local radius field. Fillets of existing corners of one body, chamfers
+  and smooth subtract/intersect remain open
 
 ## Scripting & symbolic modeling (design accepted)
 

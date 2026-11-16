@@ -1,5 +1,6 @@
-//! Body booleans (M21, brief 4-1): subtract / intersect / xor between
-//! bodies via `BooleanIntent`. The host's tree is checked by containment
+//! Body booleans (M21, briefs 4-1 and 4-2): subtract / intersect / xor
+//! and the filleted merge (smooth union) between bodies via
+//! `BooleanIntent`. The host's tree is checked by containment
 //! at sample points; operands are consumed; joints are rewired or
 //! deleted; one undo restores the scene record-for-record.
 
@@ -398,6 +399,7 @@ fn each_op_is_labelled_in_history() {
         (CsgOp::Intersect, "intersect"),
         (CsgOp::Xor, "xor"),
         (CsgOp::Union, "merge"),
+        (CsgOp::SmoothUnion { radius: 0.2 }, "fillet-merge"),
     ] {
         let mut app = paused_app();
         let a = spawn_box(&mut app, Vec2::ZERO, 2.0, 2.0);
@@ -432,4 +434,143 @@ fn intersecting_a_box_with_a_contained_circle_leaves_the_circle() {
             .get::<avian2d::prelude::Collider>(entity)
             .is_some()
     );
+}
+
+// --- Filleted merge (brief 4-2): `CsgOp::SmoothUnion` through the same intent ---
+
+/// A filleted merge of an L (a bar and an overlapping post) is one body
+/// whose field *is* the smooth union of the two boxes, placed in the
+/// host's frame; it fills the concave corner a plain union leaves sharp;
+/// one undo restores both bodies.
+#[test]
+fn a_fillet_merge_of_two_overlapping_boxes_is_their_smooth_union() {
+    let mut app = paused_app();
+    let host_pos = Vec2::new(1.0, 0.5);
+    let bar = spawn_box(&mut app, host_pos, 2.0, 0.5);
+    let post_offset = Vec2::new(-0.75, 0.9);
+    let post = spawn_box(&mut app, host_pos + post_offset, 0.5, 1.5);
+    let before = SceneRecord::capture(app.world_mut());
+    let steps = depth(&app);
+    let radius = 0.3;
+
+    boolean(&mut app, CsgOp::SmoothUnion { radius }, vec![bar, post]);
+
+    assert_eq!(depth(&app), steps + 1, "one undo step");
+    assert_eq!(
+        app.world().resource::<CommandStack>().peek_undo(),
+        Some("fillet-merge")
+    );
+    assert_eq!(body_count(&mut app), 1, "the post is consumed");
+    assert!(entity_of(&app, post).is_none());
+    let shape = shape_of(&app, bar);
+    let expected = ShapeDef::Csg {
+        op: CsgOp::SmoothUnion { radius },
+        lhs: Box::new(ShapeDef::Box {
+            width: 2.0,
+            height: 0.5,
+        }),
+        rhs: Box::new(ShapeDef::Placed {
+            pos: post_offset,
+            rot: 0.0,
+            shape: Box::new(ShapeDef::Box {
+                width: 0.5,
+                height: 1.5,
+            }),
+        }),
+    };
+    for ix in -12..=12 {
+        for iy in -6..=12 {
+            let p = Vec2::new(ix as f32, iy as f32) * 0.1;
+            let (got, want) = (sdf::eval(&shape, p), sdf::eval(&expected, p));
+            assert!((got - want).abs() < 1e-5, "field at {p}: {got} vs {want}");
+        }
+    }
+    // The concave corner (host-local (-0.5, 0.25)) is filled just off
+    // the corner, where a plain union is empty.
+    let in_fillet = Vec2::new(-0.47, 0.28);
+    assert!(sdf::eval(&shape, in_fillet) < 0.0, "the fillet is solid");
+    if let ShapeDef::Csg { lhs, rhs, .. } = expected.clone() {
+        let plain = ShapeDef::Csg {
+            op: CsgOp::Union,
+            lhs,
+            rhs,
+        };
+        assert!(sdf::eval(&plain, in_fillet) > 0.0, "a plain union is sharp");
+    }
+    // The blended body still builds a collider.
+    app.update();
+    let entity = entity_of(&app, bar).unwrap();
+    assert!(
+        app.world()
+            .get::<avian2d::prelude::Collider>(entity)
+            .is_some()
+    );
+
+    undo(&mut app);
+    assert_eq!(
+        before,
+        SceneRecord::capture(app.world_mut()),
+        "one undo restores both bodies"
+    );
+    redo(&mut app);
+    assert_eq!(body_count(&mut app), 1, "redo replays the fillet merge");
+}
+
+/// A smooth union's blend closes a gap between parallel faces narrower
+/// than `radius / 2`, so a filleted merge joins bodies a plain merge
+/// refuses as disconnected; a gap of more than half the radius stays
+/// open and is refused like any disconnected union.
+#[test]
+fn a_fillet_merge_joins_bodies_a_gap_apart() {
+    // Two unit boxes, `gap` apart along x; fillet radius 1.
+    let pair = |gap: f32| {
+        let mut app = paused_app();
+        let a = spawn_box(&mut app, Vec2::ZERO, 1.0, 1.0);
+        let b = spawn_box(&mut app, Vec2::new(1.0 + gap, 0.0), 1.0, 1.0);
+        (app, a, b)
+    };
+
+    let (mut app, a, b) = pair(0.3);
+    let steps = depth(&app);
+    app.world_mut().write_message(MergeIntent {
+        targets: vec![a, b],
+    });
+    app.update();
+    assert_eq!(depth(&app), steps, "a plain merge refuses the gap");
+    boolean(&mut app, CsgOp::SmoothUnion { radius: 1.0 }, vec![a, b]);
+    assert_eq!(depth(&app), steps + 1, "the fillet bridges it");
+    assert_eq!(body_count(&mut app), 1);
+    let shape = shape_of(&app, a);
+    assert!(
+        sdf::eval(&shape, Vec2::new(0.65, 0.0)) < 0.0,
+        "the gap is filled"
+    );
+    assert_eq!(polygonize_components(&shape).len(), 1);
+
+    let (mut app, a, b) = pair(0.7);
+    let steps = depth(&app);
+    boolean(&mut app, CsgOp::SmoothUnion { radius: 1.0 }, vec![a, b]);
+    assert_eq!(depth(&app), steps, "0.7 m is over half the radius: refused");
+    assert_eq!(body_count(&mut app), 2);
+}
+
+/// A fillet radius that is zero, negative, NaN or infinite is refused by
+/// the command itself (whatever surface emitted it): no history, no body
+/// touched.
+#[test]
+fn a_bad_fillet_radius_commits_nothing() {
+    let mut app = paused_app();
+    let a = spawn_box(&mut app, Vec2::ZERO, 2.0, 0.5);
+    let b = spawn_box(&mut app, Vec2::new(0.5, 0.5), 0.5, 1.0);
+    let before = SceneRecord::capture(app.world_mut());
+    let steps = depth(&app);
+    for radius in [0.0, -0.25, f32::NAN, f32::INFINITY] {
+        boolean(&mut app, CsgOp::SmoothUnion { radius }, vec![a, b]);
+        assert_eq!(depth(&app), steps, "radius {radius}: nothing recorded");
+        assert_eq!(
+            before,
+            SceneRecord::capture(app.world_mut()),
+            "radius {radius}: nothing changed"
+        );
+    }
 }

@@ -1,8 +1,9 @@
-//! Booleans between bodies: merge (union), subtract, intersect and xor.
+//! Booleans between bodies: merge (union), filleted merge (smooth union),
+//! subtract, intersect and xor.
 //!
 //! Merge is the SDF answer to "weld should make two objects into one
 //! object"; subtract / intersect / xor are the CSG modeling operations of
-//! the context menu (roadmap M21, feedback 7.3). All four are one command,
+//! the context menu (roadmap M21, feedback 7.3). All five are one command,
 //! [`MergeCommand`], differing only in the [`CsgOp`] that folds the
 //! operands together.
 //!
@@ -16,7 +17,10 @@
 //! **Connectivity.** A union (or smooth union) must be a single connected
 //! component — merging disjoint bodies would be a phantom rigid link,
 //! which is what grouping is for — so it is refused (`NoEffect`)
-//! otherwise. Subtract, intersect and xor may legitimately split the
+//! otherwise. A smooth union's blend can itself close a gap (between
+//! parallel faces, any gap under `radius / 2`), so a filleted merge joins
+//! bodies a plain merge refuses — that is what a fillet does.
+//! Subtract, intersect and xor may legitimately split the
 //! host (a bar subtracted across a box, the two private halves of an
 //! xor): the host is then replaced by polygon-leaf pieces exactly as a
 //! severing cut replaces a body (`cut_cmd::piece_records`). An empty
@@ -112,6 +116,9 @@ impl MergeCommand {
     }
 
     fn stage(&mut self, world: &mut World) -> Result<Staged, CommandError> {
+        // A fillet radius that is not finite and positive is refused up
+        // front, whichever surface emitted it.
+        self.op.validate()?;
         if self.targets.len() < 2 {
             return Err(CommandError::NoEffect);
         }
@@ -316,7 +323,8 @@ impl GameCommand for MergeCommand {
     fn name(&self) -> &'static str {
         use crate::intent::name;
         match self.op {
-            CsgOp::Union | CsgOp::SmoothUnion { .. } => name::MERGE,
+            CsgOp::Union => name::MERGE,
+            CsgOp::SmoothUnion { .. } => name::FILLET_MERGE,
             CsgOp::Subtract => name::SUBTRACT,
             CsgOp::Intersect => name::INTERSECT,
             CsgOp::Xor => name::XOR,

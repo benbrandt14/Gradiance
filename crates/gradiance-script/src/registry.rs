@@ -99,6 +99,11 @@ pub mod name {
     pub const INTERSECT: &str = "intersect";
     /// `(xor a b)` — keep what is in exactly one of bodies a and b.
     pub const XOR: &str = "xor";
+    /// `(fillet-merge a b radius)` — merge bodies a and b with a fillet of
+    /// `radius` metres; re-exported from
+    /// [`intent::name`](gradiance_command::intent::name) like
+    /// [`CUT`], so verb, undo label, and command share one constant.
+    pub use gradiance_command::intent::name::FILLET_MERGE;
     /// `(delete-joint i)` — remove the i-th joint.
     pub const DELETE_JOINT: &str = "delete-joint";
     /// `(group (list i …))` — wrap the listed bodies in one fresh group.
@@ -285,6 +290,13 @@ fn boolean_specs() -> Vec<OpSpec> {
             doc: "Fuse bodies a and b into one CSG union; a survives.",
             category: Edit,
             args: 2,
+        },
+        OpSpec {
+            name: name::FILLET_MERGE,
+            signature: "(fillet-merge a b radius)",
+            doc: "Fuse bodies a and b into one with a smooth fillet of radius metres where they meet (CSG smooth union); a survives. Bridges a gap under radius/2. Errors unless radius > 0.",
+            category: Edit,
+            args: 3,
         },
         OpSpec {
             name: name::SUBTRACT,

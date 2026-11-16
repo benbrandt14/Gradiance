@@ -205,6 +205,25 @@ pub struct ContextMenu {
     /// Behavior node under the click, if any (opens the node menu instead
     /// of the physical-object menu).
     pub node: Option<StableId>,
+    /// The radius "Merge with fillet" uses; kept between openings.
+    pub fillet_radius: FilletRadius,
+}
+
+/// The context menu's fillet radius, in metres — a parameter of the next
+/// "Merge with fillet" gesture, not authored state: it lives with the
+/// menu, is never saved, and writes nothing until the button commits one
+/// `BooleanIntent`. Scripts pass the radius to `(fillet-merge a b r)`
+/// instead.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FilletRadius(pub f32);
+
+impl Default for FilletRadius {
+    /// A quarter metre: a visible blend on bodies of a metre or so, and
+    /// well above the ~4 contour cells a fillet needs to render as a curve
+    /// rather than a chamfer (`geometry::polygonize` tests).
+    fn default() -> Self {
+        Self(0.25)
+    }
 }
 
 /// Nearest joint id whose glyph distance is within `radius`. Pure so the
@@ -357,6 +376,7 @@ pub fn context_menu(
         .collect();
 
     let at = menu.world;
+    let mut fillet_radius = menu.fillet_radius.0;
     let mut close = false;
     let response = egui::Area::new(egui::Id::new("context-menu"))
         .fixed_pos(egui::pos2(menu.screen.x, menu.screen.y))
@@ -528,6 +548,36 @@ pub fn context_menu(
                     });
                     close = true;
                 }
+                // Merge with a fillet: the same boolean, as a smooth union
+                // of the radius set just below it.
+                if ui
+                    .add_enabled(
+                        selected_ids.len() >= 2,
+                        egui::Button::new("Merge with fillet"),
+                    )
+                    .on_hover_text(
+                        "merge into one body, blending a rounded fillet where the bodies meet",
+                    )
+                    .clicked()
+                {
+                    writers.booleans.write(BooleanIntent {
+                        op: CsgOp::SmoothUnion {
+                            radius: fillet_radius,
+                        },
+                        targets: selected_ids.clone(),
+                    });
+                    close = true;
+                }
+                egui::Grid::new("context-menu-fillet").show(ui, |ui| {
+                    widgets::labelled_drag(
+                        ui,
+                        "Fillet radius (m)",
+                        &mut fillet_radius,
+                        0.01..=10.0,
+                        0.005,
+                        "blend radius of Merge with fillet; also joins bodies less than half of it apart",
+                    );
+                });
                 // The other body booleans: the first-selected body hosts the
                 // result and the rest are consumed (`command::merge_cmd`).
                 for (label, op, hint) in [
@@ -768,6 +818,7 @@ pub fn context_menu(
             });
         })
         .response;
+    menu.fillet_radius.0 = fillet_radius;
 
     if close || response.clicked_elsewhere() {
         menu.open = false;
