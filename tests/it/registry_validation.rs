@@ -4,9 +4,11 @@
 
 use crate::harness::headless_app;
 use bevy::prelude::*;
-use gradiance::domain::settings::SimSettings;
+use gradiance::domain::settings::{CameraSettings, SimSettings};
 use gradiance::script::bridge::{IntentDispatch, ScriptInputs, ScriptLog, edit_bindings};
-use gradiance::script::registry::{OpCategory, OperationCatalog, SIM_SETTING_PATHS};
+use gradiance::script::registry::{
+    CAMERA_SETTING_PATHS, OpCategory, OperationCatalog, SIM_SETTING_PATHS,
+};
 use std::collections::BTreeSet;
 
 /// Every op the catalog advertises is actually bound in the VM: evaluating
@@ -87,6 +89,19 @@ fn every_documented_sim_path_resolves() {
         assert!(
             gradiance::script::reflect_bridge::read_path(&settings, path).is_some(),
             "documented sim path `{path}` does not resolve on SimSettings"
+        );
+    }
+}
+
+/// Every documented `camera-get`/`camera-set` path resolves on the real
+/// `CameraSettings` type.
+#[test]
+fn every_documented_camera_path_resolves() {
+    let settings = CameraSettings::default();
+    for path in CAMERA_SETTING_PATHS {
+        assert!(
+            gradiance::script::reflect_bridge::read_path(&settings, path).is_some(),
+            "documented camera path `{path}` does not resolve on CameraSettings"
         );
     }
 }

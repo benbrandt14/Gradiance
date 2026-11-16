@@ -573,14 +573,36 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
     let mut border = to_array(appearance.border);
     let mut fill_changed = false;
     let mut border_changed = false;
+    // The quantized picker: one swatch per palette entry. A click sets every
+    // selected body's fill RGB (keeping its alpha, border and emissive).
+    let mut picked: Option<gradiance_domain::appearance::Rgba> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for swatch in &gradiance_domain::appearance::PALETTE {
+            let c = swatch.color;
+            let current =
+                (c.r, c.g, c.b) == (appearance.fill.r, appearance.fill.g, appearance.fill.b);
+            let button = egui::Button::new("")
+                .fill(swatch_color32(c))
+                .min_size(egui::vec2(16.0, 16.0))
+                .selected(current);
+            if ui.add(button).on_hover_text(swatch.name).clicked() {
+                picked = Some(c);
+            }
+        }
+    });
     ui.horizontal(|ui| {
-        ui.label("fill");
-        fill_changed = ui.color_edit_button_rgba_unmultiplied(&mut fill).changed();
         ui.label("border");
         border_changed = ui
             .color_edit_button_rgba_unmultiplied(&mut border)
             .changed();
     });
+    // The free picker stays, behind a disclosure: the palette is the default.
+    egui::CollapsingHeader::new("custom fill")
+        .id_salt(ui.id().with("custom-fill"))
+        .show(ui, |ui| {
+            fill_changed = ui.color_edit_button_rgba_unmultiplied(&mut fill).changed();
+        });
     let mut emissive = appearance.emissive;
     let ce = ui
         .horizontal(|ui| {
@@ -588,7 +610,22 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
             precise_drag(ui, ui.id().with("emissive"), &mut emissive, 0.0, 0.05)
         })
         .inner;
-    if fill_changed || border_changed || matches!(ce, Commit::Done(..)) {
+    if let Some(color) = picked {
+        commit_to_selection(
+            selection,
+            &props.ids,
+            &props.appearance_q,
+            PropertyValue::Appearance,
+            |old| Appearance {
+                fill: gradiance_domain::appearance::Rgba {
+                    a: old.fill.a,
+                    ..color
+                },
+                ..*old
+            },
+            &mut props.edits,
+        );
+    } else if fill_changed || border_changed || matches!(ce, Commit::Done(..)) {
         commit_to_selection(
             selection,
             &props.ids,
@@ -606,6 +643,13 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
             &mut props.edits,
         );
     }
+}
+
+/// A domain color as an egui swatch fill (both are sRGB-encoded; render
+/// converts `Rgba` with `Color::srgba` too).
+fn swatch_color32(c: gradiance_domain::appearance::Rgba) -> egui::Color32 {
+    let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    egui::Color32::from_rgba_unmultiplied(byte(c.r), byte(c.g), byte(c.b), byte(c.a))
 }
 
 /// The depth editor: numeric front/back faces of the authored band

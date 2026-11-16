@@ -16,8 +16,8 @@ use gradiance_core::states::ToolState;
 use gradiance_domain::Body;
 use gradiance_domain::joint::{JointDef, JointKind};
 use gradiance_domain::settings::{
-    DebugSettings, GridSettings, GridSystem, KeyLightSettings, LightingSettings, RenderSettings,
-    ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
+    CameraSettings, DebugSettings, GridSettings, GridSystem, KeyLightSettings, LightingSettings,
+    RenderSettings, ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
 };
 use gradiance_domain::shape::ShapeDef;
 use gradiance_units::Dimension;
@@ -30,6 +30,8 @@ pub enum SettingsTab {
     Simulation,
     /// Grid & snapping.
     GridSnap,
+    /// Camera feel (zoom, pan and orbit sensitivity).
+    Camera,
     /// Rendering style.
     Rendering,
     /// Key light, ambient, and backdrop planes.
@@ -70,6 +72,7 @@ pub fn settings_window(
     mut grid: ResMut<GridSettings>,
     mut snap: ResMut<SnapConfig>,
     mut tool_defaults: ResMut<ToolDefaults>,
+    mut camera: ResMut<CameraSettings>,
     mut render: ResMut<RenderSettings>,
     mut lighting: ResMut<LightingSettings>,
     mut scenery: ResMut<ScenerySettings>,
@@ -89,6 +92,7 @@ pub fn settings_window(
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut window.tab, SettingsTab::Simulation, "Simulation");
                 ui.selectable_value(&mut window.tab, SettingsTab::GridSnap, "Grid & Snap");
+                ui.selectable_value(&mut window.tab, SettingsTab::Camera, "Camera");
                 ui.selectable_value(&mut window.tab, SettingsTab::Rendering, "Rendering");
                 ui.selectable_value(&mut window.tab, SettingsTab::Lighting, "Lighting");
                 ui.selectable_value(&mut window.tab, SettingsTab::Debug, "Debug");
@@ -96,21 +100,18 @@ pub fn settings_window(
             ui.separator();
             match window.tab {
                 SettingsTab::Simulation => {
-                    reflect_grid_units(
-                        ui,
-                        egui::Id::new("sim"),
-                        sim.bypass_change_detection(),
-                        &[
-                            ("gravity", Dimension::Acceleration.symbol()),
-                            ("timestep_hz", Dimension::Frequency.symbol()),
-                        ],
-                    );
-                    // Only flag the resource changed when egui actually
-                    // edited something is overkill here; mark it touched.
+                    simulation_tab(ui, sim.bypass_change_detection());
+                    // `commit_settings_edits` compares by value, so marking
+                    // the resource touched every frame is harmless.
                     sim.set_changed();
                 }
                 SettingsTab::GridSnap => {
                     grid_snap_tab(ui, &mut grid, &mut snap, &mut tool_defaults);
+                }
+                SettingsTab::Camera => {
+                    if camera_tab(ui, camera.bypass_change_detection()) {
+                        camera.set_changed();
+                    }
                 }
                 SettingsTab::Rendering => {
                     reflect_grid(
@@ -126,12 +127,6 @@ pub fn settings_window(
                 SettingsTab::Debug => {
                     reflect_grid(ui, egui::Id::new("debug"), debug.bypass_change_detection());
                     debug.set_changed();
-                    ui.label(
-                        egui::RichText::new(
-                            "middle-drag orbits the 3D view · Home glides back to 2D",
-                        )
-                        .weak(),
-                    );
                     ui.separator();
                     debug_readouts(ui, &readouts);
                 }
@@ -139,6 +134,176 @@ pub fn settings_window(
         });
     window.open = open;
     Ok(())
+}
+
+/// `SimSettings` fields [`simulation_tab`] draws by hand; any field added
+/// later still appears, through the reflect grid below them.
+pub(crate) const SIM_HAND_DRAWN: &[&str] = &[
+    "gravity",
+    "speed",
+    "substeps",
+    "plane_friction",
+    "timestep_hz",
+];
+
+/// The Simulation tab: the gravity-direction dial plus scrub-drag rows
+/// (`labelled_drag` — the config seam; a settled edit becomes one undo step
+/// through `commit_settings_edits`, so no gesture bookkeeping here).
+fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
+    widgets::section_header(ui, "Gravity");
+    let (mut angle, mut magnitude) = sim.gravity_polar();
+    let mut gravity_changed = false;
+    ui.horizontal(|ui| {
+        gravity_changed |= gravity_dial(ui, &mut angle, magnitude);
+        egui::Grid::new("sim-gravity")
+            .num_columns(2)
+            .show(ui, |ui| {
+                gravity_changed |= widgets::labelled_drag(
+                    ui,
+                    &format!("direction ({})", glyph::DEGREE),
+                    &mut angle,
+                    -180.0..=180.0,
+                    1.0,
+                    "counter-clockwise from +x; straight down is -90",
+                );
+                gravity_changed |= widgets::labelled_drag(
+                    ui,
+                    &format!("strength ({})", Dimension::Acceleration.symbol()),
+                    &mut magnitude,
+                    0.0..=1000.0,
+                    0.1,
+                    "gravity magnitude; 0 = weightless",
+                );
+                ui.label(
+                    egui::RichText::new(format!("x {:.2}  y {:.2}", sim.gravity.x, sim.gravity.y))
+                        .weak(),
+                );
+                ui.end_row();
+            });
+    });
+    if gravity_changed {
+        sim.gravity = SimSettings::gravity_from_polar(angle, magnitude);
+    }
+    ui.separator();
+    widgets::section_header(ui, "Solver");
+    egui::Grid::new("sim-scalars")
+        .num_columns(2)
+        .show(ui, |ui| {
+            widgets::labelled_drag(
+                ui,
+                "speed",
+                &mut sim.speed,
+                0.0..=10.0,
+                0.01,
+                "simulation speed multiplier; 1 = real time",
+            );
+            widgets::labelled_drag_u32(
+                ui,
+                "substeps",
+                &mut sim.substeps,
+                1..=64,
+                "solver substeps per physics step: stiffer, more accurate, slower",
+            );
+            widgets::labelled_drag(
+                ui,
+                &format!("timestep ({})", Dimension::Frequency.symbol()),
+                &mut sim.timestep_hz,
+                10.0..=480.0,
+                1.0,
+                "physics steps per second",
+            );
+            widgets::labelled_drag(
+                ui,
+                "plane friction",
+                &mut sim.plane_friction,
+                0.0..=5.0,
+                0.01,
+                "Coulomb friction against the back plane (top-down mode); 0 = off",
+            );
+        });
+    reflect_grid_except(ui, egui::Id::new("sim"), sim, &[], SIM_HAND_DRAWN);
+}
+
+/// A gravity-direction dial: the handle's angle is the gravity direction.
+/// Click or drag on it to aim. Returns whether the angle moved.
+fn gravity_dial(ui: &mut egui::Ui, angle_deg: &mut f32, magnitude: f32) -> bool {
+    const RADIUS: f32 = 32.0;
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(RADIUS * 2.2, RADIUS * 2.2),
+        egui::Sense::click_and_drag(),
+    );
+    let center = rect.center();
+    let mut changed = false;
+    if (response.dragged() || response.clicked())
+        && let Some(pos) = response.interact_pointer_pos()
+    {
+        let v = pos - center;
+        if v.length() > 2.0 {
+            // Screen y is down; the angle is in world (y-up) terms.
+            *angle_deg = f32::atan2(-v.y, v.x).to_degrees();
+            changed = true;
+        }
+    }
+    let painter = ui.painter_at(rect);
+    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, egui::Color32::GRAY));
+    let a = angle_deg.to_radians();
+    let dir = egui::vec2(a.cos(), -a.sin());
+    // Weightless: a dot, not an arrow — there is no direction to show.
+    let color = if magnitude > f32::EPSILON {
+        ui.visuals().strong_text_color()
+    } else {
+        egui::Color32::from_gray(90)
+    };
+    painter.arrow(center, dir * RADIUS, egui::Stroke::new(2.0, color));
+    response.on_hover_text("drag to aim gravity");
+    changed
+}
+
+/// The Camera tab: camera feel (workstation config — saved with the scene,
+/// never undone). Returns whether anything changed.
+fn camera_tab(ui: &mut egui::Ui, camera: &mut CameraSettings) -> bool {
+    let mut changed = false;
+    let (lo, hi) = CameraSettings::ZOOM_STEP_RANGE;
+    egui::Grid::new("camera").num_columns(2).show(ui, |ui| {
+        changed |= widgets::labelled_drag(
+            ui,
+            "zoom step",
+            &mut camera.zoom_step,
+            lo..=hi,
+            0.002,
+            "zoom multiplier per scroll notch: closer to 1 is gentler",
+        );
+        changed |= widgets::labelled_drag(
+            ui,
+            "pan speed (px/s)",
+            &mut camera.pan_speed,
+            0.0..=5000.0,
+            5.0,
+            "arrow-key pan speed in screen pixels per second",
+        );
+        changed |= widgets::labelled_drag(
+            ui,
+            &format!("orbit speed ({}/px)", glyph::DEGREE),
+            &mut camera.orbit_speed_deg,
+            0.0..=5.0,
+            0.005,
+            "middle-drag orbit sensitivity",
+        );
+    });
+    if ui.button("Reset to defaults").clicked() {
+        *camera = CameraSettings::default();
+        changed = true;
+    }
+    widgets::hint(
+        ui,
+        &format!(
+            "right-drag or arrows pan {} wheel zooms {} middle-drag orbits {} Home glides back to 2D",
+            glyph::MIDDOT,
+            glyph::MIDDOT,
+            glyph::MIDDOT
+        ),
+    );
+    changed
 }
 
 /// `GridSettings` fields [`grid_snap_tab`] draws by hand, so the reflect

@@ -22,17 +22,14 @@ use crate::PointerOverUi;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use gradiance_domain::settings::ScenerySettings;
+use gradiance_domain::settings::{CameraSettings, ScenerySettings};
 
-/// Keyboard pan speed in metres per second (at scale 1).
-const KEY_PAN_SPEED: f32 = 6.0;
-/// Zoom multiplier per scroll notch (closer to 1 = gentler).
-const ZOOM_STEP: f32 = 0.94;
+// Zoom step, keyboard pan speed and orbit sensitivity are the person's,
+// not constants: `CameraSettings` (workstation config).
+
 /// World-units-per-pixel zoom limits (both projections).
 const MIN_SCALE: f32 = 0.0005;
 const MAX_SCALE: f32 = 0.2;
-/// Orbit sensitivity, radians per screen pixel.
-const ORBIT_SPEED: f32 = 0.005;
 /// Exponential rate of the glide toward a view target (per second).
 const GLIDE_RATE: f32 = 8.0;
 
@@ -166,6 +163,7 @@ pub fn apply_projection(
 pub fn pan_and_zoom_camera(
     mut rig: ResMut<CameraRig>,
     mut cameras: Query<(&mut Projection, &Camera, &GlobalTransform), With<Camera3d>>,
+    settings: Res<CameraSettings>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     motion: Res<AccumulatedMouseMotion>,
@@ -181,6 +179,8 @@ pub fn pan_and_zoom_camera(
     };
     let viewport_height = windows.iter().next().map_or(900.0, Window::height);
     let wpp = world_per_pixel(&projection, rig.distance, viewport_height);
+    let feel = settings.sanitized();
+    let orbit_speed = feel.orbit_speed_deg.to_radians();
 
     // Keyboard pan always works; pointer gestures only off-UI.
     let mut pan = Vec2::ZERO;
@@ -196,7 +196,9 @@ pub fn pan_and_zoom_camera(
     if keys.pressed(KeyCode::ArrowUp) {
         pan.y += 1.0;
     }
-    let mut delta = pan * KEY_PAN_SPEED * time.delta_secs() * wpp;
+    // Screen pixels per second × world per pixel: the same apparent speed
+    // at every zoom.
+    let mut delta = pan * feel.pan_speed * time.delta_secs() * wpp;
 
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let middle = buttons.pressed(MouseButton::Middle);
@@ -226,8 +228,8 @@ pub fn pan_and_zoom_camera(
         if m != Vec2::ZERO {
             use std::f32::consts::{FRAC_PI_2, PI, TAU};
             rig.target = None;
-            rig.yaw = (rig.yaw + m.x * ORBIT_SPEED + PI).rem_euclid(TAU) - PI;
-            rig.pitch = (rig.pitch - m.y * ORBIT_SPEED).clamp(-FRAC_PI_2, FRAC_PI_2);
+            rig.yaw = (rig.yaw + m.x * orbit_speed + PI).rem_euclid(TAU) - PI;
+            rig.pitch = (rig.pitch - m.y * orbit_speed).clamp(-FRAC_PI_2, FRAC_PI_2);
         }
     }
     if keys.just_pressed(KeyCode::Home) && !keyboard_captured.0 {
@@ -262,7 +264,7 @@ pub fn pan_and_zoom_camera(
     // scales the projection, perspective dollies the rig.
     let notches = scroll.delta.y;
     if notches.abs() > f32::EPSILON && !over_ui.0 {
-        let factor = ZOOM_STEP.powf(notches);
+        let factor = feel.zoom_step.powf(notches);
         let new_wpp = (wpp * factor).clamp(MIN_SCALE, MAX_SCALE);
         if (new_wpp - wpp).abs() > f32::EPSILON {
             let anchor = windows

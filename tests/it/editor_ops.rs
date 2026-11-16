@@ -459,3 +459,73 @@ fn ungroup_peels_only_the_outermost_group() {
     undo(&mut app);
     assert_eq!(stack(&app, d).len(), 1, "undo restores D's outer group");
 }
+
+/// "Random colors (per group)": bodies sharing an outermost group get one
+/// palette color, an ungrouped body its own, and the whole recolor is one
+/// `PropertyEditIntent` — one undo step. The menu button is a thin wrapper
+/// over exactly this (`appearance::random_fills` + one intent).
+#[test]
+fn grouped_random_colors_share_a_hue_per_group_with_one_undo() {
+    use gradiance::domain::appearance::{Appearance, PALETTE, random_fills};
+
+    let mut app = paused_app();
+    let ids: Vec<StableId> = (0..5)
+        .map(|i| spawn_box(&mut app, Vec2::new(i as f32 * 100.0, 0.0)))
+        .collect();
+    app.world_mut().write_message(GroupIntent {
+        targets: vec![ids[0], ids[1]],
+    });
+    app.update();
+    app.world_mut().write_message(GroupIntent {
+        targets: vec![ids[2], ids[3]],
+    });
+    app.update();
+
+    let read = |app: &App, id: StableId| {
+        let e = entity_of(app, id).unwrap();
+        let group = app
+            .world()
+            .get::<SelectionGroup>(e)
+            .and_then(SelectionGroup::outermost);
+        (id, group, *app.world().get::<Appearance>(e).unwrap())
+    };
+    let members: Vec<_> = ids.iter().map(|id| read(&app, *id)).collect();
+    let before: Vec<Appearance> = members.iter().map(|m| m.2).collect();
+
+    let changes = random_fills(&members, true)
+        .into_iter()
+        .zip(&members)
+        .map(|((id, new), (_, _, old))| PropertyChange {
+            id,
+            old: PropertyValue::Appearance(*old),
+            new: PropertyValue::Appearance(new),
+        })
+        .collect();
+    app.world_mut()
+        .write_message(PropertyEditIntent { changes });
+    app.update();
+
+    let fill = |app: &App, i: usize| read(app, ids[i]).2.fill;
+    assert_eq!(fill(&app, 0), fill(&app, 1), "group A shares one color");
+    assert_eq!(fill(&app, 2), fill(&app, 3), "group B shares one color");
+    assert_ne!(fill(&app, 0), fill(&app, 2), "groups differ");
+    assert_ne!(
+        fill(&app, 4),
+        fill(&app, 0),
+        "a loose body is its own group"
+    );
+    assert_ne!(fill(&app, 4), fill(&app, 2));
+    for i in 0..5 {
+        assert!(PALETTE.iter().any(|s| s.color == fill(&app, i)));
+    }
+
+    // One undo restores every body.
+    undo(&mut app);
+    for (i, id) in ids.iter().enumerate() {
+        assert_eq!(
+            read(&app, *id).2,
+            before[i],
+            "body {i} restored by one undo"
+        );
+    }
+}

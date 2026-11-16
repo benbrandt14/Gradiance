@@ -369,9 +369,10 @@ impl EnvironmentRecord {
     ///   scenery, and the signal-dataflow graph. These describe the scene
     ///   itself: change one and the picture or the physics changes. Undo
     ///   covers them.
-    /// - *workstation config* — grid and snap. Authoring aids that belong to
-    ///   the person, not the document. Undo never touches these, so reverting
-    ///   an edit cannot silently move your grid out from under you.
+    /// - *workstation config* — grid, snap and camera feel. Authoring aids
+    ///   that belong to the person, not the document. Undo never touches
+    ///   these, so reverting an edit cannot silently move your grid (or
+    ///   change how your camera zooms) out from under you.
     pub fn scene_content_eq(&self, other: &Self) -> bool {
         self.sim == other.sim
             && self.render == other.render
@@ -402,6 +403,9 @@ environment_record! {
     grid: gradiance_domain::settings::GridSettings,
     /// Snap configuration.
     snap: gradiance_domain::settings::SnapConfig,
+    /// Camera feel — workstation config (defaulted when absent — pre-M19
+    /// files).
+    camera: gradiance_domain::settings::CameraSettings,
     /// Rendering style (defaulted when absent — pre-M10 files).
     render: gradiance_domain::settings::RenderSettings,
     /// Scene lighting (defaulted when absent — pre-V1 files).
