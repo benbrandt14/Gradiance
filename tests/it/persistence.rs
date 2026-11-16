@@ -126,10 +126,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                     fill: Rgba { r, g, b, a },
                     ..Appearance::default()
                 },
-                depth: DepthBand {
-                    near,
-                    far: near + thickness,
-                },
+                depth: DepthBand::metres(near, near + thickness),
                 layers: None,
                 groups,
                 field: None,

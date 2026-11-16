@@ -89,24 +89,12 @@ fn joint(n: u8, kind: JointKind) -> JointRecord {
 /// A scene with every quantity-bearing authored field set to a distinctive,
 /// non-default value.
 pub(crate) fn every_quantity_scene() -> SceneRecord {
-    let mut field_body = body(
-        1,
-        DepthBand {
-            near: 0.75,
-            far: 3.5,
-        },
-    );
+    let mut field_body = body(1, DepthBand::metres(0.75, 3.5));
     field_body.field = Some(FieldSource {
         strength: -12.5,
         falloff: FieldFalloff::Quadratic,
     });
-    let mut tracer_body = body(
-        2,
-        DepthBand {
-            near: 0.0,
-            far: 1.25,
-        },
-    );
+    let mut tracer_body = body(2, DepthBand::metres(0.0, 1.25));
     tracer_body.tracer = Some(Tracer {
         fade_secs: 2.75,
         size: 0.0625,

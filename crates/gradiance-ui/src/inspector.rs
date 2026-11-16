@@ -663,8 +663,8 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
     let Ok(band) = props.depths.get(primary).copied() else {
         return;
     };
-    let mut near = band.near;
-    let mut far = band.far;
+    let mut near = band.near.value();
+    let mut far = band.far.value();
     ui.horizontal(|ui| {
         ui.label("front")
             .on_hover_text("depth of the front face (0 = the interaction plane)");
@@ -686,7 +686,7 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
                 &props.ids,
                 &props.depths,
                 PropertyValue::Depth,
-                move |_| DepthBand { near, far }.sanitized(),
+                move |_| DepthBand::metres(near, far).sanitized(),
                 &mut props.edits,
             );
         }

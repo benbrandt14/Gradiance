@@ -348,15 +348,9 @@ fn depth_aware_packing_beats_flat_packing_on_the_same_bodies() {
             let mut record = box_record(Vec2::new(i as f32 * 3.0, 0.0), 0.5, 0.5);
             let slab = gradiance::core::constants::LAYER_HEIGHT;
             record.depth = if i % 2 == 0 {
-                DepthBand {
-                    near: 0.0,
-                    far: slab,
-                }
+                DepthBand::metres(0.0, slab)
             } else {
-                DepthBand {
-                    near: slab,
-                    far: slab * 2.0,
-                }
+                DepthBand::metres(slab, slab * 2.0)
             };
             ids.push(record.id);
             app.world_mut().write_message(SpawnBodyIntent { record });

@@ -57,10 +57,7 @@ mod tests {
             width: 20.0,
             height: 10.0,
         };
-        let band = DepthBand {
-            near: 10.0,
-            far: 30.0, // z ∈ [-30, -10]
-        };
+        let band = DepthBand::metres(10.0, 30.0); // z ∈ [-30, -10]
         let mesh = build_body_mesh(&shape, &band);
         let positions = mesh
             .attribute(Mesh::ATTRIBUTE_POSITION)

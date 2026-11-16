@@ -736,24 +736,15 @@ pub fn context_menu(
                             depth_edit(&selection, &props.ids, &props.depths, edits, f);
                         };
                     if ui.small_button("to front").clicked() {
-                        shift(&mut props.edits, &|old| DepthBand {
-                            near: 0.0,
-                            far: old.thickness().max(DepthBand::MIN_THICKNESS),
-                        });
+                        shift(&mut props.edits, &|old| DepthBand::metres(0.0, old.thickness().max(DepthBand::MIN_THICKNESS)));
                         close = true;
                     }
                     if ui.small_button("forward").clicked() {
-                        shift(&mut props.edits, &|old| DepthBand {
-                            near: old.near - step,
-                            far: old.far - step,
-                        });
+                        shift(&mut props.edits, &|old| DepthBand::metres(old.near.value() - step, old.far.value() - step));
                         close = true;
                     }
                     if ui.small_button("backward").clicked() {
-                        shift(&mut props.edits, &|old| DepthBand {
-                            near: old.near + step,
-                            far: old.far + step,
-                        });
+                        shift(&mut props.edits, &|old| DepthBand::metres(old.near.value() + step, old.far.value() + step));
                         close = true;
                     }
                 });

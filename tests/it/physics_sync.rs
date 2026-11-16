@@ -10,10 +10,7 @@ use gradiance::prelude::*;
 fn spawned_body_gains_engine_components() {
     let mut app = headless_app();
     let mut record = box_record(Vec2::ZERO, 0.4, 0.2);
-    record.depth = DepthBand {
-        near: 0.1,
-        far: 0.3, // layers 1..=2
-    };
+    record.depth = DepthBand::metres(0.1, 0.3); // layers 1..=2
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
     step(&mut app, 2);

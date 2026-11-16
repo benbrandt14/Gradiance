@@ -105,10 +105,7 @@ fn depth_band_edit_round_trips_and_undoes() {
     let a = spawn_box(&mut app, Vec2::ZERO);
     let entity = entity_of(&app, a).unwrap();
     let old_band = *app.world().get::<DepthBand>(entity).unwrap();
-    let new_band = DepthBand {
-        near: 10.0,
-        far: 32.5, // non-integer depth is first-class
-    };
+    let new_band = DepthBand::metres(10.0, 32.5); // non-integer depth is first-class
 
     app.world_mut().write_message(PropertyEditIntent {
         changes: vec![PropertyChange {

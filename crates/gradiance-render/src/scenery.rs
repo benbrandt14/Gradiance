@@ -186,7 +186,7 @@ pub fn track_scene_depth(
 ) {
     let deepest_back = bodies
         .iter()
-        .map(|band| -band.sanitized().far)
+        .map(|band| -band.sanitized().far.value())
         .fold(-gradiance_core::constants::LAYER_HEIGHT, f32::min);
     let target = deepest_back - settings.back_offset.value().max(0.0);
     for (material, mut transform) in &mut planes {
