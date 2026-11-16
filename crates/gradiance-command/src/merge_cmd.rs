@@ -48,6 +48,7 @@ use gradiance_domain::shape::{CsgOp, MAX_CSG_DEPTH, ShapeDef};
 use gradiance_geometry::polygonize::polygonize_components;
 use gradiance_geometry::sdf;
 use gradiance_scene::{BodyRecord, JointRecord};
+use gradiance_units::{Angle, Displacement};
 
 /// How far outside a shape (metres of field) an anchor may sit and still
 /// count as on its material — absorbs contouring and placement round-off.
@@ -262,7 +263,7 @@ fn boolean_joint_changes(
                 return Some((record, None));
             }
             let mut new = def.clone();
-            match fate(def.body_a, def.anchor_a) {
+            match fate(def.body_a, def.anchor_a.value()) {
                 EndFate::Keep => {}
                 EndFate::Drop => return Some((record, None)),
                 EndFate::Move {
@@ -271,14 +272,14 @@ fn boolean_joint_changes(
                     rest_rot,
                 } => {
                     new.body_a = body;
-                    new.anchor_a = anchor;
+                    new.anchor_a = Displacement(anchor);
                     if let Some(rot) = rest_rot {
-                        new.rest_rot_a = rot;
+                        new.rest_rot_a = Angle(rot);
                     }
                 }
             }
             if let Some(b) = def.body_b {
-                match fate(b, def.anchor_b) {
+                match fate(b, def.anchor_b.value()) {
                     EndFate::Keep => {}
                     EndFate::Drop => return Some((record, None)),
                     EndFate::Move {
@@ -287,9 +288,9 @@ fn boolean_joint_changes(
                         rest_rot,
                     } => {
                         new.body_b = Some(body);
-                        new.anchor_b = anchor;
+                        new.anchor_b = Displacement(anchor);
                         if let Some(rot) = rest_rot {
-                            new.rest_rot_b = rot;
+                            new.rest_rot_b = Angle(rot);
                         }
                     }
                 }

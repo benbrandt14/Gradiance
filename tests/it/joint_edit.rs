@@ -39,10 +39,10 @@ fn hinge_pin(body_a: StableId, anchor_world: Vec2, anchor_a: Vec2) -> JointDef {
         common: JointCommon::default(),
         body_a,
         body_b: None,
-        anchor_a,
-        anchor_b: anchor_world,
-        rest_rot_a: 0.0,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance::units::Displacement(anchor_a),
+        anchor_b: gradiance::units::Displacement(anchor_world),
+        rest_rot_a: gradiance::units::Angle(0.0),
+        rest_rot_b: gradiance::units::Angle(0.0),
     }
 }
 
@@ -187,10 +187,10 @@ fn prismatic_pin(body_a: StableId, limits: Option<[f32; 2]>) -> JointDef {
         common: JointCommon::default(),
         body_a,
         body_b: None,
-        anchor_a: Vec2::ZERO,
-        anchor_b: Vec2::ZERO,
-        rest_rot_a: 0.0,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+        anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+        rest_rot_a: gradiance::units::Angle(0.0),
+        rest_rot_b: gradiance::units::Angle(0.0),
     }
 }
 
@@ -334,14 +334,14 @@ fn dragging_a_selected_anchor_relocates_it_in_pause_mode() {
     let def = app.world().get::<JointDef>(entity).unwrap();
     // World pin: anchor_b is the world point, now at the release position.
     assert!(
-        (def.anchor_b - Vec2::new(20.0, 15.0)).length() < 1.0,
+        (def.anchor_b.value() - Vec2::new(20.0, 15.0)).length() < 1.0,
         "world anchor followed the cursor (got {})",
-        def.anchor_b
+        def.anchor_b.value()
     );
     // anchor_a re-expressed in body-local (body at origin, unrotated).
     assert!(
-        (def.anchor_a - Vec2::new(20.0, 15.0)).length() < 1.0,
+        (def.anchor_a.value() - Vec2::new(20.0, 15.0)).length() < 1.0,
         "body-local anchor updated (got {})",
-        def.anchor_a
+        def.anchor_a.value()
     );
 }

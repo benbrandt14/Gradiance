@@ -31,7 +31,7 @@ use bevy::math::Vec2;
 use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
-use gradiance_units::{Angle, Damping, Force, Length, Stiffness};
+use gradiance_units::{Angle, Damping, Displacement, Force, Length, Stiffness};
 use serde::{Deserialize, Serialize};
 
 // --- Motors ---------------------------------------------------------------
@@ -325,11 +325,11 @@ pub struct JointDef {
     pub body_a: StableId,
     /// Second connected body, or `None` to pin to the world.
     pub body_b: Option<StableId>,
-    /// Anchor in body-A local space (m).
-    pub anchor_a: Vec2,
+    /// Anchor in body-A local space.
+    pub anchor_a: Displacement,
     /// Anchor in body-B local space — or world space for world pins.
-    pub anchor_b: Vec2,
-    /// Body A's rotation when the joint was authored (radians).
+    pub anchor_b: Displacement,
+    /// Body A's rotation when the joint was authored.
     ///
     /// Together with [`rest_rot_b`](Self::rest_rot_b) this defines the
     /// constraint's rest orientation: welds hold the bodies at their
@@ -337,10 +337,10 @@ pub struct JointDef {
     /// hinge limits are measured from it. Without this, joints between
     /// rotated bodies violently snap into alignment at spawn.
     #[serde(default)]
-    pub rest_rot_a: f32,
+    pub rest_rot_a: Angle,
     /// Body B's rotation when the joint was authored (0 for world pins).
     #[serde(default)]
-    pub rest_rot_b: f32,
+    pub rest_rot_b: Angle,
 }
 
 impl JointDef {
@@ -355,7 +355,7 @@ impl JointDef {
     /// `anchor_a` is body-A local, so it rotates and translates with the
     /// body.
     pub fn anchor_world(&self, body_a_pos: Vec2, body_a_rot: f32) -> Vec2 {
-        body_a_pos + Vec2::from_angle(body_a_rot).rotate(self.anchor_a)
+        body_a_pos + Vec2::from_angle(body_a_rot).rotate(self.anchor_a.value())
     }
 
     /// The world angle a **hinge** limit arc is measured from — shared by the
@@ -370,7 +370,7 @@ impl JointDef {
     /// only a world-pin hinge substitutes the rest frame.)
     pub fn limit_reference_angle(&self, body_a_rot: f32) -> f32 {
         match self.kind {
-            JointKind::Hinge { .. } if self.body_b.is_none() => self.rest_rot_a,
+            JointKind::Hinge { .. } if self.body_b.is_none() => self.rest_rot_a.value(),
             _ => body_a_rot,
         }
     }
@@ -392,14 +392,14 @@ impl JointDef {
     #[must_use]
     pub fn sensor_state(&self, pose_a: PosRot, pose_b: PosRot) -> JointSensors {
         let world_a = self.anchor_world(pose_a.pos, pose_a.rot);
-        let world_b = pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(self.anchor_b);
+        let world_b = pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(self.anchor_b.value());
         JointSensors {
             length: Length(world_a.distance(world_b)),
             angle: Angle(hinge_limit_angle(
                 pose_a.rot,
                 pose_b.rot,
-                self.rest_rot_a,
-                self.rest_rot_b,
+                self.rest_rot_a.value(),
+                self.rest_rot_b.value(),
             )),
         }
     }
@@ -447,19 +447,19 @@ mod tests {
     fn a_hinge_at_rest_reads_zero_angle_and_zero_length() {
         // Two bodies 2 m apart, hinged at the midpoint, both authored rotated.
         let mut def = hinge(Some(StableId::new()), 0.4);
-        def.rest_rot_b = -0.2;
-        def.anchor_a = Vec2::new(1.0, 0.0);
-        def.anchor_b = Vec2::new(-1.0, 0.0);
+        def.rest_rot_b = Angle(-0.2);
+        def.anchor_a = Displacement(Vec2::new(1.0, 0.0));
+        def.anchor_b = Displacement(Vec2::new(-1.0, 0.0));
         // Body-local anchors in each body's rotated frame: place the bodies so
         // both anchors land on the same world point.
         let pivot = Vec2::new(3.0, 1.0);
-        let pa = pivot - Vec2::from_angle(0.4).rotate(def.anchor_a);
-        let pb = pivot - Vec2::from_angle(-0.2).rotate(def.anchor_b);
+        let pa = pivot - Vec2::from_angle(0.4).rotate(def.anchor_a.value());
+        let pb = pivot - Vec2::from_angle(-0.2).rotate(def.anchor_b.value());
         let s = def.sensor_state(pose(pa.x, pa.y, 0.4), pose(pb.x, pb.y, -0.2));
         assert!(s.length.value() < 1e-5, "coincident anchors: {s:?}");
         assert!(s.angle.value().abs() < 1e-6, "at rest: {s:?}");
         // Rotate B by +0.3 about the pivot: angle reads +0.3, length stays 0.
-        let pb2 = pivot - Vec2::from_angle(0.1).rotate(def.anchor_b);
+        let pb2 = pivot - Vec2::from_angle(0.1).rotate(def.anchor_b.value());
         let s2 = def.sensor_state(pose(pa.x, pa.y, 0.4), pose(pb2.x, pb2.y, 0.1));
         assert!(close(s2.angle.value(), 0.3), "{s2:?}");
         assert!(s2.length.value() < 1e-5);
@@ -476,10 +476,10 @@ mod tests {
             common: JointCommon::default(),
             body_a: StableId::new(),
             body_b: Some(StableId::new()),
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::ZERO,
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: Displacement(Vec2::ZERO),
+            anchor_b: Displacement(Vec2::ZERO),
+            rest_rot_a: Angle(0.0),
+            rest_rot_b: Angle(0.0),
         };
         let s = def.sensor_state(pose(0.0, 0.0, 0.0), pose(1.5, 0.0, 0.0));
         assert!(close(s.length.value(), 1.5), "{s:?}");
@@ -490,10 +490,10 @@ mod tests {
     fn a_world_pin_measures_against_the_world_point() {
         // Pinned at world (2, 0); body A's anchor is 1 m right of its centre.
         let mut def = hinge(None, 0.5);
-        def.anchor_a = Vec2::new(1.0, 0.0);
-        def.anchor_b = Vec2::new(2.0, 0.0);
+        def.anchor_a = Displacement(Vec2::new(1.0, 0.0));
+        def.anchor_b = Displacement(Vec2::new(2.0, 0.0));
         // At rest (rot 0.5) with the anchor 0.5 m short of the pin.
-        let a = Vec2::new(1.5, 0.0) - Vec2::from_angle(0.5).rotate(def.anchor_a);
+        let a = Vec2::new(1.5, 0.0) - Vec2::from_angle(0.5).rotate(def.anchor_a.value());
         let s = def.sensor_state(pose(a.x, a.y, 0.5), WORLD_POSE);
         assert!(close(s.length.value(), 0.5), "{s:?}");
         assert!(s.angle.value().abs() < 1e-6);
@@ -533,10 +533,10 @@ mod tests {
             common: JointCommon::default(),
             body_a: StableId::new(),
             body_b,
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::ZERO,
-            rest_rot_a,
-            rest_rot_b: 0.0,
+            anchor_a: Displacement(Vec2::ZERO),
+            anchor_b: Displacement(Vec2::ZERO),
+            rest_rot_a: Angle(rest_rot_a),
+            rest_rot_b: Angle(0.0),
         }
     }
 
@@ -571,10 +571,10 @@ mod tests {
             common: JointCommon::default(),
             body_a: StableId::new(),
             body_b: None,
-            anchor_a: Vec2::ZERO,
-            anchor_b: Vec2::ZERO,
-            rest_rot_a: 0.7,
-            rest_rot_b: 0.0,
+            anchor_a: Displacement(Vec2::ZERO),
+            anchor_b: Displacement(Vec2::ZERO),
+            rest_rot_a: Angle(0.7),
+            rest_rot_b: Angle(0.0),
         };
         assert!(close(def.limit_reference_angle(1.3), 1.3));
     }

@@ -186,10 +186,10 @@ fn spawn_joint_intent_round_trips_through_reflection() {
             },
             body_a: StableId::new(),
             body_b: Some(StableId::new()),
-            anchor_a: bevy::math::Vec2::new(1.0, 2.0),
-            anchor_b: bevy::math::Vec2::new(3.0, 4.0),
-            rest_rot_a: 0.1,
-            rest_rot_b: -0.2,
+            anchor_a: gradiance::units::Displacement(bevy::math::Vec2::new(1.0, 2.0)),
+            anchor_b: gradiance::units::Displacement(bevy::math::Vec2::new(3.0, 4.0)),
+            rest_rot_a: gradiance::units::Angle(0.1),
+            rest_rot_b: gradiance::units::Angle(-0.2),
         },
     };
     let intent = SpawnJointIntent {

@@ -3771,6 +3771,7 @@ dependencies = [
  "gradiance-geometry",
  "gradiance-scene",
  "gradiance-signal",
+ "gradiance-units",
  "thiserror 2.0.18",
 ]
 

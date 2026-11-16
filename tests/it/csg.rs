@@ -192,10 +192,10 @@ fn joints_reattach_to_the_piece_containing_their_anchor() {
         common: JointCommon::default(),
         body_a: id,
         body_b: None,
-        anchor_a: Vec2::new(-40.0, 0.0),
-        anchor_b: Vec2::new(-40.0, 0.0),
-        rest_rot_a: 0.0,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance::units::Displacement(Vec2::new(-40.0, 0.0)),
+        anchor_b: gradiance::units::Displacement(Vec2::new(-40.0, 0.0)),
+        rest_rot_a: gradiance::units::Angle(0.0),
+        rest_rot_b: gradiance::units::Angle(0.0),
     };
     app.world_mut().write_message(SpawnJointIntent {
         record: JointRecord {
@@ -219,7 +219,7 @@ fn joints_reattach_to_the_piece_containing_their_anchor() {
     let host_x = app.world().get::<Transform>(host).unwrap().translation.x;
     assert!(host_x < 0.0, "anchor at x=-40 lands in the left piece");
     // Anchor remapped into the piece frame: world position preserved.
-    let world_anchor = host_x + def.anchor_a.x;
+    let world_anchor = host_x + def.anchor_a.value().x;
     assert!(
         (world_anchor + 40.0).abs() < 1.0,
         "world anchor preserved (got {world_anchor})"
@@ -251,10 +251,10 @@ fn joints_whose_anchor_material_is_destroyed_are_deleted() {
                 common: JointCommon::default(),
                 body_a: id,
                 body_b: None,
-                anchor_a: Vec2::ZERO,
-                anchor_b: Vec2::ZERO,
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+                anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -401,10 +401,10 @@ mod conservation {
                         common: JointCommon::default(),
                         body_a: first_id.expect("at least one body"),
                         body_b: None,
-                        anchor_a: Vec2::ZERO,
-                        anchor_b: Vec2::ZERO,
-                        rest_rot_a: 0.0,
-                        rest_rot_b: 0.0,
+                        anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+                        anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+                        rest_rot_a: gradiance::units::Angle(0.0),
+                        rest_rot_b: gradiance::units::Angle(0.0),
                     },
                 },
             });
@@ -537,10 +537,10 @@ fn merge_rewires_external_joints_and_deletes_internal_ones() {
                 common: JointCommon::default(),
                 body_a: absorbed,
                 body_b: None,
-                anchor_a: Vec2::new(10.0, 0.0),
-                anchor_b: Vec2::new(70.0, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(10.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(70.0, 0.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -556,10 +556,10 @@ fn merge_rewires_external_joints_and_deletes_internal_ones() {
                 common: JointCommon::default(),
                 body_a: host,
                 body_b: Some(absorbed),
-                anchor_a: Vec2::new(30.0, 0.0),
-                anchor_b: Vec2::new(-30.0, 0.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(30.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-30.0, 0.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -579,9 +579,9 @@ fn merge_rewires_external_joints_and_deletes_internal_ones() {
     assert_eq!(defs.len(), 1, "internal weld deleted, external pin kept");
     assert_eq!(defs[0].body_a, host, "pin rewired onto the host");
     assert!(
-        (defs[0].anchor_a - Vec2::new(70.0, 0.0)).length() < 1e-3,
+        (defs[0].anchor_a.value() - Vec2::new(70.0, 0.0)).length() < 1e-3,
         "anchor keeps its world point in host space (got {})",
-        defs[0].anchor_a
+        defs[0].anchor_a.value()
     );
 
     undo(&mut app);

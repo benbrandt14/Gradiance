@@ -1903,10 +1903,10 @@ fn spawn_joint(
         body_a: id_a,
         body_b: None,
         // For a world pin the far anchor is the world point itself.
-        anchor_b: anchor,
-        anchor_a: to_local(pose_a, anchor),
-        rest_rot_a: pose_a.rot,
-        rest_rot_b: 0.0,
+        anchor_b: gradiance_units::Displacement(anchor),
+        anchor_a: gradiance_units::Displacement(to_local(pose_a, anchor)),
+        rest_rot_a: gradiance_units::Angle(pose_a.rot),
+        rest_rot_b: gradiance_units::Angle(0.0),
     };
     // `b < 0` is the world pin; otherwise resolve the second body. An index
     // that does not resolve degrades to a world pin rather than dropping the
@@ -1916,8 +1916,8 @@ fn spawn_joint(
         && id_b != id_a
     {
         def.body_b = Some(id_b);
-        def.anchor_b = to_local(pose_b, anchor);
-        def.rest_rot_b = pose_b.rot;
+        def.anchor_b = gradiance_units::Displacement(to_local(pose_b, anchor));
+        def.rest_rot_b = gradiance_units::Angle(pose_b.rot);
     }
     let record = gradiance_scene::JointRecord {
         id: StableId::new(),

@@ -14,6 +14,7 @@ gradiance-domain.workspace = true
 gradiance-geometry.workspace = true
 gradiance-scene.workspace = true
 gradiance-signal.workspace = true
+gradiance-units.workspace = true
 avian2d.workspace = true
 bevy.workspace = true
 thiserror.workspace = true

@@ -125,16 +125,16 @@ fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Too
         },
         body_a: id_a,
         body_b: None,
-        anchor_a: to_local(pose_a, anchor_a),
-        anchor_b, // world point for the world-pin case
-        rest_rot_a: pose_a.rot,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance_units::Displacement(to_local(pose_a, anchor_a)),
+        anchor_b: gradiance_units::Displacement(anchor_b), // world point for the world-pin case
+        rest_rot_a: gradiance_units::Angle(pose_a.rot),
+        rest_rot_b: gradiance_units::Angle(0.0),
     };
 
     if let Some(((_, pose_b), id_b)) = far {
         def.body_b = Some(id_b);
-        def.anchor_b = to_local(pose_b, anchor_b);
-        def.rest_rot_b = pose_b.rot;
+        def.anchor_b = gradiance_units::Displacement(to_local(pose_b, anchor_b));
+        def.rest_rot_b = gradiance_units::Angle(pose_b.rot);
     }
 
     Some(ToolCommit::SpawnJoint(Box::new(JointRecord {

@@ -462,10 +462,10 @@ fn world_pin_prismatic_locks_rotation_by_default() {
                 body_a: plank_id,
                 // World pin at the plank's LEFT END: gravity torques it.
                 body_b: None,
-                anchor_a: Vec2::new(-90.0, 0.0),
-                anchor_b: Vec2::new(-90.0, 100.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(-90.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-90.0, 100.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });

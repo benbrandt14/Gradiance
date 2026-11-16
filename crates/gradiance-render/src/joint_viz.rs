@@ -154,8 +154,8 @@ fn anchor_b_world(def: &JointDef, index: &IdIndex, transforms: &Query<&Transform
             .entity(id)
             .and_then(|e| transforms.get(e).ok())
             .map(PosRot::from_transform)
-            .map(|pose_b| pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b)),
-        None => Some(def.anchor_b), // world pin
+            .map(|pose_b| pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b.value())),
+        None => Some(def.anchor_b.value()), // world pin
     }
 }
 

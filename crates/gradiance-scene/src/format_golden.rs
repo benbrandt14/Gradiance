@@ -77,10 +77,10 @@ fn joint(n: u8, kind: JointKind) -> JointRecord {
             },
             body_a: id(1),
             body_b: Some(id(2)),
-            anchor_a: Vec2::new(0.125, -0.375),
-            anchor_b: Vec2::new(-0.625, 0.875),
-            rest_rot_a: 0.3125,
-            rest_rot_b: -0.4375,
+            anchor_a: q("(0.125, -0.375)"),
+            anchor_b: q("(-0.625, 0.875)"),
+            rest_rot_a: q("0.3125"),
+            rest_rot_b: q("-0.4375"),
         },
     }
 }

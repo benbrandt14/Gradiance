@@ -188,7 +188,8 @@ fn the_crate_dag_matches_the_architecture() {
     let allowed: &[(&str, &[&str])] = &[
         (
             "command",
-            &["core", "domain", "geometry", "scene", "signal"],
+            // units: commands rewire typed joint anchors / rest angles (5-1).
+            &["core", "domain", "geometry", "scene", "signal", "units"],
         ),
         ("core", &[]),
         ("domain", &["core", "geometry", "units"]),

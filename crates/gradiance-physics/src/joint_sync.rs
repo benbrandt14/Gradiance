@@ -101,14 +101,14 @@ pub fn sync_joints(
                 commands.entity(entity).insert(JointUnresolved);
                 continue;
             };
-            (resolved, def.anchor_b)
+            (resolved, def.anchor_b.value())
         } else {
             // World pin: derived static anchor at the world point, no
             // collider — nothing to collide, nothing to explode.
             let pin = commands
                 .spawn((
                     RigidBody::Static,
-                    Transform::from_translation(def.anchor_b.extend(0.0)),
+                    Transform::from_translation(def.anchor_b.value().extend(0.0)),
                     ChildOf(entity),
                 ))
                 .id();
@@ -151,7 +151,7 @@ pub fn sync_joints(
         // *creation-time* pose — welds hold it, sliders lock rotation to
         // it, hinge limits measure from it — instead of snapping rotated
         // bodies into alignment.
-        let basis_b = def.rest_rot_a - def.rest_rot_b;
+        let basis_b = (def.rest_rot_a - def.rest_rot_b).value();
         insert_derived_joint(
             &mut entity_commands,
             def,
@@ -189,7 +189,7 @@ fn insert_derived_joint(
     match &def.kind {
         JointKind::Hinge { limits, motor } => {
             let mut joint = RevoluteJoint::new(body_a, body_b)
-                .with_local_anchor1(Vector::from(def.anchor_a))
+                .with_local_anchor1(Vector::from(def.anchor_a.value()))
                 .with_local_anchor2(Vector::from(anchor_b))
                 .with_local_basis2(basis_b);
             if let Some([min, max]) = limits {
@@ -206,7 +206,7 @@ fn insert_derived_joint(
             motor,
         } => {
             let mut joint = PrismaticJoint::new(body_a, body_b)
-                .with_local_anchor1(Vector::from(def.anchor_a))
+                .with_local_anchor1(Vector::from(def.anchor_a.value()))
                 .with_local_anchor2(Vector::from(anchor_b))
                 .with_local_basis2(basis_b)
                 .with_slider_axis(Vector::from(*axis));
@@ -237,7 +237,7 @@ fn insert_derived_joint(
                 None => (rest_length.value(), rest_length.value()),
             };
             let joint = DistanceJoint::new(body_a, body_b)
-                .with_local_anchor1(Vector::from(def.anchor_a))
+                .with_local_anchor1(Vector::from(def.anchor_a.value()))
                 .with_local_anchor2(Vector::from(anchor_b))
                 .with_limits(min, max)
                 .with_compliance(compliance);

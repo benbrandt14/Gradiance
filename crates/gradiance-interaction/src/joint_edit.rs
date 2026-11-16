@@ -274,9 +274,9 @@ pub fn pick_joint(
         match def.body_b {
             Some(id) => {
                 let pose = PosRot::from_transform(bodies.get(index.entity(id)?).ok()?);
-                Some(pose.pos + Vec2::from_angle(pose.rot).rotate(def.anchor_b))
+                Some(pose.pos + Vec2::from_angle(pose.rot).rotate(def.anchor_b.value()))
             }
-            None => Some(def.anchor_b),
+            None => Some(def.anchor_b.value()),
         }
     };
 
@@ -475,14 +475,17 @@ fn relocated(
         PosRot::from_transform(bodies.get(e).ok()?)
     };
     let mut new = def.clone();
-    new.anchor_a = Vec2::from_angle(-pose_a.rot).rotate(target - pose_a.pos);
+    new.anchor_a =
+        gradiance_units::Displacement(Vec2::from_angle(-pose_a.rot).rotate(target - pose_a.pos));
     match def.body_b {
         Some(id) => {
             let e = index.entity(id)?;
             let pose_b = PosRot::from_transform(bodies.get(e).ok()?);
-            new.anchor_b = Vec2::from_angle(-pose_b.rot).rotate(target - pose_b.pos);
+            new.anchor_b = gradiance_units::Displacement(
+                Vec2::from_angle(-pose_b.rot).rotate(target - pose_b.pos),
+            );
         }
-        None => new.anchor_b = target, // world pin: anchor_b is the world point
+        None => new.anchor_b = gradiance_units::Displacement(target), // world pin: anchor_b is the world point
     }
     Some(new)
 }

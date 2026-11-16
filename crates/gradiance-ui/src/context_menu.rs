@@ -287,9 +287,9 @@ pub fn open_context_menu(
                     Some(idb) => {
                         let pose_b =
                             PosRot::from_transform(transforms.get(index.entity(idb)?).ok()?);
-                        Some(pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b))
+                        Some(pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b.value()))
                     }
-                    None => Some(def.anchor_b),
+                    None => Some(def.anchor_b.value()),
                 };
                 Some((
                     *id,

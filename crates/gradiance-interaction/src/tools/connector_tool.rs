@@ -183,17 +183,17 @@ fn build_joint(
         common: JointCommon::default(),
         body_a: id_a,
         body_b: None,
-        anchor_a: to_local(pose_a, anchor),
-        anchor_b: anchor, // world point for the world-pin case
-        rest_rot_a: pose_a.rot,
-        rest_rot_b: 0.0,
+        anchor_a: gradiance_units::Displacement(to_local(pose_a, anchor)),
+        anchor_b: gradiance_units::Displacement(anchor), // world point for the world-pin case
+        rest_rot_a: gradiance_units::Angle(pose_a.rot),
+        rest_rot_b: gradiance_units::Angle(0.0),
     };
     if let Some(&body_b) = hits.get(1) {
         let id_b = world.id_of(body_b)?;
         let pose_b = world.pose_of(body_b)?;
         def.body_b = Some(id_b);
-        def.anchor_b = to_local(pose_b, anchor);
-        def.rest_rot_b = pose_b.rot;
+        def.anchor_b = gradiance_units::Displacement(to_local(pose_b, anchor));
+        def.rest_rot_b = gradiance_units::Angle(pose_b.rot);
     }
 
     Some(ToolCommit::SpawnJoint(Box::new(JointRecord {
