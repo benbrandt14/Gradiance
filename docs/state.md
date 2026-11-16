@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-16 (orchestrator; 5-1 in flight).
+Last updated: 2026-11-16 (orchestrator; #236 merged; 4b-0 in flight).
 
 ## Position
 
@@ -10,11 +10,11 @@ Last updated: 2026-11-16 (orchestrator; 5-1 in flight).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **5-1** units P2·types. Owner ruling: quantities serialize bare
-  (`#[serde(transparent)]`), format v7, older files rejected.
+- **Now:** **4b-0** review mode. **5-1** merged (#236): domain + settings
+  quantities typed, bare on disk, format **v7** (v6 rejected).
 - **Next, in order:**
   - **Phase 4b** (owner direction 2026-11-16, `orchestration.md`):
-    - **4b-0** review mode: open questions as live scenes; answers file
+    - **4b-0** review mode (in flight): open questions as live scenes; answers file
       the owner commits, ingested at each phase start;
     - **4b-1** group op surface;
     - **4b-2** groups panel;
@@ -77,6 +77,9 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
     - drag/`ManipTool` tools, previews, icons, shortcuts (3-5);
   - two start-up scripts share one snapshot;
   - pixel-era sizes in `tests/it/scripting.rs` (3-6).
+- **Units (5-1):** tracer dot minimum radius 0.5 m, tracer size range
+  0.5–20 m and slider-limit 1 m gap are pixel-era; spring damping unit vs
+  avian's; geometry crate retype; enum joint kind dumps as `Void`.
 - **UI/render:**
   - start-up scene has no ground (product decision, 3-6);
   - Joint window covers the Properties dock;
