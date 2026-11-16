@@ -135,6 +135,27 @@ pub fn apply_lighting(
     }
 }
 
+/// Keeps every other camera's MSAA equal to the scene camera's.
+///
+/// Bevy keys a camera's main texture by `(target, usage, format, Msaa)`, so
+/// two cameras drawing into one window only *layer* when their MSAA matches.
+/// The egui camera overlays the scene with `ClearColorConfig::None`; once
+/// SSAO switched the scene camera to `Msaa::Off`, the overlay got a texture of
+/// its own and its output replaced the scene — the whole viewport went blank
+/// whenever ambient occlusion was on. Matching the overlay to the scene keeps
+/// them on one texture whatever `apply_lighting` chooses.
+pub fn match_overlay_msaa(
+    scene: Query<&Msaa, With<Camera3d>>,
+    mut overlays: Query<&mut Msaa, (With<Camera>, Without<Camera3d>)>,
+) {
+    let Ok(scene) = scene.single() else {
+        return;
+    };
+    for mut msaa in &mut overlays {
+        msaa.set_if_neq(*scene);
+    }
+}
+
 /// Applies [`ScenerySettings`] color/visibility to the back plane
 /// (change-detected).
 pub fn apply_scenery(
@@ -175,5 +196,22 @@ pub fn track_scene_depth(
                 mat.extension.plane.w = target;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn overlay_cameras_follow_the_scene_cameras_msaa() {
+        let mut world = World::new();
+        world.spawn((Camera3d::default(), Msaa::Off));
+        let overlay = world.spawn((Camera::default(), Msaa::Sample4)).id();
+        world
+            .run_system_once(match_overlay_msaa)
+            .expect("system runs");
+        assert_eq!(*world.get::<Msaa>(overlay).expect("msaa"), Msaa::Off);
     }
 }

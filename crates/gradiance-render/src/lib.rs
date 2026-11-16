@@ -60,6 +60,9 @@ impl Plugin for GradianceRenderPlugin {
                 scenery::apply_scenery
                     .run_if(resource_changed::<gradiance_domain::settings::ScenerySettings>),
                 scenery::track_scene_depth,
+                // After the lighting sync so an SSAO toggle's MSAA change
+                // reaches the overlay camera the same frame.
+                scenery::match_overlay_msaa.after(scenery::apply_lighting),
             ),
         );
         app.add_systems(
