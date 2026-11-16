@@ -9,6 +9,8 @@
 //! change to *one* module — the command layer consumes records, the
 //! `persist` layer moves bytes, and neither owns the format.
 
+#[cfg(test)]
+mod format_golden;
 mod records;
 
 pub use records::{
