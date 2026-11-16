@@ -549,6 +549,30 @@ fn pre_si_files_are_rejected() {
 }
 
 #[test]
+fn v6_files_are_rejected() {
+    // v7 saves every typed quantity bare (`near: 0.5`); v6 wrote the joint
+    // motor fields and `break_force` wrapped (`target_velocity: (2.0)`). The
+    // format is pre-release, so v6 is rejected rather than migrated
+    // (`docs/units-decision.md` ruling 2).
+    let scene = SceneRecord {
+        version: 6,
+        app_version: String::new(),
+        bodies: vec![box_record(Vec2::ZERO, 0.1, 0.1)],
+        joints: vec![],
+        nodes: vec![],
+        environment: EnvironmentRecord::default(),
+    };
+    let text = to_ron(&scene).unwrap();
+    assert!(
+        matches!(
+            from_ron(&text),
+            Err(gradiance::scene::PersistError::Version(6))
+        ),
+        "v6 files are rejected, not silently loaded"
+    );
+}
+
+#[test]
 fn pre_tracer_files_still_parse() {
     // `tracer` is serde-defaulted, so scenes saved before tracers existed
     // load unchanged.

@@ -36,10 +36,9 @@ impl TracePattern {
 pub struct Tracer {
     /// How long a sample stays visible, in simulated seconds (the trail
     /// ages on the physics clock, so pausing freezes it).
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub fade_secs: Time,
     /// Trail thickness: dot radius (`Dots`) / point size (world metres).
-    #[serde(default = "default_size", with = "gradiance_units::serde_bare::scalar")]
+    #[serde(default = "default_size")]
     pub size: Length,
     /// How the trail is rendered.
     #[serde(default)]

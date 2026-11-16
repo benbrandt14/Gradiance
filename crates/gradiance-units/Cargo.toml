@@ -20,5 +20,5 @@ thiserror.workspace = true
 glam.workspace = true
 
 [dev-dependencies]
-# Round-trip tests of the `serde_bare` adapters in the scene format.
+# Round-trip test: quantities serialize bare in the scene format (v7).
 ron.workspace = true

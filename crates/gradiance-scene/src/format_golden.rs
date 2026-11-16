@@ -1,15 +1,15 @@
-//! Format-stability pins for the typed-quantity retype (brief 5-1).
+//! Scene-format pins for the typed quantities (brief 5-1, format v7).
 //!
-//! [`every_quantity_scene`] sets every authored field that carries (or will
-//! carry) a `gradiance-units` quantity to a distinctive non-default value. The
-//! golden test saves it and compares the bytes with a checked-in v6 fixture,
-//! then reloads the fixture and compares values — so a retyped field that
-//! forgot its `serde_bare` adapter (and so saves as `(x)`) fails here.
+//! [`every_quantity_scene`] sets every authored field that carries a
+//! `gradiance-units` quantity to a distinctive non-default value. The golden
+//! test saves it and compares the bytes with the checked-in v7 fixture, then
+//! reloads the fixture and compares values.
 //!
 //! The structural guard walks the same scene by reflection instead: every
-//! `gradiance_units` quantity it finds gets a unique sentinel, and the saved
-//! text must spell each one bare. That catches a quantity field this fixture
-//! forgot to set.
+//! `gradiance_units` quantity it reaches gets a unique sentinel, and the saved
+//! text must spell each one bare (`0.5`, never `(0.5)`). That catches a
+//! quantity field this fixture forgot to set, or a quantity type that lost
+//! `#[serde(transparent)]`.
 //!
 //! Regenerate the fixture only for an intended format change:
 //! `UPDATE_GOLDEN=1 cargo test -p gradiance-scene format_golden`.
@@ -32,7 +32,7 @@ use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::tracer::{TracePattern, Tracer};
 
-const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/v6_every_quantity.ron");
+const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/v7_every_quantity.ron");
 
 fn id(n: u8) -> StableId {
     let text = format!("(\"00000000-0000-0000-0000-0000000000{n:02x}\")");
@@ -40,12 +40,11 @@ fn id(n: u8) -> StableId {
 }
 
 /// A `gradiance-units` quantity from its base-SI text (`"0.25"`,
-/// `"1.5, -9.75"`), typed by inference from the field it is assigned to — so
-/// this crate builds typed values without a `gradiance-units` dependency edge.
-/// Parses the quantity's own (wrapped) serde form, independent of the
-/// `serde_bare` adapters under test.
+/// `"(1.5, -9.75)"`), typed by inference from the field it is assigned to —
+/// so this crate builds typed values without a `gradiance-units` dependency
+/// edge.
 fn q<T: serde::de::DeserializeOwned>(si: &str) -> T {
-    ron::from_str(&format!("({si})")).expect("a quantity parses")
+    ron::from_str(si).expect("a quantity parses")
 }
 
 fn body(n: u8, depth: DepthBand) -> BodyRecord {
@@ -153,7 +152,7 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
 }
 
 #[test]
-fn every_quantity_saves_byte_identical_to_the_v6_fixture() {
+fn every_quantity_saves_byte_identical_to_the_v7_fixture() {
     let saved = to_ron(&every_quantity_scene()).expect("the scene saves");
     if std::env::var_os("UPDATE_GOLDEN").is_some() {
         std::fs::write(FIXTURE_PATH, &saved).expect("the fixture writes");
@@ -162,22 +161,17 @@ fn every_quantity_saves_byte_identical_to_the_v6_fixture() {
     assert!(!fixture.is_empty(), "missing fixture {FIXTURE_PATH}");
     assert_eq!(
         saved, fixture,
-        "the scene format moved; a retyped field may be missing its serde_bare adapter"
+        "the scene format moved; regenerate only for an intended change"
     );
 }
 
 #[test]
-fn the_v6_fixture_reloads_to_the_same_values() {
+fn the_v7_fixture_reloads_to_the_same_values() {
     let fixture = std::fs::read_to_string(FIXTURE_PATH).expect("the fixture reads");
     let loaded = from_ron(&fixture);
     assert!(loaded.is_ok(), "{loaded:?}");
     assert_eq!(loaded.ok(), Some(every_quantity_scene()));
 }
-
-/// Reflect-path suffixes of quantity fields typed *before* the bare adapters
-/// existed; they keep the wrapped `(x)` spelling on disk (a known wart —
-/// `docs/units-decision.md` § ruling 2; unifying is a format change).
-const WRAPPED_ALLOWLIST: &[&str] = &["target_velocity", "max_torque", "max_force", "break_force"];
 
 /// One quantity leaf found by the walk: its path, sentinel, and shape.
 struct Found {
@@ -262,6 +256,26 @@ fn plant_sentinels(value: &mut dyn PartialReflect, path: &str, found: &mut Vec<F
     }
 }
 
+/// Whether `text` contains `needle` (which starts with `(`) as an unnamed
+/// tuple — not as the payload parenthesis of a named one (`Some(0.5)` is a
+/// bare value inside an `Option`; `(0.5)` alone is a wrapped newtype).
+fn contains_unnamed(text: &str, needle: &str) -> bool {
+    text.match_indices(needle).any(|(at, _)| {
+        !text[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+    })
+}
+
+#[test]
+fn the_wrapped_detector_ignores_named_payloads() {
+    assert!(contains_unnamed("near: (0.5),", "(0.5)"));
+    assert!(contains_unnamed("Some((0.5))", "(0.5)"));
+    assert!(!contains_unnamed("Some(0.5)", "(0.5)"));
+    assert!(!contains_unnamed("near: 0.5,", "(0.5)"));
+}
+
 #[test]
 fn every_quantity_field_in_the_save_format_is_spelled_bare() {
     let mut scene = every_quantity_scene();
@@ -282,16 +296,12 @@ fn every_quantity_field_in_the_save_format_is_spelled_bare() {
         } else {
             format!("({s})")
         };
-        let allowlisted = WRAPPED_ALLOWLIST
-            .iter()
-            .any(|suffix| f.path.contains(suffix));
-        if text.contains(&wrapped_form) && !allowlisted {
+        if contains_unnamed(&text, &wrapped_form) {
             wrapped.push(f.path.clone());
         }
     }
     assert!(
         wrapped.is_empty(),
-        "quantity fields saved wrapped `(x)` -- add \
-         #[serde(with = \"gradiance_units::serde_bare::...\")]: {wrapped:?}"
+        "quantity fields saved wrapped `(x)` -- is the type #[serde(transparent)]? {wrapped:?}"
     );
 }

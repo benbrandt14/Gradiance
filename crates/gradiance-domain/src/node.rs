@@ -34,7 +34,6 @@ pub struct NodeAttachment {
     /// The body this node follows, or `None` for a free node.
     pub target: Option<StableId>,
     /// Offset from the target's origin, in the target's local frame.
-    #[serde(with = "gradiance_units::serde_bare::vec2")]
     pub offset: Displacement,
 }
 

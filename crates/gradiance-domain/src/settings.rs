@@ -39,13 +39,10 @@ pub struct GridSettings {
     /// Grid geometry family.
     pub system: GridSystem,
     /// Base cell size (display adapts by powers of two).
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub spacing: Length,
     /// Grid origin in world space.
-    #[serde(with = "gradiance_units::serde_bare::vec2")]
     pub origin: Displacement,
     /// Grid rotation.
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub rotation: Angle,
 }
 
@@ -210,7 +207,6 @@ impl Default for ToolDefaults {
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct SimSettings {
     /// World gravity.
-    #[serde(with = "gradiance_units::serde_bare::vec2")]
     pub gravity: Acceleration2,
     /// Simulation speed multiplier (1 = realtime).
     pub speed: f32,
@@ -223,10 +219,7 @@ pub struct SimSettings {
     #[serde(default)]
     pub plane_friction: f32,
     /// Physics steps per second (the fixed timestep).
-    #[serde(
-        default = "default_timestep_hz",
-        with = "gradiance_units::serde_bare::scalar"
-    )]
+    #[serde(default = "default_timestep_hz")]
     pub timestep_hz: Frequency,
 }
 
@@ -418,7 +411,6 @@ pub struct LightingSettings {
     /// How far from the camera shadows stay valid, world metres. Smaller =
     /// denser shadow texels (crisper); too small clips shadows when the
     /// view orbits.
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub shadow_distance: Length,
 }
 
@@ -446,7 +438,6 @@ impl Default for LightingSettings {
 pub struct ScenerySettings {
     /// Gap between the deepest occupied layer's back face and the back
     /// plane, metres (0 = touching).
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub back_offset: Length,
     /// Back plane color.
     pub back_color: crate::appearance::Rgba,

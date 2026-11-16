@@ -42,7 +42,6 @@ pub struct FieldSource {
     /// orbits work), couples through the source's own mass (cutting a
     /// source conserves its field), and reacts equally and oppositely on
     /// the source (momentum conserves). See `docs/field-architecture.md`.
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub strength: Acceleration,
     /// Falloff over surface distance.
     pub falloff: FieldFalloff,

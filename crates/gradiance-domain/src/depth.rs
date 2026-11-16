@@ -26,10 +26,8 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct DepthBand {
     /// Depth of the front face (≥ 0; 0 = the interaction plane).
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub near: Length,
     /// Depth of the back face (> `near`).
-    #[serde(with = "gradiance_units::serde_bare::scalar")]
     pub far: Length,
 }
 

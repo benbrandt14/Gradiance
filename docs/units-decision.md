@@ -120,6 +120,21 @@ The rollout is still incremental (each phase green), but unlike the earlier
 draft there is **no interim pixel-stored phase** — the persistence rev is
 committed, because the strong typing is the point.
 
+**v7: quantities serialize bare (P2·types, brief 5-1).** The quantity
+newtypes are `#[serde(transparent)]`, so a typed field saves as the number
+it holds (`near: 0.5`, `gravity: (0.0, -10.0)`). Before this, a derived
+newtype saved wrapped (`(0.5)`), and neither spelling loaded into the other,
+so the joint motor fields typed earlier (`target_velocity: (2.0)`) and the
+domain's bare `f32`s used two spellings for one kind of value. The owner
+ruled the save format experimental and free to change, so rather than
+per-field adapters that preserve v6 bytes, every quantity (the joint motor
+fields included) was made bare and the format revved to **v7**, with v6 and
+older rejected through the same version check (no migration). avian's own
+authored components (`ColliderDensity`, `GravityScale`) are outside these
+macros and keep avian's wrapped spelling (`density: (1.0)`). A scene-crate
+guard plants a sentinel in every `gradiance_units` value reachable by
+reflection from a `SceneRecord` and fails if any saves wrapped.
+
 ### 3. Density → **2D areal (kg/m²) now; built to jump to 3D later**
 
 Owner ruling: *2D density only; be broadly prepared for a future 3D jump,

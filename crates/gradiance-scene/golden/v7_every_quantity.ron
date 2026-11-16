@@ -1,5 +1,5 @@
 (
-    version: 6,
+    version: 7,
     app_version: "golden",
     bodies: [
         (
@@ -113,8 +113,8 @@
                 kind: Hinge(
                     limits: Some((-1.5, 0.875)),
                     motor: Some((
-                        target_velocity: (2.0),
-                        max_torque: (0.0),
+                        target_velocity: 2.0,
+                        max_torque: 0.0,
                         damping: 30.0,
                         oscillate: false,
                         enabled: true,
@@ -122,7 +122,7 @@
                 ),
                 common: (
                     collide_connected: false,
-                    break_force: Some((250.0)),
+                    break_force: Some(250.0),
                 ),
                 body_a: ("00000000-0000-0000-0000-000000000001"),
                 body_b: Some(("00000000-0000-0000-0000-000000000002")),
@@ -139,8 +139,8 @@
                     axis: (0.6, 0.8),
                     limits: Some((-0.25, 1.75)),
                     motor: Some((
-                        target_velocity: (2.0),
-                        max_force: (0.0),
+                        target_velocity: 2.0,
+                        max_force: 0.0,
                         damping: 30.0,
                         oscillate: false,
                         enabled: true,
@@ -148,7 +148,7 @@
                 ),
                 common: (
                     collide_connected: false,
-                    break_force: Some((250.0)),
+                    break_force: Some(250.0),
                 ),
                 body_a: ("00000000-0000-0000-0000-000000000001"),
                 body_b: Some(("00000000-0000-0000-0000-000000000002")),
@@ -169,7 +169,7 @@
                 ),
                 common: (
                     collide_connected: false,
-                    break_force: Some((250.0)),
+                    break_force: Some(250.0),
                 ),
                 body_a: ("00000000-0000-0000-0000-000000000001"),
                 body_b: Some(("00000000-0000-0000-0000-000000000002")),
