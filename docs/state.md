@@ -2,7 +2,9 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-16 (orchestrator; #238 merged; 4b-1 in flight).
+Last updated: 2026-11-17 (planning session, merged with orchestrator's
+#238 update; 4b-1 in flight; order revised per owner direction,
+`docs/unified-surface-plan.md`).
 
 ## Position
 
@@ -14,21 +16,35 @@ Last updated: 2026-11-16 (orchestrator; #238 merged; 4b-1 in flight).
   typed quantities, format v7) and **4b-0** (#238, review mode:
   `cargo run -- --review`, questions/answers in `docs/review/`, process in
   `orchestration.md` § Review mode; 3 seed questions open).
-- **Next, in order:**
-  - **Phase 4b** (owner direction 2026-11-16, `orchestration.md`):
-    - **4b-1** group op surface (in flight; adds `set-color`, which fixes
-      review scenes re-rolling colours);
-    - **4b-2** groups panel;
-    - **4b-3** art direction (2–3 presets, SSAO options; show the owner);
-    - **4b-4** parameters scaled to body mass, with behaviour tests.
-  - **Phase 5:**
-    - **5-2** named quantity catalog (P3);
-    - **5-3** unit-aware input + deg/rad preference (P4);
-    - **5-4** units in scripts (P6);
-    - **5-5** frames + curvilinear proposals (owner ratifies).
-  - Then **Phase 6** (testing & diagnostics). No briefs yet.
+- **Next, in order** (owner left the order to the planner, 2026-11-17; the
+  reasons are in `docs/unified-surface-plan.md` § 10):
+  1. **4b-1** group op surface (in flight; adds `set-color`, which fixes
+     review scenes re-rolling colours).
+  2. **D-0** toolchain bump to 1.100.0 (brief ready): Bevy 0.20 needs
+     rustc ≥ 1.97.1.
+  3. **D-1** Bevy 0.20 stack (brief ready).
+  4. **U-1** `gradiance-op`: one declaration per operation (brief ready).
+  5. **U-2** migrate all verbs (4b-1's group verbs included), menus, keys
+     onto the registry (brief at U-1 handoff).
+  6. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
+     **U-4** in-app input injection; **U-5** snapshot tests on lavapipe.
+  7. **4b-2** groups panel (on the new registry).
+  8. **U-6** CLI + MCP server.
+  9. **U-7** theme tokens, Blender-leaning, together with **4b-3** art
+     direction; then **4b-4** scaled defaults.
+  10. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
+  11. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
+      saved workspaces; **U-11** Adjust Last Operation.
+  12. **Phase 6** (testing & diagnostics).
+  13. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
+      **D-2** egui 0.37 once bevy_egui ships it.
 - **Owner rulings in force:**
-  - **No unbriefed work** (2026-11-13).
+  - **Scoped work** (2026-11-17; revises "no unbriefed work" of 2026-11-13).
+    The intent is to keep changes local and to keep context from degrading.
+    Code changes go through a brief: one brief, one worker, one PR, nothing
+    outside its scope. A session may write the brief itself when the work is
+    in the plan above. Docs-only changes (plans, briefs, `state.md`) need no
+    brief.
   - **Questions go to review mode, not chat** (2026-11-16): add them to
     `docs/review/questions.ron` with scenes; ingest `answers.ron` at each
     phase start.
@@ -37,6 +53,20 @@ Last updated: 2026-11-16 (orchestrator; #238 merged; 4b-1 in flight).
   - **Merge freely when CI is green** and no tests or checks were removed to
     get there (2026-11-16).
   - **Orchestrator rotation at gates is skipped.**
+  - **UI and op-surface direction** (2026-11-17, `docs/unified-surface-plan.md`
+    § 0): excellent egui polish is now wanted (overrides `orchestration.md`
+    Future intent 1's "don't polish"); lean to Blender's theme; upgrade crates
+    where it saves rework; Graphite is the capability goal, MVP first; port
+    from upstreams, don't depend; BUI dropped; licensing not a concern yet;
+    UI/Lisp/CLI/MCP/graph must be one surface that cannot drift.
+  - **Screenshots may go in git when useful** (2026-11-17), e.g. snapshot
+    test fixtures. Owner review of visuals goes through review mode (4b-0),
+    not ad-hoc images.
+  - **Keys are out of scope** (2026-11-17): keep the current bindings; no
+    keymap or Blender-key work.
+  - **Earlier architecture decisions may be revisited** where the intent has
+    moved (2026-11-17). First use: dock layouts and workspaces persist as
+    workstation config (U-10).
 - **Process:** one worker at a time (shared disk). The worker hands off via
   the brief's Outcome + PR. The orchestrator reviews, merges (REST squash),
   updates this file, and sends screenshots to the owner.
@@ -110,7 +140,9 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   `find target/debug/deps -atime +2`. Never `cargo clean`. Run
   `cargo test --workspace` locally only above ~20 GB free; otherwise leave
   it to CI.
-- **Toolchain:** rustc 1.97.0 = `RUST_PIN`; rust-lang.org is unreachable.
+- **Toolchain:** rustc 1.97.0 = `RUST_PIN`. On 2026-11-17
+  `static.rust-lang.org` answered HTTP 200 from a container (earlier it was
+  unreachable); D-0 confirms that `rustup` can install from it.
   Pending bump debt: `orchestration.md` § Recurring.
 - **CI:** read annotations first (fmt, clippy and test failures are
   annotated); full logs via `gh run view <id> --log-failed`. GraphQL 403s:

@@ -243,10 +243,19 @@ the next bump (found 2026-10 on a newer stable): a new lint against
 `assert!(x.is_empty())` / `assert!(!x.is_empty())` — ~21 single-line sites
 plus multi-line ones across the workspace. Bump `RUST_PIN`, fix in the same PR.
 
+**Phase U — one operation surface (owner direction 2026-11-17).** Plan:
+`docs/unified-surface-plan.md`. Toolchain and Bevy 0.20 upgrades (D-0,
+D-1), one declaration per operation projected to Lisp, BRP/MCP, CLI, menus,
+keys and docs with conformance tests (U-1, U-2), in-app test and control
+(U-3..U-6), then Blender-leaning polish (U-7..U-11). Its briefs interleave
+with 4b and 5; the order is in `docs/state.md`.
+
 **Deferred to the next planning stage** (not part of "roadmap complete"):
-`bevy_picking` interaction rework (audit D); dock and node-canvas layout
-persistence; `bevy-persistent`; `egui_code_editor`; the UI framework
-question in `ui-shell-decision.md`; PR #208.
+`bevy_picking` interaction rework (audit D); node-canvas layout persistence
+(becomes document content if the graph becomes the document: G-0);
+`bevy-persistent`; `egui_code_editor`; PR #208. *Revised 2026-11-17:* dock
+layout persistence moved into U-10 (workstation config); the UI framework
+question is settled (egui, polished).
 
 ## Future intent — do not act on, do not foreclose
 
@@ -257,10 +266,12 @@ above should leave them cheaper, never more expensive.
 has UI test and MCP infrastructure; editor and UI code will be copied in.
 So, until then:
 
-- **Invest in the op surface, not the chrome.** A feature is done when it is
-  reachable as an intent and a registered op with a test; its egui panel
-  should be the thinnest thing that exercises it. Don't polish egui widgets,
-  layouts, or theming beyond usable.
+- **Op surface first, then excellent chrome.** A feature is done when it is
+  reachable as an intent and a registered op with a test. *Revised
+  2026-11-17:* the owner now wants excellent egui polish, leaning to
+  Blender's theme (`docs/unified-surface-plan.md` § 0, § 7). Polish lands
+  through the U-briefs, after the op registry (U-1, U-2), so every panel is a
+  projection of registered operations.
 - **Keep `gradiance-ui` a consumer.** No logic in UI that a script or
   external client would need. If a panel computes something, that
   computation belongs in a lower crate behind a read.
