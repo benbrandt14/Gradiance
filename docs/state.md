@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-16 (orchestrator; #236 merged; 4b-0 in flight).
+Last updated: 2026-11-16 (orchestrator; #238 merged; 4b-1 in flight).
 
 ## Position
 
@@ -10,13 +10,14 @@ Last updated: 2026-11-16 (orchestrator; #236 merged; 4b-0 in flight).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-0** review mode. **5-1** merged (#236): domain + settings
-  quantities typed, bare on disk, format **v7** (v6 rejected).
+- **Now:** **4b-1** group op surface. Recently merged: **5-1** (#236,
+  typed quantities, format v7) and **4b-0** (#238, review mode:
+  `cargo run -- --review`, questions/answers in `docs/review/`, process in
+  `orchestration.md` § Review mode; 3 seed questions open).
 - **Next, in order:**
   - **Phase 4b** (owner direction 2026-11-16, `orchestration.md`):
-    - **4b-0** review mode (in flight): open questions as live scenes; answers file
-      the owner commits, ingested at each phase start;
-    - **4b-1** group op surface;
+    - **4b-1** group op surface (in flight; adds `set-color`, which fixes
+      review scenes re-rolling colours);
     - **4b-2** groups panel;
     - **4b-3** art direction (2–3 presets, SSAO options; show the owner);
     - **4b-4** parameters scaled to body mass, with behaviour tests.
@@ -28,8 +29,9 @@ Last updated: 2026-11-16 (orchestrator; #236 merged; 4b-0 in flight).
   - Then **Phase 6** (testing & diagnostics). No briefs yet.
 - **Owner rulings in force:**
   - **No unbriefed work** (2026-11-13).
-  - **Questions go to review mode, not chat** (2026-11-16): once 4b-0
-    lands, add them to its questions file with scenes.
+  - **Questions go to review mode, not chat** (2026-11-16): add them to
+    `docs/review/questions.ron` with scenes; ingest `answers.ron` at each
+    phase start.
   - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
     reject older files, regenerate goldens, no migrations.
   - **Merge freely when CI is green** and no tests or checks were removed to
@@ -87,6 +89,10 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
     workaround); `world_per_pixel` uses window height for the perspective
     FOV (4-4).
   - Headless `ButtonInput` presses lose `just_pressed` (3-5).
+- **Review mode (4b-0):** option-level camera (open a question tilted);
+  seed joint-inspector / tangent-glyph / guide-faintness questions once an
+  alternative exists; option scripts' registered actions persist across
+  options.
 
 ## Parked — do not merge, rebase or close
 
