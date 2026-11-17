@@ -21,6 +21,7 @@ avian2d.workspace = true
 # `bevy_remote`: the external control surface (`remote.rs`, BRP over the
 # operation registry). Compiled always, started only by `--remote`.
 bevy = { workspace = true, features = ["bevy_remote"] }
+serde.workspace = true
 serde_json.workspace = true
 steel-core.workspace = true
 thiserror.workspace = true

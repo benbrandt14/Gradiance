@@ -2,8 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (U-2a in its PR; U-2 split into U-2a and U-2b;
-order per `docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-17 (U-2b in its PR; order per
+`docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -11,11 +11,14 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-2a** is in its PR (branch `claude/u-2a-edit-ops`): the 22
-  edit verbs are registry operations, menus and keys invoke them by id,
-  the key link table is `interaction::input::KEY_OPS`, scripts cannot
-  name the selection (`docs/briefs/U-2a-edit-ops-menus-keys.md` § Outcome).
-  Next: **U-2b**. **U-1** merged (#243).
+- **Now:** **U-2b** is in its PR (branch `claude/u-2b-queries-editor`):
+  every Lisp verb is a registry operation or one of 11 listed VM
+  built-ins, `OpSpec`/`EditBinding`/`IntentDispatch` are gone, the remote
+  name form no longer builds Scheme for registry names, `docs/ops.md` is
+  generated (currency test), and a scanner bounds intent writers in
+  `gradiance-ui`/`-interaction` to an allow list. **Next: 4b-1.** Found: the
+  settings undo tracker does not watch the signal-graph resources (brief
+  U-2b Outcome, decision 6) — wants its own small brief.
 - **4b-1 was not in flight:** GitHub had no branch and no PR for it on
   2026-11-17. It moved to step 4; its verbs are written once, on the
   registry (`docs/review/archive.ron`, `order-4b-1`).
@@ -24,9 +27,9 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
   2. **U-1** `gradiance-op`: one declaration per operation (done, #243;
      the Outcome lists the migration list).
-  3. **U-2a** the 22 edit verbs, the menus and the key link table;
-     then **U-2b** queries, config, editor verbs, deletion of the old
-     paths, generated `docs/ops.md`. (Split 2026-11-17: one PR for all of
+  3. **U-2a** the 22 edit verbs, the menus and the key link table (done,
+     #244); then **U-2b** queries, config, editor verbs, deletion of the old
+     paths, generated `docs/ops.md` (in its PR). (Split 2026-11-17: one PR for all of
      U-2 exceeds one worker's coherence budget.)
   4. **4b-1** group op surface, on the registry (adds `set-color`, which
      fixes review scenes re-rolling colours).

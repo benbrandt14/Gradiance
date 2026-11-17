@@ -12,27 +12,17 @@
 //!     by the registry's one serde decoder and applied through the seams it
 //!     names. No Scheme text is built. Its edits reach the dispatcher in the
 //!     next `Update`, like a console line's.
-//!   - `{"name": "spawn-box", "args": [0, 2, 1, 1]}` — any catalog verb.
-//!     The call is lowered to **one script run** — the args rendered as
-//!     Scheme literals, `(spawn-box 0 2 1 1)` submitted to [`ScriptInputs`]
-//!     and run through the one doorway, [`run_scripts`] — so it inherits
-//!     everything a console line has: the per-run snapshot, the 2 s budget,
-//!     all-or-nothing, one batch of undoable commands, a line in the console
-//!     log. Its intents go through the ordinary dispatcher in the next
-//!     frame's `Update`, exactly like a console line's: the handler adds no
-//!     second dispatch site. A client's next call, a frame later, reads the
-//!     write.
+//!   - `{"name": "spawn-box", "args": [0, 2, 1, 1]}` — the same operation by
+//!     its Lisp name with positional args. The args map to the named params
+//!     by declared field order ([`OpEntry::named`](gradiance_op::OpEntry::named),
+//!     the mapping the Lisp doorway uses) and the call goes through the
+//!     registry exactly as the `id` form does. Only a **VM built-in**
+//!     (`crate::registry::BUILTINS`: the panel verbs until U-3, the
+//!     invocation-context reads, `ops`/`describe`) is still lowered to **one
+//!     script run**: the args rendered as Scheme literals, submitted to
+//!     [`ScriptInputs`] and run through [`run_scripts`] like a console line.
 //! - [`method::QUERY`] — the same, restricted to `query` ops: a client
 //!   holding only this method cannot change anything.
-//!
-//! Why the `name` form lowers to a script call and not to a verb's Rust
-//! function: the hand-written verbs exist only as steel builtins (their
-//! bodies are closures over the engine's queues), so the script path *is*
-//! their call path. A second, direct path would be a second set of argument
-//! coercions and rollback rules to keep in step. Brief U-2 moves the rest of
-//! the verbs to the registry, and the `id` form then reaches all of them. The op name must be a catalog entry and
-//! every argument is typed JSON rendered as a literal, so a call cannot
-//! smuggle in other code.
 //!
 //! **Security posture.** Off unless the app is started with `--remote`;
 //! bound to `127.0.0.1` only; no authentication (out of scope — localhost is
@@ -43,7 +33,7 @@
 //! seam-mediated. [`KEPT_BUILTINS`] lists the read-only ones that stay.
 
 use crate::bridge::{OperationRegistry, ScriptInputs, run_scripts};
-use crate::registry::{OpCategory, OpSpec};
+use crate::registry::{CatalogEntry, OpCategory};
 use bevy::prelude::*;
 use bevy::remote::builtin_methods::{
     BRP_GET_COMPONENTS_METHOD, BRP_GET_RESOURCE_METHOD, BRP_LIST_COMPONENTS_METHOD,
@@ -178,7 +168,7 @@ fn list_ops(
 
 /// One catalog row; a registry operation also carries its `id` and its
 /// declared field names (the keys of the `params` form).
-fn op_json(op: &OpSpec, registry: &OpRegistry) -> Value {
+fn op_json(op: &CatalogEntry, registry: &OpRegistry) -> Value {
     let entry = registry.by_lisp(op.name);
     json!({
         "id": entry.map(|e| e.meta.id),
@@ -201,8 +191,9 @@ fn invoke_query(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     invoke(params, world, Some(OpCategory::Query))
 }
 
-/// Lowers one call to one script run and runs it through the doorway; the
-/// intents it emitted wait for the dispatcher like any other run's.
+/// One call in either form. A registry operation (by `id`, or by Lisp `name`
+/// with positional `args`) goes through the registry; a VM built-in runs as
+/// one script run.
 fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) -> BrpResult {
     if let Some(Value::Object(fields)) = &params
         && fields.contains_key("id")
@@ -210,20 +201,20 @@ fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) ->
         return invoke_registered(params, world, only);
     }
     let (name, args) = parse_params(params)?;
+    let entry = world
+        .get_resource::<OpRegistry>()
+        .and_then(|registry| registry.by_lisp(&name).cloned());
+    if let Some(entry) = entry {
+        let params = entry
+            .named(args)
+            .map_err(|err| invalid_params(format!("{name}: {err}")))?;
+        return invoke_entry(world, entry.meta.id, entry.meta.seam, params, only);
+    }
     let spec = world
         .get_resource::<OperationRegistry>()
         .and_then(|registry| registry.0.find(&name).cloned())
         .ok_or_else(|| invalid_params(format!("unknown operation `{name}`")))?;
-    if let Some(category) = only
-        && spec.category != category
-    {
-        return Err(invalid_params(format!(
-            "`{name}` is a {} operation; `{}` runs {} operations only",
-            spec.category.label(),
-            method::QUERY,
-            category.label(),
-        )));
-    }
+    check_category(&name, spec.category, only)?;
     let source = call_source(spec.name, &args)?;
 
     let reply = world
@@ -244,9 +235,40 @@ fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) ->
     })
 }
 
-/// `{"id": <string>, "params": {…}}`: one registry operation, lowered against
-/// a fresh context and applied. The reply is the operation's value (`null`
-/// for none).
+/// Refuses a call whose category `only` excludes.
+fn check_category(
+    name: &str,
+    category: OpCategory,
+    only: Option<OpCategory>,
+) -> Result<(), BrpError> {
+    match only {
+        Some(only) if category != only => Err(invalid_params(format!(
+            "`{name}` is a {} operation; `{}` runs {} operations only",
+            category.label(),
+            method::QUERY,
+            only.label(),
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// Lowers one registry operation against a fresh context and applies it.
+/// The reply is the operation's value (`null` for none). An error names the
+/// operation once.
+fn invoke_entry(
+    world: &mut World,
+    id: &'static str,
+    seam: gradiance_op::Seam,
+    params: Value,
+    only: Option<OpCategory>,
+) -> BrpResult {
+    check_category(id, OpCategory::from(seam), only)?;
+    gradiance_op::invoke(world, id, params)
+        .map(|value| value.unwrap_or(Value::Null))
+        .map_err(|err| invalid_params(format!("{id}: {err}")))
+}
+
+/// `{"id": <string>, "params": {…}}`: one registry operation by id.
 fn invoke_registered(
     params: Option<Value>,
     world: &mut World,
@@ -263,24 +285,11 @@ fn invoke_registered(
         Some(object @ Value::Object(_)) => object,
         Some(_) => return Err(invalid_params("`params` must be an object")),
     };
-    let seam = world
+    let (id, seam) = world
         .get_resource::<OpRegistry>()
-        .and_then(|registry| registry.get(&id).map(|e| e.meta.seam))
+        .and_then(|registry| registry.get(&id).map(|e| (e.meta.id, e.meta.seam)))
         .ok_or_else(|| invalid_params(format!("unknown operation `{id}`")))?;
-    let category = OpCategory::from(seam);
-    if let Some(only) = only
-        && category != only
-    {
-        return Err(invalid_params(format!(
-            "`{id}` is a {} operation; `{}` runs {} operations only",
-            category.label(),
-            method::QUERY,
-            only.label(),
-        )));
-    }
-    gradiance_op::invoke(world, &id, op_params)
-        .map(|value| value.unwrap_or(Value::Null))
-        .map_err(|err| invalid_params(format!("{id}: {err}")))
+    invoke_entry(world, id, seam, op_params, only)
 }
 
 /// Reads `{"name": <string>, "args": [<arg>…]}` (`args` optional).
@@ -303,7 +312,9 @@ fn parse_params(params: Option<Value>) -> Result<(String, Vec<Value>), BrpError>
     Ok((name, args))
 }
 
-/// `(name arg…)` with every argument rendered as a Scheme literal.
+/// `(name arg…)` with every argument rendered as a Scheme literal: the form
+/// a VM built-in's remote call runs as. The conformance tests also use it to
+/// drive the Lisp doorway from an operation's example.
 pub fn call_source(name: &str, args: &[Value]) -> Result<String, BrpError> {
     let mut source = format!("({name}");
     for (i, arg) in args.iter().enumerate() {

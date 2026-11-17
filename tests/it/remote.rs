@@ -59,7 +59,7 @@ fn lists_the_operation_catalog() {
 }
 
 #[test]
-fn an_op_call_is_one_run_one_body_one_undo_step() {
+fn a_name_call_is_one_operation_one_body_one_undo_step() {
     let mut app = remote_app();
     let before = undo_depth(&app);
     let handle = ok(
@@ -80,15 +80,63 @@ fn an_op_call_is_one_run_one_body_one_undo_step() {
         count.as_f64().is_some_and(|n| (n - 1.0).abs() < 1e-9),
         "{count}"
     );
-    // It shows in the console like any other run.
-    let log = &app.world().resource::<ScriptLog>().0;
-    assert!(
-        log.iter()
-            .any(|e| e.ok && e.input == "(spawn-box 0 200 40 20.5)")
-    );
+    // A registry verb goes through the registry, not a script run: no
+    // Scheme text, no console line (brief U-2b).
+    assert!(app.world().resource::<ScriptLog>().0.is_empty());
 
     app.update();
     undo(&mut app);
+    assert_eq!(body_count(&mut app), 0);
+}
+
+/// A query of something that is not there answers `null` over remote (NaN
+/// in Lisp).
+#[test]
+fn a_query_of_a_missing_body_answers_null() {
+    let mut app = remote_app();
+    let x = ok(
+        &mut app,
+        method::QUERY,
+        json!({"name": "body-x", "args": [3]}),
+    );
+    assert_eq!(x, Value::Null);
+    let x = ok(
+        &mut app,
+        method::QUERY,
+        json!({"id": "body.x", "params": {"i": 3}}),
+    );
+    assert_eq!(x, Value::Null);
+}
+
+/// A registry error names the operation once, in both forms (U-2a found
+/// `group.create: group.create: …`).
+#[test]
+fn a_registry_error_names_the_operation_once() {
+    let mut app = remote_app();
+    let err = call(
+        &mut app,
+        method::OP,
+        json!({"name": "spawn-box", "args": [1]}),
+    )
+    .and_then(Result::err)
+    .unwrap_or_else(|| panic!("expected an error"));
+    assert_eq!(err.code, error_codes::INVALID_PARAMS);
+    assert_eq!(err.message, "spawn-box: expected 4 arguments, got 1");
+
+    let err = call(
+        &mut app,
+        method::OP,
+        json!({"id": "group.create", "params": {"targets": "selection"}}),
+    )
+    .and_then(Result::err)
+    .unwrap_or_else(|| panic!("expected an error"));
+    assert_eq!(err.code, error_codes::INVALID_PARAMS);
+    assert!(
+        err.message.starts_with("group.create: invalid type"),
+        "{}",
+        err.message
+    );
+    assert_eq!(err.message.matches("group.create").count(), 1);
     assert_eq!(body_count(&mut app), 0);
 }
 
@@ -102,14 +150,16 @@ fn an_unknown_op_is_an_invalid_params_error() {
     assert!(err.message.contains("no-such-op"), "{}", err.message);
 }
 
+/// A VM built-in still runs as one script run, so its failure is the
+/// console's text.
 #[test]
 fn a_failing_run_returns_the_consoles_message() {
     let mut app = remote_app();
-    // Wrong arity: steel refuses the call; nothing is spawned.
+    // Wrong arity: steel refuses the call.
     let err = call(
         &mut app,
         method::OP,
-        json!({"name": "spawn-box", "args": [1]}),
+        json!({"name": "tool-x", "args": [1, 2]}),
     )
     .and_then(Result::err)
     .unwrap_or_else(|| panic!("expected an error"));
@@ -122,7 +172,7 @@ fn a_failing_run_returns_the_consoles_message() {
 }
 
 #[test]
-fn an_argument_with_no_scheme_form_is_refused_before_running() {
+fn an_argument_of_the_wrong_type_is_refused_before_anything_runs() {
     let mut app = remote_app();
     let err = call(
         &mut app,

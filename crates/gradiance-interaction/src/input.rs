@@ -14,7 +14,7 @@ use crate::selection::{SelectTransition, Selection};
 use bevy::prelude::*;
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_domain::Body;
-use gradiance_op::InvokeOp;
+use gradiance_op::{InvokeOp, Value, json};
 use leafwing_input_manager::prelude::*;
 
 /// Discrete editor actions with rebindable inputs.
@@ -120,15 +120,16 @@ impl Plugin for EditorInputPlugin {
 }
 
 /// One row of the key link table: pressing `action` invokes the operation
-/// `id` with `params` (JSON text).
+/// `id` with the params `params` builds.
 #[derive(Debug, Clone, Copy)]
 pub struct KeyOp {
     /// The key binding.
     pub action: EditorAction,
     /// The operation's registry id.
     pub id: &'static str,
-    /// The named params, as JSON text.
-    pub params: &'static str,
+    /// Builds the named params (a JSON object). A function, not JSON text, so
+    /// a row cannot fail to parse at run time.
+    pub params: fn() -> Value,
 }
 
 /// The key link table (plan § 13.4): each editing [`EditorAction`] and the
@@ -143,42 +144,39 @@ pub const KEY_OPS: &[KeyOp] = &[
     KeyOp {
         action: EditorAction::Undo,
         id: "edit.undo",
-        params: "{}",
+        params: || json!({}),
     },
     KeyOp {
         action: EditorAction::Redo,
         id: "edit.redo",
-        params: "{}",
+        params: || json!({}),
     },
     KeyOp {
         action: EditorAction::DeleteSelection,
         id: "joint.delete",
-        params: r#"{"i": "selection"}"#,
+        params: || json!({"i": "selection"}),
     },
     KeyOp {
         action: EditorAction::DeleteSelection,
         id: "body.delete",
-        params: r#"{"i": "selection"}"#,
+        params: || json!({"i": "selection"}),
     },
     KeyOp {
         action: EditorAction::Group,
         id: "group.create",
-        params: r#"{"targets": ["selection"]}"#,
+        params: || json!({"targets": ["selection"]}),
     },
     KeyOp {
         action: EditorAction::Ungroup,
         id: "group.ungroup",
-        params: r#"{"targets": ["selection"]}"#,
+        params: || json!({"targets": ["selection"]}),
     },
 ];
 
 impl KeyOp {
-    /// The invocation this row makes. A row whose params do not parse is
-    /// logged and makes none (the conformance test keeps every row parsing).
-    pub fn invoke(&self) -> Option<InvokeOp> {
-        InvokeOp::parse(self.id, self.params)
-            .inspect_err(|err| warn!("key table: {err}"))
-            .ok()
+    /// The invocation this row makes.
+    pub fn invoke(&self) -> InvokeOp {
+        InvokeOp::with(self.id, (self.params)())
     }
 }
 
@@ -189,7 +187,7 @@ pub fn key_invocations(action: EditorAction) -> impl Iterator<Item = InvokeOp> {
     KEY_OPS
         .iter()
         .filter(move |row| row.action == action)
-        .filter_map(KeyOp::invoke)
+        .map(KeyOp::invoke)
 }
 
 /// All the outgoing messages shortcuts can emit (grouped to stay under
@@ -233,11 +231,8 @@ pub fn apply_shortcuts(
     let ungrouping = actions.just_pressed(&EditorAction::Ungroup);
     for row in KEY_OPS {
         let shadowed = row.action == EditorAction::Group && ungrouping;
-        if actions.just_pressed(&row.action)
-            && !shadowed
-            && let Some(invocation) = row.invoke()
-        {
-            writers.invoke.write(invocation);
+        if actions.just_pressed(&row.action) && !shadowed {
+            writers.invoke.write(row.invoke());
         }
     }
     if actions.just_pressed(&EditorAction::TogglePause) {

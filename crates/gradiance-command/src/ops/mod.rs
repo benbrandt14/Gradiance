@@ -8,7 +8,8 @@
 //! The files split by family: [`spawn`] authors new geometry, [`body`] edits
 //! one existing body, [`sets`] edits several at once (booleans, groups),
 //! [`joint`] makes and removes relationships, [`scene`] holds the history,
-//! query and settings operations.
+//! the new scene, a count and the settings write, and [`query`] the
+//! read-only queries.
 //!
 //! # Targets and the selection
 //!
@@ -22,6 +23,7 @@
 
 pub mod body;
 pub mod joint;
+pub mod query;
 pub mod scene;
 pub mod sets;
 pub mod spawn;
@@ -159,6 +161,7 @@ impl Plugin for SceneOpsPlugin {
             sets::register(&mut registry);
             joint::register(&mut registry);
             scene::register(&mut registry);
+            query::register(&mut registry);
         }
         app.world_mut()
             .resource_mut::<OpContextFillers>()

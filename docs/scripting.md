@@ -93,8 +93,10 @@ component directly — the same guarantee the tools and UI live under.
 
 ## Verb reference
 
-The authoritative list is the console's **Reference** panel (and `(ops)` /
-`(describe "name")` from inside a script). At time of writing:
+The authoritative list is **`docs/ops.md`**, generated from the operation
+registry (a test fails when it is stale), and the console's **Reference**
+panel (and `(ops)` / `(describe "name")` from inside a script). At time of
+writing:
 
 Lengths and positions are in **metres** (1 m = 100 px at start-up zoom,
 world (0, 0) at the view centre, so the start-up view spans about ±6 m
@@ -327,15 +329,18 @@ Reads driving edits (a marker under every existing body):
 
 ## Adding a verb (contributor recipe)
 
-### The registry way (new verbs; brief U-1)
+### Declare an operation (every verb; briefs U-1, U-2a, U-2b)
 
 An operation is declared **once**, in the layer that owns it, and every
 doorway is generated from that declaration: the Lisp verb, the remote
 `gradiance.op {"id", "params"}` call, a menu row's `InvokeOp`, the catalog
 row the console and `gradiance.ops` show, and the key link table's rows.
-Every **edit** verb works this way (27 operations since brief U-2a; see
-`crates/gradiance-command/src/ops/`, split by family). Brief U-2b moves the
-query, config and editor verbs.
+Every verb works this way (since brief U-2b) except the few **VM
+built-ins** below. The operations live with their owners: scene edits and
+queries in `crates/gradiance-command/src/ops/` (split by family), the
+camera-feel pair in `crates/gradiance-interaction/src/ops.rs`, the editor
+and signal verbs in `crates/gradiance-script/src/ops.rs`. The full list is
+`docs/ops.md`.
 
 1. In the owning layer, write a parameter struct that derives
    `serde::Deserialize` (with `#[serde(deny_unknown_fields)]`) and
@@ -353,38 +358,40 @@ query, config and editor verbs.
    values from a context mirror (`ctx.get::<SceneSnapshot>()`), takes new ids
    from `ctx.new_id()`, and returns an `OpOutput`: `.message(intent)`,
    `.setting(&mirror, path, value)?`, `.returning(value)`. It never touches
-   the world.
+   the world. A query returns NaN for "nothing there"; JSON carries it as
+   `null` and the Lisp doorway turns a query's `null` back into NaN. An
+   editor operation that fills a table writes a message its layer drains
+   (`gradiance-script`'s `EditorRequest`); the seam and the undo label say
+   whether it is an undo step (`camera.set`: workstation config, none;
+   `sim.set`: scene content, one `settings` step).
 3. Register it in the layer's plugin: `registry.register::<MyOp>()`. If it
    reads a new mirror, publish it from that layer's context filler.
 4. A menu row or a key writes `InvokeOp::with("layer.verb", json!({…}))`
    (or `InvokeOp::new` without params), never the intent. A key binding is
    one row of `KEY_OPS` in `crates/gradiance-interaction/src/input.rs`; a
    menu row that repeats a key writes `key_invocations(action)`.
-5. Nothing else. The conformance tests (`tests/it/op_conformance.rs`) iterate
+5. Regenerate the reference: `UPDATE_OPS_DOC=1 cargo test --test it
+   docs_ops_md_is_current` rewrites `docs/ops.md`.
+6. Nothing else. The conformance tests (`tests/it/op_conformance.rs`) iterate
    the registry and run the new operation through every doorway from its
    `example` against a fixed fixture: equal outputs, schema round trip, the
-   declared undo step. They also check every key row against a fixture
-   selection, and that the menus and the key handler write no intent an
-   operation owns.
+   declared undo step, `docs/ops.md` current. They also check every key row
+   against a fixture selection, and that `gradiance-ui` and
+   `gradiance-interaction` declare no intent writer outside an allow list
+   of gesture tools and inspector fields (each row with its reason).
 
-### The hand-written way (query, config and editor verbs not migrated yet)
+### VM built-ins (not operations)
 
-The catalog and the steel registration are kept in lockstep by a shared name
-constant, so a new verb touches three places. A new **edit** verb is always a
-registry operation (above).
-
-1. **`crates/gradiance-script/src/registry.rs`** — add a `name::MY_VERB` constant and an `OpSpec`
-   entry in the matching `*_specs()` helper (name, signature, doc, category,
-   arity). The console picks it up automatically.
-2. **`crates/gradiance-script/src/bridge.rs`** — register the builtin in the matching
-   `register_*_verbs` function, under the same `name::MY_VERB` constant:
-   - a **config** verb reads the settings mirror / queues a reflect-path write;
-   - a **query** verb reads the `SceneSnapshot` and returns a number;
-   - an **editor** verb queues an editor-state change.
-3. Add a test (a bridge-level bus check and/or an end-to-end `tests/it/scripting.rs`
-   case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
-   `cargo test` green — the validation test above already covers the
-   catalog↔builtin drift cases.
+A handful of verbs exist only inside a VM run: the invocation-context reads
+(`action-x`, `action-y`, `tool-count`, `tool-x`, `tool-y`: there is no
+action or tool outside a run), the panel verbs (`panel-show`, `panel-hide`,
+`panel-toggle`, `panel-open?`: `gradiance-ui` registers `panel.*` in brief
+U-3) and the introspection pair (`ops`, `describe`: the remote surface has
+`gradiance.ops`). They are the `BUILTINS` table in
+`crates/gradiance-script/src/registry.rs` (each row says why it is not an
+operation) and a steel builtin in `bridge.rs` under the same `name::`
+constant. Do not add one for anything a remote caller or a menu could use:
+declare an operation.
 
 ### Joints: relationships, not just objects
 
@@ -533,7 +540,7 @@ authentication: the local machine is the boundary.
 | Method | Params | Result |
 |---|---|---|
 | `gradiance.ops` | none | every op: `name`, `signature`, `doc`, `category`, `args`; a registry operation also has `id` and `fields` |
-| `gradiance.op` | `{"id": "<op id>", "params": {...}}` for a registry operation, or `{"name": "<op>", "args": [...]}` (`args` optional) for any op | the op's value as JSON |
+| `gradiance.op` | `{"id": "<op id>", "params": {...}}`, or `{"name": "<lisp name>", "args": [...]}` (`args` optional) | the op's value as JSON (a query's NaN is `null`) |
 | `gradiance.query` | same | same, but only `query` ops are accepted |
 
 ```sh
@@ -548,24 +555,25 @@ curl -s localhost:15702 -d '{"jsonrpc":"2.0","id":1,"method":"gradiance.op",
 applied through the seams it names. No Scheme text is built and no console
 line is written. An edit becomes a command in the next frame's `Update`.
 
-**The `name` form is one script run.** `gradiance.op` checks the name against the
-catalog, renders each argument as a Scheme literal (numbers, strings,
-booleans; arrays become `(list …)`; `null` and objects are refused), and
-submits `(spawn-box 0 1 1.6 1.2)` to `ScriptInputs`, then runs it through
-`run_scripts` like a console line: same snapshot rule, same 2 s budget, same
-all-or-nothing, one batch of undoable commands, and a line in the console
-log. The reply comes back at the end of the frame the run happened in (BRP
-handles requests after `Last`); the run's intents become commands in the
-next frame's `Update`, as a console line's do, so a client's next call reads
-the write. Two calls are two runs (two snapshots); to compose edits
-atomically, `register-action` a helper and call it instead.
+**The `name` form is the same operation, positionally.** `{"name":
+"spawn-box", "args": [0, 1, 1.6, 1.2]}` maps the args to the named params in
+declared order (the mapping the Lisp doorway uses) and goes through the
+registry exactly like the `id` form: no Scheme text, no console line. Only a
+**VM built-in** (`panel-show` and the other panel verbs until U-3, `ops`,
+`describe`, the invocation-context reads) is still one **script run**: the
+args rendered as Scheme literals (numbers, strings, booleans; arrays become
+`(list …)`; `null` and objects are refused), submitted to `ScriptInputs` and
+run through `run_scripts` like a console line, with its snapshot, budget,
+all-or-nothing and console log line. Two calls are two invocations (two
+snapshots); to compose edits atomically, `register-action` a helper and
+invoke it from a script.
 
 **Errors** are JSON-RPC errors:
 
 | Code | When | `message` |
 |---|---|---|
-| `-32602` (invalid params) | unknown op, bad params shape, an argument with no Scheme form, a non-query op sent to `gradiance.query` | what was wrong |
-| `-32000` (script error) | the run failed (evaluation error, panic, budget) | the console's text, verbatim; `data.source` is the run's source |
+| `-32602` (invalid params) | unknown op, bad params shape, a param that does not decode, a refused value, a non-query op sent to `gradiance.query` | the op's id (or Lisp name) once, then what was wrong |
+| `-32000` (script error) | a VM built-in's run failed (evaluation error, panic, budget) | the console's text, verbatim; `data.source` is the run's source |
 
 **Writes stay seam-mediated.** Bevy's built-in world-mutation methods
 (`world.spawn_entity`, `world.insert_components`, `world.mutate_components`,

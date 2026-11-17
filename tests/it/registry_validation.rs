@@ -1,17 +1,12 @@
 //! Registry validation — the compiler the DSL doesn't have: every advertised
-//! op must be a bound VM symbol, every Edit op must map to a registered +
-//! reflected intent type, and every documented reflect path must resolve.
+//! op must be a bound VM symbol and every documented reflect path must
+//! resolve. (What an operation writes is checked from its own output by
+//! `op_conformance`.)
 
 use crate::harness::headless_app;
-use bevy::prelude::*;
 use gradiance::domain::settings::{CameraSettings, SimSettings};
-use gradiance::script::bridge::{
-    IntentDispatch, OperationRegistry, ScriptInputs, ScriptLog, edit_bindings,
-};
-use gradiance::script::registry::{
-    CAMERA_SETTING_PATHS, OpCategory, OperationCatalog, SIM_SETTING_PATHS,
-};
-use std::collections::BTreeSet;
+use gradiance::script::bridge::{OperationRegistry, ScriptInputs, ScriptLog};
+use gradiance::script::registry::{CAMERA_SETTING_PATHS, SIM_SETTING_PATHS};
 
 /// Every op the catalog advertises — the built-in rows and the registry
 /// operations it projects — is actually bound in the VM: evaluating the bare
@@ -36,53 +31,6 @@ fn every_catalog_op_is_a_bound_vm_symbol() {
             entry.ok,
             "catalog advertises `{}` but the VM rejects it: {}",
             op.name, entry.output
-        );
-    }
-}
-
-/// The catalog's Edit ops and the intent-binding table are the same set, and
-/// every bound intent type is registered on the dispatch bus. An Edit verb
-/// that would silently drop its ops fails here instead.
-#[test]
-fn every_edit_op_maps_to_a_registered_intent() {
-    let app = headless_app();
-    let dispatch = app.world().resource::<IntentDispatch>();
-
-    let catalog_edits: BTreeSet<&str> = OperationCatalog::builtin()
-        .ops()
-        .iter()
-        .filter(|o| o.category == OpCategory::Edit)
-        .map(|o| o.name)
-        .collect();
-    let bound_edits: BTreeSet<&str> = edit_bindings().iter().map(|b| b.op).collect();
-    assert_eq!(
-        catalog_edits, bound_edits,
-        "catalog Edit ops and bridge edit_bindings() diverge"
-    );
-
-    for binding in edit_bindings() {
-        assert!(
-            dispatch.is_registered(binding.intent),
-            "edit op `{}` emits {} but that intent is not registered on the bus",
-            binding.op,
-            binding.intent_path
-        );
-    }
-}
-
-/// Every intent type an Edit op emits resolves in the app's reflection
-/// registry (scripting binds operations by reflected type).
-#[test]
-fn every_edit_intent_resolves_in_the_type_registry() {
-    let app = headless_app();
-    let registry = app.world().resource::<AppTypeRegistry>().read();
-    for binding in edit_bindings() {
-        assert!(
-            registry.get_with_type_path(binding.intent_path).is_some(),
-            "intent type `{}` (op `{}`) is not in the type registry — \
-             missing register_type in CommandPlugin?",
-            binding.intent_path,
-            binding.op
         );
     }
 }

@@ -66,8 +66,9 @@ pub enum OpError {
     /// No operation has this id (or Lisp name).
     #[error("unknown operation `{0}`")]
     Unknown(String),
-    /// The params did not decode.
-    #[error("{op}: {why}")]
+    /// The params did not decode. The text is serde's alone: each doorway
+    /// prefixes the name it knows the operation by, once.
+    #[error("{why}")]
     Decode {
         /// The operation's id.
         op: &'static str,
@@ -75,7 +76,7 @@ pub enum OpError {
         why: String,
     },
     /// A positional call had the wrong number of arguments.
-    #[error("{op}: expected {expected} arguments, got {got}")]
+    #[error("expected {expected} arguments, got {got}")]
     Arity {
         /// The operation's id.
         op: &'static str,
@@ -243,16 +244,6 @@ impl InvokeOp {
             params,
         }
     }
-
-    /// An invocation whose params are JSON text: for a table of static rows
-    /// (the key link table).
-    pub fn parse(id: &'static str, params: &str) -> Result<Self, OpError> {
-        let params = serde_json::from_str(params).map_err(|err| OpError::Decode {
-            op: id,
-            why: err.to_string(),
-        })?;
-        Ok(Self::with(id, params))
-    }
 }
 
 /// The set that drains [`InvokeOp`]. The command layer orders its dispatcher
@@ -265,7 +256,7 @@ pub struct OpInvokeSet;
 fn run_invocations(world: &mut World) {
     for request in gradiance_core::messages::drain::<InvokeOp>(world) {
         if let Err(err) = invoke(world, &request.id, request.params) {
-            warn!("{err}");
+            warn!("{}: {err}", request.id);
         }
     }
 }
@@ -353,19 +344,18 @@ mod tests {
     }
 
     #[test]
-    fn bad_calls_are_errors_that_name_the_operation() {
+    fn bad_calls_are_errors_that_say_what_was_wrong() {
         let entry = OpEntry::of::<MoveThing>();
         let ctx = OpContext::new(OpIdSource::Random);
         let text = |r: Result<OpOutput, OpError>| r.err().map(|e| e.to_string());
         let wrong_type = text(entry.lower(json!({"x": "left", "y": 0}), &ctx));
-        assert!(wrong_type.is_some_and(|t| t.starts_with("thing.move: ")));
+        // No operation prefix: each doorway adds the name it knows (U-1
+        // decision 5), so the remote text is not `thing.move: thing.move: …`.
+        assert!(wrong_type.is_some_and(|t| t.starts_with("invalid type")));
         let unknown_field = text(entry.lower(json!({"x": 0, "y": 0, "z": 0}), &ctx));
         assert!(unknown_field.is_some_and(|t| t.contains("unknown field")));
         let arity = entry.named(vec![json!(1)]).err().map(|e| e.to_string());
-        assert_eq!(
-            arity.as_deref(),
-            Some("thing.move: expected 2 arguments, got 1")
-        );
+        assert_eq!(arity.as_deref(), Some("expected 2 arguments, got 1"));
     }
 
     #[test]

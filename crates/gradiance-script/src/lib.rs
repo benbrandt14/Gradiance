@@ -16,11 +16,15 @@
 //!   and convert a whole value to steel data (the read-total path). Pure
 //!   w.r.t. the ECS.
 //!
-//! - [`registry`] — the **operation catalog**: pure metadata (name, signature,
-//!   doc, governance category) for every scene verb the VM understands. The
-//!   single source of truth the console, the in-VM `(ops)`/`(describe)`
-//!   builtins, and later data-driven menus / user tools bind to, so what the
-//!   editor advertises tracks what the VM implements. No ECS, no `steel`.
+//! - [`registry`] — the **operation catalog** the console, the in-VM
+//!   `(ops)`/`(describe)` built-ins and `gradiance.ops` show: a projection of
+//!   the operation registry (`gradiance-op`, where every verb is declared)
+//!   plus the few VM built-ins, each listed with the reason it is not an
+//!   operation. No ECS, no `steel`.
+//!
+//! - [`ops`] — this layer's own operations: the editor verbs
+//!   (`register-action`, `register-tool`, `label`) and the script side of the
+//!   signal bus (`signal-get`, `signal-set`, `defparam`, `defsignal`).
 //!
 //! - [`bridge`] — the **World-facing seam** (the only ECS-touching part).
 //!   Embeds the steel engine, registers scene-verb builtins (edits *and*
@@ -32,8 +36,8 @@
 //!
 //! - [`remote`] — the **external control surface**: Bevy's remote protocol
 //!   (JSON-RPC over HTTP, localhost, off unless `--remote`) bound to the
-//!   operation registry. A remote call is one script run through the same
-//!   doorway; Bevy's built-in world-mutation methods are removed.
+//!   operation registry: a call is one registry invocation (a VM built-in is
+//!   one script run). Bevy's built-in world-mutation methods are removed.
 //!
 //! - [`budget`] — the wall-clock budget one script run gets before it is
 //!   stopped (a guard against runaway scripts, not a scheduler).
@@ -46,6 +50,7 @@
 pub mod actions;
 pub mod bridge;
 pub mod budget;
+pub mod ops;
 pub mod reflect_bridge;
 pub mod registry;
 pub mod remote;

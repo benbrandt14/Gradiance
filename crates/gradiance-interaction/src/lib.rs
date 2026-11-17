@@ -25,6 +25,7 @@ pub mod indicators;
 pub mod input;
 pub mod joint_edit;
 pub mod node_edit;
+pub mod ops;
 pub mod overlay;
 pub mod pack;
 pub mod pointer;
@@ -100,6 +101,7 @@ impl Plugin for InteractionPlugin {
         app.world_mut()
             .resource_mut::<gradiance_op::OpContextFillers>()
             .add(selection::fill_selection_mirror);
+        ops::install(app);
         app.configure_sets(Update, InteractionSet.before(gradiance_op::OpInvokeSet));
 
         app.add_plugins(input::EditorInputPlugin);

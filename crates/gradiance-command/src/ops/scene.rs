@@ -1,18 +1,20 @@
-//! Scene-wide operations: the history steps, a count, and the simulation
-//! settings write.
+//! Scene-wide operations: the history steps, a new empty scene, a count, and
+//! the simulation settings write.
 
 use crate::intent::name;
-use crate::intent::{RedoIntent, UndoIntent};
+use crate::intent::{LoadSceneIntent, RedoIntent, UndoIntent};
 use crate::snapshot::SceneSnapshot;
 use bevy::prelude::*;
 use gradiance_domain::settings::SimSettings;
 use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam};
+use gradiance_scene::{EnvironmentRecord, FORMAT_VERSION, SceneRecord};
 use serde::Deserialize;
 
 /// Registers this file's operations.
 pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<Undo>();
     registry.register::<Redo>();
+    registry.register::<NewScene>();
     registry.register::<BodyCount>();
     registry.register::<SimSet>();
 }
@@ -60,6 +62,44 @@ impl Operation for Redo {
 
     fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
         Ok(OpOutput::none().message(RedoIntent))
+    }
+}
+
+/// Replace the scene with an empty one: one undo step, as File ▸ New scene
+/// takes. The environment (gravity, render style, …) returns to its defaults.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct NewScene {}
+
+impl Operation for NewScene {
+    const META: OpMeta = OpMeta {
+        id: "scene.new",
+        lisp: "new-scene",
+        doc: "Replace the scene with an empty one (default environment) — one undo step, as File ▸ New scene.",
+        seam: Seam::Edit,
+        menu: Some("File/New scene"),
+        chord: None,
+        undo: Some(name::LOAD_SCENE),
+        example: "{}",
+    };
+
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        Ok(OpOutput::none().message(LoadSceneIntent {
+            scene: empty_scene(),
+        }))
+    }
+}
+
+/// An empty scene at the current format version, with the default
+/// environment.
+pub fn empty_scene() -> SceneRecord {
+    SceneRecord {
+        version: FORMAT_VERSION,
+        app_version: String::new(),
+        bodies: Vec::new(),
+        joints: Vec::new(),
+        nodes: Vec::new(),
+        environment: EnvironmentRecord::default(),
     }
 }
 

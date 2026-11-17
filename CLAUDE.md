@@ -146,8 +146,11 @@ The accepted plan makes the whole tool programmable via a Lisp/DSL. It is being
 built by *accretion*, not big-bang: honor these when your work touches an
 adjacent seam, so the layer lands uniformly instead of as an unmaintained
 side-car. The P1 substrate is in place — the operation registry
-(`crates/gradiance-script/src/registry.rs`), edit/config/query/editor verbs +
-REPL console + `--script` loader (`crates/gradiance-script/src/bridge.rs`,
+(`gradiance-op`; every verb is an operation declared in its owning layer,
+listed in the generated `docs/ops.md`), the catalog the console shows
+(`crates/gradiance-script/src/registry.rs`: a projection of the registry plus
+the few VM built-ins, each with its reason), the REPL console + `--script`
+loader (`crates/gradiance-script/src/bridge.rs`,
 `crates/gradiance-ui/src/console.rs`); adding a verb follows the recipe in
 `docs/scripting.md`.
 

@@ -1,72 +1,54 @@
 //! The World-facing scripting seam (Tier-A authoring path).
 //!
-//! This is the **only ECS-touching part** of `src/script/`. It embeds the
-//! steel engine, registers scene-verb builtins across all three governance
-//! categories (authored-world **edits** → intents, **config** → settings
-//! resources, read-total **queries**), and runs the exclusive [`run_scripts`]
-//! system that dispatches script-emitted operation records through the
-//! *existing* seams.
+//! This is the **only ECS-touching part** of this crate's VM. It embeds the
+//! steel engine, binds every registry operation (`gradiance-op`) as a Lisp
+//! verb generated from its declaration (`bind_op`), registers the few VM
+//! built-ins ([`BUILTINS`](crate::registry::BUILTINS)), and runs the
+//! exclusive [`run_scripts`] system that applies the operations' outputs
+//! through the seams they name.
 //!
 //! # The World-integration constraint (spike #1)
 //!
 //! steel's `register_fn` requires `Fn(..) + Send + Sync + 'static`, so a
 //! builtin **cannot capture `&mut World`**. That is not a limitation to work
-//! around — it *is* the architecture pointing at itself. A builtin only ever
-//! *emits operation data* (a reflected intent value) into a queue; one
-//! exclusive system drains the queue and writes each value to its
-//! `Messages<T>` — exactly the doorway tools and UI already use. Scripts
-//! therefore **physically cannot** bypass the command discipline (invariants
-//! 1–2): they can only emit intents, and only for intents an operation was
-//! registered for. The registry may `write_message`, never `get_mut` an
-//! authored component.
+//! around — it *is* the architecture pointing at itself. A verb only ever
+//! *lowers to operation output* (intent messages, a settings write, a value)
+//! into a queue; one exclusive system drains the queue through
+//! [`gradiance_op::apply`] — the same write every other doorway ends in.
+//! Scripts therefore **physically cannot** bypass the command discipline
+//! (invariants 1–2).
 //!
 //! # Reads are total, writes are seam-mediated
 //!
-//! The same `Send + Sync` constraint blocks a builtin from reading `&World`
+//! The same `Send + Sync` constraint blocks a verb from reading `&World`
 //! too. The read half of the governance model (`docs/script-lisp-decision.md`)
-//! is served by a [`SceneSnapshot`]: [`run_scripts`] snapshots the committed scene
-//! into a shared buffer before running a source, and the query builtins read
-//! that buffer. Reads therefore observe *last-committed* state (a script's own
-//! edits, being pending intents, land the same frame but after this system) —
-//! which is exactly the last-frame-read discipline the driver dataflow will
-//! also use.
+//! is served by the [`OpContext`]: [`run_scripts`] builds one per pass from
+//! committed state (each layer publishes its mirrors into it), and every verb
+//! reads it. Reads therefore observe *last-committed* state (a script's own
+//! edits, being pending intents, land the same frame but after this system)
+//! — which is exactly the last-frame-read discipline the driver dataflow
+//! also uses.
 //!
-//! Because `Reflect: Send + Sync`, the op queue (`Vec<Box<dyn Reflect>>`) and
-//! the `SceneSnapshot` are `Send + Sync` and a builtin may capture them; the steel
-//! engine itself is the cold-path VM and lives as a `NonSend` resource on the
-//! main thread, so it never needs to be `Send`.
+//! The op queue and the context are `Send + Sync`, so a verb may capture
+//! them; the steel engine itself is the cold-path VM and lives as a
+//! `NonSend` resource on the main thread, so it never needs to be `Send`.
 
 pub use crate::actions::{ScriptAction, ScriptActions};
 use crate::budget::{SCRIPT_BUDGET, run_with_budget};
-use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
+use crate::reflect_bridge::steel_to_f64;
 use crate::registry::{OperationCatalog, name};
-use avian2d::prelude::RigidBody;
+use bevy::prelude::*;
 use gradiance_command::CommandDispatchSet;
-use gradiance_command::snapshot::SceneSnapshot;
 use gradiance_core::ids::StableId;
 use gradiance_core::script_tools::{ScriptToolFired, ScriptToolSpec, ScriptTools};
-use gradiance_domain::props::BodyPhysics;
-use gradiance_domain::settings::{CameraSettings, SimSettings};
-use gradiance_domain::signal::{ComputedSignal, SignalExpr, SignalParam};
 use gradiance_op::{
-    OpContext, OpEntry, OpError, OpIdSource, OpOutput, OpRegistry, SelectionMirror,
+    OpContext, OpEntry, OpError, OpIdSource, OpInvokeSet, OpOutput, OpRegistry, Seam,
+    SelectionMirror,
 };
-use steel::rerrs::{ErrorKind, SteelErr};
-
-/// A `defparam` / `defsignal` declaration queued by a script builtin, drained
-/// in [`run_scripts`] into the `SignalParams` / `ComputedSignals` resources.
-enum SignalDef {
-    /// A tunable slider parameter.
-    Param(SignalParam),
-    /// A computed (modulator) signal.
-    Computed(ComputedSignal),
-}
-use bevy::prelude::*;
-use bevy::reflect::Reflect;
-use std::any::TypeId;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use steel::rerrs::{ErrorKind, SteelErr};
 use steel::rvals::SteelVal;
 use steel::steel_vm::engine::Engine;
 use steel::steel_vm::register_fn::RegisterFn;
@@ -77,61 +59,16 @@ use steel::steel_vm::register_fn::RegisterFn;
 /// (consumer).
 type OpQueue = Arc<Mutex<Vec<(&'static str, OpOutput)>>>;
 
-/// A read snapshot of the committed scene, shared between [`run_scripts`]
-/// (producer) and the query builtins (consumers). The same value the run's
-/// [`OpContext`] holds: one snapshot per run for both kinds of verb.
-type SharedView = Arc<Mutex<Arc<SceneSnapshot>>>;
-
-/// One pending config write (a reflect-path + scalar) emitted by a config verb;
-/// applied to the settings resource after the run — the invariant-#4 seam, not
-/// the command stack.
-struct ConfigWrite {
-    /// Which settings resource the path is into.
-    target: ConfigTarget,
-    path: String,
-    value: f64,
-}
-
-/// The settings resources the config verbs reach.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ConfigTarget {
-    /// `CameraSettings` (`camera-set`) — workstation config, never undone.
-    Camera,
-}
-
-/// A queue of config writes, shared between the config builtins (producers) and
-/// [`run_scripts`] (consumer).
-type ConfigQueue = Arc<Mutex<Vec<ConfigWrite>>>;
-
-/// The buffers the steel builtins capture, cloned into each closure. A producer
-/// / consumer split between the builtins and [`run_scripts`]: query/`sim-get`
-/// verbs read the snapshots [`run_scripts`] fills; edit/`sim-set` verbs push to
-/// the queues [`run_scripts`] drains.
+/// The buffers the steel builtins capture, cloned into each closure. A
+/// producer / consumer split between the builtins and [`run_scripts`]: the
+/// generated registry verbs read the run pass's context and push their
+/// outputs to the op queue; the built-ins read the per-run invocation context
+/// and the panel mirror, and queue panel requests.
 struct Shared {
-    /// Reflected edit intents emitted by edit verbs → the intent bus.
+    /// Registry operation outputs, in call order → [`gradiance_op::apply`].
     ops: OpQueue,
-    /// Read snapshot of the committed scene → query verbs.
-    view: SharedView,
     /// The run pass's operation context → registry operations.
     ctx: Arc<Mutex<Arc<OpContext>>>,
-    /// Read mirror of `SimSettings` → `sim-get`.
-    sim: Arc<Mutex<SimSettings>>,
-    /// Read mirror of `CameraSettings` → `camera-get`.
-    camera: Arc<Mutex<CameraSettings>>,
-    /// Config writes emitted by `sim-set` → the settings resource.
-    config: ConfigQueue,
-    /// Named actions emitted by `register-action` → the `ScriptActions` table.
-    actions: Arc<Mutex<Vec<ScriptAction>>>,
-    /// Named-signal publishes emitted by `signal-set` → the `SignalBus`.
-    signal_writes: Arc<Mutex<Vec<(String, f64)>>>,
-    /// Read mirror of the `SignalBus` values → `signal-get`.
-    signal_values: Arc<Mutex<HashMap<String, f64>>>,
-    /// Param / computed-signal declarations emitted by `defparam` /
-    /// `defsignal` → the `SignalParams` / `ComputedSignals` resources.
-    signal_defs: Arc<Mutex<Vec<SignalDef>>>,
-    /// Workspace labels emitted by `label` → the [`WorkspaceLabels`] table
-    /// (body-handle uuid string + display name).
-    labels: Arc<Mutex<Vec<(String, String)>>>,
     /// Panel visibility requests emitted by `panel-show`/`-hide`/`-toggle` →
     /// the [`PanelRequests`] queue the UI drains. `None` means "flip it".
     panel_requests: Arc<Mutex<Vec<(String, Option<bool>)>>>,
@@ -145,8 +82,6 @@ struct Shared {
     /// The world-space point the current run's action was invoked at →
     /// `action-x`/`action-y`. Set by [`run_scripts`] around one run only.
     action_point: Arc<Mutex<Option<Vec2>>>,
-    /// Tools emitted by `register-tool` → the [`ScriptTools`] table.
-    tools: Arc<Mutex<Vec<ScriptToolSpec>>>,
     /// The points the current run's script tool collected →
     /// `tool-count`/`tool-x`/`tool-y`. Set by [`run_scripts`] around one run
     /// only.
@@ -160,21 +95,11 @@ impl Shared {
     fn new() -> Self {
         Self {
             ops: Arc::new(Mutex::new(Vec::new())),
-            view: Arc::new(Mutex::new(Arc::new(SceneSnapshot::default()))),
             ctx: Arc::new(Mutex::new(Arc::new(OpContext::new(OpIdSource::Random)))),
-            sim: Arc::new(Mutex::new(SimSettings::default())),
-            camera: Arc::new(Mutex::new(CameraSettings::default())),
-            config: Arc::new(Mutex::new(Vec::new())),
-            actions: Arc::new(Mutex::new(Vec::new())),
-            signal_writes: Arc::new(Mutex::new(Vec::new())),
-            signal_values: Arc::new(Mutex::new(HashMap::new())),
-            signal_defs: Arc::new(Mutex::new(Vec::new())),
-            labels: Arc::new(Mutex::new(Vec::new())),
             panel_requests: Arc::new(Mutex::new(Vec::new())),
             panel_states: Arc::new(Mutex::new(HashMap::new())),
             catalog: Arc::new(Mutex::new(OperationCatalog::builtin())),
             action_point: Arc::new(Mutex::new(None)),
-            tools: Arc::new(Mutex::new(Vec::new())),
             tool_points: Arc::new(Mutex::new(None)),
         }
     }
@@ -183,38 +108,24 @@ impl Shared {
     /// run can be [rolled back](Self::rollback) to exactly here without
     /// touching what earlier runs in the same frame queued.
     fn mark(&self) -> QueueMark {
-        QueueMark([
-            queue_len(&self.ops),
-            queue_len(&self.config),
-            queue_len(&self.actions),
-            queue_len(&self.signal_writes),
-            queue_len(&self.signal_defs),
-            queue_len(&self.labels),
-            queue_len(&self.panel_requests),
-            queue_len(&self.tools),
-        ])
+        QueueMark([queue_len(&self.ops), queue_len(&self.panel_requests)])
     }
 
     /// Discards everything queued since `mark`: a run is all or nothing, like
     /// its one undo batch, so a script that fails (eval error, panic, budget)
     /// half-way commits none of its edits, config writes, labels, actions,
-    /// tools, panel requests or signal publishes.
+    /// tools, panel requests or signal publishes (all but the panel requests
+    /// are registry outputs in the op queue).
     fn rollback(&self, mark: &QueueMark) {
-        let [ops, config, actions, writes, defs, labels, panels, tools] = mark.0;
+        let [ops, panels] = mark.0;
         queue_truncate(&self.ops, ops);
-        queue_truncate(&self.config, config);
-        queue_truncate(&self.actions, actions);
-        queue_truncate(&self.signal_writes, writes);
-        queue_truncate(&self.signal_defs, defs);
-        queue_truncate(&self.labels, labels);
         queue_truncate(&self.panel_requests, panels);
-        queue_truncate(&self.tools, tools);
     }
 }
 
 /// The fill level of every [`Shared`] write queue at one instant (see
 /// [`Shared::mark`]).
-struct QueueMark([usize; 8]);
+struct QueueMark([usize; 2]);
 
 fn queue_len<T>(queue: &Mutex<Vec<T>>) -> usize {
     queue.lock().map_or(0, |q| q.len())
@@ -522,57 +433,6 @@ pub struct PanelRequest {
 #[derive(Resource, Default, Debug)]
 pub struct PanelStates(pub Vec<(String, bool)>);
 
-/// Routes a reflected intent value to its `Messages<T>` bus. This is the
-/// operation registry's dispatch half: a script names an op, the exclusive
-/// system routes the reflected value to the right intent channel. Registering
-/// an intent here is the *only* way a script op reaches the world, and it can
-/// only ever `write_message`.
-#[derive(Resource, Default)]
-pub struct IntentDispatch {
-    writers: HashMap<TypeId, fn(&mut World, Box<dyn Reflect>)>,
-}
-
-impl IntentDispatch {
-    /// Registers `T` so a script-emitted `T` value dispatches to its bus.
-    pub fn register<T: Message + Reflect>(&mut self) {
-        self.writers.insert(TypeId::of::<T>(), |world, op| {
-            if let Ok(intent) = op.into_any().downcast::<T>() {
-                world.write_message(*intent);
-            }
-        });
-    }
-
-    /// Whether an intent type is registered (the registry-validation test
-    /// checks every Edit op's intent against this).
-    pub fn is_registered(&self, intent: TypeId) -> bool {
-        self.writers.contains_key(&intent)
-    }
-}
-
-/// One Edit-category operation's binding to the intent type it emits.
-/// [`edit_bindings`] is the single table [`ScriptPlugin`] registers
-/// [`IntentDispatch`] from and `tests/it/registry_validation.rs` checks the
-/// catalog against.
-pub struct EditBinding {
-    /// The operation's [`name`] constant.
-    pub op: &'static str,
-    /// `TypeId` of the intent the verb emits.
-    pub intent: TypeId,
-    /// The intent's reflected type path (must resolve in the type registry).
-    pub intent_path: &'static str,
-    /// Registers the intent's bus writer on an [`IntentDispatch`].
-    pub register: fn(&mut IntentDispatch),
-}
-
-/// Every hand-written Edit-category verb and the intent it emits — one row
-/// per verb. Registry operations (`gradiance-op`) are not here: they lower
-/// through their own declaration.
-pub fn edit_bindings() -> Vec<EditBinding> {
-    // Every edit verb is a registry operation now (U-2a); the table and its
-    // type go in U-2b.
-    Vec::new()
-}
-
 /// The steel engine plus the shared buffers it reads/writes. A `NonSend`
 /// resource: the VM is the cold authoring path and lives on the main thread, so
 /// it never needs to be `Send`.
@@ -671,22 +531,6 @@ impl ScriptEngine {
     }
 }
 
-/// Coerces `N` steel values to finite `f64`s, or `None` if any is non-numeric
-/// or non-finite (Scheme integer literals arrive as `IntV`, floats as `NumV` —
-/// [`steel_to_f64`] accepts both). A verb with a bad argument no-ops rather
-/// than emitting a malformed intent.
-fn nums<const N: usize>(vals: [&SteelVal; N]) -> Option<[f64; N]> {
-    let out = vals.map(|v| steel_to_f64(v).unwrap_or(f64::NAN));
-    out.iter().all(|v| v.is_finite()).then_some(out)
-}
-
-/// Coerces one steel value to a non-negative array index, or `None`.
-fn index_arg(v: &SteelVal) -> Option<usize> {
-    steel_to_f64(v)
-        .filter(|n| n.is_finite() && *n >= 0.0)
-        .map(|n| n as usize)
-}
-
 /// Binds one registry operation as a Lisp verb, generated from its
 /// declaration: the arguments map to the named params by declared field order
 /// (the same mapping every doorway uses), the registry's one serde decoder
@@ -697,6 +541,7 @@ fn bind_op(engine: &mut Engine, shared: &Shared, entry: OpEntry) {
     let ctx = Arc::clone(&shared.ctx);
     let ops = Arc::clone(&shared.ops);
     let lisp = entry.meta.lisp;
+    let query = entry.meta.seam == Seam::Query;
     let call = move |args: &[SteelVal]| -> steel::rvals::Result<SteelVal> {
         let failed = |err: OpError| SteelErr::new(ErrorKind::Generic, format!("{lisp}: {err}"));
         let params = entry
@@ -709,7 +554,13 @@ fn bind_op(engine: &mut Engine, shared: &Shared, entry: OpEntry) {
             )
         })?;
         let output = entry.lower(params, &ctx).map_err(failed)?;
-        let value = output.value().map_or(SteelVal::Void, json_to_steel);
+        let value = match output.value() {
+            // A query's "nothing there" (NaN, which JSON carries as `null`)
+            // reads NaN in Lisp, as it always has: zero would read as a
+            // measurement.
+            Some(serde_json::Value::Null) if query => SteelVal::NumV(f64::NAN),
+            value => value.map_or(SteelVal::Void, json_to_steel),
+        };
         if let Ok(mut queue) = ops.lock() {
             queue.push((entry.meta.id, output));
         }
@@ -732,205 +583,14 @@ fn json_to_steel(value: &serde_json::Value) -> SteelVal {
     }
 }
 
-/// Registers the scene-verb builtins on `engine`. Edit verbs capture the op
-/// queue; query verbs capture the read snapshot; config verbs capture the sim
-/// mirror + config queue; meta verbs capture the catalog. Adding an authored
-/// verb = one builtin here (under a [`name`] constant) + one entry in
-/// [`OperationCatalog::builtin`] + (for edits) one [`IntentDispatch::register`]
-/// call in [`ScriptPlugin`].
+/// Registers the VM built-ins on `engine` ([`BUILTINS`](crate::registry::BUILTINS)):
+/// the invocation-context reads, the panel verbs and the meta verbs. Every
+/// other verb is a registry operation, bound by [`bind_op`].
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
-    register_property_verbs(engine, &shared.view);
-    register_query_verbs(engine, &shared.view);
-    register_config_verbs(engine, &shared.config, &shared.sim, &shared.camera);
-    register_editor_verbs(engine, &shared.actions, &shared.labels);
     register_action_reads(engine, &shared.action_point);
-    register_tool_verbs(engine, &shared.tools, &shared.tool_points);
+    register_tool_reads(engine, &shared.tool_points);
     register_panel_verbs(engine, &shared.panel_requests, &shared.panel_states);
-    register_signal_verbs(
-        engine,
-        &shared.signal_writes,
-        &shared.signal_values,
-        &shared.signal_defs,
-    );
     register_meta_verbs(engine, &shared.catalog);
-}
-
-/// Read-total geometric queries — each reads the [`SceneSnapshot`] snapshot and
-/// returns a number, mutating nothing.
-fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
-    let v = Arc::clone(view);
-    engine.register_fn(name::JOINT_COUNT, move || -> f64 {
-        v.lock().map_or(f64::NAN, |view| view.joint_count())
-    });
-
-    let v = Arc::clone(view);
-    engine.register_fn(name::BODY_X, move |i: SteelVal| -> f64 {
-        match (v.lock(), index_arg(&i)) {
-            (Ok(view), Some(i)) => view.x(i),
-            _ => f64::NAN,
-        }
-    });
-
-    let v = Arc::clone(view);
-    engine.register_fn(name::BODY_Y, move |i: SteelVal| -> f64 {
-        match (v.lock(), index_arg(&i)) {
-            (Ok(view), Some(i)) => view.y(i),
-            _ => f64::NAN,
-        }
-    });
-
-    let v = Arc::clone(view);
-    engine.register_fn(name::BODY_ROT, move |i: SteelVal| -> f64 {
-        match (v.lock(), index_arg(&i)) {
-            (Ok(view), Some(i)) => view.rot(i),
-            _ => f64::NAN,
-        }
-    });
-
-    let v = Arc::clone(view);
-    engine.register_fn(name::COUNT_AT, move |x: SteelVal, y: SteelVal| -> f64 {
-        match (nums([&x, &y]), v.lock()) {
-            (Some([x, y]), Ok(view)) => view.count_at(Vec2::new(x as f32, y as f32)),
-            _ => 0.0,
-        }
-    });
-
-    let v = Arc::clone(view);
-    engine.register_fn(name::NEAREST_AT, move |x: SteelVal, y: SteelVal| -> f64 {
-        match (nums([&x, &y]), v.lock()) {
-            (Some([x, y]), Ok(view)) => view.nearest_at(Vec2::new(x as f32, y as f32)),
-            _ => -1.0,
-        }
-    });
-
-    let v = Arc::clone(view);
-    engine.register_fn(name::NEAREST_DIST, move |x: SteelVal, y: SteelVal| -> f64 {
-        match (nums([&x, &y]), v.lock()) {
-            (Some([x, y]), Ok(view)) => view.nearest_dist(Vec2::new(x as f32, y as f32)),
-            _ => -1.0,
-        }
-    });
-
-    let v = Arc::clone(view);
-    engine.register_fn(
-        name::BODY_INDEX_AT,
-        move |x: SteelVal, y: SteelVal| -> f64 {
-            match (nums([&x, &y]), v.lock()) {
-                (Some([x, y]), Ok(view)) => view.index_at(Vec2::new(x as f32, y as f32)),
-                _ => -1.0,
-            }
-        },
-    );
-
-    // `(touch-count i)` — how many bodies the i-th body is touching.
-    let v = Arc::clone(view);
-    engine.register_fn(name::TOUCH_COUNT, move |i: SteelVal| -> f64 {
-        match (steel_to_f64(&i), v.lock()) {
-            (Some(i), Ok(view)) if i >= 0.0 => view.touch_count(i as usize),
-            _ => f64::NAN,
-        }
-    });
-}
-
-/// Editor configuration — `sim-get` reads the settings mirror (a total read),
-/// `sim-set` queues a reflect-path write applied to the settings resource (the
-/// invariant-#4 seam, never the command stack). Both name fields only by
-/// reflect-path, so any `SimSettings` scalar is reachable with no per-field
-/// builtin. `camera-get` / `camera-set` are the same pair over
-/// `CameraSettings`.
-fn register_config_verbs(
-    engine: &mut Engine,
-    config: &ConfigQueue,
-    sim: &Arc<Mutex<SimSettings>>,
-    camera: &Arc<Mutex<CameraSettings>>,
-) {
-    // `sim-set` is the registry's `sim.set`; only the read is bound here.
-    register_config_get(engine, sim, name::SIM_GET);
-    register_config_get(engine, camera, name::CAMERA_GET);
-    register_config_set(
-        engine,
-        config,
-        camera,
-        name::CAMERA_SET,
-        ConfigTarget::Camera,
-    );
-}
-
-/// One `(…-get path)` over a settings mirror: read a setting by reflect-path.
-fn register_config_get<T: Reflect>(engine: &mut Engine, mirror: &Arc<Mutex<T>>, get: &'static str) {
-    let m = Arc::clone(mirror);
-    engine.register_fn(get, move |path: String| -> f64 {
-        m.lock()
-            .ok()
-            .and_then(|settings| read_path(&*settings, &path))
-            .unwrap_or(f64::NAN)
-    });
-}
-
-/// One `(…-set path value)` over a settings mirror.
-fn register_config_set<T: Reflect + Clone>(
-    engine: &mut Engine,
-    config: &ConfigQueue,
-    mirror: &Arc<Mutex<T>>,
-    set: &'static str,
-    target: ConfigTarget,
-) {
-    // `(…-set path value)` — queue a config write to a setting. The write is
-    // trialled on a copy of the mirror first, so a bad path or a non-numeric
-    // value is a script error (logged and shown in the console) rather than a
-    // write that silently never lands. Integer and float literals both coerce
-    // to the leaf's type (`0` and `0.0` are the same).
-    let c = Arc::clone(config);
-    let m = Arc::clone(mirror);
-    engine.register_fn(
-        set,
-        move |path: String, value: SteelVal| -> Result<(), String> {
-            let Some(number) = steel_to_f64(&value) else {
-                return Err(format!("{set} {path}: expected a number, got {value}"));
-            };
-            if let Ok(settings) = m.lock() {
-                let mut trial = settings.clone();
-                write_path(&mut trial, &path, number).map_err(|e| format!("{set}: {e}"))?;
-            }
-            if let Ok(mut queue) = c.lock() {
-                queue.push(ConfigWrite {
-                    target,
-                    path,
-                    value: number,
-                });
-            }
-            Ok(())
-        },
-    );
-}
-
-/// Editor-state verbs — writes to non-authored editor resources. `register-action`
-/// appends to the action table the UI surfaces; it queues the entry (the exclusive
-/// system moves it into the `ScriptActions` resource), never touching the World.
-fn register_editor_verbs(
-    engine: &mut Engine,
-    actions: &Arc<Mutex<Vec<ScriptAction>>>,
-    labels: &Arc<Mutex<Vec<(String, String)>>>,
-) {
-    // `(register-action label source)` — surface a named action in the editor.
-    let a = Arc::clone(actions);
-    engine.register_fn(
-        name::REGISTER_ACTION,
-        move |label: String, source: String| {
-            if let Ok(mut queue) = a.lock() {
-                queue.push(ScriptAction::user(label, source));
-            }
-        },
-    );
-
-    // `(label body name)` — give a body a visible workspace name. `body` is
-    // the handle a spawn verb returned (`ans` right after spawning).
-    let l = Arc::clone(labels);
-    engine.register_fn(name::LABEL, move |body: String, label_name: String| {
-        if let Ok(mut queue) = l.lock() {
-            queue.push((body, label_name));
-        }
-    });
 }
 
 /// Invocation-context reads: where the running action was invoked. The UI
@@ -953,47 +613,11 @@ fn register_action_reads(engine: &mut Engine, point: &Arc<Mutex<Option<Vec2>>>) 
     });
 }
 
-/// Most points one script tool may collect: a tool that asks for more is a
-/// typo, not a gesture anyone will finish.
-const MAX_TOOL_POINTS: usize = 64;
-
-/// Script-tool verbs: `register-tool` (editor state — queues a palette entry
-/// the exclusive system moves into [`ScriptTools`]) and the per-run reads of
-/// the points a tool's gesture collected. The reads are NaN outside a tool
-/// run, like `(action-x)`; inside one, an index past the last point is an
-/// error, because it can only be a bug in the tool's body.
-fn register_tool_verbs(
-    engine: &mut Engine,
-    tools: &Arc<Mutex<Vec<ScriptToolSpec>>>,
-    points: &ToolPoints,
-) {
-    let t = Arc::clone(tools);
-    engine.register_fn(
-        name::REGISTER_TOOL,
-        move |tool_name: String, count: SteelVal, source: String| -> Result<(), String> {
-            let tool_name = tool_name.trim().to_string();
-            if tool_name.is_empty() {
-                return Err(format!("{}: the name is empty", name::REGISTER_TOOL));
-            }
-            let needed = steel_to_f64(&count)
-                .filter(|n| n.fract() == 0.0 && *n >= 1.0 && *n <= MAX_TOOL_POINTS as f64)
-                .ok_or_else(|| {
-                    format!(
-                        "{}: points must be a whole number from 1 to {MAX_TOOL_POINTS}, got {count}",
-                        name::REGISTER_TOOL
-                    )
-                })?;
-            if let Ok(mut queue) = t.lock() {
-                queue.push(ScriptToolSpec {
-                    name: tool_name,
-                    points: needed as usize,
-                    source,
-                });
-            }
-            Ok(())
-        },
-    );
-
+/// The per-run reads of the points a script tool's gesture collected. NaN
+/// outside a tool run, like `(action-x)`; inside one, an index past the last
+/// point is an error, because it can only be a bug in the tool's body.
+/// (`register-tool` itself is the registry's `tool.register`.)
+fn register_tool_reads(engine: &mut Engine, points: &ToolPoints) {
     let p = Arc::clone(points);
     engine.register_fn(name::TOOL_COUNT, move || -> f64 {
         p.lock()
@@ -1051,99 +675,6 @@ fn register_panel_verbs(
             .ok()
             .and_then(|states| states.get(panel.trim()).copied())
             .unwrap_or(false)
-    });
-}
-
-/// Body-property reads. The writes (`set-friction` …) are registry operations
-/// (`gradiance_command::ops::body`); the reads are deliberately symmetric:
-/// `set-friction` and `body-friction` name the same quantity, so a script can
-/// round-trip a value it did not author. Reads are total; writes are
-/// seam-mediated.
-fn register_property_verbs(engine: &mut Engine, view: &SharedView) {
-    // Reads — the same quantities, so a script can inspect before it edits.
-    for (verb, read) in [
-        (
-            name::BODY_FRICTION,
-            (|p: &BodyPhysics| f64::from(p.friction.dynamic_coefficient))
-                as fn(&BodyPhysics) -> f64,
-        ),
-        (name::BODY_RESTITUTION, |p: &BodyPhysics| {
-            f64::from(p.restitution.coefficient)
-        }),
-        (name::BODY_DENSITY, |p: &BodyPhysics| f64::from(p.density.0)),
-        (name::BODY_STATIC, |p: &BodyPhysics| {
-            f64::from(u8::from(p.rigid_body == RigidBody::Static))
-        }),
-    ] {
-        let v = Arc::clone(view);
-        engine.register_fn(verb, move |i: SteelVal| -> f64 {
-            match (v.lock(), index_arg(&i)) {
-                (Ok(view), Some(i)) => view.physics(i).map_or(f64::NAN, read),
-                _ => f64::NAN,
-            }
-        });
-    }
-}
-
-/// Signal-dataflow verbs — the script side of the signal bus
-/// (`docs/signal-dataflow.md`). `signal-set` queues a named publish (the
-/// exclusive system moves it onto the `SignalBus`); `signal-get` reads the
-/// per-run value mirror. Scripts thereby *feed* the dataflow on their own
-/// cold runs — the per-frame evaluator never enters the VM.
-fn register_signal_verbs(
-    engine: &mut Engine,
-    writes: &Arc<Mutex<Vec<(String, f64)>>>,
-    values: &Arc<Mutex<HashMap<String, f64>>>,
-    defs: &Arc<Mutex<Vec<SignalDef>>>,
-) {
-    // `(signal-set name value)` — publish a named value on the signal bus.
-    let w = Arc::clone(writes);
-    engine.register_fn(name::SIGNAL_SET, move |name: String, value: SteelVal| {
-        if let (Ok(mut queue), Some(value)) = (w.lock(), steel_to_f64(&value)) {
-            queue.push((name, value));
-        }
-    });
-
-    // `(signal-get name)` — the current value of a bus signal (NaN if unset).
-    let v = Arc::clone(values);
-    engine.register_fn(name::SIGNAL_GET, move |name: String| -> f64 {
-        v.lock()
-            .ok()
-            .and_then(|values| values.get(&name).copied())
-            .unwrap_or(f64::NAN)
-    });
-
-    // `(defparam name value min max)` — declare a tunable slider param.
-    let d = Arc::clone(defs);
-    engine.register_fn(
-        name::DEFPARAM,
-        move |name: String, value: SteelVal, min: SteelVal, max: SteelVal| {
-            if let (Ok(mut queue), Some(value), Some(min), Some(max)) = (
-                d.lock(),
-                steel_to_f64(&value),
-                steel_to_f64(&min),
-                steel_to_f64(&max),
-            ) {
-                queue.push(SignalDef::Param(SignalParam {
-                    name,
-                    value: value as f32,
-                    min: min as f32,
-                    max: max as f32,
-                }));
-            }
-        },
-    );
-
-    // `(defsignal name expr)` — declare a computed signal from RPN source.
-    let d = Arc::clone(defs);
-    engine.register_fn(name::DEFSIGNAL, move |name: String, expr: String| {
-        if let (Ok(mut queue), Ok(parsed)) = (d.lock(), SignalExpr::parse_rpn(&expr)) {
-            queue.push(SignalDef::Computed(ComputedSignal {
-                name,
-                expr: parsed,
-                block: None,
-            }));
-        }
     });
 }
 
@@ -1220,43 +751,18 @@ pub fn run_scripts(world: &mut World) {
         engine.bind_ops(&registry);
     }
 
-    // Refresh the read-total snapshots from committed state: one operation
-    // context for the whole pass (scripting rule 3), whose scene snapshot the
-    // hand-written query verbs read too.
+    // One operation context for the whole pass (scripting rule 3): every
+    // registry verb in every run of this pass reads the same snapshot.
     // Scripting rule 2: a script names objects by index or id, never by what
     // happens to be selected, so its context has no selection mirror and
     // `"selection"` is a visible error.
     let mut ctx = OpContext::build(world);
     ctx.remove::<SelectionMirror>();
-    let ctx = Arc::new(ctx);
-    let snapshot = ctx.get_shared::<SceneSnapshot>().unwrap_or_default();
-    if let Some(engine) = world.get_non_send::<ScriptEngine>() {
-        if let Ok(mut guard) = engine.shared.view.lock() {
-            *guard = snapshot;
-        }
-        if let Ok(mut guard) = engine.shared.ctx.lock() {
-            *guard = ctx;
-        }
-    }
-    if let (Some(sim), Some(settings)) = (
-        world
-            .get_non_send::<ScriptEngine>()
-            .map(|e| Arc::clone(&e.shared.sim)),
-        world.get_resource::<SimSettings>().cloned(),
-    ) && let Ok(mut guard) = sim.lock()
+    if let Some(engine) = world.get_non_send::<ScriptEngine>()
+        && let Ok(mut guard) = engine.shared.ctx.lock()
     {
-        *guard = settings;
+        *guard = Arc::new(ctx);
     }
-    if let (Some(camera), Some(settings)) = (
-        world
-            .get_non_send::<ScriptEngine>()
-            .map(|e| Arc::clone(&e.shared.camera)),
-        world.get_resource::<CameraSettings>().cloned(),
-    ) && let Ok(mut guard) = camera.lock()
-    {
-        *guard = settings;
-    }
-    refresh_signal_mirror(world);
     refresh_panel_mirror(world);
 
     for run in sources {
@@ -1280,68 +786,10 @@ pub fn run_scripts(world: &mut World) {
         gradiance_op::apply(world, id, output);
     }
 
-    // Drain the config queue and apply each write to the settings resource (the
-    // invariant-#4 seam). Only touch the resource when a write is pending, so a
-    // script that never calls `sim-set` leaves change detection alone.
-    let writes: Vec<ConfigWrite> = world
-        .get_non_send::<ScriptEngine>()
-        .and_then(|engine| {
-            engine
-                .shared
-                .config
-                .lock()
-                .ok()
-                .map(|mut q| std::mem::take(&mut *q))
-        })
-        .unwrap_or_default();
-    for write in writes {
-        // Already trialled by the verb; a failure here means the resource
-        // and the mirror disagree on shape — say so. Each write touches only
-        // its own resource, so a script that never calls `camera-set` leaves
-        // `CameraSettings` change detection alone (and likewise for sim).
-        let result = match write.target {
-            ConfigTarget::Camera => world
-                .get_resource_mut::<CameraSettings>()
-                .map(|mut s| write_path(&mut *s, &write.path, write.value)),
-        };
-        if let Some(Err(err)) = result {
-            warn!("{:?} config write: {err}", write.target);
-        }
-    }
-
-    drain_labels(world);
-    drain_actions(world);
-    drain_tools(world);
+    // Editor requests land in their tables in the same frame (a remote
+    // call that ran this pass outside the schedule sees them at once).
+    crate::ops::apply_editor_requests(world);
     drain_panel_requests(world);
-    drain_signal_publishes(world);
-    drain_signal_defs(world);
-}
-
-/// Drains the label queue into the `WorkspaceLabels` table (upsert by
-/// name, so re-running a labelling script is idempotent).
-fn drain_labels(world: &mut World) {
-    let labels: Vec<(String, String)> = world
-        .get_non_send::<ScriptEngine>()
-        .and_then(|engine| {
-            engine
-                .shared
-                .labels
-                .lock()
-                .ok()
-                .map(|mut q| std::mem::take(&mut *q))
-        })
-        .unwrap_or_default();
-    if !labels.is_empty()
-        && let Some(mut table) = world.get_resource_mut::<WorkspaceLabels>()
-    {
-        for (handle, label_name) in labels {
-            if let Ok(uuid) = uuid::Uuid::parse_str(handle.trim()) {
-                table.upsert(label_name, StableId(uuid));
-            } else {
-                warn!("(label …): `{handle}` is not a body handle");
-            }
-        }
-    }
 }
 
 /// Moves queued panel requests onto the [`PanelRequests`] resource for the UI
@@ -1384,29 +832,6 @@ fn refresh_panel_mirror(world: &mut World) {
         mirror.clear();
         for (name, open) in &states.0 {
             mirror.insert(name.clone(), *open);
-        }
-    }
-}
-
-/// Drains the action queue into the `ScriptActions` table (upsert by
-/// label, so re-running a registration script is idempotent).
-fn drain_actions(world: &mut World) {
-    let actions: Vec<ScriptAction> = world
-        .get_non_send::<ScriptEngine>()
-        .and_then(|engine| {
-            engine
-                .shared
-                .actions
-                .lock()
-                .ok()
-                .map(|mut q| std::mem::take(&mut *q))
-        })
-        .unwrap_or_default();
-    if !actions.is_empty()
-        && let Some(mut table) = world.get_resource_mut::<ScriptActions>()
-    {
-        for action in actions {
-            table.upsert(action);
         }
     }
 }
@@ -1487,124 +912,6 @@ fn queue_tool_runs(world: &mut World) {
     }
 }
 
-/// Drains the `register-tool` queue into the [`ScriptTools`] table (upsert
-/// by name, so a hot reload re-registers in place and indices stay valid).
-fn drain_tools(world: &mut World) {
-    let tools: Vec<ScriptToolSpec> = world
-        .get_non_send::<ScriptEngine>()
-        .and_then(|engine| {
-            engine
-                .shared
-                .tools
-                .lock()
-                .ok()
-                .map(|mut q| std::mem::take(&mut *q))
-        })
-        .unwrap_or_default();
-    if !tools.is_empty()
-        && let Some(mut table) = world.get_resource_mut::<ScriptTools>()
-    {
-        for tool in tools {
-            let index = table.upsert(tool);
-            if u16::try_from(index).is_err() {
-                warn!("script tool {index} is past the palette's index range");
-            }
-        }
-    }
-}
-
-/// Mirrors the current [`SignalBus`](gradiance_signal::SignalBus) values into
-/// the `signal-get` read snapshot (part of the per-run read refresh).
-fn refresh_signal_mirror(world: &mut World) {
-    if let (Some(values), Some(bus)) = (
-        world
-            .get_non_send::<ScriptEngine>()
-            .map(|e| Arc::clone(&e.shared.signal_values)),
-        world.get_resource::<gradiance_signal::SignalBus>(),
-    ) && let Ok(mut guard) = values.lock()
-    {
-        guard.clear();
-        guard.extend(
-            bus.entries()
-                .map(|(name, entry)| (name.to_owned(), f64::from(entry.value()))),
-        );
-    }
-}
-
-/// Drains `signal-set` publishes onto the signal bus (remembering the
-/// names, so bus hygiene keeps script signals alive between runs).
-fn drain_signal_publishes(world: &mut World) {
-    let publishes: Vec<(String, f64)> = world
-        .get_non_send::<ScriptEngine>()
-        .and_then(|engine| {
-            engine
-                .shared
-                .signal_writes
-                .lock()
-                .ok()
-                .map(|mut q| std::mem::take(&mut *q))
-        })
-        .unwrap_or_default();
-    if publishes.is_empty() {
-        return;
-    }
-    if let Some(mut names) = world.get_resource_mut::<gradiance_signal::ScriptSignals>() {
-        for (name, _) in &publishes {
-            if !names.0.contains(name) {
-                names.0.push(name.clone());
-            }
-        }
-    }
-    if let Some(mut bus) = world.get_resource_mut::<gradiance_signal::SignalBus>() {
-        for (name, value) in publishes {
-            bus.publish(&name, value as f32, false);
-        }
-    }
-}
-
-/// Drains `defparam` / `defsignal` declarations into the `SignalParams` /
-/// `ComputedSignals` config resources (upsert by name, so a re-run of a
-/// definitions script updates in place instead of duplicating).
-fn drain_signal_defs(world: &mut World) {
-    let defs: Vec<SignalDef> = world
-        .get_non_send::<ScriptEngine>()
-        .and_then(|engine| {
-            engine
-                .shared
-                .signal_defs
-                .lock()
-                .ok()
-                .map(|mut q| std::mem::take(&mut *q))
-        })
-        .unwrap_or_default();
-    if defs.is_empty() {
-        return;
-    }
-    for def in defs {
-        match def {
-            SignalDef::Param(param) => {
-                if let Some(mut params) = world.get_resource_mut::<gradiance_signal::SignalParams>()
-                {
-                    match params.0.iter_mut().find(|p| p.name == param.name) {
-                        Some(existing) => *existing = param,
-                        None => params.0.push(param),
-                    }
-                }
-            }
-            SignalDef::Computed(signal) => {
-                if let Some(mut computed) =
-                    world.get_resource_mut::<gradiance_signal::ComputedSignals>()
-                {
-                    match computed.0.iter_mut().find(|c| c.name == signal.name) {
-                        Some(existing) => *existing = signal,
-                        None => computed.0.push(signal),
-                    }
-                }
-            }
-        }
-    }
-}
-
 /// Installs the scripting seam: embeds steel, registers the scene verbs and
 /// their intent dispatch, surfaces the operation catalog, and runs the
 /// exclusive doorway system. Always on (steel is a first-class dependency);
@@ -1627,11 +934,8 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<WorkspaceLabels>();
         app.init_resource::<StartupScripts>();
         app.init_resource::<ScriptWatch>();
-        let mut dispatch = IntentDispatch::default();
-        for binding in edit_bindings() {
-            (binding.register)(&mut dispatch);
-        }
-        app.insert_resource(dispatch);
+        // This layer's own operations: the editor and signal verbs.
+        crate::ops::install(app);
         app.insert_non_send(ScriptEngine::new());
         app.add_systems(Startup, load_startup_scripts);
         app.add_systems(
@@ -1640,6 +944,7 @@ impl Plugin for ScriptPlugin {
                 sync_catalog,
                 watch_scripts,
                 run_scripts.before(CommandDispatchSet),
+                crate::ops::apply_editor_requests.after(OpInvokeSet),
             )
                 .chain(),
         );
@@ -1652,6 +957,8 @@ mod tests {
     use super::*;
     use crate::registry::OpCategory;
     use gradiance_command::intent::{CutIntent, SpawnBodyIntent};
+    use gradiance_domain::props::BodyPhysics;
+    use gradiance_domain::settings::SimSettings;
     use gradiance_domain::shape::ShapeDef;
 
     #[derive(Resource, Default)]
@@ -1782,33 +1089,6 @@ mod tests {
         assert_eq!(settings.speed, 2.0);
         // A config write is not an authored edit — nothing reached the intent bus.
         assert!(app.world().resource::<Spawns>().0.is_empty());
-    }
-
-    #[test]
-    fn camera_verbs_read_and_write_camera_settings() {
-        let mut app = bus_app();
-        app.insert_resource(SimSettings::default());
-        app.insert_resource(CameraSettings::default());
-        run(
-            &mut app,
-            "(camera-set \"zoom_step\" (- (camera-get \"zoom_step\") 0.04))",
-        );
-        let camera = app.world().resource::<CameraSettings>();
-        assert!((camera.zoom_step - 0.90).abs() < 1e-6, "{camera:?}");
-        // Only the camera moved: the sim settings saw no write.
-        assert_eq!(
-            *app.world().resource::<SimSettings>(),
-            SimSettings::default()
-        );
-
-        run(&mut app, "(camera-set \"no_such_field\" 1)");
-        let log = app.world().resource::<ScriptLog>();
-        let entry = log.0.last().expect("logged");
-        assert!(
-            !entry.ok && entry.output.contains("camera-set"),
-            "{}",
-            entry.output
-        );
     }
 
     #[test]
