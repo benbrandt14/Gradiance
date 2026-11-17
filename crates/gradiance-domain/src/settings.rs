@@ -205,6 +205,9 @@ impl Default for ToolDefaults {
 /// Authored/persisted like the grid; the physics seam applies changes to
 /// the engine (`Gravity`, physics clock speed) — UI never touches avian.
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+// Container default: a partial record (a review option's settings
+// override, `scene::review::SettingsOverride`) fills the rest from `Default`.
+#[serde(default)]
 pub struct SimSettings {
     /// World gravity.
     pub gravity: Acceleration2,
@@ -278,6 +281,9 @@ impl SimSettings {
 /// Consumed by `render::toon` via change detection — the toon banding is
 /// a shader parameter, so toggling styles never rebuilds materials.
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+// Container default: a partial record (a review option's settings
+// override, `scene::review::SettingsOverride`) fills the rest from `Default`.
+#[serde(default)]
 pub struct RenderSettings {
     /// Quantize lighting into bands (toon look). Off = smooth matte PBR.
     pub toon_enabled: bool,
@@ -396,6 +402,9 @@ impl Default for KeyLightSettings {
 /// seam applies changes to the light entities / ambient / camera AO via
 /// change detection — UI never touches light entities directly.
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+// Container default: a partial record (a review option's settings
+// override, `scene::review::SettingsOverride`) fills the rest from `Default`.
+#[serde(default)]
 pub struct LightingSettings {
     /// The key lights (at least one; the Lighting tab adds/removes).
     pub lights: Vec<KeyLightSettings>,
@@ -435,6 +444,9 @@ impl Default for LightingSettings {
 /// layer; the **ground** is any half-plane body's infinite render. Colors
 /// and visibility here; the ground's color is the body's own `Appearance`.
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
+// Container default: a partial record (a review option's settings
+// override, `scene::review::SettingsOverride`) fills the rest from `Default`.
+#[serde(default)]
 pub struct ScenerySettings {
     /// Gap between the deepest occupied layer's back face and the back
     /// plane, metres (0 = touching).

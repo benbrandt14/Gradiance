@@ -96,6 +96,7 @@ pub use gradiance_ui as ui;
 pub use gradiance_units as units;
 
 pub mod prelude;
+pub mod review;
 
 /// Optional Bevy dev-tools diagnostics overlay (`--features diagnostics`).
 #[cfg(feature = "diagnostics")]
@@ -116,5 +117,6 @@ plugin_group! {
         crate::render:::GradianceRenderPlugin,
         crate::ui:::GradianceUiPlugin,
         crate::script:::ScriptPlugin,
+        crate::review:::ReviewPlugin,
     }
 }

@@ -11,10 +11,10 @@ use crate::cut_cmd::CutCommand;
 use crate::group_cmd::{GroupCommand, UngroupCommand};
 use crate::intent::name;
 use crate::intent::{
-    ArrayIntent, BooleanIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent,
-    DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent, PropertyEditIntent, RedoIntent,
-    ScaleIntent, SpawnBodyIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent,
-    UngroupIntent,
+    ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
+    DeleteJointIntent, DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent,
+    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
+    SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
@@ -111,6 +111,7 @@ pub fn dispatch_intents(world: &mut World) {
 
     let undos = drain::<UndoIntent>(world).len();
     let redos = drain::<RedoIntent>(world).len();
+    let clear = !drain::<ClearHistoryIntent>(world).is_empty();
 
     // Navigating history during a live run implies editing, not running, so
     // undo/redo auto-pauses. Undo additionally closes the run as one step
@@ -131,6 +132,10 @@ pub fn dispatch_intents(world: &mut World) {
             stack.push_boundary(world);
         }
         execute(&mut stack, world, commands, undos, redos);
+        if clear {
+            *stack = CommandStack::default();
+            trace!(target: "gradiance_command::command", "history cleared");
+        }
         world.insert_resource(crate::HistoryInfo {
             undo_depth: stack.undo_len(),
             redo_depth: stack.redo_len(),

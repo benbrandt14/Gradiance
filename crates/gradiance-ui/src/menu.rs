@@ -56,6 +56,8 @@ pub struct Panels<'w> {
     pub array: ResMut<'w, crate::array_panel::ArrayWindow>,
     /// Layout-optimizer window.
     pub optimizer: ResMut<'w, crate::optimizer::OptimizerExpanded>,
+    /// Review-mode window (questions as scenes).
+    pub review: ResMut<'w, crate::review::ReviewWindow>,
     /// Debug overlays (field vectors).
     pub debug: ResMut<'w, gradiance_domain::settings::DebugSettings>,
 }
@@ -289,6 +291,7 @@ pub(crate) fn menu_label(name: &str) -> &'static str {
         "array" => "Array",
         "optimizer" => "Optimizer",
         "settings" => "Settings",
+        "review" => "Review",
         _ => "Panel",
     }
 }

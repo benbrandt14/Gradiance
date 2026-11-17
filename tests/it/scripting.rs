@@ -983,6 +983,7 @@ fn the_ui_applies_queued_panel_requests_and_ignores_unknown_names() {
     app.init_resource::<gradiance::ui::outliner::ObjectTreePanel>();
     app.init_resource::<gradiance::ui::console::ScriptConsole>();
     app.init_resource::<gradiance::ui::array_panel::ArrayWindow>();
+    app.init_resource::<gradiance::ui::review::ReviewWindow>();
     app.init_resource::<gradiance::ui::optimizer::OptimizerExpanded>();
     app.init_resource::<gradiance::domain::settings::DebugSettings>();
     app.add_systems(Update, apply_panel_requests);
