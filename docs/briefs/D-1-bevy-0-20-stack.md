@@ -1,7 +1,7 @@
 # Bevy 0.20 stack
 Phase U · `docs/unified-surface-plan.md` § 4, § 10 row 3 ("Upgrade crates
 such as egui where that prevents a lot of rework", owner 2026-11-17) ·
-status: done (CI results: see Outcome)
+status: done (PR #242)
 
 ## Goal
 
@@ -129,5 +129,12 @@ still necessary on 0.20; it is kept. `assets/shaders/toon.wgsl` still has
 **Harness:** a fresh container also needs `libxkbcommon-x11-0` for the
 screenshot run (winit panics without it).
 
-**Test thresholds and format:** see the CI record below.
+**Test thresholds and format:** no test threshold and no golden value
+changed; avian 0.8 moved no asserted number. No test was removed, skipped or
+loosened. `FORMAT_VERSION` did not move (the authored avian components
+serialize as before; the persistence tests pass unchanged).
+
+**CI record (PR #242):** run 1 failed in `coverage` on the 4 `gradiance-ui`
+tests of item 4. Run 2 (after the helper fix): `ci`, `coverage` and
+`coupling` pass.
 
