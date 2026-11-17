@@ -42,4 +42,5 @@ mod ui_conflicts;
 mod ui_input;
 mod ui_panels;
 mod ui_registry;
+mod ui_snapshots;
 mod unit_commands;
