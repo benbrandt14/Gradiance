@@ -109,7 +109,7 @@ change to the app.
 
 ## Outcome
 
-**Landed (worker, 2026-11-17), PR in review.** `tests/it/ui_snapshots.rs`:
+**Landed (worker, 2026-11-17), PR #251 in review.** `tests/it/ui_snapshots.rs`:
 five image snapshots plus one pure test of the GPU gate. Each snapshot draws
 a leaf renderer in a central panel at a fixed size, 1 pixel per point, dark
 theme, `fonts::install`, on `egui_kittest`'s wgpu renderer (it prefers a CPU

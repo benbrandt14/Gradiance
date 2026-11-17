@@ -11,7 +11,7 @@ as #250, 38541ff; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-5 in review** (PR #PRNUM, branch
+- **Now:** **U-5 in review** (PR #251, branch
   `claude/project-thread-dydbi0`): image snapshot tests of five egui leaf
   renderers on lavapipe (`tests/it/ui_snapshots.rs`, PNGs in
   `tests/snapshots/ui/`, update with `UPDATE_SNAPSHOTS=1 cargo test --test
@@ -35,7 +35,7 @@ as #250, 38541ff; order per `docs/unified-surface-plan.md` § 10 and § 13).
      `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (done,
      #249); **U-4** in-app input injection (done, #250); **U-5**
-     snapshot tests on lavapipe (in review, #PRNUM). **U-3b** `panel.*` operations (cut from U-3; replaces the
+     snapshot tests on lavapipe (in review, #251). **U-3b** `panel.*` operations (cut from U-3; replaces the
      four panel VM built-ins) before 4b-2.
   6. **4b-2** groups panel (on the new registry).
   7. **U-6** CLI + MCP server.
