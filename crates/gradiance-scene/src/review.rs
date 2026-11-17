@@ -514,7 +514,7 @@ mod tests {
         for entry in &archive.entries {
             entry.question.validate().unwrap();
             assert_eq!(entry.answer.question, entry.question.id);
-            assert!(!entry.ingested_as.trim().is_empty());
+            assert_ne!(entry.ingested_as.trim(), "");
         }
     }
 
