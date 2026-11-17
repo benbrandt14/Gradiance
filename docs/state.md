@@ -2,8 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (after D-0 #240, the plan revision #239 and review
-decisions #241; order per `docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-17 (after U-1 #243; U-2 split into U-2a and U-2b;
+order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -11,18 +11,21 @@ decisions #241; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-1** operation registry (`gradiance-op`) is in its PR. **D-1**
-  merged (#242): Bevy 0.20.1, avian2d 0.8.0, bevy_egui 0.43.1 / egui 0.36.
+- **Now:** **U-2a** edit operations, menus and the key link table on the
+  registry (`docs/briefs/U-2a-edit-ops-menus-keys.md`). **U-1** merged
+  (#243): `gradiance-op`, five operations, the conformance tests.
 - **4b-1 was not in flight:** GitHub had no branch and no PR for it on
   2026-11-17. It moved to step 4; its verbs are written once, on the
   registry (`docs/review/archive.ron`, `order-4b-1`).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
-  2. **U-1** `gradiance-op`: one declaration per operation (in its PR;
-     five operations; the Outcome lists U-2's migration list).
-  3. **U-2** migrate all verbs, menus and the key link table onto the
-     registry (brief at U-1 handoff).
+  2. **U-1** `gradiance-op`: one declaration per operation (done, #243;
+     the Outcome lists the migration list).
+  3. **U-2a** the 22 edit verbs, the menus and the key link table;
+     then **U-2b** queries, config, editor verbs, deletion of the old
+     paths, generated `docs/ops.md`. (Split 2026-11-17: one PR for all of
+     U-2 exceeds one worker's coherence budget.)
   4. **4b-1** group op surface, on the registry (adds `set-color`, which
      fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;

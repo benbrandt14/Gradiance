@@ -1,7 +1,7 @@
 # One declaration per operation: the `gradiance-op` registry
 Phase U · `docs/unified-surface-plan.md` § 3 ("MCP, the command line, the UI,
 the Steel Lisp dialect and the procedural graph are one integrated system …
-that cannot become misaligned from itself", owner 2026-11-17) · status: done (PR: see `docs/state.md`)
+that cannot become misaligned from itself", owner 2026-11-17) · status: done (#243)
 
 ## Goal
 
