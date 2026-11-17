@@ -82,21 +82,6 @@ impl SceneSnapshot {
         self.bodies.len() as f64
     }
 
-    /// X of the `i`-th body, or NaN if out of range.
-    pub fn x(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.x))
-    }
-
-    /// Y of the `i`-th body, or NaN if out of range.
-    pub fn y(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.y))
-    }
-
-    /// Rotation (radians) of the `i`-th body, or NaN if out of range.
-    pub fn rot(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.rot))
-    }
-
     /// The body with this id.
     pub fn get(&self, id: StableId) -> Option<&BodySnapshot> {
         self.bodies.iter().find(|b| b.id == id)
@@ -107,21 +92,6 @@ impl SceneSnapshot {
         self.bodies.get(i).map(|b| b.id)
     }
 
-    /// Identity **and pose** of the `i`-th body. Joint anchors are authored in
-    /// each body's *local* space, so a verb that places one needs the pose to
-    /// convert, exactly as the connector tool does.
-    pub fn body(&self, i: usize) -> Option<(StableId, PosRot)> {
-        self.bodies.get(i).map(|b| {
-            (
-                b.id,
-                PosRot {
-                    pos: b.pos,
-                    rot: b.rot,
-                },
-            )
-        })
-    }
-
     /// Number of authored joints.
     pub fn joint_count(&self) -> f64 {
         self.joints.len() as f64
@@ -130,11 +100,6 @@ impl SceneSnapshot {
     /// Identity of the `i`-th joint.
     pub fn joint_id(&self, i: usize) -> Option<StableId> {
         self.joints.get(i).copied()
-    }
-
-    /// The authored physics of the `i`-th body.
-    pub fn physics(&self, i: usize) -> Option<&BodyPhysics> {
-        self.bodies.get(i).map(|b| &b.physics)
     }
 
     /// How many bodies contain the world point `p`.
@@ -171,11 +136,6 @@ impl SceneSnapshot {
             .iter()
             .position(|b| b.contains(p))
             .map_or(-1.0, |i| i as f64)
-    }
-
-    /// How many bodies the `i`-th body is touching, or NaN if out of range.
-    pub fn touch_count(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| b.touching as f64)
     }
 }
 

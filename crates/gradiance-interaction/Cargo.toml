@@ -22,3 +22,4 @@ gradiance-units.workspace = true
 avian2d.workspace = true
 bevy.workspace = true
 leafwing-input-manager.workspace = true
+serde.workspace = true

@@ -369,7 +369,7 @@ fn fixture_ids(app: &mut App) -> (Vec<String>, String) {
 }
 
 /// Test 1b, the key and menu doorway: every row of the key link table names
-/// a registered operation and parses. With a fixture selection (bodies 0 and
+/// a registered operation. With a fixture selection (bodies 0 and
 /// 1, then joint 0), the row's invocation (what the key handler and the menu
 /// rows that repeat a key write) and the remote `id` form with the same
 /// params lower to the same output, and that output names exactly the
@@ -389,10 +389,8 @@ fn every_key_row_acts_on_the_selection_and_a_script_cannot() {
         let entry = registry
             .get(row.id)
             .unwrap_or_else(|| panic!("{:?}: `{}` is not registered", row.action, row.id));
-        let invocation = row
-            .invoke()
-            .unwrap_or_else(|| panic!("{:?}: params do not parse", row.action));
-        let names_selection = row.params.contains("\"selection\"");
+        let invocation = row.invoke();
+        let names_selection = invocation.params.to_string().contains("\"selection\"");
         let mut wrote = false;
         for (picked, selected_joint) in [(&[0_usize, 1][..], false), (&[][..], true)] {
             select(&mut app, picked, selected_joint);
@@ -469,8 +467,9 @@ fn every_key_row_acts_on_the_selection_and_a_script_cannot() {
 }
 
 /// Test 6, history: an edit with an undo label records exactly one step with
-/// that label; `edit.undo` removes one; a query records nothing; a config
-/// write records one settled step.
+/// that label; `edit.undo` removes one; a query records nothing; a
+/// scene-content config write records one settled step; workstation config
+/// and editor state record none.
 #[test]
 fn every_invocation_changes_history_by_its_declared_step() {
     for entry in entries(&fixture()) {
@@ -505,7 +504,330 @@ fn every_invocation_changes_history_by_its_declared_step() {
                     "{id}: the step moved between the stacks"
                 );
             }
-            (seam, None) => panic!("{id}: a {seam:?} operation must declare its undo label"),
+            // Workstation config (`camera.set`) and editor state
+            // (`action.register`, …) are never undo steps.
+            (Seam::Config | Seam::Editor, None) => {
+                assert_eq!(
+                    (after, redo_after),
+                    (before, redo_before),
+                    "{id}: declares no undo step but history moved"
+                );
+            }
         }
+    }
+}
+
+/// Where `crates/<crate>/src` files write an intent directly instead of
+/// invoking an operation, with the reason each is allowed (brief U-2b). A
+/// gesture commits one intent built from what the drag did, and an inspector
+/// field carries the old value it shows; neither is a named operation yet
+/// (U-3's widget registry). Each row is `(path under crates/, intent, why)`.
+const SIDE_DOOR_ALLOW: &[(&str, &str, &str)] = &[
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "SpawnBodyIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "SpawnNodeIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "CutIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "SpawnJointIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "CommitTransformIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "ScaleIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "DuplicateIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "ArrayIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "MergeIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "PropertyEditIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/tools/context.rs",
+        "SpawnRodIntent",
+        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
+    ),
+    (
+        "gradiance-interaction/src/joint_edit.rs",
+        "PropertyEditIntent",
+        "gesture: a joint anchor or limit handle drag commits one edit on release",
+    ),
+    (
+        "gradiance-interaction/src/pack.rs",
+        "CommitTransformIntent",
+        "gesture: a finished packing run commits one transform of the selection",
+    ),
+    (
+        "gradiance-ui/src/inspector.rs",
+        "PropertyEditIntent",
+        "inspector fields: each carries the old value it shows (U-3)",
+    ),
+    (
+        "gradiance-ui/src/joint_inspector.rs",
+        "PropertyEditIntent",
+        "inspector fields: the joint's limits, motor and flags (U-3)",
+    ),
+    (
+        "gradiance-ui/src/depth_panel.rs",
+        "PropertyEditIntent",
+        "inspector fields and a band drag in the depth plan view (U-3)",
+    ),
+    (
+        "gradiance-ui/src/signals.rs",
+        "PropertyEditIntent",
+        "inspector fields: a node's signal bindings in the signal list (U-3)",
+    ),
+    (
+        "gradiance-ui/src/bottom_dock.rs",
+        "PropertyEditIntent",
+        "inspector fields: node edits from the node-graph pane (U-3)",
+    ),
+    (
+        "gradiance-ui/src/context_menu.rs",
+        "PropertyEditIntent",
+        "inspector fields: the embedded inspector sections, the node-kind editor, \
+         the joint collide checkbox (U-3)",
+    ),
+    (
+        "gradiance-ui/src/context_menu.rs",
+        "CommitTransformIntent",
+        "Align & distribute: one transform commit computed from bounds; no operation fits",
+    ),
+];
+
+/// Every `(path under crates/, intent)` where `gradiance-ui` or
+/// `gradiance-interaction` declares a writer of an intent: a
+/// `MessageWriter<…Intent>` or a `Messages<…Intent>` (the resource a direct
+/// `write_message` would go through). Comment lines are skipped.
+fn intent_writers() -> Vec<(String, String)> {
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("crates");
+    let mut found = Vec::new();
+    for krate in ["gradiance-ui", "gradiance-interaction"] {
+        let mut stack = vec![crates.join(krate).join("src")];
+        while let Some(path) = stack.pop() {
+            for item in std::fs::read_dir(&path).unwrap_or_else(|e| panic!("{e}")) {
+                let path = item.unwrap_or_else(|e| panic!("{e}")).path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                let code: String = text
+                    .lines()
+                    .filter(|line| !line.trim_start().starts_with("//"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let rel = path
+                    .strip_prefix(&crates)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                for intent in written_intents(&code) {
+                    let row = (rel.clone(), intent);
+                    if !found.contains(&row) {
+                        found.push(row);
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
+/// The intent types `code` declares a writer of.
+fn written_intents(code: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for opener in ["MessageWriter<", "Messages<"] {
+        for (at, _) in code.match_indices(opener) {
+            // The generic argument, up to its matching `>`.
+            let rest = &code[at + opener.len()..];
+            let mut depth = 1;
+            let end = rest
+                .char_indices()
+                .find_map(|(i, c)| {
+                    match c {
+                        '<' => depth += 1,
+                        '>' => depth -= 1,
+                        _ => {}
+                    }
+                    (depth == 0).then_some(i)
+                })
+                .unwrap_or(rest.len());
+            // `'w, path::to::Type` → `Type`.
+            let ty: String = rest[..end].chars().filter(|c| !c.is_whitespace()).collect();
+            let ty = ty.rsplit(',').next().unwrap_or_default();
+            let name = ty.rsplit("::").next().unwrap_or_default();
+            if name.ends_with("Intent") {
+                out.push(name.to_owned());
+            }
+        }
+    }
+    out
+}
+
+/// Test 3, no side doors (plan § 3.5): `gradiance-ui` and
+/// `gradiance-interaction` declare an intent writer only where
+/// [`SIDE_DOOR_ALLOW`] lists it with a reason. Every other edit goes through
+/// `InvokeOp` and the registry. A row that no longer matches anything is an
+/// error too, so the list cannot rot.
+#[test]
+fn no_intent_writer_outside_the_allow_list() {
+    let found = intent_writers();
+    assert!(
+        found.iter().any(|(_, i)| i == "SpawnBodyIntent"),
+        "the scan found no tool writer: it is broken ({found:?})"
+    );
+    for (path, intent) in &found {
+        assert!(
+            SIDE_DOOR_ALLOW
+                .iter()
+                .any(|(p, i, _)| p == path && i == intent),
+            "{path} declares a writer of `{intent}`: invoke an operation \
+             (`InvokeOp`), or add an allow-list row with the reason"
+        );
+    }
+    for (path, intent, why) in SIDE_DOOR_ALLOW {
+        assert!(!why.is_empty(), "{path} {intent}: no reason given");
+        assert!(
+            found.iter().any(|(p, i)| p == path && i == intent),
+            "allow-list row {path} `{intent}` matches nothing: remove it"
+        );
+    }
+}
+
+/// The markdown `docs/ops.md` holds, generated from the registry and the VM
+/// built-ins.
+fn ops_markdown(registry: &OpRegistry) -> String {
+    use gradiance::script::registry::{BUILTINS, OpCategory};
+    use std::fmt::Write as _;
+    let cell = |text: &str| text.replace('|', "\\|");
+    let mut ops: Vec<&OpEntry> = registry.entries().iter().collect();
+    ops.sort_by_key(|e| e.meta.id);
+    let mut out = String::new();
+    let _ = write!(
+        out,
+        "# Operations\n\n\
+         <!-- Generated from the operation registry by `tests/it/op_conformance.rs` \
+         (`docs_ops_md_is_current`). Do not edit by hand: run \
+         `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->\n\n\
+         Every Lisp verb, remote call, menu row and key edit is one of these {} \
+         operations, declared once in the layer that owns it (`gradiance-op`; the \
+         recipe is in `docs/scripting.md`), or one of the {} VM built-ins at the \
+         end. Remote: `gradiance.op {{\"id\", \"params\"}}` takes the id and the \
+         named params; `{{\"name\", \"args\"}}` takes the Lisp name and the \
+         params in call order.\n\n\
+         Seams: **edit** lowers to an undoable intent; **config** writes a \
+         settings resource; **query** returns a value and writes nothing; \
+         **editor** writes non-authored editor state. A query's NaN (\"nothing \
+         there\") is `null` over remote.\n",
+        ops.len(),
+        BUILTINS.len(),
+    );
+    let mut namespace = "";
+    for entry in ops {
+        let meta = entry.meta;
+        let ns = meta.id.split_once('.').map_or(meta.id, |(ns, _)| ns);
+        if ns != namespace {
+            namespace = ns;
+            let _ = write!(
+                out,
+                "\n## `{ns}`\n\n\
+                 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |\n\
+                 |---|---|---|---|---|---|---|\n"
+            );
+        }
+        let surface: Vec<&str> = [meta.menu, meta.chord].into_iter().flatten().collect();
+        let _ = writeln!(
+            out,
+            "| `{}` | `{}` | {} | {} | {} | {} | `{}` |",
+            meta.id,
+            entry.signature(),
+            OpCategory::from(meta.seam).label(),
+            meta.undo.map_or("—".to_owned(), |u| format!("`{u}`")),
+            if surface.is_empty() {
+                "—".to_owned()
+            } else {
+                cell(&surface.join(", "))
+            },
+            cell(meta.doc),
+            cell(meta.example),
+        );
+    }
+    out.push_str(
+        "\n## VM built-ins\n\n\
+         These exist only inside a script run and are not registry operations.\n\n\
+         | Lisp call | Seam | Doc | Why not an operation |\n\
+         |---|---|---|---|\n",
+    );
+    for builtin in BUILTINS {
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {} | {} |",
+            builtin.signature,
+            builtin.category.label(),
+            cell(builtin.doc),
+            cell(builtin.why),
+        );
+    }
+    out
+}
+
+/// Test 5, generated docs are current: `docs/ops.md` equals the generator's
+/// output for the full app's registry.
+#[test]
+fn docs_ops_md_is_current() {
+    let app = fixture();
+    let generated = ops_markdown(app.world().resource::<OpRegistry>());
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/ops.md");
+    if std::env::var_os("UPDATE_OPS_DOC").is_some() {
+        std::fs::write(&path, &generated).unwrap_or_else(|e| panic!("{e}"));
+        return;
+    }
+    let on_disk = std::fs::read_to_string(&path).unwrap_or_default();
+    if on_disk != generated {
+        let line = on_disk
+            .lines()
+            .zip(generated.lines())
+            .position(|(a, b)| a != b)
+            .unwrap_or_else(|| on_disk.lines().count().min(generated.lines().count()));
+        panic!(
+            "docs/ops.md is stale (first difference at line {}): run \
+             `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`\n\
+             on disk:   {:?}\ngenerated: {:?}",
+            line + 1,
+            on_disk.lines().nth(line),
+            generated.lines().nth(line),
+        );
     }
 }

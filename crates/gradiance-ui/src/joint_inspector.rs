@@ -11,7 +11,7 @@ use crate::widgets;
 use crate::widgets::{Commit, precise_drag_unit};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use gradiance_command::intent::{DeleteJointIntent, PropertyEditIntent};
+use gradiance_command::intent::PropertyEditIntent;
 use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
@@ -22,6 +22,7 @@ use gradiance_domain::joint::{
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::SignalBindings;
 use gradiance_interaction::selection::SelectedJoint;
+use gradiance_op::{InvokeOp, json};
 use gradiance_physics::queries::PhysicsQueries;
 use gradiance_units::{Angle, Length};
 use gradiance_units::{Dimension, Force};
@@ -43,7 +44,7 @@ pub fn joint_inspector(
     fixed: Res<Time<Fixed>>,
     mut bindings: ResMut<SignalBindings>,
     mut edits: MessageWriter<PropertyEditIntent>,
-    mut deletes: MessageWriter<DeleteJointIntent>,
+    mut invoke: MessageWriter<InvokeOp>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let Some(entity) = selected.0 else {
@@ -109,7 +110,10 @@ pub fn joint_inspector(
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
-                deletes.write(DeleteJointIntent { id });
+                invoke.write(InvokeOp::with(
+                    "joint.delete",
+                    json!({ "i": id.0.to_string() }),
+                ));
             }
         });
 

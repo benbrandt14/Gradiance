@@ -4003,6 +4003,7 @@ dependencies = [
  "gradiance-scene",
  "gradiance-units",
  "leafwing-input-manager",
+ "serde",
 ]
 
 [[package]]
@@ -4103,6 +4104,7 @@ dependencies = [
  "gradiance-scene",
  "gradiance-signal",
  "gradiance-units",
+ "serde",
  "serde_json",
  "steel-core",
  "thiserror 2.0.18",

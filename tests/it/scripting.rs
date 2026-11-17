@@ -1568,3 +1568,53 @@ fn the_builtin_gravity_actions_round_trip() {
         "restoring gravity was one undo step"
     );
 }
+
+// --- Camera feel (interaction's `camera.get` / `camera.set`, brief U-2b) ---
+
+/// `camera-get`/`camera-set` read and write `CameraSettings` through the
+/// config seam: no undo step, the sim settings untouched, and a bad path is
+/// a visible error naming the verb.
+#[test]
+fn camera_verbs_read_and_write_camera_settings() {
+    use gradiance::domain::settings::CameraSettings;
+    let mut app = paused_app();
+    let undo_before = app
+        .world()
+        .resource::<gradiance::command::HistoryInfo>()
+        .undo_depth;
+    run(
+        &mut app,
+        "(camera-set \"zoom_step\" (- (camera-get \"zoom_step\") 0.04))",
+    );
+    step(&mut app, 3);
+    let camera = app.world().resource::<CameraSettings>();
+    assert!((camera.zoom_step - 0.90).abs() < 1e-6, "{camera:?}");
+    assert_eq!(
+        *app.world().resource::<SimSettings>(),
+        SimSettings::default()
+    );
+    assert_eq!(
+        app.world()
+            .resource::<gradiance::command::HistoryInfo>()
+            .undo_depth,
+        undo_before,
+        "workstation config records no undo step"
+    );
+
+    run(&mut app, "(camera-set \"no_such_field\" 1)");
+    let (ok, output) = last_entry(&app).expect("logged");
+    assert!(!ok && output.contains("camera-set"), "{output}");
+}
+
+/// A query of something that is not there reads NaN in Lisp, as before the
+/// queries became registry operations (JSON carries it as `null`).
+#[test]
+fn a_query_of_a_missing_body_reads_nan() {
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(if (and (nan? (body-x 3)) (nan? (body-friction 0)) \
+                  (nan? (sim-get \"no.such\")) (nan? (signal-get \"unset\"))) 1 0)",
+    );
+    assert_eq!(last_entry(&app), Some((true, "1".to_string())));
+}

@@ -13,7 +13,6 @@ use bevy::app::AppExit;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use gradiance_command::intent::LoadSceneIntent;
 use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::settings::GridSettings;
@@ -22,7 +21,6 @@ use gradiance_interaction::selection::Selection;
 use gradiance_op::InvokeOp;
 use gradiance_persist::{LoadSceneRequest, SaveSceneRequest, SnapshotRequest};
 use gradiance_scene::FORMAT_VERSION;
-use gradiance_scene::{EnvironmentRecord, SceneRecord};
 
 /// The About dialog's visibility (Help ▸ About).
 #[derive(Resource, Default)]
@@ -69,25 +67,12 @@ pub struct MenuWriters<'w> {
     /// Edit rows invoke registry operations by id (`gradiance-op`); a
     /// conformance test checks every id resolves. The rows that repeat a key
     /// write that key's invocations ([`key_invocations`]), so the two cannot
-    /// differ. File ▸ New's scene replacement is not an operation yet (U-2b).
+    /// differ.
     invoke: MessageWriter<'w, InvokeOp>,
-    load_scene: MessageWriter<'w, LoadSceneIntent>,
     save: MessageWriter<'w, SaveSceneRequest>,
     load: MessageWriter<'w, LoadSceneRequest>,
     snapshot: MessageWriter<'w, SnapshotRequest>,
     exit: MessageWriter<'w, AppExit>,
-}
-
-/// An empty scene (the File ▸ New target) — the current format, no content.
-fn empty_scene() -> SceneRecord {
-    SceneRecord {
-        version: FORMAT_VERSION,
-        app_version: String::new(),
-        bodies: Vec::new(),
-        joints: Vec::new(),
-        nodes: Vec::new(),
-        environment: EnvironmentRecord::default(),
-    }
 }
 
 /// Renders the top menu bar and its About dialog.
@@ -143,9 +128,7 @@ pub fn menu_bar(
 fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
     ui.menu_button("File", |ui| {
         if ui.button("New scene").clicked() {
-            writers.load_scene.write(LoadSceneIntent {
-                scene: empty_scene(),
-            });
+            writers.invoke.write(InvokeOp::new("scene.new"));
             ui.close();
         }
         if ui.button("Open…").clicked() {
