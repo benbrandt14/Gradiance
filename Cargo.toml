@@ -186,7 +186,7 @@ serde_json.workspace = true
 # The integration suite drives the whole app, egui panels included.
 bevy_egui.workspace = true
 proptest.workspace = true
-egui_kittest.workspace = true
+egui_kittest = { workspace = true, features = ["snapshot", "wgpu"] }
 uuid.workspace = true
 
 # Enable a small amount of optimization in debug mode for our code,

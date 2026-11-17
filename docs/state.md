@@ -2,8 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (U-4 worker handoff, PR in review; U-3 merged
-as #249, 97abe8f; order per `docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-17 (U-5 worker handoff, PR in review; U-4 merged
+as #250, 38541ff; order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -11,16 +11,18 @@ as #249, 97abe8f; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-4 in review** (PR #250, branch
-  `claude/project-thread-dydbi0`): in-app input injection by widget name,
-  `ui.click/drag/key/text/wheel` as `ui`-layer operations writing Bevy input
-  messages (`ui::host::input`); `tools/screenshot/session.sh` drives the app
-  over `--remote` and no longer uses `xdotool`/`xwd`. Orchestrator: read the
-  brief's Outcome (8 decisions; SolidCraft's injection rules ported as rules,
-  VectorCraft and craft-libs unreachable), merge when CI is green. U-3
-  merged as #249 (97abe8f). **Next: U-5** (snapshot tests on lavapipe),
-  with **U-3b** panel ops before 4b-2. Workers run on Opus while Fable lacks
-  usage credits (owner, 2026-11-17).
+- **Now:** **U-5 in review** (PR #PRNUM, branch
+  `claude/project-thread-dydbi0`): image snapshot tests of five egui leaf
+  renderers on lavapipe (`tests/it/ui_snapshots.rs`, PNGs in
+  `tests/snapshots/ui/`, update with `UPDATE_SNAPSHOTS=1 cargo test --test
+  it ui_snapshots`); CI installs `mesa-vulkan-drivers` and sets
+  `GRADIANCE_REQUIRE_GPU=1` (a missing adapter fails). Orchestrator: read
+  the brief's Outcome (8 decisions; craft-libs still unreachable, harness
+  native; `Cargo.lock` gains 13 entries), merge when CI is green. U-4
+  merged as #250 (38541ff). **Next: U-3b** panel ops, then **4b-2**.
+  Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
+  tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
+  Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
@@ -32,8 +34,8 @@ as #249, 97abe8f; order per `docs/unified-surface-plan.md` § 10 and § 13).
   4. **4b-1** group op surface, on the registry (done, #248; adds
      `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (done,
-     #249); **U-4** in-app input injection (in review, #250); **U-5**
-     snapshot tests on lavapipe. **U-3b** `panel.*` operations (cut from U-3; replaces the
+     #249); **U-4** in-app input injection (done, #250); **U-5**
+     snapshot tests on lavapipe (in review, #PRNUM). **U-3b** `panel.*` operations (cut from U-3; replaces the
      four panel VM built-ins) before 4b-2.
   6. **4b-2** groups panel (on the new registry).
   7. **U-6** CLI + MCP server.

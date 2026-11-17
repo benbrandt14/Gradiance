@@ -59,3 +59,27 @@ Things learned the hard way:
 - **Physics runs slow** at software-rendering frame rates; wait longer than you
   think for motion to settle, and compare two grabs to see whether anything is
   still moving (`compare -metric AE a.png b.png diff.png`, ImageMagick).
+
+## Snapshot tests (no Xvfb)
+
+`tests/it/ui_snapshots.rs` (brief U-5) renders a few egui panels with
+`egui_kittest` on a wgpu adapter (lavapipe here, as in CI) and compares them
+with the PNGs in `tests/snapshots/ui/`. They need `mesa-vulkan-drivers`
+and `libvulkan1`, not Xvfb or the app.
+
+```sh
+cargo test --test it ui_snapshots                     # compare
+UPDATE_SNAPSHOTS=1 cargo test --test it ui_snapshots  # rewrite after an intended change
+```
+
+- **Tolerance:** a pixel counts as changed past a YIQ distance of 0.6
+  (`egui_kittest`'s default); a snapshot fails when more than 20 pixels
+  change. Changing which tool is highlighted moves 1585 pixels.
+- **On failure** `<name>.new.png` and `<name>.diff.png` appear next to the
+  committed file (git-ignored); CI uploads them as the `ui-snapshot-diffs`
+  artifact.
+- **No adapter:** the tests print why and pass, unless
+  `GRADIANCE_REQUIRE_GPU=1` (CI sets it), which fails them.
+- Committed snapshots are fixed-size (1 pixel per point) and a few KB each;
+  review their diff like code.
+

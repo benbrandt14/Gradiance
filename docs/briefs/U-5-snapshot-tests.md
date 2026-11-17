@@ -1,6 +1,6 @@
 # Image snapshot tests of the editor UI on lavapipe
 Phase U · `docs/unified-surface-plan.md` § 10 row 6 ("**U-5** snapshot
-tests") and § 8 tier T1, snapshot half · status: in work
+tests") and § 8 tier T1, snapshot half · status: in review
 
 Written by the worker (owner ruling "scoped work", `docs/state.md`: a
 session may write the brief when the work is in the plan).
@@ -109,4 +109,76 @@ change to the app.
 
 ## Outcome
 
-(filled at handoff)
+**Landed (worker, 2026-11-17), PR in review.** `tests/it/ui_snapshots.rs`:
+five image snapshots plus one pure test of the GPU gate. Each snapshot draws
+a leaf renderer in a central panel at a fixed size, 1 pixel per point, dark
+theme, `fonts::install`, on `egui_kittest`'s wgpu renderer (it prefers a CPU
+adapter: lavapipe). Committed PNGs in `tests/snapshots/ui/` (73 KB in all):
+
+| Snapshot | Size (px) | PNG |
+|---|---|---|
+| `tool_palette` (Box selected, text fallback) | 120x330 | 16 KB |
+| `settings_grid` (`SimSettings` reflect grid) | 260x140 | 9 KB |
+| `curve_editor` (default curve) | 300x220 | 14 KB |
+| `plot_pane` (one sine series, fixed data) | 360x240 | 25 KB |
+| `glyph_sheet` (`glyph::ALL`, proportional and monospace) | 420x64 | 8 KB |
+
+**Porting decision: native, rule ported.** craft-libs (`Screens`) is still
+unreachable (credentials asked). SolidCraft `e424409` has no snapshot
+harness in code, only the `SOLIDCRAFT_REQUIRE_GPU` rule in its docs; that
+rule is ported as a rule (`GRADIANCE_REQUIRE_GPU`), cited in the test's
+module docs and `docs/upstream-watch.md`. Nothing added to
+`vendor/UPSTREAM.toml` (it lists ported files only).
+
+**Decisions (non-interactive, owner ruling 2026-11-17):**
+
+1. *Where:* a module of the umbrella `tests/it` binary (one Bevy-sized
+   link), not `gradiance-ui` unit tests: the root dev-dependency is the one
+   that gains the features, and `tests/boundaries.rs` already exempts the
+   root manifest.
+2. *Gate:* the adapter is probed once per process by catching
+   `egui_kittest`'s panic (`create_render_state` panics with no adapter;
+   it exposes no fallible constructor). `GRADIANCE_REQUIRE_GPU=1`: a missing
+   adapter fails every snapshot test with the probe's reason; unset: the test
+   prints why and passes. Checked both ways locally by hiding the drivers
+   (`VK_ICD_FILENAMES=/nonexistent`, `__EGL_VENDOR_LIBRARY_FILENAMES=/nonexistent`).
+3. *GPU lock:* a process-wide `Mutex` held for the whole test (harness,
+   run, render, compare), poison ignored.
+4. *Tolerance:* per-pixel YIQ threshold 0.6 (upstream default), at most 20
+   failing pixels per snapshot. Measured: moving the palette highlight from
+   Box to Circle fails 1585 pixels at every threshold 0.0-10.0; four
+   repeated runs on lavapipe were identical.
+5. *Output path* from `CARGO_MANIFEST_DIR`, not the working directory.
+   By-products (`*.new.png`, `*.diff.png`, `*.old.png`) are git-ignored; CI
+   uploads them as the `ui-snapshot-diffs` artifact when Test fails.
+6. *CI:* `mesa-vulkan-drivers libvulkan1` installed in the `ci` and
+   `coverage` jobs; `GRADIANCE_REQUIRE_GPU=1` at workflow level (both run the
+   tests).
+7. *No full-app snapshot.* A Bevy-render snapshot through `ui.screenshot`
+   needs the windowed app under Xvfb inside a test (start-up, render settle,
+   readback; tens of seconds on lavapipe) and a different tolerance; not
+   cheap enough for one test here. `tools/screenshot/session.sh` covers it
+   ad hoc; a later brief can pin a scene.
+8. *Dependency:* root dev-dependency `egui_kittest` gains `snapshot` and
+   `wgpu` (pin unchanged). `Cargo.lock`: 13 new entries (`egui-wgpu`,
+   `dify`, `pollster`, `open`, `type-map`, `colored`, `getopts`, `is-docker`,
+   `is-wsl`, `objc2-ui-kit`, `wgpu-core-deps-emscripten`; `eframe` and
+   `egui-winit` are lockfile-only, not built). wgpu stays 30.0.0; its
+   features gain `gles` and `std`, so test builds rebuild the Bevy render
+   crates once (7 min 52 s cold here, the `it` binary included) and keep a
+   second copy beside `cargo build --bin gradiance`'s (its size was not
+   measured apart from the rebuilt workspace crates).
+
+**Checked locally** (rustc 1.100.0, mesa 25.2.8 lavapipe):
+`cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --
+-D warnings`; `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+--lib`; `cargo test --test boundaries` (8);
+`GRADIANCE_REQUIRE_GPU=1 cargo test --test it -- ui_` (24, the snapshots
+included).
+
+**Not checked:** the full `cargo test --workspace` (CI); whether CI's
+lavapipe matches the container's pixels (first CI run, see the PR);
+HiDPI (snapshots are 1 pixel per point); the light theme; whole
+Bevy-system panels (they need an app with an egui pass).
+
+**Deviations from the brief:** none.

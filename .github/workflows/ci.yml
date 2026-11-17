@@ -15,6 +15,11 @@ env:
   # The CI toolchain. See the comment on the `ci` job's toolchain step.
   # Keep equal to `rust-toolchain.toml` (asserted by tests/boundaries.rs).
   RUST_PIN: "1.100.0"
+  # The UI snapshot tests (tests/it/ui_snapshots.rs, brief U-5) render on a
+  # wgpu adapter: Mesa's lavapipe (CPU Vulkan), installed below. With this
+  # set, a missing adapter fails them instead of skipping them, so a broken
+  # driver install cannot turn the visual gate silently green.
+  GRADIANCE_REQUIRE_GPU: "1"
 
 # Lint policy: clippy::pedantic runs at *warn* (Cargo.toml), and `-D warnings`
 # below promotes every warning — pedantic included — to an error. That is
@@ -43,7 +48,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld mesa-vulkan-drivers libvulkan1
 
       # Pinned, like Cargo.lock: `pedantic` is warn-level and clippy runs
       # with `-D warnings`, so on `@stable` every Rust release that adds a
@@ -159,6 +164,20 @@ jobs:
           echo "::error::tail: $(tail -n 15 test.txt | tr '\n' '|' | cut -c1-1500)"
           exit 0
 
+      - name: Upload UI snapshot diffs
+        # A failed snapshot test leaves `<name>.new.png` (this run's frame)
+        # and `<name>.diff.png` next to the committed PNG
+        # (tests/it/ui_snapshots.rs); keep them to see what moved.
+        if: failure() && steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshot-diffs
+          path: |
+            tests/snapshots/**/*.new.png
+            tests/snapshots/**/*.diff.png
+          if-no-files-found: ignore
+          retention-days: 14
+
   coverage:
     # Instrumented builds are too heavy for agent containers (see
     # docs/workspace-plan.md § coverage baseline) — CI owns coverage.
@@ -173,7 +192,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config libwayland-dev libxkbcommon-dev clang lld mesa-vulkan-drivers libvulkan1
 
       - uses: dtolnay/rust-toolchain@master
         with:

@@ -263,6 +263,13 @@ break:
   renderers and queries the accessibility tree, which catches reflow and
   missing-label regressions. A panel that only exists as a Bevy system is
   covered by its intent-level tests instead.
+- **Looks, on lavapipe** — `tests/it/ui_snapshots.rs` (brief U-5) renders a
+  few leaf renderers (tool palette, settings grid, curve editor, plot pane,
+  glyph sheet) with the editor's fonts on a CPU Vulkan adapter and compares
+  each with a PNG in `tests/snapshots/ui/`. A brief that changes how chrome
+  looks regenerates them (`UPDATE_SNAPSHOTS=1 cargo test --test it
+  ui_snapshots`) and its reviewer reads the PNG diff. Add a snapshot when a
+  new leaf renderer carries a look worth pinning; keep them few and small.
 
 ### The node canvas has no persistence
 
