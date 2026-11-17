@@ -35,6 +35,10 @@ default scene and the main panels look the same.
 | `steel-core` | `=0.8.2` | `=0.8.3` | patch |
 | `glam` | `0.32` | must match Bevy: `bevy_math` 0.20.1 uses `^0.33.2` | |
 
+- *Verified on crates.io, 2026-11-17 (second check):* every target version
+  in the table exists; `bevy` 0.20.1 declares `rust_version` 1.97.1. Newer
+  releases exist for `egui_tiles` (0.18.0), `egui_plot` (0.38.0) and
+  `egui_kittest` (0.37.0); they need egui 0.37, so do not take them.
 - bevy_egui `main` (0.43.2) is still on egui 0.36. **egui 0.37 is not
   reachable** with a released bevy_egui. Do not fork or git-patch it (D-2
   waits for a release).
@@ -49,13 +53,22 @@ default scene and the main panels look the same.
 
 ## Approach
 
-1. Bump all rows of the table in one commit; then fix the build crate by
-   crate, bottom of the DAG first (`cargo check -p <crate>`).
+0. **Baseline first, on `main`, before any bump:** save the
+   `cargo test --workspace` summary and the four screenshots of step 4. The
+   "after" state is compared with these, not with memory.
+1. Bump `steel-core` in its own commit (it does not depend on Bevy), and run
+   `cargo test -p gradiance-script`. Then bump all other rows of the table in
+   one commit and fix the build crate by crate, bottom of the DAG first
+   (`cargo check -p <crate>`).
 2. Read each upstream migration guide (Bevy 0.19→0.20, avian 0.8,
    bevy_egui 0.42 and 0.43, egui 0.36) and record the changes that bit this
    codebase in `docs/bevy20-notes.md`, in the shape of `bevy19-notes.md`.
 3. Keep behaviour: no feature work, no API redesign. Where an upstream API
-   moved, make the smallest change and note it.
+   moved, make the smallest change and note it. avian2d 0.8 can move numeric
+   results: if a test threshold or a golden value must change, record the old
+   value, the new value and the cause in the Outcome. Do not remove, skip or
+   loosen a test without that record (owner ruling: merge only when no test
+   was removed to get green).
 4. Visual check on lavapipe: default scene, inspector, node graph, settings,
    before and after. Describe them in the PR (owner rulings: images used by
    a test or review question may be committed; ad-hoc ones stay out).
@@ -73,8 +86,8 @@ feature, removing leafwing (U-2 decides that), retained items in
 - fmt, clippy, doc and `cargo test --workspace` pass; CI is green.
 - `docs/bevy20-notes.md` exists; `CLAUDE.md` and `docs/state.md` name the new
   versions; `bevy19-notes.md` is deleted or marked as history.
-- The Outcome lists each breaking change met, and whether the format version
-  moved.
+- The Outcome lists each breaking change met, each changed test threshold
+  (old, new, cause), and whether the format version moved.
 
 ## Outcome
 
