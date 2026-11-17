@@ -61,7 +61,7 @@ mimalloc = "0.1"
 # holds — the steel VM runs only on the authoring (cold) path, never in the
 # per-frame loop (continuous drivers lower to `gradiance-kernel`); see
 # docs/script-lisp-decision.md. Confined to `crates/gradiance-script`.
-steel-core = "=0.8.2"
+steel-core = "=0.8.3"
 colorgrad = { version = "0.8.0", features = ["preset"] }
 
 # Test-only
