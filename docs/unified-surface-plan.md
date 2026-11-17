@@ -404,9 +404,8 @@ them for free, and review mode (4b-0) can script its scenes with them.
 - **Two tiers.** Steel never runs in the frame loop; the graph evaluates in
   compiled Rust.
 - **Other agents.** One worker at a time (`docs/state.md`). 4b-0 merged
-  (#238). 4b-1 (group op surface) was already in flight when this order was
-  set, so it lands first and **U-2 migrates its verbs** (`set-color`, the
-  group verbs) onto the registry.
+  (#238). 4b-1 (group op surface) runs after U-2 and writes its verbs
+  (`set-color`, the group verbs) on the registry (§ 13.8).
 - **Exact pins and `--locked`.** Each upgrade is its own reviewed brief with
   the lockfile diff.
 
@@ -419,11 +418,12 @@ gives the reason for its place.
 
 | # | Item | Why here |
 |---|---|---|
-| 1 | **4b-1** group op surface (in flight; 4b-0 merged as #238) | Already running; do not disturb it. |
+| 1 | *(was 4b-1; moved to row 5b on 2026-11-17, § 13.8)* | |
 | 2 | **D-0** toolchain 1.97.0 → 1.100.0 | Bevy 0.20 requires rustc ≥ 1.97.1 (crates.io `rust_version`). Clears the lint debt in `orchestration.md` § Recurring. |
 | 3 | **D-1** Bevy 0.20 stack (§ 4) | Touches every crate; do it once, before code that U-briefs write. |
 | 4 | **U-1** `gradiance-op` + 3 operations + conformance tests | The foundation all later surfaces project from. |
 | 5 | **U-2** migrate the rest (4b-1's verbs included); delete `OpSpec` strings, `EditBinding`, Scheme lowering, direct menu intents | Before 4b-2 builds a panel over the group verbs, so the panel is a projection of the registry. |
+| 5b | **4b-1** group op surface, written on the registry | It was not in work (no branch, no PR). Its verbs are written once instead of written and then migrated. |
 | 6 | **U-3** widget registry, `ui.inspect`, `ui.screenshot`; **U-4** input injection; **U-5** snapshot tests | Every later visual brief (4b-2, 4b-3, U-7..U-11) is then checkable in a container without `xdotool`. |
 | 7 | **4b-2** groups panel | Owner's 4b direction, now on the registry. |
 | 8 | **U-6** CLI + MCP server | Thin once U-2..U-4 exist; gives the owner an MCP door before the polish phase. |
@@ -474,7 +474,7 @@ its facts depend on that outcome (scoped-work ruling, `docs/state.md`).
 
 Made after a read of `registry.rs`, `bridge.rs`, `remote.rs`, `dispatch.rs`
 and `input.rs` on `main` `47bcfc9`. Each item changes one design point; the
-order (§ 10) does not change.
+order (§ 10) changes in one place (§ 13.8).
 
 ### 13.1 One trait for four categories: `OpOutput`
 
@@ -551,4 +551,13 @@ user is a listed code smell).
   requirements, not syntax.
 - Whether serde decodes the `gradiance-units` quantity newtypes from the JSON
   shapes a client would write (`[0, 1]` for a `Vec2` quantity). U-1 checks it.
-- Whether brief 4b-1 is in work: GitHub shows no branch and no PR for it.
+- Whether brief 4b-1 is in work on a machine that has not pushed: GitHub
+  shows no branch and no PR for it. § 13.8 assumes that it is not.
+
+### 13.8 Decisions made by the session (owner: "best estimates")
+
+The owner ruled on 2026-11-17 that non-interactive decisions stay with the
+session. Six are recorded in `docs/review/archive.ron`: § 13.1 to § 13.4 as
+written above, `rust-toolchain.toml` kept (D-0), and **4b-1 moved after
+U-2**. Cost of the move: review scenes keep re-rolled colours until
+`set-color` exists. U-2's migration list no longer holds 4b-1's verbs.
