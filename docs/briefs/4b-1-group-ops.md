@@ -4,7 +4,7 @@ workflow (in the form of groups) is clear and efficient. It should be simple
 to quickly edit the parameters of a given group (ie color, but could be
 anything) or to distribute them in certain bounds. There should be various
 filtering to select among groups or create/decompose groups to suit this
-workflow." · status: ready
+workflow." · status: in review
 
 ## Goal
 
@@ -124,4 +124,72 @@ palette redesign (4b-3), `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+Landed in PR #248 (worker, 2026-11-17). Every item of the Goal and every
+Done-when test; no split was needed.
+
+**What landed**
+
+- **Data.** `domain::group::GroupNames` (`BTreeMap<u32, String>`), a
+  scene-content resource in the `scene_content!` list, so it is saved and
+  restored by undo with no new path. `domain::group::GroupIndex` is the pure
+  read view (groups in id order, members, parent). `SceneSnapshot` now
+  carries each body's `Appearance`, `DepthBand`, group stack and full
+  `BodyPhysics` (gravity scale, sensor, rotation lock), the joint links
+  and the group names.
+- **Pure functions.** `domain::distribute` (`Linear` by sort key, seeded
+  `Random` via an inline SplitMix64); `Rgba::to_hsl`/`with_hue`,
+  `palette_slot`/`palette_fill`. `command::filter`: clause parser +
+  `matching`, and `decompose` by colour / kind / joint islands / dissolve.
+- **One property table**: `command::body_prop::BODY_PROPS` (friction,
+  restitution, density, gravity-scale, static, sensor, rotation-lock, depth,
+  hue, palette): name, read off the snapshot, and `(old, new)`
+  `PropertyValue` edit. The verbs and filter clauses read it; 4b-2's panel
+  should too.
+- **Intents/commands.** `NameGroupIntent` → `NameGroupCommand` and
+  `RegroupIntent` → `RegroupCommand` (decompose: each part takes a fresh id
+  in the old group's place in every stack, so nesting is kept). Group-set,
+  distribute, scatter and colours reuse `PropertyEditIntent` (one change
+  per member). One fresh-id function now (`group_cmd::fresh_group_id`;
+  the duplicate in `spawn.rs` went): past every live **and named** id.
+- **Operations** (11 new, in `docs/ops.md` and `docs/scripting.md`):
+  `groups`, `group-name`, `group-members`, `name-group`, `group-set`,
+  `group-set-color`, `group-distribute`, `group-scatter`, `bodies-where`,
+  `decompose`, `set-color`. `group` now returns the new group's index.
+- **Tests.** Unit: distribute (bounds, endpoints, ties, seeded random),
+  HSL/palette, `GroupIndex`, filter clauses, decompose keys, the property
+  table. Integration `tests/it/groups.rs`: name survives save/load and
+  undo; group-set and distribute are one step each and undo restores every
+  member exactly; seeded scatter reproduces; decompose by colour gives one
+  group per colour (inner nesting kept); filter → `group` → `group-members`
+  round-trips; `set-color` reverses. Goldens regenerated (the environment
+  gained `group_names: ({})`).
+
+**Decisions (in scope; reversible)**
+
+- **Names live in a scene-content resource**, not on a group entity: groups
+  have no entity today, and the resource rides the existing save + undo
+  path. The command writes it; the settings watcher then sees the change but
+  `push_snapshot` finds the live world equal to the tip, so it is still one
+  step. Stale names are inert, and fresh ids skip them.
+- **No `FORMAT_VERSION` bump:** the field is `#[serde(default)]`, so a file
+  without it loads with no names (additive).
+- **Group targets:** an index counts into `(groups)` (id order; a new group
+  is always last); a body target (id, point, `"selection"`) names its
+  outermost group.
+- **`group-from` is `group`**, which now returns the new index, rather than
+  a second verb over the same intent. Two `group` calls in one run both
+  return the same index (one snapshot per run).
+- **Colour:** exact RGB is `set-color` / `group-set-color`; spreads go
+  through the scalar `hue` (degrees; a grey takes saturation 0.8 and
+  lightness 0.5 so a spread shows) and `palette` (slot, rounded and
+  wrapped) properties. Random mode is a separate verb (`group-scatter`)
+  rather than a mode string, so every argument stays typed.
+- **Filters are AND of clauses** with `not:`; a union is two lists
+  appended. **"Islands" = joint connectivity** between members (a world
+  pin joins nothing).
+- **Label filter not built:** workspace labels live in `gradiance-script`
+  (`WorkspaceLabels`), above `command`; a label clause would need that
+  layer to publish a mirror. Left for 4b-2 or a follow-up.
+
+**Not checked:** the full `cargo test --workspace` (CI runs it); no
+screenshots (no UI change).

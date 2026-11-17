@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 51 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 11 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 62 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 11 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -33,6 +33,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.restitution` | `(body-restitution i)` | query | — | — | Bounciness of the i-th body. | `{"i": 0}` |
 | `body.rot` | `(body-rot i)` | query | — | — | Rotation (radians) of the i-th body; NaN if out of range. | `{"i": 0}` |
 | `body.scale` | `(scale i fx fy)` | edit | `scale` | — | Resize the i-th body by (fx, fy) about its own centre, along its own axes. | `{"i": 0, "fx": 2, "fy": 1.5}` |
+| `body.set_color` | `(set-color i r g b)` | edit | `property-edit` | — | Set the i-th body's fill to (r, g, b), each in 0..1 — undoable. | `{"i": 0, "r": 0.9, "g": 0.3, "b": 0.1}` |
 | `body.set_density` | `(set-density i v)` | edit | `property-edit` | — | Set the i-th body's mass density (area x density = mass) — undoable. | `{"i": 0, "v": 3}` |
 | `body.set_friction` | `(set-friction i v)` | edit | `property-edit` | — | Set the i-th body's Coulomb friction (static and dynamic) — undoable. | `{"i": 0, "v": 0.9}` |
 | `body.set_restitution` | `(set-restitution i v)` | edit | `property-edit` | — | Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable. | `{"i": 0, "v": 0.8}` |
@@ -43,6 +44,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.spawn_ground` | `(spawn-ground x y angle)` | edit | `spawn-body` | — | Author a fixed ground half-plane through (x, y) (metres), tilted by angle radians. | `{"x": 0, "y": -2, "angle": 0.1}` |
 | `body.subtract` | `(subtract a b)` | edit | `subtract` | Context/Subtract from first selected | Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces. | `{"a": 0, "b": 1}` |
 | `body.touch_count` | `(touch-count i)` | query | — | — | How many bodies the i-th body is currently touching; NaN if out of range. | `{"i": 0}` |
+| `body.where` | `(bodies-where clauses)` | query | — | — | Indices of the bodies matching every clause (kind:circle, group:0, ungrouped, palette:3, friction:0.2..0.5, not:…). | `{"clauses": ["kind:circle", "grouped"]}` |
 | `body.x` | `(body-x i)` | query | — | — | X of the i-th body (bodies ordered by id); NaN if out of range. | `{"i": 0}` |
 | `body.xor` | `(xor a b)` | edit | `xor` | Context/Xor | Keep what lies in exactly one of bodies a and b (CSG xor) on a; b is consumed, a split result becomes pieces. | `{"a": 0, "b": 1}` |
 | `body.y` | `(body-y i)` | query | — | — | Y of the i-th body; NaN if out of range. | `{"i": 0}` |
@@ -65,7 +67,16 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
-| `group.create` | `(group targets)` | edit | `group` | Edit/Group, Ctrl+G | Group the listed bodies (id order) like Ctrl+G; fewer than two distinct bodies is a no-op. | `{"targets": [0, 1]}` |
+| `group.create` | `(group targets)` | edit | `group` | Edit/Group, Ctrl+G | Group the listed bodies (id order) like Ctrl+G and return the new group's index; fewer than two distinct bodies is a no-op. | `{"targets": [0, 1]}` |
+| `group.decompose` | `(decompose group key)` | edit | `regroup` | — | Split the group into one group per colour, kind or joint island, or dissolve it — one undo step. | `{"group": 0, "key": "dissolve"}` |
+| `group.distribute` | `(group-distribute group prop lo hi by)` | edit | `property-edit` | — | Spread a body property over the members from lo to hi, ordered by `by` (order, x, y, size, value) — one undo step. | `{"group": 0, "prop": "density", "lo": 0.5, "hi": 5, "by": "x"}` |
+| `group.list` | `(groups)` | query | — | — | Every group's name in group order ("" when unnamed); a group index counts into this list. | `{}` |
+| `group.members` | `(group-members group)` | query | — | — | The body indices of the group's members (any nesting depth), as a list. | `{"group": 0}` |
+| `group.name` | `(group-name group)` | query | — | — | The group's name ("" when unnamed; NaN when no such group). | `{"group": 0}` |
+| `group.rename` | `(name-group group name)` | edit | `name-group` | — | Name the group ("" removes the name) — undoable, saved with the scene. | `{"group": 0, "name": "wheels"}` |
+| `group.scatter` | `(group-scatter group prop lo hi seed)` | edit | `property-edit` | — | Set a body property on every member to a seeded random value in lo..hi — one undo step. | `{"group": 0, "prop": "hue", "lo": 0, "hi": 300, "seed": 7}` |
+| `group.set` | `(group-set group prop v)` | edit | `property-edit` | — | Set one body property (friction, density, hue, palette, depth, …) on every member — one undo step. | `{"group": 0, "prop": "friction", "v": 0.2}` |
+| `group.set_color` | `(group-set-color group r g b)` | edit | `property-edit` | — | Set every member's fill to (r, g, b), each in 0..1 — one undo step. | `{"group": 0, "r": 0.9, "g": 0.3, "b": 0.1}` |
 | `group.ungroup` | `(ungroup targets)` | edit | `ungroup` | Edit/Ungroup, Ctrl+Shift+G | Peel the listed bodies' outermost group (id order) like Ctrl+Shift+G; inner groups survive. | `{"targets": [3]}` |
 
 ## `joint`

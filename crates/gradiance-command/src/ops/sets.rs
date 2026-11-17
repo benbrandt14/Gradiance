@@ -220,7 +220,7 @@ impl Operation for Group {
     const META: OpMeta = OpMeta {
         id: "group.create",
         lisp: "group",
-        doc: "Group the listed bodies (id order) like Ctrl+G; fewer than two distinct bodies is a no-op.",
+        doc: "Group the listed bodies (id order) like Ctrl+G and return the new group's index; fewer than two distinct bodies is a no-op.",
         seam: Seam::Edit,
         menu: Some("Edit/Group"),
         chord: Some("Ctrl+G"),
@@ -234,7 +234,12 @@ impl Operation for Group {
         if targets.len() < 2 {
             return Ok(OpOutput::none());
         }
-        Ok(OpOutput::none().message(GroupIntent { targets }))
+        // The new group takes an id past every live one, so it lands last
+        // in group order: its index is today's group count.
+        let index = scene.group_index().len();
+        Ok(OpOutput::none()
+            .message(GroupIntent { targets })
+            .returning(index))
     }
 }
 

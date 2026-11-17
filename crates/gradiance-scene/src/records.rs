@@ -366,7 +366,7 @@ macro_rules! environment_record {
 /// describes rather than where it is edited:
 ///
 /// - *scene content* — gravity and sim tuning, render style, lighting,
-///   scenery, and the signal-dataflow graph. These describe the scene
+///   scenery, the signal-dataflow graph and the group names. These describe the scene
 ///   itself: change one and the picture or the physics changes. Undo
 ///   covers them.
 /// - *workstation config* — grid, snap and camera feel. Authoring aids
@@ -409,7 +409,16 @@ fn live_eq<R: Resource + PartialEq + Default>(world: &World, mine: &R) -> bool {
         .map_or_else(|| *mine == R::default(), |live| live == mine)
 }
 
-scene_content!(sim, render, lighting, scenery, signals, params, computed);
+scene_content!(
+    sim,
+    render,
+    lighting,
+    scenery,
+    signals,
+    params,
+    computed,
+    group_names
+);
 
 environment_record! {
     /// Simulation tuning.
@@ -433,6 +442,8 @@ environment_record! {
     params: gradiance_domain::signal::SignalParams,
     /// Computed signals (`defsignal` modulators; defaulted for pre-P2 files).
     computed: gradiance_domain::signal::ComputedSignals,
+    /// Group names (brief 4b-1; scene content: saved and undoable).
+    group_names: gradiance_domain::group::GroupNames,
 }
 
 /// A complete scene: the save file, and the unit of whole-world undo.

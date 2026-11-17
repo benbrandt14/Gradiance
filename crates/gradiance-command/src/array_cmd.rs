@@ -137,7 +137,7 @@ impl GameCommand for ArrayCommand {
         }
         let mut clones = Vec::with_capacity(self.sources.len() * placements.len());
         let mut joint_clones = Vec::new();
-        let mut next_group = crate::spawn::next_group_id(world);
+        let mut next_group = crate::group_cmd::fresh_group_id(world);
 
         for placement in placements {
             let copy_start = clones.len();

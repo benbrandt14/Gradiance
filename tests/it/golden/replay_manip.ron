@@ -278,5 +278,6 @@
         signals: ([]),
         params: ([]),
         computed: ([]),
+        group_names: ({}),
     ),
 )

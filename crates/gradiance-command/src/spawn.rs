@@ -115,16 +115,6 @@ impl GameCommand for DeleteCommand {
     }
 }
 
-/// The next unused selection-group id.
-pub(crate) fn next_group_id(world: &mut World) -> u32 {
-    let mut query = world.query::<&gradiance_domain::group::SelectionGroup>();
-    query
-        .iter(world)
-        .flat_map(|g| g.0.iter().copied())
-        .max()
-        .map_or(1, |m| m + 1)
-}
-
 /// Rewrites cloned bodies' selection groups to fresh ids (one fresh id
 /// per distinct source group), so duplicates form their *own* groups
 /// instead of joining the originals' — the "group selection deteriorates
@@ -233,7 +223,7 @@ impl GameCommand for DuplicateCommand {
         // Installs the cloned bindings into `SignalBindings` (the returned
         // names were only ever needed to undo them).
         clone_bindings(world, &id_map);
-        let mut next_group = next_group_id(world);
+        let mut next_group = crate::group_cmd::fresh_group_id(world);
         remap_clone_groups(&mut clones, &mut next_group);
         for record in &clones {
             record.spawn(world);

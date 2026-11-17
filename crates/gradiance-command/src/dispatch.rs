@@ -8,12 +8,12 @@
 
 use crate::array_cmd::ArrayCommand;
 use crate::cut_cmd::CutCommand;
-use crate::group_cmd::{GroupCommand, UngroupCommand};
+use crate::group_cmd::{GroupCommand, NameGroupCommand, RegroupCommand, UngroupCommand};
 use crate::intent::name;
 use crate::intent::{
     ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
-    DeleteJointIntent, DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent,
-    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
+    DeleteJointIntent, DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent, NameGroupIntent,
+    PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
     SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
@@ -90,6 +90,8 @@ command_intents! {
     PropertyEditIntent => |i| Box::new(PropertyEditCommand { changes: i.changes }),
     GroupIntent => |i| Box::new(GroupCommand::new(i.targets)),
     UngroupIntent => |i| Box::new(UngroupCommand::new(i.targets)),
+    NameGroupIntent => |i| Box::new(NameGroupCommand { group: i.group, name: i.name }),
+    RegroupIntent => |i| Box::new(RegroupCommand { group: i.group, parts: i.parts }),
     ScaleIntent => |i| Box::new(ScaleCommand::new(i.targets, i.pivot, i.frame_rot, i.factors)),
     ArrayIntent => |i| Box::new(ArrayCommand::new(i.sources, i.count, i.mode)),
     CutIntent => |i| Box::new(CutCommand::new(i.a, i.b, i.width)),

@@ -42,6 +42,11 @@ pub mod name {
     pub const GROUP: &str = "group";
     /// [`UngroupIntent`](super::UngroupIntent) → `UngroupCommand`.
     pub const UNGROUP: &str = "ungroup";
+    /// [`NameGroupIntent`](super::NameGroupIntent) → `NameGroupCommand`.
+    pub const NAME_GROUP: &str = "name-group";
+    /// [`RegroupIntent`](super::RegroupIntent) → `RegroupCommand` → script
+    /// verb `(decompose …)`.
+    pub const REGROUP: &str = "regroup";
     /// [`CutIntent`](super::CutIntent) → `CutCommand` → script verb `(cut …)`.
     pub const CUT: &str = "cut";
     /// [`DeleteJointIntent`](super::DeleteJointIntent) → `DeleteJointCommand`.
@@ -192,6 +197,29 @@ pub struct GroupIntent {
 pub struct UngroupIntent {
     /// Bodies to ungroup.
     pub targets: Vec<StableId>,
+}
+
+/// Request to name a group (an empty name removes the name).
+// Trace: dispatch.rs → NameGroupCommand (group_cmd.rs) → writes the GroupNames scene-content resource only (no derived sync).
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct NameGroupIntent {
+    /// The group's id (the value in its members' `SelectionGroup` stacks).
+    pub group: u32,
+    /// The new name.
+    pub name: String,
+}
+
+/// Request to split one group into parts, in one undo step: each part of
+/// two or more bodies becomes a fresh group in the old group's place in
+/// every member's stack (nesting is kept); a part of one body, or a member
+/// in no part, just leaves the group.
+// Trace: dispatch.rs → RegroupCommand (group_cmd.rs) → writes SelectionGroup and GroupNames only (no derived sync).
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct RegroupIntent {
+    /// The group's id.
+    pub group: u32,
+    /// The parts, each a list of the group's members.
+    pub parts: Vec<Vec<StableId>>,
 }
 
 /// Request to replace the whole world with a scene (undoable).

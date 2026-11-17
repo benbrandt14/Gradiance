@@ -7,7 +7,7 @@
 use crate::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
-use gradiance_domain::group::SelectionGroup;
+use gradiance_domain::group::{GroupIndex, GroupNames, SelectionGroup};
 
 fn prior_groups(
     world: &mut World,
@@ -22,14 +22,26 @@ fn prior_groups(
         .collect()
 }
 
-/// The next unused group id across every stack in the world.
-fn fresh_group_id(world: &mut World) -> u32 {
-    let mut query = world.query::<&SelectionGroup>();
-    query
+/// The live group index (members in `StableId` order).
+fn group_index(world: &mut World) -> GroupIndex {
+    let mut query = world.query::<(&StableId, &SelectionGroup)>();
+    let mut rows: Vec<(StableId, Vec<u32>)> = query
         .iter(world)
-        .flat_map(|g| g.0.iter().copied())
-        .max()
-        .map_or(1, |m| m + 1)
+        .map(|(id, g)| (*id, g.0.clone()))
+        .collect();
+    rows.sort_by_key(|(id, _)| id.0);
+    GroupIndex::build(rows.iter().map(|(id, s)| (*id, s.as_slice())))
+}
+
+/// The next unused group id: past every stack in the world and every named
+/// group ([`GroupIndex::fresh_id`]), so a new group never inherits a stale
+/// name.
+pub(crate) fn fresh_group_id(world: &mut World) -> u32 {
+    let names = world
+        .get_resource::<GroupNames>()
+        .cloned()
+        .unwrap_or_default();
+    group_index(world).fresh_id(&names)
 }
 
 /// Wraps the targets in one fresh group (pushed *around* any groups they
@@ -113,5 +125,119 @@ impl GameCommand for UngroupCommand {
 
     fn name(&self) -> &'static str {
         crate::intent::name::UNGROUP
+    }
+}
+
+/// Names a group (an empty name removes it). The name is scene content
+/// (`GroupNames`), so the stack's snapshot carries it and undo restores it.
+#[derive(Debug)]
+pub struct NameGroupCommand {
+    /// The group's id.
+    pub group: u32,
+    /// The new name.
+    pub name: String,
+}
+
+impl GameCommand for NameGroupCommand {
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
+        if group_index(world).get(self.group).is_none() {
+            return Err(CommandError::NoEffect);
+        }
+        let mut names = world
+            .get_resource::<GroupNames>()
+            .cloned()
+            .unwrap_or_default();
+        let old = names.get(self.group).unwrap_or_default().to_owned();
+        if old == self.name {
+            return Err(CommandError::NoEffect);
+        }
+        if self.name.is_empty() {
+            names.0.remove(&self.group);
+        } else {
+            names.0.insert(self.group, self.name.clone());
+        }
+        world.insert_resource(names);
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        crate::intent::name::NAME_GROUP
+    }
+}
+
+/// Splits one group into parts (see [`RegroupIntent`](crate::intent::RegroupIntent)):
+/// each part of two or more members takes a fresh id in the old group's
+/// place in every member's stack, so the nesting above and below is kept.
+/// The old group's name goes with it.
+#[derive(Debug)]
+pub struct RegroupCommand {
+    /// The group's id.
+    pub group: u32,
+    /// The parts.
+    pub parts: Vec<Vec<StableId>>,
+}
+
+impl GameCommand for RegroupCommand {
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
+        let Some(entry) = group_index(world).get(self.group).cloned() else {
+            return Err(CommandError::NoEffect);
+        };
+        // One part holding every member is the group itself: nothing to do.
+        let whole = self
+            .parts
+            .iter()
+            .any(|p| p.len() == entry.members.len() && entry.members.iter().all(|m| p.contains(m)));
+        if whole {
+            return Err(CommandError::NoEffect);
+        }
+        for member in &entry.members {
+            resolve(world, *member)?;
+        }
+        let mut next = fresh_group_id(world);
+        let mut replacement: Vec<(StableId, Option<u32>)> = Vec::new();
+        for part in &self.parts {
+            let members: Vec<StableId> = part
+                .iter()
+                .copied()
+                .filter(|m| entry.members.contains(m))
+                .collect();
+            let id = (members.len() >= 2).then(|| {
+                next += 1;
+                next - 1
+            });
+            replacement.extend(members.into_iter().map(|m| (m, id)));
+        }
+        for member in &entry.members {
+            let new_id = replacement
+                .iter()
+                .find(|(m, _)| m == member)
+                .and_then(|(_, id)| *id);
+            let entity = resolve(world, *member)?;
+            let Some(mut stack) = world.get::<SelectionGroup>(entity).cloned() else {
+                continue;
+            };
+            match (stack.0.iter().position(|g| *g == self.group), new_id) {
+                (Some(at), Some(id)) => stack.0[at] = id,
+                (Some(at), None) => {
+                    stack.0.remove(at);
+                }
+                (None, _) => {}
+            }
+            if stack.0.is_empty() {
+                world.entity_mut(entity).remove::<SelectionGroup>();
+            } else {
+                world.entity_mut(entity).insert(stack);
+            }
+        }
+        if let Some(mut names) = world.get_resource_mut::<GroupNames>()
+            && names.0.contains_key(&self.group)
+        {
+            names.0.remove(&self.group);
+        }
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        crate::intent::name::REGROUP
     }
 }
