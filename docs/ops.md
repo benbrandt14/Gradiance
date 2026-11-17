@@ -88,9 +88,9 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
-| `signal.computed` | `(defsignal name expr)` | config | — | — | Declare a computed signal from an RPN expression over other signals (e.g. "t sin amp *"). | `{"name": "osc", "expr": "t sin 2 *"}` |
+| `signal.computed` | `(defsignal name expr)` | config | `settings` | — | Declare a computed signal from an RPN expression over other signals (e.g. "t sin amp *"). | `{"name": "osc", "expr": "t sin 2 *"}` |
 | `signal.get` | `(signal-get name)` | query | — | — | Current value of a named signal on the bus; NaN if unset. | `{"name": "t"}` |
-| `signal.param` | `(defparam name value min max)` | config | — | — | Declare a tunable signal parameter (an auto-slider) published on the bus. | `{"name": "amp", "value": 2, "min": 0, "max": 10}` |
+| `signal.param` | `(defparam name value min max)` | config | `settings` | — | Declare a tunable signal parameter (an auto-slider) published on the bus. | `{"name": "amp", "value": 2, "min": 0, "max": 10}` |
 | `signal.set` | `(signal-set name value)` | editor | — | — | Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md). | `{"name": "excitement", "value": 7}` |
 
 ## `sim`

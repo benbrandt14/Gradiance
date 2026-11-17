@@ -5,7 +5,12 @@
 
 use crate::harness::*;
 use bevy::prelude::*;
+use gradiance::command::HistoryInfo;
 use gradiance::prelude::*;
+use gradiance::signal::{
+    ComputedSignal, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalExpr,
+    SignalMap, SignalParam, SignalParams, SignalSink, SignalSource,
+};
 use gradiance_domain::settings::{CameraSettings, LightingSettings, SimSettings};
 
 /// Spawns a box and lets the stack settle, returning its id.
@@ -313,5 +318,98 @@ fn lighting_edits_are_undoable_too() {
         *app.world().resource::<LightingSettings>(),
         original,
         "lighting is scene content, so it is undoable"
+    );
+}
+
+// --- signal-graph edits as undo steps (brief U-2c) -----------------------
+
+/// Applies `edit` to resource `R`, lets it settle, and checks it recorded
+/// exactly one `settings` step that undo reverts and redo re-applies.
+fn assert_one_settled_step<R>(edit: impl FnOnce(&mut R))
+where
+    R: Resource<Mutability = bevy::ecs::component::Mutable> + Clone + PartialEq + std::fmt::Debug,
+{
+    let mut app = paused_app();
+    spawn_settled(&mut app); // establish a baseline
+    let original = app.world().resource::<R>().clone();
+    let before = app.world().resource::<HistoryInfo>().undo_depth;
+
+    edit(&mut app.world_mut().resource_mut::<R>());
+    app.update(); // change seen: dirty
+    app.update(); // settled: snapshot
+    let edited = app.world().resource::<R>().clone();
+    assert_ne!(edited, original, "the edit changed the resource");
+
+    let info = *app.world().resource::<HistoryInfo>();
+    assert_eq!(info.undo_depth, before + 1, "exactly one step");
+    assert_eq!(info.undo_label, Some("settings"));
+
+    undo(&mut app);
+    assert_eq!(*app.world().resource::<R>(), original, "undo restores it");
+    assert_eq!(body_count(&mut app), 1, "undo stopped at the signal edit");
+    redo(&mut app);
+    assert_eq!(*app.world().resource::<R>(), edited, "redo re-applies it");
+}
+
+#[test]
+fn a_signal_binding_edit_is_one_undo_step() {
+    assert_one_settled_step::<SignalBindings>(|bindings| {
+        bindings.0.push(SignalBinding {
+            name: "clock".into(),
+            source: SignalSource::Named("t".into()),
+            map: SignalMap::default(),
+            curve: None,
+            gradient: GradientSpec::default(),
+            sink: SignalSink::Plot,
+        });
+    });
+}
+
+#[test]
+fn a_signal_param_edit_is_one_undo_step() {
+    assert_one_settled_step::<SignalParams>(|params| {
+        params.0.push(SignalParam::unit("amp"));
+    });
+}
+
+#[test]
+fn a_computed_signal_edit_is_one_undo_step() {
+    assert_one_settled_step::<ComputedSignals>(|computed| {
+        computed.0.push(ComputedSignal {
+            name: "osc".into(),
+            expr: SignalExpr::parse_rpn("t sin").unwrap(),
+            block: None,
+        });
+    });
+}
+
+/// A param slider drag (a value written every frame) settles into one step.
+#[test]
+fn a_param_slider_drag_is_one_undo_step() {
+    let mut app = paused_app();
+    app.world_mut()
+        .resource_mut::<SignalParams>()
+        .0
+        .push(SignalParam::unit("amp"));
+    spawn_settled(&mut app); // the spawn's snapshot holds the param
+    app.update();
+    let before = app.world().resource::<HistoryInfo>().undo_depth;
+
+    for i in 1..=10 {
+        app.world_mut().resource_mut::<SignalParams>().0[0].value = 0.5 + i as f32 * 0.04;
+        app.update();
+    }
+    app.update(); // settles
+    assert_eq!(
+        app.world().resource::<HistoryInfo>().undo_depth,
+        before + 1,
+        "the whole drag is a single undo step"
+    );
+
+    undo(&mut app);
+    let value = app.world().resource::<SignalParams>().0[0].value;
+    assert!(
+        (value - 0.5).abs() < 1e-6,
+        "undo restores the pre-drag value"
     );
 }

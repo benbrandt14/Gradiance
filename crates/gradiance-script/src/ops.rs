@@ -265,9 +265,8 @@ impl Operation for SignalSet {
 }
 
 /// Declare a tunable parameter. The parameters are scene content (saved with
-/// the scene), but `commit_settings_edits` does not watch the signal-graph
-/// resources yet, so a declaration records no undo step today (brief U-2b
-/// Outcome); the metadata says what happens, not what should.
+/// the scene), so a declaration records one settled `settings` undo step
+/// through `commit_settings_edits` (brief U-2c).
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
 pub struct DefParam {
@@ -289,7 +288,7 @@ impl Operation for DefParam {
         seam: Seam::Config,
         menu: None,
         chord: None,
-        undo: None,
+        undo: Some(gradiance_command::intent::name::SETTINGS),
         example: r#"{"name": "amp", "value": 2, "min": 0, "max": 10}"#,
     };
 
@@ -303,8 +302,8 @@ impl Operation for DefParam {
     }
 }
 
-/// Declare a computed signal from an RPN expression. Scene content with no
-/// undo step today, like [`DefParam`].
+/// Declare a computed signal from an RPN expression. Scene content with one
+/// settled `settings` undo step, like [`DefParam`].
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
 pub struct DefSignal {
@@ -322,7 +321,7 @@ impl Operation for DefSignal {
         seam: Seam::Config,
         menu: None,
         chord: None,
-        undo: None,
+        undo: Some(gradiance_command::intent::name::SETTINGS),
         example: r#"{"name": "osc", "expr": "t sin 2 *"}"#,
     };
 

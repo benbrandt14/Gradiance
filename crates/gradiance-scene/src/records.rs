@@ -358,42 +358,58 @@ macro_rules! environment_record {
     };
 }
 
-impl EnvironmentRecord {
-    /// True when two records agree on every **scene-content** setting.
-    ///
-    /// The environment splits in two, and the line is what the setting
-    /// describes rather than where it is edited:
-    ///
-    /// - *scene content* — gravity and sim tuning, render style, lighting,
-    ///   scenery, and the signal-dataflow graph. These describe the scene
-    ///   itself: change one and the picture or the physics changes. Undo
-    ///   covers them.
-    /// - *workstation config* — grid, snap and camera feel. Authoring aids
-    ///   that belong to the person, not the document. Undo never touches
-    ///   these, so reverting an edit cannot silently move your grid (or
-    ///   change how your camera zooms) out from under you.
-    pub fn scene_content_eq(&self, other: &Self) -> bool {
-        self.sim == other.sim
-            && self.render == other.render
-            && self.lighting == other.lighting
-            && self.scenery == other.scenery
-            && self.signals == other.signals
-            && self.params == other.params
-            && self.computed == other.computed
-    }
+/// Declares the **scene-content** half of [`EnvironmentRecord`] from a
+/// single field list: the comparison, the live comparison and the restore
+/// all come from one line, so they cannot disagree about what undo covers.
+///
+/// The environment splits in two, and the line is what the setting
+/// describes rather than where it is edited:
+///
+/// - *scene content* — gravity and sim tuning, render style, lighting,
+///   scenery, and the signal-dataflow graph. These describe the scene
+///   itself: change one and the picture or the physics changes. Undo
+///   covers them.
+/// - *workstation config* — grid, snap and camera feel. Authoring aids
+///   that belong to the person, not the document. Undo never touches
+///   these, so reverting an edit cannot silently move your grid (or
+///   change how your camera zooms) out from under you.
+macro_rules! scene_content {
+    ($( $field:ident ),* $(,)?) => {
+        impl EnvironmentRecord {
+            /// True when two records agree on every **scene-content**
+            /// setting (see the `scene_content!` list in this module).
+            pub fn scene_content_eq(&self, other: &Self) -> bool {
+                $( self.$field == other.$field )&&*
+            }
 
-    /// Restores the scene-content settings, leaving workstation config alone
-    /// (see [`scene_content_eq`](Self::scene_content_eq)). Used by undo/redo.
-    pub fn apply_scene_content(&self, world: &mut World) {
-        world.insert_resource(self.sim.clone());
-        world.insert_resource(self.render.clone());
-        world.insert_resource(self.lighting.clone());
-        world.insert_resource(self.scenery.clone());
-        world.insert_resource(self.signals.clone());
-        world.insert_resource(self.params.clone());
-        world.insert_resource(self.computed.clone());
-    }
+            /// True when the live world still holds this record's
+            /// scene-content settings (a missing resource reads as its
+            /// default). Compares in place — nothing is cloned — so the
+            /// settings watcher (`gradiance_command`'s
+            /// `commit_settings_edits`) can run it every frame.
+            pub fn scene_content_matches(&self, world: &World) -> bool {
+                $( live_eq(world, &self.$field) )&&*
+            }
+
+            /// Restores the scene-content settings, leaving workstation
+            /// config alone (see
+            /// [`scene_content_eq`](Self::scene_content_eq)). Used by
+            /// undo/redo.
+            pub fn apply_scene_content(&self, world: &mut World) {
+                $( world.insert_resource(self.$field.clone()); )*
+            }
+        }
+    };
 }
+
+/// Whether the live `R` equals `mine` (a missing resource reads as default).
+fn live_eq<R: Resource + PartialEq + Default>(world: &World, mine: &R) -> bool {
+    world
+        .get_resource::<R>()
+        .map_or_else(|| *mine == R::default(), |live| live == mine)
+}
+
+scene_content!(sim, render, lighting, scenery, signals, params, computed);
 
 environment_record! {
     /// Simulation tuning.

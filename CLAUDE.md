@@ -94,8 +94,10 @@ Rationale, coupling data, and the roadmap→package feature tree:
      belong to the person, not the document. Saved with the scene, never in
      undo history, so reverting an edit can't move someone's grid.
 
-   The split lives in one place: `scene::records::EnvironmentRecord::scene_content_eq`
-   / `apply_scene_content`. A new settings resource must be classified there.
+   The split lives in one place: the `scene_content!` field list in
+   `scene::records`, which generates `EnvironmentRecord::scene_content_eq`,
+   `scene_content_matches` (the undo watcher's test) and `apply_scene_content`.
+   A new settings resource must be classified there.
 5. **Authored vs derived:** components in `gradiance-domain` (+ `StableId`) plus the
    authored avian components (`RigidBody`, `Friction`, `Restitution`, `ColliderDensity`,
    `GravityScale`, `Sensor`, `LockedAxes`) are the save content. The save **format**

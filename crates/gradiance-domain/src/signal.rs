@@ -279,7 +279,8 @@ impl SignalBinding {
 }
 
 /// The signal graph: every active binding. Config-seam resource (UI edits
-/// directly, persisted in the scene's `EnvironmentRecord`, not undoable).
+/// directly, persisted in the scene's `EnvironmentRecord`; scene content, so
+/// a settled edit is one `settings` undo step).
 #[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct SignalBindings(pub Vec<SignalBinding>);
 
@@ -803,7 +804,7 @@ impl BlockOp {
 }
 
 /// Every tunable parameter. Config-seam resource (UI slider edits directly,
-/// persisted with the scene, not undoable).
+/// persisted with the scene; a settled edit is one `settings` undo step).
 #[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct SignalParams(pub Vec<SignalParam>);
 

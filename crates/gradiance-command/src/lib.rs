@@ -67,6 +67,7 @@ pub mod transform_cmd;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::shape::ShapeError;
+use gradiance_scene::EnvironmentRecord;
 use gradiance_scene::SceneRecord;
 use std::collections::VecDeque;
 
@@ -341,21 +342,31 @@ fn close_sim_run(world: &mut World) {
 /// one-frame latency is invisible, and a whole gesture collapses into a
 /// single undo step.
 ///
-/// Only *scene-content* settings count (see
-/// [`EnvironmentRecord::scene_content_eq`](gradiance_scene::records::EnvironmentRecord::scene_content_eq));
-/// grid and snap are workstation config and never enter history.
+/// Only *scene-content* settings count — the `scene_content!` list in
+/// `gradiance_scene::records`, read through
+/// [`EnvironmentRecord::scene_content_matches`]: sim, render, lighting,
+/// scenery and the signal graph (`SignalBindings`, `SignalParams`,
+/// `ComputedSignals`). Grid, snap and camera are workstation config and
+/// never enter history.
+///
+/// The resources are tracked **by value**. Bevy's change flags are not
+/// usable here: the settings window calls `set_changed()` unconditionally
+/// while a tab is open and writes its fields through
+/// `bypass_change_detection`, so the flags read "changed" every frame the
+/// panel is visible and stay silent for some edits entirely. Comparing values
+/// is the only honest signal; nothing is cloned until something moves.
 fn commit_settings_edits(
     world: &mut World,
-    mut seen: Local<Option<SceneSettings>>,
+    mut seen: Local<Option<EnvironmentRecord>>,
     mut dirty: Local<bool>,
 ) {
     let Some(previous) = seen.as_ref() else {
         // First frame: establish the reference without recording anything.
-        *seen = Some(SceneSettings::capture(world));
+        *seen = Some(EnvironmentRecord::capture(world));
         return;
     };
-    if !previous.matches(world) {
-        *seen = Some(SceneSettings::capture(world));
+    if !previous.scene_content_matches(world) {
+        *seen = Some(EnvironmentRecord::capture(world));
         *dirty = true;
         return;
     }
@@ -372,49 +383,6 @@ fn commit_settings_edits(
             redo_label: stack.peek_redo(),
         });
     });
-}
-
-/// The scene-content settings resources, tracked **by value**.
-///
-/// Bevy's change flags are not usable here: the settings window calls
-/// `set_changed()` unconditionally while a tab is open and writes its fields
-/// through `bypass_change_detection`, so the flags read "changed" every frame
-/// the panel is visible and stay silent for some edits entirely. Comparing
-/// values is the only honest signal, and it costs four equality checks per
-/// frame — nothing is cloned until something actually moves.
-#[derive(Clone, PartialEq)]
-struct SceneSettings {
-    sim: gradiance_domain::settings::SimSettings,
-    render: gradiance_domain::settings::RenderSettings,
-    lighting: gradiance_domain::settings::LightingSettings,
-    scenery: gradiance_domain::settings::ScenerySettings,
-}
-
-impl SceneSettings {
-    fn capture(world: &World) -> Self {
-        fn get<R: Resource + Clone + Default>(world: &World) -> R {
-            world.get_resource::<R>().cloned().unwrap_or_default()
-        }
-        Self {
-            sim: get(world),
-            render: get(world),
-            lighting: get(world),
-            scenery: get(world),
-        }
-    }
-
-    /// True when every tracked resource still holds the recorded value.
-    fn matches(&self, world: &World) -> bool {
-        fn eq<R: Resource + PartialEq + Default>(world: &World, mine: &R) -> bool {
-            world
-                .get_resource::<R>()
-                .map_or_else(|| *mine == R::default(), |live| live == mine)
-        }
-        eq(world, &self.sim)
-            && eq(world, &self.render)
-            && eq(world, &self.lighting)
-            && eq(world, &self.scenery)
-    }
 }
 
 /// System set containing the intent dispatcher; producers of intents must
