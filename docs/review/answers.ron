@@ -1,29 +1,4 @@
 (
     version: 1,
-    answers: [
-        (
-            question: "fillet-bulge",
-            title: "Fillet merge bulges flat faces: fix it or accept it?",
-            choice: Picked("Accept the bulge"),
-            note: "Retain this as an issue, but it is low enough priority to ignore for now.",
-            answered_at: "2026-11-17T01:53:32Z",
-            revision: "32d084f15193",
-        ),
-        (
-            question: "shading",
-            title: "Which shading should be the default look?",
-            choice: Picked("Toon (today)"),
-            note: "A future revamp of the visuals will be required. The initial build-out was not able to take screenshots. Some other aspects of 2D lighting ( like the 2d lighting bevy crate) would probably be good too. The toon banding has never really been observed because of the flat lighting.",
-            answered_at: "2026-11-17T01:56:09Z",
-            revision: "32d084f15193",
-        ),
-        (
-            question: "startup-scene",
-            title: "What should a fresh start-up scene contain?",
-            choice: Picked("Empty"),
-            note: "",
-            answered_at: "2026-11-17T01:56:20Z",
-            revision: "32d084f15193",
-        ),
-    ],
+    answers: [],
 )

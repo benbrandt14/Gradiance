@@ -151,9 +151,25 @@ chat or leave it in an Outcome as "owner to decide". Add it to
   (`expected_bodies`) — the guard loads every option and fails on a script
   error or a wrong count.
 
-A question whose alternative cannot be shown yet (it needs code that does not
-exist) is not a review question: record it as a follow-up until a scene can
-show both sides.
+A **product** question whose alternative cannot be shown yet (it needs code
+that does not exist) is not a review question: record it as a follow-up
+until a scene can show both sides.
+
+**Plan decisions are not asked** (owner, 2026-11-17: "Leave non
+interactive changes to the thread here. Go with your best estimates").
+Review mode is for **interactive** questions: a choice the owner judges in a
+live scene. A choice that no scene can show (an order of work, an
+architecture option, a process rule) is made by the session on its best
+estimate. Record it so that the owner can find and reverse it:
+
+- append an entry to `docs/review/archive.ron` with a `decision: true`
+  question (text-only options: a label and a caption that says what the
+  option does and what it costs), the picked option, a note that the
+  session decided, and `ingested_as` = the brief or doc that holds the
+  result;
+- small choices inside a brief's own scope go in its Outcome, not here.
+
+Ask the owner in chat, and wait, only where a step cannot be undone.
 
 **Ingesting (orchestrator, at each phase start).**
 
@@ -164,7 +180,9 @@ show both sides.
      (`Archive` schema: `question`, `answer`, `ingested_as` = what it
      became), and delete its entry from `questions.ron` and `answers.ron`.
      Keep its `scenes/<id>/` files; the archive entry still points at them,
-     and drop its row from `expected_bodies`.
+     and drop its row from `expected_bodies` (the three seed rows stay: the
+     mechanism tests run over `tests/fixtures/review/questions.ron`, which
+     uses those scenes).
 2. An answer of "none of these" is still an answer: its free text and note
    are the owner's direction; if it opens a new question, ask it as a new
    question with scenes.

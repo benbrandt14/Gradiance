@@ -54,6 +54,23 @@ Show the options side by side.
   - **one source:** no hard-coded colour literals outside the theme/palette
     modules. A source scanner test, like the glyph rule.
 
+## Owner input (review mode, ingested 2026-11-17)
+
+Question `shading` (`docs/review/archive.ron`): the owner picked **Toon
+(today)** over Smooth and Toon + SSAO. Note, verbatim: "A future revamp of
+the visuals will be required. The initial build-out was not able to take
+screenshots. Some other aspects of 2D lighting ( like the 2d lighting bevy
+crate) would probably be good too. The toon banding has never really been
+observed because of the flat lighting."
+
+For this brief that means:
+- build the presets on toon; SSAO is not the default;
+- the default lighting is too flat to show the bands. Change the default
+  light direction or band thresholds so that a default scene shows them, and
+  put the before and after in review mode;
+- a full visuals revamp and a 2D-lighting crate are **not** this brief
+  (`docs/state.md`, retained, UI/render).
+
 ## Approach
 
 1. Survey: screenshot the current look across a standard scene: stacked

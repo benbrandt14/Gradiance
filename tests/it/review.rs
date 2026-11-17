@@ -24,7 +24,14 @@ use std::path::{Path, PathBuf};
 /// Frames a load may take before the test calls it stuck.
 const MAX_LOAD_FRAMES: usize = 120;
 
-fn questions_file() -> PathBuf {
+/// The frozen seed questions the mechanism tests run over. The live file
+/// changes at every ingestion, so no test of the mechanism depends on it.
+fn fixture_questions() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/review/questions.ron")
+}
+
+/// The live questions file the owner answers.
+fn live_questions() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/review/questions.ron")
 }
 
@@ -36,11 +43,16 @@ fn temp_dir(name: &str) -> PathBuf {
     dir
 }
 
-/// A headless app in review mode over the seed questions, writing answers to
-/// `answers` (never to the repo's file). The start-up show of the first
+/// A headless app in review mode over the fixture questions, writing answers
+/// to `answers` (never to the repo's file). The start-up show of the first
 /// question has finished when this returns.
 fn review_app(answers: PathBuf) -> App {
-    let mut session = ReviewSession::open(questions_file()).expect("seed questions parse");
+    review_app_over(fixture_questions(), answers)
+}
+
+/// [`review_app`] over any questions file.
+fn review_app_over(questions: PathBuf, answers: PathBuf) -> App {
+    let mut session = ReviewSession::open(questions).expect("questions parse");
     session.answers_path = answers;
     session.answers = read_answers(&session.answers_path).unwrap();
     let mut app = headless_app_with(move |app| {
@@ -71,9 +83,10 @@ fn show(app: &mut App, question: usize, view: ReviewView) {
     wait_until_loaded(app, &format!("question {question} {view:?}"));
 }
 
-/// Bodies each seed option leaves in the world, by question id — so an
+/// Bodies each scene option leaves in the world, by question id — so an
 /// option whose merge silently failed (a no-op, not a script error) still
-/// fails here.
+/// fails here. A live scene question adds its row; ingestion drops it. The
+/// first three rows are the fixture's and stay.
 fn expected_bodies(question: &str) -> &'static [usize] {
     match question {
         "startup-scene" => &[0, 1, 6],
@@ -87,11 +100,33 @@ fn expected_bodies(question: &str) -> &'static [usize] {
 #[test]
 fn every_seed_option_loads_without_errors_and_leaves_no_undo() {
     let dir = temp_dir("seed");
-    let mut app = review_app(dir.join("answers.ron"));
+    let loaded = every_option_loads(fixture_questions(), dir.join("answers.ron"));
+    assert_eq!(loaded, 3, "the fixture holds the three seed questions");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn every_live_question_loads_without_errors_and_leaves_no_undo() {
+    // The file the owner opens with `--review`. It may be empty between an
+    // ingestion and the next question.
+    let dir = temp_dir("live");
+    every_option_loads(live_questions(), dir.join("answers.ron"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Shows every option of every question in `questions` and checks that it
+/// loads cleanly; returns how many questions the file holds.
+fn every_option_loads(questions: PathBuf, answers: PathBuf) -> usize {
+    let mut app = review_app_over(questions, answers);
     let questions = session(&app).questions.questions.clone();
-    assert!(questions.len() >= 3, "seed at least three questions");
     for (q, question) in questions.iter().enumerate() {
-        let expected = expected_bodies(&question.id);
+        // A plan decision has no scenes: every option is an empty world.
+        let empty = vec![0; question.options.len()];
+        let expected = if question.decision {
+            empty.as_slice()
+        } else {
+            expected_bodies(&question.id)
+        };
         assert_eq!(
             expected.len(),
             question.options.len(),
@@ -146,7 +181,7 @@ fn every_seed_option_loads_without_errors_and_leaves_no_undo() {
             assert_eq!(app.world().resource::<HistoryInfo>().undo_depth, 0);
         }
     }
-    let _ = std::fs::remove_dir_all(&dir);
+    questions.len()
 }
 
 #[test]
