@@ -124,7 +124,7 @@ palette redesign (4b-3), `docs/state.md`.
 
 ## Outcome
 
-Landed in one PR (worker, 2026-11-17). Every item of the Goal and every
+Landed in PR #248 (worker, 2026-11-17). Every item of the Goal and every
 Done-when test; no split was needed.
 
 **What landed**

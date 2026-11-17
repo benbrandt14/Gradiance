@@ -11,7 +11,7 @@ as #247, 05b404d; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-1 in review** (PR #PRNUM, branch
+- **Now:** **4b-1 in review** (PR #248, branch
   `claude/project-thread-dydbi0`): groups as editing layers on the op
   registry: group names (scene content), group-set / distribute / scatter
   in one undo step, `bodies-where` filters, `decompose`, `set-color`, and
@@ -29,7 +29,7 @@ as #247, 05b404d; order per `docs/unified-surface-plan.md` § 10 and § 13).
   3. **U-2a** (done, #244), **U-2b** (done, #245), then **U-2c**
      signal-graph undo (done, #247). (U-2 split 2026-11-17: one PR for all of
      U-2 exceeds one worker's coherence budget.)
-  4. **4b-1** group op surface, on the registry (in review, #PRNUM; adds
+  4. **4b-1** group op surface, on the registry (in review, #248; adds
      `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
      **U-4** in-app input injection; **U-5** snapshot tests on lavapipe.
