@@ -37,10 +37,10 @@ fn spawn_joint(app: &mut App, common: JointCommon, a: StableId, anchor: Vec2) ->
             common,
             body_a: a,
             body_b: None,
-            anchor_a: Vec2::ZERO,
-            anchor_b: anchor,
-            rest_rot_a: 0.0,
-            rest_rot_b: 0.0,
+            anchor_a: gradiance::units::Displacement(Vec2::ZERO),
+            anchor_b: gradiance::units::Displacement(anchor),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
         },
     };
     let id = record.id;

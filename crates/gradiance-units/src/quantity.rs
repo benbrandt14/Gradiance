@@ -19,6 +19,7 @@ macro_rules! scalar_quantity {
         $(#[$doc])+
         #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default, Serialize, Deserialize, Reflect)]
         #[repr(transparent)]
+        #[serde(transparent)]
         pub struct $name(pub f32);
 
         impl $name {
@@ -88,6 +89,7 @@ macro_rules! vector_quantity {
         $(#[$doc])+
         #[derive(Clone, Copy, PartialEq, Debug, Default, Serialize, Deserialize, Reflect)]
         #[repr(transparent)]
+        #[serde(transparent)]
         pub struct $name(pub Vec2);
 
         impl $name {
@@ -296,5 +298,55 @@ impl core::ops::Div<Time> for Impulse {
     /// contact impulse ÷ fixed dt reads as the contact force).
     fn div(self, rhs: Time) -> Force {
         Force(self.0 / rhs.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // float_cmp: values round-trip exactly through the text format.
+    #![allow(clippy::float_cmp)]
+    use super::*;
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct Typed {
+        near: Length,
+        gravity: Acceleration2,
+        limits: Option<[Angle; 2]>,
+    }
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct Untyped {
+        near: f32,
+        gravity: Vec2,
+        limits: Option<[f32; 2]>,
+    }
+
+    fn pretty<T: Serialize>(value: &T) -> String {
+        ron::ser::to_string_pretty(value, ron::ser::PrettyConfig::new()).expect("serializes")
+    }
+
+    /// Scene format v7: a quantity saves as the bare number it holds, exactly
+    /// as the `f32`/`Vec2` it replaced (`#[serde(transparent)]`), and loads
+    /// back from that spelling.
+    #[test]
+    fn quantities_serialize_as_their_bare_value() {
+        let typed = Typed {
+            near: Length(0.5),
+            gravity: Acceleration2(Vec2::new(1.25, -9.75)),
+            limits: Some([Angle(-1.0), Angle(1.5)]),
+        };
+        let untyped = Untyped {
+            near: 0.5,
+            gravity: Vec2::new(1.25, -9.75),
+            limits: Some([-1.0, 1.5]),
+        };
+        let text = pretty(&typed);
+        assert_eq!(text, pretty(&untyped));
+        assert!(text.contains("near: 0.5,"), "{text}");
+        assert!(text.contains("gravity: (1.25, -9.75),"), "{text}");
+        assert_eq!(ron::from_str::<Typed>(&text).ok(), Some(typed));
+        // The pre-v7 wrapped spelling is not accepted (v6 files are rejected
+        // by version before they get this far).
+        assert!(ron::from_str::<Length>("(0.5)").is_err());
     }
 }

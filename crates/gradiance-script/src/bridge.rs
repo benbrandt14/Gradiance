@@ -1855,9 +1855,9 @@ fn register_joint_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
             let rest_length = far.map_or(0.0, |(_, pose_b)| pose_a.pos.distance(pose_b.pos));
             drop(view);
             let kind = JointKind::Spring {
-                rest_length,
-                stiffness: stiffness as f32,
-                damping: damping as f32,
+                rest_length: gradiance_units::Length(rest_length),
+                stiffness: gradiance_units::Stiffness(stiffness as f32),
+                damping: gradiance_units::Damping(damping as f32),
                 range: None,
             };
             // Anchored at body A's centre; `spawn_joint` puts B's anchor at
@@ -1903,10 +1903,10 @@ fn spawn_joint(
         body_a: id_a,
         body_b: None,
         // For a world pin the far anchor is the world point itself.
-        anchor_b: anchor,
-        anchor_a: to_local(pose_a, anchor),
-        rest_rot_a: pose_a.rot,
-        rest_rot_b: 0.0,
+        anchor_b: gradiance_units::Displacement(anchor),
+        anchor_a: gradiance_units::Displacement(to_local(pose_a, anchor)),
+        rest_rot_a: gradiance_units::Angle(pose_a.rot),
+        rest_rot_b: gradiance_units::Angle(0.0),
     };
     // `b < 0` is the world pin; otherwise resolve the second body. An index
     // that does not resolve degrades to a world pin rather than dropping the
@@ -1916,8 +1916,8 @@ fn spawn_joint(
         && id_b != id_a
     {
         def.body_b = Some(id_b);
-        def.anchor_b = to_local(pose_b, anchor);
-        def.rest_rot_b = pose_b.rot;
+        def.anchor_b = gradiance_units::Displacement(to_local(pose_b, anchor));
+        def.rest_rot_b = gradiance_units::Angle(pose_b.rot);
     }
     let record = gradiance_scene::JointRecord {
         id: StableId::new(),
@@ -2656,7 +2656,7 @@ mod tests {
             "(begin (sim-set \"gravity.y\" -250) (sim-set \"speed\" 2))",
         );
         let settings = app.world().resource::<SimSettings>();
-        assert_eq!(settings.gravity.y, -250.0);
+        assert_eq!(settings.gravity.value().y, -250.0);
         assert_eq!(settings.speed, 2.0);
         // A config write is not an authored edit — nothing reached the intent bus.
         assert!(app.world().resource::<Spawns>().0.is_empty());

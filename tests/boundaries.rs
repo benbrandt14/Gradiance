@@ -188,7 +188,8 @@ fn the_crate_dag_matches_the_architecture() {
     let allowed: &[(&str, &[&str])] = &[
         (
             "command",
-            &["core", "domain", "geometry", "scene", "signal"],
+            // units: commands rewire typed joint anchors / rest angles (5-1).
+            &["core", "domain", "geometry", "scene", "signal", "units"],
         ),
         ("core", &[]),
         ("domain", &["core", "geometry", "units"]),
@@ -197,6 +198,9 @@ fn the_crate_dag_matches_the_architecture() {
             "interaction",
             &[
                 "command", "core", "domain", "geometry", "optimize", "persist", "physics", "scene",
+                // Typed joint limits / spring parameters (units P2·types,
+                // brief 5-1): units is a bottom node any layer may use.
+                "units",
             ],
         ),
         ("kernel", &[]),
@@ -218,7 +222,10 @@ fn the_crate_dag_matches_the_architecture() {
         ("scene", &["core", "domain"]),
         (
             "script",
-            &["command", "core", "domain", "geometry", "scene", "signal"],
+            // units: the spring verb builds typed spring parameters (5-1).
+            &[
+                "command", "core", "domain", "geometry", "scene", "signal", "units",
+            ],
         ),
         ("signal", &["core", "domain", "kernel", "physics"]),
         (

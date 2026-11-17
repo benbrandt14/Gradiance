@@ -86,7 +86,7 @@ impl BackgroundMenu<'_> {
             )
             .on_hover_text("top-down mode: bodies rub on the back plane (0 = off)");
         });
-        let top_down = self.sim.gravity.length() < 1e-3;
+        let top_down = self.sim.gravity.value().length() < 1e-3;
         for action in script.actions.builtins() {
             let Some(name) = action.builtin else { continue };
             if !BACKGROUND_BUILTINS.contains(&name) || !background_builtin_shown(name, top_down) {
@@ -115,14 +115,14 @@ impl BackgroundMenu<'_> {
         }
         // Reset the grid's user coordinate system to world axes (undoes an
         // "align grid to body").
-        if (self.grid.origin != Vec2::ZERO || self.grid.rotation != 0.0)
+        if (self.grid.origin.value() != Vec2::ZERO || self.grid.rotation.value() != 0.0)
             && ui
                 .button("Reset grid to world")
                 .on_hover_text("clear a local-frame alignment")
                 .clicked()
         {
-            self.grid.origin = Vec2::ZERO;
-            self.grid.rotation = 0.0;
+            self.grid.origin = gradiance_units::Displacement(Vec2::ZERO);
+            self.grid.rotation = gradiance_units::Angle(0.0);
             close = true;
         }
         if ui.button("Scene & lighting settings…").clicked() {
@@ -138,8 +138,8 @@ impl BackgroundMenu<'_> {
     /// body's rotation, so sketching against a tilted structure snaps in
     /// that structure's axes (CAD "align UCS to face").
     fn align_grid_to(&mut self, pose: PosRot) {
-        self.grid.origin = pose.pos;
-        self.grid.rotation = pose.rot;
+        self.grid.origin = gradiance_units::Displacement(pose.pos);
+        self.grid.rotation = gradiance_units::Angle(pose.rot);
     }
 }
 
@@ -287,9 +287,9 @@ pub fn open_context_menu(
                     Some(idb) => {
                         let pose_b =
                             PosRot::from_transform(transforms.get(index.entity(idb)?).ok()?);
-                        Some(pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b))
+                        Some(pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(def.anchor_b.value()))
                     }
-                    None => Some(def.anchor_b),
+                    None => Some(def.anchor_b.value()),
                 };
                 Some((
                     *id,
@@ -736,24 +736,15 @@ pub fn context_menu(
                             depth_edit(&selection, &props.ids, &props.depths, edits, f);
                         };
                     if ui.small_button("to front").clicked() {
-                        shift(&mut props.edits, &|old| DepthBand {
-                            near: 0.0,
-                            far: old.thickness().max(DepthBand::MIN_THICKNESS),
-                        });
+                        shift(&mut props.edits, &|old| DepthBand::metres(0.0, old.thickness().max(DepthBand::MIN_THICKNESS)));
                         close = true;
                     }
                     if ui.small_button("forward").clicked() {
-                        shift(&mut props.edits, &|old| DepthBand {
-                            near: old.near - step,
-                            far: old.far - step,
-                        });
+                        shift(&mut props.edits, &|old| DepthBand::metres(old.near.value() - step, old.far.value() - step));
                         close = true;
                     }
                     if ui.small_button("backward").clicked() {
-                        shift(&mut props.edits, &|old| DepthBand {
-                            near: old.near + step,
-                            far: old.far + step,
-                        });
+                        shift(&mut props.edits, &|old| DepthBand::metres(old.near.value() + step, old.far.value() + step));
                         close = true;
                     }
                 });

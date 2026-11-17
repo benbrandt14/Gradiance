@@ -18,6 +18,7 @@
 
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
+use gradiance_units::Displacement;
 use serde::{Deserialize, Serialize};
 
 /// Marker on every authored behavior-node entity (the node analogue of
@@ -33,14 +34,14 @@ pub struct NodeAttachment {
     /// The body this node follows, or `None` for a free node.
     pub target: Option<StableId>,
     /// Offset from the target's origin, in the target's local frame.
-    pub offset: Vec2,
+    pub offset: Displacement,
 }
 
 impl Default for NodeAttachment {
     fn default() -> Self {
         Self {
             target: None,
-            offset: Vec2::ZERO,
+            offset: Displacement(Vec2::ZERO),
         }
     }
 }
@@ -51,11 +52,12 @@ impl NodeAttachment {
         Self::default()
     }
 
-    /// A node attached to `target` at `offset` in the target's local frame.
+    /// A node attached to `target` at `offset` (metres) in the target's
+    /// local frame.
     pub fn to(target: StableId, offset: Vec2) -> Self {
         Self {
             target: Some(target),
-            offset,
+            offset: Displacement(offset),
         }
     }
 }

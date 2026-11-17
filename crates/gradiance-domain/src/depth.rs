@@ -8,6 +8,7 @@
 //! granularity), and ground half-planes collide with everything.
 
 use gradiance_core::constants::LAYER_HEIGHT;
+use gradiance_units::Length;
 use serde::{Deserialize, Serialize};
 
 /// The authored depth band of a body, in world units *into* the screen:
@@ -25,17 +26,14 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct DepthBand {
     /// Depth of the front face (≥ 0; 0 = the interaction plane).
-    pub near: f32,
+    pub near: Length,
     /// Depth of the back face (> `near`).
-    pub far: f32,
+    pub far: Length,
 }
 
 impl Default for DepthBand {
     fn default() -> Self {
-        Self {
-            near: 0.0,
-            far: LAYER_HEIGHT,
-        }
+        Self::metres(0.0, LAYER_HEIGHT)
     }
 }
 
@@ -52,28 +50,35 @@ impl DepthBand {
     /// The UI drag snap step (a quarter layer).
     pub const SNAP_STEP: f32 = LAYER_HEIGHT / 4.0;
 
+    /// A band from its two face depths in metres.
+    #[must_use]
+    pub const fn metres(near: f32, far: f32) -> Self {
+        Self {
+            near: Length(near),
+            far: Length(far),
+        }
+    }
+
     /// A well-formed copy: `near ≥ 0`, `far ≥ near + MIN_THICKNESS`,
     /// non-finite input replaced by the default band.
     #[must_use]
     pub fn sanitized(self) -> Self {
-        if !(self.near.is_finite() && self.far.is_finite()) {
+        let (near, far) = (self.near.value(), self.far.value());
+        if !(near.is_finite() && far.is_finite()) {
             return Self::default();
         }
-        let near = self.near.max(0.0);
-        Self {
-            near,
-            far: self.far.max(near + Self::MIN_THICKNESS),
-        }
+        let near = near.max(0.0);
+        Self::metres(near, far.max(near + Self::MIN_THICKNESS))
     }
 
     /// z of the front face (the extrusion's `z_front`).
     pub fn z_front(&self) -> f32 {
-        -self.near
+        -self.near.value()
     }
 
     /// Extrusion thickness.
     pub fn thickness(&self) -> f32 {
-        self.far - self.near
+        (self.far - self.near).value()
     }
 
     /// The derived contiguous collision-layer bits: every layer
@@ -83,15 +88,18 @@ impl DepthBand {
     /// ```
     /// use gradiance_domain::depth::DepthBand;
     ///
-    /// assert_eq!(DepthBand { near: 0.0, far: 0.1 }.bits(), 0b0001);
-    /// assert_eq!(DepthBand { near: 0.05, far: 0.15 }.bits(), 0b0011);
-    /// assert_eq!(DepthBand { near: 0.1, far: 0.2 }.bits(), 0b0010);
+    /// assert_eq!(DepthBand::metres(0.0, 0.1).bits(), 0b0001);
+    /// assert_eq!(DepthBand::metres(0.05, 0.15).bits(), 0b0011);
+    /// assert_eq!(DepthBand::metres(0.1, 0.2).bits(), 0b0010);
     /// ```
     pub fn bits(&self) -> u32 {
         let band = self.sanitized();
-        let first = ((band.near / LAYER_HEIGHT + EDGE_EPS).floor().max(0.0) as u32).min(31);
-        let last =
-            (((band.far / LAYER_HEIGHT - EDGE_EPS).ceil().max(1.0) as u32) - 1).clamp(first, 31);
+        let first = ((band.near.value() / LAYER_HEIGHT + EDGE_EPS)
+            .floor()
+            .max(0.0) as u32)
+            .min(31);
+        let last = (((band.far.value() / LAYER_HEIGHT - EDGE_EPS).ceil().max(1.0) as u32) - 1)
+            .clamp(first, 31);
         let count = last - first + 1;
         (((1u64 << count) - 1) << first) as u32
     }
@@ -107,20 +115,17 @@ impl DepthBand {
     #[must_use]
     pub fn snapped(self) -> Self {
         let step = Self::SNAP_STEP;
-        Self {
-            near: (self.near / step).round() * step,
-            far: (self.far / step).round() * step,
-        }
+        Self::metres(
+            (self.near.value() / step).round() * step,
+            (self.far.value() / step).round() * step,
+        )
         .sanitized()
     }
 
     /// The equivalent band for a legacy v4 layer bit range (`min..=max`,
     /// from `LayerMask32::occupied_range`) — the save-migration mapping.
     pub fn from_bit_range(min: u32, max: u32) -> Self {
-        Self {
-            near: min as f32 * LAYER_HEIGHT,
-            far: (max + 1) as f32 * LAYER_HEIGHT,
-        }
+        Self::metres(min as f32 * LAYER_HEIGHT, (max + 1) as f32 * LAYER_HEIGHT)
     }
 }
 
@@ -132,131 +137,50 @@ mod tests {
     fn bits_cover_exactly_the_overlapped_layers() {
         // Bands are metres; one layer is `LAYER_HEIGHT` (0.1 m) thick.
         // Whole layers map to their own bit.
-        assert_eq!(
-            DepthBand {
-                near: 0.0,
-                far: 0.1
-            }
-            .bits(),
-            1
-        );
-        assert_eq!(
-            DepthBand {
-                near: 0.1,
-                far: 0.2
-            }
-            .bits(),
-            0b10
-        );
-        assert_eq!(
-            DepthBand {
-                near: 0.3,
-                far: 0.6
-            }
-            .bits(),
-            0b11_1000
-        );
+        assert_eq!(DepthBand::metres(0.0, 0.1).bits(), 1);
+        assert_eq!(DepthBand::metres(0.1, 0.2).bits(), 0b10);
+        assert_eq!(DepthBand::metres(0.3, 0.6).bits(), 0b11_1000);
         // Fractional bands cover every touched layer.
-        assert_eq!(
-            DepthBand {
-                near: 0.025,
-                far: 0.075
-            }
-            .bits(),
-            1
-        );
-        assert_eq!(
-            DepthBand {
-                near: 0.075,
-                far: 0.125
-            }
-            .bits(),
-            0b11
-        );
+        assert_eq!(DepthBand::metres(0.025, 0.075).bits(), 1);
+        assert_eq!(DepthBand::metres(0.075, 0.125).bits(), 0b11);
         // Grazing a boundary does not claim the neighbor.
-        assert_eq!(
-            DepthBand {
-                near: 0.0,
-                far: 0.100_005
-            }
-            .bits(),
-            1
-        );
-        assert_eq!(
-            DepthBand {
-                near: 0.099_995,
-                far: 0.2
-            }
-            .bits(),
-            0b10
-        );
+        assert_eq!(DepthBand::metres(0.0, 0.100_005).bits(), 1);
+        assert_eq!(DepthBand::metres(0.099_995, 0.2).bits(), 0b10);
     }
 
     #[test]
     fn bits_clamp_to_the_32_available_layers() {
-        let deep = DepthBand {
-            near: 500.0,
-            far: 900.0,
-        };
+        let deep = DepthBand::metres(500.0, 900.0);
         assert_eq!(deep.bits(), 1 << 31, "beyond layer 31 collides as 31");
-        let huge = DepthBand {
-            near: 0.0,
-            far: 10_000.0,
-        };
+        let huge = DepthBand::metres(0.0, 10_000.0);
         assert_eq!(huge.bits(), u32::MAX, "spanning everything sets all bits");
     }
 
     #[test]
     fn sanitize_enforces_ordering_and_thickness() {
-        let inverted = DepthBand {
-            near: 20.0,
-            far: 5.0,
-        }
-        .sanitized();
-        assert!(inverted.far >= inverted.near + DepthBand::MIN_THICKNESS);
-        let negative = DepthBand {
-            near: -3.0,
-            far: 4.0,
-        }
-        .sanitized();
-        assert!(negative.near >= 0.0);
-        let sliver = DepthBand {
-            near: 5.0,
-            far: 5.0,
-        }
-        .sanitized();
+        let inverted = DepthBand::metres(20.0, 5.0).sanitized();
+        assert!(inverted.far.value() >= inverted.near.value() + DepthBand::MIN_THICKNESS);
+        let negative = DepthBand::metres(-3.0, 4.0).sanitized();
+        assert!(negative.near.value() >= 0.0);
+        let sliver = DepthBand::metres(5.0, 5.0).sanitized();
         assert!(sliver.thickness() >= DepthBand::MIN_THICKNESS);
         assert_eq!(
-            DepthBand {
-                near: f32::NAN,
-                far: 1.0
-            }
-            .sanitized(),
+            DepthBand::metres(f32::NAN, 1.0).sanitized(),
             DepthBand::default()
         );
     }
 
     #[test]
     fn snapping_rounds_to_quarter_layers() {
-        let band = DepthBand {
-            near: 0.014,
-            far: 0.137,
-        }
-        .snapped();
-        assert!((band.near - 0.025).abs() < 1e-6);
-        assert!((band.far - 0.125).abs() < 1e-6);
+        let band = DepthBand::metres(0.014, 0.137).snapped();
+        assert!((band.near.value() - 0.025).abs() < 1e-6);
+        assert!((band.far.value() - 0.125).abs() < 1e-6);
     }
 
     #[test]
     fn overlap_uses_exact_floats() {
-        let a = DepthBand {
-            near: 0.0,
-            far: 10.4,
-        };
-        let b = DepthBand {
-            near: 10.6,
-            far: 20.0,
-        };
+        let a = DepthBand::metres(0.0, 10.4);
+        let b = DepthBand::metres(10.6, 20.0);
         assert!(!a.overlaps(&b), "exact ranges do not overlap");
         // …though the quantized bits do (layer-granularity approximation).
         assert_ne!(a.bits() & b.bits(), 0);
@@ -264,21 +188,9 @@ mod tests {
 
     #[test]
     fn v4_bit_ranges_map_to_equivalent_bands() {
-        assert_eq!(
-            DepthBand::from_bit_range(0, 0),
-            DepthBand {
-                near: 0.0,
-                far: 0.1
-            }
-        );
+        assert_eq!(DepthBand::from_bit_range(0, 0), DepthBand::metres(0.0, 0.1));
         let band = DepthBand::from_bit_range(1, 3);
-        assert_eq!(
-            band,
-            DepthBand {
-                near: 0.1,
-                far: 0.4
-            }
-        );
+        assert_eq!(band, DepthBand::metres(0.1, 0.4));
         assert_eq!(band.bits(), 0b1110, "round-trips through the bit view");
     }
 }

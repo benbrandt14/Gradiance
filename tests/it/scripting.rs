@@ -155,7 +155,7 @@ fn body_accessors_read_positions() {
 #[test]
 fn a_script_configures_the_simulation() {
     let mut app = paused_app();
-    let gravity_y = |app: &mut App| app.world().resource::<SimSettings>().gravity.y;
+    let gravity_y = |app: &mut App| app.world().resource::<SimSettings>().gravity.value().y;
     assert!((gravity_y(&mut app) - (-250.0)).abs() > 1.0); // default is -1000
     run(&mut app, "(sim-set \"gravity.y\" -250)");
     // Config is not authored state: the write lands on the settings resource
@@ -187,7 +187,15 @@ fn assert_floating(app: &mut App) {
     let before = dynamic_heights(app);
     assert_eq!(before.len(), 2, "both boxes spawned");
     step(app, 60);
-    assert!(app.world().resource::<SimSettings>().gravity.y.abs() < 1e-6);
+    assert!(
+        app.world()
+            .resource::<SimSettings>()
+            .gravity
+            .value()
+            .y
+            .abs()
+            < 1e-6
+    );
     let after = dynamic_heights(app);
     for (b, a) in before.iter().zip(&after) {
         assert!(
@@ -221,7 +229,7 @@ fn a_console_script_zeroes_gravity_while_playing() {
 #[test]
 fn integer_and_float_literals_both_write_a_float_setting() {
     let mut app = paused_app();
-    let gravity_y = |app: &mut App| app.world().resource::<SimSettings>().gravity.y;
+    let gravity_y = |app: &mut App| app.world().resource::<SimSettings>().gravity.value().y;
     run(&mut app, "(sim-set \"gravity.y\" 0)");
     assert!(gravity_y(&mut app).abs() < 1e-6);
     run(&mut app, "(sim-set \"gravity.y\" -3.5)");
@@ -702,6 +710,57 @@ fn every_joint_kind_lands_and_is_undoable() {
     undo(&mut app);
     undo(&mut app);
     assert_eq!(joint_count(&mut app), 0);
+}
+
+/// Brief 5-1: retyping authored scalars to `gradiance-units` quantities must
+/// not change what a script sees. `sim-get`/`sim-set` read and write typed
+/// settings (`gravity: Acceleration2`, `timestep_hz: Frequency`) as plain
+/// numbers by their old paths, and the `spring` verb's numeric arguments land
+/// in the typed spring parameters unchanged.
+#[test]
+fn retyped_quantities_read_and_write_as_numbers() {
+    use gradiance::domain::joint::{JointDef, JointKind};
+    use gradiance::units::{Acceleration2, Damping, Frequency, Length, Stiffness};
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(begin (sim-set \"timestep_hz\" 120) (sim-set \"gravity.x\" 1.5) \
+                (sim-set \"gravity.y\" -9.5))",
+    );
+    let sim = app.world().resource::<SimSettings>().clone();
+    assert_eq!(sim.timestep_hz, Frequency(120.0));
+    assert_eq!(sim.gravity, Acceleration2(Vec2::new(1.5, -9.5)));
+
+    // Reads come back as numbers a script can compare and do arithmetic on.
+    run(
+        &mut app,
+        "(when (and (= (sim-get \"timestep_hz\") 120) \
+                    (< (+ (sim-get \"gravity.y\") (sim-get \"gravity.x\")) -7.9)) \
+            (spawn-box 0 0 1 1))",
+    );
+    assert_eq!(body_count(&mut app), 1, "sim-get returned numbers");
+
+    run(&mut app, "(spawn-box 3 0 1 1)");
+    run(&mut app, "(spring 0 1 150 0.25)");
+    let mut q = app.world_mut().query::<&JointDef>();
+    let defs: Vec<JointDef> = q.iter(app.world()).cloned().collect();
+    assert_eq!(defs.len(), 1);
+    let JointKind::Spring {
+        rest_length,
+        stiffness,
+        damping,
+        range,
+    } = defs[0].kind
+    else {
+        panic!("expected a spring, got {:?}", defs[0].kind);
+    };
+    assert_eq!(stiffness, Stiffness(150.0));
+    assert_eq!(damping, Damping(0.25));
+    assert!(
+        (rest_length - Length(3.0)).value().abs() < 1e-5,
+        "{rest_length:?}"
+    );
+    assert_eq!(range, None);
 }
 
 /// Bad body indices must not produce a half-built joint. A first index that
@@ -1255,7 +1314,7 @@ fn a_script_that_spawns_then_loops_forever_spawns_nothing() {
 fn a_failed_run_commits_none_of_its_queued_effects() {
     use gradiance::signal::{SignalBus, SignalParams};
     let mut app = paused_app();
-    let gravity = app.world().resource::<SimSettings>().gravity.y;
+    let gravity = app.world().resource::<SimSettings>().gravity.value().y;
     run(
         &mut app,
         "(spawn-box 0 0 40 20)
@@ -1269,7 +1328,7 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
     assert!(!last_entry(&app).expect("logged").0, "the run failed");
     assert_eq!(body_count(&mut app), 0);
     let world = app.world();
-    assert!((world.resource::<SimSettings>().gravity.y - gravity).abs() < 1e-6);
+    assert!((world.resource::<SimSettings>().gravity.value().y - gravity).abs() < 1e-6);
     assert_eq!(world.resource::<SignalBus>().get("half-run"), None);
     assert!(world.resource::<SignalParams>().0.is_empty());
     assert_eq!(world.resource::<ScriptActions>().user().count(), 0);
@@ -1490,7 +1549,10 @@ fn the_builtin_gravity_actions_round_trip() {
     let side = app.world().resource::<SimSettings>().gravity;
     invoke_builtin(&mut app, builtin::TOP_DOWN);
     let settings = app.world().resource::<SimSettings>().clone();
-    assert_eq!(settings.gravity, Vec2::ZERO);
+    assert_eq!(
+        settings.gravity,
+        gradiance::units::Acceleration2(Vec2::ZERO)
+    );
     assert!((settings.plane_friction - 0.3).abs() < 1e-6);
     invoke_builtin(&mut app, builtin::RESTORE_GRAVITY);
     assert_eq!(app.world().resource::<SimSettings>().gravity, side);
@@ -1498,7 +1560,7 @@ fn the_builtin_gravity_actions_round_trip() {
     app.update();
     assert_eq!(
         app.world().resource::<SimSettings>().gravity,
-        Vec2::ZERO,
+        gradiance::units::Acceleration2(Vec2::ZERO),
         "restoring gravity was one undo step"
     );
 }

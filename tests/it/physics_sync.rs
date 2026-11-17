@@ -10,10 +10,7 @@ use gradiance::prelude::*;
 fn spawned_body_gains_engine_components() {
     let mut app = headless_app();
     let mut record = box_record(Vec2::ZERO, 0.4, 0.2);
-    record.depth = DepthBand {
-        near: 0.1,
-        far: 0.3, // layers 1..=2
-    };
+    record.depth = DepthBand::metres(0.1, 0.3); // layers 1..=2
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
     step(&mut app, 2);
@@ -246,7 +243,7 @@ fn timestep_setting_applies_to_the_fixed_clock() {
     let mut app = paused_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .timestep_hz = 120.0;
+        .timestep_hz = gradiance::units::Frequency(120.0);
     app.update();
 
     let dt = app
@@ -289,7 +286,7 @@ fn attraction_clusters_and_repulsion_scatters() {
         let mut record = box_record(Vec2::new(x, 0.0), 30.0, 30.0);
         record.shape = ShapeDef::Circle { radius: 15.0 };
         record.field = Some(FieldSource {
-            strength,
+            strength: gradiance::units::Acceleration(strength),
             falloff: FieldFalloff::Quadratic,
         });
         let id = record.id;
@@ -318,7 +315,7 @@ fn attraction_clusters_and_repulsion_scatters() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
     let a = spawn_field_circle(&mut app, -80.0, -2000.0);
     let b = spawn_field_circle(&mut app, 80.0, -2000.0);
@@ -334,7 +331,7 @@ fn attraction_clusters_and_repulsion_scatters() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
     let a = spawn_field_circle(&mut app, -40.0, 2000.0);
     let b = spawn_field_circle(&mut app, 40.0, 2000.0);
@@ -354,13 +351,13 @@ fn a_field_acts_on_plain_bodies_too() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     let mut attractor = box_record(Vec2::ZERO, 40.0, 40.0);
     attractor.physics.rigid_body = RigidBody::Static;
     attractor.field = Some(FieldSource {
-        strength: -2000.0,
+        strength: gradiance::units::Acceleration(-2000.0),
         falloff: FieldFalloff::Quadratic,
     });
     app.world_mut()
@@ -388,14 +385,14 @@ fn set_in_orbit_produces_a_limit_cycle() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     let mut sun = box_record(Vec2::ZERO, 60.0, 60.0);
     sun.shape = ShapeDef::Circle { radius: 30.0 };
     sun.physics.rigid_body = RigidBody::Static;
     sun.field = Some(FieldSource {
-        strength: -4000.0,
+        strength: gradiance::units::Acceleration(-4000.0),
         falloff: FieldFalloff::Quadratic,
     });
     app.world_mut()
@@ -455,17 +452,20 @@ fn world_pin_prismatic_locks_rotation_by_default() {
             def: JointDef {
                 kind: JointKind::Slider {
                     axis: Vec2::Y,
-                    limits: Some([-80.0, 80.0]),
+                    limits: Some([
+                        gradiance::units::Length(-80.0),
+                        gradiance::units::Length(80.0),
+                    ]),
                     motor: None,
                 },
                 common: JointCommon::default(),
                 body_a: plank_id,
                 // World pin at the plank's LEFT END: gravity torques it.
                 body_b: None,
-                anchor_a: Vec2::new(-90.0, 0.0),
-                anchor_b: Vec2::new(-90.0, 100.0),
-                rest_rot_a: 0.0,
-                rest_rot_b: 0.0,
+                anchor_a: gradiance::units::Displacement(Vec2::new(-90.0, 0.0)),
+                anchor_b: gradiance::units::Displacement(Vec2::new(-90.0, 100.0)),
+                rest_rot_a: gradiance::units::Angle(0.0),
+                rest_rot_b: gradiance::units::Angle(0.0),
             },
         },
     });
@@ -512,13 +512,13 @@ fn field_forces_are_equal_and_opposite() {
     let mut app = headless_app();
     app.world_mut()
         .resource_mut::<gradiance::domain::settings::SimSettings>()
-        .gravity = Vec2::ZERO;
+        .gravity = gradiance::units::Acceleration2(Vec2::ZERO);
     app.update();
 
     let mut attractor = box_record(Vec2::new(-60.0, 0.0), 60.0, 60.0);
     attractor.shape = ShapeDef::Circle { radius: 30.0 };
     attractor.field = Some(FieldSource {
-        strength: -20_000.0,
+        strength: gradiance::units::Acceleration(-20_000.0),
         falloff: FieldFalloff::Quadratic,
     });
     let attractor_id = attractor.id;
@@ -571,7 +571,7 @@ fn cutting_a_field_source_conserves_its_field() {
     let mut app = paused_app();
     let mut source = box_record(Vec2::ZERO, 80.0, 40.0);
     source.field = Some(FieldSource {
-        strength: -10_000.0,
+        strength: gradiance::units::Acceleration(-10_000.0),
         falloff: FieldFalloff::Quadratic,
     });
     app.world_mut()
@@ -613,7 +613,7 @@ fn tracers_sample_fading_trails_and_toggle_undoably() {
     let mut app = headless_app();
     let mut record = box_record(Vec2::new(0.0, 300.0), 20.0, 20.0);
     record.tracer = Some(Tracer {
-        fade_secs: 0.5,
+        fade_secs: gradiance::units::Time(0.5),
         ..Default::default()
     });
     let id = record.id;

@@ -208,13 +208,14 @@ pub fn update_snapped_cursor(
     // A degenerate spacing draws no grid, so it snaps to none either.
     if grid.snap_enabled
         && grid.visible
-        && let Some(step) = adaptive_step(grid.spacing, scale)
+        && let Some(step) = adaptive_step(grid.spacing.value(), scale)
     {
+        let (origin, rotation) = (grid.origin.value(), grid.rotation.value());
         let snapped = match grid.system {
-            GridSystem::Cartesian => cartesian_snap(p, grid.origin, grid.rotation, step),
-            GridSystem::Isometric => isometric_snap(p, grid.origin, grid.rotation, step),
+            GridSystem::Cartesian => cartesian_snap(p, origin, rotation, step),
+            GridSystem::Isometric => isometric_snap(p, origin, rotation, step),
             GridSystem::Polar { angular_divisions } => {
-                polar_snap(p, grid.origin, grid.rotation, step, angular_divisions)
+                polar_snap(p, origin, rotation, step, angular_divisions)
             }
         };
         out.position = Some(snapped);

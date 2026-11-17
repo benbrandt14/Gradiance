@@ -23,6 +23,7 @@ use gradiance_geometry::contours::{Contours, point_in_ring};
 use gradiance_geometry::polygonize::polygonize_components;
 use gradiance_geometry::sdf;
 use gradiance_scene::{BodyRecord, JointRecord};
+use gradiance_units::Displacement;
 
 /// What happened to one cut body.
 #[derive(Debug)]
@@ -224,9 +225,9 @@ fn rewire_joints(
         .map(|(_, record)| {
             let on_body_a = record.def.body_a == original.id;
             let anchor = if on_body_a {
-                record.def.anchor_a
+                record.def.anchor_a.value()
             } else {
-                record.def.anchor_b
+                record.def.anchor_b.value()
             };
             let mut rewired = None;
             for (piece, offset) in pieces.iter().zip(piece_offsets.iter()) {
@@ -234,10 +235,10 @@ fn rewire_joints(
                     let mut def = record.def.clone();
                     if on_body_a {
                         def.body_a = piece.id;
-                        def.anchor_a = anchor - *offset;
+                        def.anchor_a = Displacement(anchor - *offset);
                     } else {
                         def.body_b = Some(piece.id);
-                        def.anchor_b = anchor - *offset;
+                        def.anchor_b = Displacement(anchor - *offset);
                     }
                     rewired = Some(def);
                     break;

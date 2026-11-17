@@ -170,16 +170,18 @@ pub(crate) fn clone_internal_joints(
             let mut def = record.def;
             // Every endpoint must be inside the cloned set.
             def.body_a = remap(def.body_a)?;
-            def.rest_rot_a += rot_offset;
+            def.rest_rot_a = def.rest_rot_a + gradiance_units::Angle(rot_offset);
             match def.body_b {
                 Some(b) => {
                     def.body_b = Some(remap(b)?);
-                    def.rest_rot_b += rot_offset;
+                    def.rest_rot_b = def.rest_rot_b + gradiance_units::Angle(rot_offset);
                 }
                 // World pin: the anchor is a world point — transform it
                 // like the cloned bodies. The pin itself never rotates,
                 // so only `rest_rot_a` advanced.
-                None => def.anchor_b = map_world(def.anchor_b),
+                None => {
+                    def.anchor_b = gradiance_units::Displacement(map_world(def.anchor_b.value()));
+                }
             }
             Some(gradiance_scene::JointRecord {
                 id: StableId::new(),

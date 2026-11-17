@@ -185,7 +185,7 @@ pub fn bodies_at_sorted(
         .filter_map(|entity| {
             let (shape, band) = bodies.get(entity).ok()?;
             let is_ground = shape.contains_half_plane();
-            Some((is_ground, band.sanitized().near, entity))
+            Some((is_ground, band.sanitized().near.value(), entity))
         })
         .collect();
     hits.sort_by(|a, b| {

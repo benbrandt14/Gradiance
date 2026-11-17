@@ -6,6 +6,7 @@
 
 use bevy::math::Vec2;
 use bevy::prelude::Resource;
+use gradiance_units::{Acceleration2, Angle, Displacement, Frequency, Length};
 use serde::{Deserialize, Serialize};
 
 /// The family of grid geometries.
@@ -37,12 +38,12 @@ pub struct GridSettings {
     pub snap_enabled: bool,
     /// Grid geometry family.
     pub system: GridSystem,
-    /// Base cell size in metres (display adapts by powers of two).
-    pub spacing: f32,
+    /// Base cell size (display adapts by powers of two).
+    pub spacing: Length,
     /// Grid origin in world space.
-    pub origin: Vec2,
-    /// Grid rotation in radians.
-    pub rotation: f32,
+    pub origin: Displacement,
+    /// Grid rotation.
+    pub rotation: Angle,
 }
 
 impl Default for GridSettings {
@@ -51,9 +52,9 @@ impl Default for GridSettings {
             visible: true,
             snap_enabled: false,
             system: GridSystem::Cartesian,
-            spacing: 1.0,
-            origin: Vec2::ZERO,
-            rotation: 0.0,
+            spacing: Length(1.0),
+            origin: Displacement(Vec2::ZERO),
+            rotation: Angle(0.0),
         }
     }
 }
@@ -205,8 +206,8 @@ impl Default for ToolDefaults {
 /// the engine (`Gravity`, physics clock speed) — UI never touches avian.
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct SimSettings {
-    /// World gravity, m/s².
-    pub gravity: Vec2,
+    /// World gravity.
+    pub gravity: Acceleration2,
     /// Simulation speed multiplier (1 = realtime).
     pub speed: f32,
     /// Solver substeps per physics step (stiffness/accuracy knob).
@@ -219,25 +220,25 @@ pub struct SimSettings {
     pub plane_friction: f32,
     /// Physics steps per second (the fixed timestep).
     #[serde(default = "default_timestep_hz")]
-    pub timestep_hz: f32,
+    pub timestep_hz: Frequency,
 }
 
 fn default_substeps() -> u32 {
     SimSettings::default().substeps
 }
 
-fn default_timestep_hz() -> f32 {
+fn default_timestep_hz() -> Frequency {
     SimSettings::default().timestep_hz
 }
 
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
-            gravity: Vec2::new(0.0, -10.0),
+            gravity: Acceleration2(Vec2::new(0.0, -10.0)),
             speed: 1.0,
             plane_friction: 0.0,
             substeps: 6,
-            timestep_hz: 60.0,
+            timestep_hz: Frequency(60.0),
         }
     }
 }
@@ -255,19 +256,20 @@ impl SimSettings {
     /// the `gravity` vector, so one settled edit is one undo step.
     #[must_use]
     pub fn gravity_polar(&self) -> (f32, f32) {
-        let magnitude = self.gravity.length();
+        let gravity = self.gravity.value();
+        let magnitude = gravity.length();
         if magnitude <= f32::EPSILON {
             return (Self::DEFAULT_GRAVITY_ANGLE_DEG, 0.0);
         }
-        (self.gravity.y.atan2(self.gravity.x).to_degrees(), magnitude)
+        (gravity.y.atan2(gravity.x).to_degrees(), magnitude)
     }
 
     /// The gravity vector for `(angle_deg, magnitude)` — the inverse of
     /// [`gravity_polar`](Self::gravity_polar). A negative magnitude is
     /// treated as zero.
     #[must_use]
-    pub fn gravity_from_polar(angle_deg: f32, magnitude: f32) -> Vec2 {
-        Vec2::from_angle(angle_deg.to_radians()) * magnitude.max(0.0)
+    pub fn gravity_from_polar(angle_deg: f32, magnitude: f32) -> Acceleration2 {
+        Acceleration2(Vec2::from_angle(angle_deg.to_radians()) * magnitude.max(0.0))
     }
 }
 
@@ -409,7 +411,7 @@ pub struct LightingSettings {
     /// How far from the camera shadows stay valid, world metres. Smaller =
     /// denser shadow texels (crisper); too small clips shadows when the
     /// view orbits.
-    pub shadow_distance: f32,
+    pub shadow_distance: Length,
 }
 
 impl Default for LightingSettings {
@@ -422,7 +424,7 @@ impl Default for LightingSettings {
             ssao: false,
             contact_shadows: true,
             shadow_map_size: 4096,
-            shadow_distance: 80.0,
+            shadow_distance: Length(80.0),
         }
     }
 }
@@ -436,7 +438,7 @@ impl Default for LightingSettings {
 pub struct ScenerySettings {
     /// Gap between the deepest occupied layer's back face and the back
     /// plane, metres (0 = touching).
-    pub back_offset: f32,
+    pub back_offset: Length,
     /// Back plane color.
     pub back_color: crate::appearance::Rgba,
     /// Draw the back plane (shadows need it to land somewhere).
@@ -452,7 +454,7 @@ pub struct ScenerySettings {
 impl Default for ScenerySettings {
     fn default() -> Self {
         Self {
-            back_offset: 0.2,
+            back_offset: Length(0.2),
             back_color: crate::appearance::Rgba::rgb(0.82, 0.83, 0.85),
             back_visible: true,
             ground_visible: true,
@@ -474,7 +476,7 @@ mod tests {
         assert!((angle - -90.0).abs() < 1e-4, "default points down: {angle}");
         assert!((magnitude - 10.0).abs() < 1e-5);
         let back = SimSettings::gravity_from_polar(angle, magnitude);
-        assert!((back - sim.gravity).length() < 1e-5, "{back}");
+        assert!((back - sim.gravity).value().length() < 1e-5, "{back:?}");
 
         for (angle, magnitude) in [(0.0, 3.0), (45.0, 9.81), (180.0, 1.0), (-135.0, 25.0)] {
             let g = SimSettings::gravity_from_polar(angle, magnitude);
@@ -489,14 +491,17 @@ mod tests {
         }
 
         let zero = SimSettings {
-            gravity: Vec2::ZERO,
+            gravity: Acceleration2(Vec2::ZERO),
             ..SimSettings::default()
         };
         assert_eq!(
             zero.gravity_polar(),
             (SimSettings::DEFAULT_GRAVITY_ANGLE_DEG, 0.0)
         );
-        assert_eq!(SimSettings::gravity_from_polar(30.0, -2.0), Vec2::ZERO);
+        assert_eq!(
+            SimSettings::gravity_from_polar(30.0, -2.0),
+            Acceleration2(Vec2::ZERO)
+        );
     }
 
     #[test]

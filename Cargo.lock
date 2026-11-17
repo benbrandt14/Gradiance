@@ -3771,6 +3771,7 @@ dependencies = [
  "gradiance-geometry",
  "gradiance-scene",
  "gradiance-signal",
+ "gradiance-units",
  "thiserror 2.0.18",
 ]
 
@@ -3826,6 +3827,7 @@ dependencies = [
  "gradiance-persist",
  "gradiance-physics",
  "gradiance-scene",
+ "gradiance-units",
  "leafwing-input-manager",
 ]
 
@@ -3913,6 +3915,7 @@ dependencies = [
  "gradiance-geometry",
  "gradiance-scene",
  "gradiance-signal",
+ "gradiance-units",
  "serde_json",
  "steel-core",
  "thiserror 2.0.18",
@@ -3962,6 +3965,7 @@ version = "0.2.0"
 dependencies = [
  "bevy",
  "glam 0.32.1",
+ "ron",
  "serde",
  "thiserror 2.0.18",
 ]

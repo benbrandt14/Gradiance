@@ -59,7 +59,7 @@ pub fn follow_node_attachments(
         else {
             continue;
         };
-        let world = pose.pos + Vec2::from_angle(pose.rot).rotate(attachment.offset);
+        let world = pose.pos + Vec2::from_angle(pose.rot).rotate(attachment.offset.value());
         transform.translation.x = world.x;
         transform.translation.y = world.y;
     }
@@ -98,7 +98,7 @@ pub fn sample_traces(
         while trail
             .0
             .front()
-            .is_some_and(|(t, _)| now - t > tracer.fade_secs.max(0.05))
+            .is_some_and(|(t, _)| now - t > tracer.fade_secs.value().max(0.05))
         {
             trail.0.pop_front();
         }
@@ -139,7 +139,7 @@ pub fn draw_traces(
 ) {
     let now = time.elapsed_secs();
     for (tracer, trail, appearance, tint) in &trails {
-        let fade = tracer.fade_secs.max(0.05);
+        let fade = tracer.fade_secs.value().max(0.05);
         let fill = match tint.and_then(|t| t.trail) {
             Some(color) => {
                 let c = color.to_srgba();
@@ -170,7 +170,7 @@ pub fn draw_traces(
                     if alpha > 0.0 {
                         gizmos.circle_2d(
                             Isometry2d::from_translation(p),
-                            tracer.size.max(0.5),
+                            tracer.size.value().max(0.5),
                             Color::srgba(fill.r, fill.g, fill.b, alpha),
                         );
                     }

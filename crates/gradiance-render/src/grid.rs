@@ -32,9 +32,10 @@ pub fn draw_grid(
     let half = 800.0 * scale;
 
     // No valid spacing, no grid (and no unbounded line/ring loops below).
-    let Some(spacing) = adaptive_step(grid.spacing, scale) else {
+    let Some(spacing) = adaptive_step(grid.spacing.value(), scale) else {
         return;
     };
+    let (origin, rotation) = (grid.origin.value(), grid.rotation.value());
     // Mid-value tint + low alpha: visible over the light backdrop without
     // clashing on dark bodies (the grid is an overlay, not a surface).
     let minor = Color::srgba(0.55, 0.57, 0.62, 0.14);
@@ -49,11 +50,11 @@ pub fn draw_grid(
         GridSystem::Polar { .. } => None,
     };
     if let Some(dirs) = families {
-        let rot = Vec2::from_angle(grid.rotation);
+        let rot = Vec2::from_angle(rotation);
         for dir in dirs {
             line_family(
                 &mut gizmos,
-                grid.origin,
+                origin,
                 rot.rotate(dir),
                 spacing,
                 center,
@@ -63,13 +64,13 @@ pub fn draw_grid(
         }
     }
     if let GridSystem::Polar { angular_divisions } = grid.system {
-        let max_radius = (center - grid.origin).length() + half * 1.5;
+        let max_radius = (center - origin).length() + half * 1.5;
         // Ring `i` at `i · spacing` (multiplied, not accumulated, so a major
         // ring's radius is exact); majors by the same rule as lines.
         let mut i = 1_i32;
         while i as f32 * spacing <= max_radius {
             gizmos.circle(
-                Isometry3d::from_translation(grid.origin.extend(INTERACTION_PLANE_Z)),
+                Isometry3d::from_translation(origin.extend(INTERACTION_PLANE_Z)),
                 i as f32 * spacing,
                 if is_major_line(i) { major } else { minor },
             );
@@ -77,10 +78,10 @@ pub fn draw_grid(
         }
         let step = std::f32::consts::TAU / angular_divisions.max(1) as f32;
         for i in 0..angular_divisions.max(1) {
-            let dir = Vec2::from_angle(grid.rotation + step * i as f32);
+            let dir = Vec2::from_angle(rotation + step * i as f32);
             gizmos.line(
-                grid.origin.extend(INTERACTION_PLANE_Z),
-                (grid.origin + dir * max_radius).extend(INTERACTION_PLANE_Z),
+                origin.extend(INTERACTION_PLANE_Z),
+                (origin + dir * max_radius).extend(INTERACTION_PLANE_Z),
                 minor,
             );
         }
