@@ -11,7 +11,7 @@ as #248, 2e06f74; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-3 in review** (PR #PRNUM, branch
+- **Now:** **U-3 in review** (PR #249, branch
   `claude/project-thread-dydbi0`): the widget registry (SolidCraft's
   `ui-registry`, the first vendored file: `vendor/UPSTREAM.toml`,
   `tools/upstream-diff.sh`, `docs/upstream-watch.md`), `ui.inspect` and
@@ -31,7 +31,7 @@ as #248, 2e06f74; order per `docs/unified-surface-plan.md` § 10 and § 13).
   4. **4b-1** group op surface, on the registry (done, #248; adds
      `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (in review,
-     #PRNUM); **U-4** in-app input injection; **U-5** snapshot tests on
+     #249); **U-4** in-app input injection; **U-5** snapshot tests on
      lavapipe. **U-3b** `panel.*` operations (cut from U-3; replaces the
      four panel VM built-ins) before 4b-2.
   6. **4b-2** groups panel (on the new registry).
