@@ -251,6 +251,15 @@ pub struct BooleanIntent {
     pub targets: Vec<StableId>,
 }
 
+/// Request to **discard** the whole undo/redo history, after this frame's
+/// commands have applied: the world stays as it is and becomes the new
+/// baseline. Review mode sends it after loading a question's scene, so the
+/// demonstration never leaves undo steps behind (brief 4b-0). Not an op —
+/// no script or menu discards history.
+// Trace: dispatch.rs → `CommandStack::default()` after `execute`.
+#[derive(Message, Debug, Clone, Copy, Default, Reflect)]
+pub struct ClearHistoryIntent;
+
 /// Request to undo the last command.
 // Trace: dispatch.rs → CommandStack::undo (mod.rs).
 #[derive(Message, Debug, Clone, Copy, Default, Reflect)]

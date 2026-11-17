@@ -31,6 +31,7 @@ pub mod plot;
 pub mod ports;
 pub mod probe;
 pub mod reflect_grid;
+pub mod review;
 pub mod settings;
 pub mod signals;
 pub mod toolbar;
@@ -227,6 +228,8 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<outliner::ObjectTreePanel>();
         app.init_resource::<optimizer::OptimizerExpanded>();
         app.init_resource::<array_panel::ArrayWindow>();
+        app.init_resource::<review::ReviewWindow>();
+        app.add_systems(Startup, review::open_in_review_mode);
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
         app.init_resource::<dock::RightDock>();
@@ -244,6 +247,7 @@ impl Plugin for GradianceUiPlugin {
                 settings::settings_window,
                 optimizer::optimizer_window,
                 array_panel::array_window,
+                review::review_window,
                 bottom_dock::bottom_dock,
                 probe::probe_panel,
                 context_menu::context_menu,

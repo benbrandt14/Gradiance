@@ -29,6 +29,7 @@ mod reflect_intents;
 mod registry_validation;
 mod remote;
 mod replay;
+mod review;
 mod rod;
 mod script_examples;
 mod script_tools;

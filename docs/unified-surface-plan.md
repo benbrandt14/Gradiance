@@ -380,11 +380,10 @@ them for free, and review mode (4b-0) can script its scenes with them.
   invocation is one command; intents hold `StableId`s.
 - **Two tiers.** Steel never runs in the frame loop; the graph evaluates in
   compiled Rust.
-- **Other agents.** One worker at a time (`docs/state.md`). In flight: 4b-0
-  (review mode, edits `gradiance-ui` and CLI parsing). Queued: 4b-1 (group op
-  surface), 4b-2 (groups panel), 5-x. **4b-1 adds verbs**: if it lands before
-  U-1, U-2 migrates them; if U-1 lands first, 4b-1 declares them the new way.
-  Decided: U-1 and U-2 land first (§ 10).
+- **Other agents.** One worker at a time (`docs/state.md`). 4b-0 merged
+  (#238). 4b-1 (group op surface) was already in flight when this order was
+  set, so it lands first and **U-2 migrates its verbs** (`set-color`, the
+  group verbs) onto the registry.
 - **Exact pins and `--locked`.** Each upgrade is its own reviewed brief with
   the lockfile diff.
 
@@ -397,13 +396,13 @@ gives the reason for its place.
 
 | # | Item | Why here |
 |---|---|---|
-| 1 | **4b-0** review mode (in flight) | Already running; do not disturb it. |
+| 1 | **4b-1** group op surface (in flight; 4b-0 merged as #238) | Already running; do not disturb it. |
 | 2 | **D-0** toolchain 1.97.0 → 1.100.0 | Bevy 0.20 requires rustc ≥ 1.97.1 (crates.io `rust_version`). Clears the lint debt in `orchestration.md` § Recurring. |
 | 3 | **D-1** Bevy 0.20 stack (§ 4) | Touches every crate; do it once, before code that U-briefs write. |
 | 4 | **U-1** `gradiance-op` + 3 operations + conformance tests | The foundation all later surfaces project from. |
-| 5 | **U-2** migrate the rest; delete `OpSpec` strings, `EditBinding`, Scheme lowering, direct menu intents | Before 4b-1 adds group verbs, so they are declared once, the new way. |
+| 5 | **U-2** migrate the rest (4b-1's verbs included); delete `OpSpec` strings, `EditBinding`, Scheme lowering, direct menu intents | Before 4b-2 builds a panel over the group verbs, so the panel is a projection of the registry. |
 | 6 | **U-3** widget registry, `ui.inspect`, `ui.screenshot`; **U-4** input injection; **U-5** snapshot tests | Every later visual brief (4b-2, 4b-3, U-7..U-11) is then checkable in a container without `xdotool`. |
-| 7 | **4b-1** group op surface; **4b-2** groups panel | Owner's 4b direction, now on the registry. |
+| 7 | **4b-2** groups panel | Owner's 4b direction, now on the registry. |
 | 8 | **U-6** CLI + MCP server | Thin once U-2..U-4 exist; gives the owner an MCP door before the polish phase. |
 | 9 | **U-7** theme tokens with **4b-3** art direction; then **4b-4** | One "look" pass for chrome and scene; review mode shows the A/B. |
 | 10 | **Phase 5**: 5-2, 5-3, **U-8** number fields, 5-4, 5-5 | U-8 shares 5-3's parser; 5-4 lands on typed op params. |

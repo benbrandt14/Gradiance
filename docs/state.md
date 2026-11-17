@@ -2,8 +2,9 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (planning session; 4b-0 in flight; order revised
-per owner direction, `docs/unified-surface-plan.md`).
+Last updated: 2026-11-17 (planning session, merged with orchestrator's
+#238 update; 4b-1 in flight; order revised per owner direction,
+`docs/unified-surface-plan.md`).
 
 ## Position
 
@@ -11,20 +12,23 @@ per owner direction, `docs/unified-surface-plan.md`).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-0** review mode. **5-1** merged (#236): domain + settings
-  quantities typed, bare on disk, format **v7** (v6 rejected).
+- **Now:** **4b-1** group op surface. Recently merged: **5-1** (#236,
+  typed quantities, format v7) and **4b-0** (#238, review mode:
+  `cargo run -- --review`, questions/answers in `docs/review/`, process in
+  `orchestration.md` § Review mode; 3 seed questions open).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
-  1. **4b-0** review mode (in flight).
+  1. **4b-1** group op surface (in flight; adds `set-color`, which fixes
+     review scenes re-rolling colours).
   2. **D-0** toolchain bump to 1.100.0 (brief ready): Bevy 0.20 needs
      rustc ≥ 1.97.1.
   3. **D-1** Bevy 0.20 stack (brief ready).
   4. **U-1** `gradiance-op`: one declaration per operation (brief ready).
-  5. **U-2** migrate all verbs, menus, keys onto the registry (brief at
-     U-1 handoff).
+  5. **U-2** migrate all verbs (4b-1's group verbs included), menus, keys
+     onto the registry (brief at U-1 handoff).
   6. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
      **U-4** in-app input injection; **U-5** snapshot tests on lavapipe.
-  7. **4b-1** group op surface, **4b-2** groups panel (on the new registry).
+  7. **4b-2** groups panel (on the new registry).
   8. **U-6** CLI + MCP server.
   9. **U-7** theme tokens, Blender-leaning, together with **4b-3** art
      direction; then **4b-4** scaled defaults.
@@ -41,8 +45,9 @@ per owner direction, `docs/unified-surface-plan.md`).
     outside its scope. A session may write the brief itself when the work is
     in the plan above. Docs-only changes (plans, briefs, `state.md`) need no
     brief.
-  - **Questions go to review mode, not chat** (2026-11-16): once 4b-0
-    lands, add them to its questions file with scenes.
+  - **Questions go to review mode, not chat** (2026-11-16): add them to
+    `docs/review/questions.ron` with scenes; ingest `answers.ron` at each
+    phase start.
   - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
     reject older files, regenerate goldens, no migrations.
   - **Merge freely when CI is green** and no tests or checks were removed to
@@ -114,6 +119,10 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
     workaround); `world_per_pixel` uses window height for the perspective
     FOV (4-4).
   - Headless `ButtonInput` presses lose `just_pressed` (3-5).
+- **Review mode (4b-0):** option-level camera (open a question tilted);
+  seed joint-inspector / tangent-glyph / guide-faintness questions once an
+  alternative exists; option scripts' registered actions persist across
+  options.
 
 ## Parked — do not merge, rebase or close
 

@@ -243,6 +243,9 @@ this file → `docs/state.md` (where things are) → `docs/orchestration.md`
 (roles, coherence budget, the phase plan, future intent) → your brief in
 `docs/briefs/`. One worker session = one brief = one PR. Hand off by updating
 `docs/state.md` and the brief's Outcome, then push.
+Product questions for the owner go into `docs/review/questions.ron` as live
+scenes (`cargo run -- --review`), never into chat (`docs/orchestration.md`
+§ Review mode).
 
 Agent-container hazards:
 

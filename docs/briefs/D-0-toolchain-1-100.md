@@ -1,7 +1,7 @@
 # Toolchain bump to rustc 1.100.0
 Phase U · `docs/unified-surface-plan.md` § 4, § 10 row 2; `orchestration.md`
 § Recurring ("Bump `RUST_PIN`, fix in the same PR") · status: ready
-(after 4b-0 merges)
+(after 4b-1 merges)
 
 ## Goal
 

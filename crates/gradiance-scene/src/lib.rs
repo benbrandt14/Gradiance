@@ -12,6 +12,7 @@
 #[cfg(test)]
 mod format_golden;
 mod records;
+pub mod review;
 
 pub use records::{
     AuthoredRecord, BodyRecord, EnvironmentRecord, JointRecord, NodeRecord, SceneRecord,
