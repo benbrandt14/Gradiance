@@ -40,25 +40,17 @@ pub use crate::actions::{ScriptAction, ScriptActions};
 use crate::budget::{SCRIPT_BUDGET, run_with_budget};
 use crate::reflect_bridge::{read_path, steel_to_f64, write_path};
 use crate::registry::{OperationCatalog, name};
-use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
+use avian2d::prelude::RigidBody;
 use gradiance_command::CommandDispatchSet;
-use gradiance_command::intent::{
-    BooleanIntent, CutIntent, DeleteIntent, DeleteJointIntent, GroupIntent, MergeIntent,
-    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent, UngroupIntent,
-};
-use gradiance_command::ops::spawned_body_record;
-use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_command::snapshot::SceneSnapshot;
 use gradiance_core::ids::StableId;
 use gradiance_core::script_tools::{ScriptToolFired, ScriptToolSpec, ScriptTools};
-use gradiance_core::units::PosRot;
-use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::settings::{CameraSettings, SimSettings};
-use gradiance_domain::shape::{CsgOp, ShapeDef};
 use gradiance_domain::signal::{ComputedSignal, SignalExpr, SignalParam};
-use gradiance_op::{OpContext, OpEntry, OpError, OpIdSource, OpOutput, OpRegistry};
-use gradiance_scene::BodyRecord;
+use gradiance_op::{
+    OpContext, OpEntry, OpError, OpIdSource, OpOutput, OpRegistry, SelectionMirror,
+};
 use steel::rerrs::{ErrorKind, SteelErr};
 
 /// A `defparam` / `defsignal` declaration queued by a script builtin, drained
@@ -79,18 +71,11 @@ use steel::rvals::SteelVal;
 use steel::steel_vm::engine::Engine;
 use steel::steel_vm::register_fn::RegisterFn;
 
-/// One write a verb queued, in call order.
-enum Queued {
-    /// A reflected intent from a hand-written verb, for [`IntentDispatch`].
-    Intent(Box<dyn Reflect>),
-    /// The output of a registry operation (`gradiance-op`), for
-    /// [`gradiance_op::apply`].
-    Op(&'static str, OpOutput),
-}
-
-/// A queue of script-emitted writes, shared between the steel builtins
-/// (producers) and the exclusive [`run_scripts`] system (consumer).
-type OpQueue = Arc<Mutex<Vec<Queued>>>;
+/// A queue of script-emitted writes, in call order: each registry
+/// operation's id and output, for [`gradiance_op::apply`]. Shared between the
+/// generated verbs (producers) and the exclusive [`run_scripts`] system
+/// (consumer).
+type OpQueue = Arc<Mutex<Vec<(&'static str, OpOutput)>>>;
 
 /// A read snapshot of the committed scene, shared between [`run_scripts`]
 /// (producer) and the query builtins (consumers). The same value the run's
@@ -562,14 +547,6 @@ impl IntentDispatch {
     pub fn is_registered(&self, intent: TypeId) -> bool {
         self.writers.contains_key(&intent)
     }
-
-    /// Dispatches one operation record to its intent bus (dropped if the type
-    /// was never registered).
-    fn apply(&self, world: &mut World, op: Box<dyn Reflect>) {
-        if let Some(writer) = self.writers.get(&op.as_any().type_id()) {
-            writer(world, op);
-        }
-    }
 }
 
 /// One Edit-category operation's binding to the intent type it emits.
@@ -587,45 +564,13 @@ pub struct EditBinding {
     pub register: fn(&mut IntentDispatch),
 }
 
-impl EditBinding {
-    fn new<T: Message + Reflect + bevy::reflect::TypePath>(op: &'static str) -> Self {
-        Self {
-            op,
-            intent: TypeId::of::<T>(),
-            intent_path: T::type_path(),
-            register: IntentDispatch::register::<T>,
-        }
-    }
-}
-
 /// Every hand-written Edit-category verb and the intent it emits — one row
 /// per verb. Registry operations (`gradiance-op`) are not here: they lower
 /// through their own declaration.
 pub fn edit_bindings() -> Vec<EditBinding> {
-    vec![
-        EditBinding::new::<CutIntent>(name::CUT),
-        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_CIRCLE),
-        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_GROUND),
-        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX_ROT),
-        EditBinding::new::<DeleteIntent>(name::DELETE),
-        EditBinding::new::<RedoIntent>(name::REDO),
-        EditBinding::new::<SpawnJointIntent>(name::HINGE),
-        EditBinding::new::<SpawnJointIntent>(name::SLIDER),
-        EditBinding::new::<SpawnJointIntent>(name::SPRING),
-        EditBinding::new::<PropertyEditIntent>(name::SET_FRICTION),
-        EditBinding::new::<PropertyEditIntent>(name::SET_RESTITUTION),
-        EditBinding::new::<PropertyEditIntent>(name::SET_DENSITY),
-        EditBinding::new::<PropertyEditIntent>(name::SET_STATIC),
-        EditBinding::new::<ScaleIntent>(name::SCALE),
-        EditBinding::new::<MergeIntent>(name::MERGE),
-        EditBinding::new::<BooleanIntent>(name::SUBTRACT),
-        EditBinding::new::<BooleanIntent>(name::INTERSECT),
-        EditBinding::new::<BooleanIntent>(name::XOR),
-        EditBinding::new::<BooleanIntent>(name::FILLET_MERGE),
-        EditBinding::new::<DeleteJointIntent>(name::DELETE_JOINT),
-        EditBinding::new::<GroupIntent>(name::GROUP),
-        EditBinding::new::<UngroupIntent>(name::UNGROUP),
-    ]
+    // Every edit verb is a registry operation now (U-2a); the table and its
+    // type go in U-2b.
+    Vec::new()
 }
 
 /// The steel engine plus the shared buffers it reads/writes. A `NonSend`
@@ -742,60 +687,6 @@ fn index_arg(v: &SteelVal) -> Option<usize> {
         .map(|n| n as usize)
 }
 
-/// Resolves a set-shaped argument — a steel list of body indices — to the
-/// distinct [`StableId`]s it names in the run's snapshot, first occurrence
-/// first.
-///
-/// Unlike the scalar index verbs (which no-op on a bad index), every failure
-/// here is an error the caller surfaces as a failed run: a set edit that
-/// quietly drops one member would author a *different* set than the script
-/// says, and nothing in the scene would show it. `verb` prefixes the message
-/// so the console names the call that failed.
-fn body_ids_arg(verb: &str, arg: &SteelVal, view: &SceneSnapshot) -> Result<Vec<StableId>, String> {
-    let SteelVal::ListV(items) = arg else {
-        return Err(format!(
-            "{verb}: expected a list of body indices, got {arg}"
-        ));
-    };
-    let mut ids = Vec::new();
-    for item in items {
-        let index = steel_to_f64(item)
-            .filter(|n| n.is_finite() && *n >= 0.0 && n.fract() == 0.0)
-            .ok_or_else(|| format!("{verb}: {item} is not a body index"))?;
-        let id = view
-            .id(index as usize)
-            .ok_or_else(|| format!("{verb}: no body {index} (the scene has {})", view.len()))?;
-        if !ids.contains(&id) {
-            ids.push(id);
-        }
-    }
-    Ok(ids)
-}
-
-/// Pushes one reflected operation record onto the shared queue.
-fn emit(ops: &OpQueue, op: Box<dyn Reflect>) {
-    if let Ok(mut queue) = ops.lock() {
-        queue.push(Queued::Intent(op));
-    }
-}
-
-/// A body of `shape` centred at `(x, y)` with a fresh id: the record a
-/// hand-written `spawn-*` verb emits. Same rule as the registry's
-/// `body.spawn_box` ([`spawned_body_record`]).
-fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
-    spawned_body_record(StableId::new(), shape, Vec2::new(x as f32, y as f32))
-}
-
-/// A fixed ground half-plane through `(x, y)`, tilted by `angle` radians — the
-/// record `spawn-ground` emits. Static physics so it never falls; the surface
-/// passes through the body origin (see [`ShapeDef::HalfPlane`]).
-fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
-    let mut record = body_record(ShapeDef::HalfPlane, x, y);
-    record.pose.rot = angle as f32;
-    record.physics = BodyPhysics::fixed();
-    record
-}
-
 /// Binds one registry operation as a Lisp verb, generated from its
 /// declaration: the arguments map to the named params by declared field order
 /// (the same mapping every doorway uses), the registry's one serde decoder
@@ -820,7 +711,7 @@ fn bind_op(engine: &mut Engine, shared: &Shared, entry: OpEntry) {
         let output = entry.lower(params, &ctx).map_err(failed)?;
         let value = output.value().map_or(SteelVal::Void, json_to_steel);
         if let Ok(mut queue) = ops.lock() {
-            queue.push(Queued::Op(entry.meta.id, output));
+            queue.push((entry.meta.id, output));
         }
         Ok(value)
     };
@@ -848,12 +739,7 @@ fn json_to_steel(value: &serde_json::Value) -> SteelVal {
 /// [`OperationCatalog::builtin`] + (for edits) one [`IntentDispatch::register`]
 /// call in [`ScriptPlugin`].
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
-    register_edit_verbs(engine, &shared.ops);
-    register_lifecycle_verbs(engine, &shared.ops, &shared.view);
-    register_boolean_verbs(engine, &shared.ops, &shared.view);
-    register_group_verbs(engine, &shared.ops, &shared.view);
-    register_joint_verbs(engine, &shared.ops, &shared.view);
-    register_property_verbs(engine, &shared.ops, &shared.view);
+    register_property_verbs(engine, &shared.view);
     register_query_verbs(engine, &shared.view);
     register_config_verbs(engine, &shared.config, &shared.sim, &shared.camera);
     register_editor_verbs(engine, &shared.actions, &shared.labels);
@@ -867,85 +753,6 @@ fn register_builtins(engine: &mut Engine, shared: &Shared) {
         &shared.signal_defs,
     );
     register_meta_verbs(engine, &shared.catalog);
-}
-
-/// Authored-world edits — each emits a reflected intent onto the op queue.
-fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
-    // `(cut ax ay bx by width)` — sever bodies along a stroke.
-    let cut_ops = Arc::clone(ops);
-    engine.register_fn(
-        name::CUT,
-        move |ax: SteelVal, ay: SteelVal, bx: SteelVal, by: SteelVal, width: SteelVal| {
-            if let Some([ax, ay, bx, by, width]) = nums([&ax, &ay, &bx, &by, &width]) {
-                emit(
-                    &cut_ops,
-                    Box::new(CutIntent {
-                        a: Vec2::new(ax as f32, ay as f32),
-                        b: Vec2::new(bx as f32, by as f32),
-                        width: width as f32,
-                    }),
-                );
-            }
-        },
-    );
-
-    // `(spawn-circle x y r)` — author a circle body centered at (x, y).
-    // Returns the new body's handle.
-    let circle_ops = Arc::clone(ops);
-    engine.register_fn(
-        name::SPAWN_CIRCLE,
-        move |x: SteelVal, y: SteelVal, r: SteelVal| -> String {
-            if let Some([x, y, r]) = nums([&x, &y, &r]) {
-                let shape = ShapeDef::Circle { radius: r as f32 };
-                let record = body_record(shape, x, y);
-                let handle = record.id.0.to_string();
-                emit(&circle_ops, Box::new(SpawnBodyIntent { record }));
-                handle
-            } else {
-                String::new()
-            }
-        },
-    );
-
-    // `(spawn-ground x y angle)` — author a fixed ground half-plane through
-    // (x, y), tilted by `angle` radians. Returns the new body's handle.
-    let ground_ops = Arc::clone(ops);
-    engine.register_fn(
-        name::SPAWN_GROUND,
-        move |x: SteelVal, y: SteelVal, angle: SteelVal| -> String {
-            if let Some([x, y, angle]) = nums([&x, &y, &angle]) {
-                let record = ground_record(x, y, angle);
-                let handle = record.id.0.to_string();
-                emit(&ground_ops, Box::new(SpawnBodyIntent { record }));
-                handle
-            } else {
-                String::new()
-            }
-        },
-    );
-
-    // `(spawn-box-rot x y w h angle)` — `spawn-box`, rotated by `angle`
-    // radians. A separate verb because `place` indexes the pre-run snapshot,
-    // so a run cannot rotate a box it has just spawned (one snapshot per run).
-    let rot_ops = Arc::clone(ops);
-    engine.register_fn(
-        name::SPAWN_BOX_ROT,
-        move |x: SteelVal, y: SteelVal, w: SteelVal, h: SteelVal, angle: SteelVal| -> String {
-            if let Some([x, y, w, h, angle]) = nums([&x, &y, &w, &h, &angle]) {
-                let shape = ShapeDef::Box {
-                    width: w as f32,
-                    height: h as f32,
-                };
-                let mut record = body_record(shape, x, y);
-                record.pose.rot = angle as f32;
-                let handle = record.id.0.to_string();
-                emit(&rot_ops, Box::new(SpawnBodyIntent { record }));
-                handle
-            } else {
-                String::new()
-            }
-        },
-    );
 }
 
 /// Read-total geometric queries — each reads the [`SceneSnapshot`] snapshot and
@@ -1247,276 +1054,12 @@ fn register_panel_verbs(
     });
 }
 
-/// The body booleans, indexed like every lifecycle verb: `(merge a b)`,
-/// `(subtract a b)`, `(intersect a b)`, `(xor a b)`, and
-/// `(fillet-merge a b radius)`.
-fn register_boolean_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
-    // `(merge a b)` — one CSG union; `a` survives carrying both shapes. This is
-    // what "weld" means in this engine (there is no weld joint).
-    // `(subtract a b)` / `(intersect a b)` / `(xor a b)` — the other body
-    // booleans, the context menu's entries as ops: `a` hosts the result and
-    // `b` is consumed, exactly as the menu does with the first-selected body.
-    for (verb, op) in [
-        (name::MERGE, None),
-        (name::SUBTRACT, Some(CsgOp::Subtract)),
-        (name::INTERSECT, Some(CsgOp::Intersect)),
-        (name::XOR, Some(CsgOp::Xor)),
-    ] {
-        let bool_ops = Arc::clone(ops);
-        let bool_view = Arc::clone(view);
-        engine.register_fn(verb, move |a: SteelVal, b: SteelVal| {
-            if let Some([a, b]) = nums([&a, &b])
-                && a >= 0.0
-                && b >= 0.0
-                && let Ok(view) = bool_view.lock()
-                && let (Some(id_a), Some(id_b)) = (view.id(a as usize), view.id(b as usize))
-                // A boolean of a body with itself would ask the command to
-                // fold one body onto itself — refused, but still noise.
-                && id_a != id_b
-            {
-                let targets = vec![id_a, id_b];
-                // Merge keeps its own intent (the weld tool emits it too).
-                let intent: Box<dyn Reflect> = match op {
-                    None => Box::new(MergeIntent { targets }),
-                    Some(op) => Box::new(BooleanIntent { op, targets }),
-                };
-                emit(&bool_ops, intent);
-            }
-        });
-    }
-
-    // `(fillet-merge a b radius)` — merge with a fillet: the same boolean
-    // intent carrying `CsgOp::SmoothUnion`. The radius is checked here, as a
-    // visible error that aborts the run (so nothing it queued commits); the
-    // command refuses a bad radius too, for every other surface. Bad indices
-    // are the quiet no-op every indexed verb uses.
-    let fillet_ops = Arc::clone(ops);
-    let fillet_view = Arc::clone(view);
-    engine.register_fn(
-        name::FILLET_MERGE,
-        move |a: SteelVal, b: SteelVal, radius: SteelVal| -> Result<(), String> {
-            let op = steel_to_f64(&radius)
-                .map(|r| CsgOp::SmoothUnion { radius: r as f32 })
-                .filter(|op| op.validate().is_ok())
-                .ok_or_else(|| {
-                    format!(
-                        "{}: the radius must be a finite number of metres > 0, got {radius}",
-                        name::FILLET_MERGE
-                    )
-                })?;
-            if let Some([a, b]) = nums([&a, &b])
-                && a >= 0.0
-                && b >= 0.0
-                && let Ok(view) = fillet_view.lock()
-                && let (Some(id_a), Some(id_b)) = (view.id(a as usize), view.id(b as usize))
-                && id_a != id_b
-            {
-                emit(
-                    &fillet_ops,
-                    Box::new(BooleanIntent {
-                        op,
-                        targets: vec![id_a, id_b],
-                    }),
-                );
-            }
-            Ok(())
-        },
-    );
-}
-
-/// Verbs over **existing** bodies — the history ops and the edits that move or
-/// remove something already authored.
-///
-/// Split from [`register_edit_verbs`] (which authors *new* geometry) because
-/// these all share one property: they name their target by index against the
-/// run's snapshot, and they need the *old* value to be reversible.
-fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
-    // `(redo)` — the same step Edit ▸ Redo takes. (`undo` is the registry's
-    // `edit.undo`.)
-    let redo_ops = Arc::clone(ops);
-    engine.register_fn(name::REDO, move || {
-        emit(&redo_ops, Box::new(RedoIntent));
-    });
-
-    // `(delete i)` — remove the i-th body, by the same index order as
-    // `body-x`/`body-y`. Indexed rather than selection-scoped: the selection
-    // lives in `gradiance-interaction`, which sits *above* this layer, and a
-    // script acting on "whatever happens to be selected" would be fragile
-    // anyway. `i` is resolved against the run's snapshot, so a delete composes
-    // with the reads above it in the same script.
-    let delete_ops = Arc::clone(ops);
-    let delete_view = Arc::clone(view);
-    engine.register_fn(name::DELETE, move |i: SteelVal| {
-        if let Some([i]) = nums([&i])
-            && i >= 0.0
-            && let Ok(view) = delete_view.lock()
-            && let Some(id) = view.id(i as usize)
-        {
-            emit(&delete_ops, Box::new(DeleteIntent { targets: vec![id] }));
-        }
-    });
-
-    // `(scale i fx fy)` — resize about the body's own centre, along its own
-    // axes. Local axes rather than global: "twice as wide" means along the
-    // body's width, and a global-axis scale of a rotated box would shear it
-    // into a polygon (`geometry::scale` handles that, but it is not what the
-    // caller meant).
-    let scale_ops = Arc::clone(ops);
-    let scale_view = Arc::clone(view);
-    engine.register_fn(
-        name::SCALE,
-        move |i: SteelVal, fx: SteelVal, fy: SteelVal| {
-            if let Some([i, fx, fy]) = nums([&i, &fx, &fy])
-                && i >= 0.0
-                // A zero or negative factor would collapse or mirror the body;
-                // neither is a resize, and zero is unrecoverable.
-                && fx > 0.0
-                && fy > 0.0
-                && let Ok(view) = scale_view.lock()
-                && let Some((id, pose)) = view.body(i as usize)
-            {
-                emit(
-                    &scale_ops,
-                    Box::new(ScaleIntent {
-                        targets: vec![id],
-                        pivot: pose.pos,
-                        frame_rot: pose.rot,
-                        factors: Vec2::new(fx as f32, fy as f32),
-                    }),
-                );
-            }
-        },
-    );
-
-    // `(delete-joint i)` — unmake a relationship. Without this a script could
-    // create constraints and only undo them wholesale.
-    let unjoin_ops = Arc::clone(ops);
-    let unjoin_view = Arc::clone(view);
-    engine.register_fn(name::DELETE_JOINT, move |i: SteelVal| {
-        if let Some([i]) = nums([&i])
-            && i >= 0.0
-            && let Ok(view) = unjoin_view.lock()
-            && let Some(id) = view.joint_id(i as usize)
-        {
-            emit(&unjoin_ops, Box::new(DeleteJointIntent { id }));
-        }
-    });
-}
-
-/// Set-shaped edits — `(group (list i …))` / `(ungroup (list i …))`.
-///
-/// steel's variadic `RestArgs` is private, so the set arrives as one list
-/// argument, resolved through [`body_ids_arg`] against the run's snapshot.
-/// They emit exactly what Ctrl+G / Ctrl+Shift+G emit, so a scripted group and
-/// a hand-made one are the same save file and the same undo step.
-fn register_group_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
-    // Ctrl+G with fewer than two bodies selected emits nothing (and
-    // `GroupCommand` would reject it as no effect), so `group` matches: a
-    // one-body list is a quiet no-op, not an error.
-    let group_ops = Arc::clone(ops);
-    let group_view = Arc::clone(view);
-    engine.register_fn(name::GROUP, move |set: SteelVal| -> Result<(), String> {
-        let targets = match group_view.lock() {
-            Ok(view) => body_ids_arg(name::GROUP, &set, &view)?,
-            Err(_) => return Ok(()),
-        };
-        if targets.len() >= 2 {
-            emit(&group_ops, Box::new(GroupIntent { targets }));
-        }
-        Ok(())
-    });
-    let ungroup_ops = Arc::clone(ops);
-    let ungroup_view = Arc::clone(view);
-    engine.register_fn(name::UNGROUP, move |set: SteelVal| -> Result<(), String> {
-        let targets = match ungroup_view.lock() {
-            Ok(view) => body_ids_arg(name::UNGROUP, &set, &view)?,
-            Err(_) => return Ok(()),
-        };
-        if !targets.is_empty() {
-            emit(&ungroup_ops, Box::new(UngroupIntent { targets }));
-        }
-        Ok(())
-    });
-}
-
-/// Body-property verbs — the inspector's fields as ops.
-///
-/// Every one is a [`PropertyEditIntent`], the same seam the inspector's
-/// `precise_drag` rows commit through, so a scripted change is one undo step
-/// and lands in the save file identically to a hand edit.
-///
-/// The reads are the other half and are deliberately symmetric: `set-friction`
-/// and `body-friction` name the same quantity, so a script can round-trip a
-/// value it did not author. Reads are total; writes are seam-mediated.
-fn register_property_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
-    // Writes. Each closure turns the new scalar into the `PropertyValue` pair
-    // the command needs, reading `old` out of the snapshot.
-    for (verb, build) in [
-        (
-            name::SET_FRICTION,
-            (|physics: &BodyPhysics, v: f64| {
-                let old = PropertyValue::Friction(physics.friction);
-                let new = PropertyValue::Friction(Friction {
-                    // Both coefficients move together, as the inspector does:
-                    // authoring two numbers that are almost always equal is
-                    // friction the UI deliberately does not expose.
-                    dynamic_coefficient: v as f32,
-                    static_coefficient: v as f32,
-                    ..physics.friction
-                });
-                (old, new)
-            }) as fn(&BodyPhysics, f64) -> (PropertyValue, PropertyValue),
-        ),
-        (name::SET_RESTITUTION, |physics: &BodyPhysics, v: f64| {
-            let old = PropertyValue::Restitution(physics.restitution);
-            let new = PropertyValue::Restitution(Restitution {
-                coefficient: v as f32,
-                ..physics.restitution
-            });
-            (old, new)
-        }),
-        (name::SET_DENSITY, |physics: &BodyPhysics, v: f64| {
-            let old = PropertyValue::Density(physics.density);
-            let new = PropertyValue::Density(ColliderDensity(v as f32));
-            (old, new)
-        }),
-        (name::SET_STATIC, |physics: &BodyPhysics, v: f64| {
-            let old = PropertyValue::RigidBody(physics.rigid_body);
-            // Non-zero = static; anything else returns the body to dynamic, so
-            // the verb is a toggle with an explicit argument rather than two
-            // verbs that can disagree.
-            let new = PropertyValue::RigidBody(if v == 0.0 {
-                RigidBody::Dynamic
-            } else {
-                RigidBody::Static
-            });
-            (old, new)
-        }),
-    ] {
-        let prop_ops = Arc::clone(ops);
-        let prop_view = Arc::clone(view);
-        engine.register_fn(verb, move |i: SteelVal, v: SteelVal| {
-            if let Some([i, v]) = nums([&i, &v])
-                && i >= 0.0
-                && let Ok(view) = prop_view.lock()
-                && let Some(id) = view.id(i as usize)
-                && let Some(physics) = view.physics(i as usize)
-            {
-                let (old, new) = build(physics, v);
-                // Setting a value to what it already is would be an empty undo
-                // step — the same guard `place` has.
-                if old != new {
-                    emit(
-                        &prop_ops,
-                        Box::new(PropertyEditIntent {
-                            changes: vec![PropertyChange { id, old, new }],
-                        }),
-                    );
-                }
-            }
-        });
-    }
-
+/// Body-property reads. The writes (`set-friction` …) are registry operations
+/// (`gradiance_command::ops::body`); the reads are deliberately symmetric:
+/// `set-friction` and `body-friction` name the same quantity, so a script can
+/// round-trip a value it did not author. Reads are total; writes are
+/// seam-mediated.
+fn register_property_verbs(engine: &mut Engine, view: &SharedView) {
     // Reads — the same quantities, so a script can inspect before it edits.
     for (verb, read) in [
         (
@@ -1540,179 +1083,6 @@ fn register_property_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView
             }
         });
     }
-}
-
-/// Joint verbs — **relationships** between bodies, the half of the scene model
-/// a script could not touch at all before.
-///
-/// A joint's anchors are authored in each body's *local* space and its
-/// `rest_rot_*` capture the bodies' orientations at creation (welds hold that
-/// relative angle, sliders lock rotation to it, hinge limits measure from it).
-/// Getting that wrong makes joints between rotated bodies snap violently at
-/// spawn, so these verbs do exactly what `interaction::tools::connector_tool`
-/// does — [`joint_def`] is the one place the conversion lives.
-///
-/// Bodies are named by index, like every other edit verb, and `b < 0` means
-/// "pin to the world" — the same one-body case the tools produce by clicking
-/// where only one body sits.
-fn register_joint_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
-    // `(hinge a b x y)` — revolute joint at a world point.
-    let hinge_ops = Arc::clone(ops);
-    let hinge_view = Arc::clone(view);
-    engine.register_fn(
-        name::HINGE,
-        move |a: SteelVal, b: SteelVal, x: SteelVal, y: SteelVal| -> String {
-            let Some([a, b, x, y]) = nums([&a, &b, &x, &y]) else {
-                return String::new();
-            };
-            let kind = JointKind::Hinge {
-                limits: None,
-                motor: None,
-            };
-            spawn_joint(
-                &hinge_ops,
-                &hinge_view,
-                a,
-                b,
-                Vec2::new(x as f32, y as f32),
-                kind,
-                false,
-            )
-        },
-    );
-
-    // `(slider a b x y ax ay)` — prismatic joint sliding along a world axis.
-    // The axis is stored body-A local, so it rotates with the body.
-    let slider_ops = Arc::clone(ops);
-    let slider_view = Arc::clone(view);
-    engine.register_fn(
-        name::SLIDER,
-        move |a: SteelVal,
-              b: SteelVal,
-              x: SteelVal,
-              y: SteelVal,
-              ax: SteelVal,
-              ay: SteelVal|
-              -> String {
-            let Some([a, b, x, y, ax, ay]) = nums([&a, &b, &x, &y, &ax, &ay]) else {
-                return String::new();
-            };
-            let world_axis = Vec2::new(ax as f32, ay as f32);
-            // A zero-length axis has no direction to slide along; fall back to
-            // body-A's local X, which is what a too-short tool drag does.
-            let anchor = Vec2::new(x as f32, y as f32);
-            let Some((_, pose_a)) = slider_view.lock().ok().and_then(|v| v.body(a as usize)) else {
-                return String::new();
-            };
-            let world_axis = if world_axis.length() < 1e-6 {
-                Vec2::from_angle(pose_a.rot)
-            } else {
-                world_axis.normalize()
-            };
-            let kind = JointKind::Slider {
-                axis: Vec2::from_angle(-pose_a.rot).rotate(world_axis),
-                limits: None,
-                motor: None,
-            };
-            spawn_joint(&slider_ops, &slider_view, a, b, anchor, kind, false)
-        },
-    );
-
-    // `(spring a b stiffness damping)` — a strut between the two bodies'
-    // centres. Unlike the tool, which sizes stiffness from the connected mass,
-    // a script states it: a fixture that depends on a mass heuristic is not
-    // reproducible when the shape changes.
-    let spring_ops = Arc::clone(ops);
-    let spring_view = Arc::clone(view);
-    engine.register_fn(
-        name::SPRING,
-        move |a: SteelVal, b: SteelVal, stiffness: SteelVal, damping: SteelVal| -> String {
-            let Some([a, b, stiffness, damping]) = nums([&a, &b, &stiffness, &damping]) else {
-                return String::new();
-            };
-            let Ok(view) = spring_view.lock() else {
-                return String::new();
-            };
-            let Some((_, pose_a)) = view.body(a as usize) else {
-                return String::new();
-            };
-            // Rest length is the *current* separation, so the strut starts
-            // relaxed — the same thing the tool's drag length means.
-            let far = (b >= 0.0).then(|| view.body(b as usize)).flatten();
-            let rest_length = far.map_or(0.0, |(_, pose_b)| pose_a.pos.distance(pose_b.pos));
-            drop(view);
-            let kind = JointKind::Spring {
-                rest_length: gradiance_units::Length(rest_length),
-                stiffness: gradiance_units::Stiffness(stiffness as f32),
-                damping: gradiance_units::Damping(damping as f32),
-                range: None,
-            };
-            // Anchored at body A's centre; `spawn_joint` puts B's anchor at
-            // B's centre because that is where the anchor point resolves to.
-            let anchor = pose_a.pos;
-            // Struts collide by default (the tool's convention), so a spring
-            // between neighbours does not make them pass through each other.
-            spawn_joint(&spring_ops, &spring_view, a, b, anchor, kind, true)
-        },
-    );
-}
-
-/// Builds and emits one [`SpawnJointIntent`], returning the joint's handle (or
-/// an empty string when a body index does not resolve).
-///
-/// `anchor` is a **world** point; it is converted into each body's local frame
-/// here — the single place that conversion happens on the script side.
-fn spawn_joint(
-    ops: &OpQueue,
-    view: &SharedView,
-    a: f64,
-    b: f64,
-    anchor: Vec2,
-    kind: JointKind,
-    collide_connected: bool,
-) -> String {
-    if a < 0.0 {
-        return String::new();
-    }
-    let Ok(view) = view.lock() else {
-        return String::new();
-    };
-    let Some((id_a, pose_a)) = view.body(a as usize) else {
-        return String::new();
-    };
-    let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
-    let mut def = JointDef {
-        kind,
-        common: JointCommon {
-            collide_connected,
-            ..JointCommon::default()
-        },
-        body_a: id_a,
-        body_b: None,
-        // For a world pin the far anchor is the world point itself.
-        anchor_b: gradiance_units::Displacement(anchor),
-        anchor_a: gradiance_units::Displacement(to_local(pose_a, anchor)),
-        rest_rot_a: gradiance_units::Angle(pose_a.rot),
-        rest_rot_b: gradiance_units::Angle(0.0),
-    };
-    // `b < 0` is the world pin; otherwise resolve the second body. An index
-    // that does not resolve degrades to a world pin rather than dropping the
-    // joint, so a typo is visible in the scene instead of silent.
-    if b >= 0.0
-        && let Some((id_b, pose_b)) = view.body(b as usize)
-        && id_b != id_a
-    {
-        def.body_b = Some(id_b);
-        def.anchor_b = gradiance_units::Displacement(to_local(pose_b, anchor));
-        def.rest_rot_b = gradiance_units::Angle(pose_b.rot);
-    }
-    let record = gradiance_scene::JointRecord {
-        id: StableId::new(),
-        def,
-    };
-    let handle = record.id.0.to_string();
-    emit(ops, Box::new(SpawnJointIntent { record }));
-    handle
 }
 
 /// Signal-dataflow verbs — the script side of the signal bus
@@ -1853,7 +1223,12 @@ pub fn run_scripts(world: &mut World) {
     // Refresh the read-total snapshots from committed state: one operation
     // context for the whole pass (scripting rule 3), whose scene snapshot the
     // hand-written query verbs read too.
-    let ctx = Arc::new(OpContext::build(world));
+    // Scripting rule 2: a script names objects by index or id, never by what
+    // happens to be selected, so its context has no selection mirror and
+    // `"selection"` is a visible error.
+    let mut ctx = OpContext::build(world);
+    ctx.remove::<SelectionMirror>();
+    let ctx = Arc::new(ctx);
     let snapshot = ctx.get_shared::<SceneSnapshot>().unwrap_or_default();
     if let Some(engine) = world.get_non_send::<ScriptEngine>() {
         if let Ok(mut guard) = engine.shared.view.lock() {
@@ -1889,9 +1264,8 @@ pub fn run_scripts(world: &mut World) {
     }
 
     // Drain the op queue (releasing the engine borrow first), then write each
-    // entry in call order: a hand-written verb's intent through its bus, a
-    // registry operation's output through `gradiance_op::apply`.
-    let ops: Vec<Queued> = world
+    // registry operation's output in call order through `gradiance_op::apply`.
+    let ops: Vec<(&'static str, OpOutput)> = world
         .get_non_send::<ScriptEngine>()
         .and_then(|engine| {
             engine
@@ -1902,17 +1276,8 @@ pub fn run_scripts(world: &mut World) {
                 .map(|mut q| std::mem::take(&mut *q))
         })
         .unwrap_or_default();
-    for op in ops {
-        match op {
-            Queued::Intent(intent) => {
-                world.resource_scope(|world, dispatch: Mut<IntentDispatch>| {
-                    dispatch.apply(world, intent);
-                });
-            }
-            Queued::Op(id, output) => {
-                gradiance_op::apply(world, id, output);
-            }
-        }
+    for (id, output) in ops {
+        gradiance_op::apply(world, id, output);
     }
 
     // Drain the config queue and apply each write to the settings resource (the
@@ -2286,7 +1651,8 @@ mod tests {
     #![allow(clippy::float_cmp)]
     use super::*;
     use crate::registry::OpCategory;
-    use gradiance_command::snapshot::BodySnapshot;
+    use gradiance_command::intent::{CutIntent, SpawnBodyIntent};
+    use gradiance_domain::shape::ShapeDef;
 
     #[derive(Resource, Default)]
     struct Cuts(Vec<CutIntent>);
@@ -2323,61 +1689,6 @@ mod tests {
             .resource_mut::<ScriptInputs>()
             .submit(source);
         app.update();
-    }
-
-    /// A snapshot of `n` bodies with fresh ids, in id order like the real one.
-    fn view_of(n: usize) -> SceneSnapshot {
-        let mut bodies: Vec<BodySnapshot> = (0..n)
-            .map(|_| BodySnapshot {
-                id: StableId::new(),
-                physics: BodyPhysics::default(),
-                pos: Vec2::ZERO,
-                rot: 0.0,
-                shape: ShapeDef::Circle { radius: 1.0 },
-                touching: 0,
-            })
-            .collect();
-        bodies.sort_by_key(|b| b.id.0);
-        SceneSnapshot {
-            bodies,
-            joints: Vec::new(),
-        }
-    }
-
-    fn ints(xs: &[isize]) -> SteelVal {
-        SteelVal::ListV(xs.iter().map(|&x| SteelVal::IntV(x)).collect())
-    }
-
-    #[test]
-    fn a_body_list_resolves_in_order_without_duplicates() {
-        let view = view_of(3);
-        let ids = body_ids_arg("group", &ints(&[2, 0, 2]), &view).expect("valid list");
-        assert_eq!(ids, vec![view.bodies[2].id, view.bodies[0].id]);
-        // Whole floats are indices too, like every other indexed verb.
-        let float = SteelVal::ListV(std::iter::once(SteelVal::NumV(1.0)).collect());
-        assert_eq!(
-            body_ids_arg("group", &float, &view).expect("1.0 is an index"),
-            vec![view.bodies[1].id]
-        );
-    }
-
-    #[test]
-    fn a_bad_body_list_is_an_error_naming_the_verb() {
-        let view = view_of(2);
-        let not_a_list = SteelVal::IntV(0);
-        let not_a_number =
-            SteelVal::ListV(std::iter::once(SteelVal::StringV("a".into())).collect());
-        let fractional = SteelVal::ListV(std::iter::once(SteelVal::NumV(0.5)).collect());
-        for bad in [
-            not_a_list,
-            not_a_number,
-            fractional,
-            ints(&[0, 2]),
-            ints(&[-1]),
-        ] {
-            let err = body_ids_arg("ungroup", &bad, &view).expect_err("should be rejected");
-            assert!(err.starts_with("ungroup:"), "{err}");
-        }
     }
 
     #[test]
@@ -2443,7 +1754,7 @@ mod tests {
     }
 
     #[test]
-    fn a_non_numeric_arg_no_ops() {
+    fn a_non_numeric_arg_is_an_error_and_emits_nothing() {
         let mut app = bus_app();
         run(&mut app, "(cut \"oops\" 0 0 0 1)");
         assert!(app.world().resource::<Cuts>().0.is_empty());
@@ -2706,7 +2017,7 @@ mod tests {
             Some(OpCategory::Query),
         );
         assert_eq!(
-            registry.0.find(name::CUT).map(|o| o.category),
+            registry.0.find("cut").map(|o| o.category),
             Some(OpCategory::Edit),
         );
     }

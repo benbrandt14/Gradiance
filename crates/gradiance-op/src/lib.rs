@@ -30,4 +30,8 @@ pub use output::{OpOutput, OpTrace, TraceEntry, apply};
 pub use registry::{
     InvokeOp, OpEntry, OpError, OpInvokeSet, OpMeta, OpPlugin, OpRegistry, Operation, Seam, invoke,
 };
-pub use target::{ResolveTarget, Target};
+pub use target::{ResolveTarget, SelectionMirror, Target};
+
+/// Re-exported so a doorway builds [`InvokeOp`] params without its own JSON
+/// dependency.
+pub use serde_json::{Value, json};

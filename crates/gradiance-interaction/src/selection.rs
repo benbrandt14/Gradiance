@@ -27,6 +27,7 @@
 //! about it.
 
 use bevy::prelude::*;
+use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::group::SelectionGroup;
 
@@ -232,4 +233,19 @@ pub fn expand_groups(
             entities.push(entity);
         }
     }
+}
+
+/// Publishes the selection into a new operation context, as ids
+/// ([`gradiance_op::SelectionMirror`]): what a `"selection"` target in a menu
+/// row or a key binding resolves against. The Lisp doorway withdraws it.
+pub(crate) fn fill_selection_mirror(world: &mut World, ctx: &mut gradiance_op::OpContext) {
+    let id = |entity: Entity| world.get::<StableId>(entity).copied();
+    let objects = world
+        .get_resource::<Selection>()
+        .map_or_default(|selection| selection.iter().filter_map(id).collect());
+    let joint = world
+        .get_resource::<SelectedJoint>()
+        .and_then(|joint| joint.0)
+        .and_then(id);
+    ctx.insert(gradiance_op::SelectionMirror { objects, joint });
 }

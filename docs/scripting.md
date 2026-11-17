@@ -332,9 +332,10 @@ Reads driving edits (a marker under every existing body):
 An operation is declared **once**, in the layer that owns it, and every
 doorway is generated from that declaration: the Lisp verb, the remote
 `gradiance.op {"id", "params"}` call, a menu row's `InvokeOp`, the catalog
-row the console and `gradiance.ops` show. Five operations work this way now
-(`spawn-box`, `place`, `undo`, `body-count`, `sim-set`; see
-`crates/gradiance-command/src/ops.rs`). Brief U-2 moves the rest.
+row the console and `gradiance.ops` show, and the key link table's rows.
+Every **edit** verb works this way (27 operations since brief U-2a; see
+`crates/gradiance-command/src/ops/`, split by family). Brief U-2b moves the
+query, config and editor verbs.
 
 1. In the owning layer, write a parameter struct that derives
    `serde::Deserialize` (with `#[serde(deny_unknown_fields)]`) and
@@ -342,7 +343,10 @@ row the console and `gradiance.ops` show. Five operations work this way now
    Use `gradiance-units` quantities (`Length`, `Angle`, …) for physical
    values; they decode from plain JSON numbers. Name a scene object with
    `gradiance_op::Target` (an index, an id string, `"selection"`, or
-   `{"at": [x, y]}`).
+   `{"at": [x, y]}`); a set is `Vec<Target>` (`(list i …)` in Lisp).
+   `"selection"` resolves only where the interaction layer publishes its
+   selection mirror (menus, keys, the remote `id` form). A script run has
+   no selection mirror, so there it is a visible error (scripting rule 2).
 2. `impl gradiance_op::Operation`: `META` (id `layer.verb`, Lisp name, doc,
    seam, menu path, chord, the undo label the command records, and an
    example params object) and `lower(self, &OpContext)`. `lower` reads old
@@ -352,30 +356,32 @@ row the console and `gradiance.ops` show. Five operations work this way now
    the world.
 3. Register it in the layer's plugin: `registry.register::<MyOp>()`. If it
    reads a new mirror, publish it from that layer's context filler.
-4. Nothing else. The conformance tests (`tests/it/op_conformance.rs`) iterate
+4. A menu row or a key writes `InvokeOp::with("layer.verb", json!({…}))`
+   (or `InvokeOp::new` without params), never the intent. A key binding is
+   one row of `KEY_OPS` in `crates/gradiance-interaction/src/input.rs`; a
+   menu row that repeats a key writes `key_invocations(action)`.
+5. Nothing else. The conformance tests (`tests/it/op_conformance.rs`) iterate
    the registry and run the new operation through every doorway from its
-   `example`: equal outputs, schema round trip, the declared undo step.
+   `example` against a fixed fixture: equal outputs, schema round trip, the
+   declared undo step. They also check every key row against a fixture
+   selection, and that the menus and the key handler write no intent an
+   operation owns.
 
-### The hand-written way (the verbs not migrated yet)
+### The hand-written way (query, config and editor verbs not migrated yet)
 
 The catalog and the steel registration are kept in lockstep by a shared name
-constant, so a new verb touches three (edits: four) places:
+constant, so a new verb touches three places. A new **edit** verb is always a
+registry operation (above).
 
 1. **`crates/gradiance-script/src/registry.rs`** — add a `name::MY_VERB` constant and an `OpSpec`
    entry in the matching `*_specs()` helper (name, signature, doc, category,
    arity). The console picks it up automatically.
 2. **`crates/gradiance-script/src/bridge.rs`** — register the builtin in the matching
    `register_*_verbs` function, under the same `name::MY_VERB` constant:
-   - an **edit** verb `emit`s a reflected intent onto the op queue;
    - a **config** verb reads the settings mirror / queues a reflect-path write;
    - a **query** verb reads the `SceneSnapshot` and returns a number;
    - an **editor** verb queues an editor-state change.
-3. **Edits only:** add a row to `edit_bindings()` in `bridge.rs`
-   (op name + the intent type it emits). `ScriptPlugin` registers the bus
-   writer from that table, and `tests/it/registry_validation.rs` fails if a
-   catalog Edit op has no binding, an unregistered intent, or an intent
-   missing from the reflection registry.
-4. Add a test (a bridge-level bus check and/or an end-to-end `tests/it/scripting.rs`
+3. Add a test (a bridge-level bus check and/or an end-to-end `tests/it/scripting.rs`
    case). Keep `cargo fmt`, `cargo clippy --all-targets -D warnings`, and
    `cargo test` green — the validation test above already covers the
    catalog↔builtin drift cases.

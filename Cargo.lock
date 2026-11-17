@@ -3996,6 +3996,7 @@ dependencies = [
  "gradiance-core",
  "gradiance-domain",
  "gradiance-geometry",
+ "gradiance-op",
  "gradiance-optimize",
  "gradiance-persist",
  "gradiance-physics",

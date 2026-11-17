@@ -156,7 +156,10 @@ REPL console + `--script` loader (`crates/gradiance-script/src/bridge.rs`,
 (`hinge`, `slider`, `spring`, `delete-joint`) — plus panels as registered ops
 (`menu::Panels::named` is the one table the View menu and the `panel-*` verbs
 share). Every verb emits the intent its equivalent tool or inspector field
-emits; menus and scripting are two control surfaces over one model.
+emits; menus and scripting are two control surfaces over one model. Every edit
+verb is a `gradiance-op` operation, and the Edit menu, the context menu and the
+edit keys invoke those operations by id (`InvokeOp`; the key link table is
+`interaction::input::KEY_OPS`), never the intent (brief U-2a).
 
 Three rules hold that together, and a new verb must obey all three:
 

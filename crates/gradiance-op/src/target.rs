@@ -56,6 +56,24 @@ impl TryFrom<TargetRepr> for Target {
     }
 }
 
+/// The editor's selection, as a read-only mirror: the selected objects
+/// (bodies and behaviour nodes) in selection order, the first being the
+/// primary, and the selected joint. The layer that
+/// owns the selection publishes it; a [`Target::Selection`] resolves against
+/// it. Objects and a joint are never selected together.
+///
+/// The Lisp doorway builds its context **without** this mirror (scripting
+/// rule 2: a script acting on whatever happens to be selected is not
+/// reproducible), so `"selection"` there is a visible error
+/// ([`OpContext::selection`](crate::OpContext::selection)).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SelectionMirror {
+    /// Selected bodies and nodes, in selection order.
+    pub objects: Vec<StableId>,
+    /// The selected joint, if any.
+    pub joint: Option<StableId>,
+}
+
 /// A mirror that can resolve a [`Target`] of one object kind. The layer that
 /// owns the scene snapshot implements it; `None` means "names nothing".
 pub trait ResolveTarget {
