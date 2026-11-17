@@ -2,8 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (U-5 worker handoff, PR in review; U-4 merged
-as #250, 38541ff; order per `docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-17 (phase gate after U-5, merged as #251, 508b6e5;
+order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -11,18 +11,18 @@ as #250, 38541ff; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-5 in review** (PR #251, branch
-  `claude/project-thread-dydbi0`): image snapshot tests of five egui leaf
-  renderers on lavapipe (`tests/it/ui_snapshots.rs`, PNGs in
-  `tests/snapshots/ui/`, update with `UPDATE_SNAPSHOTS=1 cargo test --test
-  it ui_snapshots`); CI installs `mesa-vulkan-drivers` and sets
-  `GRADIANCE_REQUIRE_GPU=1` (a missing adapter fails). Orchestrator: read
-  the brief's Outcome (8 decisions; craft-libs still unreachable, harness
-  native; `Cargo.lock` gains 13 entries), merge when CI is green. U-4
-  merged as #250 (38541ff). **Next: U-3b** panel ops, then **4b-2**.
-  Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
-  tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
-  Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
+- **Now:** no brief in flight. Phase gate after the test and control
+  tier (2026-11-17): U-2c #247, 4b-1 #248, U-3 #249, U-4 #250, U-5 #251
+  all merged (main 508b6e5). The app now has a widget registry
+  (`ui.inspect`), screenshots (`ui.screenshot`), in-app input injection
+  (`ui.click/drag/key/text/wheel`) and egui snapshot tests on lavapipe in
+  CI (`GRADIANCE_REQUIRE_GPU=1`). **Next: U-3b** panel ops (no brief yet;
+  scope in the U-3 brief's Outcome, "Cut"), **then 4b-2** (its brief
+  predates the registry: revise it against 4b-1's `command::body_prop`
+  table and the U-3/U-4/U-5 checks first). Agent containers need
+  `mesa-vulkan-drivers libvulkan1` for the snapshot tests (without them
+  the tests skip unless `GRADIANCE_REQUIRE_GPU=1`). Workers run on Opus
+  while Fable lacks usage credits (owner, 2026-11-17).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
@@ -35,7 +35,7 @@ as #250, 38541ff; order per `docs/unified-surface-plan.md` § 10 and § 13).
      `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (done,
      #249); **U-4** in-app input injection (done, #250); **U-5**
-     snapshot tests on lavapipe (in review, #251). **U-3b** `panel.*` operations (cut from U-3; replaces the
+     snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (cut from U-3; replaces the
      four panel VM built-ins) before 4b-2.
   6. **4b-2** groups panel (on the new registry).
   7. **U-6** CLI + MCP server.
@@ -117,8 +117,13 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - alignment during creation tools (1-5);
   - grid coverage from the frustum (1-1);
   - tangent-snap toggle and the tangent glyph bar always horizontal (1-7);
-  - faint alignment guide.
+  - faint alignment guide;
+  - the select tool grabs the snap point nearest the drag's first moved
+    frame, so a fast drag (long first step) can land a body offset by half
+    its size (found by U-4's injected drag; README notes it).
 - **Scripting:**
+  - `bodies-where` has no label filter: labels live in `gradiance-script`,
+    above `command`, and need a mirror first (4b-1 Outcome);
   - verbs for `ToolDefaults`/`SnapConfig`/joint props;
   - `joint-at`, `node-at`/node indexing, `set-orbit`, `set-depth` (3-3);
   - script tools:
