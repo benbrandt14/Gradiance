@@ -1,6 +1,6 @@
 # Queries, config and editor verbs on the registry; old paths deleted
 Phase U · `docs/unified-surface-plan.md` § 3.4–3.6 · follows U-2a ·
-status: open (start after U-2a merges)
+status: open (U-2a merged, #244)
 
 ## Goal
 

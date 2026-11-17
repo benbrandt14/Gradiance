@@ -11,11 +11,12 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-2a** is in its PR (branch `claude/u-2a-edit-ops`): the 22
-  edit verbs are registry operations, menus and keys invoke them by id,
-  the key link table is `interaction::input::KEY_OPS`, scripts cannot
-  name the selection (`docs/briefs/U-2a-edit-ops-menus-keys.md` § Outcome).
-  Next: **U-2b**. **U-1** merged (#243).
+- **Now:** **U-2b** queries, config, editor verbs, deletion of the old
+  paths, generated `docs/ops.md`
+  (`docs/briefs/U-2b-queries-config-editor-ops.md`). **U-2a** merged
+  (#244): the 27 edit verbs are registry operations, menus and keys invoke
+  them by id (`interaction::input::KEY_OPS`), scripts cannot name the
+  selection. **U-1** merged (#243).
 - **4b-1 was not in flight:** GitHub had no branch and no PR for it on
   2026-11-17. It moved to step 4; its verbs are written once, on the
   registry (`docs/review/archive.ron`, `order-4b-1`).
@@ -24,8 +25,8 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
   2. **U-1** `gradiance-op`: one declaration per operation (done, #243;
      the Outcome lists the migration list).
-  3. **U-2a** the 22 edit verbs, the menus and the key link table;
-     then **U-2b** queries, config, editor verbs, deletion of the old
+  3. **U-2a** the 22 edit verbs, the menus and the key link table (done,
+     #244); then **U-2b** queries, config, editor verbs, deletion of the old
      paths, generated `docs/ops.md`. (Split 2026-11-17: one PR for all of
      U-2 exceeds one worker's coherence budget.)
   4. **4b-1** group op surface, on the registry (adds `set-color`, which

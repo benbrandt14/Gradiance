@@ -1,6 +1,6 @@
 # Edit operations, menus and keys on the registry
 Phase U · `docs/unified-surface-plan.md` § 3.4–3.6, § 13.4 · follows U-1
-(#243) · status: done (PR: see docs/state.md)
+(#243) · status: done (#244)
 
 ## Goal
 
