@@ -78,7 +78,14 @@ op surface**. The UI is brief 4b-2, which consumes it.
    distribute. Add an intent for naming, and for "group from list" or
    "decompose" only if `GroupIntent`/`UngroupIntent` can't express them in
    one undo step.
-4. **Verbs** with `OpSpec` rows. Indicative names; choose a coherent family:
+4. **Operations** in the registry (`gradiance-op`; recipe in
+   `docs/scripting.md`; U-2b deleted `OpSpec`). Each one is declared once in
+   its owning layer, so the Lisp verb, the remote call and the
+   `docs/ops.md` row come from that one declaration. Regenerate
+   `docs/ops.md` (`UPDATE_OPS_DOC=1 cargo test --test it
+   docs_ops_md_is_current`). Group and body references are `Target`s, so
+   an index, an id or `"selection"` (not from a script) all work.
+   Indicative names; choose a coherent family:
    - `(groups)`, `(group-name g)`, `(name-group g "wheels")`,
      `(group-members g)`;
    - `(group-set g "friction" 0.2)`, `(group-distribute g "density" 0.5 5
@@ -88,6 +95,10 @@ op surface**. The UI is brief 4b-2, which consumes it.
    - `(set-color i r g b)`.
 5. A "property name" table that verbs, the 4b-2 panel and the remote surface
    all share: one table, several surfaces.
+
+Revised 2026-11-17 after U-2 (#243–#245): verbs are registry operations,
+not `OpSpec` rows; the conformance tests in `tests/it/op_conformance.rs`
+cover every new operation without new hand lists.
 
 ## Out of scope
 
@@ -106,7 +117,8 @@ palette redesign (4b-3), `docs/state.md`.
   - decompose by colour yields one group per colour;
   - a filter result → `group-from` → `group-members` round-trips;
   - `set-color` is reversible.
-- Each new verb is documented in `docs/scripting.md` with an example; the
+- Each new operation is in the generated `docs/ops.md`, and each new verb
+  has an example in `docs/scripting.md`; the
   3-6 guard runs every doc example, so make them metre-sized.
 - Gates green. Outcome filled.
 
