@@ -303,7 +303,7 @@ mod tests {
         );
         assert_eq!(components.len(), 1);
         let c = &components[0];
-        assert!(c.holes.is_empty());
+        assert_eq!(c.holes, [] as [Vec<Vec2>; 0]);
         let ideal = std::f32::consts::PI * r * r;
         assert!(
             (c.area() - ideal).abs() / ideal < 0.005,

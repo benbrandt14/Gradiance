@@ -37,7 +37,7 @@ pub struct Interval {
 impl Interval {
     /// The interval's midpoint (where a centre line runs).
     pub fn mid(self) -> f32 {
-        0.5 * (self.min + self.max)
+        f32::midpoint(self.min, self.max)
     }
 
     /// The interval moved by `d`.

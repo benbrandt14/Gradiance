@@ -153,7 +153,7 @@ fn cancelling_mid_gesture_spawns_nothing() {
     app.update();
     button(&mut app, MouseButton::Right, false);
     app.update();
-    assert!(app.world().resource::<ScriptTool>().points().is_empty());
+    assert_eq!(app.world().resource::<ScriptTool>().points(), []);
 
     // Escape cancels too.
     click(&mut app, Vec2::ZERO);
@@ -161,7 +161,7 @@ fn cancelling_mid_gesture_spawns_nothing() {
     app.update();
     escape(&mut app, ButtonState::Released);
     app.update();
-    assert!(app.world().resource::<ScriptTool>().points().is_empty());
+    assert_eq!(app.world().resource::<ScriptTool>().points(), []);
 
     // A fresh first point after a cancel starts a new gesture; it does not
     // complete the old one.
@@ -195,5 +195,8 @@ fn a_bad_point_count_is_a_script_error() {
         let entry = app.world().resource::<ScriptLog>().0.last().cloned();
         assert!(entry.is_some_and(|e| !e.ok), "{bad} points should fail");
     }
-    assert!(app.world().resource::<ScriptTools>().0.is_empty());
+    assert_eq!(
+        app.world().resource::<ScriptTools>().0,
+        [] as [gradiance::core::script_tools::ScriptToolSpec; 0]
+    );
 }

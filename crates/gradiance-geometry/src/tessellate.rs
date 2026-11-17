@@ -98,7 +98,7 @@ mod tests {
             holes: vec![],
         });
         let tri = tessellate(&contours);
-        assert!(!tri.indices.is_empty());
+        assert_ne!(tri.indices, [] as [u32; 0]);
         assert!((tri.area() - 1200.0).abs() < 1.0);
     }
 

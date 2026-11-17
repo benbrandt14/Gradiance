@@ -349,10 +349,7 @@ pub fn lay_out_side_by_side(
         bodies: Vec::new(),
         joints: Vec::new(),
         nodes: Vec::new(),
-        environment: parts
-            .first()
-            .map(|(_, s)| s.environment.clone())
-            .unwrap_or_default(),
+        environment: parts.first().map_or_default(|(_, s)| s.environment.clone()),
     };
     let mut regions = Vec::new();
     let mut warnings = Vec::new();
@@ -549,7 +546,7 @@ mod tests {
             ("C".to_owned(), scene(Vec::new())),
         ];
         let (merged, regions, warnings) = lay_out_side_by_side(&parts, 2.0);
-        assert!(warnings.is_empty());
+        assert_eq!(warnings, [] as [String; 0]);
         assert_eq!(merged.bodies.len(), 3);
         assert_eq!(regions.len(), 3);
         // A spans [-2, 3.5]; B (4 m wide) starts 2 m after; C after B.

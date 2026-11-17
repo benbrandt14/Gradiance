@@ -232,7 +232,7 @@ pub fn set_in_orbit(
             let r = p.distance(center);
             let v = orbit_speed(accel.length(), r);
             // Orbit relative to a moving attractor: inherit its drift.
-            let drift = velocities.get(source).map(|lv| lv.0).unwrap_or_default();
+            let drift = velocities.get(source).map_or_default(|lv| lv.0);
             if let Ok(mut lv) = velocities.get_mut(entity) {
                 lv.0 = drift + toward.perp() * v;
             }
