@@ -1,6 +1,6 @@
 # Signal-graph edits become undo steps
 Phase U · CLAUDE.md invariant 4 · found by U-2b (Outcome, decision 6) ·
-status: open
+status: in review
 
 ## Goal
 
@@ -54,4 +54,38 @@ Any other settings resource, the signal panel's layout, new verbs.
 
 ## Outcome
 
-(open)
+**Landed (worker, 2026-11-17).** An edit to `SignalBindings`,
+`SignalParams` or `ComputedSignals` records one settled `settings` undo
+step; `defparam`/`defsignal` declare `undo: Some("settings")` and
+conformance test 6 checks them through its general arm (no special case).
+
+- *One list, not two (approach step 1, the preferred form).*
+  `SceneSettings` is gone. A `scene_content!` macro in
+  `gradiance-scene/src/records.rs` takes the scene-content field list once
+  and generates `EnvironmentRecord::scene_content_eq`, the new
+  `scene_content_matches(&World)` (compares in place, clones nothing), and
+  `apply_scene_content`. `commit_settings_edits` keeps an
+  `EnvironmentRecord` as its reference and tests it with
+  `scene_content_matches`, so the watcher, the comparison and the restore
+  cannot disagree again. CLAUDE.md invariant 4 names the list.
+- *The signal panel had no other path* (checked first, as the brief
+  asked): the node graph, signals panel, joint inspector and inspector
+  write the three resources through `ResMut` and nothing recorded them.
+  The script (`apply_editor_requests`) and the panels now share the one
+  watcher. A command that writes `SignalBindings` (duplicate copies
+  bindings) still records one step: the command's snapshot already holds
+  the bindings, so the watcher's `push_snapshot` finds no difference.
+- *Decision: `signal.set` stays `Seam::Editor`, `undo: None`.* It publishes
+  a value on `SignalBus`, which is live runtime state, not in
+  `EnvironmentRecord` and not saved; by the scene-content rule it is not an
+  undo step. Test 6 still asserts it moves no history.
+- *Side effect to know:* any settled change to a signal resource is now a
+  step, including canvas edits that change a `ComputedSignal`'s `block`
+  (one step per gesture, by the debounce). This is the intended rule
+  (scene content), not a special case.
+- Stale "not undoable" comments fixed (domain `signal.rs`, `gradiance-signal`
+  crate docs, `ui/signals.rs`, `docs/signal-dataflow.md`); `docs/ops.md`
+  regenerated (two undo cells).
+- Tests (`tests/it/history.rs`): one per resource (one step, label
+  `settings`, undo restores, redo re-applies) and a ten-frame param slider
+  drag that settles into one step.

@@ -15,7 +15,8 @@
 //!
 //! The signal resources (`SignalBindings`, `SignalParams`, `ComputedSignals`)
 //! are config-seam (invariant-#4 class), so this edits them directly: no
-//! intents, no undo, exactly like the grid and snap settings. The one exception
+//! intents, exactly like the sim settings. They are scene content, so
+//! `commit_settings_edits` records a settled edit as one undo step. The one exception
 //! is the behavior-node editor, which edits *authored* state and therefore
 //! emits a `PropertyEditIntent` like everything else.
 

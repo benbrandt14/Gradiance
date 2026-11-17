@@ -17,9 +17,9 @@
 //!   bus/plot publish. Removing a binding removes its override and the
 //!   authored appearance shows through again.
 //! - [`SignalBindings`] is a **config-seam resource** (invariant-#4 class,
-//!   like `GridSettings`): the UI edits it directly, it persists with the
-//!   scene, it is not undoable, and it references bodies only by
-//!   [`StableId`].
+//!   like `SimSettings`): the UI edits it directly, it persists with the
+//!   scene, it is scene content (a settled edit is one `settings` undo step),
+//!   and it references bodies only by [`StableId`].
 //! - The per-frame evaluator is plain queries + arithmetic — the scripting
 //!   VM stays off the hot path. Scripts participate by *publishing* named
 //!   values on their own (cold) runs via `signal-set`.

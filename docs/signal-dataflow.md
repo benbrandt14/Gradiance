@@ -80,7 +80,7 @@ same regardless of how many points were placed.
 
 | State | Class | Rules |
 |---|---|---|
-| `SignalBindings`, `SignalParams`, `ComputedSignals` | **config seam** (invariant-#4, like `GridSettings`) | UI edits directly; persisted in the scene's `EnvironmentRecord` (serde-defaulted — old files load); not undoable; bodies by `StableId` only |
+| `SignalBindings`, `SignalParams`, `ComputedSignals` | **config seam** (invariant-#4, like `GridSettings`) | UI edits directly; persisted in the scene's `EnvironmentRecord` (serde-defaulted — old files load); scene content, so a settled edit is one `settings` undo step (U-2c); bodies by `StableId` only |
 | `SignalBus`, `ScriptSignals` | derived | rebuilt continuously; never persisted; bus hygiene drops entries whose binding/param/computed/script producer is gone |
 | `CompiledSignals` | derived | the compiled kernels behind `ComputedSignals`, rebuilt by `recompile_signals` on change — keeps the *compile* step off the frame loop |
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
@@ -102,7 +102,7 @@ body quantity" implementation, and no `SensorQuantity`/`ActuatorTarget` enum.
 A **wire between ports is a [`SignalBinding`]**: a source (a sensor port, a
 param, or a computed signal) → a map + gradient → a sink (an actuator port or
 the plot). Bindings are the single config-seam currency — edited directly,
-persisted with the scene, not undoable — and duplicating a body copies the
+persisted with the scene, one settled undo step per edit — and duplicating a body copies the
 bindings that reference it (`signal::remap_binding`, fresh names), so behavior
 copies with the base object.
 
