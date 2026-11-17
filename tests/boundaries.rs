@@ -323,3 +323,28 @@ fn ui_and_script_stacks_stay_confined_in_manifests() {
         }
     }
 }
+
+#[test]
+fn the_toolchain_pin_is_one_version() {
+    // `rust-toolchain.toml` selects the compiler for local and agent builds;
+    // `RUST_PIN` selects it for CI. Pedantic lints are errors under
+    // `-D warnings`, so the two must name the same release or a local green
+    // gate says nothing about CI.
+    let quoted_after = |file: &str, key: &str| -> String {
+        let text = std::fs::read_to_string(repo_root().join(file))
+            .unwrap_or_else(|e| panic!("read {file}: {e}"));
+        let line = text
+            .lines()
+            .find(|l| l.trim_start().starts_with(key))
+            .unwrap_or_else(|| panic!("{file} has no `{key}` line"));
+        line.split('"')
+            .nth(1)
+            .unwrap_or_else(|| panic!("{file}: `{key}` has no quoted value"))
+            .to_owned()
+    };
+    assert_eq!(
+        quoted_after("rust-toolchain.toml", "channel"),
+        quoted_after(".github/workflows/ci.yml", "RUST_PIN:"),
+        "rust-toolchain.toml `channel` and ci.yml `RUST_PIN` must be equal"
+    );
+}

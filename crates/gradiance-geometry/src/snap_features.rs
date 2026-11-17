@@ -376,7 +376,7 @@ mod tests {
             let d = t.distance(project_on_segment(t, a, b));
             assert!((d - r).abs() < 1e-4);
         }
-        assert!(capsule_tangent_points(Vec2::ZERO, a, b, r).is_empty());
+        assert_eq!(capsule_tangent_points(Vec2::ZERO, a, b, r), [] as [Vec2; 0]);
     }
 
     #[test]

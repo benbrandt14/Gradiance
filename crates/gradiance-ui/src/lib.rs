@@ -476,7 +476,7 @@ mod tests {
     /// render rect at `origin` of `size`.
     fn pixel(clip: Mat4, point: Vec3, origin: Vec2, size: Vec2) -> Vec2 {
         let ndc = clip.project_point3(point);
-        origin + Vec2::new((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5) * size
+        origin + Vec2::new(f32::midpoint(ndc.x, 1.0), (1.0 - ndc.y) * 0.5) * size
     }
 
     /// The SSAO framing: a full-window camera with [`full_window_sub_view`]

@@ -10,6 +10,5 @@ use bevy::prelude::*;
 pub fn drain<M: Message>(world: &mut World) -> Vec<M> {
     world
         .get_resource_mut::<Messages<M>>()
-        .map(|mut m| m.drain().collect())
-        .unwrap_or_default()
+        .map_or_default(|mut m| m.drain().collect())
 }

@@ -37,8 +37,7 @@ pub fn drive_oscillating_motors(
         let pos = |e: Entity| {
             transforms
                 .get(e)
-                .map(|t| t.translation().truncate())
-                .unwrap_or_default()
+                .map_or_default(|t| t.translation().truncate())
         };
 
         match &def.kind {

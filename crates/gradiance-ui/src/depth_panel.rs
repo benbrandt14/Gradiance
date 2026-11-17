@@ -513,15 +513,13 @@ fn update_drag(
     } else if drag.current == drag.start {
         Vec::new()
     } else {
-        drag.id
-            .map(|id| {
-                vec![PropertyChange {
-                    id,
-                    old: PropertyValue::Depth(drag.start),
-                    new: PropertyValue::Depth(drag.current),
-                }]
-            })
-            .unwrap_or_default()
+        drag.id.map_or_default(|id| {
+            vec![PropertyChange {
+                id,
+                old: PropertyValue::Depth(drag.start),
+                new: PropertyValue::Depth(drag.current),
+            }]
+        })
     };
     if !changes.is_empty() {
         edits.write(PropertyEditIntent { changes });

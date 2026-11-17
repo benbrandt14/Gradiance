@@ -215,7 +215,10 @@ mod tests {
 
     #[test]
     fn a_zero_count_pattern_produces_nothing() {
-        assert!(ArrayMode::Linear { step: Vec2::X }.placements(0).is_empty());
+        assert_eq!(
+            ArrayMode::Linear { step: Vec2::X }.placements(0),
+            [] as [CopyPlacement; 0]
+        );
     }
 
     #[test]

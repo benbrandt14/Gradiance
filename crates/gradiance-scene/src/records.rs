@@ -84,8 +84,7 @@ impl BodyRecord {
             layers: None,
             groups: entity_ref
                 .get::<SelectionGroup>()
-                .map(|g| g.0.clone())
-                .unwrap_or_default(),
+                .map_or_default(|g| g.0.clone()),
             field: entity_ref
                 .get::<gradiance_domain::field::FieldSource>()
                 .copied(),

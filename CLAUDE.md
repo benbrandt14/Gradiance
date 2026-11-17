@@ -191,8 +191,10 @@ Three rules hold that together, and a new verb must obey all three:
 
 ## Build & test
 
-Toolchain: **rustc ≥ 1.95.0** (Bevy 0.19's floor). CI is **pinned** to
-`RUST_PIN` in `.github/workflows/ci.yml` (currently 1.97.0) — pedantic lints
+Toolchain: **rustc 1.100.0**, pinned in `rust-toolchain.toml` (`rustup`
+installs it on the first `cargo` call) and in `RUST_PIN` in
+`.github/workflows/ci.yml`; `tests/boundaries.rs` asserts that the two are
+equal. Bevy 0.19's floor is 1.95.0. The pin exists because pedantic lints
 are warn-level and `-D warnings` makes them errors, so a floating toolchain
 breaks main on every release that adds one. Bumping the pin is its own
 reviewed PR that fixes the new lints. Native builds also need
@@ -257,9 +259,10 @@ Agent-container hazards:
   `--workspace` once, as the gate.
 - `grep -E '^test result|FAILED|panicked'` matches nothing in a *build*
   failure — an empty result is not green. Check the exit code.
-- rust-lang.org is not reachable from the container, so the toolchain can't
-  be updated there; that is why CI is pinned to the container's version.
-  If `rustc --version` differs from `RUST_PIN`, say so in your handoff.
+- `static.rust-lang.org` is reachable from the container (D-0, 2026-11-17:
+  `rustup` installed 1.100.0 in 21 s), so `rust-toolchain.toml` selects the
+  compiler. The container's default toolchain can be older; if
+  `rustc --version` in the repo differs from `RUST_PIN`, say so in your handoff.
   CI is the authority. Read its failures through annotations first (clippy,
   fmt and failed tests are annotated — `docs/orchestration.md` § Gates and
   CI); the full log is `gh run view <run-id> --log-failed`. GitHub GraphQL
