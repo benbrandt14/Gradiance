@@ -220,13 +220,18 @@ script run, `-32000`).
   still resolves `"selection"` (U-2a's open question).
 - Separate brief: the signal-graph undo gap (decision 6).
 
-**Checked locally** (rustc 1.100.0): see the final report / PR body for
-the exact runs; fmt, clippy `-D warnings`, doc `-D warnings`,
-`cargo test --test it` (whole binary), `cargo test -p gradiance-op`.
+**Checked locally** (rustc 1.100.0): `cargo fmt --all -- --check`;
+`cargo clippy --workspace --all-targets -- -D warnings`;
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --lib`;
+`cargo test --test it` (whole umbrella binary: 330 passed);
+`cargo test --test boundaries` (8 passed); `cargo test -p gradiance-op`
+(14 passed); `cargo test -p <crate> --lib` for `gradiance-script` (43),
+`gradiance-command` (7), `gradiance-interaction` (36).
 
-**Not checked locally:** `cargo test --workspace` (CI); unit tests of
-`gradiance-script`, `-command`, `-interaction` were run only through
-`cargo test --workspace --lib` if listed below, not per package (each `-p`
-selection rebuilds Bevy with its own feature set and the container ran out
-of disk once); the app was not run (File ▸ New and the joint inspector's
-delete button are checked by the scanners and conformance tests only).
+**Not checked locally:** `cargo test --workspace` (CI); doctests; the app
+was not run (File ▸ New and the joint inspector's delete button are
+checked by the scanners and conformance tests only). Container note: the
+cargo in this toolchain keeps one `target/debug/build/<pkg>/<hash>/` per
+feature set, so `rm -rf target/debug/deps/*gradiance*` (CLAUDE.md) no
+longer applies; the disk filled once and was recovered by removing
+`target/debug/build/gradiance*/` and stale pre-D-1 variants.
