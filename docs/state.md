@@ -12,10 +12,13 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-1** group op surface. Recently merged: **5-1** (#236,
+- **Now:** D-0, then D-1. **4b-1 is not in flight and item 1 below is
+  void:** GitHub had no branch and no PR for it on 2026-11-17, so it moved
+  to 5b and its verbs are written once, on the registry
+  (`docs/review/archive.ron`, `order-4b-1`). Recently merged: **5-1** (#236,
   typed quantities, format v7) and **4b-0** (#238, review mode:
   `cargo run -- --review`, questions/answers in `docs/review/`, process in
-  `orchestration.md` § Review mode; 3 seed questions open).
+  `orchestration.md` § Review mode; no question is open).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **4b-1** group op surface (in flight; adds `set-color`, which fixes
@@ -26,6 +29,8 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
   4. **U-1** `gradiance-op`: one declaration per operation (brief ready).
   5. **U-2** migrate all verbs (4b-1's group verbs included), menus, keys
      onto the registry (brief at U-1 handoff).
+  5b. **4b-1** group op surface, on the registry (adds `set-color`, which
+     fixes review scenes re-rolling colours).
   6. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
      **U-4** in-app input injection; **U-5** snapshot tests on lavapipe.
   7. **4b-2** groups panel (on the new registry).
@@ -47,9 +52,11 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
     brief.
   - **Questions go to review mode, not chat** (2026-11-16): add them to
     `docs/review/questions.ron` with scenes; ingest `answers.ron` at each
-    phase start. **Plan decisions go there too** (2026-11-17, "utilize/extend
-    this review mechanism directly for as many decisions as possible"): a
-    `decision: true` question is text-only (brief 4b-0b). Six are open.
+    phase start. **Only interactive questions go to the owner**
+    (2026-11-17: "Leave non interactive changes to the thread here. Go with
+    your best estimates"): a plan decision is made by the session on its best
+    estimate and recorded in `docs/review/archive.ron` as a `decision: true`
+    entry (brief 4b-0b). Six were decided that way on 2026-11-17.
   - **Review answers, ingested 2026-11-17** (`docs/review/archive.ron`):
     the start-up scene stays **empty**; **toon** stays the default shading;
     the fillet bulge is **accepted**.

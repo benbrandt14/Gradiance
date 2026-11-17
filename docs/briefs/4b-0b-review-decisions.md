@@ -62,9 +62,17 @@ to the answers format, option-level camera (retained in `docs/state.md`).
 
 Worker session, 2026-11-17, branch `claude/review-decisions`.
 
-- **Landed:** steps 1 to 5. Six decision questions are open: `order-4b-1`,
-  `op-output`, `op-context`, `op-decoder`, `op-keys`, `toolchain-file`.
-  Each names the PR that holds its recommended option (#239 or #240).
+- **Landed:** steps 1 to 5, then **step 4 changed** on the owner's next
+  instruction ("Leave non interactive changes to the thread here. Go with
+  your best estimates for all these questions"). The six decisions
+  (`order-4b-1`, `op-output`, `op-context`, `op-decoder`, `op-keys`,
+  `toolchain-file`) were made by the session, each on its recommended
+  option, and are entries in `docs/review/archive.ron`. `questions.ron` is
+  empty. `order-4b-1` moved 4b-1 after U-2 (`docs/state.md`).
+- **Rule that follows** (`orchestration.md` § Review mode): only interactive
+  questions go to the owner. `decision: true` stays in the schema as the
+  record format for session decisions, and for a text question if the owner
+  asks for one.
 - **Ingested as:** see `docs/review/archive.ron` (`ingested_as`) and
   `docs/state.md` (rulings; retained UI/render). `shading` changed brief
   4b-3 (new "Owner input" section).
@@ -75,6 +83,5 @@ Worker session, 2026-11-17, branch `claude/review-decisions`.
   ruled that long runs go to CI; the `it` binary is one. No screenshot of
   the decision panel was taken. Local: `cargo test -p gradiance-scene`,
   fmt, clippy.
-- **For the next session:** the answers to the six questions change PR #239
-  (plan § 13, brief U-1) and PR #240 (`rust-toolchain.toml`) only where the
-  owner does not pick the recommended option.
+- **For the next session:** the owner can reverse any of the six by a note;
+  the archive entry names the PR or doc to change.
