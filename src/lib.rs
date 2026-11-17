@@ -85,6 +85,7 @@ pub use gradiance_domain as domain;
 pub use gradiance_geometry as geometry;
 pub use gradiance_interaction as interaction;
 pub use gradiance_kernel as kernel;
+pub use gradiance_op as op;
 pub use gradiance_optimize as optimize;
 pub use gradiance_persist as persist;
 pub use gradiance_physics as physics;

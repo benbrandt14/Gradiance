@@ -14,12 +14,13 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_command::intent::{
-    DeleteIntent, GroupIntent, LoadSceneIntent, RedoIntent, UndoIntent, UngroupIntent,
+    DeleteIntent, GroupIntent, LoadSceneIntent, RedoIntent, UngroupIntent,
 };
 use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::settings::GridSettings;
 use gradiance_interaction::selection::Selection;
+use gradiance_op::InvokeOp;
 use gradiance_persist::{LoadSceneRequest, SaveSceneRequest, SnapshotRequest};
 use gradiance_scene::FORMAT_VERSION;
 use gradiance_scene::{EnvironmentRecord, SceneRecord};
@@ -66,7 +67,9 @@ pub struct Panels<'w> {
 /// system-parameter limit (same idiom as `interaction::input::ShortcutWriters`).
 #[derive(SystemParam)]
 pub struct MenuWriters<'w> {
-    undo: MessageWriter<'w, UndoIntent>,
+    /// Rows migrated to the operation registry invoke it by id
+    /// (`gradiance-op`); a conformance test checks every id resolves.
+    invoke: MessageWriter<'w, InvokeOp>,
     redo: MessageWriter<'w, RedoIntent>,
     delete: MessageWriter<'w, DeleteIntent>,
     group: MessageWriter<'w, GroupIntent>,
@@ -206,7 +209,7 @@ fn edit_menu(
             )
             .clicked()
         {
-            writers.undo.write(UndoIntent);
+            writers.invoke.write(InvokeOp::new("edit.undo"));
             ui.close();
         }
         if ui

@@ -11,20 +11,16 @@ decisions #241; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **D-1** Bevy 0.20 stack is in its PR (Bevy 0.20.1, avian2d 0.8.0,
-  bevy_egui 0.43.1 / egui 0.36; `docs/bevy20-notes.md`). **U-1** is next.
-  Recently merged: **D-0** (#240, rustc 1.100.0), the plan revision (#239),
-  **4b-0b** (#241, review decisions), **5-1** (#236) and **4b-0** (#238,
-  review mode: `cargo run -- --review`; no question is open).
+- **Now:** **U-1** operation registry (`gradiance-op`) is in its PR. **D-1**
+  merged (#242): Bevy 0.20.1, avian2d 0.8.0, bevy_egui 0.43.1 / egui 0.36.
 - **4b-1 was not in flight:** GitHub had no branch and no PR for it on
   2026-11-17. It moved to step 4; its verbs are written once, on the
   registry (`docs/review/archive.ron`, `order-4b-1`).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
-  1. **D-1** Bevy 0.20 stack (in its PR; shaders are WESL now).
-  2. **U-1** `gradiance-op`: one declaration per operation (brief ready;
-     revised 2026-11-17, `unified-surface-plan.md` § 13: five operations,
-     `OpOutput`, snapshot stays above `gradiance-op`, one decoder).
+  1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
+  2. **U-1** `gradiance-op`: one declaration per operation (in its PR;
+     five operations; the Outcome lists U-2's migration list).
   3. **U-2** migrate all verbs, menus and the key link table onto the
      registry (brief at U-1 handoff).
   4. **4b-1** group op surface, on the registry (adds `set-color`, which

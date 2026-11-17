@@ -1,0 +1,17 @@
+[package]
+name = "gradiance-op"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance operation registry: one declaration per operation, shared by every doorway"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+bevy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true

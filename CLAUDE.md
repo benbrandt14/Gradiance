@@ -15,12 +15,13 @@ violation is a **compile error**, not a review comment:
 ```text
 kernel → (nothing)                  units → (nothing, +bevy for Reflect)
 core → bevy                         geometry → core
+op → core
 domain → core, geometry             scene → core, domain
 optimize → core, geometry (+bevy for Reflect)
 physics → core, domain, geometry, units
-signal → kernel, domain, physics    command → scene, signal (+ lower)
+signal → kernel, domain, physics    command → scene, signal, op (+ lower)
 persist → scene, command            interaction → command, optimize, persist (+ lower)
-render → interaction, units (+ lower)   script → command, signal (+ lower)
+render → interaction, units (+ lower)   script → command, signal, op (+ lower)
 ui → everything except render
 ```
 
@@ -28,6 +29,15 @@ ui → everything except render
 a bottom node with no `gradiance-*` deps but a minimal `bevy` surface (its
 quantity newtypes derive `Reflect`, like the geometry shape tree). It owns
 the single px↔SI seam `units::world` (`PIXELS_PER_METER`).
+
+`gradiance-op` is the operation registry (`docs/unified-surface-plan.md`
+§ 3, § 13; brief U-1): one declaration per operation (a serde + reflect
+param struct, `OpMeta`, `lower(params, &OpContext) -> OpOutput`), from which
+the Lisp verb, the remote call, menu rows and the catalog are generated.
+Each layer registers its own operations and publishes read-only mirrors
+into `OpContext`; `gradiance_op::apply` is the only place an output is
+written, through the seams it names. A new verb goes here (recipe in
+`docs/scripting.md`).
 
 `gradiance-kernel` also owns `Lut`, the sampled form of an authored response
 curve: the curve editor's control points are sampled once at compile time

@@ -22,6 +22,7 @@ mod joint_edit;
 mod joint_sensors;
 mod joints;
 mod nodes;
+mod op_conformance;
 mod packing;
 mod persistence;
 mod physics_sync;

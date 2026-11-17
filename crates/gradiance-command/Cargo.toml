@@ -12,11 +12,13 @@ workspace = true
 gradiance-core.workspace = true
 gradiance-domain.workspace = true
 gradiance-geometry.workspace = true
+gradiance-op.workspace = true
 gradiance-scene.workspace = true
 gradiance-signal.workspace = true
 gradiance-units.workspace = true
 avian2d.workspace = true
 bevy.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 
 [features]

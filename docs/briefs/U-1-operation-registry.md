@@ -1,8 +1,7 @@
 # One declaration per operation: the `gradiance-op` registry
 Phase U · `docs/unified-surface-plan.md` § 3 ("MCP, the command line, the UI,
 the Steel Lisp dialect and the procedural graph are one integrated system …
-that cannot become misaligned from itself", owner 2026-11-17) · status: ready
-(after D-1)
+that cannot become misaligned from itself", owner 2026-11-17) · status: done (PR: see `docs/state.md`)
 
 ## Goal
 
@@ -132,4 +131,88 @@ the CLI and MCP server (U-6); `ui.*`/`panel.*` operations (U-3); the graph (G-0)
 
 ## Outcome
 
-(filled by the worker)
+**What landed.**
+
+- `crates/gradiance-op` (above `core` only): `Operation` (serde + reflect
+  params, `const META: OpMeta`, `lower(self, &OpContext) -> Result<OpOutput,
+  OpError>`), `OpOutput` (messages and reflect-path settings writes, plus a
+  return value; the write kinds are private, so an operation cannot hold an
+  arbitrary world mutation), `OpContext` (type-keyed read-only mirrors, an id
+  source with a fixed `Sequence` for tests, one `build(world)` that runs each
+  layer's filler), `Target { Index, Id, Selection, At }` with a JSON form,
+  `OpRegistry`, `invoke`, `InvokeOp` + `OpInvokeSet`, `apply` (the only
+  write), `OpTrace` (records outputs; `dry_run` withholds them). The
+  reflect-path read/write helpers moved here from `reflect_bridge` (the
+  script crate re-exports them).
+- `gradiance-command`: `snapshot::SceneSnapshot` (the former `SceneView`,
+  moved down; the one builder `snapshot_scene`), `ops.rs` with the five
+  operations and `SceneOpsPlugin` (registers them, publishes the snapshot and
+  `SimSettings` mirrors, orders `OpInvokeSet` before `CommandDispatchSet`).
+  `sim.set` is registered here because this layer owns the settings undo
+  record (`commit_settings_edits`).
+- Lisp: the five verbs are **generated** from the registry (`bind_op`, one
+  steel boxed function each, bound at the first run pass, so an operation a
+  later layer registers is bound too). The hand-written closures, their
+  `name::` constants, catalog rows and `edit_bindings` rows are gone. The
+  catalog the console and `gradiance.ops` show is `OperationCatalog::
+  with_registry` (built-in rows plus one row per registry entry).
+- One snapshot: a run pass builds one `OpContext`; the hand-written query
+  verbs read the same `Arc<SceneSnapshot>`.
+- One decoder: every doorway builds a named JSON object (Lisp by declared
+  field order) and `OpEntry::lower` decodes it with serde.
+- Remote: `gradiance.op {"id", "params"}` decodes through the registry; the
+  `{"name", "args"}` form is unchanged (a script run, which now reaches the
+  generated verbs). `gradiance.ops` rows carry `id` and `fields` for registry
+  operations.
+- Menu: Edit ▸ Undo writes `InvokeOp::new("edit.undo")`, not `UndoIntent`.
+- Conformance (`tests/it/op_conformance.rs`, all iterate the registry):
+  doorway equivalence (Lisp, remote `id` form, `InvokeOp`; dry run, fixed id
+  sequence, one fixture scene), schema round trip (declared fields vs the
+  example; positional mapping rebuilds it), every `InvokeOp::new("…")` in
+  `gradiance-ui` names a registered id and `menu.rs` writes no `UndoIntent`,
+  history (an edit records exactly one step with its declared label, `undo`
+  removes one, the query records none, `sim.set` records one settled
+  `settings` step).
+
+**Decisions made here** (non-interactive, owner ruling 2026-11-17):
+
+1. Params use `gradiance-units` quantities (`Length`, `Angle`). *Checked:*
+   they are `#[serde(transparent)]` over `f32` and decode from JSON numbers,
+   integers included (`OpEntry` tests and the conformance example).
+2. `Target` decodes from a number, an id string, `"selection"` or
+   `{"at": [x, y]}`. A target that names nothing is a quiet no-op, as
+   `(place 99 …)` was. `Selection` resolves only where a selection mirror
+   exists (none yet).
+3. Field names keep today's Lisp signatures (`(spawn-box x y w h)`,
+   `(place i x y angle)`), so the catalog text and docs do not change.
+4. Steel: one native function per operation
+   (`SteelVal::anonymous_boxed_function`), not a variadic `%op` plus a
+   generated prelude. *Tried:* steel's `BoxedDynFunction` is reachable only
+   through that constructor; it takes `&[SteelVal]`, so no prelude is needed.
+5. Errors: `OpError` text has no operation prefix; each doorway adds its
+   own name (`sim-set: …` in the console, `sim.set: …` over remote).
+6. No derive macro: five plain `impl Operation` blocks read clearly. U-2
+   decides with 61 rows of evidence.
+
+**Behaviour changes (all on bad input only):** a wrong-type or non-finite
+argument to one of the five verbs is now a visible script error. Before, the
+verb returned `""` and did nothing. Arity errors were already errors.
+
+**For U-2.** Migration list by category (rows still hand-written):
+22 edit (`cut`, `spawn-circle`, `spawn-ground`, `spawn-box-rot`, `delete`,
+`redo`, `hinge`, `slider`, `spring`, `set-friction`, `set-restitution`,
+`set-density`, `set-static`, `scale`, `merge`, `subtract`, `intersect`,
+`xor`, `fillet-merge`, `delete-joint`, `group`, `ungroup`), 24 query, 1
+config (`camera-set`, workstation config, no undo), 9 editor. Design notes:
+- `OpOutput` needs no change for these categories. An editor operation
+  that fills a script-side table (`register-action`) needs a mirror or a
+  message type from its owning layer.
+- Set-shaped params (`group`) want `Vec<Target>`; it decodes as is.
+- `sim-get`/`camera-get` should read the context's `SimSettings` mirror
+  instead of their own copies, so a run has one settings snapshot too.
+- The key link table (§ 13.4) can write `InvokeOp`, as the menu now does.
+
+**Not checked locally:** `cargo test --workspace` (CI runs it, owner
+ruling). Local: `cargo test -p gradiance-op` (13 passed),
+`cargo test -p gradiance-script` (45 passed), fmt, clippy, doc.
+
