@@ -22,6 +22,7 @@ gradiance-scene.workspace = true
 gradiance-script.workspace = true
 gradiance-signal.workspace = true
 gradiance-units.workspace = true
+serde.workspace = true
 avian2d.workspace = true
 bevy.workspace = true
 bevy_egui.workspace = true

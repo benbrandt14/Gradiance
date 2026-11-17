@@ -239,6 +239,7 @@ pub fn bottom_dock(
     };
     // Claim the dock's rect so input over it doesn't leak to the scene.
     panels.push(panel_rect);
+    crate::widget_registry::publish_rect("bottom_dock", panel_rect);
 
     // Drain the node-graph pane's edits into the config-seam resources.
     node_graph::apply_pane(viewer, &mut gp);

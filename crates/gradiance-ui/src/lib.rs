@@ -18,12 +18,14 @@ pub mod depth_panel;
 pub mod dock;
 pub mod dock_sync;
 pub mod fonts;
+pub mod host;
 pub mod icons;
 pub mod inspector;
 pub mod joint_inspector;
 pub mod labels;
 pub mod menu;
 pub mod node_graph;
+pub mod ops;
 pub mod optimizer;
 pub mod outliner;
 pub mod panels;
@@ -35,7 +37,9 @@ pub mod review;
 pub mod settings;
 pub mod signals;
 pub mod toolbar;
+pub mod vendor;
 pub mod view_cube;
+pub mod widget_registry;
 pub mod widgets;
 
 use bevy::prelude::*;
@@ -199,6 +203,8 @@ pub struct GradianceUiPlugin;
 
 impl Plugin for GradianceUiPlugin {
     fn build(&self, app: &mut App) {
+        // The operations register headless too, so every doorway lists them.
+        ops::install(app);
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }
@@ -237,6 +243,7 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(
             EguiPrimaryContextPass,
             (
+                widget_registry::begin_frame,
                 fonts::install_fonts,
                 menu::menu_bar,
                 toolbar::toolbar,
@@ -257,9 +264,18 @@ impl Plugin for GradianceUiPlugin {
                 // shrinks the UI.
                 apply_scene_viewport,
                 capture_pointer_over_ui,
+                widget_registry::end_frame,
             )
                 .chain(),
         );
+        // The widget registry keeps a frame's names in thread-locals
+        // (upstream shape): one thread must run the whole pass, from
+        // `begin_frame` to `end_frame`. The pass is one chain, so nothing
+        // ran in parallel before either.
+        host::install_render_busy(app);
+        app.edit_schedule(EguiPrimaryContextPass, |schedule| {
+            schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
+        });
         // The panel registry's script seam: apply what `panel-show` and friends
         // asked for, then publish the state `panel-open?` reads. Both sit in
         // `Update` rather than the egui pass — they touch no context, and

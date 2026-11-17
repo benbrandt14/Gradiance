@@ -1,0 +1,17 @@
+# Files ported from fast-moving upstreams (docs/unified-surface-plan.md § 6).
+# One [[file]] per ported file: where it came from, the revision it was taken
+# at, and every local change. `tools/upstream-diff.sh <name>` shows what
+# upstream changed since `rev`. After taking an upstream change, update `rev`
+# (and `changes`) in the same PR. The upstreams are listed in
+# docs/upstream-watch.md.
+
+[[file]]
+name = "ui_registry"
+repo = "https://github.com/tangency-labs/solidcraft.git"
+path = "crates/ui-registry/src/lib.rs"
+rev = "0f5a5e22d22492416af6009f59cd39facce2de75"
+local = "crates/gradiance-ui/src/vendor/solidcraft/ui_registry.rs"
+license = "MIT OR Apache-2.0 (outside SolidCraft's brand licence, which covers ui-kit, look and theme only)"
+changes = [
+    "line 11: `use bevy_egui::egui;` (gradiance-ui reaches egui through bevy_egui; upstream depends on egui directly)",
+]

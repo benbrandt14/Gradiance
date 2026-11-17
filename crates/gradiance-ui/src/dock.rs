@@ -376,6 +376,7 @@ pub fn right_dock(
     };
     // Claim the dock's rect so input over it doesn't leak to the scene.
     panels.push(panel_rect);
+    crate::widget_registry::publish_rect("right_dock", panel_rect);
 
     // A closed tab turns its section's toggle off — the same state the View
     // menu edits, so the two agree and the pane doesn't reappear next frame.

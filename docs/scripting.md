@@ -312,6 +312,27 @@ Labels are unique by name (re-labelling rebinds), never persisted, and show
 up in the context menu's pick list. The `StableId` underneath remains the
 durable identity.
 
+### The window: inspect and screenshot (brief U-3)
+
+```scheme
+(ui-inspect "tools:")        ; the tool buttons drawn last frame
+(ui-screenshot "shot.png")   ; a PNG of the window, once the view settles
+```
+
+| Verb | Id | Seam | What it does |
+|---|---|---|---|
+| `(ui-inspect prefix)` | `ui.inspect` | query | The widgets the last frame drew whose name starts with `prefix` (`""`: all). Each row: `name`, `area`, `rect` `[x0 y0 x1 y1]`, `at` `[x y]` (the point to click), in egui logical points from the window's top left. Remote gets a JSON array of objects; Lisp a list of the same objects as JSON text. |
+| `(ui-screenshot path)` | `ui.screenshot` | editor | Saves a PNG of the whole window (scene and panels) at `path` (must end in `.png`; relative to the working directory). Returns the path at once; the file follows once the view settles: at least 150 ms and 3 frames, a camera glide gets 500 ms more, a busy renderer (start-up, pipelines compiling) holds it up to 20 s. No undo step. |
+
+Widget names come from the **widget registry** (`ui::widget_registry`, a
+port of SolidCraft's `ui-registry`): an area publishes its rect under its own
+name (`menu`, `transport`, `tools`, `right_dock`, `bottom_dock`,
+`view_cube`); a widget inside it is `<area>:<name>` (`tools:Box`, one per
+palette tool, script tools included). A panel names a widget by calling
+`widget_registry::publish_target` (rect and handle) or `publish_rect` while
+it draws. Headless there is no egui pass: `ui-inspect` answers an empty list
+and `ui-screenshot` logs that there is no window.
+
 ## Examples
 
 A floor with a stack of boxes:
@@ -424,8 +445,8 @@ and signal verbs in `crates/gradiance-script/src/ops.rs`. The full list is
 A handful of verbs exist only inside a VM run: the invocation-context reads
 (`action-x`, `action-y`, `tool-count`, `tool-x`, `tool-y`: there is no
 action or tool outside a run), the panel verbs (`panel-show`, `panel-hide`,
-`panel-toggle`, `panel-open?`: `gradiance-ui` registers `panel.*` in brief
-U-3) and the introspection pair (`ops`, `describe`: the remote surface has
+`panel-toggle`, `panel-open?`: `gradiance-ui` registers `panel.*` in a
+later brief, cut from U-3) and the introspection pair (`ops`, `describe`: the remote surface has
 `gradiance.ops`). They are the `BUILTINS` table in
 `crates/gradiance-script/src/registry.rs` (each row says why it is not an
 operation) and a steel builtin in `bridge.rs` under the same `name::`
@@ -598,7 +619,7 @@ line is written. An edit becomes a command in the next frame's `Update`.
 "spawn-box", "args": [0, 1, 1.6, 1.2]}` maps the args to the named params in
 declared order (the mapping the Lisp doorway uses) and goes through the
 registry exactly like the `id` form: no Scheme text, no console line. Only a
-**VM built-in** (`panel-show` and the other panel verbs until U-3, `ops`,
+**VM built-in** (`panel-show` and the other panel verbs, `ops`,
 `describe`, the invocation-context reads) is still one **script run**: the
 args rendered as Scheme literals (numbers, strings, booleans; arrays become
 `(list …)`; `null` and objects are refused), submitted to `ScriptInputs` and

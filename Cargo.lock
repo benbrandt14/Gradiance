@@ -4147,6 +4147,7 @@ dependencies = [
  "gradiance-script",
  "gradiance-signal",
  "gradiance-units",
+ "serde",
 ]
 
 [[package]]
