@@ -2,8 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (U-3 worker handoff, PR in review; 4b-1 merged
-as #248, 2e06f74; order per `docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-17 (U-4 worker handoff, PR in review; U-3 merged
+as #249, 97abe8f; order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -11,15 +11,16 @@ as #248, 2e06f74; order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-3 in review** (PR #249, branch
-  `claude/project-thread-dydbi0`): the widget registry (SolidCraft's
-  `ui-registry`, the first vendored file: `vendor/UPSTREAM.toml`,
-  `tools/upstream-diff.sh`, `docs/upstream-watch.md`), `ui.inspect` and
-  `ui.screenshot` as `ui`-layer operations. Orchestrator: read the brief's
-  Outcome (8 decisions, one cut), merge when CI is green. 4b-1 merged as
-  #248 (2e06f74). **Next: U-4** (input injection by widget name; its brief
-  is written at this handoff's review). Workers run on Opus while Fable
-  lacks usage credits (owner, 2026-11-17).
+- **Now:** **U-4 in review** (PR #250, branch
+  `claude/project-thread-dydbi0`): in-app input injection by widget name,
+  `ui.click/drag/key/text/wheel` as `ui`-layer operations writing Bevy input
+  messages (`ui::host::input`); `tools/screenshot/session.sh` drives the app
+  over `--remote` and no longer uses `xdotool`/`xwd`. Orchestrator: read the
+  brief's Outcome (8 decisions; SolidCraft's injection rules ported as rules,
+  VectorCraft and craft-libs unreachable), merge when CI is green. U-3
+  merged as #249 (97abe8f). **Next: U-5** (snapshot tests on lavapipe),
+  with **U-3b** panel ops before 4b-2. Workers run on Opus while Fable lacks
+  usage credits (owner, 2026-11-17).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
@@ -30,9 +31,9 @@ as #248, 2e06f74; order per `docs/unified-surface-plan.md` § 10 and § 13).
      U-2 exceeds one worker's coherence budget.)
   4. **4b-1** group op surface, on the registry (done, #248; adds
      `set-color`, which fixes review scenes re-rolling colours).
-  5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (in review,
-     #249); **U-4** in-app input injection; **U-5** snapshot tests on
-     lavapipe. **U-3b** `panel.*` operations (cut from U-3; replaces the
+  5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (done,
+     #249); **U-4** in-app input injection (in review, #250); **U-5**
+     snapshot tests on lavapipe. **U-3b** `panel.*` operations (cut from U-3; replaces the
      four panel VM built-ins) before 4b-2.
   6. **4b-2** groups panel (on the new registry).
   7. **U-6** CLI + MCP server.
@@ -175,13 +176,14 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   merge with `gh api -X PUT …/pulls/N/merge -f merge_method=squash -f
   sha=…`. Ready-for-review: `POST …/pulls/N/ccr/ready_for_review`.
 - **Shallow clone:** after pushing a branch, add a fetch refspec for it.
-- **Screenshot harness:**
-  - keyboard input doesn't reach the app;
-  - egui buttons: `mousedown 1; sleep 0.3; mouseup 1` (egui drops clicks
-    held > 0.8 s); scene picks want a ~1 s hold;
-  - pause the sim at screen (60,42);
-  - world (0,0) is screen (640,370) at 100 px/m;
-  - open panels with `(panel-show …)`;
+- **Screenshot harness** (`tools/screenshot/`, driven by operations since
+  U-4):
+  - the sim plays from start-up: `ui.key "Space"` pauses; undo does nothing
+    while it plays;
+  - world (0,0) is window (640,370) at 100 points/m; prefer widget names
+    from `ui.inspect`;
+  - a gesture plays over the next frames: wait before the next grab;
+  - the select tool grabs the snap point nearest the first moved frame;
   - indexed verbs in one run read the pre-run snapshot, so apply them from a
     second, hot-reloaded script.
 - Where `docs/agent-context.md` and `CLAUDE.md` disagree, `CLAUDE.md` wins.

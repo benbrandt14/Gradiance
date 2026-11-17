@@ -333,6 +333,38 @@ palette tool, script tools included). A panel names a widget by calling
 it draws. Headless there is no egui pass: `ui-inspect` answers an empty list
 and `ui-screenshot` logs that there is no window.
 
+### The window: input by widget name (brief U-4)
+
+```scheme
+(ui-click (list 32 141))                   ; a window point: the palette's Select
+(ui-drag (list 600 370) (list 700 370) 10) ; 10 frames of movement
+(ui-key "Escape")                          ; clear the selection
+(ui-text "1.5\n")                          ; type into the focused field
+(ui-wheel (list 640 370) 1)                ; zoom in a notch
+```
+
+| Verb | Id | Seam | What it does |
+|---|---|---|---|
+| `(ui-click at)` | `ui.click` | editor | Left click at `at`: a widget name (`ui-inspect` lists them; `(ui-click "tools:Box")` picks the Box tool) or a window point `(list x y)`. Plays move, press, release, one frame each. |
+| `(ui-drag from to steps)` | `ui.drag` | editor | Left drag: move to `from`, press, move to `to` in `steps` frames (1–200), release. A tool's gesture commits its one undo step on the release, as for a hand-made drag. |
+| `(ui-key chord)` | `ui.key` | editor | Press and release a chord written as menus show it: `"Ctrl+Z"`, `"Ctrl+Shift+G"`, `"Delete"`, `"Escape"`, `"F1"`, `"A"`. Modifiers go down a frame before the key and up a frame after. |
+| `(ui-text text)` | `ui.text` | editor | Types `text` into whatever has keyboard focus (click the field first), in one frame; a newline presses Enter. Typed text trips no key shortcut. |
+| `(ui-wheel at lines)` | `ui.wheel` | editor | Move to `at`, then turn the wheel by `lines` (> 0: up, away from you). |
+
+None records an undo step itself; the input it gives may (a drag that moves
+a body is one step, as by hand). Each returns at once and its gesture plays
+over the next frames, after any gesture already queued: one pointer event
+per frame (Craft's injection rule), at most 2000 frames waiting. A widget
+name resolves to the point the **last drawn frame** published; an unknown
+name or a non-finite point is an error and nothing is queued.
+
+The input is written inside the app as Bevy input messages, the ones winit
+writes (`CursorMoved`, `MouseButtonInput`, `KeyboardInput`, `MouseWheel` and
+the `WindowEvent` around each), and a move sets the window's cursor, so
+egui and the tools both see real input; the OS pointer follows. Keys arrive
+without window focus. Headless, keys and buttons still reach `ButtonInput`
+(there is no cursor and no egui).
+
 ## Examples
 
 A floor with a stack of boxes:
