@@ -7,6 +7,7 @@
 
 pub mod appearance;
 pub mod depth;
+pub mod distribute;
 pub mod field;
 pub mod group;
 pub mod joint;

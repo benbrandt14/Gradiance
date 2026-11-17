@@ -9,6 +9,10 @@ use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
+use gradiance_domain::appearance::Appearance;
+use gradiance_domain::depth::DepthBand;
+use gradiance_domain::group::{GroupIndex, GroupNames, SelectionGroup};
+use gradiance_domain::joint::JointDef;
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::sdf;
@@ -38,6 +42,13 @@ pub struct BodySnapshot {
     pub shape: ShapeDef,
     /// How many bodies it touches (from avian's contact graph).
     pub touching: usize,
+    /// Authored appearance: the old half of a colour edit, and what the
+    /// colour filters and decompose read.
+    pub appearance: Appearance,
+    /// Authored depth band.
+    pub depth: DepthBand,
+    /// The group stack, innermost first (empty when ungrouped).
+    pub groups: Vec<u32>,
 }
 
 impl BodySnapshot {
@@ -74,6 +85,11 @@ pub struct SceneSnapshot {
     /// The committed scene's behaviour nodes, in `StableId` order: what a
     /// delete may name besides a body.
     pub nodes: Vec<StableId>,
+    /// The bodies each joint connects (`None`: pinned to the world), in
+    /// joint id order: what connectivity decompose walks.
+    pub joint_links: Vec<(StableId, Option<StableId>)>,
+    /// The group names (scene content).
+    pub group_names: GroupNames,
 }
 
 impl SceneSnapshot {
@@ -156,45 +172,47 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
     // Authored physics is spread across avian components (that is the
     // de-adapter collapse — `docs/physics-deadapter-decision.md`), so the
     // snapshot re-gathers them into the `BodyPhysics` bundle the records use.
-    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize, BodyPhysics)> = world
-        .query_filtered::<(
-            Entity,
-            &StableId,
-            &Transform,
-            &ShapeDef,
-            Option<&avian2d::prelude::RigidBody>,
-            Option<&avian2d::prelude::Friction>,
-            Option<&avian2d::prelude::Restitution>,
-            Option<&avian2d::prelude::ColliderDensity>,
-        ), With<Body>>()
+    let mut rows: Vec<BodySnapshot> = world
+        .query_filtered::<(EntityRef, &StableId, &Transform, &ShapeDef), With<Body>>()
         .iter(world)
-        .map(
-            |(entity, id, transform, shape, rigid_body, friction, restitution, density)| {
-                let pose = PosRot::from_transform(transform);
-                let touching = touch.get(&entity).copied().unwrap_or(0);
-                // The components are `Option` so that a body missing one is
-                // still *in* the snapshot: making them required would silently
-                // drop it from `body-count` and every index after it, which is
-                // a far worse failure than reading a default.
-                let defaults = BodyPhysics::default();
-                let physics = BodyPhysics {
-                    rigid_body: rigid_body.copied().unwrap_or(defaults.rigid_body),
-                    friction: friction.copied().unwrap_or(defaults.friction),
-                    restitution: restitution.copied().unwrap_or(defaults.restitution),
-                    density: density.copied().unwrap_or(defaults.density),
-                    ..defaults
-                };
-                (*id, pose.pos, pose.rot, shape.clone(), touching, physics)
-            },
-        )
+        .map(|(entity, id, transform, shape)| {
+            let pose = PosRot::from_transform(transform);
+            // Every authored part reads as its default when absent, so a body
+            // missing one is still *in* the snapshot: requiring them would
+            // silently drop it from `body-count` and every index after it,
+            // which is a far worse failure than reading a default.
+            BodySnapshot {
+                id: *id,
+                physics: BodyPhysics::capture(&entity),
+                pos: pose.pos,
+                rot: pose.rot,
+                shape: shape.clone(),
+                touching: touch.get(&entity.id()).copied().unwrap_or(0),
+                appearance: entity.get::<Appearance>().copied().unwrap_or_default(),
+                depth: entity.get::<DepthBand>().copied().unwrap_or_default(),
+                groups: entity
+                    .get::<SelectionGroup>()
+                    .map_or_else(Vec::new, |g| g.0.clone()),
+            }
+        })
         .collect();
-    rows.sort_by_key(|(id, ..)| id.0);
+    rows.sort_by_key(|b| b.id.0);
+    let mut links: Vec<(StableId, StableId, Option<StableId>)> = world
+        .query_filtered::<(&StableId, Option<&JointDef>), With<gradiance_domain::Joint>>()
+        .iter(world)
+        .filter_map(|(id, def)| def.map(|d| (*id, d.body_a, d.body_b)))
+        .collect();
+    links.sort_by_key(|(id, ..)| id.0);
     let mut joints: Vec<StableId> = world
         .query_filtered::<&StableId, With<gradiance_domain::Joint>>()
         .iter(world)
         .copied()
         .collect();
     joints.sort_by_key(|id| id.0);
+    let group_names = world
+        .get_resource::<GroupNames>()
+        .cloned()
+        .unwrap_or_default();
     let mut nodes: Vec<StableId> = world
         .query_filtered::<&StableId, With<gradiance_domain::node::BehaviorNode>>()
         .iter(world)
@@ -204,21 +222,23 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
     SceneSnapshot {
         joints,
         nodes,
-        bodies: rows
-            .into_iter()
-            .map(|(id, pos, rot, shape, touching, physics)| BodySnapshot {
-                id,
-                physics,
-                pos,
-                rot,
-                shape,
-                touching,
-            })
-            .collect(),
+        bodies: rows,
+        joint_links: links.into_iter().map(|(_, a, b)| (a, b)).collect(),
+        group_names,
     }
 }
 
 impl SceneSnapshot {
+    /// Every group, in id order, members in body (id) order.
+    pub fn group_index(&self) -> GroupIndex {
+        GroupIndex::build(self.bodies.iter().map(|b| (b.id, b.groups.as_slice())))
+    }
+
+    /// The index of the body with this id.
+    pub fn index_of(&self, id: StableId) -> Option<usize> {
+        self.bodies.iter().position(|b| b.id == id)
+    }
+
     /// Number of bodies, as a count.
     pub fn len(&self) -> usize {
         self.bodies.len()

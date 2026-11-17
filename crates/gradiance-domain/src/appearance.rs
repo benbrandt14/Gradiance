@@ -42,6 +42,81 @@ impl Rgba {
         let m = lightness - c / 2.0;
         Self::rgb(r1 + m, g1 + m, b1 + m)
     }
+
+    /// The colour as HSL: hue in degrees `[0, 360)`, saturation and
+    /// lightness in `[0, 1]`. A grey has hue 0.
+    #[must_use]
+    pub fn to_hsl(self) -> (f32, f32, f32) {
+        let max = self.r.max(self.g).max(self.b);
+        let min = self.r.min(self.g).min(self.b);
+        let lightness = f32::midpoint(max, min);
+        let chroma = max - min;
+        if chroma <= f32::EPSILON {
+            return (0.0, 0.0, lightness);
+        }
+        let saturation = chroma / (1.0 - (2.0 * lightness - 1.0).abs()).max(f32::EPSILON);
+        // `max` is one of the three channels, copied: exact comparison is
+        // the intent.
+        #[allow(clippy::float_cmp)]
+        let sector = if max == self.r {
+            ((self.g - self.b) / chroma).rem_euclid(6.0)
+        } else if max == self.g {
+            (self.b - self.r) / chroma + 2.0
+        } else {
+            (self.r - self.g) / chroma + 4.0
+        };
+        (
+            (sector * 60.0).rem_euclid(360.0),
+            saturation.min(1.0),
+            lightness,
+        )
+    }
+
+    /// This colour turned to `hue` degrees, keeping its saturation,
+    /// lightness and alpha. A near-grey has no hue to turn, so it takes the
+    /// classic per-layer saturation and lightness (0.8, 0.5) instead: a hue
+    /// spread over default-grey bodies must be visible.
+    #[must_use]
+    pub fn with_hue(self, hue: f32) -> Self {
+        let (_, saturation, lightness) = self.to_hsl();
+        let (saturation, lightness) = if saturation < 0.05 {
+            (0.8, 0.5)
+        } else {
+            (saturation, lightness)
+        };
+        Self {
+            a: self.a,
+            ..Self::from_hsl(hue, saturation, lightness)
+        }
+    }
+}
+
+/// The [`PALETTE`] slot whose colour `fill` is (RGB, alpha ignored). Palette
+/// fills are copied, never computed, so a small tolerance only absorbs a
+/// save-file round trip.
+#[must_use]
+pub fn palette_slot(fill: Rgba) -> Option<usize> {
+    let near = |a: f32, b: f32| (a - b).abs() < 1e-5;
+    PALETTE
+        .iter()
+        .position(|s| near(s.color.r, fill.r) && near(s.color.g, fill.g) && near(s.color.b, fill.b))
+}
+
+/// The [`PALETTE`] colour for a (possibly fractional or out-of-range) slot:
+/// rounded, then wrapped, so a spread from 0 to 9 walks the palette and a
+/// spread past its end comes round again. Alpha comes from `old`.
+#[must_use]
+pub fn palette_fill(slot: f64, old: Rgba) -> Rgba {
+    let len = PALETTE.len() as f64;
+    let index = if slot.is_finite() {
+        slot.round().rem_euclid(len) as usize
+    } else {
+        0
+    };
+    Rgba {
+        a: old.a,
+        ..PALETTE[index.min(PALETTE.len() - 1)].color
+    }
 }
 
 /// The authored appearance of a body.
@@ -195,6 +270,38 @@ mod tests {
     #![allow(clippy::float_cmp)]
     use super::*;
     use gradiance_core::ids::StableId;
+
+    #[test]
+    fn hsl_round_trips_and_hue_turns_keep_lightness() {
+        for swatch in PALETTE {
+            let (h, s, l) = swatch.color.to_hsl();
+            let back = Rgba::from_hsl(h, s, l);
+            assert!((back.r - swatch.color.r).abs() < 1e-4, "{}", swatch.name);
+            assert!((back.g - swatch.color.g).abs() < 1e-4, "{}", swatch.name);
+            assert!((back.b - swatch.color.b).abs() < 1e-4, "{}", swatch.name);
+        }
+        let red = Rgba::from_hsl(0.0, 0.6, 0.4);
+        let (h, s, l) = red.with_hue(200.0).to_hsl();
+        assert!((h - 200.0).abs() < 0.1 && (s - 0.6).abs() < 1e-3 && (l - 0.4).abs() < 1e-3);
+        // A grey takes the classic saturation so the hue shows.
+        let (_, s, _) = Rgba::rgb(0.6, 0.6, 0.6).with_hue(120.0).to_hsl();
+        assert!((s - 0.8).abs() < 1e-3);
+    }
+
+    #[test]
+    fn palette_slots_round_and_wrap() {
+        let old = Rgba {
+            a: 0.5,
+            ..Rgba::rgb(0.0, 0.0, 0.0)
+        };
+        assert_eq!(palette_slot(palette_fill(2.4, old)), Some(2));
+        assert_eq!(
+            palette_slot(palette_fill(-1.0, old)),
+            Some(PALETTE.len() - 1)
+        );
+        assert_eq!(palette_fill(3.0, old).a, 0.5);
+        assert_eq!(palette_slot(Rgba::rgb(0.123, 0.0, 0.0)), None);
+    }
 
     #[test]
     fn for_id_lands_on_the_palette() {

@@ -15,6 +15,7 @@ mod array_drag;
 mod booleans;
 mod csg;
 mod editor_ops;
+mod groups;
 mod history;
 mod interaction;
 mod joint_breaking;

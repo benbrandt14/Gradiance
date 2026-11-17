@@ -2,9 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (U-2c worker handoff, PR in review; phase gate
-after U-2: U-1 #243, U-2a #244, U-2b #245; order per
-`docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-17 (4b-1 worker handoff, PR in review; U-2c merged
+as #247, 05b404d; order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -12,29 +11,26 @@ after U-2: U-1 #243, U-2a #244, U-2b #245; order per
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-2c in review** (PR #247, branch
-  `claude/project-thread-dydbi0`): signal-graph edits record one settled
-  `settings` undo step; the scene-content list is one macro in
-  `scene::records`. Orchestrator: read the brief's Outcome, merge when CI is
-  green. The U-2 phase is done: every Lisp verb is a
-  `gradiance-op` operation (51) or one of 11 listed VM built-ins; menus and
-  keys invoke operations by id; `docs/ops.md` is generated; a scanner bounds
-  intent writers in `gradiance-ui`/`-interaction`. **Next: 4b-1** (brief revised
-  for the registry). Workers run on Opus while Fable lacks usage credits
-  (owner, 2026-11-17).
-- **4b-1 was not in flight:** GitHub had no branch and no PR for it on
-  2026-11-17. It moved to step 4; its verbs are written once, on the
-  registry (`docs/review/archive.ron`, `order-4b-1`).
+- **Now:** **4b-1 in review** (PR #PRNUM, branch
+  `claude/project-thread-dydbi0`): groups as editing layers on the op
+  registry: group names (scene content), group-set / distribute / scatter
+  in one undo step, `bodies-where` filters, `decompose`, `set-color`, and
+  one body-property table (`command::body_prop`). Orchestrator: read the
+  brief's Outcome, merge when CI is green. The U-2 phase is done (U-2c
+  merged as #247): every Lisp verb is a `gradiance-op` operation or one of
+  11 listed VM built-ins; menus and keys invoke operations by id;
+  `docs/ops.md` is generated. **Next: U-3.** Workers run on Opus while
+  Fable lacks usage credits (owner, 2026-11-17).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
   2. **U-1** `gradiance-op`: one declaration per operation (done, #243;
      the Outcome lists the migration list).
   3. **U-2a** (done, #244), **U-2b** (done, #245), then **U-2c**
-     signal-graph undo (in review, #247). (U-2 split 2026-11-17: one PR for all of
+     signal-graph undo (done, #247). (U-2 split 2026-11-17: one PR for all of
      U-2 exceeds one worker's coherence budget.)
-  4. **4b-1** group op surface, on the registry (adds `set-color`, which
-     fixes review scenes re-rolling colours).
+  4. **4b-1** group op surface, on the registry (in review, #PRNUM; adds
+     `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
      **U-4** in-app input injection; **U-5** snapshot tests on lavapipe.
   6. **4b-2** groups panel (on the new registry).

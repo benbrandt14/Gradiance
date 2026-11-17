@@ -22,6 +22,7 @@
 //! ends) it names the primary (first-selected) body.
 
 pub mod body;
+pub mod group;
 pub mod joint;
 pub mod query;
 pub mod scene;
@@ -158,6 +159,7 @@ impl Plugin for SceneOpsPlugin {
             let mut registry = app.world_mut().resource_mut::<OpRegistry>();
             spawn::register(&mut registry);
             body::register(&mut registry);
+            group::register(&mut registry);
             sets::register(&mut registry);
             joint::register(&mut registry);
             scene::register(&mut registry);
@@ -194,10 +196,15 @@ mod tests {
                     rot: 0.0,
                     shape: ShapeDef::Circle { radius: 0.5 },
                     touching: 0,
+                    appearance: Appearance::default(),
+                    depth: DepthBand::default(),
+                    groups: Vec::new(),
                 })
                 .collect(),
             joints: vec![id(99)],
             nodes: Vec::new(),
+            joint_links: Vec::new(),
+            group_names: gradiance_domain::group::GroupNames::default(),
         }
     }
 

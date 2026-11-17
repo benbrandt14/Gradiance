@@ -13,6 +13,7 @@ use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
+use gradiance_domain::appearance::{Appearance, Rgba};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target};
 use gradiance_units::{Angle, Length};
@@ -27,6 +28,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetRestitution>();
     registry.register::<SetDensity>();
     registry.register::<SetStatic>();
+    registry.register::<SetColor>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -324,5 +326,62 @@ impl Operation for SetStatic {
                 PropertyValue::RigidBody(kind),
             )
         })
+    }
+}
+
+/// Set the body's fill colour from RGB in `[0, 1]` (alpha, border and glow
+/// are kept): what a scene script uses for a fixed look, where the
+/// id-derived colour would change from run to run.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetColor {
+    /// The body.
+    pub i: Target,
+    /// Red in `[0, 1]`.
+    pub r: f32,
+    /// Green in `[0, 1]`.
+    pub g: f32,
+    /// Blue in `[0, 1]`.
+    pub b: f32,
+}
+
+impl Operation for SetColor {
+    const META: OpMeta = OpMeta {
+        id: "body.set_color",
+        lisp: "set-color",
+        doc: "Set the i-th body's fill to (r, g, b), each in 0..1 — undoable.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "r": 0.9, "g": 0.3, "b": 0.1}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| {
+                let old = scene.get(id)?.appearance;
+                let fill = Rgba {
+                    a: old.fill.a,
+                    ..Rgba::rgb(
+                        self.r.clamp(0.0, 1.0),
+                        self.g.clamp(0.0, 1.0),
+                        self.b.clamp(0.0, 1.0),
+                    )
+                };
+                let new = Appearance { fill, ..old };
+                (old != new).then_some(PropertyChange {
+                    id,
+                    old: PropertyValue::Appearance(old),
+                    new: PropertyValue::Appearance(new),
+                })
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
     }
 }

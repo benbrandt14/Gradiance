@@ -144,6 +144,29 @@ across and ±3.5 m up and down); angles are radians.
 ;; duplicates collapse; fewer than two distinct bodies is a quiet no-op
 ;; (as Ctrl+G with one body selected). A non-list, a non-index element or
 ;; an out-of-range index is a script error, and the run commits nothing.
+;; group returns the new group's index (groups are listed in id order and
+;; a new group always lands last)
+
+;; groups as editing layers — g is a group index (as in (groups)) or a body
+;; (an id or {"at": [x, y]} from the remote surface: its outermost group)
+(groups)                     ; every group's name, in group order ("" = unnamed)
+(group-name g)               ; one group's name
+(group-members g)            ; its members' body indices (any nesting depth)
+(name-group g "wheels")      ; name it ("" removes the name) — undoable, saved
+(group-set g "friction" 0.2) ; one property on every member — one undo step
+(group-set-color g r g b)    ; every member's fill, each channel 0..1
+(group-distribute g "density" 0.5 5 "x")  ; lo..hi in order of x (or y, size,
+                             ; order, value) — first gets lo, last gets hi
+(group-scatter g "hue" 0 300 7)           ; seeded random in lo..hi
+(bodies-where (list "kind:circle" "ungrouped"))  ; indices matching every clause
+(decompose g "color")        ; one group per colour (or "kind", "islands",
+                             ; "dissolve") — one undo step
+(set-color i r g b)          ; one body's fill, each channel 0..1
+;; properties (the table in crates/gradiance-command/src/body_prop.rs):
+;; friction restitution density gravity-scale static sensor rotation-lock
+;; depth hue palette. Clauses: kind:<box|circle|polygon|rod|plane|csg>,
+;; group:<g>, grouped, ungrouped, palette:<slot>, <property>:<lo>..<hi>,
+;; <property>:<v>, not:<clause>.
 
 ;; config — tune the simulation (not undoable; the settings seam)
 (sim-get "gravity.y")        ; read a SimSettings field by reflect-path
@@ -326,6 +349,22 @@ Reads driving edits (a marker under every existing body):
     (spawn-circle (body-x i) (- (body-y i) 0.4) 0.05)
     (loop (+ i 1))))
 ```
+
+Groups as editing layers: group a filter result, then edit the group as one
+thing. Every read in a run sees the pre-run scene, so the new group is edited
+from a second run (here a context-menu action):
+
+```scheme
+(group (bodies-where (list "kind:box")))
+(register-action "Style the row"
+  "(begin (name-group 0 \"row\") (group-distribute 0 \"hue\" 0 240 \"x\")
+          (group-set 0 \"friction\" 0.2) (group-distribute 0 \"density\" 0.5 5 \"x\"))")
+```
+
+A group, once named and styled, can be split again: `(decompose 0 "color")`
+leaves one group per fill colour, `(decompose 0 "islands")` one per set of
+jointed bodies, and `(decompose 0 "dissolve")` removes the group. Like Ctrl+G,
+each of these is one undo step; nested groups around and inside it are kept.
 
 ## Adding a verb (contributor recipe)
 

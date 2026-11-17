@@ -47,10 +47,12 @@
 //! sequences to prove they compose.
 
 pub mod array_cmd;
+pub mod body_prop;
 pub mod cut_cmd;
 #[cfg(feature = "dev")]
 pub mod diagnostics;
 pub mod dispatch;
+pub mod filter;
 pub mod group_cmd;
 pub mod intent;
 pub mod joint_cmd;
@@ -346,7 +348,7 @@ fn close_sim_run(world: &mut World) {
 /// `gradiance_scene::records`, read through
 /// [`EnvironmentRecord::scene_content_matches`]: sim, render, lighting,
 /// scenery and the signal graph (`SignalBindings`, `SignalParams`,
-/// `ComputedSignals`). Grid, snap and camera are workstation config and
+/// `ComputedSignals`) and `GroupNames`. Grid, snap and camera are workstation config and
 /// never enter history.
 ///
 /// The resources are tracked **by value**. Bevy's change flags are not
@@ -399,6 +401,8 @@ impl Plugin for CommandPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CommandStack>();
         app.init_resource::<HistoryInfo>();
+        app.init_resource::<gradiance_domain::group::GroupNames>();
+        app.register_type::<gradiance_domain::group::GroupNames>();
         // The whole command intent surface — messages + reflected types —
         // registers from the one `command_intents!` table in `dispatch`.
         dispatch::register_command_intents(app);
