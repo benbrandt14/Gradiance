@@ -35,6 +35,13 @@ Last updated: 2026-11-16 (orchestrator; #236 merged; 4b-0 in flight).
   - **Merge freely when CI is green** and no tests or checks were removed to
     get there (2026-11-16).
   - **Orchestrator rotation at gates is skipped.**
+  - **UI and op-surface direction** (2026-11-17, `docs/unified-surface-plan.md`
+    § 0): excellent egui polish is now wanted (overrides `orchestration.md`
+    Future intent 1's "don't polish"); lean to Blender's theme; upgrade crates
+    where it saves rework; Graphite is the capability goal, MVP first; port
+    from upstreams, don't depend; BUI dropped; licensing not a concern yet;
+    UI/Lisp/CLI/MCP/graph must be one surface that cannot drift. Briefs D-1,
+    U-1..U-11 are proposed there, not yet written.
 - **Process:** one worker at a time (shared disk). The worker hands off via
   the brief's Outcome + PR. The orchestrator reviews, merges (REST squash),
   updates this file, and sends screenshots to the owner.
