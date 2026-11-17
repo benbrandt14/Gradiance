@@ -15,7 +15,7 @@ live in `docs/roadmap.md` and the tool docs; this is about chrome.
 
 ### Fonts are configured; they were not
 
-egui 0.35 bundles four fonts, and the workspace shipped with **no font
+egui 0.36 bundles four fonts, and the workspace shipped with **no font
 configuration at all**, so it inherited the stock families: Monospace is
 Hack → Ubuntu-Light → NotoEmoji → emoji-icon-font, Proportional the same list
 **without Hack**. Nine of the codepoints the UI drew resolved in none of them

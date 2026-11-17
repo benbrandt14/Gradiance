@@ -101,7 +101,7 @@ impl PhysicsQueries<'_, '_> {
             .filter_map(|(entity, transform, collider)| {
                 let pose = PosRot::from_transform(transform);
                 collider
-                    .contains_point(Position::new(pose.pos), Rotation::radians(pose.rot), point)
+                    .contains_point(pose.pos, Rotation::radians(pose.rot), point)
                     .then_some(entity)
             })
             .collect()
@@ -117,7 +117,7 @@ impl PhysicsQueries<'_, '_> {
             .filter_map(|(entity, transform, collider)| {
                 let pose = PosRot::from_transform(transform);
                 collider
-                    .aabb(pose.pos, Rotation::radians(pose.rot))
+                    .aabb(pose.pos, Rotation::radians(pose.rot), 0.0)
                     .intersects(&box_aabb)
                     .then_some(entity)
             })

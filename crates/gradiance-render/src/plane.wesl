@@ -7,12 +7,12 @@
 // (dithered discard) so orbiting through never blinds the view. A faint
 // trace line marks where the plane crosses the authoring plane (z = 0).
 
-#import bevy_pbr::{
+import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     forward_io::{VertexOutput, FragmentOutput},
     mesh_view_bindings::view,
-}
+};
 
 struct PlaneData {
     // xyz = outward plane normal (world), w = plane offset.
@@ -29,9 +29,9 @@ struct HorizonData {
     color: vec4<f32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> plane: PlaneData;
-@group(#{MATERIAL_BIND_GROUP}) @binding(101) var<uniform> fade: FadeData;
-@group(#{MATERIAL_BIND_GROUP}) @binding(102) var<uniform> horizon: HorizonData;
+@group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> plane: PlaneData;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101) var<uniform> fade: FadeData;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102) var<uniform> horizon: HorizonData;
 
 // 4x4 Bayer threshold — the opaque pass has no blending, so the inside
 // reveal is a screen-door dissolve (brief: the band is ~0.5 m of camera
@@ -63,7 +63,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     pbr_input.material.base_color =
-        alpha_discard(pbr_input.material, pbr_input.material.base_color);
+        alpha_discard(
+            pbr_input.material.flags,
+            pbr_input.material.alpha_cutoff,
+            pbr_input.material.base_color,
+        );
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);

@@ -21,10 +21,10 @@ simulation and geometric queries** — every menu action, tool, and sim feature 
 scriptable/extensible from a `.scm` file, feeding a future
 sensor/modulator/actuator dataflow layer.
 
-- **Stack:** Bevy 0.19 ECS · Avian2d 0.7 (physics) · bevy_egui 0.41 (UI) ·
+- **Stack:** Bevy 0.20 ECS · Avian2d 0.8 (physics) · bevy_egui 0.43 (UI) ·
   steel (Scheme VM for the DSL). All exact-pinned. **API knowledge for these
-  versions is easily stale — check `docs/bevy19-notes.md` before writing
-  Bevy/avian/egui code** (Bevy 0.19 uses Messages not Events, exclusive
+  versions is easily stale — check `docs/bevy20-notes.md` before writing
+  Bevy/avian/egui code** (Bevy 0.20 uses Messages not Events, exclusive
   systems, a 16-param system limit, etc.).
 - **Toolchain:** rustc 1.100.0, pinned in `rust-toolchain.toml` and in CI's
   `RUST_PIN` (equal by test), so local clippy is as strict as CI's (e.g.
@@ -324,6 +324,6 @@ then script it. Order: (1) interactions & joints/constraints + their UI →
 **Deeper reading (only when a topic needs it):** `docs/script-lisp-decision.md`
 (scripting design + governance), `docs/sdf-geometry-decision.md` (geometry),
 `docs/scripting.md` (verb author guide), `docs/roadmap.md` (full milestone
-list), `docs/bevy19-notes.md` (version gotchas), `docs/ui-design.md` (the
+list), `docs/bevy20-notes.md` (version gotchas), `docs/ui-design.md` (the
 chrome design system — glyphs, widget vocabulary, seam rules, keybindings),
 `docs/feature-feedback.md` (user feedback log).

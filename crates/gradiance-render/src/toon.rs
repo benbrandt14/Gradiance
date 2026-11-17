@@ -18,7 +18,7 @@ use gradiance_domain::settings::RenderSettings;
 /// Where the [`install`]ed `embedded_asset!` registration puts the shader:
 /// `embedded://<crate underscore name>/<path from src/>`. Asserted against
 /// the macro's own computation in this file's tests.
-const TOON_SHADER_PATH: &str = "embedded://gradiance_render/toon.wgsl";
+const TOON_SHADER_PATH: &str = "embedded://gradiance_render/toon.wesl";
 
 /// The material every body renders with.
 pub type ToonMaterial = ExtendedMaterial<StandardMaterial, ToonExtension>;
@@ -55,7 +55,7 @@ pub fn params_of(settings: &RenderSettings) -> Vec4 {
 
 /// Installs the toon material pipeline and its embedded shader.
 pub fn install(app: &mut App) {
-    embedded_asset!(app, "toon.wgsl");
+    embedded_asset!(app, "toon.wesl");
     app.add_plugins(MaterialPlugin::<ToonMaterial>::default());
 }
 
@@ -111,7 +111,7 @@ mod tests {
     /// the registration in [`super::install`]).
     #[test]
     fn shader_ref_matches_the_embedded_registration() {
-        let registered = bevy::asset::embedded_path!("toon.wgsl");
+        let registered = bevy::asset::embedded_path!("toon.wesl");
         assert_eq!(
             format!("embedded://{}", registered.display()),
             TOON_SHADER_PATH

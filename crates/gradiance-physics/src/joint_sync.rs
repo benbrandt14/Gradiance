@@ -14,7 +14,6 @@
 //! restores the joint. The sync then derives avian's [`JointDisabled`] from
 //! that flag; `JointDisabled` itself is never saved.
 
-use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
@@ -189,8 +188,8 @@ fn insert_derived_joint(
     match &def.kind {
         JointKind::Hinge { limits, motor } => {
             let mut joint = RevoluteJoint::new(body_a, body_b)
-                .with_local_anchor1(Vector::from(def.anchor_a.value()))
-                .with_local_anchor2(Vector::from(anchor_b))
+                .with_local_anchor1(def.anchor_a.value())
+                .with_local_anchor2(anchor_b)
                 .with_local_basis2(basis_b);
             if let Some([min, max]) = limits {
                 joint = joint.with_angle_limits(min.value(), max.value());
@@ -206,10 +205,10 @@ fn insert_derived_joint(
             motor,
         } => {
             let mut joint = PrismaticJoint::new(body_a, body_b)
-                .with_local_anchor1(Vector::from(def.anchor_a.value()))
-                .with_local_anchor2(Vector::from(anchor_b))
+                .with_local_anchor1(def.anchor_a.value())
+                .with_local_anchor2(anchor_b)
                 .with_local_basis2(basis_b)
-                .with_slider_axis(Vector::from(*axis));
+                .with_slider_axis(*axis);
             if let Some([min, max]) = limits {
                 joint = joint.with_limits(min.value(), max.value());
             }
@@ -237,8 +236,8 @@ fn insert_derived_joint(
                 None => (rest_length.value(), rest_length.value()),
             };
             let joint = DistanceJoint::new(body_a, body_b)
-                .with_local_anchor1(Vector::from(def.anchor_a.value()))
-                .with_local_anchor2(Vector::from(anchor_b))
+                .with_local_anchor1(def.anchor_a.value())
+                .with_local_anchor2(anchor_b)
                 .with_limits(min, max)
                 .with_compliance(compliance);
             entity_commands.insert((

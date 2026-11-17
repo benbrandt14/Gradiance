@@ -357,7 +357,7 @@ pub fn right_dock(
             closed: &mut closed,
         };
 
-        // egui 0.35 panels dock inside a `Ui`; build the screen-root one.
+        // egui 0.36 panels dock inside a `Ui`; build the screen-root one.
         let mut root = egui::Ui::new(
             ctx.clone(),
             "right-dock".into(),

@@ -165,7 +165,9 @@ fn spawn_body_intent_round_trips_through_reflection() {
     // Type-erase to a dynamic representation, then rebuild the concrete type —
     // this exercises `FromReflect` across the opaque `StableId`/`ShapeDef`
     // leaves and the structural avian-backed `BodyPhysics`.
-    let dynamic = intent.to_dynamic();
+    let dynamic = intent
+        .to_dynamic()
+        .expect("the intent clones to a dynamic value");
     let rebuilt =
         SpawnBodyIntent::from_reflect(&*dynamic).expect("from_reflect rebuilds the intent");
     assert_eq!(rebuilt.record, record);
@@ -196,7 +198,9 @@ fn spawn_joint_intent_round_trips_through_reflection() {
         record: record.clone(),
     };
 
-    let dynamic = intent.to_dynamic();
+    let dynamic = intent
+        .to_dynamic()
+        .expect("the intent clones to a dynamic value");
     let rebuilt =
         SpawnJointIntent::from_reflect(&*dynamic).expect("from_reflect rebuilds the joint intent");
     assert_eq!(rebuilt.record, record);

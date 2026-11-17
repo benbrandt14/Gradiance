@@ -11,7 +11,7 @@ discussion instead.
 ## Setup (once per container)
 
 ```sh
-apt-get install -y mesa-vulkan-drivers libvulkan1 x11-apps xdotool imagemagick xvfb
+apt-get install -y mesa-vulkan-drivers libvulkan1 x11-apps xdotool imagemagick xvfb libxkbcommon-x11-0
 cargo build --locked --bin gradiance      # honours CARGO_TARGET_DIR
 ```
 

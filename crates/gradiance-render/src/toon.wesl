@@ -7,12 +7,12 @@
 // Behavioral spec: the original Gradiance toon shader (ceil-banded n·l
 // plus rim light), re-derived on top of real shadowed lighting.
 
-#import bevy_pbr::{
+import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     forward_io::{VertexOutput, FragmentOutput},
     mesh_view_bindings::lights,
-}
+};
 
 struct ToonParams {
     // x = band count (0 disables banding), y = rim strength,
@@ -21,13 +21,17 @@ struct ToonParams {
     data: vec4<f32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> toon: ToonParams;
+@group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> toon: ToonParams;
 
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     pbr_input.material.base_color =
-        alpha_discard(pbr_input.material, pbr_input.material.base_color);
+        alpha_discard(
+            pbr_input.material.flags,
+            pbr_input.material.alpha_cutoff,
+            pbr_input.material.base_color,
+        );
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);

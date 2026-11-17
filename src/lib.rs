@@ -77,7 +77,7 @@
 //! (only `gradiance-ui`/`gradiance-script` declare them) and re-checked by
 //! `tests/boundaries.rs`, which also holds the exact-pin line on engine
 //! dependencies. See `CLAUDE.md` for the full contract and
-//! `docs/bevy19-notes.md` for verified Bevy 0.19 API notes.
+//! `docs/bevy20-notes.md` for verified Bevy 0.20 API notes.
 
 pub use gradiance_command as command;
 pub use gradiance_core as core;
