@@ -9,22 +9,22 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 # Engine + physics. Versions are exact-pinned: agent sessions must not drift
 # APIs (enforced by tests/boundaries.rs).
-bevy = "=0.19.0"
+bevy = "=0.20.1"
 # `serialize` lets authored avian components go straight into the RON save
 # (the de-adapter collapse — see docs/physics-deadapter-decision.md). Save
 # stability across avian versions is explicitly not a goal.
-avian2d = { version = "=0.7.0", features = ["serialize"] }
-bevy_egui = "=0.41.0"
-# Node-graph editor widget: the Simulink-style signal canvas. Shares egui 0.35
-# with bevy_egui (the only major node-editor crate on egui 0.35).
-egui-snarl = "=0.11.0"
+avian2d = { version = "=0.8.0", features = ["serialize"] }
+bevy_egui = "=0.43.1"
+# Node-graph editor widget: the Simulink-style signal canvas. Shares egui 0.36
+# with bevy_egui (the only major node-editor crate on egui 0.36).
+egui-snarl = "=0.12.0"
 # Docking/tabbing workspace (Rerun's tiling lib; the desktop-app shell — see
-# docs/ui-shell-decision.md). Shares egui 0.35 with bevy_egui.
-egui_tiles = "=0.16.0"
+# docs/ui-shell-decision.md). Shares egui 0.36 with bevy_egui.
+egui_tiles = "=0.17.0"
 # Plotting widget (axes, zoom/pan, legend, cursor) — the live plotter and the
-# substrate the curve editor draws on. Shares egui 0.35 with bevy_egui.
-egui_plot = "=0.36.0"
-leafwing-input-manager = "=0.21.0"
+# substrate the curve editor draws on. Shares egui 0.36 with bevy_egui.
+egui_plot = "=0.37.0"
+leafwing-input-manager = "=0.22.0"
 
 # Numerical optimization (the layout solver family — docs/optimize-decision.md).
 # `argmin` supplies the search algorithms (line search, L-BFGS, Nelder-Mead);
@@ -41,7 +41,7 @@ argmin-math = { version = "0.5", default-features = false, features = [
 lyon = "1.0"
 # Features-only dependency: turns on the serde impls for the bevy math types
 # (Vec2) that authored data serializes. Never imported directly.
-glam = { version = "0.32", features = ["serde"] }
+glam = { version = "0.33", features = ["serde"] }
 
 # Identity + persistence
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -61,14 +61,14 @@ mimalloc = "0.1"
 # holds — the steel VM runs only on the authoring (cold) path, never in the
 # per-frame loop (continuous drivers lower to `gradiance-kernel`); see
 # docs/script-lisp-decision.md. Confined to `crates/gradiance-script`.
-steel-core = "=0.8.2"
+steel-core = "=0.8.3"
 colorgrad = { version = "0.8.0", features = ["preset"] }
 
 # Test-only
 proptest = "1.9"
-# UI layout tests for panel leaf renderers (shares egui 0.35 with bevy_egui).
+# UI layout tests for panel leaf renderers (shares egui 0.36 with bevy_egui).
 # Accessibility-tree queries only — no GPU, no screenshot farm.
-egui_kittest = "=0.35.0"
+egui_kittest = "=0.36.2"
 
 # Workspace members
 gradiance-core = { path = "crates/gradiance-core" }

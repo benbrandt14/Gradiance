@@ -1,7 +1,7 @@
 # Bevy 0.20 stack
 Phase U · `docs/unified-surface-plan.md` § 4, § 10 row 3 ("Upgrade crates
 such as egui where that prevents a lot of rework", owner 2026-11-17) ·
-status: ready (after D-0)
+status: done (PR #242)
 
 ## Goal
 
@@ -91,4 +91,50 @@ feature, removing leafwing (U-2 decides that), retained items in
 
 ## Outcome
 
-(filled by the worker)
+**Pins (all rows of the table at target):** `bevy` 0.20.1, `avian2d` 0.8.0,
+`bevy_egui` 0.43.1 (egui 0.36.2), `egui_tiles` 0.17.0, `egui-snarl` 0.12.0,
+`egui_plot` 0.37.0, `egui_kittest` 0.36.2, `leafwing-input-manager` 0.22.0,
+`steel-core` 0.8.3 (own commit; `cargo test -p gradiance-script`: 45 passed),
+`glam` 0.33. `Cargo.lock` was resolved with the minimum change
+(`cargo metadata`, not `cargo update`); `parry2d` is 0.31.1, `wgpu` is 30.0.0.
+
+**Breaking changes met** (detail in `docs/bevy20-notes.md` § What changed):
+
+1. Shaders: `naga_oil` is gone. `toon.wgsl` and `plane.wgsl` became
+   `toon.wesl` and `plane.wesl` (`import ..;`, `constants::MATERIAL_BIND_GROUP`,
+   `bevy_pbr::render::..` paths, three-argument `alpha_discard`). The compiler
+   does not see this failure: the old files built, then every toon and plane
+   mesh failed to draw at run time. The screenshot comparison found it.
+2. `PartialReflect::to_dynamic` returns a `Result` (2 test sites).
+3. avian 0.8: `math::Vector` is private (`Vec2` instead);
+   `Collider::convex_decomposition` takes slices; `contains_point` and `aabb`
+   take a position and a `Rotation` (`physics::queries`).
+4. egui 0.36 debug-asserts that a `TexturesDelta` is applied or cleared
+   before it drops. Two headless test helpers (`fonts::tests::ready_ctx`,
+   `reflect_grid::tests::painted_text`) clear it now. CI found this (4
+   failed tests in `gradiance-ui`); the assertions of the tests did not change.
+5. No non-test code in `gradiance-ui` needed a change for bevy_egui 0.43 / egui 0.36,
+   `egui_tiles` 0.17, `egui-snarl` 0.12 or `egui_plot` 0.37.
+
+**Visual check (lavapipe, 1280x720):** default scene, Properties, node graph
+and settings, before (`main` at D-0) and after. Toon bands, cast shadows, the
+grid, the ground plane and all chrome look the same. The remaining pixel
+difference (RMSE 6.5–7.4 %) comes from the random body colours and from the
+simulation time of the capture. Not compared: a tilted (3D) view, SSAO on.
+
+**Not checked:** whether the SSAO `full_window_sub_view` workaround (4-4) is
+still necessary on 0.20; it is kept. `assets/shaders/toon.wgsl` still has
+`naga_oil` syntax; no code loads it (left alone, out of scope).
+
+**Harness:** a fresh container also needs `libxkbcommon-x11-0` for the
+screenshot run (winit panics without it).
+
+**Test thresholds and format:** no test threshold and no golden value
+changed; avian 0.8 moved no asserted number. No test was removed, skipped or
+loosened. `FORMAT_VERSION` did not move (the authored avian components
+serialize as before; the persistence tests pass unchanged).
+
+**CI record (PR #242):** run 1 failed in `coverage` on the 4 `gradiance-ui`
+tests of item 4. Run 2 (after the helper fix): `ci`, `coverage` and
+`coupling` pass.
+

@@ -241,7 +241,7 @@ Recommendation:
   the container on 2026-11-17 (stable is 1.100.0).
 - **D-1: one brief for the Bevy 0.20 stack**, before the UI work. Each UI brief
   after it is written once against current APIs. `docs/bevy19-notes.md`
-  becomes `bevy20-notes.md`.
+  became `docs/bevy20-notes.md` (done, D-1).
 - **D-2: egui 0.37** when bevy_egui releases it. The Craft code is on 0.37, so
   this step lowers porting cost again. Do **not** fork bevy_egui to get there
   earlier: a fork is one more upstream to track.

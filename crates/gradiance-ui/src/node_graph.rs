@@ -1,6 +1,6 @@
 //! The **node-graph canvas**: the Simulink-style visual editor for the signal
 //! dataflow (`docs/signal-dataflow.md`), built on the [`egui-snarl`] node-graph
-//! widget (the one major node editor tracking our pinned egui 0.35 —
+//! widget (the one major node editor tracking our pinned egui 0.36 —
 //! `egui_node_graph2` is stuck on 0.29). snarl owns the box layout, pan/zoom,
 //! and the drag-to-connect interaction; this module is the **adapter** between
 //! it and the ECS dataflow.

@@ -1,7 +1,7 @@
 # Gradiance
 
 An Algodoo-inspired 2.5D physics sandbox with CAD-grade editing, built on
-[Bevy](https://bevy.org) 0.19 and [Avian2d](https://github.com/Jondolf/avian)
+[Bevy](https://bevy.org) 0.20 and [Avian2d](https://github.com/Jondolf/avian)
 physics. 2D bodies extrude into 3D: each collision layer bit maps to a slab
 of depth, rendered with toon-banded lighting and cast shadows.
 
@@ -96,8 +96,8 @@ tools / UI ──intents──▶ command dispatch ──▶ authored components
 - The root `gradiance` package is the app shell: plugin group, prelude,
   `main`, and the integration test suite.
 
-See `CLAUDE.md` for the full invariants and `docs/bevy19-notes.md` for
-verified Bevy 0.19 API notes.
+See `CLAUDE.md` for the full invariants and `docs/bevy20-notes.md` for
+verified Bevy 0.20 API notes.
 
 ## License
 

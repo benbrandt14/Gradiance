@@ -198,7 +198,9 @@ mod tests {
             ctx.set_fonts(egui::FontDefinitions::default());
         }
         ctx.begin_pass(egui::RawInput::default());
-        let _ = ctx.end_pass();
+        // egui 0.36 debug-asserts that a `TexturesDelta` is applied or cleared
+        // before it drops; no renderer exists here, so clear it.
+        ctx.end_pass().textures_delta.clear();
         // A font family is instantiated lazily, on first use. Headless there is
         // no UI to use one, so probe glyphs in an untouched family and every
         // answer comes back "missing" — which looked exactly like a font full

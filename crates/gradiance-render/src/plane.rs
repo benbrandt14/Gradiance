@@ -27,7 +27,7 @@ use gradiance_domain::shape::ShapeDef;
 
 /// Where the `embedded_asset!` registration puts the shader (see
 /// `toon.rs::TOON_SHADER_PATH` for the derivation); asserted in tests.
-const PLANE_SHADER_PATH: &str = "embedded://gradiance_render/plane.wgsl";
+const PLANE_SHADER_PATH: &str = "embedded://gradiance_render/plane.wesl";
 
 /// Half-extent of the plane quads — far beyond any navigable range; the
 /// shader's horizon fog ends the surface long before geometry does, and
@@ -103,7 +103,7 @@ pub fn plane_material(
 
 /// Installs the plane material pipeline and its embedded shader.
 pub fn install(app: &mut App) {
-    embedded_asset!(app, "plane.wgsl");
+    embedded_asset!(app, "plane.wesl");
     app.add_plugins(MaterialPlugin::<InfinitePlaneMaterial>::default());
 }
 
@@ -191,7 +191,7 @@ mod tests {
     /// the `embedded_asset!` registration in this file derives.
     #[test]
     fn shader_ref_matches_the_embedded_registration() {
-        let registered = bevy::asset::embedded_path!("plane.wgsl");
+        let registered = bevy::asset::embedded_path!("plane.wesl");
         assert_eq!(
             format!("embedded://{}", registered.display()),
             PLANE_SHADER_PATH

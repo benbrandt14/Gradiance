@@ -1,7 +1,7 @@
 # Gradiance — Agent Contract
 
-Algodoo-inspired 2.5D physics sandbox. Bevy 0.19 + Avian2d 0.7 + bevy_egui 0.41 (exact-pinned).
-**Your API knowledge is probably stale for these versions — read `docs/bevy19-notes.md` before writing Bevy/avian/egui code.**
+Algodoo-inspired 2.5D physics sandbox. Bevy 0.20 + Avian2d 0.8 + bevy_egui 0.43 (exact-pinned).
+**Your API knowledge is probably stale for these versions — read `docs/bevy20-notes.md` before writing Bevy/avian/egui code.**
 
 ## Workspace layout (the layer diagram is the dependency graph)
 
@@ -194,7 +194,7 @@ Three rules hold that together, and a new verb must obey all three:
 Toolchain: **rustc 1.100.0**, pinned in `rust-toolchain.toml` (`rustup`
 installs it on the first `cargo` call) and in `RUST_PIN` in
 `.github/workflows/ci.yml`; `tests/boundaries.rs` asserts that the two are
-equal. Bevy 0.19's floor is 1.95.0. The pin exists because pedantic lints
+equal. Bevy 0.20.1's floor is 1.97.1. The pin exists because pedantic lints
 are warn-level and `-D warnings` makes them errors, so a floating toolchain
 breaks main on every release that adds one. Bumping the pin is its own
 reviewed PR that fixes the new lints. Native builds also need

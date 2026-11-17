@@ -1,6 +1,5 @@
 //! Authored components → engine components, `Changed<>`-driven and idempotent.
 
-use avian2d::math::Vector;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 use gradiance_domain::Body;
@@ -25,12 +24,12 @@ fn collider_for(shape: &ShapeDef) -> Option<Collider> {
             radius,
         } => Some(Collider::capsule_endpoints(
             *radius,
-            Vector::new(-half_length, 0.0),
-            Vector::new(*half_length, 0.0),
+            Vec2::new(-half_length, 0.0),
+            Vec2::new(*half_length, 0.0),
         )),
         // Truly infinite: the surface passes through the body origin with
         // local +Y outward; body rotation orients it.
-        ShapeDef::HalfPlane => Some(Collider::half_space(Vector::Y)),
+        ShapeDef::HalfPlane => Some(Collider::half_space(Vec2::Y)),
         // CSG trees collide as their contoured polygons — every connected
         // component's rings, so merged-but-barely-touching unions keep
         // full collision coverage.
@@ -61,7 +60,7 @@ fn decomposition_collider<'a>(rings: impl Iterator<Item = &'a Vec<Vec2>>) -> Opt
         max = max.max(*v);
     }
     let tol = (max - min).max_element().max(0.0) * DECIMATE_FRACTION;
-    let mut vertices: Vec<Vector> = Vec::new();
+    let mut vertices: Vec<Vec2> = Vec::new();
     let mut indices: Vec<[u32; 2]> = Vec::new();
     for ring in rings {
         let ring = gradiance_geometry::contours::decimate_ring(ring, tol);
@@ -76,7 +75,7 @@ fn decomposition_collider<'a>(rings: impl Iterator<Item = &'a Vec<Vec2>>) -> Opt
     if vertices.is_empty() {
         return None;
     }
-    Some(Collider::convex_decomposition(vertices, indices))
+    Some(Collider::convex_decomposition(&vertices, &indices))
 }
 
 /// Collider decimation tolerance as a fraction of the shape's extent

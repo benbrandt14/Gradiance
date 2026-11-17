@@ -214,7 +214,7 @@ pub fn bottom_dock(
             closed: &mut closed,
             list: &mut signal_list,
         };
-        // egui 0.35 panels dock inside a `Ui`; build the screen-root one (the
+        // egui 0.36 panels dock inside a `Ui`; build the screen-root one (the
         // same background-layer pattern the right dock uses, so it claims the
         // edge). Stop at the right dock's left edge so the two don't overlap in
         // the bottom-right corner (the right dock pushed its rect first).

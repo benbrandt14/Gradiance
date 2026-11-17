@@ -1,9 +1,48 @@
-# Bevy 0.19 / Avian2d 0.7 / bevy_egui 0.41 — API notes
+# Bevy 0.20 / Avian2d 0.8 / bevy_egui 0.43 — API notes
 
 **Read this before writing any engine-facing code.** Model knowledge typically ends around
 Bevy 0.15/0.16; every fact below was verified against the exact pinned crate sources in
-`~/.cargo/registry` (rustc ≥ 1.95 required — this repo builds on 1.96). When in doubt,
+`~/.cargo/registry` (rustc ≥ 1.97.1 required — this repo pins 1.100.0). When in doubt,
 grep the crate source, not memory. Items marked ⚠ were not fully verified.
+
+## What changed from the 0.19 stack (brief D-1, 2026-11-17)
+
+Sections below this one were written for Bevy 0.19 / Avian2d 0.7 /
+bevy_egui 0.41. D-1 rechecked only the items that broke the build or the
+render; those are corrected in place and listed here. The other items compiled
+without change on the new stack.
+
+**Changes that bit this codebase:**
+
+- **Shaders are WESL; `naga_oil` is gone.** A shader with imports must have
+  the `.wesl` extension. `#import a::b::{..}` becomes `import a::b::{..};`
+  (a trailing `;`, before all other items). `#ifdef X` becomes `@if(X)`.
+  The material group index `#{MATERIAL_BIND_GROUP}` becomes
+  `constants::MATERIAL_BIND_GROUP` (no import needed). An old-syntax file
+  still compiles into the binary and fails only at run time:
+  `failed to create shader module ... found "#"`, and the mesh does not draw.
+- **`bevy_pbr` shader modules moved under `render::`:**
+  `bevy_pbr::render::{pbr_fragment, pbr_functions, forward_io,
+  mesh_view_bindings, pbr_types}`; `bevy_pbr::prepass::utils`.
+- **`alpha_discard` takes three arguments:**
+  `alpha_discard(material.flags, material.alpha_cutoff, color)`.
+- **`PartialReflect::to_dynamic` returns a `Result`.**
+- **avian 0.8: `avian2d::math::Vector` is private.** Use `Vec2`.
+- **avian 0.8: `Collider::convex_decomposition(&[Vec2], &[[u32; 2]])`** takes
+  slices; `collider.contains_point(pos, rot, point)` and
+  `collider.aabb(pos, rot, margin)` take a position, a `Rotation` and (for
+  `aabb`) a margin.
+- **egui 0.36: a dropped `TexturesDelta` that is not empty panics in debug
+  builds.** A headless test that runs a pass (`ctx.run_ui`, `end_pass`)
+  without a renderer must call `output.textures_delta.clear()`.
+- **`glam` is 0.33** (`bevy_math` 0.20.1 needs `^0.33.2`).
+
+**Read in the migration guides, not met in this codebase** (no call site):
+`Tonemapping::None` is a full passthrough (use `Linear` for the old result);
+`Camera3d` enables `DebandDither` by default; `Query::iter_many` items are
+`Result`s; `NextState::set_if_neq` is `set_if_different`; avian
+`SpeculativeMargin` is `SpeculativeCcd` (off by default); bevy_egui 0.42
+removed single-pass mode; egui 0.36 removed `Modifiers` from `RawInput`.
 
 ## Bevy ECS: Messages vs Events (the big rename)
 
@@ -94,11 +133,11 @@ sees unconsumed pointer events (empty-canvas clicks).
 - `Pickable` component controls behavior (`should_block_lower`, `is_hoverable`); not required
   for backends to pick an entity, only to override defaults.
 
-## Avian2d 0.7
+## Avian2d 0.8
 
 ```rust
 app.add_plugins(PhysicsPlugins::default().with_length_unit(100.0));  // PhysicsLengthUnit resource
-app.insert_resource(Gravity(Vector::NEG_Y * 1000.0));                // Vector = Vec2 (f32 default)
+app.insert_resource(Gravity(Vec2::NEG_Y * 1000.0));                  // math::Vector is private in 0.8
 ```
 
 - Bodies: `RigidBody::{Dynamic, Static, Kinematic}` component. Position is driven through
@@ -106,7 +145,7 @@ app.insert_resource(Gravity(Vector::NEG_Y * 1000.0));                // Vector =
   teleports). Velocities: `LinearVelocity(Vec2)`, `AngularVelocity(f32)` — read/write directly.
 - Colliders: `Collider::circle(r)`, `Collider::rectangle(w, h)`, `Collider::triangle(a,b,c)`,
   `Collider::half_space(normal)`, `Collider::capsule(r, len)`,
-  `Collider::convex_decomposition(vertices: Vec<Vector>, indices: Vec<[u32;2]>)` (loop indices),
+  `Collider::convex_decomposition(vertices: &[Vec2], indices: &[[u32; 2]])` (loop indices),
   `Collider::convex_hull(points) -> Option<Self>` ⚠ verify signature.
 - Materials/props: `Friction::new(f)`, `Restitution::new(r)`, `ColliderDensity(d)`,
   `GravityScale(s)`, `Sensor`, `LockedAxes::ROTATION_LOCKED`, `Mass(m)`, `SleepingDisabled`.
@@ -126,21 +165,21 @@ app.insert_resource(Gravity(Vector::NEG_Y * 1000.0));                // Vector =
                                      /* or MotorModel::SpringDamper { frequency, damping_ratio } */,
                                      ..default() }),
   );
-  // PrismaticJoint::new(e1, e2).with_slider_axis(Vector::Y).with_limits(lo, hi)
+  // PrismaticJoint::new(e1, e2).with_slider_axis(Vec2::Y).with_limits(lo, hi)
   //     .with_motor(LinearMotor::new(model).with_target_position(x).with_max_force(f))
   // FixedJoint::new(e1, e2)  ⚠ verify anchor/rotation setters in src/dynamics/joints/fixed.rs
   // Mutate live: query &mut RevoluteJoint, edit joint.motor.target_velocity etc.
   // Extras: JointDisabled, JointCollisionDisabled (disables contacts between the two bodies).
   ```
 - Spatial queries: `SpatialQuery` system param —
-  `point_intersections(Vector, &SpatialQueryFilter) -> Vec<Entity>`,
+  `point_intersections(Vec2, &SpatialQueryFilter) -> Vec<Entity>`,
   `aabb_intersections_with_aabb(ColliderAabb) -> Vec<Entity>`, `cast_ray(..)`, shape casts.
 - Picking backend: add `PhysicsPickingPlugin`, put `PhysicsPickable` on the **camera** and on
   target entities (or set `PhysicsPickingSettings::require_markers = false` — default picks all ⚠
   check `picking/mod.rs`: by default all colliders pickable unless `require_markers` set).
 - Determinism escape hatch: `enhanced-determinism` feature.
 
-## bevy_egui 0.41 (egui 0.35)
+## bevy_egui 0.43 (egui 0.36)
 
 ```rust
 app.add_plugins(EguiPlugin::default());
@@ -151,7 +190,7 @@ fn my_ui(mut contexts: EguiContexts) -> Result {                // fallible syst
     egui::Window::new("w").show(ctx, |ui| ..);                  // (SidePanel/TopBottomPanel renamed)
     Ok(())
 }
-// Pointer-over-UI: ctx.wants_pointer_input() / ctx.wants_keyboard_input() (egui 0.35 methods)
+// Pointer-over-UI: ctx.wants_pointer_input() / ctx.wants_keyboard_input() (egui methods)
 // Multi-window: PrimaryEguiContext marker; EguiGlobalSettings resource.
 ```
 
@@ -203,10 +242,10 @@ Unchanged from prior experience: `lyon::path::Path` builder, `FillTessellator::t
 - `despawn()` is recursive now; there is no `despawn_recursive()`.
 - egui systems go in `EguiPrimaryContextPass`, and `ctx_mut()` returns `Result`.
 - Pointer drag deltas are screen-space (Y inverted vs world).
-- avian `Scalar`/`Vector` = f32/Vec2 under default `parry-f32`.
-- rustc ≥ 1.95 required by bevy 0.19 (container toolchain updated to 1.96.1).
+- avian scalars are f32 and vectors are `Vec2` under default `parry-f32`.
+- rustc ≥ 1.97.1 required by bevy 0.20.1 (`rust-toolchain.toml` pins 1.100.0).
 
-## Custom materials (verified against bevy_pbr 0.19 sources, M10)
+## Custom materials (verified against bevy_pbr 0.20.1 sources, D-1)
 
 - Extend `StandardMaterial` instead of replacing it:
   `ExtendedMaterial<StandardMaterial, MyExtension>` + `MaterialPlugin::<That>::default()`.
@@ -214,13 +253,14 @@ Unchanged from prior experience: `lyon::path::Path` builder, `FillTessellator::t
   `MaterialExtension` (`fragment_shader() -> ShaderRef`); base-material shadow
   maps, clustered lights, and the prepass keep working untouched.
 - Extension bind-group entries must start at `@binding(100)` to avoid clashing
-  with `StandardMaterial`'s bindings; in WGSL the material group index is the
-  preprocessor def `#{MATERIAL_BIND_GROUP}`.
-- Fragment recipe (from `pbr_fragment.wgsl` / `pbr_functions.wgsl`):
-  `pbr_input_from_standard_material(in, is_front)` → `alpha_discard` →
+  with `StandardMaterial`'s bindings; in WESL the material group index is
+  `constants::MATERIAL_BIND_GROUP`.
+- Fragment recipe (from `render/pbr.wesl`):
+  `pbr_input_from_standard_material(in, is_front)` →
+  `alpha_discard(material.flags, material.alpha_cutoff, base_color)` →
   `apply_pbr_lighting(pbr_input)` → tweak → `main_pass_post_lighting_processing`.
   `PbrInput` exposes `N` and `V` for rim/fresnel terms.
-- Ship shaders inside the binary with `bevy::asset::embedded_asset!(app, "file.wgsl")`
+- Ship shaders inside the binary with `bevy::asset::embedded_asset!(app, "file.wesl")`
   (path relative to the calling file, `src/` stripped) and reference them as
-  `"embedded://<crate>/<dir>/file.wgsl"`. `ShaderRef: From<&'static str>`.
+  `"embedded://<crate>/<dir>/file.wesl"`. `ShaderRef: From<&'static str>`.
 - `bevy_shader` is re-exported as `bevy::shader` (home of `ShaderRef`).
