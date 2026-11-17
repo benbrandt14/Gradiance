@@ -1,6 +1,6 @@
 //! The host adapter (`docs/unified-surface-plan.md` § 6): the one place the
-//! window's own requests meet Bevy. Today it holds the screenshot request
-//! (`ui.screenshot`); input injection (U-4) joins it.
+//! window's own requests meet Bevy: the screenshot request (`ui.screenshot`,
+//! here) and input injection (`ui.click` and the rest, [`input`]).
 //!
 //! A screenshot is Bevy's ([`Screenshot::primary_window`] with
 //! [`save_to_disk`]): the whole window, scene and egui chrome together. When
@@ -18,6 +18,8 @@
 //! (its frame count starts again), up to [`RENDER_WAIT_MS`]. Without it, a
 //! start-up script's screenshot was black (measured on lavapipe,
 //! 2026-11-17).
+
+pub mod input;
 
 use bevy::prelude::*;
 use bevy::render::render_resource::PipelineCache;
