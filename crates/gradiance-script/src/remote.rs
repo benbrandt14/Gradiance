@@ -17,7 +17,7 @@
 //!     by declared field order ([`OpEntry::named`](gradiance_op::OpEntry::named),
 //!     the mapping the Lisp doorway uses) and the call goes through the
 //!     registry exactly as the `id` form does. Only a **VM built-in**
-//!     (`crate::registry::BUILTINS`: the panel verbs until U-3, the
+//!     (`crate::registry::BUILTINS`: the panel verbs, the
 //!     invocation-context reads, `ops`/`describe`) is still lowered to **one
 //!     script run**: the args rendered as Scheme literals, submitted to
 //!     [`ScriptInputs`] and run through [`run_scripts`] like a console line.

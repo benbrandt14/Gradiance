@@ -165,6 +165,7 @@ pub fn view_cube(
     // (its Area is on the background layer, which `is_pointer_over_egui`
     // ignores).
     panel_rects.push(cube_rect.response.rect);
+    crate::widget_registry::publish_rect("view_cube", cube_rect.response.rect);
     Ok(())
 }
 

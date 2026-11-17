@@ -3,6 +3,7 @@
 
 use crate::fonts::glyph;
 use crate::icons::{self, Icon};
+use crate::widget_registry;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::script_tools::{ScriptToolSpec, ScriptTools};
@@ -104,7 +105,7 @@ pub fn toolbar(
     // transport strip doesn't cover the File/Edit/View/Help menus.
     let viewport = ctx.viewport_rect();
     let top = panel_rects.top_inset(viewport) - viewport.top() + 4.0;
-    egui::Window::new("transport")
+    let transport = egui::Window::new("transport")
         .title_bar(false)
         .resizable(false)
         .anchor(egui::Align2::LEFT_TOP, [8.0, top])
@@ -165,11 +166,14 @@ pub fn toolbar(
                 }
             });
         });
+    if let Some(shown) = transport {
+        widget_registry::publish_rect("transport", shown.response.rect);
+    }
 
     // A fixed docked strip on the left edge (not a collapsible/movable floating
     // window), slightly translucent so the scene reads behind it.
     let tools_frame = egui::Frame::window(&ctx.global_style()).multiply_with_opacity(0.82);
-    egui::Window::new("Tools")
+    let tools = egui::Window::new("Tools")
         .title_bar(false)
         .collapsible(false)
         .movable(false)
@@ -186,6 +190,9 @@ pub fn toolbar(
                 next_tool.set(state);
             }
         });
+    if let Some(shown) = tools {
+        widget_registry::publish_rect("tools", shown.response.rect);
+    }
     Ok(())
 }
 
@@ -222,6 +229,7 @@ pub fn tools_palette_ui(
                     }
                     None => ui.selectable_label(selected, format!("{name} ({key})")),
                 };
+                widget_registry::publish_target(&format!("tools:{name}"), resp.rect);
                 if resp.on_hover_text(format!("{name} ({key})")).clicked() {
                     clicked = Some(*state);
                 }
@@ -264,6 +272,7 @@ fn script_tools_ui(
                 }
                 None => ui.selectable_label(selected, &tool.name),
             };
+            widget_registry::publish_target(&format!("tools:{}", tool.name), resp.rect);
             if resp.on_hover_text(hover).clicked() {
                 clicked = Some(state);
             }

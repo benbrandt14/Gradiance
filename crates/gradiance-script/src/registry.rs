@@ -117,8 +117,7 @@ pub struct Builtin {
 /// Why the invocation-context reads are built-ins.
 const RUN_CONTEXT: &str = "reads the running action's or tool's own invocation context, which exists only inside one VM run (a remote call or a menu row has none)";
 /// Why the panel verbs are built-ins.
-const PANELS: &str =
-    "panel state lives in gradiance-ui, which registers `panel.*` operations in brief U-3";
+const PANELS: &str = "panel state lives in gradiance-ui, which registers `panel.*` operations in a later brief (cut from U-3)";
 /// Why the introspection verbs are built-ins.
 const META: &str =
     "reads the VM's own catalog; the remote surface has `gradiance.ops` for the same list";

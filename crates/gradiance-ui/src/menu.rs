@@ -110,6 +110,7 @@ pub fn menu_bar(
         });
     });
     panel_rects.push(bar.response.rect);
+    crate::widget_registry::publish_rect("menu", bar.response.rect);
 
     let mut open = about.open;
     egui::Window::new("About Gradiance")
