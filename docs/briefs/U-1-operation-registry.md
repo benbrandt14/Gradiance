@@ -212,6 +212,17 @@ config (`camera-set`, workstation config, no undo), 9 editor. Design notes:
   instead of their own copies, so a run has one settings snapshot too.
 - The key link table (§ 13.4) can write `InvokeOp`, as the menu now does.
 
+**A failing case (shown 2026-11-17).** With the Lisp doorway broken on
+purpose (positional args mapped in reverse order, one line in `bind_op`),
+`cargo test --test it op_conformance` failed in
+`every_doorway_lowers_a_call_to_the_same_output`: `body.spawn_box: Lisp and
+remote disagree`, the Lisp record at `pos: Vec2(1.2, 1.6)` with a 2.0 x 0.5
+box, the remote one at the example's values. The other three tests passed.
+The break was reverted before the commit.
+
+**CI (PR #243):** `ci`, `coverage` and `coupling` pass; the four
+conformance tests pass.
+
 **Not checked locally:** `cargo test --workspace` (CI runs it, owner
 ruling). Local: `cargo test -p gradiance-op` (13 passed),
 `cargo test -p gradiance-script` (45 passed), fmt, clippy, doc.
