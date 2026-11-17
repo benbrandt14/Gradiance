@@ -416,9 +416,12 @@ pub fn answers_from_ron(text: &str) -> Result<AnswerSet, ReviewError> {
     Ok(set)
 }
 
-/// Serializes an answers file (deterministic: same set, same bytes).
+/// Serializes an answers file (deterministic: same set, same bytes; ends
+/// in a newline, so the committed file diffs cleanly).
 pub fn answers_to_ron(set: &AnswerSet) -> Result<String, ReviewError> {
-    Ok(options().to_string_pretty(set, pretty())?)
+    let mut text = options().to_string_pretty(set, pretty())?;
+    text.push('\n');
+    Ok(text)
 }
 
 /// Parses an archive file.

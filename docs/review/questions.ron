@@ -64,7 +64,7 @@ Use "Side by side" to see both at once. Zoom in on the left pair's top and botto
             source: "Phase 4b, 4b-3 art direction (input for its presets; SSAO options)",
             description: r#"The same scene under three render settings. Toon banding is today's default. Smooth shading is plain matte PBR. SSAO adds screen-space ambient occlusion, darkening contacts and creases; it turns MSAA off, so edges alias more, and it costs frame time.
 
-Settings are global, so these options can only be flipped one at a time, not shown side by side. Press play and orbit the view (middle-drag) to judge depth. 4b-3 builds 2-3 presets from this answer."#,
+Settings are global, so these options can only be flipped one at a time, not shown side by side. In the straight-on view the front faces look alike: press play and orbit the view (middle-drag) to see the sides and contacts, where the options differ. Body colours are re-rolled on every load (scripts cannot set a colour yet), so judge the shading, not the hues. 4b-3 builds 2-3 presets from this answer."#,
             options: [
                 (
                     label: "Toon (today)",

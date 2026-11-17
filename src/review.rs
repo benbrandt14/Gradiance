@@ -168,7 +168,10 @@ fn drive_review(world: &mut World) {
         Step::Wait => {}
         Step::Frame => {
             let bounds = union(&job.regions);
-            frame_camera(world, bounds, job.home);
+            let inset = world
+                .get_resource::<ReviewSession>()
+                .map_or(0.0, |s| s.view_inset_right);
+            frame_camera(world, bounds, job.home, inset);
         }
         Step::Clear => {
             world.write_message(ClearHistoryIntent);
@@ -441,8 +444,10 @@ pub fn fit_scale(size: Vec2, viewport: Vec2) -> f32 {
 }
 
 /// Points the editor camera straight on at `bounds` (side by side), or —
-/// when `home` — back at the start-up view. View state only.
-fn frame_camera(world: &mut World, bounds: Option<(Vec2, Vec2)>, home: bool) {
+/// when `home` — back at the start-up view. View state only. `inset` is the
+/// width (logical pixels) of the viewport's right side that the review
+/// window covers: the bounds are fitted into what is left of it.
+fn frame_camera(world: &mut World, bounds: Option<(Vec2, Vec2)>, home: bool, inset: f32) {
     let (focus, scale) = match bounds {
         Some((min, max)) => {
             let viewport = {
@@ -453,14 +458,22 @@ fn frame_camera(world: &mut World, bounds: Option<(Vec2, Vec2)>, home: bool) {
                     .and_then(Camera::logical_viewport_size)
                     .unwrap_or(Vec2::new(1280.0, 720.0))
             };
+            let inset = inset.clamp(0.0, viewport.x * 0.6);
+            let visible = Vec2::new(viewport.x - inset, viewport.y);
             // Labels sit above each region: leave them room.
             let size = (max - min) + Vec2::new(0.0, 1.0);
-            (
-                (min + max) / 2.0 + Vec2::new(0.0, 0.5),
-                fit_scale(size, viewport),
-            )
+            let scale = fit_scale(size, visible);
+            // Centre the content in the uncovered part: move the focus right
+            // by half the covered width, in world units.
+            let focus = (min + max) / 2.0 + Vec2::new(inset * scale / 2.0, 0.5);
+            (focus, scale)
         }
-        None if home => (Vec2::ZERO, 1.0 / crate::units::world::PIXELS_PER_METER),
+        None if home => {
+            // The start-up zoom, with the world origin centred in the part
+            // of the view the review window leaves uncovered.
+            let scale = 1.0 / crate::units::world::PIXELS_PER_METER;
+            (Vec2::new(inset.max(0.0) * scale / 2.0, 0.0), scale)
+        }
         None => return,
     };
     if let Some(mut rig) = world.get_resource_mut::<CameraRig>() {

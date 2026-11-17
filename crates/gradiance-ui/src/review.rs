@@ -20,6 +20,9 @@ use gradiance_persist::review::{
 };
 use gradiance_scene::review::{Choice, Question};
 
+/// Default width of the window, logical pixels.
+const WINDOW_WIDTH: f32 = 360.0;
+
 /// Whether the Review window is showing, and the answer being drafted.
 #[derive(Resource, Default, Debug)]
 pub struct ReviewWindow {
@@ -88,7 +91,7 @@ pub fn draft_from_answer(
 pub fn review_window(
     mut contexts: EguiContexts,
     mut window: ResMut<ReviewWindow>,
-    session: Option<Res<ReviewSession>>,
+    mut session: Option<ResMut<ReviewSession>>,
     mut show: MessageWriter<ReviewShowRequest>,
     mut answer: MessageWriter<ReviewAnswerRequest>,
     cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
@@ -100,20 +103,26 @@ pub fn review_window(
         region_tags(ctx, session, camera, pose);
     }
     if !window.open {
+        set_inset(session.as_deref_mut(), 0.0);
         return Ok(());
     }
     let mut open = true;
-    egui::Window::new("Review")
+    let shown = egui::Window::new("Review")
         .open(&mut open)
-        .default_pos(egui::pos2(70.0, 60.0))
-        .default_width(360.0)
-        .default_height(560.0)
+        // Right edge, clear of the tool palette and most of the scene: the
+        // scene is what is being judged.
+        .default_pos(egui::pos2(
+            (ctx.viewport_rect().right() - WINDOW_WIDTH - 16.0).max(0.0),
+            60.0,
+        ))
+        .default_width(WINDOW_WIDTH)
+        .default_height(640.0)
         .resizable(true)
         .vscroll(false)
         .show(ctx, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .show(ui, |ui| match &session {
+                .show(ui, |ui| match session.as_deref() {
                     Some(session) => {
                         review_body(ui, session, &mut window, &mut show, &mut answer);
                     }
@@ -127,10 +136,24 @@ pub fn review_window(
                     }
                 });
         });
+    // Tell the loader how much of the scene's right side the window covers,
+    // so a side-by-side view is framed in the part that stays visible.
+    let right = ctx.viewport_rect().right();
+    let inset = shown.map_or(0.0, |r| (right - r.response.rect.left()).max(0.0));
+    set_inset(session.as_deref_mut(), if open { inset } else { 0.0 });
     if !open {
         window.open = false;
     }
     Ok(())
+}
+
+/// Publishes the window's right-side cover to the session (view state).
+fn set_inset(session: Option<&mut ReviewSession>, inset: f32) {
+    if let Some(session) = session
+        && (session.view_inset_right - inset).abs() > 0.5
+    {
+        session.view_inset_right = inset;
+    }
 }
 
 fn review_body(

@@ -74,6 +74,10 @@ pub struct ReviewSession {
     pub problems: Vec<String>,
     /// The last successful answer write, for the status line.
     pub last_saved: Option<String>,
+    /// Logical pixels of the scene's right side covered by the review
+    /// window (published by the UI; 0 headless). Side-by-side framing fits
+    /// the regions into the part left uncovered.
+    pub view_inset_right: f32,
 }
 
 impl ReviewSession {
@@ -98,6 +102,7 @@ impl ReviewSession {
             busy: false,
             problems: Vec::new(),
             last_saved: None,
+            view_inset_right: 0.0,
         })
     }
 
