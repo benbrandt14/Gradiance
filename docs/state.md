@@ -47,7 +47,12 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
     brief.
   - **Questions go to review mode, not chat** (2026-11-16): add them to
     `docs/review/questions.ron` with scenes; ingest `answers.ron` at each
-    phase start.
+    phase start. **Plan decisions go there too** (2026-11-17, "utilize/extend
+    this review mechanism directly for as many decisions as possible"): a
+    `decision: true` question is text-only (brief 4b-0b). Six are open.
+  - **Review answers, ingested 2026-11-17** (`docs/review/archive.ron`):
+    the start-up scene stays **empty**; **toon** stays the default shading;
+    the fillet bulge is **accepted**.
   - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
     reject older files, regenerate goldens, no migrations.
   - **Merge freely when CI is green** and no tests or checks were removed to
@@ -91,7 +96,8 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - CSG arcs snap to contour vertices and give no tangents (1-4, 1-7);
   - split boolean pieces become polygon leaves; the AABB-level miss check
     (4-1);
-  - smooth-min bulges flush faces (≤ r/4); the fillet body's selection box
+  - smooth-min bulges flush faces (≤ r/4): **accepted** by the owner in
+    review (2026-11-17), kept as a low-priority issue; the fillet body's selection box
     ignores the bulge; smooth subtract/intersect, chamfers, corner fillets
     (4-2).
 - **Snapping/tools:**
@@ -113,7 +119,11 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   0.5–20 m and slider-limit 1 m gap are pixel-era; spring damping unit vs
   avian's; geometry crate retype; enum joint kind dumps as `Void`.
 - **UI/render:**
-  - start-up scene has no ground (product decision, 3-6);
+  - visuals revamp (owner, review 2026-11-17): the first build-out had no
+    screenshots; 2D lighting (e.g. a Bevy 2D-lighting crate) is worth a look;
+    the lighting is flat, so the toon bands were never really seen. 4b-3
+    takes the part that fits its scope; the rest is for the next planning
+    stage;
   - Joint window covers the Properties dock;
   - report Bevy's SSAO-viewport bug upstream (then drop the sub-view
     workaround); `world_per_pixel` uses window height for the perspective

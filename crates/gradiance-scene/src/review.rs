@@ -91,6 +91,13 @@ pub struct Question {
     /// [`SettingsOverride`]s (validation rejects it).
     #[serde(default)]
     pub side_by_side: bool,
+    /// Whether this is a **plan decision**: a choice the owner makes from
+    /// the text alone (an order of work, an architecture option), where no
+    /// scene can show the difference. Its options carry a caption and no
+    /// `scene`, `scripts` or settings; the app lists them over an empty
+    /// scene.
+    #[serde(default)]
+    pub decision: bool,
     /// The choices, 2–4.
     pub options: Vec<ReviewOption>,
 }
@@ -209,9 +216,27 @@ impl Question {
             if self.options[..i].iter().any(|o| o.label == option.label) {
                 return Err(fail(format!("two options are labelled `{}`", option.label)));
             }
-            if option.scene.is_none() && option.scripts.is_empty() {
+            if !self.decision && option.scene.is_none() && option.scripts.is_empty() {
                 return Err(fail(format!(
-                    "option `{}` has no scene: give it a `scene` (.ron) or `scripts` (.scm)",
+                    "option `{}` has no scene: give it a `scene` (.ron) or `scripts` (.scm), \
+                     or mark the question `decision: true`",
+                    option.label
+                )));
+            }
+            if self.decision && option.caption.trim().is_empty() {
+                return Err(fail(format!(
+                    "option `{}` has no caption: a decision is made from the text",
+                    option.label
+                )));
+            }
+            if self.decision
+                && (option.scene.is_some()
+                    || !option.scripts.is_empty()
+                    || !option.settings.is_empty())
+            {
+                return Err(fail(format!(
+                    "option `{}` has a scene, but the question is `decision: true`: \
+                     drop the flag to show scenes",
                     option.label
                 )));
             }
@@ -454,8 +479,85 @@ mod tests {
             description: "Why".into(),
             source: String::new(),
             side_by_side: false,
+            decision: false,
             options: vec![option("a"), option("b")],
         }
+    }
+
+    /// The review files in the repository parse and validate. Cheap (no
+    /// app), so a hand edit of a question or an ingestion is checked by
+    /// `cargo test -p gradiance-scene`; loading the scenes is `tests/it`'s.
+    #[test]
+    fn the_committed_review_files_parse() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let read = |file: &str| {
+            std::fs::read_to_string(root.join(file)).unwrap_or_else(|e| panic!("{file}: {e}"))
+        };
+        for file in [
+            "docs/review/questions.ron",
+            "tests/fixtures/review/questions.ron",
+        ] {
+            questions_from_ron(&read(file)).unwrap_or_else(|e| panic!("{file}: {e}"));
+        }
+        let answers = answers_from_ron(&read("docs/review/answers.ron"))
+            .unwrap_or_else(|e| panic!("answers.ron: {e}"));
+        let open = questions_from_ron(&read("docs/review/questions.ron")).unwrap();
+        for answer in &answers.answers {
+            assert!(
+                open.position(&answer.question).is_some(),
+                "answers.ron answers `{}`, which questions.ron does not ask",
+                answer.question
+            );
+        }
+        let archive = archive_from_ron(&read("docs/review/archive.ron"))
+            .unwrap_or_else(|e| panic!("archive.ron: {e}"));
+        for entry in &archive.entries {
+            entry.question.validate().unwrap();
+            assert_eq!(entry.answer.question, entry.question.id);
+            assert!(!entry.ingested_as.trim().is_empty());
+        }
+    }
+
+    #[test]
+    fn a_decision_question_needs_captions_but_no_scenes() {
+        let sceneless = |caption: &str| ReviewOption {
+            caption: caption.into(),
+            scene: None,
+            scripts: vec![],
+            ..option("b")
+        };
+        let ok = Question {
+            decision: true,
+            options: vec![sceneless("the first choice"), sceneless("the second")],
+            ..question("order")
+        };
+        let ok = Question {
+            options: vec![
+                ReviewOption {
+                    label: "a".into(),
+                    ..ok.options[0].clone()
+                },
+                ok.options[1].clone(),
+            ],
+            ..ok
+        };
+        ok.validate().unwrap();
+        let text = questions_to_ron(&set(vec![ok.clone()])).unwrap();
+        assert_eq!(questions_from_ron(&text).unwrap().questions[0], ok);
+
+        let mute = Question {
+            options: vec![ok.options[0].clone(), sceneless(" ")],
+            ..ok.clone()
+        };
+        let message = mute.validate().unwrap_err().to_string();
+        assert!(message.contains("has no caption"), "{message}");
+
+        let staged = Question {
+            options: vec![ok.options[0].clone(), option("b")],
+            ..ok
+        };
+        let message = staged.validate().unwrap_err().to_string();
+        assert!(message.contains("has a scene"), "{message}");
     }
 
     fn set(questions: Vec<Question>) -> QuestionSet {

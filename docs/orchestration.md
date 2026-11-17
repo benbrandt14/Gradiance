@@ -151,9 +151,26 @@ chat or leave it in an Outcome as "owner to decide". Add it to
   (`expected_bodies`) — the guard loads every option and fails on a script
   error or a wrong count.
 
-A question whose alternative cannot be shown yet (it needs code that does not
-exist) is not a review question: record it as a follow-up until a scene can
-show both sides.
+A **product** question whose alternative cannot be shown yet (it needs code
+that does not exist) is not a review question: record it as a follow-up
+until a scene can show both sides.
+
+**Plan decisions** (owner direction 2026-11-17, brief 4b-0b). A choice that
+no scene can show (an order of work, an architecture option, a process rule)
+is asked in the same file with `decision: true`. Its options are text: a
+label and a caption, no `scene`, `scripts` or `settings`, and no
+`expected_bodies` row. Rules for the text:
+
+- the description gives the facts and says what the choice locks in;
+- each caption gives what the option does and what it costs;
+- one caption starts with "Recommended." and the work **continues on that
+  option** without waiting. An answer that differs becomes a change at
+  ingestion. Ask first, and wait, only where the step cannot be undone;
+- name the PR or brief that holds the recommended option, so the answer can
+  be applied to it.
+
+Do not turn a choice into a question when the brief already decides it or
+when only one option is reasonable; record it in the Outcome.
 
 **Ingesting (orchestrator, at each phase start).**
 
@@ -164,7 +181,9 @@ show both sides.
      (`Archive` schema: `question`, `answer`, `ingested_as` = what it
      became), and delete its entry from `questions.ron` and `answers.ron`.
      Keep its `scenes/<id>/` files; the archive entry still points at them,
-     and drop its row from `expected_bodies`.
+     and drop its row from `expected_bodies` (the three seed rows stay: the
+     mechanism tests run over `tests/fixtures/review/questions.ron`, which
+     uses those scenes).
 2. An answer of "none of these" is still an answer: its free text and note
    are the owner's direction; if it opens a new question, ask it as a new
    question with scenes.

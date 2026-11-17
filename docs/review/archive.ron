@@ -1,0 +1,116 @@
+// Ingested review questions with their answers, oldest first.
+// Schema: `gradiance_scene::review` (Archive). Process: docs/orchestration.md,
+// "Review mode". Option paths are relative to `docs/review/`.
+(
+    version: 1,
+    entries: [
+        (
+            question: (
+                id: "fillet-bulge",
+                title: "Fillet merge bulges flat faces: fix it or accept it?",
+                source: "docs/state.md retained, Geometry: smooth-min bulges flush faces (<= r/4) (4-2)",
+                description: r#"`fillet-merge` (Merge with fillet) blends two shapes with a smooth minimum. Where the shapes meet at an angle, as in the T on the right, that is the rounded inside corner you asked for. Where their faces line up, as in the flush pair on the left, it also pushes a bump out of the flat face at the seam, up to a quarter of the radius (0.1 m here, radius 0.4 m).
+
+Fixing it means an exact fillet that rounds only the corners where faces meet at an angle. That is a geometry brief of its own, about the size of 4-2. Accepting it keeps today's behaviour and moves the brief's effort elsewhere.
+
+Use "Side by side" to see both at once. Zoom in on the left pair's top and bottom faces, and on the T's inside corners."#,
+                side_by_side: true,
+                options: [
+                    (
+                        label: "Accept the bulge",
+                        caption: "Today's fillet everywhere: the flush pair bulges at its seam, the T's corners are rounded.",
+                        scripts: ["scenes/fillet-bulge/parts.scm", "scenes/fillet-bulge/today.scm"],
+                    ),
+                    (
+                        label: "Fix it (exact fillet)",
+                        caption: "What the fix gives: the flush pair's faces stay flat (shown with a plain merge), the T's corners are still rounded.",
+                        scripts: ["scenes/fillet-bulge/parts.scm", "scenes/fillet-bulge/fixed.scm"],
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fillet-bulge",
+                title: "Fillet merge bulges flat faces: fix it or accept it?",
+                choice: Picked("Accept the bulge"),
+                note: "Retain this as an issue, but it is low enough priority to ignore for now.",
+                answered_at: "2026-11-17T01:53:32Z",
+                revision: "32d084f15193",
+            ),
+            ingested_as: "No brief. docs/state.md keeps the bulge as a retained Geometry item, marked accepted and low priority (owner note).",
+        ),
+        (
+            question: (
+                id: "shading",
+                title: "Which shading should be the default look?",
+                source: "Phase 4b, 4b-3 art direction (input for its presets; SSAO options)",
+                description: r#"The same scene under three render settings. Toon banding is today's default. Smooth shading is plain matte PBR. SSAO adds screen-space ambient occlusion, darkening contacts and creases; it turns MSAA off, so edges alias more, and it costs frame time.
+
+Settings are global, so these options can only be flipped one at a time, not shown side by side. In the straight-on view the front faces look alike: press play and orbit the view (middle-drag) to see the sides and contacts, where the options differ. Body colours are re-rolled on every load (scripts cannot set a colour yet), so judge the shading, not the hues. 4b-3 builds 2-3 presets from this answer."#,
+                options: [
+                    (
+                        label: "Toon (today)",
+                        caption: "Four light bands with a rim light, no SSAO.",
+                        scripts: ["scenes/shading/scene.scm"],
+                    ),
+                    (
+                        label: "Smooth",
+                        caption: "Toon banding off: continuous matte shading, same lights.",
+                        scripts: ["scenes/shading/scene.scm"],
+                        settings: (render: (toon_enabled: false)),
+                    ),
+                    (
+                        label: "Toon + SSAO",
+                        caption: "Today's toon bands plus screen-space ambient occlusion.",
+                        scripts: ["scenes/shading/scene.scm"],
+                        settings: (lighting: (ssao: true)),
+                    ),
+                ],
+            ),
+            answer: (
+                question: "shading",
+                title: "Which shading should be the default look?",
+                choice: Picked("Toon (today)"),
+                note: "A future revamp of the visuals will be required. The initial build-out was not able to take screenshots. Some other aspects of 2D lighting ( like the 2d lighting bevy crate) would probably be good too. The toon banding has never really been observed because of the flat lighting.",
+                answered_at: "2026-11-17T01:56:09Z",
+                revision: "32d084f15193",
+            ),
+            ingested_as: "Toon stays the default. docs/briefs/4b-3-art-direction.md gained an 'Owner input' section: build the presets on toon; the flat lighting hides the banding, so 4b-3 must make the bands visible; a later visuals revamp and a 2D-lighting crate are recorded in docs/state.md (retained, UI/render).",
+        ),
+        (
+            question: (
+                id: "startup-scene",
+                title: "What should a fresh start-up scene contain?",
+                source: "docs/state.md retained, UI/render: start-up scene has no ground (3-6)",
+                description: r#"`gradiance` with no arguments opens an empty world today. Bodies drawn there fall forever unless you draw a ground first, so the first thing every session does is the same chore. A seeded scene saves that step and gives the camera, lighting and shadows something to show; it also means a new user's first click may select something they did not make.
+
+Flip between the options and press play in each. This only decides the default: a scene file, --resume or --script still open what they name."#,
+                options: [
+                    (
+                        label: "Empty",
+                        caption: "Today: nothing at all. Draw a ground (G) before anything you draw can land.",
+                        scripts: ["scenes/startup-scene/empty.scm"],
+                    ),
+                    (
+                        label: "Ground only",
+                        caption: "A ground half-plane 3 m below the view centre and nothing else: draw and it lands.",
+                        scripts: ["scenes/startup-scene/ground.scm"],
+                    ),
+                    (
+                        label: "Ground + a few bodies",
+                        caption: "A ground with five bodies (boxes, circles, a ramp) that settle when you press play: something to drag and delete on the first frame.",
+                        scripts: ["scenes/startup-scene/ground-bodies.scm"],
+                    ),
+                ],
+            ),
+            answer: (
+                question: "startup-scene",
+                title: "What should a fresh start-up scene contain?",
+                choice: Picked("Empty"),
+                note: "",
+                answered_at: "2026-11-17T01:56:20Z",
+                revision: "32d084f15193",
+            ),
+            ingested_as: "No change: the start-up scene stays empty. The retained item 'start-up scene has no ground' is closed in docs/state.md.",
+        ),
+    ],
+)

@@ -253,6 +253,23 @@ fn question_view(
     }
     ui.label(&question.description);
 
+    if question.decision {
+        // A plan decision has no scenes: every option is read, none is shown.
+        ui.separator();
+        widgets::section_header(ui, "Options");
+        for (i, option) in question.options.iter().enumerate() {
+            ui.label(
+                egui::RichText::new(format!("{}  {}", option_letter(i), option.label)).strong(),
+            );
+            ui.label(&option.caption);
+        }
+        widgets::hint(
+            ui,
+            "A plan decision: there is no scene to compare. Pick from the text.",
+        );
+        return;
+    }
+
     ui.separator();
     widgets::section_header(ui, "Show");
     ui.horizontal_wrapped(|ui| {
