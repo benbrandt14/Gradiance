@@ -1,0 +1,7 @@
+# The one toolchain for local, agent-container and CI builds. `rustup`
+# installs it on the first `cargo` call. Keep `channel` equal to `RUST_PIN`
+# in `.github/workflows/ci.yml` (asserted by tests/boundaries.rs). A bump is
+# its own reviewed PR that fixes the new lints (CLAUDE.md § Build & test).
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]

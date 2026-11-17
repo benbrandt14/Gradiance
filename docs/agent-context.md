@@ -26,8 +26,9 @@ sensor/modulator/actuator dataflow layer.
   versions is easily stale — check `docs/bevy19-notes.md` before writing
   Bevy/avian/egui code** (Bevy 0.19 uses Messages not Events, exclusive
   systems, a 16-param system limit, etc.).
-- **Toolchain:** rustc ≥ 1.95.0 (CI runs `@stable`, currently 1.97 — **stricter
-  clippy than local**, e.g. `clippy::float_cmp` denies `==` on floats).
+- **Toolchain:** rustc 1.100.0, pinned in `rust-toolchain.toml` and in CI's
+  `RUST_PIN` (equal by test), so local clippy is as strict as CI's (e.g.
+  `clippy::float_cmp` denies `==` on floats).
 - **Gates (all must stay green):** `cargo fmt --all -- --check` ·
   `cargo clippy --all-targets -- -D warnings` · `cargo test` (includes
   `tests/boundaries.rs`, which enforces the layer rules below).

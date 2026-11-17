@@ -2,9 +2,9 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (planning session, merged with orchestrator's
-#238 update; 4b-1 in flight; order revised per owner direction,
-`docs/unified-surface-plan.md`).
+Last updated: 2026-11-17 (D-0 worker handoff; before that the planning
+session, merged with orchestrator's #238 update; order revised per owner
+direction, `docs/unified-surface-plan.md`).
 
 ## Position
 
@@ -23,10 +23,13 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **4b-1** group op surface (in flight; adds `set-color`, which fixes
      review scenes re-rolling colours).
-  2. **D-0** toolchain bump to 1.100.0 (brief ready): Bevy 0.20 needs
-     rustc ≥ 1.97.1.
+  2. **D-0** toolchain bump to 1.100.0: **PR open** (branch
+     `claude/d-0-toolchain-1-100`; it ran before 4b-1, see its Outcome).
+     Bevy 0.20 needs rustc ≥ 1.97.1.
   3. **D-1** Bevy 0.20 stack (brief ready).
-  4. **U-1** `gradiance-op`: one declaration per operation (brief ready).
+  4. **U-1** `gradiance-op`: one declaration per operation (brief ready;
+     revised 2026-11-17, `unified-surface-plan.md` § 13: five operations,
+     `OpOutput`, snapshot stays above `gradiance-op`, one decoder).
   5. **U-2** migrate all verbs (4b-1's group verbs included), menus, keys
      onto the registry (brief at U-1 handoff).
   5b. **4b-1** group op surface, on the registry (adds `set-color`, which
@@ -82,8 +85,10 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
 - **Process:** one worker at a time (shared disk). The worker hands off via
   the brief's Outcome + PR. The orchestrator reviews, merges (REST squash),
   updates this file, and sends screenshots to the owner.
-- **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). They never go in
-  git; they are shown in the conversation and described in PR comments.
+- **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Ad-hoc ones stay
+  out of git; they are shown in the conversation and described in PR
+  comments. Images that a test or a review question uses may be committed
+  (ruling above).
 
 ## Retained for future planning — do not work on these
 
@@ -157,10 +162,12 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   `find target/debug/deps -atime +2`. Never `cargo clean`. Run
   `cargo test --workspace` locally only above ~20 GB free; otherwise leave
   it to CI.
-- **Toolchain:** rustc 1.97.0 = `RUST_PIN`. On 2026-11-17
-  `static.rust-lang.org` answered HTTP 200 from a container (earlier it was
-  unreachable); D-0 confirms that `rustup` can install from it.
-  Pending bump debt: `orchestration.md` § Recurring.
+- **Toolchain:** rustc 1.100.0 = `rust-toolchain.toml` = `RUST_PIN` (D-0).
+  `rustup` installs it on the first `cargo` call (21 s, 2026-11-17). The
+  container default is still 1.97.0: run `cargo` from the repo root.
+  A fresh container needs `apt-get update` before the native-library install.
+- **Long runs go to CI** (owner, 2026-11-17): do not run
+  `cargo test --workspace` in a container; push and read the checks.
 - **CI:** read annotations first (fmt, clippy and test failures are
   annotated); full logs via `gh run view <id> --log-failed`. GraphQL 403s:
   merge with `gh api -X PUT …/pulls/N/merge -f merge_method=squash -f

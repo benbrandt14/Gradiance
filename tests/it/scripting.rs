@@ -1331,9 +1331,12 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
     let world = app.world();
     assert!((world.resource::<SimSettings>().gravity.value().y - gravity).abs() < 1e-6);
     assert_eq!(world.resource::<SignalBus>().get("half-run"), None);
-    assert!(world.resource::<SignalParams>().0.is_empty());
+    assert_eq!(
+        world.resource::<SignalParams>().0,
+        [] as [gradiance::signal::SignalParam; 0]
+    );
     assert_eq!(world.resource::<ScriptActions>().user().count(), 0);
-    assert!(world.resource::<PanelRequests>().0.is_empty());
+    assert_eq!(world.resource::<PanelRequests>().0, [] as [PanelRequest; 0]);
 }
 
 /// Rolling back a failed run does not reach into a successful run queued in

@@ -271,7 +271,7 @@ fn an_answer_writes_one_entry_and_keeps_earlier_ones() {
         on_disk,
         "session out of step with the file"
     );
-    assert!(session(&app).problems.is_empty());
+    assert_eq!(session(&app).problems, [] as [String; 0]);
 
     // Answering again replaces that entry; it never adds a second one.
     app.world_mut().write_message(ReviewAnswerRequest {
@@ -295,6 +295,6 @@ fn an_answer_writes_one_entry_and_keeps_earlier_ones() {
     });
     app.update();
     assert_eq!(read_answers(&answers_path).unwrap(), on_disk);
-    assert!(!session(&app).problems.is_empty());
+    assert_ne!(session(&app).problems, [] as [String; 0]);
     let _ = std::fs::remove_dir_all(&dir);
 }

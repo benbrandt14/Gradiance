@@ -2046,8 +2046,7 @@ pub fn run_scripts(world: &mut World) {
     queue_tool_runs(world);
     let sources: Vec<ScriptRun> = world
         .get_resource_mut::<ScriptInputs>()
-        .map(|mut inputs| std::mem::take(&mut inputs.0))
-        .unwrap_or_default();
+        .map_or_default(|mut inputs| std::mem::take(&mut inputs.0));
     if sources.is_empty() {
         return;
     }

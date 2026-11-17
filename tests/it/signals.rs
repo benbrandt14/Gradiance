@@ -224,7 +224,7 @@ fn bindings_persist_with_the_scene_and_old_files_parse() {
     };
     assert_ne!(text, cut, "fixture actually removed the signals field");
     let parsed = from_ron(&cut).expect("pre-signal file parses");
-    assert!(parsed.environment.signals.0.is_empty());
+    assert_eq!(parsed.environment.signals.0, [] as [SignalBinding; 0]);
 }
 
 #[test]
@@ -405,6 +405,6 @@ fn params_and_computed_persist_and_old_files_parse() {
         .replace("computed: ([]),", "");
     assert_ne!(text, cut, "fixture removed the fields");
     let parsed = from_ron(&cut).expect("pre-P2 file parses");
-    assert!(parsed.environment.params.0.is_empty());
-    assert!(parsed.environment.computed.0.is_empty());
+    assert_eq!(parsed.environment.params.0, [] as [SignalParam; 0]);
+    assert_eq!(parsed.environment.computed.0, [] as [ComputedSignal; 0]);
 }

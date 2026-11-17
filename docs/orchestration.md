@@ -256,10 +256,11 @@ snapshots, polygonize proptests, the diagnostics stack (audit section B).
 Some of this may be pulled earlier if a phase needs it; that's fine.
 
 **Recurring — toolchain bump.** Not a phase; a brief the orchestrator
-schedules at a phase gate when containers ship a newer rustc. Known debt for
-the next bump (found 2026-10 on a newer stable): a new lint against
-`assert!(x.is_empty())` / `assert!(!x.is_empty())` — ~21 single-line sites
-plus multi-line ones across the workspace. Bump `RUST_PIN`, fix in the same PR.
+schedules at a phase gate when a newer stable is wanted (containers install
+any version through `rust-toolchain.toml`). Bump `rust-toolchain.toml` and
+`RUST_PIN` together, fix the new lints in the same PR. Last bump: D-0
+(1.97.0 → 1.100.0, 2026-11-17); it cleared the `assert!(x.is_empty())` debt.
+No known debt for the next bump.
 
 **Phase U — one operation surface (owner direction 2026-11-17).** Plan:
 `docs/unified-surface-plan.md`. Toolchain and Bevy 0.20 upgrades (D-0,

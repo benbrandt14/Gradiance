@@ -1,7 +1,7 @@
 # Toolchain bump to rustc 1.100.0
 Phase U · `docs/unified-surface-plan.md` § 4, § 10 row 2; `orchestration.md`
-§ Recurring ("Bump `RUST_PIN`, fix in the same PR") · status: ready
-(after 4b-1 merges)
+§ Recurring ("Bump `RUST_PIN`, fix in the same PR") · status: done
+(PR open; see Outcome)
 
 ## Goal
 
@@ -62,4 +62,40 @@ that a lint does not flag.
 
 ## Outcome
 
-(filled by the worker)
+Worker session, 2026-11-17, branch `claude/d-0-toolchain-1-100`.
+
+- **Install:** `rustup toolchain install 1.100.0 --profile minimal -c clippy
+  -c rustfmt` finished in 21 s through the container proxy (`rustc 1.100.0
+  (0ef1bc386 2026-11-09)`). The unverified fact is now verified.
+- **Order:** this ran before 4b-1. GitHub had no branch and no PR for 4b-1
+  on 2026-11-17, and the owner asked for the roadmap to start. A 4b-1 branch
+  that lands later rebases onto this; `rust-toolchain.toml` gives its worker
+  the new compiler without a manual step.
+- **Lints fixed** (no `allow` added):
+
+  | Lint | Sites | Fix |
+  |---|---|---|
+  | `clippy::assert_is_empty` | 18 | `assert_eq!(x, [] as [T; 0])` / `assert_ne!`, as clippy suggests, with short type names. A failure now prints the value. |
+  | `clippy::map_unwrap_or` (now also `map(..).unwrap_or_default()`) | 7 | `map_or_default(..)` |
+  | `clippy::manual_midpoint` | 3 | `f32::midpoint(a, b)` |
+
+  The known debt said about 21 `assert!` sites; 1.100.0 flags 18.
+  `f32::midpoint` gives the same result as `0.5 * (a + b)` except where
+  `a + b` overflows `f32`, which these three sites (a curve bound, an AABB
+  centre, an NDC coordinate) do not reach. `crates/gradiance-ui/src/lib.rs`
+  now reads `f32::midpoint(ndc.x, 1.0)` next to `(1.0 - ndc.y) * 0.5`; the
+  lint flags only the first.
+- **`rust-toolchain.toml`: added** (`channel = "1.100.0"`, `rustfmt`,
+  `clippy`). Reason: the container default is still 1.97.0, so without the
+  file each later session gates on the wrong compiler unless it reads
+  `ci.yml`. `RUST_PIN` stays (the CI action needs an explicit version);
+  `tests/boundaries.rs::the_toolchain_pin_is_one_version` asserts that the two
+  are equal. Side effect: the `coupling` job and `release.yml` ask for
+  `@stable` but `cargo` there now uses 1.100.0 through the file.
+- **Gates on 1.100.0, local:** fmt, clippy (`-D warnings`, all targets) and
+  `cargo doc` (`-D warnings`) pass. `Cargo.lock` is unchanged.
+  **`cargo test --workspace` did not run locally:** the owner ruled on
+  2026-11-17 that long runs go to GitHub CI. CI on the PR is the test gate,
+  and it is the first run of the new boundaries test.
+- **Container note:** a fresh container needed `apt-get update` before the
+  native-library install; without it three packages were not found.

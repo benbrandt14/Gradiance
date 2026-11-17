@@ -187,7 +187,7 @@ impl Curve {
         if left * right <= 0.0 {
             0.0
         } else {
-            0.5 * (left + right)
+            f32::midpoint(left, right)
         }
     }
 }
@@ -1046,7 +1046,7 @@ mod tests {
         // A Constant is a source (no input pins) lowering to a bare const.
         let c = BlockOp::Constant { value: 4.5 };
         assert_eq!(c.to_expr(), SignalExpr::Const(4.5));
-        assert!(c.input_slots().is_empty());
-        assert!(c.to_expr().inputs().is_empty());
+        assert_eq!(c.input_slots(), [] as [(&str, Option<String>); 0]);
+        assert_eq!(c.to_expr().inputs(), [] as [String; 0]);
     }
 }

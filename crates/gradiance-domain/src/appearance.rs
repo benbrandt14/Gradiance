@@ -267,6 +267,6 @@ mod tests {
         assert_ne!(out[0].1.fill, out[1].1.fill);
         assert_ne!(out[1].1.fill, out[2].1.fill);
         assert_ne!(out[0].1.fill, out[2].1.fill);
-        assert!(random_fills(&[], true).is_empty());
+        assert_eq!(random_fills(&[], true), [] as [(StableId, Appearance); 0]);
     }
 }
