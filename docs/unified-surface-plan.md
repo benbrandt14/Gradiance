@@ -1,6 +1,6 @@
 # Plan: one operation surface for UI, Lisp, CLI, MCP and the graph
 
-Status: **plan for the orchestrator; not a brief, no code.** Written
+Status: **accepted plan; order decided (§ 10); no code.** Written
 2026-11-17 on branch `claude/laughing-euler-sh2g1r`, after `main` `04067ab`.
 It replaces the 2026-11-16 investigation `docs/ui-blender-investigation.md`
 (same branch, never merged). The owner rulings in `docs/state.md` still apply:
@@ -111,9 +111,17 @@ pub struct SpawnBox {
   and tooltips.
 - **Typed parameters** use `gradiance-units` quantities (brief 5-1 landed),
   so units, defaults and ranges are data, not prose.
-- **The struct is the intent**, or maps 1:1 to it. Execution does not change:
-  doorway → intent → `command::dispatch` → `GameCommand` → `CommandStack`.
-  Invariants 1–2 hold. No new mutation path.
+- **The struct is not the intent; it lowers to one.** Intents are low-level
+  and carry what undo needs: `SpawnBodyIntent { record: BodyRecord }`,
+  `CommitTransformIntent { changes: Vec<TransformChange> }` (old *and* new
+  poses). Each operation has one `lower(params, &OpSnapshot) ->
+  Result<Intent, OpError>`, written by the layer that owns it. The snapshot
+  gives the old values, as `SceneView` does for scripts now
+  (`gradiance-script/src/bridge.rs:558`), so the scripting rule "one
+  snapshot per run" holds for every doorway.
+- Execution does not change: doorway → `lower` → intent →
+  `command::dispatch` → `GameCommand` → `CommandStack`. Invariants 1–2 hold.
+  No new mutation path.
 
 ### 3.2 References to scene objects
 
@@ -171,7 +179,8 @@ test:
 
 1. **Doorway equivalence.** For each operation with sample params (generated
    from its defaults), invoke it through Lisp, BRP JSON, the CLI parser and the
-   UI invoke path. All four emit **equal intents**.
+   UI invoke path. All four **lower to equal intents** against the same
+   snapshot.
 2. **Schema round trip.** JSON schema ↔ serde ↔ reflection agree for each
    operation.
 3. **No side doors.** A source-scanner test (as `no_source_file_uses_an_unlisted_glyph`
@@ -203,16 +212,18 @@ Measured on crates.io and GitHub, 2026-11-17:
 | `egui_tiles` | `=0.16.0` | 0.17.0 (egui 0.36) | 0.18 needs egui 0.37 |
 | `egui-snarl` | `=0.11.0` | 0.12.0 (egui 0.36) | |
 | `egui_plot` | `=0.36.0` | 0.37.0 (egui 0.36) | 0.38 needs egui 0.37 |
-| `egui_kittest` | `=0.35.0` | 0.36.x | version not checked |
+| `egui_kittest` | `=0.35.0` | 0.36.2 | |
 | `leafwing-input-manager` | `=0.21.0` | 0.22.0 (needs Bevy 0.20) | may go away (§ 3.4) |
 | `steel-core` | `=0.8.2` | 0.8.3 | patch |
 
 Recommendation:
 
+- **D-0: toolchain first.** Bevy 0.20.0 and 0.20.1 declare `rust_version`
+  1.97.1; the pin is 1.97.0. `static.rust-lang.org` answered HTTP 200 from
+  the container on 2026-11-17 (stable is 1.100.0).
 - **D-1: one brief for the Bevy 0.20 stack**, before the UI work. Each UI brief
   after it is written once against current APIs. `docs/bevy19-notes.md`
-  becomes `bevy20-notes.md`. The toolchain pin (`RUST_PIN` 1.97.0) may need a
-  bump if Bevy 0.20 raises its floor (**not checked**).
+  becomes `bevy20-notes.md`.
 - **D-2: egui 0.37** when bevy_egui releases it. The Craft code is on 0.37, so
   this step lowers porting cost again. Do **not** fork bevy_egui to get there
   earlier: a fork is one more upstream to track.
@@ -287,7 +298,7 @@ code calls eframe in these places; the adapter gives it one Bevy-side target.
 | Source | Ports | Does not port |
 |---|---|---|
 | `craft-libs/crates/ui` (egui 0.37) | widgets, `testing` (`Screens`, snapshots on lavapipe), docking model as a spec | eframe window glue |
-| `craft-libs/crates/keymap` | chords, overrides, profiles (a Blender profile, an Algodoo profile) | — |
+| `craft-libs/crates/keymap` | not needed now (keys are out of scope) | — |
 | `craft-libs/crates/control`, `mcp` | protocol, token file, loopback server, MCP envelopes (no UI toolkit) | — |
 | SolidCraft `ui-registry`, `control-egui/screenshot.rs` | registry; screenshot settle rules | — |
 | VectorCraft control protocol | input injection rules and budgets | app-specific `ui.*` verbs |
@@ -373,77 +384,61 @@ them for free, and review mode (4b-0) can script its scenes with them.
   (review mode, edits `gradiance-ui` and CLI parsing). Queued: 4b-1 (group op
   surface), 4b-2 (groups panel), 5-x. **4b-1 adds verbs**: if it lands before
   U-1, U-2 migrates them; if U-1 lands first, 4b-1 declares them the new way.
-  The orchestrator chooses (Q6).
+  Decided: U-1 and U-2 land first (§ 10).
 - **Exact pins and `--locked`.** Each upgrade is its own reviewed brief with
   the lockfile diff.
 
 ---
 
-## 10. Proposed briefs and order (orchestrator decides)
+## 10. Order (decided 2026-11-17; the owner left it to the planner)
 
-Phase "U" is a placeholder name. Estimates are worker time.
+Numbers changed from the first draft of this plan; these are final. Each line
+gives the reason for its place.
 
-**Before any U brief**
+| # | Item | Why here |
+|---|---|---|
+| 1 | **4b-0** review mode (in flight) | Already running; do not disturb it. |
+| 2 | **D-0** toolchain 1.97.0 → 1.100.0 | Bevy 0.20 requires rustc ≥ 1.97.1 (crates.io `rust_version`). Clears the lint debt in `orchestration.md` § Recurring. |
+| 3 | **D-1** Bevy 0.20 stack (§ 4) | Touches every crate; do it once, before code that U-briefs write. |
+| 4 | **U-1** `gradiance-op` + 3 operations + conformance tests | The foundation all later surfaces project from. |
+| 5 | **U-2** migrate the rest; delete `OpSpec` strings, `EditBinding`, Scheme lowering, direct menu intents | Before 4b-1 adds group verbs, so they are declared once, the new way. |
+| 6 | **U-3** widget registry, `ui.inspect`, `ui.screenshot`; **U-4** input injection; **U-5** snapshot tests | Every later visual brief (4b-2, 4b-3, U-7..U-11) is then checkable in a container without `xdotool`. |
+| 7 | **4b-1** group op surface; **4b-2** groups panel | Owner's 4b direction, now on the registry. |
+| 8 | **U-6** CLI + MCP server | Thin once U-2..U-4 exist; gives the owner an MCP door before the polish phase. |
+| 9 | **U-7** theme tokens with **4b-3** art direction; then **4b-4** | One "look" pass for chrome and scene; review mode shows the A/B. |
+| 10 | **Phase 5**: 5-2, 5-3, **U-8** number fields, 5-4, 5-5 | U-8 shares 5-3's parser; 5-4 lands on typed op params. |
+| 11 | **U-9** F3 search, status bar, pie menus; **U-10** editor areas + saved workspaces; **U-11** Adjust Last Operation | Pure projections of the registry; last because they need it complete. |
+| 12 | **Phase 6** testing & diagnostics | Action matrix over the registry; mutation tests of the scene loader. |
+| 13 | Next planning stage: **G-0** one graph model, **3D-0** the 3D plan, **D-2** egui 0.37 | After the roadmap, per the owner. |
 
-1. **D-1** Bevy 0.20 stack (§ 4). About 1–2 days. Best placed at the next
-   gate, after 4b-0.
-
-**MVP hardening: the integrated surface** (after D-1)
-
-2. **U-1** `gradiance-op` crate, `#[derive(Operation)]`, `Target`, three
-   operations end to end, conformance tests 1–6. About 2–3 days.
-3. **U-2** Move the remaining verbs, menus and keys onto the registry; delete
-   `OpSpec` strings, `EditBinding`, Scheme lowering in `remote.rs`. Split by
-   category if it is too large. About 3–4 days.
-4. **U-3** CLI (`gradiance op`, `gradiance ops`) and `gradiance mcp` (stdio,
-   loopback + token file, Craft `craft-mcp` envelopes). About 2 days.
-5. **U-4** Widget registry + `ui.inspect` + `ui.screenshot`. About 2 days.
-6. **U-5** Input injection (`ui.click/drag/key/text/wheel`); rewrite
-   `tools/screenshot/README.md`. About 2 days.
-7. **U-6** Snapshot tests on lavapipe (needs Q3). About 1 day.
-
-**Polish** (after U-2; the number-field rows after 5-3)
-
-8. **U-7** Theme tokens, Blender-leaning palette (review-mode A/B).
-9. **U-8** Number-field behaviours (§ 7.2 rows 1–5).
-10. **U-9** F3 search, status bar, pie menus.
-11. **U-10** Areas with an editor-type switch, workspaces (needs Q4).
-12. **U-11** Adjust Last Operation.
-
-**Later planning stage** (after the roadmap)
-
-- **G-0** decision note: one graph model (signal + geometry), IR, Lisp and
-  canvas as views (§ 5).
-- **3D-0** the 3D plan, with PR #208 and `frames-decision.md` as input.
-- **D-2** egui 0.37 when bevy_egui releases it.
-
-Suggested placement: 4b-0 → **D-1** → **U-1..U-3** → rest of 4b → Phase 5
-(5-3 and 5-4 then land on typed operation params) → **U-4..U-11** with Phase 6
-(testing). This is a proposal; the phase order is the orchestrator's.
+Brief files: D-0, D-1 and U-1 are written (`docs/briefs/D-0-*`, `D-1-*`,
+`U-1-*`). Each later brief is written at its predecessor's handoff, because
+its facts depend on that outcome (scoped-work ruling, `docs/state.md`).
 
 ---
 
-## 11. Questions for the owner (to review mode once 4b-0 lands)
+## 11. Owner answers (2026-11-17)
 
-Answered by the 2026-11-17 direction: polish (yes), theme (lean Blender),
-licensing (not now), BUI (dropped).
-
-- **Q3.** May UI snapshot PNGs go in git as test fixtures? ("Screenshots never
-  go in git" is the current rule.)
-- **Q4.** May dock layouts and workspaces persist, as workstation config?
-- **Q5.** Keys: Blender (`G`/`R`/`S` grab/rotate/scale, `N` sidebar, `F3`) or
-  the current Algodoo-style tool keys (`S` select, `G` ground, `R` prismatic,
-  `N` tracer)? With `craft-keymap` profiles, both can exist; which is default?
-- **Q6.** Should D-1 and U-1..U-3 go before the rest of Phase 4b (so 4b-1's
-  group verbs are declared the new way), or after it?
+- Polish: **yes**, excellent egui. Theme: **lean Blender**, not at the cost
+  of other goals. Licensing: **not now**. BUI: **dropped**.
+- Snapshot images in git: **yes, when useful.** Visual review for the owner
+  goes through review mode (4b-0), not ad-hoc images.
+- Dock layouts: the planner may revisit. **Decision:** dock layouts and
+  workspaces persist as **workstation config** (like `GridSettings`), in
+  U-10. Node-canvas positions wait for G-0, because they become document
+  content if the graph becomes the document.
+- Keys: **out of scope.** Keep the current bindings. § 3.4 still moves the
+  *existing* bindings into the registry (alignment, not new keys);
+  `craft-keymap` profiles are dropped from the plan.
+- Order: the planner decides (§ 10).
 
 ---
 
 ## 12. What I did not check
 
-- Bevy 0.20's rustc floor, and its migration size for this workspace.
-- `egui_kittest` 0.36 exact version; other Bevy-ecosystem pins in the
-  workspace besides those in § 4.
+- Bevy 0.20's migration size for this workspace.
+- Other pins that Bevy 0.20 moves (e.g. `glam`: Bevy 0.20 uses `^0.33.2`, the
+  workspace pins `0.32`).
 - Whether Steel accepts one variadic native `%op` with reflected coercion as
   sketched; the generated-prelude design does not depend on it (a fixed-arity
   `register_fn` per arity also works).

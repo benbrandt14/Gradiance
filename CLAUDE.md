@@ -262,7 +262,8 @@ Agent-container hazards:
   CI); the full log is `gh run view <run-id> --log-failed`. GitHub GraphQL
   is unavailable (use REST).
 - **Visual checks:** `tools/screenshot/` runs the real app on lavapipe
-  (CPU Vulkan) under Xvfb. Screenshots never go in git — show them in the
-  conversation and describe them in the PR.
+  (CPU Vulkan) under Xvfb. Ad-hoc screenshots stay out of git: show them in
+  the conversation and describe them in the PR. Images that a test or a
+  review-mode question uses may be committed (owner, 2026-11-17).
 - A fresh container may lack the native libs (the `alsa-sys` build script
   fails). `apt-get install` the list above.
