@@ -1,6 +1,6 @@
 # Queries, config and editor verbs on the registry; old paths deleted
 Phase U · `docs/unified-surface-plan.md` § 3.4–3.6 · follows U-2a ·
-status: done (PR: see docs/state.md)
+status: done (#245)
 
 ## Goal
 
