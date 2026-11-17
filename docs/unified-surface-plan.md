@@ -2,10 +2,12 @@
 
 Status: **accepted plan; order decided (§ 10); no code.** Written
 2026-11-17 on branch `claude/laughing-euler-sh2g1r`, after `main` `04067ab`.
+**Revised 2026-11-17 (§ 13)** after a read of the code that § 3 replaces;
+where § 13 and an older sentence disagree, § 13 wins.
 It replaces the 2026-11-16 investigation `docs/ui-blender-investigation.md`
 (same branch, never merged). The owner rulings in `docs/state.md` still apply:
-no unbriefed work, one worker at a time. § 10 proposes briefs and where they
-go in the phase order.
+scoped work (one brief, one worker, one PR), one worker at a time. § 10
+proposes briefs and where they go in the phase order.
 
 ## 0. Owner direction (2026-11-17)
 
@@ -114,11 +116,19 @@ pub struct SpawnBox {
 - **The struct is not the intent; it lowers to one.** Intents are low-level
   and carry what undo needs: `SpawnBodyIntent { record: BodyRecord }`,
   `CommitTransformIntent { changes: Vec<TransformChange> }` (old *and* new
-  poses). Each operation has one `lower(params, &OpSnapshot) ->
-  Result<Intent, OpError>`, written by the layer that owns it. The snapshot
-  gives the old values, as `SceneView` does for scripts now
-  (`gradiance-script/src/bridge.rs:558`), so the scripting rule "one
-  snapshot per run" holds for every doorway.
+  poses). Each operation has one `lower(params, &OpContext) ->
+  Result<OpOutput, OpError>`, written by the layer that owns it.
+- **`OpOutput` is "messages to write + a value to return"** (revised, § 13.1).
+  An edit returns one intent; a query returns only a value; `spawn-box`
+  returns an intent *and* the new handle; a config or editor operation
+  returns the write its seam already queues. One trait thus covers all four
+  categories. Half of today's catalogue is queries (25 of 61 rows,
+  `registry.rs`), so a trait that returns only an intent does not cover it.
+- **`OpContext` gives the old values** (revised, § 13.2), as `SceneView` does
+  for scripts now (`gradiance-script/src/bridge.rs:558`), so the scripting
+  rule "one snapshot per run" holds for every doorway. It also gives the
+  **new ids**: an operation that creates an object takes its `StableId` from
+  the context, never from `StableId::new()` inside `lower`.
 - Execution does not change: doorway → `lower` → intent →
   `command::dispatch` → `GameCommand` → `CommandStack`. Invariants 1–2 hold.
   No new mutation path.
@@ -142,9 +152,11 @@ snapshot; MCP and the CLI use `Id` or `At`. The intent then holds only
 ### 3.3 Where the registry lives (layer rule)
 
 A new bottom crate `gradiance-op` holds the trait, the metadata types, the
-`Target` type and the registry resource. It depends on `gradiance-core` and
-`gradiance-units` only. Each layer **registers its own operations at app
-build**, as Bevy's type registry works:
+`Target` type, the `OpContext` container and the registry resource. It
+depends on `gradiance-core` and `gradiance-units` only. It does **not** hold
+the scene snapshot type: that type names `ShapeDef` and `BodyPhysics`, which
+live above this crate (§ 13.2). Each layer **registers its own operations at
+app build**, as Bevy's type registry works:
 
 - `command` registers scene operations;
 - `interaction` registers tool and selection operations;
@@ -160,11 +172,11 @@ removes the upward-edge problem that the first investigation found for
 
 | Surface | What it gets from the registry | Replaces |
 |---|---|---|
-| Steel | A generated prelude: `(define (spawn-box at size) (%op "body.spawn_box" at size))`, plus one native `%op` builtin with one generic coercion from `SteelVal` to reflected fields | 49 hand-written `register_fn` closures, `EditBinding` |
-| BRP / MCP | JSON schema per operation from reflection; `gradiance.op {id, params}` with **named** JSON params, decoded by serde, not lowered to Scheme text | `remote.rs` Scheme lowering |
+| Steel | A generated prelude: `(define (spawn-box at size) (%op "body.spawn_box" at size))`, plus one native `%op` builtin. It maps positional `SteelVal`s to a **named JSON object** by declared field order, then uses the BRP decoder (§ 13.3) | 49 hand-written `register_fn` closures, `EditBinding` |
+| BRP / MCP | JSON schema per operation from reflection; `gradiance.op {id, params}` with **named** JSON params, decoded by serde, not lowered to Scheme text. This is the **one decoder** for every doorway | `remote.rs` Scheme lowering |
 | CLI | `gradiance op body.spawn_box --at 0,1 --size 1.6,1.2`; `gradiance ops` lists them; `gradiance mcp` serves MCP on stdio | — |
 | Menus, F3 search, pie menus, status bar | `menu` path, label, icon, enable predicate | hand-wired rows, direct intent writes |
-| Keys | default chord from `key`; leafwing `InputMap` built from the registry; user overrides stored separately | `EditorAction` enum |
+| Keys | `key` is metadata; one table maps each `EditorAction` variant to an operation id; the leafwing `InputMap` and the enum stay (§ 13.4) | the key handlers' direct intent writes |
 | Console | completion, signatures, docs | `OpSpec` strings |
 | Docs | generated `docs/ops.md` | prose in `scripting.md` |
 | Graph (later) | operations marked `node` become node types (§ 5) | — |
@@ -179,10 +191,14 @@ test:
 
 1. **Doorway equivalence.** For each operation with sample params (generated
    from its defaults), invoke it through Lisp, BRP JSON, the CLI parser and the
-   UI invoke path. All four **lower to equal intents** against the same
-   snapshot.
-2. **Schema round trip.** JSON schema ↔ serde ↔ reflection agree for each
-   operation.
+   UI invoke path. All four **lower to equal outputs** against the same
+   context. The test context supplies a **fixed id sequence** and a fixture
+   scene with a fixture selection; without it two `spawn-box` calls never
+   compare equal (each mints a random `StableId`, and the colour derives from
+   the id).
+2. **Schema round trip.** The reflected schema and the serde decoder agree for
+   each operation (field names, order, optionality). This is the only place
+   where two descriptions of the params exist (§ 13.3).
 3. **No side doors.** A source-scanner test (as `no_source_file_uses_an_unlisted_glyph`
    does) fails if `gradiance-ui` or `gradiance-interaction` declares a
    `MessageWriter<…Intent>` outside the one invoke path.
@@ -193,9 +209,11 @@ test:
 
 ### 3.6 Migration shape
 
-Do not migrate all at once. Brief U-1 builds `gradiance-op` and moves three
-operations end to end (`body.spawn_box`, `body.place`, `edit.undo`) with the
-conformance tests. Brief U-2 moves the rest by category. Old and new verbs
+Do not migrate all at once. Brief U-1 builds `gradiance-op` and moves **five**
+operations end to end with the conformance tests: `body.spawn_box`,
+`body.place`, `edit.undo` (edit), `body.count` (query) and `sim.set`
+(config). One per category proves the trait shape before U-2 depends on it
+(§ 13.1); `panel.*` (editor) waits for U-3 because `ui` registers it. Brief U-2 moves the rest by category. Old and new verbs
 can live together during U-2, because both end at the same intents.
 
 ---
@@ -307,6 +325,11 @@ code calls eframe in these places; the adapter gives it one Bevy-side target.
 
 `docs/upstream-watch.md` (new, short) lists each upstream, what to watch, and
 the last revision reviewed.
+
+**When this section becomes files** (§ 13.5): `vendor/UPSTREAM.toml`,
+`tools/upstream-diff.sh`, `ui::host` and `upstream-watch.md` are created by
+the **first brief that ports a file** (U-3 by the current order), each with
+its first user in the same PR. No brief creates them empty.
 
 ---
 
@@ -444,3 +467,88 @@ its facts depend on that outcome (scoped-work ruling, `docs/state.md`).
 - Whether a Bevy app on lavapipe presents frames without Xvfb.
 - Bevy 0.19/0.20 screenshot API details.
 - No code was compiled. The `#[derive(Operation)]` syntax is a sketch.
+
+---
+
+## 13. Revision 2026-11-17 (execution session)
+
+Made after a read of `registry.rs`, `bridge.rs`, `remote.rs`, `dispatch.rs`
+and `input.rs` on `main` `47bcfc9`. Each item changes one design point; the
+order (§ 10) does not change.
+
+### 13.1 One trait for four categories: `OpOutput`
+
+*Measured:* the catalogue has 61 rows: 25 edit, 25 query, 2 config, 9
+editor. *Problem:* § 3.1 gave `lower` the return type `Intent`. That fits 25
+rows. U-1 migrated three edit operations, so U-2 would find the trait wrong
+for the other 36 after the doorways and tests already depend on it.
+*Change:* `lower` returns `OpOutput`: zero or more reflected messages for the
+registry to write to their existing queues, plus an optional return value
+(`serde_json::Value`). U-1 migrates one query and one config operation too.
+
+### 13.2 The snapshot cannot live in `gradiance-op`
+
+*Measured:* `SceneView` holds `ShapeDef` (`gradiance-geometry`),
+`BodyPhysics` (`gradiance-domain`) and contact counts read from avian. § 3.3
+allows `gradiance-op` to depend on `core` and `units` only, and brief U-1 told
+the worker to move the snapshot there. Both cannot hold.
+*Change:* `gradiance-op` defines `OpContext` as a type-keyed container of
+read-only **mirrors** (`ctx.get::<T>()`), and names no mirror type. Each layer
+publishes its own mirror: `gradiance-command` owns `SceneSnapshot` (today's
+`SceneView`, moved down from `gradiance-script`), `ui` owns `PanelStates`
+(already a mirror, scripting rule 2). One builder function fills the context;
+the Lisp doorway calls it once per run, every other doorway once per
+invocation.
+*Rejected:* `lower(params, &World)`. Steel builtins cannot hold `&World`
+during a run (the reason `SceneView` exists), and a query verb must answer at
+its call site, so the Lisp doorway needs an owned snapshot in any case. Two
+read paths would then exist.
+*Known cost:* the snapshot grows when an operation needs a new old value.
+That cost exists today.
+
+### 13.3 One decoder
+
+*Problem:* § 3.4 gave Lisp a reflection-based coercion and BRP a serde
+decoder, then § 3.5 tested that they agree. Two decoders is the drift this
+plan removes.
+*Change:* every doorway produces a named JSON object and calls the same serde
+decoder. Lisp-specific code is `SteelVal → serde_json::Value` plus the
+positional-to-named mapping (declared field order). The CLI parser does the
+same from flags. Reflection describes (schema, docs, completion); it does not
+decode.
+
+### 13.4 Keys: link, do not regenerate
+
+*Measured:* `EditorAction` has 14 use sites; `input.rs` is 248 lines.
+*Problem:* § 3.4 replaced the enum and built the leafwing `InputMap` from the
+registry. The owner ruled keys out of scope; a rebuild of the input layer is
+key work with no user-visible result.
+*Change:* U-2 keeps `EditorAction` and its `InputMap`. One table maps each
+variant to an operation id, the key handler invokes that id, and conformance
+test 4 checks the table. A generated `InputMap` waits for a brief that needs
+user-editable keys.
+
+### 13.5 Porting files appear with their first user
+
+§ 6 named four new files and a host adapter but no brief. They are created by
+the first brief that ports a file, not earlier (an extension point with no
+user is a listed code smell).
+
+### 13.6 D-1 guards
+
+- *Verified on crates.io, 2026-11-17:* every target version in § 4 exists;
+  `bevy` 0.20.1 declares `rust_version` 1.97.1; `rustup` installs 1.100.0 in
+  the container in 21 s.
+- avian2d 0.8 can move numeric results. D-1 records a test baseline and
+  screenshots on `main` **before** the bump, and lists each changed test
+  threshold in its Outcome with the old and new value. No test is removed.
+- The `steel-core` patch bump does not depend on Bevy. It is its own commit
+  in D-1, so a failure there is separable.
+
+### 13.7 Not checked in this revision
+
+- No code was compiled for § 13.1–13.4. The trait and container shapes are
+  requirements, not syntax.
+- Whether serde decodes the `gradiance-units` quantity newtypes from the JSON
+  shapes a client would write (`[0, 1]` for a `Vec2` quantity). U-1 checks it.
+- Whether brief 4b-1 is in work: GitHub shows no branch and no PR for it.

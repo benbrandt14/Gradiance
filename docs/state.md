@@ -23,7 +23,9 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
   2. **D-0** toolchain bump to 1.100.0 (brief ready): Bevy 0.20 needs
      rustc ≥ 1.97.1.
   3. **D-1** Bevy 0.20 stack (brief ready).
-  4. **U-1** `gradiance-op`: one declaration per operation (brief ready).
+  4. **U-1** `gradiance-op`: one declaration per operation (brief ready;
+     revised 2026-11-17, `unified-surface-plan.md` § 13: five operations,
+     `OpOutput`, snapshot stays above `gradiance-op`, one decoder).
   5. **U-2** migrate all verbs (4b-1's group verbs included), menus, keys
      onto the registry (brief at U-1 handoff).
   6. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
@@ -70,8 +72,10 @@ Last updated: 2026-11-17 (planning session, merged with orchestrator's
 - **Process:** one worker at a time (shared disk). The worker hands off via
   the brief's Outcome + PR. The orchestrator reviews, merges (REST squash),
   updates this file, and sends screenshots to the owner.
-- **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). They never go in
-  git; they are shown in the conversation and described in PR comments.
+- **Screenshots:** `tools/screenshot/` (lavapipe + Xvfb). Ad-hoc ones stay
+  out of git; they are shown in the conversation and described in PR
+  comments. Images that a test or a review question uses may be committed
+  (ruling above).
 
 ## Retained for future planning — do not work on these
 
