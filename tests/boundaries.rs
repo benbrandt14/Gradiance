@@ -200,7 +200,10 @@ fn the_crate_dag_matches_the_architecture() {
         (
             "interaction",
             &[
-                "command", "core", "domain", "geometry", "optimize", "persist", "physics", "scene",
+                "command", "core", "domain", "geometry",
+                // op: keys invoke registry operations by id, and this layer
+                // publishes the selection mirror (U-2a).
+                "op", "optimize", "persist", "physics", "scene",
                 // Typed joint limits / spring parameters (units P2·types,
                 // brief 5-1): units is a bottom node any layer may use.
                 "units",

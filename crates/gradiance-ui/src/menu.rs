@@ -1,8 +1,8 @@
 //! The top **menu bar** — File / Edit / View / Help — the first piece of the
 //! desktop-app shell (`docs/ui-shell-decision.md`). It is a thin projection: every
-//! item routes to an existing intent (undo/redo/delete/group, scene save/load) or
-//! toggles an existing panel resource, so it adds discoverability, not a new
-//! mutation path. Docked at the screen top via the same background-layer root
+//! item invokes a registry operation (undo/redo/delete/group), routes to an
+//! existing request (scene save/load) or toggles an existing panel resource,
+//! so it adds discoverability, not a new mutation path. Docked at the screen top via the same background-layer root
 //! pattern the other panels use; its rect feeds [`PanelRects`] so clicks don't
 //! leak to the scene.
 
@@ -13,12 +13,11 @@ use bevy::app::AppExit;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use gradiance_command::intent::{
-    DeleteIntent, GroupIntent, LoadSceneIntent, RedoIntent, UngroupIntent,
-};
+use gradiance_command::intent::LoadSceneIntent;
 use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::settings::GridSettings;
+use gradiance_interaction::input::{EditorAction, key_invocations};
 use gradiance_interaction::selection::Selection;
 use gradiance_op::InvokeOp;
 use gradiance_persist::{LoadSceneRequest, SaveSceneRequest, SnapshotRequest};
@@ -67,13 +66,11 @@ pub struct Panels<'w> {
 /// system-parameter limit (same idiom as `interaction::input::ShortcutWriters`).
 #[derive(SystemParam)]
 pub struct MenuWriters<'w> {
-    /// Rows migrated to the operation registry invoke it by id
-    /// (`gradiance-op`); a conformance test checks every id resolves.
+    /// Edit rows invoke registry operations by id (`gradiance-op`); a
+    /// conformance test checks every id resolves. The rows that repeat a key
+    /// write that key's invocations ([`key_invocations`]), so the two cannot
+    /// differ. File ▸ New's scene replacement is not an operation yet (U-2b).
     invoke: MessageWriter<'w, InvokeOp>,
-    redo: MessageWriter<'w, RedoIntent>,
-    delete: MessageWriter<'w, DeleteIntent>,
-    group: MessageWriter<'w, GroupIntent>,
-    ungroup: MessageWriter<'w, UngroupIntent>,
     load_scene: MessageWriter<'w, LoadSceneIntent>,
     save: MessageWriter<'w, SaveSceneRequest>,
     load: MessageWriter<'w, LoadSceneRequest>,
@@ -122,7 +119,7 @@ pub fn menu_bar(
     let bar = egui::Panel::top("menu-bar").show(&mut root, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             file_menu(ui, &mut writers);
-            edit_menu(ui, &mut writers, has_selection, &selected_ids, &history);
+            edit_menu(ui, &mut writers, has_selection, &history);
             view_menu(ui, &mut panels, &mut grid);
             help_menu(ui, &mut about);
         });
@@ -195,7 +192,6 @@ fn edit_menu(
     ui: &mut egui::Ui,
     writers: &mut MenuWriters,
     has_selection: bool,
-    selected_ids: &[StableId],
     history: &gradiance_command::HistoryInfo,
 ) {
     ui.menu_button("Edit", |ui| {
@@ -219,7 +215,9 @@ fn edit_menu(
             )
             .clicked()
         {
-            writers.redo.write(RedoIntent);
+            writers
+                .invoke
+                .write_batch(key_invocations(EditorAction::Redo));
             ui.close();
         }
         ui.separator();
@@ -227,27 +225,27 @@ fn edit_menu(
             .add_enabled(has_selection, egui::Button::new("Delete selection"))
             .clicked()
         {
-            writers.delete.write(DeleteIntent {
-                targets: selected_ids.to_vec(),
-            });
+            writers
+                .invoke
+                .write_batch(key_invocations(EditorAction::DeleteSelection));
             ui.close();
         }
         if ui
             .add_enabled(has_selection, egui::Button::new("Group"))
             .clicked()
         {
-            writers.group.write(GroupIntent {
-                targets: selected_ids.to_vec(),
-            });
+            writers
+                .invoke
+                .write_batch(key_invocations(EditorAction::Group));
             ui.close();
         }
         if ui
             .add_enabled(has_selection, egui::Button::new("Ungroup"))
             .clicked()
         {
-            writers.ungroup.write(UngroupIntent {
-                targets: selected_ids.to_vec(),
-            });
+            writers
+                .invoke
+                .write_batch(key_invocations(EditorAction::Ungroup));
             ui.close();
         }
     });

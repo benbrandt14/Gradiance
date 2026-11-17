@@ -90,6 +90,10 @@ pub enum OpError {
     /// A settings write did not resolve.
     #[error(transparent)]
     Setting(#[from] PathError),
+    /// A [`Target::Selection`](crate::Target::Selection) where no selection
+    /// is published: the Lisp doorway (scripting rule 2).
+    #[error("\"selection\" is not available here: name objects by index or id")]
+    NoSelection,
     /// The operation refused its params.
     #[error("{0}")]
     Invalid(String),
@@ -228,10 +232,26 @@ pub struct InvokeOp {
 impl InvokeOp {
     /// An invocation of an operation that takes no params.
     pub fn new(id: &'static str) -> Self {
+        Self::with(id, Value::Object(Map::new()))
+    }
+
+    /// An invocation with named params (a JSON object; build one with
+    /// [`json!`](crate::json)).
+    pub fn with(id: &'static str, params: Value) -> Self {
         Self {
             id: Cow::Borrowed(id),
-            params: Value::Object(Map::new()),
+            params,
         }
+    }
+
+    /// An invocation whose params are JSON text: for a table of static rows
+    /// (the key link table).
+    pub fn parse(id: &'static str, params: &str) -> Result<Self, OpError> {
+        let params = serde_json::from_str(params).map_err(|err| OpError::Decode {
+            op: id,
+            why: err.to_string(),
+        })?;
+        Ok(Self::with(id, params))
     }
 }
 

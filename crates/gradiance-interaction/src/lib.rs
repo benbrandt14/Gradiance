@@ -93,6 +93,15 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<camera::CameraRig>();
         app.init_resource::<camera::CameraScale>();
 
+        // The operation registry: the selection mirror `"selection"` targets
+        // resolve against (menus and keys), and an invoked key edit becomes a
+        // command in the same frame.
+        gradiance_command::ops::install(app);
+        app.world_mut()
+            .resource_mut::<gradiance_op::OpContextFillers>()
+            .add(selection::fill_selection_mirror);
+        app.configure_sets(Update, InteractionSet.before(gradiance_op::OpInvokeSet));
+
         app.add_plugins(input::EditorInputPlugin);
         app.add_plugins(tools::ToolsPlugin);
 

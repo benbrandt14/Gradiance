@@ -3,13 +3,18 @@
 //! Discrete editor commands only — continuous input (camera drag, tool
 //! gestures) reads raw input/picking directly. All world mutation still
 //! flows through intents.
+//!
+//! A key that edits the scene invokes a registry operation by id
+//! ([`KEY_OPS`], the key link table of plan § 13.4), as a menu row does; the
+//! operation names `"selection"`, which resolves against the selection
+//! mirror this layer publishes. The leafwing `InputMap` and [`EditorAction`]
+//! are unchanged (keys are out of scope).
 
 use crate::selection::{SelectTransition, Selection};
 use bevy::prelude::*;
-use gradiance_command::intent::{DeleteIntent, GroupIntent, RedoIntent, UndoIntent, UngroupIntent};
-use gradiance_core::ids::StableId;
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_domain::Body;
+use gradiance_op::InvokeOp;
 use leafwing_input_manager::prelude::*;
 
 /// Discrete editor actions with rebindable inputs.
@@ -114,22 +119,92 @@ impl Plugin for EditorInputPlugin {
     }
 }
 
+/// One row of the key link table: pressing `action` invokes the operation
+/// `id` with `params` (JSON text).
+#[derive(Debug, Clone, Copy)]
+pub struct KeyOp {
+    /// The key binding.
+    pub action: EditorAction,
+    /// The operation's registry id.
+    pub id: &'static str,
+    /// The named params, as JSON text.
+    pub params: &'static str,
+}
+
+/// The key link table (plan § 13.4): each editing [`EditorAction`] and the
+/// operation it invokes. A conformance test checks every id is registered and
+/// every row lowers. The non-edit actions (pause, selection, files, tools)
+/// are handled below and get operations in U-2b and U-3.
+///
+/// Delete has two rows: a selected joint and selected bodies are never
+/// selected together, so exactly one of them has something to delete (a
+/// selected joint takes the key, as before).
+pub const KEY_OPS: &[KeyOp] = &[
+    KeyOp {
+        action: EditorAction::Undo,
+        id: "edit.undo",
+        params: "{}",
+    },
+    KeyOp {
+        action: EditorAction::Redo,
+        id: "edit.redo",
+        params: "{}",
+    },
+    KeyOp {
+        action: EditorAction::DeleteSelection,
+        id: "joint.delete",
+        params: r#"{"i": "selection"}"#,
+    },
+    KeyOp {
+        action: EditorAction::DeleteSelection,
+        id: "body.delete",
+        params: r#"{"i": "selection"}"#,
+    },
+    KeyOp {
+        action: EditorAction::Group,
+        id: "group.create",
+        params: r#"{"targets": ["selection"]}"#,
+    },
+    KeyOp {
+        action: EditorAction::Ungroup,
+        id: "group.ungroup",
+        params: r#"{"targets": ["selection"]}"#,
+    },
+];
+
+impl KeyOp {
+    /// The invocation this row makes. A row whose params do not parse is
+    /// logged and makes none (the conformance test keeps every row parsing).
+    pub fn invoke(&self) -> Option<InvokeOp> {
+        InvokeOp::parse(self.id, self.params)
+            .inspect_err(|err| warn!("key table: {err}"))
+            .ok()
+    }
+}
+
+/// The invocations `action` makes, from [`KEY_OPS`]. The menus that repeat a
+/// key's edit (Edit ▸ Redo, Delete, Group, Ungroup) write these too, so a key
+/// and its menu row cannot differ.
+pub fn key_invocations(action: EditorAction) -> impl Iterator<Item = InvokeOp> {
+    KEY_OPS
+        .iter()
+        .filter(move |row| row.action == action)
+        .filter_map(KeyOp::invoke)
+}
+
 /// All the outgoing messages shortcuts can emit (grouped to stay under
 /// the system-parameter limit).
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct ShortcutWriters<'w> {
-    undo: MessageWriter<'w, UndoIntent>,
-    redo: MessageWriter<'w, RedoIntent>,
-    delete: MessageWriter<'w, DeleteIntent>,
-    group: MessageWriter<'w, GroupIntent>,
-    ungroup: MessageWriter<'w, UngroupIntent>,
-    delete_joint: MessageWriter<'w, gradiance_command::intent::DeleteJointIntent>,
+    /// Edits, by operation id ([`KEY_OPS`]).
+    invoke: MessageWriter<'w, InvokeOp>,
     save: MessageWriter<'w, gradiance_persist::SaveSceneRequest>,
     load: MessageWriter<'w, gradiance_persist::LoadSceneRequest>,
     snapshot: MessageWriter<'w, gradiance_persist::SnapshotRequest>,
 }
 
-/// Translates just-pressed actions into intents / state changes.
+/// Translates just-pressed actions into operation invocations / state
+/// changes.
 pub fn apply_shortcuts(
     actions: Query<&ActionState<EditorAction>, With<EditorControls>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -138,7 +213,6 @@ pub fn apply_shortcuts(
     mut selection: ResMut<Selection>,
     mut selected_joint: ResMut<crate::selection::SelectedJoint>,
     groups: Query<(Entity, &gradiance_domain::group::SelectionGroup), With<Body>>,
-    ids: Query<&StableId>,
     bodies: Query<Entity, With<Body>>,
     game_state: Res<State<GameState>>,
     mut next_game: ResMut<NextState<GameState>>,
@@ -153,44 +227,17 @@ pub fn apply_shortcuts(
     let Ok(actions) = actions.single() else {
         return;
     };
-    let selected_ids = |selection: &Selection| -> Vec<StableId> {
-        selection
-            .iter()
-            .filter_map(|e| ids.get(e).ok().copied())
-            .collect()
-    };
 
-    if actions.just_pressed(&EditorAction::Undo) {
-        writers.undo.write(UndoIntent);
-    }
-    if actions.just_pressed(&EditorAction::Redo) {
-        writers.redo.write(RedoIntent);
-    }
-    if actions.just_pressed(&EditorAction::DeleteSelection) {
-        // A selected joint takes delete priority (it consumed selection).
-        if let Some(joint) = selected_joint.0
-            && let Ok(&id) = ids.get(joint)
+    // The edits: one table, rows in order. Ungroup's chord (Ctrl+Shift+G)
+    // also satisfies Group's, so Group yields to it.
+    let ungrouping = actions.just_pressed(&EditorAction::Ungroup);
+    for row in KEY_OPS {
+        let shadowed = row.action == EditorAction::Group && ungrouping;
+        if actions.just_pressed(&row.action)
+            && !shadowed
+            && let Some(invocation) = row.invoke()
         {
-            writers
-                .delete_joint
-                .write(gradiance_command::intent::DeleteJointIntent { id });
-        } else if !selection.is_empty() {
-            let targets = selected_ids(&selection);
-            if !targets.is_empty() {
-                writers.delete.write(DeleteIntent { targets });
-            }
-        }
-    }
-    // Ungroup first: its chord (Ctrl+Shift+G) also satisfies Group's.
-    if actions.just_pressed(&EditorAction::Ungroup) {
-        let targets = selected_ids(&selection);
-        if !targets.is_empty() {
-            writers.ungroup.write(UngroupIntent { targets });
-        }
-    } else if actions.just_pressed(&EditorAction::Group) {
-        let targets = selected_ids(&selection);
-        if targets.len() >= 2 {
-            writers.group.write(GroupIntent { targets });
+            writers.invoke.write(invocation);
         }
     }
     if actions.just_pressed(&EditorAction::TogglePause) {

@@ -1,6 +1,7 @@
 //! [`OpContext`]: what an operation may read while it lowers.
 
 use crate::registry::OpError;
+use crate::target::SelectionMirror;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use std::any::{Any, TypeId, type_name};
@@ -67,6 +68,20 @@ impl OpContext {
         self.mirrors.insert(TypeId::of::<T>(), Arc::new(mirror));
     }
 
+    /// Withdraws the mirror of type `T`: for a doorway that must not read it
+    /// (the Lisp doorway withdraws the [`SelectionMirror`]).
+    pub fn remove<T: Any + Send + Sync>(&mut self) {
+        self.mirrors.remove(&TypeId::of::<T>());
+    }
+
+    /// The selection, for a [`Target::Selection`](crate::Target::Selection).
+    /// Where no layer published one (the Lisp doorway), the error says how to
+    /// name objects instead.
+    pub fn selection(&self) -> Result<&SelectionMirror, OpError> {
+        self.get::<SelectionMirror>()
+            .map_err(|_| OpError::NoSelection)
+    }
+
     /// The mirror of type `T`.
     pub fn get<T: Any + Send + Sync>(&self) -> Result<&T, OpError> {
         self.mirrors
@@ -119,6 +134,16 @@ mod tests {
         let second = OpContext::new(OpIdSource::Sequence(40));
         assert_eq!(first.new_id(), second.new_id());
         assert_eq!(first.new_id(), StableId(Uuid::from_u128(41)));
+    }
+
+    #[test]
+    fn a_withdrawn_selection_is_an_error_that_says_what_to_use() {
+        let mut ctx = OpContext::new(OpIdSource::Random);
+        ctx.insert(SelectionMirror::default());
+        assert!(ctx.selection().is_ok());
+        ctx.remove::<SelectionMirror>();
+        let err = ctx.selection().err().map(|e| e.to_string());
+        assert!(err.is_some_and(|text| text.contains("index or id")));
     }
 
     #[test]

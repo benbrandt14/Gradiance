@@ -8,10 +8,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, egui};
-use gradiance_command::intent::{
-    BooleanIntent, CommitTransformIntent, DeleteIntent, DeleteJointIntent, GroupIntent,
-    MergeIntent, PropertyEditIntent, UngroupIntent,
-};
+use gradiance_command::intent::{CommitTransformIntent, PropertyEditIntent};
 use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_core::units::PosRot;
@@ -20,14 +17,16 @@ use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::joint::JointDef;
 use gradiance_domain::node::{BehaviorNode, NodeKind};
-use gradiance_domain::shape::{CsgOp, ShapeDef};
+use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::PointerOverUi;
 use gradiance_interaction::align::{AlignItem, AlignOp, align_changes};
 use gradiance_interaction::cursor::CursorWorldPos;
+use gradiance_interaction::input::{EditorAction, key_invocations};
 use gradiance_interaction::joint_edit::ANCHOR_PICK_PX;
 use gradiance_interaction::pointer::PointerButtons;
 use gradiance_interaction::selection::{SelectTransition, SelectedJoint, Selection};
 use gradiance_interaction::tools::bodies_at_sorted;
+use gradiance_op::{InvokeOp, json};
 use gradiance_physics::queries::PhysicsQueries;
 use gradiance_script::actions::builtin;
 use gradiance_script::bridge::{ScriptActions, ScriptInputs};
@@ -154,15 +153,14 @@ pub struct PanelMenu<'w> {
     array: ResMut<'w, crate::array_panel::ArrayWindow>,
 }
 
-/// The body-scoped intent writers, bundled into one `SystemParam` to keep
+/// The menu's writers, bundled into one `SystemParam` to keep
 /// `context_menu` under Bevy's system-parameter count limit.
 #[derive(SystemParam)]
 pub struct GroupWriters<'w> {
-    group: MessageWriter<'w, GroupIntent>,
-    ungroup: MessageWriter<'w, UngroupIntent>,
-    merge: MessageWriter<'w, MergeIntent>,
-    /// Subtract / intersect / xor (the body booleans beside Merge).
-    booleans: MessageWriter<'w, BooleanIntent>,
+    /// Every edit row (group, merge, the booleans, deletes) invokes a
+    /// registry operation by id. The rows that act on the selection name
+    /// `"selection"`; the right click has made what it hit the selection.
+    invoke: MessageWriter<'w, InvokeOp>,
     orbits: MessageWriter<'w, gradiance_physics::fields::SetOrbitRequest>,
     /// Probe-pin target (the "Pin probe" menu action); bundled here to
     /// keep `context_menu` under Bevy's system-parameter count limit.
@@ -173,16 +171,11 @@ pub struct GroupWriters<'w> {
 }
 
 /// Behavior-node access for the node-specific context menu, bundled to keep
-/// `context_menu` under the system-parameter limit (it replaces the lone
-/// joint-delete writer).
+/// `context_menu` under the system-parameter limit.
 #[derive(SystemParam)]
 pub struct NodeMenu<'w, 's> {
     /// Selectable node kinds by id (for the node menu editor).
     nodes: Query<'w, 's, (&'static StableId, &'static NodeKind), With<BehaviorNode>>,
-    /// Joint deletion (moved here from a standalone param).
-    delete_joint: MessageWriter<'w, DeleteJointIntent>,
-    /// Body/node deletion (the node menu's Delete).
-    delete: MessageWriter<'w, DeleteIntent>,
 }
 
 /// Open context menu state.
@@ -212,7 +205,7 @@ pub struct ContextMenu {
 /// The context menu's fillet radius, in metres — a parameter of the next
 /// "Merge with fillet" gesture, not authored state: it lives with the
 /// menu, is never saved, and writes nothing until the button commits one
-/// `BooleanIntent`. Scripts pass the radius to `(fillet-merge a b r)`
+/// `body.fillet_merge` invocation. Scripts pass the radius to `(fillet-merge a b r)`
 /// instead.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FilletRadius(pub f32);
@@ -332,7 +325,7 @@ pub fn context_menu(
     joints: Query<&JointDef>,
     mut writers: GroupWriters,
     mut moves: MessageWriter<CommitTransformIntent>,
-    mut node_menu: NodeMenu,
+    node_menu: NodeMenu,
     mut script: ScriptMenu,
     mut background: BackgroundMenu,
 ) -> Result {
@@ -403,9 +396,10 @@ pub fn context_menu(
                     }
                     ui.separator();
                     if ui.button("Delete node").clicked() {
-                        node_menu.delete.write(DeleteIntent {
-                            targets: vec![node_id],
-                        });
+                        writers.invoke.write(InvokeOp::with(
+                            "body.delete",
+                            json!({"i": node_id.0.to_string()}),
+                        ));
                         close = true;
                     }
                     return; // node menu replaces the physical-object menu
@@ -443,9 +437,10 @@ pub fn context_menu(
                         close = true;
                     }
                     if ui.button("Delete joint").clicked() {
-                        node_menu
-                            .delete_joint
-                            .write(DeleteJointIntent { id: joint_id });
+                        writers.invoke.write(InvokeOp::with(
+                            "joint.delete",
+                            json!({"i": joint_id.0.to_string()}),
+                        ));
                         close = true;
                     }
                     ui.separator();
@@ -522,18 +517,18 @@ pub fn context_menu(
                     .add_enabled(selected_ids.len() >= 2, egui::Button::new("Group"))
                     .clicked()
                 {
-                    writers.group.write(GroupIntent {
-                        targets: selected_ids.clone(),
-                    });
+                    writers
+                        .invoke
+                        .write_batch(key_invocations(EditorAction::Group));
                     close = true;
                 }
                 if ui
                     .add_enabled(!selected_ids.is_empty(), egui::Button::new("Ungroup"))
                     .clicked()
                 {
-                    writers.ungroup.write(UngroupIntent {
-                        targets: selected_ids.clone(),
-                    });
+                    writers
+                        .invoke
+                        .write_batch(key_invocations(EditorAction::Ungroup));
                     close = true;
                 }
                 if ui
@@ -543,9 +538,10 @@ pub fn context_menu(
                     )
                     .clicked()
                 {
-                    writers.merge.write(MergeIntent {
-                        targets: selected_ids.clone(),
-                    });
+                    writers.invoke.write(InvokeOp::with(
+                        "body.merge",
+                        json!({"a": "selection", "b": "selection"}),
+                    ));
                     close = true;
                 }
                 // Merge with a fillet: the same boolean, as a smooth union
@@ -560,12 +556,10 @@ pub fn context_menu(
                     )
                     .clicked()
                 {
-                    writers.booleans.write(BooleanIntent {
-                        op: CsgOp::SmoothUnion {
-                            radius: fillet_radius,
-                        },
-                        targets: selected_ids.clone(),
-                    });
+                    writers.invoke.write(InvokeOp::with(
+                        "body.fillet_merge",
+                        json!({"a": "selection", "b": "selection", "radius": fillet_radius}),
+                    ));
                     close = true;
                 }
                 egui::Grid::new("context-menu-fillet").show(ui, |ui| {
@@ -580,20 +574,20 @@ pub fn context_menu(
                 });
                 // The other body booleans: the first-selected body hosts the
                 // result and the rest are consumed (`command::merge_cmd`).
-                for (label, op, hint) in [
+                for (label, id, hint) in [
                     (
                         "Subtract from first selected",
-                        CsgOp::Subtract,
+                        "body.subtract",
                         "cut the other bodies' shapes out of the first-selected body",
                     ),
                     (
                         "Intersect",
-                        CsgOp::Intersect,
+                        "body.intersect",
                         "keep only where the selected bodies overlap, on the first-selected body",
                     ),
                     (
                         "Xor",
-                        CsgOp::Xor,
+                        "body.xor",
                         "keep what lies in exactly one selected body; the overlap is removed",
                     ),
                 ] {
@@ -602,10 +596,10 @@ pub fn context_menu(
                         .on_hover_text(hint)
                         .clicked()
                     {
-                        writers.booleans.write(BooleanIntent {
-                            op,
-                            targets: selected_ids.clone(),
-                        });
+                        writers.invoke.write(InvokeOp::with(
+                            id,
+                            json!({"a": "selection", "b": "selection"}),
+                        ));
                         close = true;
                     }
                 }

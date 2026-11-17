@@ -41,6 +41,14 @@ pub struct BodySnapshot {
 }
 
 impl BodySnapshot {
+    /// The body's pose.
+    pub fn pose(&self) -> PosRot {
+        PosRot {
+            pos: self.pos,
+            rot: self.rot,
+        }
+    }
+
     /// Whether the world point `p` lies inside this body's shape (exact SDF
     /// containment, transforming the point into the body's local frame).
     pub fn contains(&self, p: Vec2) -> bool {
@@ -63,6 +71,9 @@ pub struct SceneSnapshot {
     /// count so `delete-joint` can name one, using the same index vocabulary
     /// the body verbs use.
     pub joints: Vec<StableId>,
+    /// The committed scene's behaviour nodes, in `StableId` order: what a
+    /// delete may name besides a body.
+    pub nodes: Vec<StableId>,
 }
 
 impl SceneSnapshot {
@@ -84,6 +95,11 @@ impl SceneSnapshot {
     /// Rotation (radians) of the `i`-th body, or NaN if out of range.
     pub fn rot(&self, i: usize) -> f64 {
         self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.rot))
+    }
+
+    /// The body with this id.
+    pub fn get(&self, id: StableId) -> Option<&BodySnapshot> {
+        self.bodies.iter().find(|b| b.id == id)
     }
 
     /// Identity of the `i`-th body — the target an edit verb names.
@@ -219,8 +235,15 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
         .copied()
         .collect();
     joints.sort_by_key(|id| id.0);
+    let mut nodes: Vec<StableId> = world
+        .query_filtered::<&StableId, With<gradiance_domain::node::BehaviorNode>>()
+        .iter(world)
+        .copied()
+        .collect();
+    nodes.sort_by_key(|id| id.0);
     SceneSnapshot {
         joints,
+        nodes,
         bodies: rows
             .into_iter()
             .map(|(id, pos, rot, shape, touching, physics)| BodySnapshot {

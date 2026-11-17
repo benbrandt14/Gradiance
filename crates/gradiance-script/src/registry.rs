@@ -21,16 +21,6 @@ use std::borrow::Cow;
 /// so the two cannot drift. Referencing one `const` in both places makes a
 /// mismatch a compile-time impossibility rather than a runtime bug.
 pub mod name {
-    /// `(cut ax ay bx by width)` — re-exported from
-    /// [`intent::name`](gradiance_command::intent::name) so verb, intent, and
-    /// command share one greppable constant.
-    pub use gradiance_command::intent::name::CUT;
-    /// `(spawn-circle x y r)` — author a circle body.
-    pub const SPAWN_CIRCLE: &str = "spawn-circle";
-    /// `(spawn-ground x y angle)` — author a fixed ground half-plane.
-    pub const SPAWN_GROUND: &str = "spawn-ground";
-    /// `(spawn-box-rot x y w h angle)` — author a box rotated by `angle`.
-    pub const SPAWN_BOX_ROT: &str = "spawn-box-rot";
     /// `(body-x i)` — x of the i-th body (id order).
     pub const BODY_X: &str = "body-x";
     /// `(body-y i)` — y of the i-th body.
@@ -72,14 +62,6 @@ pub mod name {
     pub const SIGNAL_SET: &str = "signal-set";
     /// `(signal-get name)` — the current value of a bus signal.
     pub const SIGNAL_GET: &str = "signal-get";
-    /// `(set-friction i v)` — Coulomb friction of the i-th body.
-    pub const SET_FRICTION: &str = "set-friction";
-    /// `(set-restitution i v)` — bounciness of the i-th body.
-    pub const SET_RESTITUTION: &str = "set-restitution";
-    /// `(set-density i v)` — mass density of the i-th body.
-    pub const SET_DENSITY: &str = "set-density";
-    /// `(set-static i on)` — make the i-th body static (or dynamic again).
-    pub const SET_STATIC: &str = "set-static";
     /// `(body-friction i)` — read it back.
     pub const BODY_FRICTION: &str = "body-friction";
     /// `(body-restitution i)` — read it back.
@@ -88,39 +70,8 @@ pub mod name {
     pub const BODY_DENSITY: &str = "body-density";
     /// `(body-static? i)` — whether the i-th body is static.
     pub const BODY_STATIC: &str = "body-static?";
-    /// `(scale i fx fy)` — resize the i-th body about its own centre.
-    pub const SCALE: &str = "scale";
-    /// `(merge a b)` — fuse two bodies into one CSG union.
-    pub const MERGE: &str = "merge";
-    /// `(subtract a b)` — cut body b's shape out of body a.
-    pub const SUBTRACT: &str = "subtract";
-    /// `(intersect a b)` — keep only the overlap of bodies a and b.
-    pub const INTERSECT: &str = "intersect";
-    /// `(xor a b)` — keep what is in exactly one of bodies a and b.
-    pub const XOR: &str = "xor";
-    /// `(fillet-merge a b radius)` — merge bodies a and b with a fillet of
-    /// `radius` metres; re-exported from
-    /// [`intent::name`](gradiance_command::intent::name) like
-    /// [`CUT`], so verb, undo label, and command share one constant.
-    pub use gradiance_command::intent::name::FILLET_MERGE;
-    /// `(delete-joint i)` — remove the i-th joint.
-    pub const DELETE_JOINT: &str = "delete-joint";
-    /// `(group (list i …))` — wrap the listed bodies in one fresh group.
-    pub const GROUP: &str = "group";
-    /// `(ungroup (list i …))` — peel the listed bodies' outermost group.
-    pub const UNGROUP: &str = "ungroup";
-    /// `(hinge a b x y)` — pin two bodies at a world point.
-    pub const HINGE: &str = "hinge";
-    /// `(slider a b x y ax ay)` — prismatic joint along an axis.
-    pub const SLIDER: &str = "slider";
-    /// `(spring a b stiffness damping)` — spring-damper strut.
-    pub const SPRING: &str = "spring";
     /// `(joint-count)` — how many joints exist.
     pub const JOINT_COUNT: &str = "joint-count";
-    /// `(redo)` — redo the last undone command.
-    pub const REDO: &str = "redo";
-    /// `(delete i)` — delete the i-th body (id order).
-    pub const DELETE: &str = "delete";
     /// `(panel-show name)` — open an editor panel by name.
     pub const PANEL_SHOW: &str = "panel-show";
     /// `(panel-hide name)` — close an editor panel by name.
@@ -206,10 +157,6 @@ impl OperationCatalog {
     /// verbs accrete.
     pub fn builtin() -> Self {
         let mut ops = Vec::new();
-        ops.extend(spawn_specs());
-        ops.extend(mutate_specs());
-        ops.extend(boolean_specs());
-        ops.extend(property_specs());
         ops.extend(query_specs());
         ops.extend(property_query_specs());
         ops.extend(action_specs());
@@ -271,192 +218,9 @@ impl Default for OperationCatalog {
     }
 }
 
-/// Authored-world edit verbs (→ intents).
-/// Edits that **author new geometry** — the spawn family and the cut.
-fn spawn_specs() -> Vec<OpSpec> {
-    use OpCategory::Edit;
-    vec![
-        OpSpec {
-            name: name::SPAWN_CIRCLE,
-            signature: Cow::Borrowed("(spawn-circle x y r)"),
-            doc: "Author a circle body of radius r centred at (x, y), in metres; returns its handle.",
-            category: Edit,
-            args: 3,
-        },
-        OpSpec {
-            name: name::SPAWN_GROUND,
-            signature: Cow::Borrowed("(spawn-ground x y angle)"),
-            doc: "Author a fixed ground half-plane through (x, y) (metres), tilted by angle radians.",
-            category: Edit,
-            args: 3,
-        },
-        OpSpec {
-            name: name::SPAWN_BOX_ROT,
-            signature: Cow::Borrowed("(spawn-box-rot x y w h angle)"),
-            doc: "Author a w×h box centred at (x, y), in metres, rotated by angle radians; returns its handle.",
-            category: Edit,
-            args: 5,
-        },
-    ]
-}
-
-/// The body booleans: two indexed bodies, the first hosting the result.
-fn boolean_specs() -> Vec<OpSpec> {
-    use OpCategory::Edit;
-    vec![
-        OpSpec {
-            name: name::MERGE,
-            signature: Cow::Borrowed("(merge a b)"),
-            doc: "Fuse bodies a and b into one CSG union; a survives.",
-            category: Edit,
-            args: 2,
-        },
-        OpSpec {
-            name: name::FILLET_MERGE,
-            signature: Cow::Borrowed("(fillet-merge a b radius)"),
-            doc: "Fuse bodies a and b into one with a smooth fillet of radius metres where they meet (CSG smooth union); a survives. Bridges a gap under radius/2. Errors unless radius > 0.",
-            category: Edit,
-            args: 3,
-        },
-        OpSpec {
-            name: name::SUBTRACT,
-            signature: Cow::Borrowed("(subtract a b)"),
-            doc: "Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces.",
-            category: Edit,
-            args: 2,
-        },
-        OpSpec {
-            name: name::INTERSECT,
-            signature: Cow::Borrowed("(intersect a b)"),
-            doc: "Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed.",
-            category: Edit,
-            args: 2,
-        },
-        OpSpec {
-            name: name::XOR,
-            signature: Cow::Borrowed("(xor a b)"),
-            doc: "Keep what lies in exactly one of bodies a and b (CSG xor) on a; b is consumed, a split result becomes pieces.",
-            category: Edit,
-            args: 2,
-        },
-    ]
-}
-
-/// Edits over **existing bodies**: their pose, their properties, their
-/// relationships, and the history ops. Split from [`spawn_specs`] to mirror the
-/// bridge's own split — these all name their target by index.
-fn mutate_specs() -> Vec<OpSpec> {
-    use OpCategory::Edit;
-    vec![
-        OpSpec {
-            name: name::SCALE,
-            signature: Cow::Borrowed("(scale i fx fy)"),
-            doc: "Resize the i-th body by (fx, fy) about its own centre, along its own axes.",
-            category: Edit,
-            args: 3,
-        },
-        OpSpec {
-            name: name::DELETE_JOINT,
-            signature: Cow::Borrowed("(delete-joint i)"),
-            doc: "Remove the i-th joint (id order, as joint-count) — undoable.",
-            category: Edit,
-            args: 1,
-        },
-        OpSpec {
-            name: name::GROUP,
-            signature: Cow::Borrowed("(group (list i …))"),
-            doc: "Group the listed bodies (id order) like Ctrl+G; fewer than two distinct bodies is a no-op.",
-            category: Edit,
-            args: 1,
-        },
-        OpSpec {
-            name: name::UNGROUP,
-            signature: Cow::Borrowed("(ungroup (list i …))"),
-            doc: "Peel the listed bodies' outermost group (id order) like Ctrl+Shift+G; inner groups survive.",
-            category: Edit,
-            args: 1,
-        },
-        OpSpec {
-            name: name::HINGE,
-            signature: Cow::Borrowed("(hinge a b x y)"),
-            doc: "Hinge bodies a and b at world point (x, y); b < 0 pins a to the world.",
-            category: OpCategory::Edit,
-            args: 4,
-        },
-        OpSpec {
-            name: name::SLIDER,
-            signature: Cow::Borrowed("(slider a b x y ax ay)"),
-            doc: "Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world.",
-            category: OpCategory::Edit,
-            args: 6,
-        },
-        OpSpec {
-            name: name::SPRING,
-            signature: Cow::Borrowed("(spring a b stiffness damping)"),
-            doc: "Spring-damper strut between the centres of a and b; rest length is their current distance.",
-            category: OpCategory::Edit,
-            args: 4,
-        },
-        OpSpec {
-            name: name::DELETE,
-            signature: Cow::Borrowed("(delete i)"),
-            doc: "Delete the i-th body (id order, same index as body-x) — undoable.",
-            category: OpCategory::Edit,
-            args: 1,
-        },
-        OpSpec {
-            name: name::REDO,
-            signature: Cow::Borrowed("(redo)"),
-            doc: "Redo the last undone command.",
-            category: OpCategory::Edit,
-            args: 0,
-        },
-        OpSpec {
-            name: name::CUT,
-            signature: Cow::Borrowed("(cut ax ay bx by width)"),
-            doc: "Sever every body crossed by the stroke a→b of the given width (metres).",
-            category: Edit,
-            args: 5,
-        },
-    ]
-}
-
-/// Body-property edits — the inspector's fields as ops.
-fn property_specs() -> Vec<OpSpec> {
-    vec![
-        OpSpec {
-            name: name::SET_FRICTION,
-            signature: Cow::Borrowed("(set-friction i v)"),
-            doc: "Set the i-th body's Coulomb friction (static and dynamic) — undoable.",
-            category: OpCategory::Edit,
-            args: 2,
-        },
-        OpSpec {
-            name: name::SET_RESTITUTION,
-            signature: Cow::Borrowed("(set-restitution i v)"),
-            doc: "Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable.",
-            category: OpCategory::Edit,
-            args: 2,
-        },
-        OpSpec {
-            name: name::SET_DENSITY,
-            signature: Cow::Borrowed("(set-density i v)"),
-            doc: "Set the i-th body's mass density (area x density = mass) — undoable.",
-            category: OpCategory::Edit,
-            args: 2,
-        },
-        OpSpec {
-            name: name::SET_STATIC,
-            signature: Cow::Borrowed("(set-static i on)"),
-            doc: "Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable.",
-            category: OpCategory::Edit,
-            args: 2,
-        },
-    ]
-}
-
-/// Reads of a body's authored properties — the mirror image of
-/// [`property_specs`], so a script can inspect a value it did not author.
+/// Reads of a body's authored properties — the mirror image of the
+/// `set-friction` … registry operations, so a script can inspect a value it
+/// did not author.
 fn property_query_specs() -> Vec<OpSpec> {
     use OpCategory::Query;
     vec![
@@ -774,7 +538,7 @@ mod tests {
     #[test]
     fn find_resolves_known_and_rejects_unknown() {
         let catalog = OperationCatalog::builtin();
-        assert_eq!(catalog.find(name::CUT).map(|o| o.args), Some(5));
+        assert_eq!(catalog.find(name::BODY_X).map(|o| o.args), Some(1));
         assert_eq!(
             catalog.find(name::JOINT_COUNT).map(|o| o.category),
             Some(OpCategory::Query)
