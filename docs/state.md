@@ -2,9 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (D-0 worker handoff; before that the planning
-session, merged with orchestrator's #238 update; order revised per owner
-direction, `docs/unified-surface-plan.md`).
+Last updated: 2026-11-17 (after D-0 #240, the plan revision #239 and review
+decisions #241; order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -12,39 +11,34 @@ direction, `docs/unified-surface-plan.md`).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** D-0, then D-1. **4b-1 is not in flight and item 1 below is
-  void:** GitHub had no branch and no PR for it on 2026-11-17, so it moved
-  to 5b and its verbs are written once, on the registry
-  (`docs/review/archive.ron`, `order-4b-1`). Recently merged: **5-1** (#236,
-  typed quantities, format v7) and **4b-0** (#238, review mode:
-  `cargo run -- --review`, questions/answers in `docs/review/`, process in
-  `orchestration.md` § Review mode; no question is open).
+- **Now:** **D-1** Bevy 0.20 stack (branch `claude/d-1-bevy-0-20-stack`).
+  Recently merged: **D-0** (#240, rustc 1.100.0), the plan revision (#239),
+  **4b-0b** (#241, review decisions), **5-1** (#236) and **4b-0** (#238,
+  review mode: `cargo run -- --review`; no question is open).
+- **4b-1 was not in flight:** GitHub had no branch and no PR for it on
+  2026-11-17. It moved to step 4; its verbs are written once, on the
+  registry (`docs/review/archive.ron`, `order-4b-1`).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
-  1. **4b-1** group op surface (in flight; adds `set-color`, which fixes
-     review scenes re-rolling colours).
-  2. **D-0** toolchain bump to 1.100.0: **PR open** (branch
-     `claude/d-0-toolchain-1-100`; it ran before 4b-1, see its Outcome).
-     Bevy 0.20 needs rustc ≥ 1.97.1.
-  3. **D-1** Bevy 0.20 stack (brief ready).
-  4. **U-1** `gradiance-op`: one declaration per operation (brief ready;
+  1. **D-1** Bevy 0.20 stack (in work).
+  2. **U-1** `gradiance-op`: one declaration per operation (brief ready;
      revised 2026-11-17, `unified-surface-plan.md` § 13: five operations,
      `OpOutput`, snapshot stays above `gradiance-op`, one decoder).
-  5. **U-2** migrate all verbs (4b-1's group verbs included), menus, keys
-     onto the registry (brief at U-1 handoff).
-  5b. **4b-1** group op surface, on the registry (adds `set-color`, which
+  3. **U-2** migrate all verbs, menus and the key link table onto the
+     registry (brief at U-1 handoff).
+  4. **4b-1** group op surface, on the registry (adds `set-color`, which
      fixes review scenes re-rolling colours).
-  6. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
+  5. **U-3** widget registry + `ui.inspect` + `ui.screenshot`;
      **U-4** in-app input injection; **U-5** snapshot tests on lavapipe.
-  7. **4b-2** groups panel (on the new registry).
-  8. **U-6** CLI + MCP server.
-  9. **U-7** theme tokens, Blender-leaning, together with **4b-3** art
+  6. **4b-2** groups panel (on the new registry).
+  7. **U-6** CLI + MCP server.
+  8. **U-7** theme tokens, Blender-leaning, together with **4b-3** art
      direction; then **4b-4** scaled defaults.
-  10. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
-  11. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
+  9. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
+  10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
-  12. **Phase 6** (testing & diagnostics).
-  13. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
+  11. **Phase 6** (testing & diagnostics).
+  12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
       **D-2** egui 0.37 once bevy_egui ships it.
 - **Owner rulings in force:**
   - **Scoped work** (2026-11-17; revises "no unbriefed work" of 2026-11-13).
