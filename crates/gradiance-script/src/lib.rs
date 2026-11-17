@@ -27,7 +27,8 @@
 //!   read-total geometric queries), and runs the exclusive `run_scripts` system
 //!   that dispatches script-emitted operation records through the intent bus
 //!   (the World-integration constraint — scripts emit intent *data*, never
-//!   `&mut World`; reads come from a per-run [`bridge::SceneView`] snapshot).
+//!   `&mut World`; reads come from a per-run
+//!   [`SceneSnapshot`](gradiance_command::snapshot::SceneSnapshot)).
 //!
 //! - [`remote`] — the **external control surface**: Bevy's remote protocol
 //!   (JSON-RPC over HTTP, localhost, off unless `--remote`) bound to the

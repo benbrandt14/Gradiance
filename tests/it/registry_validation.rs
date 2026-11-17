@@ -5,19 +5,26 @@
 use crate::harness::headless_app;
 use bevy::prelude::*;
 use gradiance::domain::settings::{CameraSettings, SimSettings};
-use gradiance::script::bridge::{IntentDispatch, ScriptInputs, ScriptLog, edit_bindings};
+use gradiance::script::bridge::{
+    IntentDispatch, OperationRegistry, ScriptInputs, ScriptLog, edit_bindings,
+};
 use gradiance::script::registry::{
     CAMERA_SETTING_PATHS, OpCategory, OperationCatalog, SIM_SETTING_PATHS,
 };
 use std::collections::BTreeSet;
 
-/// Every op the catalog advertises is actually bound in the VM: evaluating
-/// the bare symbol must succeed (an unbound symbol is a steel eval error).
-/// This is the direct catalog ↔ builtin drift check.
+/// Every op the catalog advertises — the built-in rows and the registry
+/// operations it projects — is actually bound in the VM: evaluating the bare
+/// symbol must succeed (an unbound symbol is a steel eval error). This is the
+/// direct catalog ↔ builtin drift check.
 #[test]
 fn every_catalog_op_is_a_bound_vm_symbol() {
     let mut app = headless_app();
-    let catalog = OperationCatalog::builtin();
+    let catalog = app.world().resource::<OperationRegistry>().0.clone();
+    assert!(
+        catalog.find("spawn-box").is_some(),
+        "the surfaced catalog lists the registry operations"
+    );
     for op in catalog.ops() {
         app.world_mut()
             .resource_mut::<ScriptInputs>()

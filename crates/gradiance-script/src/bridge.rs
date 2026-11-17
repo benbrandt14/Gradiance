@@ -24,7 +24,7 @@
 //!
 //! The same `Send + Sync` constraint blocks a builtin from reading `&World`
 //! too. The read half of the governance model (`docs/script-lisp-decision.md`)
-//! is served by a [`SceneView`]: [`run_scripts`] snapshots the committed scene
+//! is served by a [`SceneSnapshot`]: [`run_scripts`] snapshots the committed scene
 //! into a shared buffer before running a source, and the query builtins read
 //! that buffer. Reads therefore observe *last-committed* state (a script's own
 //! edits, being pending intents, land the same frame but after this system) —
@@ -32,7 +32,7 @@
 //! also use.
 //!
 //! Because `Reflect: Send + Sync`, the op queue (`Vec<Box<dyn Reflect>>`) and
-//! the `SceneView` are `Send + Sync` and a builtin may capture them; the steel
+//! the `SceneSnapshot` are `Send + Sync` and a builtin may capture them; the steel
 //! engine itself is the cold-path VM and lives as a `NonSend` resource on the
 //! main thread, so it never needs to be `Send`.
 
@@ -43,24 +43,23 @@ use crate::registry::{OperationCatalog, name};
 use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use gradiance_command::CommandDispatchSet;
 use gradiance_command::intent::{
-    BooleanIntent, CommitTransformIntent, CutIntent, DeleteIntent, DeleteJointIntent, GroupIntent,
-    MergeIntent, PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
-    TransformChange, UndoIntent, UngroupIntent,
+    BooleanIntent, CutIntent, DeleteIntent, DeleteJointIntent, GroupIntent, MergeIntent,
+    PropertyEditIntent, RedoIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent, UngroupIntent,
 };
+use gradiance_command::ops::spawned_body_record;
 use gradiance_command::property::{PropertyChange, PropertyValue};
+use gradiance_command::snapshot::SceneSnapshot;
 use gradiance_core::ids::StableId;
 use gradiance_core::script_tools::{ScriptToolFired, ScriptToolSpec, ScriptTools};
 use gradiance_core::units::PosRot;
-use gradiance_domain::Body;
-use gradiance_domain::appearance::Appearance;
-use gradiance_domain::depth::DepthBand;
 use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::settings::{CameraSettings, SimSettings};
 use gradiance_domain::shape::{CsgOp, ShapeDef};
 use gradiance_domain::signal::{ComputedSignal, SignalExpr, SignalParam};
-use gradiance_geometry::sdf;
+use gradiance_op::{OpContext, OpEntry, OpError, OpIdSource, OpOutput, OpRegistry};
 use gradiance_scene::BodyRecord;
+use steel::rerrs::{ErrorKind, SteelErr};
 
 /// A `defparam` / `defsignal` declaration queued by a script builtin, drained
 /// in [`run_scripts`] into the `SignalParams` / `ComputedSignals` resources.
@@ -80,14 +79,23 @@ use steel::rvals::SteelVal;
 use steel::steel_vm::engine::Engine;
 use steel::steel_vm::register_fn::RegisterFn;
 
-/// A queue of script-emitted operation records (reflected intent values),
-/// shared between the steel builtins (producers) and the exclusive
-/// [`run_scripts`] system (consumer).
-type OpQueue = Arc<Mutex<Vec<Box<dyn Reflect>>>>;
+/// One write a verb queued, in call order.
+enum Queued {
+    /// A reflected intent from a hand-written verb, for [`IntentDispatch`].
+    Intent(Box<dyn Reflect>),
+    /// The output of a registry operation (`gradiance-op`), for
+    /// [`gradiance_op::apply`].
+    Op(&'static str, OpOutput),
+}
+
+/// A queue of script-emitted writes, shared between the steel builtins
+/// (producers) and the exclusive [`run_scripts`] system (consumer).
+type OpQueue = Arc<Mutex<Vec<Queued>>>;
 
 /// A read snapshot of the committed scene, shared between [`run_scripts`]
-/// (producer) and the query builtins (consumers).
-type SharedView = Arc<Mutex<SceneView>>;
+/// (producer) and the query builtins (consumers). The same value the run's
+/// [`OpContext`] holds: one snapshot per run for both kinds of verb.
+type SharedView = Arc<Mutex<Arc<SceneSnapshot>>>;
 
 /// One pending config write (a reflect-path + scalar) emitted by a config verb;
 /// applied to the settings resource after the run — the invariant-#4 seam, not
@@ -102,9 +110,6 @@ struct ConfigWrite {
 /// The settings resources the config verbs reach.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConfigTarget {
-    /// `SimSettings` (`sim-set`) — scene content, so a settled write is one
-    /// undo step via `commit_settings_edits`.
-    Sim,
     /// `CameraSettings` (`camera-set`) — workstation config, never undone.
     Camera,
 }
@@ -122,6 +127,8 @@ struct Shared {
     ops: OpQueue,
     /// Read snapshot of the committed scene → query verbs.
     view: SharedView,
+    /// The run pass's operation context → registry operations.
+    ctx: Arc<Mutex<Arc<OpContext>>>,
     /// Read mirror of `SimSettings` → `sim-get`.
     sim: Arc<Mutex<SimSettings>>,
     /// Read mirror of `CameraSettings` → `camera-get`.
@@ -147,8 +154,9 @@ struct Shared {
     /// UI each frame, because panel state lives in `gradiance-ui` and the
     /// script layer sits below it.
     panel_states: Arc<Mutex<HashMap<String, bool>>>,
-    /// The operation catalog → the `ops`/`describe` meta verbs.
-    catalog: Arc<OperationCatalog>,
+    /// The operation catalog → the `ops`/`describe` meta verbs. Refreshed
+    /// when registry operations are bound.
+    catalog: Arc<Mutex<OperationCatalog>>,
     /// The world-space point the current run's action was invoked at →
     /// `action-x`/`action-y`. Set by [`run_scripts`] around one run only.
     action_point: Arc<Mutex<Option<Vec2>>>,
@@ -167,7 +175,8 @@ impl Shared {
     fn new() -> Self {
         Self {
             ops: Arc::new(Mutex::new(Vec::new())),
-            view: Arc::new(Mutex::new(SceneView::default())),
+            view: Arc::new(Mutex::new(Arc::new(SceneSnapshot::default()))),
+            ctx: Arc::new(Mutex::new(Arc::new(OpContext::new(OpIdSource::Random)))),
             sim: Arc::new(Mutex::new(SimSettings::default())),
             camera: Arc::new(Mutex::new(CameraSettings::default())),
             config: Arc::new(Mutex::new(Vec::new())),
@@ -178,7 +187,7 @@ impl Shared {
             labels: Arc::new(Mutex::new(Vec::new())),
             panel_requests: Arc::new(Mutex::new(Vec::new())),
             panel_states: Arc::new(Mutex::new(HashMap::new())),
-            catalog: Arc::new(OperationCatalog::builtin()),
+            catalog: Arc::new(Mutex::new(OperationCatalog::builtin())),
             action_point: Arc::new(Mutex::new(None)),
             tools: Arc::new(Mutex::new(Vec::new())),
             tool_points: Arc::new(Mutex::new(None)),
@@ -432,6 +441,14 @@ fn watch_scripts(
 #[derive(Resource, Default)]
 pub struct OperationRegistry(pub OperationCatalog);
 
+/// Rebuilds the surfaced catalog when the operation registry changes, so the
+/// console and the remote catalog list the registry's verbs too.
+fn sync_catalog(registry: Res<OpRegistry>, mut catalog: ResMut<OperationRegistry>) {
+    if registry.is_changed() {
+        catalog.0 = OperationCatalog::with_registry(&registry);
+    }
+}
+
 /// One entry in the console log: a submitted source and its outcome.
 #[derive(Debug, Clone)]
 pub struct ScriptEntry {
@@ -520,219 +537,6 @@ pub struct PanelRequest {
 #[derive(Resource, Default, Debug)]
 pub struct PanelStates(pub Vec<(String, bool)>);
 
-/// One body in a [`SceneView`] snapshot (world pose + authored shape).
-struct BodyView {
-    /// Durable identity — what an edit verb names as its target. Raw `Entity`
-    /// is never cross-referenced (invariant 3), and the snapshot outlives the
-    /// frame it was taken in, so the id is the only safe handle here.
-    id: StableId,
-    /// Authored physics — the *old* half of a property edit.
-    ///
-    /// `PropertyChange` carries both ends so it can reverse itself, and the
-    /// script layer has no live World access at verb time (the VM runs inside
-    /// one exclusive system, reading this snapshot). So the values a
-    /// `set-*` verb might change have to be *in* the snapshot; they double as
-    /// the `body-friction`-style reads, which is the read-total half.
-    physics: BodyPhysics,
-    pos: Vec2,
-    rot: f32,
-    shape: ShapeDef,
-    touching: usize,
-}
-
-impl BodyView {
-    /// Whether the world point `p` lies inside this body's shape (exact SDF
-    /// containment, transforming the point into the body's local frame).
-    fn contains(&self, p: Vec2) -> bool {
-        let local = Vec2::from_angle(-self.rot).rotate(p - self.pos);
-        sdf::eval(&self.shape, local) <= 0.0
-    }
-}
-
-/// A read-only snapshot of the committed scene, refreshed once per
-/// [`run_scripts`] pass. Query builtins read from this — they cannot hold
-/// `&World` — giving scripts the read-total half of the governance model with
-/// no mutation path. Bodies are ordered by id so an index is stable across a
-/// run.
-#[derive(Default)]
-pub struct SceneView {
-    bodies: Vec<BodyView>,
-    /// The committed scene's joints, in `StableId` order. Ids rather than a
-    /// count so `delete-joint` can name one, using the same index vocabulary
-    /// the body verbs use.
-    joints: Vec<StableId>,
-}
-
-impl SceneView {
-    /// Number of bodies.
-    fn count(&self) -> f64 {
-        self.bodies.len() as f64
-    }
-
-    /// X of the `i`-th body, or NaN if out of range.
-    fn x(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.x))
-    }
-
-    /// Y of the `i`-th body, or NaN if out of range.
-    fn y(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.y))
-    }
-
-    /// Rotation (radians) of the `i`-th body, or NaN if out of range.
-    fn rot(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.rot))
-    }
-
-    /// Identity of the `i`-th body — the target an edit verb names.
-    fn id(&self, i: usize) -> Option<StableId> {
-        self.bodies.get(i).map(|b| b.id)
-    }
-
-    /// Identity **and pose** of the `i`-th body. Joint anchors are authored in
-    /// each body's *local* space, so a verb that places one needs the pose to
-    /// convert, exactly as the connector tool does.
-    fn body(&self, i: usize) -> Option<(StableId, PosRot)> {
-        self.bodies.get(i).map(|b| {
-            (
-                b.id,
-                PosRot {
-                    pos: b.pos,
-                    rot: b.rot,
-                },
-            )
-        })
-    }
-
-    /// Number of authored joints.
-    fn joint_count(&self) -> f64 {
-        self.joints.len() as f64
-    }
-
-    /// Identity of the `i`-th joint.
-    fn joint_id(&self, i: usize) -> Option<StableId> {
-        self.joints.get(i).copied()
-    }
-
-    /// The authored physics of the `i`-th body.
-    fn physics(&self, i: usize) -> Option<&BodyPhysics> {
-        self.bodies.get(i).map(|b| &b.physics)
-    }
-
-    /// How many bodies contain the world point `p`.
-    fn count_at(&self, p: Vec2) -> f64 {
-        self.bodies.iter().filter(|b| b.contains(p)).count() as f64
-    }
-
-    /// Index of the body whose centre is nearest `p`, or -1 if the scene is
-    /// empty.
-    fn nearest_at(&self, p: Vec2) -> f64 {
-        self.bodies
-            .iter()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| {
-                a.pos
-                    .distance_squared(p)
-                    .total_cmp(&b.pos.distance_squared(p))
-            })
-            .map_or(-1.0, |(i, _)| i as f64)
-    }
-
-    /// Distance from `p` to the nearest body centre, or -1 if the scene is empty.
-    fn nearest_dist(&self, p: Vec2) -> f64 {
-        self.bodies
-            .iter()
-            .map(|b| b.pos.distance(p))
-            .min_by(f32::total_cmp)
-            .map_or(-1.0, f64::from)
-    }
-
-    /// Index of the first body (id order) whose shape contains `p`, or -1.
-    fn index_at(&self, p: Vec2) -> f64 {
-        self.bodies
-            .iter()
-            .position(|b| b.contains(p))
-            .map_or(-1.0, |i| i as f64)
-    }
-
-    /// How many bodies the `i`-th body is touching, or NaN if out of range.
-    fn touch_count(&self, i: usize) -> f64 {
-        self.bodies.get(i).map_or(f64::NAN, |b| b.touching as f64)
-    }
-}
-
-/// Snapshots the committed scene (bodies ordered by id) for the read builtins.
-fn snapshot_scene(world: &mut World) -> SceneView {
-    // Touching counts per body entity (one pass over the contact graph).
-    let mut touch: HashMap<Entity, usize> = HashMap::new();
-    if let Some(contacts) = world.get_resource::<avian2d::prelude::ContactGraph>() {
-        for pair in contacts
-            .iter_active_touching()
-            .chain(contacts.iter_sleeping_touching())
-        {
-            for entity in [pair.collider1, pair.collider2] {
-                *touch.entry(entity).or_default() += 1;
-            }
-        }
-    }
-    // Authored physics is spread across avian components (that is the
-    // de-adapter collapse — `docs/physics-deadapter-decision.md`), so the
-    // snapshot re-gathers them into the `BodyPhysics` bundle the records use.
-    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize, BodyPhysics)> = world
-        .query_filtered::<(
-            Entity,
-            &StableId,
-            &Transform,
-            &ShapeDef,
-            Option<&avian2d::prelude::RigidBody>,
-            Option<&avian2d::prelude::Friction>,
-            Option<&avian2d::prelude::Restitution>,
-            Option<&avian2d::prelude::ColliderDensity>,
-        ), With<Body>>()
-        .iter(world)
-        .map(
-            |(entity, id, transform, shape, rigid_body, friction, restitution, density)| {
-                let pose = PosRot::from_transform(transform);
-                let touching = touch.get(&entity).copied().unwrap_or(0);
-                // The components are `Option` so that a body missing one is
-                // still *in* the snapshot: making them required would silently
-                // drop it from `body-count` and every index after it, which is
-                // a far worse failure than reading a default.
-                let defaults = BodyPhysics::default();
-                let physics = BodyPhysics {
-                    rigid_body: rigid_body.copied().unwrap_or(defaults.rigid_body),
-                    friction: friction.copied().unwrap_or(defaults.friction),
-                    restitution: restitution.copied().unwrap_or(defaults.restitution),
-                    density: density.copied().unwrap_or(defaults.density),
-                    ..defaults
-                };
-                (*id, pose.pos, pose.rot, shape.clone(), touching, physics)
-            },
-        )
-        .collect();
-    rows.sort_by_key(|(id, ..)| id.0);
-    let mut joints: Vec<StableId> = world
-        .query_filtered::<&StableId, With<gradiance_domain::Joint>>()
-        .iter(world)
-        .copied()
-        .collect();
-    joints.sort_by_key(|id| id.0);
-    SceneView {
-        joints,
-        bodies: rows
-            .into_iter()
-            .map(|(id, pos, rot, shape, touching, physics)| BodyView {
-                id,
-                physics,
-                pos,
-                rot,
-                shape,
-                touching,
-            })
-            .collect(),
-    }
-}
-
 /// Routes a reflected intent value to its `Messages<T>` bus. This is the
 /// operation registry's dispatch half: a script names an op, the exclusive
 /// system routes the reflected value to the right intent channel. Registering
@@ -794,21 +598,20 @@ impl EditBinding {
     }
 }
 
-/// Every Edit-category operation and the intent it emits — one row per verb.
+/// Every hand-written Edit-category verb and the intent it emits — one row
+/// per verb. Registry operations (`gradiance-op`) are not here: they lower
+/// through their own declaration.
 pub fn edit_bindings() -> Vec<EditBinding> {
     vec![
         EditBinding::new::<CutIntent>(name::CUT),
-        EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_CIRCLE),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_GROUND),
         EditBinding::new::<SpawnBodyIntent>(name::SPAWN_BOX_ROT),
         EditBinding::new::<DeleteIntent>(name::DELETE),
-        EditBinding::new::<UndoIntent>(name::UNDO),
         EditBinding::new::<RedoIntent>(name::REDO),
         EditBinding::new::<SpawnJointIntent>(name::HINGE),
         EditBinding::new::<SpawnJointIntent>(name::SLIDER),
         EditBinding::new::<SpawnJointIntent>(name::SPRING),
-        EditBinding::new::<CommitTransformIntent>(name::PLACE),
         EditBinding::new::<PropertyEditIntent>(name::SET_FRICTION),
         EditBinding::new::<PropertyEditIntent>(name::SET_RESTITUTION),
         EditBinding::new::<PropertyEditIntent>(name::SET_DENSITY),
@@ -831,6 +634,8 @@ pub fn edit_bindings() -> Vec<EditBinding> {
 pub struct ScriptEngine {
     engine: Engine,
     shared: Shared,
+    /// How many [`OpRegistry`] entries are bound as verbs.
+    bound_ops: usize,
 }
 
 impl ScriptEngine {
@@ -838,7 +643,28 @@ impl ScriptEngine {
         let shared = Shared::new();
         let mut engine = Engine::new();
         register_builtins(&mut engine, &shared);
-        Self { engine, shared }
+        Self {
+            engine,
+            shared,
+            bound_ops: 0,
+        }
+    }
+
+    /// Binds each registry operation not bound yet as a Lisp verb, and
+    /// refreshes the catalog the meta verbs read. Layers register operations
+    /// at app build; binding at the first run catches every one of them.
+    fn bind_ops(&mut self, registry: &OpRegistry) {
+        let entries = registry.entries();
+        if entries.len() <= self.bound_ops {
+            return;
+        }
+        for entry in &entries[self.bound_ops..] {
+            bind_op(&mut self.engine, &self.shared, entry.clone());
+        }
+        self.bound_ops = entries.len();
+        if let Ok(mut catalog) = self.shared.catalog.lock() {
+            *catalog = OperationCatalog::with_registry(registry);
+        }
     }
 
     /// Runs one script source under the [wall-clock budget](crate::budget),
@@ -925,7 +751,7 @@ fn index_arg(v: &SteelVal) -> Option<usize> {
 /// quietly drops one member would author a *different* set than the script
 /// says, and nothing in the scene would show it. `verb` prefixes the message
 /// so the console names the call that failed.
-fn body_ids_arg(verb: &str, arg: &SteelVal, view: &SceneView) -> Result<Vec<StableId>, String> {
+fn body_ids_arg(verb: &str, arg: &SteelVal, view: &SceneSnapshot) -> Result<Vec<StableId>, String> {
     let SteelVal::ListV(items) = arg else {
         return Err(format!(
             "{verb}: expected a list of body indices, got {arg}"
@@ -936,12 +762,9 @@ fn body_ids_arg(verb: &str, arg: &SteelVal, view: &SceneView) -> Result<Vec<Stab
         let index = steel_to_f64(item)
             .filter(|n| n.is_finite() && *n >= 0.0 && n.fract() == 0.0)
             .ok_or_else(|| format!("{verb}: {item} is not a body index"))?;
-        let id = view.id(index as usize).ok_or_else(|| {
-            format!(
-                "{verb}: no body {index} (the scene has {})",
-                view.bodies.len()
-            )
-        })?;
+        let id = view
+            .id(index as usize)
+            .ok_or_else(|| format!("{verb}: no body {index} (the scene has {})", view.len()))?;
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -952,31 +775,15 @@ fn body_ids_arg(verb: &str, arg: &SteelVal, view: &SceneView) -> Result<Vec<Stab
 /// Pushes one reflected operation record onto the shared queue.
 fn emit(ops: &OpQueue, op: Box<dyn Reflect>) {
     if let Ok(mut queue) = ops.lock() {
-        queue.push(op);
+        queue.push(Queued::Intent(op));
     }
 }
 
-/// A body of `shape`, styled like a tool-drawn one, centered at `(x, y)` — the record a
-/// `spawn-*` verb emits.
+/// A body of `shape` centred at `(x, y)` with a fresh id: the record a
+/// hand-written `spawn-*` verb emits. Same rule as the registry's
+/// `body.spawn_box` ([`spawned_body_record`]).
 fn body_record(shape: ShapeDef, x: f64, y: f64) -> BodyRecord {
-    let id = StableId::new();
-    BodyRecord {
-        id,
-        pose: PosRot {
-            pos: Vec2::new(x as f32, y as f32),
-            rot: 0.0,
-        },
-        shape,
-        physics: BodyPhysics::default(),
-        // The tools' rule, not a grey default: a scripted scene and a
-        // hand-built one are indistinguishable.
-        appearance: Appearance::for_id(id),
-        depth: DepthBand::default(),
-        layers: None,
-        groups: Vec::new(),
-        field: None,
-        tracer: None,
-    }
+    spawned_body_record(StableId::new(), shape, Vec2::new(x as f32, y as f32))
 }
 
 /// A fixed ground half-plane through `(x, y)`, tilted by `angle` radians — the
@@ -987,6 +794,51 @@ fn ground_record(x: f64, y: f64, angle: f64) -> BodyRecord {
     record.pose.rot = angle as f32;
     record.physics = BodyPhysics::fixed();
     record
+}
+
+/// Binds one registry operation as a Lisp verb, generated from its
+/// declaration: the arguments map to the named params by declared field order
+/// (the same mapping every doorway uses), the registry's one serde decoder
+/// reads them, and the operation lowers against the run pass's context. The
+/// output joins the run's queue, so a failed run discards it like any other
+/// write. This is the whole Lisp-specific part: no decoder of its own.
+fn bind_op(engine: &mut Engine, shared: &Shared, entry: OpEntry) {
+    let ctx = Arc::clone(&shared.ctx);
+    let ops = Arc::clone(&shared.ops);
+    let lisp = entry.meta.lisp;
+    let call = move |args: &[SteelVal]| -> steel::rvals::Result<SteelVal> {
+        let failed = |err: OpError| SteelErr::new(ErrorKind::Generic, format!("{lisp}: {err}"));
+        let params = entry
+            .named(args.iter().map(steel_to_json).collect())
+            .map_err(failed)?;
+        let ctx = ctx.lock().map(|ctx| Arc::clone(&ctx)).map_err(|_| {
+            SteelErr::new(
+                ErrorKind::Generic,
+                format!("{lisp}: the operation context is unavailable"),
+            )
+        })?;
+        let output = entry.lower(params, &ctx).map_err(failed)?;
+        let value = output.value().map_or(SteelVal::Void, json_to_steel);
+        if let Ok(mut queue) = ops.lock() {
+            queue.push(Queued::Op(entry.meta.id, output));
+        }
+        Ok(value)
+    };
+    engine.register_value(lisp, SteelVal::anonymous_boxed_function(Arc::new(call)));
+}
+
+/// A registry operation's return value as steel data: the inverse of
+/// [`steel_to_json`] for the shapes an operation returns.
+fn json_to_steel(value: &serde_json::Value) -> SteelVal {
+    use serde_json::Value;
+    match value {
+        Value::Null => SteelVal::Void,
+        Value::Bool(b) => SteelVal::BoolV(*b),
+        Value::Number(n) => SteelVal::NumV(n.as_f64().unwrap_or(f64::NAN)),
+        Value::String(text) => SteelVal::StringV(text.as_str().into()),
+        Value::Array(items) => SteelVal::ListV(items.iter().map(json_to_steel).collect()),
+        Value::Object(_) => SteelVal::StringV(value.to_string().into()),
+    }
 }
 
 /// Registers the scene-verb builtins on `engine`. Edit verbs capture the op
@@ -1033,28 +885,6 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
                         width: width as f32,
                     }),
                 );
-            }
-        },
-    );
-
-    // `(spawn-box x y w h)` — author a box body centered at (x, y). Returns
-    // the new body's handle (its stable id), so `(define b (spawn-box …))`
-    // gives the script a name for it.
-    let box_ops = Arc::clone(ops);
-    engine.register_fn(
-        name::SPAWN_BOX,
-        move |x: SteelVal, y: SteelVal, w: SteelVal, h: SteelVal| -> String {
-            if let Some([x, y, w, h]) = nums([&x, &y, &w, &h]) {
-                let shape = ShapeDef::Box {
-                    width: w as f32,
-                    height: h as f32,
-                };
-                let record = body_record(shape, x, y);
-                let handle = record.id.0.to_string();
-                emit(&box_ops, Box::new(SpawnBodyIntent { record }));
-                handle
-            } else {
-                String::new()
             }
         },
     );
@@ -1118,14 +948,9 @@ fn register_edit_verbs(engine: &mut Engine, ops: &OpQueue) {
     );
 }
 
-/// Read-total geometric queries — each reads the [`SceneView`] snapshot and
+/// Read-total geometric queries — each reads the [`SceneSnapshot`] snapshot and
 /// returns a number, mutating nothing.
 fn register_query_verbs(engine: &mut Engine, view: &SharedView) {
-    let v = Arc::clone(view);
-    engine.register_fn(name::BODY_COUNT, move || -> f64 {
-        v.lock().map_or(f64::NAN, |view| view.count())
-    });
-
     let v = Arc::clone(view);
     engine.register_fn(name::JOINT_COUNT, move || -> f64 {
         v.lock().map_or(f64::NAN, |view| view.joint_count())
@@ -1212,31 +1037,20 @@ fn register_config_verbs(
     sim: &Arc<Mutex<SimSettings>>,
     camera: &Arc<Mutex<CameraSettings>>,
 ) {
-    register_config_pair(
-        engine,
-        config,
-        sim,
-        (name::SIM_GET, name::SIM_SET),
-        ConfigTarget::Sim,
-    );
-    register_config_pair(
+    // `sim-set` is the registry's `sim.set`; only the read is bound here.
+    register_config_get(engine, sim, name::SIM_GET);
+    register_config_get(engine, camera, name::CAMERA_GET);
+    register_config_set(
         engine,
         config,
         camera,
-        (name::CAMERA_GET, name::CAMERA_SET),
+        name::CAMERA_SET,
         ConfigTarget::Camera,
     );
 }
 
-/// One `(…-get path)` / `(…-set path value)` pair over a settings mirror.
-fn register_config_pair<T: Reflect + Clone>(
-    engine: &mut Engine,
-    config: &ConfigQueue,
-    mirror: &Arc<Mutex<T>>,
-    (get, set): (&'static str, &'static str),
-    target: ConfigTarget,
-) {
-    // `(…-get path)` — read a setting by reflect-path.
+/// One `(…-get path)` over a settings mirror: read a setting by reflect-path.
+fn register_config_get<T: Reflect>(engine: &mut Engine, mirror: &Arc<Mutex<T>>, get: &'static str) {
     let m = Arc::clone(mirror);
     engine.register_fn(get, move |path: String| -> f64 {
         m.lock()
@@ -1244,7 +1058,16 @@ fn register_config_pair<T: Reflect + Clone>(
             .and_then(|settings| read_path(&*settings, &path))
             .unwrap_or(f64::NAN)
     });
+}
 
+/// One `(…-set path value)` over a settings mirror.
+fn register_config_set<T: Reflect + Clone>(
+    engine: &mut Engine,
+    config: &ConfigQueue,
+    mirror: &Arc<Mutex<T>>,
+    set: &'static str,
+    target: ConfigTarget,
+) {
     // `(…-set path value)` — queue a config write to a setting. The write is
     // trialled on a copy of the mirror first, so a bad path or a non-numeric
     // value is a script error (logged and shown in the console) rather than a
@@ -1508,12 +1331,8 @@ fn register_boolean_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView)
 /// these all share one property: they name their target by index against the
 /// run's snapshot, and they need the *old* value to be reversible.
 fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedView) {
-    // `(undo)` / `(redo)` — the history ops, the same steps Edit ▸ Undo/Redo
-    // take. No arguments and no targets: the stack knows what it did.
-    let undo_ops = Arc::clone(ops);
-    engine.register_fn(name::UNDO, move || {
-        emit(&undo_ops, Box::new(UndoIntent));
-    });
+    // `(redo)` — the same step Edit ▸ Redo takes. (`undo` is the registry's
+    // `edit.undo`.)
     let redo_ops = Arc::clone(ops);
     engine.register_fn(name::REDO, move || {
         emit(&redo_ops, Box::new(RedoIntent));
@@ -1582,38 +1401,6 @@ fn register_lifecycle_verbs(engine: &mut Engine, ops: &OpQueue, view: &SharedVie
             emit(&unjoin_ops, Box::new(DeleteJointIntent { id }));
         }
     });
-
-    // `(place i x y angle)` — move and rotate the i-th body. The *old* pose
-    // comes from the run's snapshot, which is what makes this one undoable
-    // step rather than a teleport: `CommitTransformCommand` needs both ends of
-    // the move to be able to reverse it.
-    let place_ops = Arc::clone(ops);
-    let place_view = Arc::clone(view);
-    engine.register_fn(
-        name::PLACE,
-        move |i: SteelVal, x: SteelVal, y: SteelVal, angle: SteelVal| {
-            if let Some([i, x, y, angle]) = nums([&i, &x, &y, &angle])
-                && i >= 0.0
-                && let Ok(view) = place_view.lock()
-                && let Some((id, old)) = view.body(i as usize)
-            {
-                let new = PosRot {
-                    pos: Vec2::new(x as f32, y as f32),
-                    rot: angle as f32,
-                };
-                // A move to where the body already is is not an edit; emitting
-                // it would put an empty step on the undo stack.
-                if new != old {
-                    emit(
-                        &place_ops,
-                        Box::new(CommitTransformIntent {
-                            changes: vec![TransformChange { id, old, new }],
-                        }),
-                    );
-                }
-            }
-        },
-    );
 }
 
 /// Set-shaped edits — `(group (list i …))` / `(ungroup (list i …))`.
@@ -1991,20 +1778,25 @@ fn register_signal_verbs(
 }
 
 /// Homoiconic introspection — the catalog reading itself.
-fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<OperationCatalog>) {
+fn register_meta_verbs(engine: &mut Engine, catalog: &Arc<Mutex<OperationCatalog>>) {
     // `(ops)` — a list of every registered operation name.
     let cat = Arc::clone(catalog);
     engine.register_fn(name::OPS, move || -> SteelVal {
-        SteelVal::ListV(cat.names().map(|n| SteelVal::StringV(n.into())).collect())
+        cat.lock().map_or(SteelVal::Void, |cat| {
+            SteelVal::ListV(cat.names().map(|n| SteelVal::StringV(n.into())).collect())
+        })
     });
 
     // `(describe name)` — the signature and doc of one operation, as text.
     let cat = Arc::clone(catalog);
     engine.register_fn(name::DESCRIBE, move |n: String| -> String {
-        cat.find(&n).map_or_else(
-            || format!("unknown op: {n}"),
-            |op| format!("{}  —  {}", op.signature, op.doc),
-        )
+        cat.lock()
+            .ok()
+            .and_then(|cat| {
+                cat.find(&n)
+                    .map(|op| format!("{}  —  {}", op.signature, op.doc))
+            })
+            .unwrap_or_else(|| format!("unknown op: {n}"))
     });
 }
 
@@ -2051,15 +1843,24 @@ pub fn run_scripts(world: &mut World) {
         return;
     }
 
-    // Refresh the read-total snapshots (scene + settings mirror) from committed
-    // state, releasing each engine borrow before touching the world.
-    if let Some(view) = world
-        .get_non_send::<ScriptEngine>()
-        .map(|e| Arc::clone(&e.shared.view))
+    // Bind registry operations added since the last pass.
+    if let Some(registry) = world.get_resource::<OpRegistry>().cloned()
+        && let Some(mut engine) = world.get_non_send_mut::<ScriptEngine>()
     {
-        let snapshot = snapshot_scene(world);
-        if let Ok(mut guard) = view.lock() {
+        engine.bind_ops(&registry);
+    }
+
+    // Refresh the read-total snapshots from committed state: one operation
+    // context for the whole pass (scripting rule 3), whose scene snapshot the
+    // hand-written query verbs read too.
+    let ctx = Arc::new(OpContext::build(world));
+    let snapshot = ctx.get_shared::<SceneSnapshot>().unwrap_or_default();
+    if let Some(engine) = world.get_non_send::<ScriptEngine>() {
+        if let Ok(mut guard) = engine.shared.view.lock() {
             *guard = snapshot;
+        }
+        if let Ok(mut guard) = engine.shared.ctx.lock() {
+            *guard = ctx;
         }
     }
     if let (Some(sim), Some(settings)) = (
@@ -2087,9 +1888,10 @@ pub fn run_scripts(world: &mut World) {
         run_one(world, run);
     }
 
-    // Drain the op queue (releasing the engine borrow first), then dispatch
-    // each edit record through its intent bus.
-    let ops: Vec<Box<dyn Reflect>> = world
+    // Drain the op queue (releasing the engine borrow first), then write each
+    // entry in call order: a hand-written verb's intent through its bus, a
+    // registry operation's output through `gradiance_op::apply`.
+    let ops: Vec<Queued> = world
         .get_non_send::<ScriptEngine>()
         .and_then(|engine| {
             engine
@@ -2100,12 +1902,17 @@ pub fn run_scripts(world: &mut World) {
                 .map(|mut q| std::mem::take(&mut *q))
         })
         .unwrap_or_default();
-    if !ops.is_empty() {
-        world.resource_scope(|world, dispatch: Mut<IntentDispatch>| {
-            for op in ops {
-                dispatch.apply(world, op);
+    for op in ops {
+        match op {
+            Queued::Intent(intent) => {
+                world.resource_scope(|world, dispatch: Mut<IntentDispatch>| {
+                    dispatch.apply(world, intent);
+                });
             }
-        });
+            Queued::Op(id, output) => {
+                gradiance_op::apply(world, id, output);
+            }
+        }
     }
 
     // Drain the config queue and apply each write to the settings resource (the
@@ -2128,9 +1935,6 @@ pub fn run_scripts(world: &mut World) {
         // its own resource, so a script that never calls `camera-set` leaves
         // `CameraSettings` change detection alone (and likewise for sim).
         let result = match write.target {
-            ConfigTarget::Sim => world
-                .get_resource_mut::<SimSettings>()
-                .map(|mut s| write_path(&mut *s, &write.path, write.value)),
             ConfigTarget::Camera => world
                 .get_resource_mut::<CameraSettings>()
                 .map(|mut s| write_path(&mut *s, &write.path, write.value)),
@@ -2445,6 +2249,8 @@ pub struct ScriptPlugin;
 
 impl Plugin for ScriptPlugin {
     fn build(&self, app: &mut App) {
+        // The registry operations the verbs are generated from.
+        gradiance_command::ops::install(app);
         app.init_resource::<ScriptInputs>();
         app.init_resource::<ScriptLog>();
         app.init_resource::<OperationRegistry>();
@@ -2465,7 +2271,12 @@ impl Plugin for ScriptPlugin {
         app.add_systems(Startup, load_startup_scripts);
         app.add_systems(
             Update,
-            (watch_scripts, run_scripts.before(CommandDispatchSet)).chain(),
+            (
+                sync_catalog,
+                watch_scripts,
+                run_scripts.before(CommandDispatchSet),
+            )
+                .chain(),
         );
     }
 }
@@ -2475,6 +2286,7 @@ mod tests {
     #![allow(clippy::float_cmp)]
     use super::*;
     use crate::registry::OpCategory;
+    use gradiance_command::snapshot::BodySnapshot;
 
     #[derive(Resource, Default)]
     struct Cuts(Vec<CutIntent>);
@@ -2514,9 +2326,9 @@ mod tests {
     }
 
     /// A snapshot of `n` bodies with fresh ids, in id order like the real one.
-    fn view_of(n: usize) -> SceneView {
-        let mut bodies: Vec<BodyView> = (0..n)
-            .map(|_| BodyView {
+    fn view_of(n: usize) -> SceneSnapshot {
+        let mut bodies: Vec<BodySnapshot> = (0..n)
+            .map(|_| BodySnapshot {
                 id: StableId::new(),
                 physics: BodyPhysics::default(),
                 pos: Vec2::ZERO,
@@ -2526,7 +2338,7 @@ mod tests {
             })
             .collect();
         bodies.sort_by_key(|b| b.id.0);
-        SceneView {
+        SceneSnapshot {
             bodies,
             joints: Vec::new(),
         }
@@ -2884,11 +2696,15 @@ mod tests {
     #[test]
     fn the_registry_resource_lists_every_catalog_op() {
         // The console reads this; it must equal the catalog the builtins bind
-        // against.
-        let app = bus_app();
+        // against, registry operations included (after the first update).
+        let mut app = bus_app();
+        app.update();
         let registry = app.world().resource::<OperationRegistry>();
-        assert!(registry.0.find(name::SPAWN_BOX).is_some());
-        assert!(registry.0.find(name::BODY_COUNT).is_some());
+        assert!(registry.0.find("spawn-box").is_some());
+        assert_eq!(
+            registry.0.find("body-count").map(|o| o.category),
+            Some(OpCategory::Query),
+        );
         assert_eq!(
             registry.0.find(name::CUT).map(|o| o.category),
             Some(OpCategory::Edit),

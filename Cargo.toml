@@ -72,6 +72,7 @@ egui_kittest = "=0.36.2"
 
 # Workspace members
 gradiance-core = { path = "crates/gradiance-core" }
+gradiance-op = { path = "crates/gradiance-op" }
 gradiance-kernel = { path = "crates/gradiance-kernel" }
 gradiance-units = { path = "crates/gradiance-units" }
 gradiance-geometry = { path = "crates/gradiance-geometry" }
@@ -128,6 +129,7 @@ workspace = true
 
 [dependencies]
 gradiance-core.workspace = true
+gradiance-op.workspace = true
 gradiance-kernel.workspace = true
 gradiance-optimize.workspace = true
 gradiance-units.workspace = true

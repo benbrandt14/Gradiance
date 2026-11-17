@@ -189,7 +189,10 @@ fn the_crate_dag_matches_the_architecture() {
         (
             "command",
             // units: commands rewire typed joint anchors / rest angles (5-1).
-            &["core", "domain", "geometry", "scene", "signal", "units"],
+            // op: the scene operations register here (U-1).
+            &[
+                "core", "domain", "geometry", "op", "scene", "signal", "units",
+            ],
         ),
         ("core", &[]),
         ("domain", &["core", "geometry", "units"]),
@@ -204,6 +207,8 @@ fn the_crate_dag_matches_the_architecture() {
             ],
         ),
         ("kernel", &[]),
+        // The operation registry (U-1): above core only.
+        ("op", &["core"]),
         ("optimize", &["core", "geometry"]),
         ("persist", &["command", "core", "scene"]),
         ("physics", &["core", "domain", "geometry", "units"]),
@@ -223,8 +228,9 @@ fn the_crate_dag_matches_the_architecture() {
         (
             "script",
             // units: the spring verb builds typed spring parameters (5-1).
+            // op: verbs are generated from the operation registry (U-1).
             &[
-                "command", "core", "domain", "geometry", "scene", "signal", "units",
+                "command", "core", "domain", "geometry", "op", "scene", "signal", "units",
             ],
         ),
         ("signal", &["core", "domain", "kernel", "physics"]),
@@ -236,6 +242,8 @@ fn the_crate_dag_matches_the_architecture() {
                 "domain",
                 "geometry",
                 "interaction",
+                // op: menu rows invoke registry operations by id (U-1).
+                "op",
                 "optimize",
                 "persist",
                 "physics",

@@ -1,0 +1,262 @@
+//! [`SceneSnapshot`]: the read-only mirror of the committed scene that the
+//! operation context carries (`docs/unified-surface-plan.md` § 13.2).
+//!
+//! It lives here, not in `gradiance-op`, because it names `ShapeDef` and
+//! `BodyPhysics`. One builder ([`snapshot_scene`]) serves every doorway, so
+//! "one snapshot per run" is one value, not one per surface.
+
+use bevy::prelude::*;
+use gradiance_core::ids::StableId;
+use gradiance_core::units::PosRot;
+use gradiance_domain::Body;
+use gradiance_domain::props::BodyPhysics;
+use gradiance_domain::shape::ShapeDef;
+use gradiance_geometry::sdf;
+use gradiance_op::{ResolveTarget, Target};
+use std::collections::HashMap;
+
+/// One body in a [`SceneSnapshot`] snapshot (world pose + authored shape).
+#[derive(Debug, Clone)]
+pub struct BodySnapshot {
+    /// Durable identity — what an edit verb names as its target. Raw `Entity`
+    /// is never cross-referenced (invariant 3), and the snapshot outlives the
+    /// frame it was taken in, so the id is the only safe handle here.
+    pub id: StableId,
+    /// Authored physics — the *old* half of a property edit.
+    ///
+    /// `PropertyChange` carries both ends so it can reverse itself, and the
+    /// script layer has no live World access at verb time (the VM runs inside
+    /// one exclusive system, reading this snapshot). So the values a
+    /// `set-*` verb might change have to be *in* the snapshot; they double as
+    /// the `body-friction`-style reads, which is the read-total half.
+    pub physics: BodyPhysics,
+    /// World position (metres).
+    pub pos: Vec2,
+    /// World rotation (radians).
+    pub rot: f32,
+    /// Authored shape, for point containment.
+    pub shape: ShapeDef,
+    /// How many bodies it touches (from avian's contact graph).
+    pub touching: usize,
+}
+
+impl BodySnapshot {
+    /// Whether the world point `p` lies inside this body's shape (exact SDF
+    /// containment, transforming the point into the body's local frame).
+    pub fn contains(&self, p: Vec2) -> bool {
+        let local = Vec2::from_angle(-self.rot).rotate(p - self.pos);
+        sdf::eval(&self.shape, local) <= 0.0
+    }
+}
+
+/// A read-only snapshot of the committed scene, built once per operation context
+/// ([`OpContext`](gradiance_op::OpContext)): once per script run pass, once
+/// per remote or menu invocation. Operations and the script query verbs read
+/// it (they cannot hold `&World`), giving every doorway the read-total half
+/// of the governance model with no mutation path. Bodies are ordered by id so an index is stable across a
+/// run.
+#[derive(Debug, Default, Clone)]
+pub struct SceneSnapshot {
+    /// The committed scene's bodies, in `StableId` order.
+    pub bodies: Vec<BodySnapshot>,
+    /// The committed scene's joints, in `StableId` order. Ids rather than a
+    /// count so `delete-joint` can name one, using the same index vocabulary
+    /// the body verbs use.
+    pub joints: Vec<StableId>,
+}
+
+impl SceneSnapshot {
+    /// Number of bodies.
+    pub fn count(&self) -> f64 {
+        self.bodies.len() as f64
+    }
+
+    /// X of the `i`-th body, or NaN if out of range.
+    pub fn x(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.x))
+    }
+
+    /// Y of the `i`-th body, or NaN if out of range.
+    pub fn y(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.pos.y))
+    }
+
+    /// Rotation (radians) of the `i`-th body, or NaN if out of range.
+    pub fn rot(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| f64::from(b.rot))
+    }
+
+    /// Identity of the `i`-th body — the target an edit verb names.
+    pub fn id(&self, i: usize) -> Option<StableId> {
+        self.bodies.get(i).map(|b| b.id)
+    }
+
+    /// Identity **and pose** of the `i`-th body. Joint anchors are authored in
+    /// each body's *local* space, so a verb that places one needs the pose to
+    /// convert, exactly as the connector tool does.
+    pub fn body(&self, i: usize) -> Option<(StableId, PosRot)> {
+        self.bodies.get(i).map(|b| {
+            (
+                b.id,
+                PosRot {
+                    pos: b.pos,
+                    rot: b.rot,
+                },
+            )
+        })
+    }
+
+    /// Number of authored joints.
+    pub fn joint_count(&self) -> f64 {
+        self.joints.len() as f64
+    }
+
+    /// Identity of the `i`-th joint.
+    pub fn joint_id(&self, i: usize) -> Option<StableId> {
+        self.joints.get(i).copied()
+    }
+
+    /// The authored physics of the `i`-th body.
+    pub fn physics(&self, i: usize) -> Option<&BodyPhysics> {
+        self.bodies.get(i).map(|b| &b.physics)
+    }
+
+    /// How many bodies contain the world point `p`.
+    pub fn count_at(&self, p: Vec2) -> f64 {
+        self.bodies.iter().filter(|b| b.contains(p)).count() as f64
+    }
+
+    /// Index of the body whose centre is nearest `p`, or -1 if the scene is
+    /// empty.
+    pub fn nearest_at(&self, p: Vec2) -> f64 {
+        self.bodies
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| {
+                a.pos
+                    .distance_squared(p)
+                    .total_cmp(&b.pos.distance_squared(p))
+            })
+            .map_or(-1.0, |(i, _)| i as f64)
+    }
+
+    /// Distance from `p` to the nearest body centre, or -1 if the scene is empty.
+    pub fn nearest_dist(&self, p: Vec2) -> f64 {
+        self.bodies
+            .iter()
+            .map(|b| b.pos.distance(p))
+            .min_by(f32::total_cmp)
+            .map_or(-1.0, f64::from)
+    }
+
+    /// Index of the first body (id order) whose shape contains `p`, or -1.
+    pub fn index_at(&self, p: Vec2) -> f64 {
+        self.bodies
+            .iter()
+            .position(|b| b.contains(p))
+            .map_or(-1.0, |i| i as f64)
+    }
+
+    /// How many bodies the `i`-th body is touching, or NaN if out of range.
+    pub fn touch_count(&self, i: usize) -> f64 {
+        self.bodies.get(i).map_or(f64::NAN, |b| b.touching as f64)
+    }
+}
+
+/// Snapshots the committed scene (bodies ordered by id) for the read builtins.
+pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
+    // Touching counts per body entity (one pass over the contact graph).
+    let mut touch: HashMap<Entity, usize> = HashMap::new();
+    if let Some(contacts) = world.get_resource::<avian2d::prelude::ContactGraph>() {
+        for pair in contacts
+            .iter_active_touching()
+            .chain(contacts.iter_sleeping_touching())
+        {
+            for entity in [pair.collider1, pair.collider2] {
+                *touch.entry(entity).or_default() += 1;
+            }
+        }
+    }
+    // Authored physics is spread across avian components (that is the
+    // de-adapter collapse — `docs/physics-deadapter-decision.md`), so the
+    // snapshot re-gathers them into the `BodyPhysics` bundle the records use.
+    let mut rows: Vec<(StableId, Vec2, f32, ShapeDef, usize, BodyPhysics)> = world
+        .query_filtered::<(
+            Entity,
+            &StableId,
+            &Transform,
+            &ShapeDef,
+            Option<&avian2d::prelude::RigidBody>,
+            Option<&avian2d::prelude::Friction>,
+            Option<&avian2d::prelude::Restitution>,
+            Option<&avian2d::prelude::ColliderDensity>,
+        ), With<Body>>()
+        .iter(world)
+        .map(
+            |(entity, id, transform, shape, rigid_body, friction, restitution, density)| {
+                let pose = PosRot::from_transform(transform);
+                let touching = touch.get(&entity).copied().unwrap_or(0);
+                // The components are `Option` so that a body missing one is
+                // still *in* the snapshot: making them required would silently
+                // drop it from `body-count` and every index after it, which is
+                // a far worse failure than reading a default.
+                let defaults = BodyPhysics::default();
+                let physics = BodyPhysics {
+                    rigid_body: rigid_body.copied().unwrap_or(defaults.rigid_body),
+                    friction: friction.copied().unwrap_or(defaults.friction),
+                    restitution: restitution.copied().unwrap_or(defaults.restitution),
+                    density: density.copied().unwrap_or(defaults.density),
+                    ..defaults
+                };
+                (*id, pose.pos, pose.rot, shape.clone(), touching, physics)
+            },
+        )
+        .collect();
+    rows.sort_by_key(|(id, ..)| id.0);
+    let mut joints: Vec<StableId> = world
+        .query_filtered::<&StableId, With<gradiance_domain::Joint>>()
+        .iter(world)
+        .copied()
+        .collect();
+    joints.sort_by_key(|id| id.0);
+    SceneSnapshot {
+        joints,
+        bodies: rows
+            .into_iter()
+            .map(|(id, pos, rot, shape, touching, physics)| BodySnapshot {
+                id,
+                physics,
+                pos,
+                rot,
+                shape,
+                touching,
+            })
+            .collect(),
+    }
+}
+
+impl SceneSnapshot {
+    /// Number of bodies, as a count.
+    pub fn len(&self) -> usize {
+        self.bodies.len()
+    }
+
+    /// Whether the scene has no body.
+    pub fn is_empty(&self) -> bool {
+        self.bodies.is_empty()
+    }
+}
+
+impl ResolveTarget for SceneSnapshot {
+    /// Bodies: an index in id order, an id that exists, or the first body
+    /// whose shape holds the point. The snapshot holds no selection, so
+    /// [`Target::Selection`] names nothing here.
+    fn resolve(&self, target: &Target) -> Option<StableId> {
+        match *target {
+            Target::Index(i) => usize::try_from(i).ok().and_then(|i| self.id(i)),
+            Target::Id(id) => self.bodies.iter().any(|b| b.id == id).then_some(id),
+            Target::At(p) => self.bodies.iter().find(|b| b.contains(p)).map(|b| b.id),
+            Target::Selection => None,
+        }
+    }
+}

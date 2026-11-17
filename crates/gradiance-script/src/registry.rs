@@ -14,6 +14,9 @@
 //! [`OperationRegistry`](crate::bridge::OperationRegistry) resource is
 //! this catalog surfaced into the ECS.
 
+use gradiance_op::{OpRegistry, Seam};
+use std::borrow::Cow;
+
 /// Canonical operation names, shared by the catalog and the steel registration
 /// so the two cannot drift. Referencing one `const` in both places makes a
 /// mismatch a compile-time impossibility rather than a runtime bug.
@@ -22,16 +25,12 @@ pub mod name {
     /// [`intent::name`](gradiance_command::intent::name) so verb, intent, and
     /// command share one greppable constant.
     pub use gradiance_command::intent::name::CUT;
-    /// `(spawn-box x y w h)` — author a box body.
-    pub const SPAWN_BOX: &str = "spawn-box";
     /// `(spawn-circle x y r)` — author a circle body.
     pub const SPAWN_CIRCLE: &str = "spawn-circle";
     /// `(spawn-ground x y angle)` — author a fixed ground half-plane.
     pub const SPAWN_GROUND: &str = "spawn-ground";
     /// `(spawn-box-rot x y w h angle)` — author a box rotated by `angle`.
     pub const SPAWN_BOX_ROT: &str = "spawn-box-rot";
-    /// `(body-count)` — how many bodies exist.
-    pub const BODY_COUNT: &str = "body-count";
     /// `(body-x i)` — x of the i-th body (id order).
     pub const BODY_X: &str = "body-x";
     /// `(body-y i)` — y of the i-th body.
@@ -48,8 +47,6 @@ pub mod name {
     pub const BODY_INDEX_AT: &str = "body-index-at";
     /// `(sim-get path)` — read a simulation setting by reflect-path.
     pub const SIM_GET: &str = "sim-get";
-    /// `(sim-set path value)` — write a simulation setting by reflect-path.
-    pub const SIM_SET: &str = "sim-set";
     /// `(camera-get path)` — read a camera-feel setting by reflect-path.
     pub const CAMERA_GET: &str = "camera-get";
     /// `(camera-set path value)` — write one (workstation config, not undoable).
@@ -91,8 +88,6 @@ pub mod name {
     pub const BODY_DENSITY: &str = "body-density";
     /// `(body-static? i)` — whether the i-th body is static.
     pub const BODY_STATIC: &str = "body-static?";
-    /// `(place i x y angle)` — move/rotate the i-th body.
-    pub const PLACE: &str = "place";
     /// `(scale i fx fy)` — resize the i-th body about its own centre.
     pub const SCALE: &str = "scale";
     /// `(merge a b)` — fuse two bodies into one CSG union.
@@ -122,8 +117,6 @@ pub mod name {
     pub const SPRING: &str = "spring";
     /// `(joint-count)` — how many joints exist.
     pub const JOINT_COUNT: &str = "joint-count";
-    /// `(undo)` — undo the last command.
-    pub const UNDO: &str = "undo";
     /// `(redo)` — redo the last undone command.
     pub const REDO: &str = "redo";
     /// `(delete i)` — delete the i-th body (id order).
@@ -186,12 +179,12 @@ impl OpCategory {
 }
 
 /// One registered operation's metadata — a catalog entry.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct OpSpec {
     /// The name the VM binds (from [`name`]).
     pub name: &'static str,
     /// A human-readable call form, e.g. `"(spawn-box x y w h)"`.
-    pub signature: &'static str,
+    pub signature: Cow<'static, str>,
     /// One-line description for completion tooltips and the reference panel.
     pub doc: &'static str,
     /// Which seam it routes through.
@@ -242,6 +235,36 @@ impl OperationCatalog {
     }
 }
 
+impl OperationCatalog {
+    /// The built-in catalog plus one row per registry operation
+    /// (`gradiance-op`), projected from its declaration: the Lisp name, the
+    /// signature from its declared fields, the doc and the seam.
+    pub fn with_registry(registry: &OpRegistry) -> Self {
+        let mut catalog = Self::builtin();
+        catalog
+            .ops
+            .extend(registry.entries().iter().map(|entry| OpSpec {
+                name: entry.meta.lisp,
+                signature: Cow::Owned(entry.signature()),
+                doc: entry.meta.doc,
+                category: OpCategory::from(entry.meta.seam),
+                args: entry.fields.len(),
+            }));
+        catalog
+    }
+}
+
+impl From<Seam> for OpCategory {
+    fn from(seam: Seam) -> Self {
+        match seam {
+            Seam::Edit => Self::Edit,
+            Seam::Config => Self::Config,
+            Seam::Query => Self::Query,
+            Seam::Editor => Self::EditorState,
+        }
+    }
+}
+
 impl Default for OperationCatalog {
     fn default() -> Self {
         Self::builtin()
@@ -254,29 +277,22 @@ fn spawn_specs() -> Vec<OpSpec> {
     use OpCategory::Edit;
     vec![
         OpSpec {
-            name: name::SPAWN_BOX,
-            signature: "(spawn-box x y w h)",
-            doc: "Author a box body of size w×h centred at (x, y), in metres; returns its handle.",
-            category: Edit,
-            args: 4,
-        },
-        OpSpec {
             name: name::SPAWN_CIRCLE,
-            signature: "(spawn-circle x y r)",
+            signature: Cow::Borrowed("(spawn-circle x y r)"),
             doc: "Author a circle body of radius r centred at (x, y), in metres; returns its handle.",
             category: Edit,
             args: 3,
         },
         OpSpec {
             name: name::SPAWN_GROUND,
-            signature: "(spawn-ground x y angle)",
+            signature: Cow::Borrowed("(spawn-ground x y angle)"),
             doc: "Author a fixed ground half-plane through (x, y) (metres), tilted by angle radians.",
             category: Edit,
             args: 3,
         },
         OpSpec {
             name: name::SPAWN_BOX_ROT,
-            signature: "(spawn-box-rot x y w h angle)",
+            signature: Cow::Borrowed("(spawn-box-rot x y w h angle)"),
             doc: "Author a w×h box centred at (x, y), in metres, rotated by angle radians; returns its handle.",
             category: Edit,
             args: 5,
@@ -290,35 +306,35 @@ fn boolean_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::MERGE,
-            signature: "(merge a b)",
+            signature: Cow::Borrowed("(merge a b)"),
             doc: "Fuse bodies a and b into one CSG union; a survives.",
             category: Edit,
             args: 2,
         },
         OpSpec {
             name: name::FILLET_MERGE,
-            signature: "(fillet-merge a b radius)",
+            signature: Cow::Borrowed("(fillet-merge a b radius)"),
             doc: "Fuse bodies a and b into one with a smooth fillet of radius metres where they meet (CSG smooth union); a survives. Bridges a gap under radius/2. Errors unless radius > 0.",
             category: Edit,
             args: 3,
         },
         OpSpec {
             name: name::SUBTRACT,
-            signature: "(subtract a b)",
+            signature: Cow::Borrowed("(subtract a b)"),
             doc: "Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces.",
             category: Edit,
             args: 2,
         },
         OpSpec {
             name: name::INTERSECT,
-            signature: "(intersect a b)",
+            signature: Cow::Borrowed("(intersect a b)"),
             doc: "Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed.",
             category: Edit,
             args: 2,
         },
         OpSpec {
             name: name::XOR,
-            signature: "(xor a b)",
+            signature: Cow::Borrowed("(xor a b)"),
             doc: "Keep what lies in exactly one of bodies a and b (CSG xor) on a; b is consumed, a split result becomes pieces.",
             category: Edit,
             args: 2,
@@ -334,84 +350,70 @@ fn mutate_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::SCALE,
-            signature: "(scale i fx fy)",
+            signature: Cow::Borrowed("(scale i fx fy)"),
             doc: "Resize the i-th body by (fx, fy) about its own centre, along its own axes.",
             category: Edit,
             args: 3,
         },
         OpSpec {
             name: name::DELETE_JOINT,
-            signature: "(delete-joint i)",
+            signature: Cow::Borrowed("(delete-joint i)"),
             doc: "Remove the i-th joint (id order, as joint-count) — undoable.",
             category: Edit,
             args: 1,
         },
         OpSpec {
             name: name::GROUP,
-            signature: "(group (list i …))",
+            signature: Cow::Borrowed("(group (list i …))"),
             doc: "Group the listed bodies (id order) like Ctrl+G; fewer than two distinct bodies is a no-op.",
             category: Edit,
             args: 1,
         },
         OpSpec {
             name: name::UNGROUP,
-            signature: "(ungroup (list i …))",
+            signature: Cow::Borrowed("(ungroup (list i …))"),
             doc: "Peel the listed bodies' outermost group (id order) like Ctrl+Shift+G; inner groups survive.",
             category: Edit,
             args: 1,
         },
         OpSpec {
-            name: name::PLACE,
-            signature: "(place i x y angle)",
-            doc: "Move the i-th body to (x, y) and rotate it to `angle` radians — one undo step.",
-            category: OpCategory::Edit,
-            args: 4,
-        },
-        OpSpec {
             name: name::HINGE,
-            signature: "(hinge a b x y)",
+            signature: Cow::Borrowed("(hinge a b x y)"),
             doc: "Hinge bodies a and b at world point (x, y); b < 0 pins a to the world.",
             category: OpCategory::Edit,
             args: 4,
         },
         OpSpec {
             name: name::SLIDER,
-            signature: "(slider a b x y ax ay)",
+            signature: Cow::Borrowed("(slider a b x y ax ay)"),
             doc: "Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world.",
             category: OpCategory::Edit,
             args: 6,
         },
         OpSpec {
             name: name::SPRING,
-            signature: "(spring a b stiffness damping)",
+            signature: Cow::Borrowed("(spring a b stiffness damping)"),
             doc: "Spring-damper strut between the centres of a and b; rest length is their current distance.",
             category: OpCategory::Edit,
             args: 4,
         },
         OpSpec {
             name: name::DELETE,
-            signature: "(delete i)",
+            signature: Cow::Borrowed("(delete i)"),
             doc: "Delete the i-th body (id order, same index as body-x) — undoable.",
             category: OpCategory::Edit,
             args: 1,
         },
         OpSpec {
-            name: name::UNDO,
-            signature: "(undo)",
-            doc: "Undo the last command — the same step Edit ▸ Undo takes.",
-            category: OpCategory::Edit,
-            args: 0,
-        },
-        OpSpec {
             name: name::REDO,
-            signature: "(redo)",
+            signature: Cow::Borrowed("(redo)"),
             doc: "Redo the last undone command.",
             category: OpCategory::Edit,
             args: 0,
         },
         OpSpec {
             name: name::CUT,
-            signature: "(cut ax ay bx by width)",
+            signature: Cow::Borrowed("(cut ax ay bx by width)"),
             doc: "Sever every body crossed by the stroke a→b of the given width (metres).",
             category: Edit,
             args: 5,
@@ -424,28 +426,28 @@ fn property_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::SET_FRICTION,
-            signature: "(set-friction i v)",
+            signature: Cow::Borrowed("(set-friction i v)"),
             doc: "Set the i-th body's Coulomb friction (static and dynamic) — undoable.",
             category: OpCategory::Edit,
             args: 2,
         },
         OpSpec {
             name: name::SET_RESTITUTION,
-            signature: "(set-restitution i v)",
+            signature: Cow::Borrowed("(set-restitution i v)"),
             doc: "Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable.",
             category: OpCategory::Edit,
             args: 2,
         },
         OpSpec {
             name: name::SET_DENSITY,
-            signature: "(set-density i v)",
+            signature: Cow::Borrowed("(set-density i v)"),
             doc: "Set the i-th body's mass density (area x density = mass) — undoable.",
             category: OpCategory::Edit,
             args: 2,
         },
         OpSpec {
             name: name::SET_STATIC,
-            signature: "(set-static i on)",
+            signature: Cow::Borrowed("(set-static i on)"),
             doc: "Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable.",
             category: OpCategory::Edit,
             args: 2,
@@ -460,28 +462,28 @@ fn property_query_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::BODY_FRICTION,
-            signature: "(body-friction i)",
+            signature: Cow::Borrowed("(body-friction i)"),
             doc: "Coulomb friction of the i-th body.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::BODY_RESTITUTION,
-            signature: "(body-restitution i)",
+            signature: Cow::Borrowed("(body-restitution i)"),
             doc: "Bounciness of the i-th body.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::BODY_DENSITY,
-            signature: "(body-density i)",
+            signature: Cow::Borrowed("(body-density i)"),
             doc: "Mass density of the i-th body.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::BODY_STATIC,
-            signature: "(body-static? i)",
+            signature: Cow::Borrowed("(body-static? i)"),
             doc: "Whether the i-th body is static (1) or not (0).",
             category: Query,
             args: 1,
@@ -495,35 +497,35 @@ fn action_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::ACTION_X,
-            signature: "(action-x)",
+            signature: Cow::Borrowed("(action-x)"),
             doc: "World x of the point the running action was invoked at (the click); NaN outside an action.",
             category: Query,
             args: 0,
         },
         OpSpec {
             name: name::ACTION_Y,
-            signature: "(action-y)",
+            signature: Cow::Borrowed("(action-y)"),
             doc: "World y of the point the running action was invoked at (the click); NaN outside an action.",
             category: Query,
             args: 0,
         },
         OpSpec {
             name: name::TOOL_COUNT,
-            signature: "(tool-count)",
+            signature: Cow::Borrowed("(tool-count)"),
             doc: "How many points the running script tool collected; NaN outside a tool run.",
             category: Query,
             args: 0,
         },
         OpSpec {
             name: name::TOOL_X,
-            signature: "(tool-x i)",
+            signature: Cow::Borrowed("(tool-x i)"),
             doc: "World x of the running tool's i-th point (click order); NaN outside a tool run.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::TOOL_Y,
-            signature: "(tool-y i)",
+            signature: Cow::Borrowed("(tool-y i)"),
             doc: "World y of the running tool's i-th point (click order); NaN outside a tool run.",
             category: Query,
             args: 1,
@@ -536,84 +538,77 @@ fn query_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::PANEL_OPEN,
-            signature: "(panel-open? name)",
+            signature: Cow::Borrowed("(panel-open? name)"),
             doc: "Whether an editor panel is currently shown (reads are total).",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::JOINT_COUNT,
-            signature: "(joint-count)",
+            signature: Cow::Borrowed("(joint-count)"),
             doc: "Number of authored joints in the committed scene.",
             category: Query,
             args: 0,
         },
         OpSpec {
-            name: name::BODY_COUNT,
-            signature: "(body-count)",
-            doc: "Number of authored bodies in the committed scene.",
-            category: Query,
-            args: 0,
-        },
-        OpSpec {
             name: name::BODY_X,
-            signature: "(body-x i)",
+            signature: Cow::Borrowed("(body-x i)"),
             doc: "X of the i-th body (bodies ordered by id); NaN if out of range.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::BODY_Y,
-            signature: "(body-y i)",
+            signature: Cow::Borrowed("(body-y i)"),
             doc: "Y of the i-th body; NaN if out of range.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::BODY_ROT,
-            signature: "(body-rot i)",
+            signature: Cow::Borrowed("(body-rot i)"),
             doc: "Rotation (radians) of the i-th body; NaN if out of range.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::COUNT_AT,
-            signature: "(count-at x y)",
+            signature: Cow::Borrowed("(count-at x y)"),
             doc: "Number of bodies whose shape contains the world point (x, y).",
             category: Query,
             args: 2,
         },
         OpSpec {
             name: name::NEAREST_AT,
-            signature: "(nearest-at x y)",
+            signature: Cow::Borrowed("(nearest-at x y)"),
             doc: "Index of the body whose centre is nearest (x, y); -1 if none.",
             category: Query,
             args: 2,
         },
         OpSpec {
             name: name::NEAREST_DIST,
-            signature: "(nearest-dist x y)",
+            signature: Cow::Borrowed("(nearest-dist x y)"),
             doc: "Distance from (x, y) to the nearest body centre; -1 if the scene is empty.",
             category: Query,
             args: 2,
         },
         OpSpec {
             name: name::BODY_INDEX_AT,
-            signature: "(body-index-at x y)",
+            signature: Cow::Borrowed("(body-index-at x y)"),
             doc: "Index of a body whose shape contains (x, y) (first in id order); -1 if none.",
             category: Query,
             args: 2,
         },
         OpSpec {
             name: name::TOUCH_COUNT,
-            signature: "(touch-count i)",
+            signature: Cow::Borrowed("(touch-count i)"),
             doc: "How many bodies the i-th body is currently touching; NaN if out of range.",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::SIGNAL_GET,
-            signature: "(signal-get name)",
+            signature: Cow::Borrowed("(signal-get name)"),
             doc: "Current value of a named signal on the bus; NaN if unset.",
             category: Query,
             args: 1,
@@ -628,28 +623,21 @@ fn config_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::SIM_GET,
-            signature: "(sim-get path)",
+            signature: Cow::Borrowed("(sim-get path)"),
             doc: "Read a simulation setting by reflect-path, e.g. \"gravity.y\", \"speed\".",
             category: Query,
             args: 1,
         },
         OpSpec {
-            name: name::SIM_SET,
-            signature: "(sim-set path value)",
-            doc: "Set a simulation setting by reflect-path (config seam, not undoable).",
-            category: Config,
-            args: 2,
-        },
-        OpSpec {
             name: name::CAMERA_GET,
-            signature: "(camera-get path)",
+            signature: Cow::Borrowed("(camera-get path)"),
             doc: "Read a camera-feel setting: \"zoom_step\", \"pan_speed\", \"orbit_speed_deg\".",
             category: Query,
             args: 1,
         },
         OpSpec {
             name: name::CAMERA_SET,
-            signature: "(camera-set path value)",
+            signature: Cow::Borrowed("(camera-set path value)"),
             doc: "Set a camera-feel setting by reflect-path (workstation config, never undone).",
             category: Config,
             args: 2,
@@ -666,63 +654,63 @@ fn editor_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::REGISTER_ACTION,
-            signature: "(register-action label source)",
+            signature: Cow::Borrowed("(register-action label source)"),
             doc: "Surface a named action (label + lisp source) in the editor's menus.",
             category: OpCategory::EditorState,
             args: 2,
         },
         OpSpec {
             name: name::REGISTER_TOOL,
-            signature: "(register-tool name points src)",
+            signature: Cow::Borrowed("(register-tool name points src)"),
             doc: "Add a palette tool that collects `points` clicks, then runs src once (read them with tool-x/tool-y).",
             category: OpCategory::EditorState,
             args: 3,
         },
         OpSpec {
             name: name::SIGNAL_SET,
-            signature: "(signal-set name value)",
+            signature: Cow::Borrowed("(signal-set name value)"),
             doc: "Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md).",
             category: OpCategory::EditorState,
             args: 2,
         },
         OpSpec {
             name: name::LABEL,
-            signature: "(label body name)",
+            signature: Cow::Borrowed("(label body name)"),
             doc: "Name a body in the workspace (a viewport tag); body is a spawn's return value.",
             category: OpCategory::EditorState,
             args: 2,
         },
         OpSpec {
             name: name::PANEL_SHOW,
-            signature: "(panel-show name)",
+            signature: Cow::Borrowed("(panel-show name)"),
             doc: "Open an editor panel — the same toggle the View menu drives (try (panels)).",
             category: OpCategory::EditorState,
             args: 1,
         },
         OpSpec {
             name: name::PANEL_HIDE,
-            signature: "(panel-hide name)",
+            signature: Cow::Borrowed("(panel-hide name)"),
             doc: "Close an editor panel by name.",
             category: OpCategory::EditorState,
             args: 1,
         },
         OpSpec {
             name: name::PANEL_TOGGLE,
-            signature: "(panel-toggle name)",
+            signature: Cow::Borrowed("(panel-toggle name)"),
             doc: "Flip an editor panel's visibility.",
             category: OpCategory::EditorState,
             args: 1,
         },
         OpSpec {
             name: name::DEFPARAM,
-            signature: "(defparam name value min max)",
+            signature: Cow::Borrowed("(defparam name value min max)"),
             doc: "Declare a tunable signal parameter (an auto-slider) published on the bus.",
             category: OpCategory::EditorState,
             args: 4,
         },
         OpSpec {
             name: name::DEFSIGNAL,
-            signature: "(defsignal name expr)",
+            signature: Cow::Borrowed("(defsignal name expr)"),
             doc: "Declare a computed signal from an RPN expression over other signals (e.g. \"t sin amp *\").",
             category: OpCategory::EditorState,
             args: 2,
@@ -736,14 +724,14 @@ fn meta_specs() -> Vec<OpSpec> {
     vec![
         OpSpec {
             name: name::OPS,
-            signature: "(ops)",
+            signature: Cow::Borrowed("(ops)"),
             doc: "List of every registered operation name.",
             category: Query,
             args: 0,
         },
         OpSpec {
             name: name::DESCRIBE,
-            signature: "(describe name)",
+            signature: Cow::Borrowed("(describe name)"),
             doc: "The signature and doc string of one operation, as text.",
             category: Query,
             args: 1,
@@ -788,7 +776,7 @@ mod tests {
         let catalog = OperationCatalog::builtin();
         assert_eq!(catalog.find(name::CUT).map(|o| o.args), Some(5));
         assert_eq!(
-            catalog.find(name::BODY_COUNT).map(|o| o.category),
+            catalog.find(name::JOINT_COUNT).map(|o| o.category),
             Some(OpCategory::Query)
         );
         assert!(catalog.find("no-such-op").is_none());

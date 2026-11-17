@@ -210,7 +210,7 @@ pub fn console_section(
             .show(ui, |ui| {
                 for op in registry.0.ops() {
                     ui.horizontal(|ui| {
-                        ui.monospace(op.signature);
+                        ui.monospace(op.signature.as_ref());
                         ui.weak(format!("[{}]", op.category.label()));
                     });
                     ui.label(egui::RichText::new(op.doc).weak().small());

@@ -3915,6 +3915,7 @@ dependencies = [
  "gradiance-geometry",
  "gradiance-interaction",
  "gradiance-kernel",
+ "gradiance-op",
  "gradiance-optimize",
  "gradiance-persist",
  "gradiance-physics",
@@ -3939,9 +3940,11 @@ dependencies = [
  "gradiance-core",
  "gradiance-domain",
  "gradiance-geometry",
+ "gradiance-op",
  "gradiance-scene",
  "gradiance-signal",
  "gradiance-units",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -4007,6 +4010,18 @@ version = "0.2.0"
 dependencies = [
  "proptest",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gradiance-op"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "gradiance-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -4083,6 +4098,7 @@ dependencies = [
  "gradiance-core",
  "gradiance-domain",
  "gradiance-geometry",
+ "gradiance-op",
  "gradiance-scene",
  "gradiance-signal",
  "gradiance-units",
@@ -4120,6 +4136,7 @@ dependencies = [
  "gradiance-domain",
  "gradiance-geometry",
  "gradiance-interaction",
+ "gradiance-op",
  "gradiance-optimize",
  "gradiance-persist",
  "gradiance-physics",

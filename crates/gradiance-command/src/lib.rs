@@ -55,10 +55,12 @@ pub mod group_cmd;
 pub mod intent;
 pub mod joint_cmd;
 pub mod merge_cmd;
+pub mod ops;
 pub mod property;
 pub mod rod_cmd;
 pub mod scale_cmd;
 pub mod scene_cmd;
+pub mod snapshot;
 pub mod spawn;
 pub mod transform_cmd;
 
@@ -432,6 +434,9 @@ impl Plugin for CommandPlugin {
         // The whole command intent surface — messages + reflected types —
         // registers from the one `command_intents!` table in `dispatch`.
         dispatch::register_command_intents(app);
+        // The scene operations (`gradiance-op`): one declaration each, shared
+        // by the Lisp, remote and menu doorways.
+        ops::install(app);
         // Undo/redo are meta-intents (they drive the stack, not a command).
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();

@@ -327,6 +327,37 @@ Reads driving edits (a marker under every existing body):
 
 ## Adding a verb (contributor recipe)
 
+### The registry way (new verbs; brief U-1)
+
+An operation is declared **once**, in the layer that owns it, and every
+doorway is generated from that declaration: the Lisp verb, the remote
+`gradiance.op {"id", "params"}` call, a menu row's `InvokeOp`, the catalog
+row the console and `gradiance.ops` show. Five operations work this way now
+(`spawn-box`, `place`, `undo`, `body-count`, `sim-set`; see
+`crates/gradiance-command/src/ops.rs`). Brief U-2 moves the rest.
+
+1. In the owning layer, write a parameter struct that derives
+   `serde::Deserialize` (with `#[serde(deny_unknown_fields)]`) and
+   `bevy::reflect::Reflect`. The **field order is the Lisp argument order**.
+   Use `gradiance-units` quantities (`Length`, `Angle`, …) for physical
+   values; they decode from plain JSON numbers. Name a scene object with
+   `gradiance_op::Target` (an index, an id string, `"selection"`, or
+   `{"at": [x, y]}`).
+2. `impl gradiance_op::Operation`: `META` (id `layer.verb`, Lisp name, doc,
+   seam, menu path, chord, the undo label the command records, and an
+   example params object) and `lower(self, &OpContext)`. `lower` reads old
+   values from a context mirror (`ctx.get::<SceneSnapshot>()`), takes new ids
+   from `ctx.new_id()`, and returns an `OpOutput`: `.message(intent)`,
+   `.setting(&mirror, path, value)?`, `.returning(value)`. It never touches
+   the world.
+3. Register it in the layer's plugin: `registry.register::<MyOp>()`. If it
+   reads a new mirror, publish it from that layer's context filler.
+4. Nothing else. The conformance tests (`tests/it/op_conformance.rs`) iterate
+   the registry and run the new operation through every doorway from its
+   `example`: equal outputs, schema round trip, the declared undo step.
+
+### The hand-written way (the verbs not migrated yet)
+
 The catalog and the steel registration are kept in lockstep by a shared name
 constant, so a new verb touches three (edits: four) places:
 
@@ -337,7 +368,7 @@ constant, so a new verb touches three (edits: four) places:
    `register_*_verbs` function, under the same `name::MY_VERB` constant:
    - an **edit** verb `emit`s a reflected intent onto the op queue;
    - a **config** verb reads the settings mirror / queues a reflect-path write;
-   - a **query** verb reads the `SceneView` snapshot and returns a number;
+   - a **query** verb reads the `SceneSnapshot` and returns a number;
    - an **editor** verb queues an editor-state change.
 3. **Edits only:** add a row to `edit_bindings()` in `bridge.rs`
    (op name + the intent type it emits). `ScriptPlugin` registers the bus
@@ -495,8 +526,8 @@ authentication: the local machine is the boundary.
 
 | Method | Params | Result |
 |---|---|---|
-| `gradiance.ops` | none | every op: `name`, `signature`, `doc`, `category`, `args` |
-| `gradiance.op` | `{"name": "<op>", "args": [...]}` (`args` optional) | the op's value as JSON |
+| `gradiance.ops` | none | every op: `name`, `signature`, `doc`, `category`, `args`; a registry operation also has `id` and `fields` |
+| `gradiance.op` | `{"id": "<op id>", "params": {...}}` for a registry operation, or `{"name": "<op>", "args": [...]}` (`args` optional) for any op | the op's value as JSON |
 | `gradiance.query` | same | same, but only `query` ops are accepted |
 
 ```sh
@@ -505,7 +536,13 @@ curl -s localhost:15702 -d '{"jsonrpc":"2.0","id":1,"method":"gradiance.op",
 # {"jsonrpc":"2.0","id":1,"result":"6f1c…"}   (the new body's handle)
 ```
 
-**A call is one script run.** `gradiance.op` checks the name against the
+**The `id` form is one operation.** `{"id": "body.place", "params": {"i":
+0, "x": 1.5, "y": 0, "angle": 0}}` is decoded by the registry's serde decoder
+(unknown or missing fields are errors), lowered against a fresh snapshot and
+applied through the seams it names. No Scheme text is built and no console
+line is written. An edit becomes a command in the next frame's `Update`.
+
+**The `name` form is one script run.** `gradiance.op` checks the name against the
 catalog, renders each argument as a Scheme literal (numbers, strings,
 booleans; arrays become `(list …)`; `null` and objects are refused), and
 submits `(spawn-box 0 1 1.6 1.2)` to `ScriptInputs`, then runs it through

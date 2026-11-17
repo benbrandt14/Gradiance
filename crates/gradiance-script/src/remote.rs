@@ -6,24 +6,31 @@
 //!
 //! - [`method::OPS`] — the catalog: every op's name, signature, doc,
 //!   governance category and arity.
-//! - [`method::OP`] — invoke one op: `{"name": "spawn-box", "args": [0, 2,
-//!   1, 1]}`. The call is lowered to **one script run** — the args rendered
-//!   as Scheme literals, `(spawn-box 0 2 1 1)` submitted to
-//!   [`ScriptInputs`] and run through the one doorway, [`run_scripts`] — so
-//!   it inherits everything a console line has: the per-run snapshot, the
-//!   2 s budget, all-or-nothing, one batch of undoable commands, a line in
-//!   the console log. Its intents go through the ordinary dispatcher in the
-//!   next frame's `Update`, exactly like a console line's: the handler adds
-//!   no second dispatch site. A client's next call, a frame later, reads the
-//!   write.
+//! - [`method::OP`] — invoke one op, in one of two forms:
+//!   - `{"id": "body.spawn_box", "params": {"x": 0, "y": 2, "w": 1, "h": 1}}`
+//!     — a **registry operation** (`gradiance-op`) with named params, decoded
+//!     by the registry's one serde decoder and applied through the seams it
+//!     names. No Scheme text is built. Its edits reach the dispatcher in the
+//!     next `Update`, like a console line's.
+//!   - `{"name": "spawn-box", "args": [0, 2, 1, 1]}` — any catalog verb.
+//!     The call is lowered to **one script run** — the args rendered as
+//!     Scheme literals, `(spawn-box 0 2 1 1)` submitted to [`ScriptInputs`]
+//!     and run through the one doorway, [`run_scripts`] — so it inherits
+//!     everything a console line has: the per-run snapshot, the 2 s budget,
+//!     all-or-nothing, one batch of undoable commands, a line in the console
+//!     log. Its intents go through the ordinary dispatcher in the next
+//!     frame's `Update`, exactly like a console line's: the handler adds no
+//!     second dispatch site. A client's next call, a frame later, reads the
+//!     write.
 //! - [`method::QUERY`] — the same, restricted to `query` ops: a client
 //!   holding only this method cannot change anything.
 //!
-//! Why lower to a script call and not call a verb's Rust function: the
-//! verbs exist only as steel builtins (their bodies are closures over the
-//! engine's queues), so the script path *is* the registry's call path. A
-//! second, direct path would be a second set of argument coercions and
-//! rollback rules to keep in step. The op name must be a catalog entry and
+//! Why the `name` form lowers to a script call and not to a verb's Rust
+//! function: the hand-written verbs exist only as steel builtins (their
+//! bodies are closures over the engine's queues), so the script path *is*
+//! their call path. A second, direct path would be a second set of argument
+//! coercions and rollback rules to keep in step. Brief U-2 moves the rest of
+//! the verbs to the registry, and the `id` form then reaches all of them. The op name must be a catalog entry and
 //! every argument is typed JSON rendered as a literal, so a call cannot
 //! smuggle in other code.
 //!
@@ -44,6 +51,8 @@ use bevy::remote::builtin_methods::{
 };
 use bevy::remote::http::RemoteHttpPlugin;
 use bevy::remote::{BrpError, BrpResult, RemoteMethods, RemotePlugin, error_codes};
+use gradiance_op::OpRegistry;
+use serde_json::Map;
 use serde_json::{Value, json};
 use std::fmt::Write as _;
 use std::net::Ipv4Addr;
@@ -152,12 +161,28 @@ fn curated(all: &RemoteMethods) -> RemoteMethods {
     clippy::unnecessary_wraps,
     reason = "a BRP method handler must return `BrpResult`"
 )]
-fn list_ops(In(_params): In<Option<Value>>, registry: Res<OperationRegistry>) -> BrpResult {
-    Ok(Value::Array(registry.0.ops().iter().map(op_json).collect()))
+fn list_ops(
+    In(_params): In<Option<Value>>,
+    catalog: Res<OperationRegistry>,
+    registry: Res<OpRegistry>,
+) -> BrpResult {
+    Ok(Value::Array(
+        catalog
+            .0
+            .ops()
+            .iter()
+            .map(|op| op_json(op, &registry))
+            .collect(),
+    ))
 }
 
-fn op_json(op: &OpSpec) -> Value {
+/// One catalog row; a registry operation also carries its `id` and its
+/// declared field names (the keys of the `params` form).
+fn op_json(op: &OpSpec, registry: &OpRegistry) -> Value {
+    let entry = registry.by_lisp(op.name);
     json!({
+        "id": entry.map(|e| e.meta.id),
+        "fields": entry.map(|e| e.fields.clone()),
         "name": op.name,
         "signature": op.signature,
         "doc": op.doc,
@@ -179,10 +204,15 @@ fn invoke_query(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 /// Lowers one call to one script run and runs it through the doorway; the
 /// intents it emitted wait for the dispatcher like any other run's.
 fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) -> BrpResult {
+    if let Some(Value::Object(fields)) = &params
+        && fields.contains_key("id")
+    {
+        return invoke_registered(params, world, only);
+    }
     let (name, args) = parse_params(params)?;
     let spec = world
         .get_resource::<OperationRegistry>()
-        .and_then(|registry| registry.0.find(&name).copied())
+        .and_then(|registry| registry.0.find(&name).cloned())
         .ok_or_else(|| invalid_params(format!("unknown operation `{name}`")))?;
     if let Some(category) = only
         && spec.category != category
@@ -214,6 +244,45 @@ fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) ->
     })
 }
 
+/// `{"id": <string>, "params": {…}}`: one registry operation, lowered against
+/// a fresh context and applied. The reply is the operation's value (`null`
+/// for none).
+fn invoke_registered(
+    params: Option<Value>,
+    world: &mut World,
+    only: Option<OpCategory>,
+) -> BrpResult {
+    let Some(Value::Object(mut fields)) = params else {
+        return Err(invalid_params("params must be an object"));
+    };
+    let Some(Value::String(id)) = fields.remove("id") else {
+        return Err(invalid_params("`id` must be the operation's id, a string"));
+    };
+    let op_params = match fields.remove("params") {
+        None | Some(Value::Null) => Value::Object(Map::new()),
+        Some(object @ Value::Object(_)) => object,
+        Some(_) => return Err(invalid_params("`params` must be an object")),
+    };
+    let seam = world
+        .get_resource::<OpRegistry>()
+        .and_then(|registry| registry.get(&id).map(|e| e.meta.seam))
+        .ok_or_else(|| invalid_params(format!("unknown operation `{id}`")))?;
+    let category = OpCategory::from(seam);
+    if let Some(only) = only
+        && category != only
+    {
+        return Err(invalid_params(format!(
+            "`{id}` is a {} operation; `{}` runs {} operations only",
+            category.label(),
+            method::QUERY,
+            only.label(),
+        )));
+    }
+    gradiance_op::invoke(world, &id, op_params)
+        .map(|value| value.unwrap_or(Value::Null))
+        .map_err(|err| invalid_params(format!("{id}: {err}")))
+}
+
 /// Reads `{"name": <string>, "args": [<arg>…]}` (`args` optional).
 fn parse_params(params: Option<Value>) -> Result<(String, Vec<Value>), BrpError> {
     let Some(Value::Object(mut fields)) = params else {
@@ -235,7 +304,7 @@ fn parse_params(params: Option<Value>) -> Result<(String, Vec<Value>), BrpError>
 }
 
 /// `(name arg…)` with every argument rendered as a Scheme literal.
-fn call_source(name: &str, args: &[Value]) -> Result<String, BrpError> {
+pub fn call_source(name: &str, args: &[Value]) -> Result<String, BrpError> {
     let mut source = format!("({name}");
     for (i, arg) in args.iter().enumerate() {
         source.push(' ');
