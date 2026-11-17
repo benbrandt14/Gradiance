@@ -32,6 +32,9 @@ without change on the new stack.
   slices; `collider.contains_point(pos, rot, point)` and
   `collider.aabb(pos, rot, margin)` take a position, a `Rotation` and (for
   `aabb`) a margin.
+- **egui 0.36: a dropped `TexturesDelta` that is not empty panics in debug
+  builds.** A headless test that runs a pass (`ctx.run_ui`, `end_pass`)
+  without a renderer must call `output.textures_delta.clear()`.
 - **`glam` is 0.33** (`bevy_math` 0.20.1 needs `^0.33.2`).
 
 **Read in the migration guides, not met in this codebase** (no call site):

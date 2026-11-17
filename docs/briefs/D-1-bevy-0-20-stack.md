@@ -109,7 +109,11 @@ feature, removing leafwing (U-2 decides that), retained items in
 3. avian 0.8: `math::Vector` is private (`Vec2` instead);
    `Collider::convex_decomposition` takes slices; `contains_point` and `aabb`
    take a position and a `Rotation` (`physics::queries`).
-4. Nothing in `gradiance-ui` needed a change for bevy_egui 0.43 / egui 0.36,
+4. egui 0.36 debug-asserts that a `TexturesDelta` is applied or cleared
+   before it drops. Two headless test helpers (`fonts::tests::ready_ctx`,
+   `reflect_grid::tests::painted_text`) clear it now. CI found this (4
+   failed tests in `gradiance-ui`); the assertions of the tests did not change.
+5. No non-test code in `gradiance-ui` needed a change for bevy_egui 0.43 / egui 0.36,
    `egui_tiles` 0.17, `egui-snarl` 0.12 or `egui_plot` 0.37.
 
 **Visual check (lavapipe, 1280x720):** default scene, Properties, node graph

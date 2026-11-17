@@ -146,14 +146,17 @@ mod tests {
     fn painted_text(value: &mut dyn Reflect) -> Vec<String> {
         let ctx = egui::Context::default();
         // Two frames: a grid's first frame may be an invisible sizing pass.
-        let mut output = egui::FullOutput::default();
+        // egui 0.36 debug-asserts that a `TexturesDelta` is applied or cleared
+        // before it drops; no renderer exists here, so clear each one.
+        let mut shapes = Vec::new();
         for _ in 0..2 {
-            output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
                 reflect_grid(ui, egui::Id::new("probe"), value);
             });
+            output.textures_delta.clear();
+            shapes = output.shapes;
         }
-        output
-            .shapes
+        shapes
             .iter()
             .filter_map(|clipped| match &clipped.shape {
                 egui::Shape::Text(text) => Some(text.galley.text().to_string()),
