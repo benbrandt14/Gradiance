@@ -270,7 +270,9 @@ Agent-container hazards:
 - `cargo test --workspace` links many Bevy-sized binaries and can exhaust the
   writable allowance. The symptom is misleading: `ld.lld` fails with "failed
   to write output … No such file or directory" while `df` looks fine. Recover
-  with `rm -rf target/debug/deps/*gradiance*` — **never `cargo clean`**, which
+  with `rm -rf target/debug/deps/*gradiance* target/debug/build/gradiance*/`
+  (the current cargo keeps per-package output under `build/<pkg>/`; U-2b,
+  2026-11-17) — **never `cargo clean`**, which
   discards the third-party build. Use `-p <crate>` runs as the inner loop and
   `--workspace` once, as the gate.
 - `grep -E '^test result|FAILED|panicked'` matches nothing in a *build*

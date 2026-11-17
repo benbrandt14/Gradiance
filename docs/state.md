@@ -2,8 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (U-2b in its PR; order per
-`docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-17 (phase gate after U-2: U-1 #243, U-2a #244,
+U-2b #245; order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -11,14 +11,14 @@ Last updated: 2026-11-17 (U-2b in its PR; order per
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-2b** is in its PR (branch `claude/u-2b-queries-editor`):
-  every Lisp verb is a registry operation or one of 11 listed VM
-  built-ins, `OpSpec`/`EditBinding`/`IntentDispatch` are gone, the remote
-  name form no longer builds Scheme for registry names, `docs/ops.md` is
-  generated (currency test), and a scanner bounds intent writers in
-  `gradiance-ui`/`-interaction` to an allow list. **Next: 4b-1.** Found: the
-  settings undo tracker does not watch the signal-graph resources (brief
-  U-2b Outcome, decision 6) — wants its own small brief.
+- **Now:** no brief in flight. The U-2 phase is done: every Lisp verb is a
+  `gradiance-op` operation (51) or one of 11 listed VM built-ins; menus and
+  keys invoke operations by id; `docs/ops.md` is generated; a scanner bounds
+  intent writers in `gradiance-ui`/`-interaction`. **Next: U-2c** (small:
+  signal-graph edits record no undo step,
+  `docs/briefs/U-2c-signal-settings-undo.md`), **then 4b-1** (brief revised
+  for the registry). Workers run on Opus while Fable lacks usage credits
+  (owner, 2026-11-17).
 - **4b-1 was not in flight:** GitHub had no branch and no PR for it on
   2026-11-17. It moved to step 4; its verbs are written once, on the
   registry (`docs/review/archive.ron`, `order-4b-1`).
@@ -27,9 +27,8 @@ Last updated: 2026-11-17 (U-2b in its PR; order per
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
   2. **U-1** `gradiance-op`: one declaration per operation (done, #243;
      the Outcome lists the migration list).
-  3. **U-2a** the 22 edit verbs, the menus and the key link table (done,
-     #244); then **U-2b** queries, config, editor verbs, deletion of the old
-     paths, generated `docs/ops.md` (in its PR). (Split 2026-11-17: one PR for all of
+  3. **U-2a** (done, #244), **U-2b** (done, #245), then **U-2c**
+     signal-graph undo (open). (U-2 split 2026-11-17: one PR for all of
      U-2 exceeds one worker's coherence budget.)
   4. **4b-1** group op surface, on the registry (adds `set-color`, which
      fixes review scenes re-rolling colours).
