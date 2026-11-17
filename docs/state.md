@@ -12,7 +12,7 @@ after U-2: U-1 #243, U-2a #244, U-2b #245; order per
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-2c in review** (PR #PRNUM, branch
+- **Now:** **U-2c in review** (PR #247, branch
   `claude/project-thread-dydbi0`): signal-graph edits record one settled
   `settings` undo step; the scene-content list is one macro in
   `scene::records`. Orchestrator: read the brief's Outcome, merge when CI is
@@ -31,7 +31,7 @@ after U-2: U-1 #243, U-2a #244, U-2b #245; order per
   2. **U-1** `gradiance-op`: one declaration per operation (done, #243;
      the Outcome lists the migration list).
   3. **U-2a** (done, #244), **U-2b** (done, #245), then **U-2c**
-     signal-graph undo (in review, #PRNUM). (U-2 split 2026-11-17: one PR for all of
+     signal-graph undo (in review, #247). (U-2 split 2026-11-17: one PR for all of
      U-2 exceeds one worker's coherence budget.)
   4. **4b-1** group op surface, on the registry (adds `set-color`, which
      fixes review scenes re-rolling colours).

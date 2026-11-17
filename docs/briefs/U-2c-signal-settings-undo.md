@@ -1,6 +1,6 @@
 # Signal-graph edits become undo steps
 Phase U · CLAUDE.md invariant 4 · found by U-2b (Outcome, decision 6) ·
-status: in review
+status: in review (PR #247)
 
 ## Goal
 
