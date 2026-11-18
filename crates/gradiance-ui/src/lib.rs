@@ -239,7 +239,6 @@ impl Plugin for GradianceUiPlugin {
                 fonts::install_fonts,
                 theme::apply_chrome,
                 menu::menu_bar,
-                toolbar::toolbar,
                 dock::right_dock,
                 view_cube::view_cube,
                 labels::draw_workspace_labels,
@@ -249,6 +248,9 @@ impl Plugin for GradianceUiPlugin {
                 array_panel::array_window,
                 review::review_window,
                 bottom_dock::bottom_dock,
+                // After the docks: the palette fits the height they leave
+                // (brief A-1: it covered the bottom dock's tabs).
+                toolbar::toolbar,
                 probe::probe_panel,
                 context_menu::context_menu,
                 // Stage 2: route the scene camera into the dock-bounded pane.
