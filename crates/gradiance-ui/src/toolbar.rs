@@ -186,7 +186,9 @@ pub fn toolbar(
         .title_bar(false)
         .collapsible(false)
         .movable(false)
-        .resizable(false)
+        // Sized to its content (no default 420-point window height, which
+        // would clip the scrolling strip).
+        .auto_sized()
         .frame(tools_frame)
         .anchor(egui::Align2::LEFT_TOP, [8.0, PALETTE_TOP])
         .show(ctx, |ui| {
