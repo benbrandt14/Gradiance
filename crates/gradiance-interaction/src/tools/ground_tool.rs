@@ -3,9 +3,9 @@
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
 use avian2d::prelude::RigidBody;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Role;
 
 /// Below this drag length (world metres, ~5 px) the ground is horizontal.
 /// The SI flip left this at its pixel-era `5.0`, i.e. a 5 m (500 px) dead
@@ -36,7 +36,8 @@ impl DraftTool for GroundTool {
                 };
                 let mut record = new_body_record(ShapeDef::HalfPlane, anchor, rot);
                 record.physics.rigid_body = RigidBody::Static;
-                record.appearance.fill = gradiance_domain::appearance::Rgba::rgb(0.35, 0.4, 0.35);
+                // The look's floor tone (canonical; the render layer tones it).
+                record.appearance.fill = gradiance_domain::theme::STUDIO.ground;
                 Some(ToolCommit::SpawnBody(Box::new(record)))
             }
             GesturePhase::Idle | GesturePhase::Held => None,
@@ -58,7 +59,11 @@ impl DraftTool for GroundTool {
             // The surface line reads as infinite; the hatch marks are
             // screen-sized (pixels × `cam_scale` world-per-pixel) so they
             // stay a fixed size near the drag instead of scaling with zoom.
-            out.line(anchor - dir * 10_000.0, anchor + dir * 10_000.0, css::OLIVE);
+            out.line(
+                anchor - dir * 10_000.0,
+                anchor + dir * 10_000.0,
+                Role::Preview,
+            );
             // Hatch the solid side (local −Y of the surface).
             let down = -dir.perp();
             let px = ctx.cam_scale;
@@ -67,7 +72,7 @@ impl DraftTool for GroundTool {
                 out.line(
                     base,
                     base + (down - dir) * 15.0 * px,
-                    css::OLIVE.with_alpha(0.6),
+                    Role::Preview.alpha(0.6),
                 );
             }
         }

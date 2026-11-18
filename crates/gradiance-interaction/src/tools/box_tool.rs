@@ -14,9 +14,9 @@
 use crate::snap::DraftReference;
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Role;
 use gradiance_geometry::construct::{RotatedBox, three_point_box};
 
 /// Minimum accepted box side, world metres (~1 px on screen). The SI flip
@@ -159,17 +159,17 @@ impl DraftTool for BoxTool {
         match self.0 {
             BoxDraft::Idle => {}
             BoxDraft::Corner(anchor) => {
-                out.rect((anchor + p) / 2.0, (p - anchor).abs(), css::AQUAMARINE);
+                out.rect((anchor + p) / 2.0, (p - anchor).abs(), Role::Preview);
             }
             BoxDraft::EdgeStart(a) => {
-                out.line(a, edge_end(a, p, ctx), css::AQUAMARINE);
+                out.line(a, edge_end(a, p, ctx), Role::Preview);
             }
             BoxDraft::Height(a, b) => {
                 if let Some(bx) = three_point_box(a, b, p) {
                     let [c0, c1, c2, c3] = bx.corners();
-                    out.polyline(vec![c0, c1, c2, c3, c0], css::AQUAMARINE.with_alpha(0.6));
+                    out.polyline(vec![c0, c1, c2, c3, c0], Role::Preview.alpha(0.6));
                 }
-                out.line(a, b, css::AQUAMARINE);
+                out.line(a, b, Role::Preview);
             }
         }
     }

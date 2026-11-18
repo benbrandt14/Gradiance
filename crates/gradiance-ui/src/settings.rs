@@ -114,10 +114,15 @@ pub fn settings_window(
                     }
                 }
                 SettingsTab::Rendering => {
-                    reflect_grid(
+                    look_picker(ui, &mut render, &mut lighting, &mut scenery);
+                    ui.separator();
+                    // `look` is the picker above.
+                    reflect_grid_except(
                         ui,
                         egui::Id::new("render"),
                         render.bypass_change_detection(),
+                        &[],
+                        &["look"],
                     );
                     render.set_changed();
                 }
@@ -134,6 +139,34 @@ pub fn settings_window(
         });
     window.open = open;
     Ok(())
+}
+
+/// The scene-look picker (brief 4b-3): choosing a look applies its whole
+/// preset (render, lighting, scenery) — the same writes `look.apply` makes,
+/// so a settled pick is one undo step through `commit_settings_edits`.
+fn look_picker(
+    ui: &mut egui::Ui,
+    render: &mut ResMut<RenderSettings>,
+    lighting: &mut ResMut<LightingSettings>,
+    scenery: &mut ResMut<ScenerySettings>,
+) {
+    use gradiance_domain::theme::Look;
+    widgets::section_header(ui, "Look");
+    let current = render.look;
+    ui.horizontal(|ui| {
+        for look in Look::ALL {
+            if ui
+                .selectable_label(current == look, look.theme().label)
+                .on_hover_text("apply this look's palette tone, ink, lighting and toon preset")
+                .clicked()
+                && current != look
+            {
+                **render = look.render();
+                **lighting = look.lighting();
+                **scenery = look.scenery();
+            }
+        }
+    });
 }
 
 /// `SimSettings` fields [`simulation_tab`] draws by hand; any field added
@@ -415,8 +448,8 @@ fn lighting_tab(
         // colored shadows — cheap depth on a flat scene.
         settings.lights.push(KeyLightSettings {
             azimuth_deg: 40.0,
-            color: gradiance_domain::appearance::Rgba::rgb(0.9, 0.85, 1.0),
-            illuminance: 6_000.0,
+            color: gradiance_domain::theme::FILL_LIGHT,
+            illuminance: 900.0,
             ..KeyLightSettings::default()
         });
         changed = true;

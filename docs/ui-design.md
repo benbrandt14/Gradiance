@@ -7,7 +7,8 @@ them, plus the rules that decide where a new surface goes.
 
 Scope: `crates/gradiance-ui` only — the one crate allowed to import `egui`
 (invariant 4). Interaction rules for the *scene* (tools, gestures, snapping)
-live in `docs/roadmap.md` and the tool docs; this is about chrome.
+live in `docs/roadmap.md` and the tool docs; this is about chrome, plus
+§ 7, the scene look the chrome sits over (brief 4b-3).
 
 ---
 
@@ -283,3 +284,70 @@ restart.
 Note that egui and gizmo draw paths are structurally uncoverable headless
 (`desmell-log.md:68`), against a 50% CI line floor — which is another reason to
 keep the decisions out of the draw call.
+
+---
+
+## 7. The scene look (brief 4b-3)
+
+The scene — bodies, outlines, backdrop, grounds, lights, and every gizmo
+drawn over them — has one source of colour: `gradiance_domain::theme`. The
+chrome's tokens are U-7's (`docs/unified-surface-plan.md` § 7.1); U-7 may
+read the scene **accent** (`Ink::accent`, the selection colour) from here.
+
+### Looks
+
+A `Look` names a direction; `RenderSettings::look` holds the active one
+(scene content: saved, one undo step). Applying a look (`look.apply`, or
+Settings ▸ Rendering ▸ Look) also resets the render, lighting and scenery
+settings to its preset; editing those afterwards keeps the look.
+
+| Look | Name | Backdrop | Pieces | Light | Bands |
+|---|---|---|---|---|---|
+| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 4, rim 0.2, glint 0.25 |
+| Blueprint | `blueprint` | navy | pale chalk tones (L 0.84), navy ink outlines | one cool key | 3, rim 0.35 |
+| Flat graphic | `poster` | paper white | bold tones (L 0.615), black outlines | one key | 2, no rim or glint |
+
+**Why studio is the default:** it is the only look whose two lights make
+the toon bands read in a plain 2D view (overlapping shadows step through
+all four bands), its mid-light backdrop keeps both dark outlines and
+saturated ink legible, and it is the nearest to the toon look the owner
+chose in review (`shading`). The owner's pick is open as the review question
+`look`.
+
+### The palette is semantic
+
+`appearance::PALETTE` is the studio palette. A body stores one of its ten
+fills; under another look the render layer shows that slot in the look's
+tone (`SceneTheme::display`), as it does the default outline, neutral fill,
+ground and rod. So a red body is red in every look, a custom colour is shown
+exactly as authored, and the save file never changes with the look. (The
+inspector's swatch row still shows the studio tones; see the 4b-3 Outcome.)
+
+### Ink roles
+
+Gizmos draw with a **role**, never a colour: `theme::Role` (`Accent`,
+`Snap`, `Guide`, `Preview`, `Alternate`, `Danger`, `Marquee`, `Rotate`,
+`Joint`, `JointOutline`, `Muted`, `Grid`), resolved by the active look's
+`Ink`. A tool's `ToolPreview` holds `Stroke`s (a role and an alpha) and is
+resolved at draw time. Debug overlays use `theme::debug`, which does not
+change with the look.
+
+### Rules the tests hold
+
+- **One source.** `tests/boundaries.rs` (`scene_colours_have_one_source`)
+  fails on a colour written as numbers (or a `css::` name) outside
+  `theme.rs`, in every crate but `gradiance-ui`. Add a token, not a literal.
+- **Contrast** (`theme::floors`, WCAG ratio): fill and rod vs backdrop ≥ 3,
+  outline vs fill ≥ 3, ink vs backdrop ≥ 3, joint face vs outline ≥ 3,
+  ground vs backdrop ≥ 1.2 (a surface, not an object).
+- **Distinctness:** palette entries are ≥ 0.045 apart in OKLab (about two
+  just-noticeable differences).
+
+### Lighting and bands
+
+Light levels are set against the toon white point (1.0): see
+`Look::lighting`. The back plane and grounds are banded like bodies, so a
+shadow is a flat step. The camera uses a linear tone curve, so the top band
+shows a fill exactly as authored. SSAO stays off: at this scale it changes
+nothing visible (4b-3 Outcome); outlines and banded, layered shadows carry
+the contact cues instead.

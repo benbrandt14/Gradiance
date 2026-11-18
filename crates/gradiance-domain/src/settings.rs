@@ -285,6 +285,12 @@ impl SimSettings {
 // override, `scene::review::SettingsOverride`) fills the rest from `Default`.
 #[serde(default)]
 pub struct RenderSettings {
+    /// The scene look ([`Look`](crate::theme::Look)): it tones the body
+    /// palette and picks the overlay ink. Applying a look (`look.apply`)
+    /// also resets these settings, the lighting and the scenery to the
+    /// look's preset; setting only this field re-tones colours and keeps
+    /// the rest.
+    pub look: crate::theme::Look,
     /// Quantize lighting into bands (toon look). Off = smooth matte PBR.
     pub toon_enabled: bool,
     /// Number of light bands when toon shading is on.
@@ -310,14 +316,9 @@ fn default_specular() -> f32 {
 }
 
 impl Default for RenderSettings {
+    /// The default look's preset.
     fn default() -> Self {
-        Self {
-            toon_enabled: true,
-            bands: 4,
-            rim_strength: 0.25,
-            white_point: 1.3,
-            specular: 0.3,
-        }
+        crate::theme::Look::default().render()
     }
 }
 
@@ -387,10 +388,12 @@ pub struct KeyLightSettings {
 impl Default for KeyLightSettings {
     fn default() -> Self {
         Self {
-            azimuth_deg: 120.0,
-            elevation_deg: 32.0,
-            color: crate::appearance::Rgba::rgb(1.0, 1.0, 1.0),
-            illuminance: 12_000.0,
+            // The studio key's direction and strength, untinted: a light
+            // added in the Lighting tab lands at the toon white point.
+            azimuth_deg: 125.0,
+            elevation_deg: 40.0,
+            color: crate::theme::WHITE_LIGHT,
+            illuminance: 2_400.0,
             shadows: true,
         }
     }
@@ -424,17 +427,9 @@ pub struct LightingSettings {
 }
 
 impl Default for LightingSettings {
+    /// The default look's preset.
     fn default() -> Self {
-        // The single-light default matches the original hard-coded key
-        // light: from (-400, 700) in-plane, lifted toward the viewer.
-        Self {
-            lights: vec![KeyLightSettings::default()],
-            ambient: 300.0,
-            ssao: false,
-            contact_shadows: true,
-            shadow_map_size: 4096,
-            shadow_distance: Length(80.0),
-        }
+        crate::theme::Look::default().lighting()
     }
 }
 
@@ -464,14 +459,9 @@ pub struct ScenerySettings {
 }
 
 impl Default for ScenerySettings {
+    /// The default look's preset.
     fn default() -> Self {
-        Self {
-            back_offset: Length(0.2),
-            back_color: crate::appearance::Rgba::rgb(0.82, 0.83, 0.85),
-            back_visible: true,
-            ground_visible: true,
-            perspective_deg: 0.0,
-        }
+        crate::theme::Look::default().scenery()
     }
 }
 

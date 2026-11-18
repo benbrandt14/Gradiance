@@ -178,6 +178,8 @@ impl Operation for SpawnGround {
         );
         record.pose.rot = self.angle.0;
         record.physics = BodyPhysics::fixed();
+        // A ground is the look's floor, as the ground tool draws it.
+        record.appearance.fill = gradiance_domain::theme::STUDIO.ground;
         Ok(spawn(record))
     }
 }

@@ -8,10 +8,11 @@ use crate::gesture::{AxisConstraint, GestureConstraints};
 use crate::overlay::OverlayGizmos;
 use crate::selection::Selection;
 use crate::snap::{SnapKind, SnappedCursor};
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::Body;
+use gradiance_domain::settings::RenderSettings;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::active;
 use gradiance_geometry::polygonize::polygonize;
 
 /// Screen-constant glyph half-size in world units.
@@ -23,13 +24,14 @@ fn glyph_size(scale: crate::camera::CameraScale) -> f32 {
 pub fn draw_snap_indicator(
     snapped: Res<SnappedCursor>,
     scale: Res<crate::camera::CameraScale>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let (Some(pos), Some(kind)) = (snapped.position, snapped.kind) else {
         return;
     };
     let s = glyph_size(*scale);
-    let color = css::GOLD;
+    let color = Color::from(active(settings.as_deref()).ink.snap);
     match kind {
         SnapKind::Grid => {
             gizmos.line_2d(pos - Vec2::X * s, pos + Vec2::X * s, color);
@@ -72,13 +74,14 @@ pub fn draw_snap_indicator(
 pub fn draw_constraint_guides(
     constraints: Res<GestureConstraints>,
     snapped: Res<SnappedCursor>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     const LEN: f32 = 1_000.0;
     let Some(pos) = snapped.effective() else {
         return;
     };
-    let color = css::CORNFLOWER_BLUE.with_alpha(0.4);
+    let color = Color::from(active(settings.as_deref()).ink.guide.with_alpha(0.45));
     let [a, b] = constraints.basis;
     let axes: &[Vec2] = match constraints.axis {
         AxisConstraint::Horizontal => &[a],
@@ -95,8 +98,10 @@ pub fn draw_constraint_guides(
 pub fn draw_selection_outlines(
     selection: Res<Selection>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
+    let accent = Color::from(active(settings.as_deref()).ink.accent);
     for entity in selection.iter() {
         let Ok((shape, transform)) = bodies.get(entity) else {
             continue;
@@ -111,7 +116,7 @@ pub fn draw_selection_outlines(
             if let Some(first) = points.first().copied() {
                 points.push(first);
             }
-            gizmos.linestrip_2d(points, css::ORANGE);
+            gizmos.linestrip_2d(points, accent);
         }
     }
 }

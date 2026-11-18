@@ -17,6 +17,7 @@ pub mod props;
 pub mod settings;
 pub use gradiance_geometry::shape;
 pub mod signal;
+pub mod theme;
 pub mod tracer;
 
 use bevy::prelude::*;

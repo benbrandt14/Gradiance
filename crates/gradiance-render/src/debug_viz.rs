@@ -4,7 +4,6 @@
 //! Everything here reads authored components, the pure geometry layer,
 //! and the `physics::queries` read facade.
 
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
 use gradiance_domain::Body;
@@ -14,6 +13,7 @@ use gradiance_domain::joint::{JointDef, JointKind};
 use gradiance_domain::layers::layer_hue;
 use gradiance_domain::settings::DebugSettings;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::debug;
 use gradiance_geometry::polygonize::polygonize;
 use gradiance_geometry::sdf;
 use gradiance_interaction::overlay::OverlayGizmos;
@@ -73,7 +73,7 @@ pub fn draw_debug_overlays(
         let n = substeps.0.len().max(1) as f32;
         for (i, frame) in substeps.0.iter().enumerate() {
             let alpha = 0.25 + 0.75 * ((i + 1) as f32 / n);
-            let color = css::MEDIUM_ORCHID.with_alpha(alpha);
+            let color = Color::from(debug::SUBSTEP.with_alpha(alpha));
             for pos in frame {
                 gizmos.circle_2d(Isometry2d::from_translation(*pos), 2.5 * px, color);
             }
@@ -102,7 +102,7 @@ fn draw_body_overlays(
     // Collision-set visualization: outline in the front-most derived
     // layer's hue, matching the depth panel's gridline swatches.
     if debug.show_layers && !infinite {
-        let color = Color::hsl(layer_hue(band.bits().trailing_zeros()), 0.75, 0.55);
+        let color = Color::from(debug::layer(layer_hue(band.bits().trailing_zeros())));
         for ring in polygonize(shape).rings() {
             let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
             if let Some(first) = pts.first().copied() {
@@ -119,7 +119,7 @@ fn draw_body_overlays(
             if let Some(first) = pts.first().copied() {
                 pts.push(first);
             }
-            gizmos.linestrip_2d(pts, css::SPRING_GREEN);
+            gizmos.linestrip_2d(pts, Color::from(debug::COLLIDER));
         }
     }
 
@@ -140,7 +140,7 @@ fn draw_body_overlays(
         gizmos.rect_2d(
             Isometry2d::from_translation((wmin + wmax) / 2.0),
             wmax - wmin,
-            css::DARK_KHAKI,
+            Color::from(debug::AABB),
         );
     }
 
@@ -149,12 +149,12 @@ fn draw_body_overlays(
         gizmos.line_2d(
             origin - Vec2::X * 6.0 * px,
             origin + Vec2::X * 6.0 * px,
-            css::WHITE,
+            Color::from(debug::ORIGIN),
         );
         gizmos.line_2d(
             origin - Vec2::Y * 6.0 * px,
             origin + Vec2::Y * 6.0 * px,
-            css::WHITE,
+            Color::from(debug::ORIGIN),
         );
         if !infinite {
             // Centroid may sit off-origin after CSG reshapes.
@@ -162,7 +162,7 @@ fn draw_body_overlays(
             gizmos.circle_2d(
                 Isometry2d::from_translation(centroid),
                 3.0 * px,
-                css::HOT_PINK,
+                Color::from(debug::CENTROID),
             );
         }
     }
@@ -173,18 +173,22 @@ fn draw_body_overlays(
         let (lin, ang) = (lin.value(), ang.value());
         let origin = transform.translation.truncate();
         if physics.is_sleeping(entity) {
-            gizmos.circle_2d(Isometry2d::from_translation(origin), 8.0 * px, css::GRAY);
+            gizmos.circle_2d(
+                Isometry2d::from_translation(origin),
+                8.0 * px,
+                Color::from(debug::SLEEPING),
+            );
         } else {
             // Velocity arrow is a world-space vector (both world and velocity
             // flipped by the same factor, so its screen size is preserved).
-            gizmos.arrow_2d(origin, origin + lin * 0.25, css::YELLOW);
+            gizmos.arrow_2d(origin, origin + lin * 0.25, Color::from(debug::VELOCITY));
             if ang.abs() > 0.05 {
                 // Angular velocity (rad/s, scale-invariant): an arc-ish tick
                 // whose pixel radius grows with spin.
                 gizmos.circle_2d(
                     Isometry2d::from_translation(origin),
                     (4.0 + ang.abs().min(20.0)) * px,
-                    css::ORANGE,
+                    Color::from(debug::SPIN),
                 );
             }
         }
@@ -201,10 +205,11 @@ fn draw_joint_anchors(
 ) {
     for def in joints {
         let color = match def.kind {
-            JointKind::Hinge { .. } => css::ORANGE,
-            JointKind::Slider { .. } => css::DEEP_SKY_BLUE,
-            JointKind::Spring { .. } => css::SPRING_GREEN,
+            JointKind::Hinge { .. } => debug::HINGE,
+            JointKind::Slider { .. } => debug::SLIDER,
+            JointKind::Spring { .. } => debug::SPRING,
         };
+        let color = Color::from(color);
         let world_a = index
             .entity(def.body_a)
             .and_then(|e| poses.get(e).ok())
@@ -239,7 +244,7 @@ fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>, p
         gizmos.circle_2d(
             Isometry2d::from_translation(contact.point),
             2.5 * px,
-            css::MAGENTA,
+            Color::from(debug::CONTACT),
         );
         // Screen-sized base plus a term growing with the contact impulse
         // (N·s, SI — clamped so hard hits stay on-screen). The impulse gain
@@ -248,7 +253,7 @@ fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>, p
         gizmos.arrow_2d(
             contact.point,
             contact.point + contact.normal * length,
-            css::MAGENTA,
+            Color::from(debug::CONTACT),
         );
     }
 }
@@ -293,7 +298,7 @@ fn draw_field_overlay(
             let dir = a / mag;
             let tip = p + dir * len;
             let heat = (mag / (mag + 20.0)).clamp(0.0, 1.0);
-            let color = css::STEEL_BLUE.mix(&css::ORANGE_RED, heat);
+            let color = Color::from(debug::FIELD_COLD).mix(&Color::from(debug::FIELD_HOT), heat);
             gizmos.line_2d(p, tip, color);
             let perp = Vec2::new(-dir.y, dir.x);
             gizmos.line_2d(tip, tip - dir * len * 0.35 + perp * len * 0.2, color);
@@ -313,10 +318,11 @@ fn draw_field_marker(
 ) {
     let p = transform.translation.truncate();
     let color = if source.strength.value() < 0.0 {
-        css::CORNFLOWER_BLUE
+        debug::FIELD_ATTRACT
     } else {
-        css::INDIAN_RED
+        debug::FIELD_REPEL
     };
+    let color = Color::from(color);
     // Screen-sized double ring (5 px / 8 px).
     gizmos.circle_2d(Isometry2d::from_translation(p), 5.0 * px, color);
     gizmos.circle_2d(

@@ -59,6 +59,21 @@ impl<R: Resource<Mutability = Mutable> + Reflect> Write for SettingWrite<R> {
     }
 }
 
+/// A whole settings resource replaced by a new value (a preset applied in
+/// one step). The config seam, like [`SettingWrite`]; a scene-content
+/// resource's settled change is still one undo step.
+struct SettingReplace<R>(R);
+
+impl<R: Resource + Debug> Write for SettingReplace<R> {
+    fn describe(&self) -> String {
+        format!("{} = {:?}", std::any::type_name::<R>(), self.0)
+    }
+
+    fn apply(self: Box<Self>, world: &mut World) {
+        world.insert_resource(self.0);
+    }
+}
+
 /// The result of [`Operation::lower`](crate::Operation::lower): zero or more
 /// writes for [`apply`] to make, plus an optional value to return to the
 /// caller. One shape covers all four seams: an edit holds one intent, a query
@@ -101,6 +116,15 @@ impl OpOutput {
             resource: PhantomData,
         }));
         Ok(self)
+    }
+
+    /// Adds a replacement of the whole settings resource `R` by `value` (a
+    /// preset applied at once). Config seam only: `R` is a settings
+    /// resource, never an authored component.
+    #[must_use]
+    pub fn replace_setting<R: Resource + Debug>(mut self, value: R) -> Self {
+        self.writes.push(Box::new(SettingReplace(value)));
+        self
     }
 
     /// Sets the value the caller gets back.

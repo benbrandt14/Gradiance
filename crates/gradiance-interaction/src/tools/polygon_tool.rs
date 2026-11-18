@@ -4,9 +4,9 @@
 use crate::snap::DraftReference;
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Role;
 use gradiance_geometry::contours::{ring_centroid, ring_signed_area};
 
 /// Clicking within this distance of the first vertex closes the loop.
@@ -78,12 +78,12 @@ impl DraftTool for PolygonTool {
         if self.0.is_empty() {
             return;
         }
-        out.polyline(self.0.clone(), css::AQUAMARINE);
+        out.polyline(self.0.clone(), Role::Preview);
         if let (Some(last), Some(p)) = (self.0.last().copied(), ctx.cursor) {
-            out.line(last, p, css::AQUAMARINE.with_alpha(0.5));
+            out.line(last, p, Role::Preview.alpha(0.5));
         }
         if let Some(first) = self.0.first().copied() {
-            out.circle(first, CLOSE_RADIUS, css::GOLD);
+            out.circle(first, CLOSE_RADIUS, Role::Snap);
         }
     }
 }

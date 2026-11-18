@@ -118,5 +118,10 @@ fn setup_scene(mut commands: Commands) {
             ..OrthographicProjection::default_3d()
         }),
         Transform::from_xyz(0.0, 0.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
+        // An identity tone curve: the toon top band shows a fill exactly as
+        // authored. The default (TonyMcMapface) darkened and desaturated
+        // saturated fills by up to a third, so the palette's contrast
+        // design never reached the screen (brief 4b-3).
+        bevy::render::view::Tonemapping::Linear,
     ));
 }

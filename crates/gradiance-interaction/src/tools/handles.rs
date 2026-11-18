@@ -9,10 +9,11 @@
 
 use crate::overlay::OverlayGizmos;
 use crate::selection::Selection;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::Body;
+use gradiance_domain::settings::RenderSettings;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::active;
 use gradiance_geometry::polygonize::polygonize;
 
 /// Which coordinate system the selection box (and thus scaling) uses.
@@ -182,8 +183,10 @@ pub fn draw_handles(
     keyboard_captured: Res<crate::KeyboardCaptured>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
     cam_scale: Res<crate::camera::CameraScale>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
+    let ink = &active(settings.as_deref()).ink;
     let Some(sbox) = selection_box(&selection, *frame, &bodies) else {
         return;
     };
@@ -194,13 +197,13 @@ pub fn draw_handles(
     // *before* committing to the gesture rather than after.
     let copying = !keyboard_captured.0
         && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight));
-    let color = if copying {
-        css::SPRING_GREEN
+    let color = Color::from(if copying {
+        ink.alternate
     } else if *frame == ScaleFrame::Local {
-        css::MEDIUM_PURPLE
+        ink.rotate
     } else {
-        css::LIGHT_SKY_BLUE
-    };
+        ink.marquee
+    });
 
     // Box outline.
     let corners = [

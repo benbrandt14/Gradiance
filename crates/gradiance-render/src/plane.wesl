@@ -31,7 +31,14 @@ struct HorizonData {
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> plane: PlaneData;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101) var<uniform> fade: FadeData;
+struct ToonData {
+    // The bodies' toon parameters: x = band count (0 = smooth), z = white
+    // point. Only the banding applies here (no rim, no glint).
+    data: vec4<f32>,
+}
+
 @group(constants::MATERIAL_BIND_GROUP) @binding(102) var<uniform> horizon: HorizonData;
+@group(constants::MATERIAL_BIND_GROUP) @binding(103) var<uniform> toon: ToonData;
 
 // 4x4 Bayer threshold — the opaque pass has no blending, so the inside
 // reveal is a screen-door dissolve (brief: the band is ~0.5 m of camera
@@ -71,6 +78,17 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
+
+    // Toon bands, as on the bodies (toon.wesl): the lit/albedo ratio is
+    // quantized, so a shadow on the plane is a flat step, and overlapping
+    // shadows from two lights are two steps.
+    let bands = toon.data.x;
+    if bands >= 1.0 {
+        let base = max(pbr_input.material.base_color.rgb, vec3(1e-3));
+        let lit = out.color.rgb / base;
+        let level = clamp(dot(lit, vec3(0.2126, 0.7152, 0.0722)) / toon.data.z, 0.0, 1.0);
+        out.color = vec4(base * (ceil(level * bands) / bands), out.color.a);
+    }
 
     // Dot grid (ground planes only; spacing 0 disables it on the back
     // plane): faint lattice dots in the plane's own tangent frame give the

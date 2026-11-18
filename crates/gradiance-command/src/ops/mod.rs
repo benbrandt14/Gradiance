@@ -8,8 +8,8 @@
 //! The files split by family: [`spawn`] authors new geometry, [`body`] edits
 //! one existing body, [`sets`] edits several at once (booleans, groups),
 //! [`joint`] makes and removes relationships, [`scene`] holds the history,
-//! the new scene, a count and the settings write, and [`query`] the
-//! read-only queries.
+//! the new scene, a count and the settings write, [`look`] the scene look
+//! and its settings writes, and [`query`] the read-only queries.
 //!
 //! # Targets and the selection
 //!
@@ -24,6 +24,7 @@
 pub mod body;
 pub mod group;
 pub mod joint;
+pub mod look;
 pub mod query;
 pub mod scene;
 pub mod sets;
@@ -37,7 +38,7 @@ use gradiance_core::units::PosRot;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::props::BodyPhysics;
-use gradiance_domain::settings::SimSettings;
+use gradiance_domain::settings::{LightingSettings, RenderSettings, ScenerySettings, SimSettings};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_op::{
     OpContext, OpContextFillers, OpError, OpInvokeSet, OpPlugin, OpRegistry, ResolveTarget, Target,
@@ -138,10 +139,19 @@ pub(crate) fn joint_of(
 }
 
 /// Publishes this layer's mirrors into a new operation context: the scene
-/// snapshot and the simulation settings.
+/// snapshot and the simulation, render, lighting and scenery settings.
 fn fill_context(world: &mut World, ctx: &mut OpContext) {
     ctx.insert(snapshot_scene(world));
     if let Some(settings) = world.get_resource::<SimSettings>() {
+        ctx.insert(settings.clone());
+    }
+    if let Some(settings) = world.get_resource::<RenderSettings>() {
+        ctx.insert(settings.clone());
+    }
+    if let Some(settings) = world.get_resource::<LightingSettings>() {
+        ctx.insert(settings.clone());
+    }
+    if let Some(settings) = world.get_resource::<ScenerySettings>() {
         ctx.insert(settings.clone());
     }
 }
@@ -163,6 +173,7 @@ impl Plugin for SceneOpsPlugin {
             sets::register(&mut registry);
             joint::register(&mut registry);
             scene::register(&mut registry);
+            look::register(&mut registry);
             query::register(&mut registry);
         }
         app.world_mut()

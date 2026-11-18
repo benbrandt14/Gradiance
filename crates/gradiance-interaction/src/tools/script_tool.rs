@@ -18,10 +18,10 @@
 
 use crate::snap::DraftReference;
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::script_tools::ScriptTools;
 use gradiance_core::states::ToolState;
+use gradiance_domain::theme::Role;
 
 /// Radius of the marker drawn at each collected point, world units.
 const POINT_MARK: f32 = 0.05;
@@ -86,13 +86,13 @@ impl DraftTool for ScriptTool {
             return;
         }
         for p in &self.points {
-            out.circle(*p, POINT_MARK, css::GOLD);
+            out.circle(*p, POINT_MARK, Role::Snap);
         }
         if self.points.len() > 1 {
-            out.polyline(self.points.clone(), css::AQUAMARINE);
+            out.polyline(self.points.clone(), Role::Preview);
         }
         if let (Some(last), Some(p)) = (self.points.last().copied(), ctx.cursor) {
-            out.line(last, p, css::AQUAMARINE.with_alpha(0.5));
+            out.line(last, p, Role::Preview.alpha(0.5));
         }
     }
 }

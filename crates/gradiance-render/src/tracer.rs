@@ -14,13 +14,14 @@
 //! its target body by [`follow_node_attachments`].
 
 use avian2d::prelude::Physics;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
 use gradiance_core::states::GameState;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
+use gradiance_domain::settings::RenderSettings;
+use gradiance_domain::theme::active;
 use gradiance_domain::tracer::Tracer;
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_interaction::selection::Selection;
@@ -135,9 +136,11 @@ pub fn draw_traces(
         &Appearance,
         Option<&gradiance_signal::SignalColorOverride>,
     )>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let now = time.elapsed_secs();
+    let theme = active(settings.as_deref());
     for (tracer, trail, appearance, tint) in &trails {
         let fade = tracer.fade_secs.value().max(0.05);
         let fill = match tint.and_then(|t| t.trail) {
@@ -150,7 +153,7 @@ pub fn draw_traces(
                     a: c.alpha,
                 }
             }
-            None => appearance.fill,
+            None => theme.display(appearance.fill),
         };
         let samples: Vec<(f32, Vec2)> = trail.0.iter().copied().collect();
         match tracer.pattern {
@@ -160,7 +163,7 @@ pub fn draw_traces(
                     let (_, b) = pair[1];
                     let alpha = (1.0 - (now - t) / fade).clamp(0.0, 1.0);
                     if alpha > 0.0 {
-                        gizmos.line_2d(a, b, Color::srgba(fill.r, fill.g, fill.b, alpha * 0.9));
+                        gizmos.line_2d(a, b, Color::from(fill.with_alpha(alpha * 0.9)));
                     }
                 }
             }
@@ -171,7 +174,7 @@ pub fn draw_traces(
                         gizmos.circle_2d(
                             Isometry2d::from_translation(p),
                             tracer.size.value().max(0.5),
-                            Color::srgba(fill.r, fill.g, fill.b, alpha),
+                            Color::from(fill.with_alpha(alpha)),
                         );
                     }
                 }
@@ -188,20 +191,25 @@ pub fn draw_node_glyphs(
     index: Res<IdIndex>,
     nodes: Query<(Entity, &Transform, &NodeKind, &NodeAttachment, &Appearance)>,
     bodies: Query<&Transform, With<Body>>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
+    let theme = active(settings.as_deref());
     for (entity, transform, kind, attachment, appearance) in &nodes {
         let p = transform.translation.truncate();
         let selected = selection.contains(entity);
-        let fill = appearance.fill;
-        let base = Color::srgb(fill.r, fill.g, fill.b);
+        let base = Color::from(theme.display(appearance.fill).with_alpha(1.0));
         // A double ring marks the node; brighter + larger when selected.
         let r = if selected { 8.0 } else { 6.0 };
         gizmos.circle_2d(Isometry2d::from_translation(p), r, base);
         gizmos.circle_2d(
             Isometry2d::from_translation(p),
             r - 2.5,
-            if selected { css::WHITE.into() } else { base },
+            if selected {
+                theme.ink.accent.into()
+            } else {
+                base
+            },
         );
         // A comet-tail tick marks the tracer (the one placeable node kind).
         match kind {

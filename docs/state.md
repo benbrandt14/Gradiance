@@ -11,9 +11,10 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-3** art direction in progress (brief revised
-  2026-11-18: the egui chrome theme moved to U-7; this brief owns the
-  scene look). **U-6** #256 is merged (b53b019): `gradiance ops`,
+- **Now:** **4b-3** art direction in review (PR #257): three scene looks
+  (`gradiance_domain::theme`, studio default), one colour source
+  (boundaries test), toon bands now visible (cap winding, light levels,
+  banded planes), review questions `look` and `toon-lighting` added. **U-6** #256 is merged (b53b019): `gradiance ops`,
   `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
   app; the catalog carries a params schema and an example per operation.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
@@ -36,7 +37,7 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
      snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (done, #253).
   6. **4b-2** groups panel (done, #254).
   7. **U-6** CLI + MCP server (done, #256).
-  8. **4b-3** art direction (scene look; in progress), then **U-7** theme
+  8. **4b-3** art direction (scene look; in review, #257), then **U-7** theme
      tokens, Blender-leaning (chrome); then **4b-4** scaled defaults.
   9. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +

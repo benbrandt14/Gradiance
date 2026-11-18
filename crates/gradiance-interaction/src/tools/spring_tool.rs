@@ -15,12 +15,12 @@ use crate::snap::DraftReference;
 use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{DEFAULT_SPRING_DAMPING, JointCommon, JointDef, JointKind};
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Role;
 use gradiance_scene::JointRecord;
 
 /// Shortest spring that will commit (world metres); a near-zero drag is a no-op.
@@ -77,10 +77,10 @@ impl ManipTool for SpringDraft {
         };
         // Screen-sized handle dots: 4 px, scaled to world by `cam_scale`.
         let r = 4.0 * ctx.cam_scale;
-        out.circle(anchor, r, css::SPRING_GREEN);
+        out.circle(anchor, r, Role::Alternate);
         if let Some(p) = ctx.cursor {
-            out.line(anchor, p, css::SPRING_GREEN);
-            out.circle(p, r, css::SPRING_GREEN);
+            out.line(anchor, p, Role::Alternate);
+            out.circle(p, r, Role::Alternate);
         }
     }
 }

@@ -10,11 +10,11 @@ use crate::selection::Selection;
 use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::node::{NodeAttachment, NodeKind};
+use gradiance_domain::theme::Role;
 use gradiance_domain::tracer::Tracer;
 use gradiance_scene::NodeRecord;
 
@@ -52,7 +52,7 @@ fn place_node(ctx: &ManipContext, world: &ToolWorld, kind: NodeKind) -> ManipOut
 fn ghost(ctx: &ManipContext, out: &mut ToolPreview) {
     if let Some(p) = ctx.cursor {
         // Screen-sized ghost dot: 6 px, scaled to world by `cam_scale`.
-        out.circle(p, 6.0 * ctx.cam_scale, css::AQUAMARINE);
+        out.circle(p, 6.0 * ctx.cam_scale, Role::Preview);
     }
 }
 

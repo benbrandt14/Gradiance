@@ -21,12 +21,12 @@ use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
 use avian2d::prelude::RigidBody;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::states::ToolState;
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
+use gradiance_domain::theme::Role;
 use gradiance_scene::JointRecord;
 
 /// Below this drag length a slider uses the body's local X axis.
@@ -91,7 +91,7 @@ impl ManipTool for ConnectorDraft {
         // Screen-sized markers: radii/lengths are in pixels, scaled to world
         // by `cam_scale` (world-per-pixel) so they stay constant on screen.
         let px = ctx.cam_scale;
-        out.circle(anchor, 5.0 * px, css::VIOLET);
+        out.circle(anchor, 5.0 * px, Role::Preview);
         if ctx.tool == ToolState::Slider
             && let Some(p) = ctx.cursor
             && anchor.distance(p) > AXIS_THRESHOLD
@@ -100,7 +100,7 @@ impl ManipTool for ConnectorDraft {
             out.line(
                 anchor - dir * 200.0 * px,
                 anchor + dir * 200.0 * px,
-                css::VIOLET,
+                Role::Preview,
             );
         }
     }

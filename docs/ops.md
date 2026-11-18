@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 74 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 79 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -89,6 +89,19 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `joint.slider` | `(slider a b x y ax ay)` | edit | `spawn-joint` | — | Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world. | `{"a": 0, "b": 1, "x": -0.2, "y": 1, "ax": 1, "ay": 0}` |
 | `joint.spring` | `(spring a b stiffness damping)` | edit | `spawn-joint` | — | Spring-damper strut between the centres of a and b; rest length is their current distance. | `{"a": 0, "b": 2, "stiffness": 50, "damping": 1}` |
 
+## `lighting`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `lighting.set` | `(lighting-set path value)` | config | `settings` | — | Set a lighting setting by reflect-path, e.g. "ambient", "lights[0].elevation_deg", "ssao" (a settled edit is one undo step). | `{"path": "lights[0].elevation_deg", "value": 30}` |
+
+## `look`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `look.apply` | `(look-apply name)` | config | `settings` | — | Apply a scene look by name (studio, blueprint, poster): palette tone, overlay ink, render, lighting and scenery presets — one undo step. | `{"name": "blueprint"}` |
+| `look.list` | `(looks)` | query | — | — | Every scene look's name, in menu order (the first is the default). | `{}` |
+
 ## `panel`
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
@@ -99,11 +112,23 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `panel.show` | `(panel-show name)` | editor | — | — | Open an editor panel by name, as its View-menu row does (see panel.list for the names). | `{"name": "properties"}` |
 | `panel.toggle` | `(panel-toggle name)` | editor | — | — | Flip an editor panel's visibility by name. | `{"name": "properties"}` |
 
+## `render`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `render.set` | `(render-set path value)` | config | `settings` | — | Set a render (toon) setting by reflect-path, e.g. "bands", "rim_strength", "white_point" (a settled edit is one undo step). | `{"path": "bands", "value": 3}` |
+
 ## `scene`
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default environment) — one undo step, as File ▸ New scene. | `{}` |
+
+## `scenery`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `scenery.set` | `(scenery-set path value)` | config | `settings` | — | Set a scenery setting by reflect-path, e.g. "perspective_deg", "back_offset", "back_visible" (a settled edit is one undo step). | `{"path": "perspective_deg", "value": 20}` |
 
 ## `signal`
 

@@ -420,7 +420,7 @@ fn layout_changes(
 /// relaxation clench and annealing rattle. The bright ones are the best
 /// layout, which is what pressing Apply would actually do.
 pub fn draw_pack_preview(session: Res<PackSession>, mut gizmos: Gizmos<OverlayGizmos>) {
-    use bevy::color::palettes::css;
+    use gradiance_domain::theme::debug;
 
     let Some(run) = session.run.as_ref() else {
         return;
@@ -439,16 +439,16 @@ pub fn draw_pack_preview(session: Res<PackSession>, mut gizmos: Gizmos<OverlayGi
             outline(
                 &mut gizmos,
                 &item.placed(*pose),
-                css::SLATE_GRAY.with_alpha(0.35),
+                Color::from(debug::PACK_GHOST.with_alpha(0.35)),
             );
         }
     }
 
-    let accent = if done {
-        css::SPRING_GREEN
+    let accent = Color::from(if done {
+        debug::PACK_DONE
     } else {
-        css::AQUAMARINE
-    };
+        debug::PACK_RUNNING
+    });
     for (i, item) in problem.items.iter().enumerate() {
         let Some(pose) = run.best_layout().poses.get(i) else {
             continue;
@@ -458,7 +458,7 @@ pub fn draw_pack_preview(session: Res<PackSession>, mut gizmos: Gizmos<OverlayGi
         } else {
             // Pinned obstacles are drawn differently: they are constraints,
             // not results, and it should be obvious they will not move.
-            css::ORANGE.with_alpha(0.6)
+            Color::from(debug::PACK_PINNED.with_alpha(0.6))
         };
         outline(&mut gizmos, &item.placed(*pose), color);
     }

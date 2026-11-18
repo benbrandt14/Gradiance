@@ -2,8 +2,8 @@
 //! (severed bodies split into independent pieces).
 
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
-use bevy::color::palettes::css;
 use bevy::prelude::*;
+use gradiance_domain::theme::Role;
 
 /// Stroke width in *screen* pixels (scaled by zoom at commit, so a cut
 /// always looks and behaves like a thin slit at any magnification).
@@ -42,7 +42,7 @@ impl DraftTool for CutTool {
 
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview) {
         if let (Some(anchor), Some(p)) = (self.0, ctx.cursor) {
-            out.line(anchor, p, css::ORANGE_RED);
+            out.line(anchor, p, Role::Danger);
         }
     }
 }

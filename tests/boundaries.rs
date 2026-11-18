@@ -359,3 +359,112 @@ fn the_toolchain_pin_is_one_version() {
         "rust-toolchain.toml `channel` and ci.yml `RUST_PIN` must be equal"
     );
 }
+
+/// The colour constructors a literal scene colour would be written with.
+const COLOUR_CONSTRUCTORS: &[&str] = &[
+    "Color::srgb(",
+    "Color::srgba(",
+    "Color::srgb_u8(",
+    "Color::srgba_u8(",
+    "Color::linear_rgb(",
+    "Color::linear_rgba(",
+    "Color::hsl(",
+    "Color::hsla(",
+    "Color::hsv(",
+    "Color::oklab(",
+    "Color::oklch(",
+    "LinearRgba::new(",
+    "LinearRgba::rgb(",
+    "Srgba::new(",
+    "Srgba::rgb(",
+    "Rgba::rgb(",
+    "Rgba::from_hsl(",
+];
+
+/// Whether `code` builds a colour from a number written in place: one of
+/// [`COLOUR_CONSTRUCTORS`] whose first argument starts with a digit (or a
+/// sign or point), a named engine colour, or an `Rgba { r: <number>, …}`.
+fn colour_literal(code: &str) -> bool {
+    let literal_arg = COLOUR_CONSTRUCTORS.iter().any(|ctor| {
+        code.match_indices(ctor).any(|(at, _)| {
+            code[at + ctor.len()..]
+                .trim_start()
+                .starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '.')
+        })
+    });
+    let named = ["css::", "palettes::", "Color::WHITE", "Color::BLACK"]
+        .iter()
+        .any(|n| code.contains(n));
+    // A colour field set from a number: `r: 0.1` (not `near: 0.1`).
+    let field = ["r: ", "red: "].iter().any(|n| {
+        code.match_indices(n).any(|(at, _)| {
+            let ident_before = code[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
+            !ident_before
+                && code[at + n.len()..].starts_with(|c: char| c.is_ascii_digit() || c == '.')
+        })
+    });
+    literal_arg || named || field
+}
+
+/// **One source for scene colour** (brief 4b-3): a colour written as
+/// numbers lives in `gradiance_domain::theme` and nowhere else, as a
+/// non-ASCII glyph lives in `ui::fonts::glyph`. Test modules are exempt
+/// (fixtures name colours), and so is `gradiance-ui`: chrome colour is
+/// egui's and its tokens are brief U-7's (`docs/unified-surface-plan.md`
+/// § 7.1). The `debug` overlay colours live in the theme too, as data.
+#[test]
+fn scene_colours_have_one_source() {
+    let root = repo_root();
+    let allowed = [
+        "crates/gradiance-domain/src/theme.rs",
+        "crates/gradiance-ui/",
+    ];
+    let mut found = Vec::new();
+    for file in workspace_sources() {
+        let rel = file
+            .strip_prefix(&root)
+            .expect("path under repo root")
+            .to_string_lossy()
+            .replace('\\', "/");
+        if allowed.iter().any(|a| rel.starts_with(a)) {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).expect("readable source file");
+        for (i, line) in text.lines().enumerate() {
+            let trimmed = line.trim_start();
+            // A file's unit tests sit at its end, after `#[cfg(test)]`.
+            if trimmed.starts_with("#[cfg(test)]") {
+                break;
+            }
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let code = trimmed.split("//").next().unwrap_or(trimmed);
+            if colour_literal(code) {
+                found.push(format!("{rel}:{}: {}", i + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "colour literals outside gradiance_domain::theme (add a token there):\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn the_colour_scanner_sees_literals() {
+    assert!(colour_literal("let c = Color::srgba(0.5, 0.5, 0.5, 1.0);"));
+    assert!(colour_literal("x(css::GOLD)"));
+    assert!(colour_literal("Rgba::rgb(.3, 0.0, 0.0)"));
+    assert!(colour_literal("Rgba { r: 0.13, g: 0.1, b: 0.1, a: 1.0 }"));
+    assert!(!colour_literal("Color::srgba(c.r, c.g, c.b, c.a)"));
+    assert!(!colour_literal("Rgba::rgb(r.clamp(0.0, 1.0), g, b)"));
+    assert!(!colour_literal("Color::from(ink.snap)"));
+    assert!(colour_literal("r: 0.08,"));
+    assert!(!colour_literal("near: 0.5,"));
+    assert!(!colour_literal("angular: 0.0,"));
+}

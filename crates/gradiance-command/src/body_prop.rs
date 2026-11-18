@@ -40,6 +40,8 @@ pub enum BodyProp {
     /// The fill's palette slot (NaN when the fill is not a palette colour);
     /// a write rounds and wraps into the palette.
     Palette,
+    /// Emissive strength: 0 is matte, higher glows in the fill's hue.
+    Emissive,
 }
 
 /// One row of [`BODY_PROPS`].
@@ -105,6 +107,11 @@ pub const BODY_PROPS: &[BodyPropRow] = &[
         prop: BodyProp::Palette,
         doc: "Fill palette slot; a write rounds and wraps into the palette.",
     },
+    BodyPropRow {
+        name: "emissive",
+        prop: BodyProp::Emissive,
+        doc: "Glow strength in the fill's hue: 0 is matte (a write clamps at 0).",
+    },
 ];
 
 /// Whether a scalar is "on" for a flag property.
@@ -156,6 +163,7 @@ impl BodyProp {
             Self::Depth => f64::from(body.depth.near.0),
             Self::Hue => f64::from(body.appearance.fill.to_hsl().0),
             Self::Palette => palette_slot(body.appearance.fill).map_or(f64::NAN, |s| s as f64),
+            Self::Emissive => f64::from(body.appearance.emissive),
         }
     }
 
@@ -219,6 +227,16 @@ impl BodyProp {
             }
             Self::Hue => colour(body, |fill| fill.with_hue(f)),
             Self::Palette => colour(body, |fill| palette_fill(v, fill)),
+            Self::Emissive => {
+                let old = body.appearance;
+                (
+                    PropertyValue::Appearance(old),
+                    PropertyValue::Appearance(Appearance {
+                        emissive: f.max(0.0),
+                        ..old
+                    }),
+                )
+            }
         }
     }
 }

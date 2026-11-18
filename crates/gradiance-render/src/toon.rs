@@ -59,16 +59,25 @@ pub fn install(app: &mut App) {
     app.add_plugins(MaterialPlugin::<ToonMaterial>::default());
 }
 
-/// Pushes changed [`RenderSettings`] into every live body material.
+/// Pushes changed [`RenderSettings`] into every live body material, and
+/// the banding into every infinite plane (back plane, grounds), so the
+/// shadows they catch step through the same bands.
 pub fn apply_render_settings(
     settings: Res<RenderSettings>,
     mut materials: ResMut<Assets<ToonMaterial>>,
+    mut planes: ResMut<Assets<crate::plane::InfinitePlaneMaterial>>,
 ) {
     let params = params_of(&settings);
     let handles: Vec<_> = materials.ids().collect();
     for id in handles {
         if let Some(mut material) = materials.get_mut(id) {
             material.extension.params = params;
+        }
+    }
+    let handles: Vec<_> = planes.ids().collect();
+    for id in handles {
+        if let Some(mut material) = planes.get_mut(id) {
+            material.extension.toon = params;
         }
     }
 }

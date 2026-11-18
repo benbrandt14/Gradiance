@@ -13,5 +13,80 @@
 // recorded in archive.ron as a `decision: true` entry; it is not asked.
 (
     version: 1,
-    questions: [],
+    questions: [
+        (
+            id: "look",
+            title: "Which scene look should be the default?",
+            source: "Phase 4b, brief 4b-3 art direction (docs/briefs/4b-3-art-direction.md)",
+            description: r#"Three looks for the scene (not the panels: their theme is U-7). A look sets the body palette's tone, the outlines, the backdrop, the overlay ink (selection, snap glyphs, guides, grid), the lights and the toon bands. Clay studio is the default today; the other two are presets in Settings > Rendering > Look and the `look-apply` verb.
+
+Bodies keep their palette slot across looks: a red body stays red, in the look's red. A custom colour is shown as authored. Flip between the options, select a body, draw with a tool to see the ink, press play to see the shadows move."#,
+            options: [
+                (
+                    label: "Clay studio",
+                    caption: "Warm grey backdrop, clay-toned pieces, dark outlines; a warm key and a cool fill light, so shadows step through four bands.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                ),
+                (
+                    label: "Blueprint",
+                    caption: "Navy backdrop, pale chalk pieces with ink outlines, light grid; one cool light, three bands, a stronger rim.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                    settings: (
+                        render: (look: Blueprint, bands: 3, rim_strength: 0.35, white_point: 1.0, specular: 0.0),
+                        lighting: (
+                            lights: [(azimuth_deg: 110.0, elevation_deg: 45.0, color: (r: 0.9, g: 0.95, b: 1.0, a: 1.0), illuminance: 3000.0, shadows: true)],
+                            ambient: 670.0,
+                        ),
+                        scenery: (back_color: (r: 0.074, g: 0.181, b: 0.314, a: 1.0)),
+                    ),
+                ),
+                (
+                    label: "Flat graphic",
+                    caption: "Paper-white backdrop, bold saturated pieces, black outlines; one light, two bands (lit or shadow), no rim or glint.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                    settings: (
+                        render: (look: Poster, bands: 2, rim_strength: 0.0, white_point: 1.0, specular: 0.0),
+                        lighting: (
+                            lights: [(azimuth_deg: 135.0, elevation_deg: 45.0, color: (r: 1.0, g: 1.0, b: 1.0, a: 1.0), illuminance: 2450.0, shadows: true)],
+                            ambient: 750.0,
+                        ),
+                        scenery: (back_color: (r: 0.97, g: 0.954, b: 0.911, a: 1.0)),
+                    ),
+                ),
+            ],
+        ),
+        (
+            id: "toon-lighting",
+            title: "Do the new default lights show the toon bands?",
+            source: "Review answer `shading` (2026-11-17): the toon banding was never seen because of the flat lighting; brief 4b-3",
+            description: r#"You picked toon shading and noted that its bands were never visible. Three causes were found and fixed: the old key light (12 000 lux) put every lit face far past the band white point, so everything lit was one band; the front faces of bodies were wound backwards and lit as if they faced away (ambient only); and the back plane and ground were not banded at all, so shadows on them were smooth.
+
+"Before" puts the old light values back on today's build (the winding and plane fixes stay). "After" is the new default: a warm key and a cool fill, set so that a face lit by both is in the top band, in the fill's shadow one band down, in the key's shadow two, in both three. Look at the stepped shadows behind the stack and the chain, then press play."#,
+            options: [
+                (
+                    label: "Before (old lights)",
+                    caption: "One 12 000 lux key light, ambient 300, white point 1.3: lit faces saturate into the top band and shadows are one dark step.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                    settings: (
+                        render: (bands: 4, rim_strength: 0.25, white_point: 1.3, specular: 0.3),
+                        lighting: (
+                            lights: [(azimuth_deg: 120.0, elevation_deg: 32.0, color: (r: 1.0, g: 1.0, b: 1.0, a: 1.0), illuminance: 12000.0, shadows: true)],
+                            ambient: 300.0,
+                        ),
+                    ),
+                ),
+                (
+                    label: "After (new default)",
+                    caption: "Warm key + cool fill at the white point: overlapping shadows step through four bands, bodies show their palette tone.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                ),
+                (
+                    label: "After, tilted",
+                    caption: "The new default with a 30 degree perspective, so the side walls show: each wall facing a different way sits in its own band.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                    settings: (scenery: (perspective_deg: 30.0)),
+                ),
+            ],
+        ),
+    ],
 )

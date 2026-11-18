@@ -7,9 +7,9 @@
 use crate::snap::DraftReference;
 use crate::tools::context::{DraftTool, GesturePhase, ToolCommit, ToolContext, ToolPreview};
 use crate::tools::new_body_record;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Role;
 
 /// Minimum accepted radius, world metres (~0.5 px on screen). The SI flip
 /// left this at its pixel-era `0.5`, which demanded a 0.5 m (50 px) minimum
@@ -55,8 +55,8 @@ impl DraftTool for CircleTool {
 
     fn preview(&self, ctx: &ToolContext, out: &mut ToolPreview) {
         if let (Some(center), Some(p)) = (self.0, ctx.cursor) {
-            out.circle(center, center.distance(p).max(0.1), css::AQUAMARINE);
-            out.line(center, p, css::AQUAMARINE.with_alpha(0.5));
+            out.circle(center, center.distance(p).max(0.1), Role::Preview);
+            out.line(center, p, Role::Preview.alpha(0.5));
         }
     }
 }
