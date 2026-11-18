@@ -1138,3 +1138,43 @@ fn a_positive_hinge_motor_turns_counter_clockwise_on_both_hinge_kinds() {
         );
     }
 }
+
+/// The motor's per-substep gain is converted with the substep length the
+/// solver really steps, which `SimSettings::speed` scales: at half speed a
+/// rate gives half the gain (brief A-1; it used to ignore the speed).
+#[test]
+fn the_motor_gain_follows_the_simulation_speed() {
+    let gain_at = |speed: f32| {
+        let mut app = headless_app();
+        app.world_mut()
+            .resource_mut::<gradiance::domain::settings::SimSettings>()
+            .speed = speed;
+        let arm_id = spawn_body(&mut app, box_record(Vec2::ZERO, 1.6, 0.2));
+        let mut def = hinge(arm_id, None, Vec2::ZERO, Vec2::ZERO);
+        def.kind = JointKind::Hinge {
+            limits: None,
+            motor: Some(AngularMotorDef {
+                damping: 120.0,
+                ..default()
+            }),
+        };
+        let joint_id = spawn_joint(&mut app, def);
+        step(&mut app, 2);
+        let joint = entity_of(&app, joint_id).unwrap();
+        match app
+            .world()
+            .get::<avian2d::prelude::RevoluteJoint>(joint)
+            .unwrap()
+            .motor
+            .motor_model
+        {
+            avian2d::prelude::MotorModel::AccelerationBased { damping, .. } => damping,
+            other => panic!("{other:?}"),
+        }
+    };
+    let (full, half) = (gain_at(1.0), gain_at(0.5));
+    assert!(
+        full < 1.0 && (half - 0.5 * full).abs() < 1e-4,
+        "gain at speed 1: {full}, at 0.5: {half}"
+    );
+}

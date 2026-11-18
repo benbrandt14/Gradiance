@@ -245,7 +245,7 @@ fn reduced_of(
 }
 
 /// Re-derives every joint's **mass-derived** engine values from the bodies'
-/// current mass and the substep length: a motor's ceiling (auto: scaled to
+/// current mass and the substep length (scaled by the simulation speed): a motor's ceiling (auto: scaled to
 /// the reduced inertia or mass) and its per-substep gain, a spring's
 /// stiffness from its authored frequency. Runs every frame after
 /// [`sync_joints`]; it writes only on a difference, so a density edit or a
@@ -260,10 +260,14 @@ pub fn retune_joints(
     )>,
     bodies: Query<(&RigidBody, &ComputedMass, &ComputedAngularInertia)>,
     fixed: Res<Time<Fixed>>,
+    physics_time: Res<Time<Physics>>,
     substeps: Res<SubstepCount>,
 ) {
+    // avian steps the fixed timestep scaled by the physics clock's relative
+    // speed (`SimSettings::speed`), split into substeps.
     #[expect(clippy::cast_precision_loss, reason = "a small substep count")]
-    let substep_secs = fixed.timestep().as_secs_f32() / substeps.0.max(1) as f32;
+    let substep_secs = fixed.timestep().as_secs_f32() * physics_time.relative_speed()
+        / substeps.0.max(1) as f32;
     for (def, revolute, prismatic, distance) in &mut joints {
         match &def.kind {
             JointKind::Hinge { motor: Some(m), .. } => {
