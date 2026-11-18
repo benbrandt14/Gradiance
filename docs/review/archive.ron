@@ -315,5 +315,59 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief 4b-2 Facts.",
         ),
+        (
+            question: (
+                id: "mcp-tool-shape",
+                title: "MCP: four generic tools or one tool per operation?",
+                source: "brief U-6 Decisions 5",
+                description: r#"`gradiance mcp` projects the operation registry to MCP tools. One tool per operation gives each a typed schema at connect time; a few generic tools keep the client's context small and pick up new operations without a reconnect."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Four tools: ops, query, execute, batch",
+                        caption: r#"Recommended. Plan sec. 6 adopts Craft's MCP names (`execute`, `batch`). About 80 operation schemas stay out of every agent's context until `ops` asks for them. `query` carries the read-only hint so a client can auto-approve reads."#,
+                    ),
+                    (
+                        label: "One tool per operation",
+                        caption: r#"Typed arguments per tool, but about 80 tools in every session, and the list is fixed when the client connects."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mcp-tool-shape",
+                title: "MCP: four generic tools or one tool per operation?",
+                choice: Picked("Four tools: ops, query, execute, batch"),
+                note: "Decided by the session, not by the owner. Owner instruction, 2026-11-17: Go with your best estimates for all these questions.",
+                answered_at: "2026-11-18T05:30:00Z",
+            ),
+            ingested_as: "Brief U-6 Decisions 5.",
+        ),
+        (
+            question: (
+                id: "cli-client-or-host",
+                title: "CLI and MCP: clients of a running app, or a headless host?",
+                source: "brief U-6 Decisions 1",
+                description: r#"`gradiance op` and `gradiance mcp` can talk to an app started with `--remote`, or start a windowless app of their own per call."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Client of a running app",
+                        caption: r#"Recommended; plan sec. 8 T3 ("`gradiance mcp` on stdio to BRP"). The window, the undo stack and `ui.screenshot` are the ones the owner sees. `gradiance mcp --launch` starts the app when nothing answers."#,
+                    ),
+                    (
+                        label: "Headless host",
+                        caption: r#"No window needed, but every call starts a Bevy app, `ui.*` operations have no window, and edits vanish when the process ends."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "cli-client-or-host",
+                title: "CLI and MCP: clients of a running app, or a headless host?",
+                choice: Picked("Client of a running app"),
+                note: "Decided by the session, not by the owner. Owner instruction, 2026-11-17: Go with your best estimates for all these questions.",
+                answered_at: "2026-11-18T05:30:00Z",
+            ),
+            ingested_as: "Brief U-6 Decisions 1.",
+        ),
     ],
 )

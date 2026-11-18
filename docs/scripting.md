@@ -638,7 +638,7 @@ authentication: the local machine is the boundary.
 
 | Method | Params | Result |
 |---|---|---|
-| `gradiance.ops` | none | every op: `name`, `signature`, `doc`, `category`, `args`; a registry operation also has `id` and `fields` |
+| `gradiance.ops` | none | every op: `name`, `signature`, `doc`, `category`, `args`; a registry operation also has `id`, `fields`, `schema` (a JSON Schema of its params, from reflection) and `example` |
 | `gradiance.op` | `{"id": "<op id>", "params": {...}}`, or `{"name": "<lisp name>", "args": [...]}` (`args` optional) | the op's value as JSON (a query's NaN is `null`) |
 | `gradiance.query` | same | same, but only `query` ops are accepted |
 
@@ -680,6 +680,51 @@ streams and `schedule.*`. The reflection **reads** stay: `rpc.discover`,
 `world.get_resources`, `world.list_resources`, `registry.schema` (reads are
 total). With a renderer, Bevy also opens a render-world port (15703); its
 method table is emptied, so it answers nothing.
+
+### Command line and MCP
+
+Two client doorways ship in the same binary (brief U-6). Both talk to a
+running `gradiance --remote` and read the catalog from it, so they list and
+accept exactly what the app's registry holds. `--port N` (or
+`GRADIANCE_PORT`) selects the port; the default is 15702.
+
+```sh
+gradiance ops body.                          # id, category, signature, doc
+gradiance ops --json                         # the rows, with schema and example
+gradiance op body.spawn_box --x 0 --y 1 --w 1.6 --h 1.2
+gradiance op spawn-box 0 1 1.6 1.2           # positional, declared field order
+gradiance op ui.click --target tools:Box
+gradiance op body.place --params '{"i": 0, "x": 1, "y": 0, "angle": 0}'
+```
+
+`op` builds a **named** params object and calls the `id` form, so the app's
+one serde decoder decides what is accepted. A flag's text follows its
+field's schema type: a `string` field keeps the text; any other field is
+read as JSON, then as a comma list (`1,2` is `[1, 2]`), then as text (an
+object id, `selection`). The value prints as JSON. Exit codes: 0 done, 1 the
+app refused the operation, 2 a bad command line, 3 no app answers.
+
+`gradiance mcp` serves the **Model Context Protocol** on stdio
+(newline-delimited JSON-RPC; `initialize`, `ping`, `tools/list`,
+`tools/call`). Four tools, not one per operation:
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `ops` | `prefix` (optional) | the catalog rows: id, name, doc, category, fields, schema, example |
+| `query` | `op`, `params` or `args` | one `query` operation (read-only hint set) |
+| `execute` | `op`, `params` or `args` | any one operation |
+| `batch` | `calls`: `[{op, params or args}]` | several in order; stops at the first error |
+
+`op` is an id (with named `params`) or a Lisp name (with positional
+`args`). A refused operation is a tool result with `isError: true`. A batch
+is not one undo step: each call is its own, as successive remote calls are.
+`gradiance mcp --launch` starts `gradiance --remote <port>` when nothing
+answers and stops it when the client closes the session. A client
+configuration:
+
+```json
+{"mcpServers": {"gradiance": {"command": "gradiance", "args": ["mcp", "--launch"]}}}
+```
 
 ## What's next (see the roadmap)
 

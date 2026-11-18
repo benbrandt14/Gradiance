@@ -13,6 +13,7 @@ mod harness;
 
 mod array_drag;
 mod booleans;
+mod client;
 mod csg;
 mod editor_ops;
 mod groups;

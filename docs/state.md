@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (phase gate after 4b-2, #254, 666e614;
+Last updated: 2026-11-18 (U-6 in review;
 order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
@@ -11,15 +11,13 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** no brief in flight. Phase gate after U-3b and 4b-2
-  (2026-11-18): **U-3b** #253 (panel verbs are `panel.*` registry
-  operations; 7 VM built-ins remain; the remote surface is registry-only)
-  and **4b-2** #254 (a `groups` dock panel; every action an `InvokeOp`;
-  click table and screenshots in the brief's Outcome) are merged (main
-  666e614). **Next: U-6** CLI + MCP server (no brief yet): both project
-  the registry, which now covers panels and groups with no special cases.
-  Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
-  tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
+- **Now:** **U-6** CLI + MCP server in review (brief
+  `docs/briefs/U-6-cli-mcp.md`): `gradiance ops`, `gradiance op`,
+  `gradiance mcp [--launch]` are clients of a `--remote` app and read the
+  catalog (now with a params schema and an example per operation) from
+  it. **Next: 4b-3**, then U-7. Agent containers need
+  `mesa-vulkan-drivers libvulkan1` for the snapshot tests (without them
+  the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
   Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
   The session permission check can refuse a merge: then the owner merges
   (#253, #254, 2026-11-18).
@@ -37,7 +35,7 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
      #249); **U-4** in-app input injection (done, #250); **U-5**
      snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (done, #253).
   6. **4b-2** groups panel (done, #254).
-  7. **U-6** CLI + MCP server.
+  7. **U-6** CLI + MCP server (in review).
   8. **U-7** theme tokens, Blender-leaning, together with **4b-3** art
      direction; then **4b-4** scaled defaults.
   9. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.

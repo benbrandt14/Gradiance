@@ -23,6 +23,7 @@ mod context;
 mod output;
 pub mod reflect_path;
 mod registry;
+mod schema;
 mod target;
 
 pub use context::{OpContext, OpContextFillers, OpIdSource};

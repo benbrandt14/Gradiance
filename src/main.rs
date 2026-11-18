@@ -13,6 +13,13 @@ use std::path::PathBuf;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
+    // Client subcommands (`ops`, `op`, `mcp`) talk to a running app's remote
+    // surface and never build an app of their own (brief U-6).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = gradiance::script::client::main(&args) {
+        std::process::exit(code);
+    }
+
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(GradiancePlugins);
@@ -34,8 +41,9 @@ fn main() {
     //   `gradiance --review [file.ron]` opens review mode over a questions
     //                                   file (default
     //                                   `docs/review/questions.ron`); answers
-    //                                   go to `answers.ron` beside it.
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    //                                   go to `answers.ron` beside it;
+    //   `gradiance ops | op | mcp …`    client doorways to a `--remote` app
+    //                                   (handled above; `gradiance op --help`).
     let mut scripts = Vec::new();
     let mut i = 0;
     while i < args.len() {

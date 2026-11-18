@@ -107,6 +107,7 @@ pub struct OpEntry {
     pub meta: OpMeta,
     /// The params' field names in declared order (from reflection).
     pub fields: Vec<&'static str>,
+    info: fn() -> &'static TypeInfo,
     lower: fn(Value, &OpContext) -> Result<OpOutput, OpError>,
 }
 
@@ -119,6 +120,7 @@ impl OpEntry {
         Self {
             meta: O::META,
             fields,
+            info: O::type_info,
             lower: |params, ctx| {
                 let op: O = serde_json::from_value(params).map_err(|err| OpError::Decode {
                     op: O::META.id,
@@ -151,6 +153,19 @@ impl OpEntry {
             .zip(args)
             .collect();
         Ok(Value::Object(object))
+    }
+
+    /// The params as a JSON Schema object, built from reflection: what the
+    /// CLI's flag parser and an MCP client read. Describes only; the serde
+    /// decoder in [`lower`](Self::lower) decides what is accepted.
+    pub fn schema(&self) -> Value {
+        crate::schema::params_schema((self.info)())
+    }
+
+    /// The declared example params, parsed (`null` if the text is not
+    /// JSON; the conformance test pins that every example parses).
+    pub fn example(&self) -> Value {
+        serde_json::from_str(self.meta.example).unwrap_or(Value::Null)
     }
 
     /// The Lisp call form: `(spawn-box x y w h)`.
@@ -325,6 +340,8 @@ mod tests {
         let entry = OpEntry::of::<MoveThing>();
         assert_eq!(entry.fields, ["x", "y"]);
         assert_eq!(entry.signature(), "(move-thing x y)");
+        assert_eq!(entry.schema()["required"], json!(["x", "y"]));
+        assert_eq!(entry.example(), json!({"x": 1, "y": 2}));
     }
 
     #[test]

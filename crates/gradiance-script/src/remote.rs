@@ -5,7 +5,8 @@
 //! Three methods (`docs/scripting.md` § Remote control):
 //!
 //! - [`method::OPS`] — the catalog: every op's name, signature, doc,
-//!   governance category and arity.
+//!   governance category and arity; a registry operation also has its id,
+//!   fields, params schema and example.
 //! - [`method::OP`] — invoke one **registry operation** (`gradiance-op`), in
 //!   one of two forms:
 //!   - `{"id": "body.spawn_box", "params": {"x": 0, "y": 2, "w": 1, "h": 1}}`
@@ -162,13 +163,17 @@ fn list_ops(
     ))
 }
 
-/// One catalog row; a registry operation also carries its `id` and its
-/// declared field names (the keys of the `params` form).
+/// One catalog row; a registry operation also carries its `id`, its
+/// declared field names (the keys of the `params` form), its params schema
+/// and its example params. The CLI and MCP doorways (`crate::client`) read
+/// these rows; they hold no operation list of their own.
 fn op_json(op: &CatalogEntry, registry: &OpRegistry) -> Value {
     let entry = registry.by_lisp(op.name);
     json!({
         "id": entry.map(|e| e.meta.id),
         "fields": entry.map(|e| e.fields.clone()),
+        "schema": entry.map(gradiance_op::OpEntry::schema),
+        "example": entry.map(gradiance_op::OpEntry::example),
         "name": op.name,
         "signature": op.signature,
         "doc": op.doc,
