@@ -115,5 +115,35 @@ Try: click tools in the palette, open Settings and switch tabs, open the View me
                 ),
             ],
         ),
+        (
+            id: "spring-feel",
+            title: "How springy should a new spring be?",
+            source: "Phase 4b, brief 4b-4 scaled defaults (docs/briefs/4b-4-scaled-defaults.md)",
+            description: r#"A spring is now authored as a natural frequency (bounces per second) and a damping ratio (0 = bounces forever, 1 = settles without overshoot). The stiffness in N/m is derived from the bodies' mass while the scene runs, so one setting bounces the same way on a pebble and on a truck, and keeps its period when you change a body's density. These options are only the default a new spring gets (the spring tool and the inspector's reset); every spring stays editable.
+
+The scene hangs three bodies from hooks: a 0.15 m pebble, a 1 m box and a dense 2 m box (40 kg), each pulled 0.4 m down. Press play and watch how long they bounce and whether the three move alike. "Before" is the old default: stiffness from the body's area (density ignored) and no damping, so the dense box swings three times slower and nothing ever settles."#,
+            options: [
+                (
+                    label: "Settling (new default)",
+                    caption: "1.5 Hz, damping ratio 0.1: four or five visible bounces, still within about 3 s; the same on all three bodies.",
+                    scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/default.scm", "scenes/spring-feel/pull.scm"],
+                ),
+                (
+                    label: "Lively",
+                    caption: "1.5 Hz, damping ratio 0.05: bounces for about 6 s before it settles. More toy-like.",
+                    scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/lively.scm", "scenes/spring-feel/pull.scm"],
+                ),
+                (
+                    label: "Calm",
+                    caption: "1 Hz, damping ratio 0.3: a soft, slower spring that overshoots once or twice and rests. Sags about 0.25 m.",
+                    scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/calm.scm", "scenes/spring-feel/pull.scm"],
+                ),
+                (
+                    label: "Before (old default)",
+                    caption: "k = 100 N/m per square metre of body, no damping: the dense box swings at 0.5 Hz, the others at 1.6 Hz, and none settles.",
+                    scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/before.scm", "scenes/spring-feel/pull.scm"],
+                ),
+            ],
+        ),
     ],
 )

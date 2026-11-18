@@ -254,11 +254,13 @@ pub const MIN_MOTOR_EFFORT: f32 = 1.0;
 
 /// The motor's effective torque/force ceiling. An **explicit** authored
 /// `max_force` (`> 0`) is used as-is; otherwise it is **auto** and scales with
-/// the connected body's real `inertia_or_mass` (angular inertia for a hinge,
-/// mass for a slider) via `per` (`MOTOR_TORQUE_PER_INERTIA` /
-/// `MOTOR_FORCE_PER_MASS`), floored. The physics seam calls this at apply time
-/// with the body's `Computed*` value, so every motor — authored in the UI,
-/// spawned programmatically, or loaded from a scene — lands in the stable band.
+/// the joint's **reduced** `inertia_or_mass` (angular inertia for a hinge, mass
+/// for a slider; a static side counts as immovable, so a wheel on a static
+/// ground is sized by the wheel, not the ground) via `per`
+/// (`MOTOR_TORQUE_PER_INERTIA` / `MOTOR_FORCE_PER_MASS`), floored. The physics
+/// seam (`physics::joint_sync::retune_joints`) re-applies it whenever a mass
+/// changes, so every motor — authored in the UI, spawned programmatically, or
+/// loaded from a scene — lands in the stable band.
 #[must_use]
 pub fn motor_ceiling(authored_max: f32, inertia_or_mass: f32, per: f32) -> f32 {
     if authored_max > 0.0 {

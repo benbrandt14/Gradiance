@@ -95,6 +95,8 @@ fn expected_bodies(question: &str) -> &'static [usize] {
         "shading" => &[8, 8, 8],
         // ground + 12 bodies (docs/review/scenes/look/scene.scm)
         "look" | "toon-lighting" | "chrome" => &[13, 13, 13],
+        // three static hooks + a pebble, a box and a dense box
+        "spring-feel" => &[6, 6, 6, 6],
         _ => &[],
     }
 }

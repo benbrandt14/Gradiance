@@ -396,5 +396,59 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief U-7 Decisions; docs/ui-design.md sec. 8 Presets.",
         ),
+        (
+            question: (
+                id: "spring-authoring",
+                title: "How is a spring authored: N/m, or frequency and damping ratio?",
+                source: "brief 4b-4 Facts and Decisions",
+                description: r#"A spring was authored as stiffness (N/m) and damping, with the tool sizing the stiffness from the body's area (density ignored) and no damping. The same stiffness bounces at different periods on different masses, so a default could not suit a pebble and a truck at once, and a density edit changed a spring's feel."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Frequency + damping ratio (mass-relative)",
+                        caption: r#"Recommended. Author Hz and a ratio; the physics seam derives N/m from the reduced mass every frame (never saved). One default behaves on every body, and a density edit keeps the period. Costs a format bump (v8, v7 rejected), the `spring` verb's arguments change, and N/m is no longer typed directly."#,
+                    ),
+                    (
+                        label: "N/m with mass-scaled defaults",
+                        caption: r#"Keep N/m; the tool and the inspector's reset compute k from the real mass. No format change, but a density or size edit after creation changes the period, and a scripted N/m value stops behaving when the shape changes."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "spring-authoring",
+                title: "How is a spring authored: N/m, or frequency and damping ratio?",
+                choice: Picked("Frequency + damping ratio (mass-relative)"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). The default feel (how springy) is the interactive question `spring-feel`.",
+                answered_at: "2026-11-18T20:00:00Z",
+            ),
+            ingested_as: "Brief 4b-4 Decisions 1; gradiance_domain::tuning; FORMAT_VERSION 8.",
+        ),
+        (
+            question: (
+                id: "motor-gain",
+                title: "How is a motor's tracking rate passed to avian?",
+                source: "brief 4b-4 Measured (motors)",
+                description: r#"avian 0.8's velocity motor changes the relative speed by `damping x error` per substep, so its `damping` is a per-substep gain, stable only below about 2. The authored default 30 (documented as 1/s) was passed through unconverted: a wheel pinned at its centre did not turn, a 10 cm one spun at 400 rad/s, and arms tracked only by luck."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Rate (1/s) times substep, capped at 1",
+                        caption: r#"Recommended. Keep the authored field as a rate; the seam converts it with the substep length and caps the gain at dead-beat (1), so every rate is stable. Default rate 360/s = gain 1 at the default 6 substeps at 60 Hz. Saved motors keep their field; new ones save 360."#,
+                    ),
+                    (
+                        label: "Author the per-substep gain",
+                        caption: r#"Expose avian's number directly, clamped to (0, 1]. Simpler mapping, but the feel changes with the substep setting and the number means nothing outside the solver."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "motor-gain",
+                title: "How is a motor's tracking rate passed to avian?",
+                choice: Picked("Rate (1/s) times substep, capped at 1"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive: one option is broken.",
+                answered_at: "2026-11-18T20:00:00Z",
+            ),
+            ingested_as: "Brief 4b-4 Decisions 2; gradiance_domain::tuning::motor_gain.",
+        ),
     ],
 )
