@@ -34,17 +34,20 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<DeleteJoint>();
 }
 
-/// The joint between `a` and (if it is another body) `b` at the **world**
-/// point `anchor`, converted into each body's local frame.
+/// The joint between `a` and (if it is another body) `b`, anchored at the
+/// **world** points `[on_a, on_b]` (the same point for a hinge or a slider;
+/// each body's centre for a spring), converted into each body's local frame.
+/// A world pin's far anchor is `on_a`.
 fn joint_record(
     ctx: &OpContext,
     a: &BodySnapshot,
     b: Option<&BodySnapshot>,
-    anchor: Vec2,
+    [on_a, on_b]: [Vec2; 2],
     kind: JointKind,
     collide_connected: bool,
 ) -> JointRecord {
-    let to_local = |pose: PosRot| Vec2::from_angle(-pose.rot).rotate(anchor - pose.pos);
+    let to_local =
+        |pose: PosRot, anchor: Vec2| Vec2::from_angle(-pose.rot).rotate(anchor - pose.pos);
     let mut def = JointDef {
         kind,
         common: JointCommon {
@@ -54,14 +57,14 @@ fn joint_record(
         body_a: a.id,
         body_b: None,
         // For a world pin the far anchor is the world point itself.
-        anchor_b: Displacement(anchor),
-        anchor_a: Displacement(to_local(a.pose())),
+        anchor_b: Displacement(on_a),
+        anchor_a: Displacement(to_local(a.pose(), on_a)),
         rest_rot_a: Angle(a.rot),
         rest_rot_b: Angle(0.0),
     };
     if let Some(b) = b.filter(|b| b.id != a.id) {
         def.body_b = Some(b.id);
-        def.anchor_b = Displacement(to_local(b.pose()));
+        def.anchor_b = Displacement(to_local(b.pose(), on_b));
         def.rest_rot_b = Angle(b.rot);
     }
     JointRecord {
@@ -134,7 +137,7 @@ impl Operation for Hinge {
             motor: None,
         };
         let anchor = Vec2::new(self.x.0, self.y.0);
-        Ok(spawn(joint_record(ctx, a, b, anchor, kind, false)))
+        Ok(spawn(joint_record(ctx, a, b, [anchor, anchor], kind, false)))
     }
 }
 
@@ -188,7 +191,7 @@ impl Operation for Slider {
             motor: None,
         };
         let anchor = Vec2::new(self.x.0, self.y.0);
-        Ok(spawn(joint_record(ctx, a, b, anchor, kind, false)))
+        Ok(spawn(joint_record(ctx, a, b, [anchor, anchor], kind, false)))
     }
 }
 
@@ -234,11 +237,11 @@ impl Operation for Spring {
             damping_ratio: self.damping_ratio,
             range: None,
         };
-        // Anchored at a's centre; b's anchor lands at b's centre because that
-        // is where the world point resolves to in b's frame. Struts collide by
-        // default (the tool's convention), so a spring between neighbours does
-        // not make them pass through each other.
-        Ok(spawn(joint_record(ctx, a, b, a.pos, kind, true)))
+        // From a's centre to b's centre (a world pin: to a's centre). Struts
+        // collide by default (the tool's convention), so a spring between
+        // neighbours does not make them pass through each other.
+        let on_b = b.map_or(a.pos, |b| b.pos);
+        Ok(spawn(joint_record(ctx, a, b, [a.pos, on_b], kind, true)))
     }
 }
 

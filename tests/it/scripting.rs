@@ -759,6 +759,15 @@ fn retyped_quantities_read_and_write_as_numbers() {
         "{rest_length:?}"
     );
     assert_eq!(range, None);
+    // Both ends at the bodies' centres (brief A-1: b's anchor used to be a's
+    // centre in b's frame, so the strut hung b a rest length below a's
+    // centre *plus* their distance).
+    assert_eq!(defs[0].anchor_a.value(), Vec2::ZERO);
+    assert_eq!(
+        defs[0].anchor_b.value(),
+        Vec2::ZERO,
+        "the spring's far end is b's centre"
+    );
 }
 
 /// Bad body indices must not produce a half-built joint. A first index that
