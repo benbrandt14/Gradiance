@@ -15,6 +15,7 @@ mod array_drag;
 mod booleans;
 mod client;
 mod csg;
+mod defaults;
 mod editor_ops;
 mod groups;
 mod history;

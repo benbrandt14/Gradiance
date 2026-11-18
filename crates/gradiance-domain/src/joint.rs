@@ -31,7 +31,7 @@ use bevy::math::Vec2;
 use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
-use gradiance_units::{Angle, Damping, Displacement, Force, Length, Stiffness};
+use gradiance_units::{Angle, Displacement, Force, Frequency, Length};
 use serde::{Deserialize, Serialize};
 
 // --- Motors ---------------------------------------------------------------
@@ -45,12 +45,16 @@ use serde::{Deserialize, Serialize};
 // unrepresentable: the compiler now rejects a slider motor on a hinge, and the
 // units come from `gradiance-units` so a label can't drift from its value.
 
-/// The velocity-tracking gain (1/s) of the acceleration-based motor model: the
-/// acceleration applied per unit of velocity error. It sets how firmly a motor
-/// holds its target — too low and any load stalls it (the classic "weak
-/// motor"). Instability in this model comes from high *stiffness*, not this
-/// gain, so a firm value is safe.
-pub const DEFAULT_MOTOR_DAMPING: f32 = 30.0;
+/// The velocity-tracking rate (1/s) of the acceleration-based motor model: the
+/// fraction of the velocity error a motor removes per second. It sets how
+/// firmly a motor holds its target; too low and any load slows it (the
+/// classic "weak motor"). avian takes a per-substep gain, so the physics seam
+/// converts this with the substep length and caps it at the dead-beat gain
+/// ([`crate::tuning::motor_gain`]): any rate is stable. The default is that
+/// cap at the default 360 substeps/s (brief 4b-4 measured the old 30,
+/// passed to avian unconverted, as a gain of 30: a centre-pinned wheel did
+/// not turn).
+pub const DEFAULT_MOTOR_DAMPING: f32 = 360.0;
 /// Default hinge drive speed (rad/s ≈ 19 rpm).
 pub const DEFAULT_MOTOR_ANGULAR_VELOCITY: f32 = 2.0;
 /// Default slider drive speed (m/s).
@@ -149,9 +153,10 @@ pub struct JointCommon {
     pub broken: bool,
 }
 
-/// The break force a joint gets when "breakable" is first switched on (N) —
-/// ten times a 1 kg body's weight, so a typical light assembly holds until
-/// it is loaded on purpose.
+/// The break force (N) a joint gets when "breakable" is switched on and the
+/// weight it carries is not known: ten times a 1 kg body's weight. The
+/// inspector scales it to the connected bodies instead
+/// ([`crate::tuning::default_break_force`]).
 pub const DEFAULT_BREAK_FORCE: f32 = 100.0;
 
 /// Whether a joint's reaction-force magnitude `force` breaks a joint with
@@ -186,18 +191,22 @@ pub enum JointKind {
     /// (`compliance` = `1 / stiffness`) plus a `JointDamping` component; when
     /// unbounded the distance limit pins to `rest_length` (a pure spring), and
     /// when a [`range`](Self::Spring::range) is set the limit becomes that band.
+    ///
+    /// Authored **mass-relative** (brief 4b-4): a natural frequency and a
+    /// damping ratio. The physics seam derives the stiffness (N/m) and the
+    /// damping rate from the bodies' current reduced mass
+    /// ([`crate::tuning::spring_stiffness`]), and re-derives them when a mass
+    /// changes, so a spring keeps its period when a body is resized or made
+    /// denser. The derived values are never saved.
     Spring {
         /// The length the spring relaxes to — the creation distance.
         rest_length: Length,
-        /// Spring constant; the joint's compliance is
-        /// `1 / stiffness`, and `<= 0` is treated as rigid. Set from the
-        /// connected mass at creation so the strut isn't too soft. The scalar a
-        /// future curve editor would generalize to a nonlinear
-        /// force-vs-displacement curve.
-        stiffness: Stiffness,
-        /// Linear velocity damping applied by the joint (default 0). The scalar
-        /// a future curve editor would generalize to a nonlinear damping curve.
-        damping: Damping,
+        /// Natural frequency of the bounce (Hz); `<= 0` is treated as rigid.
+        /// See [`crate::tuning::SPRING_FREQUENCY`].
+        frequency: Frequency,
+        /// Damping ratio: 0 = undamped, 1 = critical (no overshoot). See
+        /// [`crate::tuning::SPRING_DAMPING_RATIO`].
+        damping_ratio: f32,
         /// Optional hard length clamp `[min, max]`; `None` (the
         /// default) leaves travel unbounded, so the spring is the only
         /// restoring force. When set, the strut floats freely within the band
@@ -206,16 +215,10 @@ pub enum JointKind {
     },
 }
 
-/// Fallback spring constant (N/m) for the inspector's reset (the spring tool
-/// computes a mass-based value at creation; see
-/// `interaction::tools::spring_tool`). Sized for a typical ~1 kg body: at
-/// `k = m·g / sag` with `g ≈ 10` and a ~0.1 m sag this is ~100 N/m, matching
-/// the tool's `SPRING_STIFFNESS_PER_MASS · mass`. (The earlier `0.1` was a
-/// mechanical ÷`PIXELS_PER_METER²` rescale of the pixel-era value — three
-/// orders too soft, so a reset strut drooped ~100 m.)
-pub const DEFAULT_SPRING_STIFFNESS: f32 = 100.0;
-/// Default linear damping for a freshly authored strut.
-pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;
+/// Default natural frequency of a freshly authored spring (Hz).
+pub const DEFAULT_SPRING_FREQUENCY: f32 = crate::tuning::SPRING_FREQUENCY.default;
+/// Default damping ratio of a freshly authored spring.
+pub const DEFAULT_SPRING_DAMPING_RATIO: f32 = crate::tuning::SPRING_DAMPING_RATIO.default;
 
 // --- Mass-aware motor defaults -------------------------------------------
 //
