@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (A-1 handoff, stacked on 4b-4; 4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
+Last updated: 2026-11-18 (A-2 handoff, stacked on A-1; A-1 handoff, stacked on 4b-4; 4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
 after U-6, #256, b53b019; order per `docs/unified-surface-plan.md` § 10
 and § 13).
 
@@ -34,7 +34,15 @@ and § 13).
   the `spring` verb anchored b at a's centre, which also bent the
   `spring-feel` scenes; the palette covered the bottom dock), two findings
   for new briefs (world-pin slider reversed, overlapping groups); images
-  in `/mnt/project-files/a-1/`. **U-6** #256 is merged (b53b019): `gradiance ops`,
+  in `/mnt/project-files/a-1/`. **A-2** audit follow-ups in review (PR
+  #261, branch `claude/project-thread-tw1mvl-a2`, **stacked on A-1** #260
+  → #259 → #258 → #257; merge those first): world-pin sliders derived
+  pin-first like hinges; grouping a grouped body brings its whole group and
+  a subset nests inside (archive `group-overlap`); the motor inspector reads
+  20 rpm and shows the derived auto torque. Recorded with proposals, not
+  fixed: dock opening re-centres the view, short arms lose motor speed
+  (not substeps, not the ceiling), field strength scaling (needs a feel
+  question). **U-6** #256 is merged (b53b019): `gradiance ops`,
   `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
   app; the catalog carries a params schema and an example per operation.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
@@ -122,9 +130,11 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - backlash, cams, planar contact (undefined);
   - torque-based breaking (2-2);
   - rod fixed end = merge, `spawn-rod`, rod inspector (2-3);
-  - joint node-graph block (2-1); the world-pin **slider** is still
-    derived body-first, so its travel and motor run mirrored (A-1 finding
-    7; needs a brief: extend `JointDef::world_first` to sliders);
+  - joint node-graph block (2-1);
+  - short gravity-loaded arms lose motor speed (0.1 m arm ~27% slowest);
+    substeps and the ceiling are not the cause (A-2 Outcome, proposal);
+  - field strength does not scale with the source size (fixed 1 m falloff,
+    500 m/s² clamp; A-2 Outcome; needs a feel question with scenes);
   - a 2 m flat drop lands 1–4 cm sideways in avian (2-5);
   - unaudited despawned-entity `insert` pattern (2-5);
   - elastica/flexure from #194 (after Phase 5).
@@ -143,8 +153,7 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - faint alignment guide.
 - **Scripting:**
   - groups panel (4b-2): dock widths below 260 points and a real
-    double-click are unchecked; grouping a body that is already grouped
-    puts it in two sibling groups (A-1 finding 8; needs a brief);
+    double-click are unchecked;
   - `bodies-where` has no label filter: labels live in `gradiance-script`,
     above `command`, and need a mirror first (4b-1 Outcome);
   - verbs for `ToolDefaults`/`SnapConfig`/joint props;
@@ -166,6 +175,8 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
     takes the part that fits its scope; the rest is for the next planning
     stage;
   - Joint window covers the Properties dock;
+  - opening a dock re-centres and rescales the view (A-1 finding 13;
+    proposal in the A-2 Outcome);
   - report Bevy's SSAO-viewport bug upstream (then drop the sub-view
     workaround); `world_per_pixel` uses window height for the perspective
     FOV (4-4).
