@@ -1,6 +1,6 @@
 # Groups as editing layers: the panel
 Phase 4b · owner direction 2026-11-16 (quoted in 4b-1) · status: ready
-(after 4b-1)
+(revised 2026-11-18 by the orchestrator, after U-3b: on the registry)
 
 ## Goal
 
@@ -31,42 +31,75 @@ the clicks for these five tasks, before and after:
 
 - Brief 4b-1's Outcome: the verbs, the shared property table, the group
   index, names.
-- `docs/ui-design.md` (the design system: glyphs from `ui::fonts::glyph`,
-  `precise_drag` on the edit seam, `panels::PanelToggle` for a new panel).
-- `crates/gradiance-ui/src/outliner.rs` (the closest existing list panel)
-  and `menu.rs` (`Panels::named`).
-- `docs/orchestration.md` § Future intent 1. The UI will be replaced: the
-  panel holds **no logic** a new shell would need. Every action is a 4b-1
-  intent or verb call.
+- `docs/ops.md` rows `group.*`, `body.where`, `body.set_color` (the
+  operations every panel action invokes).
+- `docs/ui-design.md` (glyphs from `ui::fonts::glyph`, `precise_drag` on the
+  edit seam, `panels::PanelToggle` for a new panel).
+- `crates/gradiance-ui/src/outliner.rs` (the closest list panel), `menu.rs`
+  (`Panels::named`) and `panel_ops.rs` (U-3b: a new `Panels::named` row is
+  reachable as `panel-show "groups"` with no extra code).
+- `tests/it/ui_panels.rs`, `ui_snapshots.rs`, `ui_input.rs` (the three test
+  tiers: kittest leaf renderers, lavapipe snapshots, injected input).
 
-## Facts (orchestrator, 2026-11-16)
+## Facts (orchestrator, 2026-11-18, on main after U-3b)
 
-- The UI may change freely (owner). The outliner may adopt group rows instead
-  of a new panel, if that is clearer. Say which, and why.
-- Selection lives in the UI layer. The panel turns a filter's index list into
-  a selection through the sanctioned `SelectTransition` seam.
+- **Every panel action is an `InvokeOp`** (`gradiance_op::InvokeOp::with(id,
+  json!{…})`), the same message the Edit menu writes (U-2a). The panel
+  builds params and nothing else; no intent is written directly, no logic a
+  new shell would need lives in the panel (`orchestration.md` Future
+  intent 1). Ids: `group.list`/`group.members`/`group.name` (reads — or the
+  same data through `domain::group::GroupIndex` + `GroupNames` for drawing),
+  `group.rename`, `group.set`, `group.set_color`, `group.distribute`,
+  `group.scatter`, `group.decompose`, `group.create`, `group.ungroup`,
+  `body.where`.
+- **The property picker** lists `command::body_prop::BODY_PROPS` (name, doc
+  as tooltip). A new property is one table row, and the panel follows.
+- **Selection** lives in `gradiance-interaction`. A filter result (indices
+  from `body.where`, run against an `OpContext`) becomes a selection through
+  `interaction::selection::SelectTransition::SetBodies`, the sanctioned seam.
+  No `select` operation exists; adding one is out of scope.
+- **Decision (orchestrator, recorded in `docs/review/archive.ron`):** a new
+  `groups` panel, not an outliner mode. The outliner is an object tree; the
+  group rows carry edit and distribute controls that would crowd it. The
+  outliner keeps its group nodes as they are.
+- Name widgets for `ui.inspect` with a `groups:` prefix (U-3 naming
+  `<area>:<label>`), so the five tasks can be scripted with `ui.click`.
 
 ## Approach
 
-1. Groups panel (or outliner group mode), a `PanelToggle`, and a `panel-*`
-   verb through `Panels::named`.
-2. Edit / distribute row: a property picker from 4b-1's shared table, value
-   widgets by property type.
-3. Filter chips → selection; "group selection"; decompose menu.
-4. Screenshots of each of the five tasks done in the running app via
-   `tools/screenshot/`: before/after for each.
+1. `groups` panel: a `PanelToggle` resource and one `Panels::named` row.
+   Rows from `GroupIndex` + `GroupNames`; click selects, double-click
+   renames (`group.rename`).
+2. Edit / distribute row: property picker over `BODY_PROPS`, a value
+   widget by property type (`precise_drag` for scalars, a checkbox for
+   booleans, a colour button for `group.set_color`); distribute lo/hi, mode
+   (linear / random seed), sort key.
+3. Filter chips → `body.where` clause string → selection; "group
+   selection" (`group.create`); decompose menu (`group.decompose`).
+4. Tests: a kittest test of the panel's leaf renderer (rows, picker,
+   chips emit the right `InvokeOp`s); one lavapipe snapshot of the panel
+   (committed fixture, `UPDATE_SNAPSHOTS=1`); an integration test that
+   drives one task through `ui.click` by name in `tests/it/ui_input.rs`
+   style if the headless app allows it, else intent-level.
+5. Screenshots of the five tasks in the running app via
+   `tools/screenshot/`, described in the PR (ad-hoc, not in git).
 
 ## Out of scope
 
-New properties, physical defaults (4b-4), theme (4b-3), `docs/state.md`.
+- New properties, physical defaults (4b-4), theme (4b-3).
+- A `select` operation, a label filter for `bodies-where` (needs a mirror
+  from `gradiance-script`), the fast-drag offset bug.
+- Outliner changes beyond what the panel needs to coexist.
 
 ## Done when
 
-- The five-task click table in the Outcome.
-- UI tests where egui can be driven headless; otherwise intent-level tests
-  for each panel action, plus the screenshots.
-- Screenshots described in the PR (not in git). Gates green. Outcome
-  filled.
+- The five-task click table in the Outcome (before = menus/console today,
+  after = the panel).
+- The tests in Approach 4; fmt, clippy, doc, boundaries, `-p gradiance-ui`
+  and the touched `tests/it` modules green locally; CI green.
+- `docs/scripting.md`/`docs/ops.md` unchanged unless an op changed; the
+  panel listed in `docs/ui-design.md` if it lists panels. Outcome filled;
+  `docs/state.md` updated.
 
 ## Outcome
 

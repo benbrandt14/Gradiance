@@ -11,20 +11,17 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-3b in review** (branch `claude/project-thread-7kscb7`):
-  panel verbs are `panel.*` registry operations owned by `gradiance-ui`,
-  the four panel VM built-ins are gone (7 remain) and the remote surface is
-  registry-only; the Outcome in `docs/briefs/U-3b-panel-ops.md` lists the
-  decisions. Phase gate before it (2026-11-17): U-2c #247, 4b-1 #248,
-  U-3 #249, U-4 #250, U-5 #251 all merged (main 508b6e5). The app has a
-  widget registry (`ui.inspect`), screenshots (`ui.screenshot`), in-app
-  input injection (`ui.click/drag/key/text/wheel`) and egui snapshot tests
-  on lavapipe in CI (`GRADIANCE_REQUIRE_GPU=1`). **Next: 4b-2** (its brief
-  predates the registry: revise it against 4b-1's `command::body_prop`
-  table and the U-3/U-4/U-5 checks first). Agent containers need
+- **Now:** **4b-2 in progress** (branch `claude/project-thread-7kscb7`;
+  brief revised 2026-11-18 for the registry: every panel action is an
+  `InvokeOp`, the picker reads `BODY_PROPS`, a new `groups` panel rather
+  than an outliner mode). **U-3b merged** (#253, 5027d96): panel verbs are
+  `panel.*` registry operations owned by `gradiance-ui`, 7 VM built-ins
+  remain, the remote surface is registry-only. Earlier: U-2c #247, 4b-1
+  #248, U-3 #249, U-4 #250, U-5 #251. Agent containers need
   `mesa-vulkan-drivers libvulkan1` for the snapshot tests (without them
   the tests skip unless `GRADIANCE_REQUIRE_GPU=1`). Workers run on Opus
-  while Fable lacks usage credits (owner, 2026-11-17).
+  while Fable lacks usage credits (owner, 2026-11-17). The session
+  permission check can refuse a merge: then the owner merges (#253, 2026-11-18).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).

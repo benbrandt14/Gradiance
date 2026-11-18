@@ -288,5 +288,32 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "PR #240 stands as written.",
         ),
+        (
+            question: (
+                id: "groups-panel-or-outliner",
+                title: "Groups panel: a new panel or an outliner mode?",
+                source: "brief 4b-2 Facts (revised 2026-11-18)",
+                description: r#"Brief 4b-2 allowed either a new Groups panel or group rows in the outliner. The group rows carry edit, distribute and filter controls."#,
+                decision: true,
+                options: [
+                    (
+                        label: "New groups panel",
+                        caption: r#"Recommended. A `PanelToggle` and one `Panels::named` row, so `panel-show "groups"` works with no extra code. The outliner stays an object tree and is not crowded by edit controls."#,
+                    ),
+                    (
+                        label: "Outliner group mode",
+                        caption: r#"One panel fewer, but the object tree gains a second mode with edit and distribute rows."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "groups-panel-or-outliner",
+                title: "Groups panel: a new panel or an outliner mode?",
+                choice: Picked("New groups panel"),
+                note: "Decided by the session, not by the owner. Owner instruction, 2026-11-17: Go with your best estimates for all these questions.",
+                answered_at: "2026-11-18T02:00:00Z",
+            ),
+            ingested_as: "Brief 4b-2 Facts.",
+        ),
     ],
 )
