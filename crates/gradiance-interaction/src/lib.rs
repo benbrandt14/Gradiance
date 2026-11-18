@@ -109,6 +109,10 @@ impl Plugin for InteractionPlugin {
         app.add_plugins(input::EditorInputPlugin);
         app.add_plugins(tools::ToolsPlugin);
 
+        // After `InputSystems`: the button edges and the cursor must describe
+        // the same frame. Read before it, a press shows a frame late, when
+        // the cursor has already moved on, so a fast drag started one step
+        // from where it was pressed (brief A-1).
         app.add_systems(
             PreUpdate,
             (
@@ -117,7 +121,8 @@ impl Plugin for InteractionPlugin {
                 gesture::update_gesture_constraints,
                 snap::update_snapped_cursor,
             )
-                .chain(),
+                .chain()
+                .after(bevy::input::InputSystems),
         );
         app.add_systems(
             Update,
