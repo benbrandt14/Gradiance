@@ -18,8 +18,8 @@ pub mod settings;
 pub use gradiance_geometry::shape;
 pub mod signal;
 pub mod theme;
-pub mod tuning;
 pub mod tracer;
+pub mod tuning;
 
 use bevy::prelude::*;
 

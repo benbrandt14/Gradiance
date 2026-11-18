@@ -187,7 +187,12 @@ mod tests {
 
     #[test]
     fn ranges_hold_their_defaults_and_round_trip_positions() {
-        for r in [SPRING_FREQUENCY, SPRING_DAMPING_RATIO, RESTITUTION, FRICTION] {
+        for r in [
+            SPRING_FREQUENCY,
+            SPRING_DAMPING_RATIO,
+            RESTITUTION,
+            FRICTION,
+        ] {
             assert!(r.min < r.default && r.default <= r.max, "{r:?}");
             assert!(close(r.at(0.0), r.min, 1e-5) && close(r.at(1.0), r.max, 1e-5));
             for t in [0.1, 0.5, 0.9] {
@@ -215,8 +220,16 @@ mod tests {
 
     #[test]
     fn reduced_mass_ignores_fixed_sides() {
-        assert!(close(reduced(inverse(2.0, true), inverse(2.0, true)), 1.0, 1e-6));
-        assert!(close(reduced(inverse(5.0, true), inverse(1e9, false)), 5.0, 1e-6));
+        assert!(close(
+            reduced(inverse(2.0, true), inverse(2.0, true)),
+            1.0,
+            1e-6
+        ));
+        assert!(close(
+            reduced(inverse(5.0, true), inverse(1e9, false)),
+            5.0,
+            1e-6
+        ));
         assert!(reduced(inverse(5.0, false), inverse(0.0, true)) == 0.0);
         assert!(inverse(f32::INFINITY, true) == 0.0);
     }
@@ -239,7 +252,10 @@ mod tests {
         let omega = TAU * 1.5;
         assert!(close(spring_damping_rate(1.5, 1.0), 2.0 * omega, 1e-6));
         assert!(spring_damping_rate(1.5, 0.0) == 0.0);
-        assert!(spring_damping_rate(1.5, -1.0) == 0.0, "negative ratio clamps");
+        assert!(
+            spring_damping_rate(1.5, -1.0) == 0.0,
+            "negative ratio clamps"
+        );
     }
 
     #[test]

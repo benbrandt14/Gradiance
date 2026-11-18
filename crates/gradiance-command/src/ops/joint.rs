@@ -23,7 +23,7 @@ use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target};
 use gradiance_scene::JointRecord;
-use gradiance_units::{Angle, Damping, Displacement, Length, Stiffness};
+use gradiance_units::{Angle, Displacement, Frequency, Length};
 use serde::Deserialize;
 
 /// Registers this file's operations.
@@ -192,11 +192,11 @@ impl Operation for Slider {
     }
 }
 
-/// A spring-damper strut between the centres of `a` and `b`. Unlike the tool,
-/// which sizes stiffness from the connected mass, the caller states it: a
-/// fixture that depends on a mass heuristic is not reproducible when the
-/// shape changes. The rest length is the current separation, so the strut
-/// starts relaxed.
+/// A spring-damper strut between the centres of `a` and `b`, authored like
+/// the tool's: a natural frequency and a damping ratio. The stiffness is
+/// derived from the connected mass at run time, so the same call bounces
+/// with the same period whatever the bodies weigh (brief 4b-4). The rest
+/// length is the current separation, so the strut starts relaxed.
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
 pub struct Spring {
@@ -204,10 +204,10 @@ pub struct Spring {
     pub a: Target,
     /// The second body, or none for a world pin.
     pub b: Target,
-    /// Spring constant.
-    pub stiffness: Stiffness,
-    /// Damping coefficient.
-    pub damping: Damping,
+    /// Natural frequency of the bounce (Hz; the tool's default is 1.5).
+    pub frequency: Frequency,
+    /// Damping ratio: 0 = undamped, 1 = critical (the tool's default is 0.1).
+    pub damping_ratio: f32,
 }
 
 impl Operation for Spring {
@@ -219,7 +219,7 @@ impl Operation for Spring {
         menu: None,
         chord: None,
         undo: Some(name::SPAWN_JOINT),
-        example: r#"{"a": 0, "b": 2, "stiffness": 50, "damping": 1}"#,
+        example: r#"{"a": 0, "b": 2, "frequency": 1.5, "damping_ratio": 0.1}"#,
     };
 
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
@@ -230,8 +230,8 @@ impl Operation for Spring {
         let rest_length = b.map_or(0.0, |b| a.pos.distance(b.pos));
         let kind = JointKind::Spring {
             rest_length: Length(rest_length),
-            stiffness: self.stiffness,
-            damping: self.damping,
+            frequency: self.frequency,
+            damping_ratio: self.damping_ratio,
             range: None,
         };
         // Anchored at a's centre; b's anchor lands at b's centre because that

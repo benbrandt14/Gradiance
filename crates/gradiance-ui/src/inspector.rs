@@ -26,6 +26,7 @@ use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::tuning::{FRICTION, RESTITUTION};
 use gradiance_interaction::selection::Selection;
 use gradiance_units::Dimension;
 
@@ -236,9 +237,16 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
         .map_or(0.5, |f| f.dynamic_coefficient);
     ui.horizontal(|ui| {
         ui.label("friction");
-        if let Commit::Done(_, new) =
-            precise_drag(ui, ui.id().with("friction"), &mut friction, 0.5, 0.01)
-        {
+        if let Commit::Done(_, new) = precise_drag(
+            ui,
+            ui.id().with("friction"),
+            &mut friction,
+            FRICTION.default,
+            0.01,
+        ) {
+            // Clamped to its tuning range (brief 4b-4): a negative
+            // coefficient is meaningless.
+            let new = FRICTION.clamp(new);
             commit_to_selection(
                 selection,
                 &props.ids,
@@ -261,9 +269,15 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
         .map_or(0.3, |r| r.coefficient);
     ui.horizontal(|ui| {
         ui.label("restitution");
-        if let Commit::Done(_, new) =
-            precise_drag(ui, ui.id().with("restitution"), &mut restitution, 0.3, 0.01)
-        {
+        if let Commit::Done(_, new) = precise_drag(
+            ui,
+            ui.id().with("restitution"),
+            &mut restitution,
+            RESTITUTION.default,
+            0.01,
+        ) {
+            // Clamped to [0, 1] (brief 4b-4): above 1 a contact adds energy.
+            let new = RESTITUTION.clamp(new);
             commit_to_selection(
                 selection,
                 &props.ids,

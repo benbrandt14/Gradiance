@@ -1,10 +1,32 @@
-//! Baseline sweep (temporary, pre-change measurements).
-#![allow(clippy::unwrap_used, clippy::too_many_lines, clippy::print_stdout)]
+//! Defaults that behave (brief 4b-4): every physical default does something
+//! visible and sane on a body of any mass, and wild behaviour sits only at
+//! the ends of an edit range.
+//!
+//! The tests state behaviour, not numbers: a period in a comfortable band and
+//! equal across masses, a motor at speed within half a second, a bounce that
+//! never gains height. The rigs run over a pebble (0.1 m box, 0.01 kg), a
+//! 1 kg box and a truck (10 m box at density 10, 1000 kg). The pure scaling
+//! is unit-tested in `gradiance_domain::tuning`.
+//!
+//! `sweep` (ignored) prints the table recorded in the brief's Outcome:
+//! `cargo test --test it defaults::sweep -- --ignored --nocapture`.
+
+// Test-only file: unwraps are the failure mechanism; the sweep prints.
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::cast_precision_loss)]
 
 use crate::harness::{box_record, entity_of, headless_app, step};
-use avian2d::prelude::{AngularVelocity, ComputedAngularInertia, ComputedMass, LinearVelocity, RigidBody};
+use avian2d::prelude::{
+    AngularVelocity, ColliderDensity, GravityScale, LinearVelocity, Restitution, RigidBody,
+};
 use bevy::prelude::*;
+use gradiance::domain::tuning;
 use gradiance::prelude::*;
+use gradiance::units::{Angle, Displacement, Force, Frequency, Length};
+
+/// A body by edge `size` (m) and `density`: pebble, unit, truck.
+const MASSES: [(f32, f32); 3] = [(0.1, 1.0), (1.0, 1.0), (10.0, 10.0)];
+/// Frames per second of the harness clock.
+const FPS: f32 = 60.0;
 
 fn spawn_body(app: &mut App, record: BodyRecord) -> StableId {
     let id = record.id;
@@ -14,15 +36,26 @@ fn spawn_body(app: &mut App, record: BodyRecord) -> StableId {
 }
 
 fn spawn_joint(app: &mut App, def: JointDef) -> StableId {
-    let record = JointRecord { id: StableId::new(), def };
+    let record = JointRecord {
+        id: StableId::new(),
+        def,
+    };
     let id = record.id;
     app.world_mut().write_message(SpawnJointIntent { record });
     app.update();
     id
 }
 
-fn pos(app: &App, id: StableId) -> Vec2 {
-    app.world().get::<Transform>(entity_of(app, id).unwrap()).unwrap().translation.truncate()
+fn body(pos: Vec2, w: f32, h: f32, density: f32) -> BodyRecord {
+    let mut rec = box_record(pos, w, h);
+    rec.physics.density = ColliderDensity(density);
+    rec
+}
+
+fn fixed(pos: Vec2, w: f32, h: f32) -> BodyRecord {
+    let mut rec = box_record(pos, w, h);
+    rec.physics.rigid_body = RigidBody::Static;
+    rec
 }
 
 fn joint(kind: JointKind, a: StableId, b: Option<StableId>, aa: Vec2, ab: Vec2) -> JointDef {
@@ -31,255 +64,651 @@ fn joint(kind: JointKind, a: StableId, b: Option<StableId>, aa: Vec2, ab: Vec2) 
         common: JointCommon::default(),
         body_a: a,
         body_b: b,
-        anchor_a: gradiance::units::Displacement(aa),
-        anchor_b: gradiance::units::Displacement(ab),
-        rest_rot_a: gradiance::units::Angle(0.0),
-        rest_rot_b: gradiance::units::Angle(0.0),
+        anchor_a: Displacement(aa),
+        anchor_b: Displacement(ab),
+        rest_rot_a: Angle(0.0),
+        rest_rot_b: Angle(0.0),
     }
 }
 
-const RIGS: [(f32, f32); 6] = [(0.1, 1.0), (0.3, 1.0), (1.0, 1.0), (3.0, 1.0), (5.0, 4.0), (10.0, 10.0)];
+fn pos(app: &App, id: StableId) -> Vec2 {
+    let e = entity_of(app, id).unwrap();
+    app.world()
+        .get::<Transform>(e)
+        .unwrap()
+        .translation
+        .truncate()
+}
 
-#[test]
-#[ignore = "sweep: prints a table"]
-fn sweep_baseline() {
-    println!("\n## spring (k = 100 * aabb area, damping 0), body hung from a world pin");
-    for (s, rho) in RIGS {
-        let mut app = headless_app();
-        let mut rec = box_record(Vec2::new(0.0, -2.0 * s), s, s);
-        rec.physics.density = avian2d::prelude::ColliderDensity(rho);
-        let id = spawn_body(&mut app, rec);
-        let k = 100.0 * s * s;
-        spawn_joint(&mut app, joint(JointKind::Spring {
-            rest_length: gradiance::units::Length(2.0 * s),
-            stiffness: gradiance::units::Stiffness(k),
-            damping: gradiance::units::Damping(0.0),
-            range: None,
-        }, id, None, Vec2::ZERO, Vec2::ZERO));
-        let mut ys = Vec::new();
-        for _ in 0..300 { step(&mut app, 1); ys.push(pos(&app, id).y); }
-        let m = app.world().get::<ComputedMass>(entity_of(&app, id).unwrap()).unwrap().value();
-        let (period, amp_first, amp_last) = oscillation(&ys);
-        println!("s={s} rho={rho} m={m:.3} period={period:.3}s amp0={:.3}s amp_end={:.3}s max_sag={:.3}s",
-            amp_first / s, amp_last / s, (-2.0 * s - ys.iter().copied().fold(f32::MAX, f32::min)) / s);
-    }
+fn omega(app: &App, id: StableId) -> f32 {
+    let e = entity_of(app, id).unwrap();
+    app.world().get::<AngularVelocity>(e).map_or(0.0, |w| w.0)
+}
 
-    println!("\n## hinge motor (default), world pin at the body centre / arm end; body_a static ground");
-    for (s, rho) in RIGS {
-        for case in ["centre", "arm", "ground_a"] {
-            let mut app = headless_app();
-            let mut rec = box_record(Vec2::ZERO, s, s * 0.25);
-            rec.physics.density = avian2d::prelude::ColliderDensity(rho);
-            let id = spawn_body(&mut app, rec);
-            let motor = Some(AngularMotorDef::default());
-            let kind = JointKind::Hinge { limits: None, motor };
-            match case {
-                "centre" => { spawn_joint(&mut app, joint(kind, id, None, Vec2::ZERO, Vec2::ZERO)); }
-                "arm" => { spawn_joint(&mut app, joint(kind, id, None, Vec2::new(-s * 0.5, 0.0), Vec2::new(-s * 0.5, 0.0))); }
-                _ => {
-                    let mut g = box_record(Vec2::new(0.0, -s), 20.0 * s, s);
-                    g.physics.rigid_body = RigidBody::Static;
-                    let gid = spawn_body(&mut app, g);
-                    spawn_joint(&mut app, joint(kind, gid, Some(id), Vec2::new(0.0, s), Vec2::ZERO));
-                }
-            }
-            let e = entity_of(&app, id).unwrap();
-            let mut ws = Vec::new();
-            for _ in 0..120 { step(&mut app, 1); ws.push(app.world().get::<AngularVelocity>(e).map_or(0.0, |w| w.0)); }
-            let t90 = ws.iter().position(|w| *w >= 1.8).map_or(f32::NAN, |i| (i + 1) as f32 / 60.0);
-            let wmax = ws.iter().copied().fold(f32::MIN, f32::max);
-            let wend = *ws.last().unwrap();
-            let inertia = app.world().get::<ComputedAngularInertia>(e).unwrap().value();
-            println!("s={s} rho={rho} {case}: I={inertia:.3e} t90={t90:.3}s wmax={wmax:.2} wend={wend:.2}");
-        }
-    }
+fn edit(app: &mut App, id: StableId, old: PropertyValue, new: PropertyValue) {
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![PropertyChange { id, old, new }],
+    });
+    app.update();
+}
 
-    println!("\n## slider motor (default 2 m/s), world pin, no gravity effect along x");
-    for (s, rho) in RIGS {
-        let mut app = headless_app();
-        let mut rec = box_record(Vec2::ZERO, s, s);
-        rec.physics.density = avian2d::prelude::ColliderDensity(rho);
-        let id = spawn_body(&mut app, rec);
-        spawn_joint(&mut app, joint(JointKind::Slider { axis: Vec2::X, limits: None, motor: Some(LinearMotorDef::default()) }, id, None, Vec2::ZERO, Vec2::ZERO));
-        let e = entity_of(&app, id).unwrap();
-        let mut vs = Vec::new();
-        for _ in 0..60 { step(&mut app, 1); vs.push(app.world().get::<LinearVelocity>(e).map_or(0.0, |v| v.0.x)); }
-        let t90 = vs.iter().position(|v| *v >= 1.8).map_or(f32::NAN, |i| (i + 1) as f32 / 60.0);
-        println!("s={s} rho={rho}: t90={t90:.3}s vend={:.2} = {:.1} body lengths/s", vs.last().unwrap(), vs.last().unwrap() / s);
-    }
-
-    println!("\n## drop onto static ground from 2 body heights: bounce ratio");
-    for (s, rho) in RIGS {
-        for e in [0.0_f32, 0.3, 0.5, 0.8, 0.95, 1.0] {
-            let mut app = headless_app();
-            let mut g = box_record(Vec2::new(0.0, -s), 40.0 * s, s);
-            g.physics.rigid_body = RigidBody::Static;
-            g.physics.restitution = avian2d::prelude::Restitution::new(e);
-            spawn_body(&mut app, g);
-            let drop_h = 2.0 * s;
-            let mut rec = box_record(Vec2::new(0.0, drop_h), s, s);
-            rec.physics.density = avian2d::prelude::ColliderDensity(rho);
-            rec.physics.restitution = avian2d::prelude::Restitution::new(e);
-            let id = spawn_body(&mut app, rec);
-            let floor_y = -s * 0.5 + s * 0.5; // ground top + half body
-            let mut ys = Vec::new();
-            for _ in 0..240 { step(&mut app, 1); ys.push(pos(&app, id).y); }
-            // first bounce apex after first contact
-            let first_contact = ys.iter().position(|y| *y < floor_y + 0.02 * s).unwrap_or(0);
-            let apex = ys[first_contact..].iter().copied().take(120).fold(f32::MIN, f32::max);
-            let ratio = (apex - floor_y) / (drop_h - floor_y);
-            let max_y = ys.iter().copied().fold(f32::MIN, f32::max);
-            println!("s={s} rho={rho} e={e}: bounce_ratio={ratio:.3} (e^2={:.3}) max_y/start={:.3}", e * e, (max_y - floor_y) / (drop_h - floor_y));
-        }
+fn spring(frequency: f32, ratio: f32, rest: f32) -> JointKind {
+    JointKind::Spring {
+        rest_length: Length(rest),
+        frequency: Frequency(frequency),
+        damping_ratio: ratio,
+        range: None,
     }
 }
 
-/// Period from upward zero crossings around the mean, and first/last half-amplitudes.
+// ---------- spring rig ----------------------------------------------------
+
+/// What a hung spring did: its period, its first and last swing amplitudes
+/// (as a fraction of the body size) and whether it stayed finite and near.
+#[derive(Debug)]
+struct Bounce {
+    period: f32,
+    first: f32,
+    last: f32,
+    sane: bool,
+}
+
+/// A box of `size`/`density` hung `2·size` below a world pin by a spring at
+/// its rest length, released, run `secs`. With `densify`, the density is
+/// multiplied by 100 after the spring exists (the retune path).
+fn hung_spring(size: f32, density: f32, f: f32, zeta: f32, secs: f32, densify: bool) -> Bounce {
+    let mut app = headless_app();
+    let id = spawn_body(
+        &mut app,
+        body(Vec2::new(0.0, -2.0 * size), size, size, density),
+    );
+    spawn_joint(
+        &mut app,
+        joint(
+            spring(f, zeta, 2.0 * size),
+            id,
+            None,
+            Vec2::ZERO,
+            Vec2::ZERO,
+        ),
+    );
+    if densify {
+        edit(
+            &mut app,
+            id,
+            PropertyValue::Density(ColliderDensity(density)),
+            PropertyValue::Density(ColliderDensity(density * 100.0)),
+        );
+    }
+    let mut ys = Vec::new();
+    let mut sane = true;
+    for _ in 0..(secs * FPS) as usize {
+        step(&mut app, 1);
+        let p = pos(&app, id);
+        sane &= p.is_finite() && p.length() < 1000.0;
+        ys.push(p.y / size);
+    }
+    let (period, first, last) = oscillation(&ys);
+    Bounce {
+        period,
+        first,
+        last,
+        sane,
+    }
+}
+
+/// Period (mean spacing of upward crossings of the settled mean), first-second
+/// and last-second half-amplitudes of a sampled signal.
 fn oscillation(ys: &[f32]) -> (f32, f32, f32) {
     let tail = &ys[ys.len() / 2..];
     let mean = tail.iter().sum::<f32>() / tail.len() as f32;
-    let mut crossings = Vec::new();
-    for i in 1..ys.len() {
-        if ys[i - 1] < mean && ys[i] >= mean { crossings.push(i); }
-    }
+    let crossings: Vec<usize> = (1..ys.len())
+        .filter(|&i| ys[i - 1] < mean && ys[i] >= mean)
+        .collect();
     let period = if crossings.len() >= 2 {
-        (crossings[crossings.len() - 1] - crossings[0]) as f32 / (crossings.len() - 1) as f32 / 60.0
-    } else { f32::NAN };
-    let amp = |w: &[f32]| (w.iter().copied().fold(f32::MIN, f32::max) - w.iter().copied().fold(f32::MAX, f32::min)) * 0.5;
-    (period, amp(&ys[..60]), amp(&ys[ys.len() - 60..]))
+        (crossings[crossings.len() - 1] - crossings[0]) as f32 / (crossings.len() - 1) as f32 / FPS
+    } else {
+        f32::NAN
+    };
+    let amp = |w: &[f32]| {
+        let hi = w.iter().copied().fold(f32::MIN, f32::max);
+        let lo = w.iter().copied().fold(f32::MAX, f32::min);
+        (hi - lo) * 0.5
+    };
+    let second = FPS as usize;
+    (period, amp(&ys[..second]), amp(&ys[ys.len() - second..]))
 }
 
 #[test]
-#[ignore = "debug"]
-fn debug_centre_motor() {
-    for s in [0.1_f32, 1.0] {
-        let mut app = headless_app();
-        let rec = box_record(Vec2::ZERO, s, s * 0.25);
-        let id = spawn_body(&mut app, rec);
-        let j = spawn_joint(&mut app, joint(JointKind::Hinge { limits: None, motor: Some(AngularMotorDef::default()) }, id, None, Vec2::ZERO, Vec2::ZERO));
-        for f in 0..6 {
-            step(&mut app, 1);
-            let je = entity_of(&app, j).unwrap();
-            let rj = app.world().get::<avian2d::prelude::RevoluteJoint>(je);
-            let unres = app.world().get::<gradiance::physics::joint_sync::JointUnresolved>(je).is_some();
-            let e = entity_of(&app, id).unwrap();
-            let w = app.world().get::<AngularVelocity>(e).map(|w| w.0);
-            let sleeping = app.world().get::<avian2d::prelude::Sleeping>(e).is_some();
-            println!("s={s} f={f} unresolved={unres} sleeping={sleeping} w={w:?} motor={:?}", rj.map(|r| (r.motor.enabled, r.motor.target_velocity, r.motor.max_torque)));
-        }
-    }
+fn a_default_spring_bounces_with_one_period_at_any_mass() {
+    let f = tuning::SPRING_FREQUENCY.default;
+    let zeta = tuning::SPRING_DAMPING_RATIO.default;
+    let periods: Vec<f32> = MASSES
+        .iter()
+        .map(|&(size, density)| {
+            let b = hung_spring(size, density, f, zeta, 5.0, false);
+            assert!(b.sane, "{size} m: {b:?}");
+            // A visible, comfortable bounce: 0.3 to 2 s.
+            assert!((0.3..=2.0).contains(&b.period), "{size} m: {b:?}");
+            // It settles: the last second swings under a fifth of the first.
+            assert!(b.last < 0.2 * b.first, "{size} m does not settle: {b:?}");
+            b.period
+        })
+        .collect();
+    let (lo, hi) = (
+        periods.iter().copied().fold(f32::MAX, f32::min),
+        periods.iter().copied().fold(f32::MIN, f32::max),
+    );
+    assert!(
+        hi / lo < 1.05,
+        "one period from a pebble to a truck: {periods:?}"
+    );
 }
 
 #[test]
-#[ignore = "debug"]
-fn debug_offsets() {
-    for s in [0.1_f32, 1.0, 10.0] {
-        for off in [0.0_f32, 0.001, 0.01, 0.1, 0.5] {
-            for swap in [false, true] {
-                let mut app = headless_app();
-                let rec = box_record(Vec2::ZERO, s, s);
-                let id = spawn_body(&mut app, rec);
-                let mut g = box_record(Vec2::new(0.0, 3.0 * s), s, s);
-                g.physics.rigid_body = RigidBody::Static;
-                let gid = spawn_body(&mut app, g);
-                let a = Vec2::new(off * s, 0.0);
-                let kind = JointKind::Hinge { limits: None, motor: Some(AngularMotorDef::default()) };
-                if swap {
-                    spawn_joint(&mut app, joint(kind, gid, Some(id), a - Vec2::new(0.0, 3.0 * s), a));
-                } else {
-                    spawn_joint(&mut app, joint(kind, id, Some(gid), a, a - Vec2::new(0.0, 3.0 * s)));
+fn a_spring_keeps_its_period_when_its_body_gets_denser() {
+    let before = hung_spring(1.0, 1.0, 1.5, 0.05, 3.0, false);
+    let after = hung_spring(1.0, 1.0, 1.5, 0.05, 3.0, true);
+    assert!(before.sane && after.sane, "{before:?} {after:?}");
+    assert!(
+        (after.period / before.period - 1.0).abs() < 0.05,
+        "density x100 keeps the period: {before:?} -> {after:?}"
+    );
+}
+
+#[test]
+fn springs_stay_sane_and_monotonic_across_the_inner_range() {
+    // Inner 10-90% of the frequency range, at the inner ratio ends, on the
+    // lightest and heaviest body: finite, near, and a higher frequency
+    // never gives a longer period.
+    for &(size, density) in &[MASSES[0], MASSES[2]] {
+        for t_zeta in [0.0_f32, 0.1] {
+            let zeta = tuning::SPRING_DAMPING_RATIO.at(t_zeta);
+            let mut last_period = f32::MAX;
+            for t in [0.5_f32, 0.75, 0.9] {
+                let f = tuning::SPRING_FREQUENCY.at(t);
+                let b = hung_spring(size, density, f, zeta, 2.0, false);
+                assert!(b.sane, "{size} m, f {f}, zeta {zeta}: {b:?}");
+                if b.period.is_finite() {
+                    assert!(
+                        b.period <= last_period * 1.05,
+                        "{size} m: period rose with frequency ({f} Hz: {b:?})"
+                    );
+                    last_period = b.period;
                 }
-                let e = entity_of(&app, id).unwrap();
-                let mut ws = Vec::new();
-                for _ in 0..120 { step(&mut app, 1); ws.push(app.world().get::<AngularVelocity>(e).unwrap().0); }
-                println!("s={s} off={off} static_is_a={swap}: w@0.1s={:.3} w@0.5s={:.3} w@2s={:.3}", ws[5], ws[29], ws[119]);
             }
+            let soft = hung_spring(
+                size,
+                density,
+                tuning::SPRING_FREQUENCY.at(0.1),
+                zeta,
+                2.0,
+                false,
+            );
+            assert!(soft.sane, "{size} m soft spring: {soft:?}");
         }
     }
 }
 
-#[test]
-#[ignore = "debug"]
-fn debug_projection() {
+// ---------- motor rigs ----------------------------------------------------
+
+/// How a motor's relative speed `rel` (rad/s or m/s) tracked `target`.
+#[derive(Debug)]
+struct Drive {
+    t90: f32,
+    peak: f32,
+    end: f32,
+}
+
+fn drive(samples: &[f32], target: f32) -> Drive {
+    let t90 = samples
+        .iter()
+        .position(|v| *v >= 0.9 * target)
+        .map_or(f32::INFINITY, |i| (i + 1) as f32 / FPS);
+    Drive {
+        t90,
+        peak: samples.iter().copied().fold(f32::MIN, f32::max),
+        end: samples[samples.len() - 1],
+    }
+}
+
+/// A box wheel driven by a default hinge motor at its centre: pinned to the
+/// world (`ground = false`) or to a static ground body that is the joint's
+/// body A. Returns the relative speed (B against A) per frame for `secs`.
+fn hinge_wheel(size: f32, density: f32, ground: bool, secs: f32) -> Vec<f32> {
     let mut app = headless_app();
-    let id = spawn_body(&mut app, box_record(Vec2::ZERO, 1.0, 1.0));
-    let j = spawn_joint(&mut app, joint(JointKind::Hinge { limits: None, motor: Some(AngularMotorDef::default()) }, id, None, Vec2::ZERO, Vec2::ZERO));
-    for f in 0..4 {
-        step(&mut app, 1);
-        let e = entity_of(&app, id).unwrap();
-        let je = entity_of(&app, j).unwrap();
-        let has = app.world().get::<avian2d::prelude::XpbdVelocityProjection>(e).is_some();
-        let pin = app.world().get::<gradiance::physics::joint_sync::PinAnchor>(je).map(|p| p.0);
-        let pin_has = pin.map(|p| app.world().get::<avian2d::prelude::XpbdVelocityProjection>(p).is_some());
-        println!("f={f} body_has_proj={has} pin={pin:?} pin_has={pin_has:?} w={}", app.world().get::<AngularVelocity>(e).unwrap().0);
-    }
-}
-
-#[test]
-#[ignore = "debug"]
-fn debug_velocity_persists() {
-    for motor in [None, Some(AngularMotorDef::default())] {
-        let mut app = headless_app();
-        let id = spawn_body(&mut app, box_record(Vec2::ZERO, 1.0, 1.0));
-        spawn_joint(&mut app, joint(JointKind::Hinge { limits: None, motor }, id, None, Vec2::ZERO, Vec2::ZERO));
-        step(&mut app, 3);
-        let e = entity_of(&app, id).unwrap();
-        app.world_mut().get_mut::<AngularVelocity>(e).unwrap().0 = 5.0;
-        for f in 0..4 {
+    let id = spawn_body(&mut app, body(Vec2::ZERO, size, size, density));
+    let kind = JointKind::Hinge {
+        limits: None,
+        motor: Some(AngularMotorDef::default()),
+    };
+    let sign = if ground {
+        let g = spawn_body(&mut app, fixed(Vec2::new(0.0, -size), 20.0 * size, size));
+        spawn_joint(
+            &mut app,
+            joint(kind, g, Some(id), Vec2::new(0.0, size), Vec2::ZERO),
+        );
+        1.0
+    } else {
+        // A world pin: the pin is body B, so B against A is minus the wheel.
+        spawn_joint(&mut app, joint(kind, id, None, Vec2::ZERO, Vec2::ZERO));
+        -1.0
+    };
+    (0..(secs * FPS) as usize)
+        .map(|_| {
             step(&mut app, 1);
-            println!("motor={} f={f} w={} rot={}", motor.is_some(), app.world().get::<AngularVelocity>(e).unwrap().0, app.world().get::<avian2d::prelude::Rotation>(e).unwrap().as_radians());
-        }
-        let subs = app.world().resource::<avian2d::prelude::SubstepCount>().0;
-        println!("substeps={subs}");
-    }
+            sign * omega(&app, id)
+        })
+        .collect()
 }
 
 #[test]
-#[ignore = "debug"]
-fn debug_damping_sweep() {
-    for damping in [0.1_f32, 0.3, 0.6, 1.0, 1.5, 3.0, 10.0, 30.0] {
-        for (s, case) in [(0.1_f32, "centre"), (1.0, "centre"), (10.0, "centre"), (0.1, "arm"), (1.0, "arm"), (10.0, "arm")] {
-            let mut app = headless_app();
-            let id = spawn_body(&mut app, box_record(Vec2::ZERO, s, s * 0.25));
-            let m = AngularMotorDef { damping, ..AngularMotorDef::default() };
-            let a = if case == "arm" { Vec2::new(-0.5 * s, 0.0) } else { Vec2::ZERO };
-            spawn_joint(&mut app, joint(JointKind::Hinge { limits: None, motor: Some(m) }, id, None, a, a));
-            let e = entity_of(&app, id).unwrap();
-            let mut ws = Vec::new();
-            for _ in 0..120 { step(&mut app, 1); ws.push(-app.world().get::<AngularVelocity>(e).unwrap().0); }
-            let t90 = ws.iter().position(|w| *w >= 1.8).map_or(f32::NAN, |i| (i + 1) as f32 / 60.0);
-            let mx = ws.iter().copied().fold(f32::MIN, f32::max);
-            let mn = ws[60..].iter().copied().fold(f32::MAX, f32::min);
-            println!("damping={damping} s={s} {case}: t90={t90:.3} max={mx:.2} min_after1s={mn:.2} end={:.2}", ws[119]);
+fn a_default_hinge_motor_reaches_its_speed_at_any_mass() {
+    let target = gradiance::domain::joint::DEFAULT_MOTOR_ANGULAR_VELOCITY;
+    for &(size, density) in &MASSES {
+        for ground in [false, true] {
+            let d = drive(&hinge_wheel(size, density, ground, 1.0), target);
+            assert!(d.t90 <= 0.5, "{size} m (ground {ground}): {d:?}");
+            assert!(d.peak <= 1.2 * target, "{size} m overshoots: {d:?}");
+            assert!((d.end - target).abs() < 0.1 * target, "{size} m: {d:?}");
         }
     }
 }
 
 #[test]
-#[ignore = "debug"]
-fn debug_small_arm() {
-    for s in [0.03_f32, 0.1, 0.3] {
-    for tau in [0.0_f32, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0] {
-        for damping in [0.3_f32, 0.6, 1.0] {
-            let mut app = headless_app();
-            let id = spawn_body(&mut app, box_record(Vec2::ZERO, s, s * 0.25));
-            let m = AngularMotorDef { damping, max_torque: gradiance::units::Torque(tau), ..AngularMotorDef::default() };
-            let a = Vec2::new(-0.5 * s, 0.0);
-            spawn_joint(&mut app, joint(JointKind::Hinge { limits: None, motor: Some(m) }, id, None, a, a));
-            let e = entity_of(&app, id).unwrap();
-            let mut ws = Vec::new();
-            let mut drift = 0.0_f32;
-            for _ in 0..120 {
-                step(&mut app, 1);
-                ws.push(-app.world().get::<AngularVelocity>(e).unwrap().0);
-                let t = app.world().get::<Transform>(e).unwrap();
-                let end = t.translation.truncate() + Vec2::from_angle(t.rotation.to_euler(EulerRot::ZYX).0).rotate(a);
-                drift = drift.max((end - a).length() / s);
+fn a_default_hinge_motor_lifts_an_arm_of_a_metre_or_more() {
+    // Gravity loads an arm pinned at one end. avian's motor corrects per
+    // substep at the body's centre-of-mass inertia, so a short arm loses
+    // speed to gravity (a 0.3 m arm holds ~75%, a 0.1 m one ~25%: see the
+    // 4b-4 Outcome); from a metre up the default holds its speed.
+    let target = gradiance::domain::joint::DEFAULT_MOTOR_ANGULAR_VELOCITY;
+    for (size, density) in [(1.0_f32, 1.0_f32), (10.0, 10.0)] {
+        let mut app = headless_app();
+        let id = spawn_body(&mut app, body(Vec2::ZERO, size, size * 0.25, density));
+        let a = Vec2::new(-0.5 * size, 0.0);
+        spawn_joint(
+            &mut app,
+            joint(
+                JointKind::Hinge {
+                    limits: None,
+                    motor: Some(AngularMotorDef::default()),
+                },
+                id,
+                None,
+                a,
+                a,
+            ),
+        );
+        let mut slowest = f32::MAX;
+        for frame in 0..120 {
+            step(&mut app, 1);
+            if frame >= 30 {
+                slowest = slowest.min(-omega(&app, id));
             }
-            let mx = ws.iter().copied().fold(f32::MIN, f32::max);
-            let mn = ws[60..].iter().copied().fold(f32::MAX, f32::min);
-            println!("s={s} tau={tau:e} gain={damping}: max={mx:.2} min_after1s={mn:.2} end={:.2} pivot_drift/s={drift:.3}", ws[119]);
         }
+        assert!(
+            slowest > 0.8 * target,
+            "{size} m arm sags under gravity: slowest {slowest}"
+        );
     }
+}
+
+#[test]
+fn a_motor_ceiling_follows_a_density_change() {
+    let mut app = headless_app();
+    let id = spawn_body(&mut app, body(Vec2::ZERO, 1.0, 1.0, 1.0));
+    let j = spawn_joint(
+        &mut app,
+        joint(
+            JointKind::Hinge {
+                limits: None,
+                motor: Some(AngularMotorDef::default()),
+            },
+            id,
+            None,
+            Vec2::ZERO,
+            Vec2::ZERO,
+        ),
+    );
+    step(&mut app, 3);
+    let ceiling = |app: &App| {
+        let e = entity_of(app, j).unwrap();
+        app.world()
+            .get::<avian2d::prelude::RevoluteJoint>(e)
+            .unwrap()
+            .motor
+            .max_torque
+    };
+    let before = ceiling(&app);
+    edit(
+        &mut app,
+        id,
+        PropertyValue::Density(ColliderDensity(1.0)),
+        PropertyValue::Density(ColliderDensity(1000.0)),
+    );
+    step(&mut app, 3);
+    let after = ceiling(&app);
+    assert!(
+        (after / before - 1000.0).abs() < 10.0,
+        "auto ceiling scales with the inertia: {before} -> {after}"
+    );
+}
+
+#[test]
+fn a_default_slider_motor_reaches_its_speed_at_any_mass() {
+    let target = gradiance::domain::joint::DEFAULT_MOTOR_LINEAR_VELOCITY;
+    for &(size, density) in &MASSES {
+        let mut app = headless_app();
+        let id = spawn_body(&mut app, body(Vec2::ZERO, size, size, density));
+        spawn_joint(
+            &mut app,
+            joint(
+                JointKind::Slider {
+                    axis: Vec2::X,
+                    limits: None,
+                    motor: Some(LinearMotorDef::default()),
+                },
+                id,
+                None,
+                Vec2::ZERO,
+                Vec2::ZERO,
+            ),
+        );
+        let e = entity_of(&app, id).unwrap();
+        let vs: Vec<f32> = (0..60)
+            .map(|_| {
+                step(&mut app, 1);
+                // The world pin is body B: B against A is minus the body.
+                -app.world().get::<LinearVelocity>(e).map_or(0.0, |v| v.0.x)
+            })
+            .collect();
+        let d = drive(&vs, target);
+        assert!(d.t90 <= 0.5, "{size} m: {d:?}");
+        assert!(d.peak <= 1.2 * target, "{size} m overshoots: {d:?}");
+    }
+}
+
+// ---------- contact rigs --------------------------------------------------
+
+/// Height ratio of the first bounce of a box dropped from two body heights
+/// onto a static floor, both at restitution `e`; and the highest the box got
+/// after its release, as a ratio of the drop (1 = no gain).
+fn bounce(size: f32, density: f32, e: f32) -> (f32, f32) {
+    let mut app = headless_app();
+    let mut floor = fixed(Vec2::new(0.0, -size), 40.0 * size, size);
+    floor.physics.restitution = Restitution::new(e);
+    spawn_body(&mut app, floor);
+    let drop = 2.0 * size;
+    let mut rec = body(Vec2::new(0.0, drop), size, size, density);
+    rec.physics.restitution = Restitution::new(e);
+    let id = spawn_body(&mut app, rec);
+    let rest_y = 0.0; // the floor's top (-size/2) plus half the box
+    // Long enough to fall and come back up: four free-fall times, plus a
+    // second.
+    let fall = (2.0 * drop / 9.81).sqrt();
+    let frames = ((4.0 * fall + 1.0) * FPS) as usize;
+    let ys: Vec<f32> = (0..frames)
+        .map(|_| {
+            step(&mut app, 1);
+            pos(&app, id).y
+        })
+        .collect();
+    let contact = ys
+        .iter()
+        .position(|y| *y < rest_y + 0.02 * size)
+        .unwrap_or(0);
+    let apex = ys[contact..].iter().copied().fold(f32::MIN, f32::max);
+    let highest = ys.iter().copied().fold(f32::MIN, f32::max);
+    (
+        (apex - rest_y) / (drop - rest_y),
+        (highest - rest_y) / (drop - rest_y),
+    )
+}
+
+#[test]
+fn restitution_bounces_alike_at_any_mass_and_never_gains_height() {
+    let mut last = vec![-1.0_f32; MASSES.len()];
+    for e in [
+        0.0_f32,
+        tuning::RESTITUTION.default,
+        0.7,
+        tuning::RESTITUTION.max,
+    ] {
+        let ratios: Vec<f32> = MASSES
+            .iter()
+            .map(|&(size, density)| {
+                let (ratio, highest) = bounce(size, density, e);
+                assert!(highest <= 1.01, "{size} m gained height at e = {e}");
+                ratio
+            })
+            .collect();
+        for (i, r) in ratios.iter().enumerate() {
+            assert!(
+                *r >= last[i] - 0.01,
+                "bounce fell as e rose to {e}: {ratios:?}"
+            );
+        }
+        let spread = ratios.iter().copied().fold(f32::MIN, f32::max)
+            - ratios.iter().copied().fold(f32::MAX, f32::min);
+        assert!(
+            spread < 0.05,
+            "mass changes the bounce at e = {e}: {ratios:?}"
+        );
+        last = ratios;
+    }
+    // The default bounces visibly, and the top of the range clearly more.
+    let (default_ratio, _) = bounce(1.0, 1.0, tuning::RESTITUTION.default);
+    assert!(
+        default_ratio > 0.03,
+        "default barely bounces: {default_ratio}"
+    );
+    assert!(
+        last[1] > 0.5,
+        "e = 1 should keep most of the height: {last:?}"
+    );
+}
+
+/// How far (m) a box slid down a static slope of `deg` in 1 s.
+fn slide(size: f32, density: f32, deg: f32, mu: f32) -> f32 {
+    let mut app = headless_app();
+    let angle = deg.to_radians();
+    let dir = Vec2::from_angle(angle);
+    let normal = dir.perp();
+    let mut slope = fixed(Vec2::ZERO, 40.0 * size, size);
+    slope.pose.rot = angle;
+    slope.physics.friction = avian2d::prelude::Friction::new(mu);
+    spawn_body(&mut app, slope);
+    // A flat box (half as tall as long) so it slides before it tips.
+    let start = normal * (0.75 * size + 0.001 * size);
+    let mut rec = body(start, size, 0.5 * size, density);
+    rec.pose.rot = angle;
+    rec.physics.friction = avian2d::prelude::Friction::new(mu);
+    let id = spawn_body(&mut app, rec);
+    step(&mut app, 60);
+    (start - pos(&app, id)).dot(dir)
+}
+
+#[test]
+fn friction_holds_or_slides_alike_at_any_mass() {
+    for &(size, density) in &MASSES {
+        // The default holds on 25 degrees and slides on 35; the top of the
+        // range holds on 40.
+        let held = slide(size, density, 25.0, tuning::FRICTION.default);
+        let slid = slide(size, density, 35.0, tuning::FRICTION.default);
+        let grip = slide(size, density, 40.0, tuning::FRICTION.at(0.9));
+        // Coulomb sliding: at least half the distance `a·t²/2` predicts,
+        // whatever the mass.
+        let (sin, cos) = 35_f32.to_radians().sin_cos();
+        let predicted = 0.5 * 9.81 * (sin - tuning::FRICTION.default * cos);
+        assert!(
+            held.abs() < 0.05 * size,
+            "{size} m slid on 25 deg: {held} m"
+        );
+        assert!(slid > 0.5 * predicted, "{size} m held on 35 deg: {slid} m");
+        assert!(
+            grip.abs() < 0.05 * size,
+            "{size} m slid at high friction: {grip} m"
+        );
+    }
+}
+
+// ---------- break force -----------------------------------------------------
+
+/// A pendulum (box on a breakable world-pin hinge at its end) released level
+/// with the default break force for its weight; after a second, gravity is
+/// scaled by `load`. Returns whether the joint broke before and after.
+fn pendulum_breaks(size: f32, density: f32, load: f32) -> (bool, bool) {
+    let mut app = headless_app();
+    let rec = body(Vec2::ZERO, size, size * 0.25, density);
+    let mass = size * size * 0.25 * density;
+    let id = spawn_body(&mut app, rec);
+    let a = Vec2::new(-0.5 * size, 0.0);
+    let mut def = joint(
+        JointKind::Hinge {
+            limits: None,
+            motor: None,
+        },
+        id,
+        None,
+        a,
+        a,
+    );
+    def.common.break_force = Some(Force(tuning::default_break_force(mass, 9.81)));
+    let j = spawn_joint(&mut app, def);
+    let broken = |app: &App| {
+        let e = entity_of(app, j).unwrap();
+        app.world().get::<JointDef>(e).unwrap().common.broken
+    };
+    step(&mut app, 60);
+    let before = broken(&app);
+    edit(
+        &mut app,
+        id,
+        PropertyValue::GravityScale(GravityScale(1.0)),
+        PropertyValue::GravityScale(GravityScale(load)),
+    );
+    step(&mut app, 60);
+    (before, broken(&app))
+}
+
+#[test]
+fn a_default_break_force_holds_a_swing_and_breaks_under_a_heavy_load() {
+    for &(size, density) in &[MASSES[0], MASSES[2]] {
+        let (swing, loaded) = pendulum_breaks(size, density, 20.0);
+        assert!(!swing, "{size} m: broke under its own swing");
+        assert!(loaded, "{size} m: held twenty times its weight");
+    }
+}
+
+// ---------- the sweep (Outcome table) --------------------------------------
+
+#[test]
+#[ignore = "sweep: prints the 4b-4 Outcome table"]
+fn sweep() {
+    let rigs = [
+        (0.1_f32, 1.0_f32),
+        (0.3, 1.0),
+        (1.0, 1.0),
+        (3.0, 1.0),
+        (5.0, 4.0),
+        (10.0, 10.0),
+    ];
+    println!(
+        "\n| mass kg | spring period s (default) | first/last swing | motor t90 s (world, ground) | bounce e=0.3 | bounce e=1 |"
+    );
+    for (size, density) in rigs {
+        let m = size * size * density;
+        let b = hung_spring(size, density, 1.5, 0.1, 5.0, false);
+        let w = drive(&hinge_wheel(size, density, false, 1.0), 2.0);
+        let g = drive(&hinge_wheel(size, density, true, 1.0), 2.0);
+        let (b3, _) = bounce(size, density, 0.3);
+        let (b10, h10) = bounce(size, density, 1.0);
+        println!(
+            "| {m} | {:.3} | {:.3}/{:.3} | {:.3}, {:.3} (peak {:.2}, {:.2}) | {b3:.3} | {b10:.3} (max {h10:.3}) |",
+            b.period, b.first, b.last, w.t90, g.t90, w.peak, g.peak
+        );
+    }
+    println!("\n| f position | f Hz | period pebble | period truck | sane |");
+    for t in [0.0_f32, 0.1, 0.5, 0.9, 1.0] {
+        let f = tuning::SPRING_FREQUENCY.at(t);
+        let p = hung_spring(0.1, 1.0, f, 0.1, 3.0, false);
+        let tr = hung_spring(10.0, 10.0, f, 0.1, 3.0, false);
+        println!(
+            "| {t} | {f:.2} | {:.3} | {:.3} | {} |",
+            p.period,
+            tr.period,
+            p.sane && tr.sane
+        );
+    }
+    println!("\n| zeta | last/first swing (1 kg, 1.5 Hz, 5 s) |");
+    for t in [0.0_f32, 0.05, 0.1, 0.5, 1.0] {
+        let zeta = tuning::SPRING_DAMPING_RATIO.at(t);
+        let b = hung_spring(1.0, 1.0, 1.5, zeta, 5.0, false);
+        println!("| {zeta:.2} | {:.3} |", b.last / b.first.max(1e-9));
+    }
+    println!("\n| motor rate 1/s | arm 0.3 m slowest | arm 1 m slowest | wheel t90 |");
+    for rate in [30.0_f32, 120.0, 360.0, 1000.0] {
+        let mut row = Vec::new();
+        for size in [0.3_f32, 1.0] {
+            let mut app = headless_app();
+            let id = spawn_body(&mut app, body(Vec2::ZERO, size, size * 0.25, 1.0));
+            let a = Vec2::new(-0.5 * size, 0.0);
+            let motor = AngularMotorDef {
+                damping: rate,
+                ..AngularMotorDef::default()
+            };
+            spawn_joint(
+                &mut app,
+                joint(
+                    JointKind::Hinge {
+                        limits: None,
+                        motor: Some(motor),
+                    },
+                    id,
+                    None,
+                    a,
+                    a,
+                ),
+            );
+            let mut slowest = f32::MAX;
+            for frame in 0..120 {
+                step(&mut app, 1);
+                if frame >= 30 {
+                    slowest = slowest.min(-omega(&app, id));
+                }
+            }
+            row.push(slowest);
+        }
+        let mut app = headless_app();
+        let id = spawn_body(&mut app, body(Vec2::ZERO, 1.0, 1.0, 1.0));
+        let motor = AngularMotorDef {
+            damping: rate,
+            ..AngularMotorDef::default()
+        };
+        spawn_joint(
+            &mut app,
+            joint(
+                JointKind::Hinge {
+                    limits: None,
+                    motor: Some(motor),
+                },
+                id,
+                None,
+                Vec2::ZERO,
+                Vec2::ZERO,
+            ),
+        );
+        let ws: Vec<f32> = (0..60)
+            .map(|_| {
+                step(&mut app, 1);
+                -omega(&app, id)
+            })
+            .collect();
+        println!(
+            "| {rate} | {:.2} | {:.2} | {:.3} |",
+            row[0],
+            row[1],
+            drive(&ws, 2.0).t90
+        );
     }
 }

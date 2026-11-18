@@ -573,6 +573,30 @@ fn v6_files_are_rejected() {
 }
 
 #[test]
+fn v7_files_are_rejected() {
+    // v8 authors a spring as a frequency and a damping ratio (brief 4b-4);
+    // a v7 spring's stiffness and damping have no v8 meaning without the
+    // bodies' mass, so v7 is rejected rather than migrated (owner ruling:
+    // the format is pre-release).
+    let scene = SceneRecord {
+        version: 7,
+        app_version: String::new(),
+        bodies: vec![box_record(Vec2::ZERO, 0.1, 0.1)],
+        joints: vec![],
+        nodes: vec![],
+        environment: EnvironmentRecord::default(),
+    };
+    let text = to_ron(&scene).unwrap();
+    assert!(
+        matches!(
+            from_ron(&text),
+            Err(gradiance::scene::PersistError::Version(7))
+        ),
+        "v7 files are rejected, not silently loaded"
+    );
+}
+
+#[test]
 fn pre_tracer_files_still_parse() {
     // `tracer` is serde-defaulted, so scenes saved before tracers existed
     // load unchanged.

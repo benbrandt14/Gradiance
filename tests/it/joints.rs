@@ -685,12 +685,12 @@ fn rotated_world_pin_slider_stays_stable_and_rotation_locked() {
     }
 }
 
-fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, stiffness: f32) -> JointDef {
+fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, frequency: f32) -> JointDef {
     JointDef {
         kind: JointKind::Spring {
             rest_length: gradiance::units::Length(rest_length),
-            stiffness: gradiance::units::Stiffness(stiffness),
-            damping: gradiance::units::Damping(5.0),
+            frequency: gradiance::units::Frequency(frequency),
+            damping_ratio: 0.5,
             range: None,
         },
         common: JointCommon::default(),
@@ -709,7 +709,7 @@ fn strut_derives_a_distance_joint_and_damping() {
     let mut app = headless_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(60.0, 0.0), 20.0, 20.0));
-    let jid = spawn_joint(&mut app, strut(a, Some(b), 60.0, 500.0));
+    let jid = spawn_joint(&mut app, strut(a, Some(b), 60.0, 2.0));
     step(&mut app, 2);
 
     let je = entity_of(&app, jid).unwrap();
@@ -717,11 +717,21 @@ fn strut_derives_a_distance_joint_and_damping() {
         app.world().get::<DistanceJoint>(je).is_some(),
         "strut derives a DistanceJoint"
     );
+    // The damping rate is 2·ζ·ω (mass-free: avian applies it to the reduced
+    // mass), and the compliance comes from the reduced mass: two 400 kg
+    // boxes reduce to 200 kg, so k = 200·(2π·2)².
     let damping = app.world().get::<JointDamping>(je).unwrap();
+    let omega = std::f32::consts::TAU * 2.0;
     assert!(
-        (damping.linear - 5.0).abs() < 1e-3,
-        "damping maps onto JointDamping ({})",
+        (damping.linear - 2.0 * 0.5 * omega).abs() < 1e-3,
+        "damping ratio maps onto JointDamping ({})",
         damping.linear
+    );
+    let compliance = app.world().get::<DistanceJoint>(je).unwrap().compliance;
+    let k = 200.0 * omega * omega;
+    assert!(
+        (compliance * k - 1.0).abs() < 1e-3,
+        "stiffness from the reduced mass (compliance {compliance}, expected 1/{k})"
     );
 }
 
@@ -738,7 +748,7 @@ fn strut_pulls_a_body_toward_its_rest_length() {
     ball.physics.gravity_scale = GravityScale(0.0);
     let ball_id = spawn_body(&mut app, ball);
     // A stiff strut with a 50 px rest length between their centres.
-    spawn_joint(&mut app, strut(anchor_id, Some(ball_id), 50.0, 1000.0));
+    spawn_joint(&mut app, strut(anchor_id, Some(ball_id), 50.0, 1.0));
 
     let start = pose_of(&app, ball_id).pos.x;
     assert!(
@@ -759,7 +769,7 @@ fn a_strut_is_undoable_and_persists_its_kind() {
     let mut app = paused_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(80.0, 0.0), 20.0, 20.0));
-    spawn_joint(&mut app, strut(a, Some(b), 80.0, 250.0));
+    spawn_joint(&mut app, strut(a, Some(b), 80.0, 1.5));
     assert_eq!(joint_count(&mut app), 1);
     undo(&mut app);
     assert_eq!(
@@ -938,11 +948,11 @@ fn angular_velocity(app: &App, id: StableId) -> f32 {
         .map_or(0.0, |w| w.0)
 }
 
-/// A strut's stiffness must be scaled for SI: a body hung from a world-pinned
-/// spring sags only ~0.1 m (`sag = m·g / k` with `k ≈ 100·m`), not the ~100 m
-/// the pre-audit `0.1 N/m` fallback gave. Undamped, it oscillates about that
-/// equilibrium, so a generous < 1 m bound distinguishes the two without needing
-/// the spring to settle.
+/// A default spring holds its body up whatever it weighs: authored as a
+/// frequency, its stiffness is derived from the mass, so the sag is
+/// `g / ω²` (about 0.1 m at 1.5 Hz), not the ~100 m the pre-audit `0.1 N/m`
+/// fallback gave. A generous < 1 m bound distinguishes the two without
+/// needing the spring to settle.
 #[test]
 fn strut_stiffness_keeps_a_hung_body_from_drooping() {
     let mut app = headless_app();
@@ -950,14 +960,15 @@ fn strut_stiffness_keeps_a_hung_body_from_drooping() {
     // world anchor at the origin; the strut spans the 50-unit gap, relaxed.
     let body = box_record(Vec2::new(0.0, -50.0), 10.0, 10.0);
     let body_id = spawn_body(&mut app, body);
-    let stiffness = 100.0 * (10.0 * 10.0); // SPRING_STIFFNESS_PER_MASS * mass
     spawn_joint(
         &mut app,
         JointDef {
             kind: JointKind::Spring {
                 rest_length: gradiance::units::Length(50.0),
-                stiffness: gradiance::units::Stiffness(stiffness),
-                damping: gradiance::units::Damping(0.0),
+                frequency: gradiance::units::Frequency(
+                    gradiance::domain::joint::DEFAULT_SPRING_FREQUENCY,
+                ),
+                damping_ratio: 0.0,
                 range: None,
             },
             common: JointCommon::default(),

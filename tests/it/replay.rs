@@ -252,12 +252,10 @@ fn replay_joints() {
         JointDef {
             kind: JointKind::Spring {
                 rest_length: gradiance::units::Length(50.0),
-                stiffness: gradiance::units::Stiffness(
-                    gradiance::domain::joint::DEFAULT_SPRING_STIFFNESS,
+                frequency: gradiance::units::Frequency(
+                    gradiance::domain::joint::DEFAULT_SPRING_FREQUENCY,
                 ),
-                damping: gradiance::units::Damping(
-                    gradiance::domain::joint::DEFAULT_SPRING_DAMPING,
-                ),
+                damping_ratio: gradiance::domain::joint::DEFAULT_SPRING_DAMPING_RATIO,
                 range: None,
             },
             common: JointCommon::default(),

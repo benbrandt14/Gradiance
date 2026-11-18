@@ -52,7 +52,11 @@ pub use records::{
 /// wrote wrapped (`target_velocity: (2.0)`). Values are unchanged; v6 files
 /// are rejected, not migrated (the format is pre-release). avian's own
 /// components keep avian's spelling (`density: (1.0)`).
-pub const FORMAT_VERSION: u32 = 7;
+///
+/// v8: a **spring is authored mass-relative** (brief 4b-4): `frequency` (Hz)
+/// and `damping_ratio` replace `stiffness` (N/m) and `damping`; the physics
+/// seam derives the stiffness from the bodies' mass. v7 files are rejected.
+pub const FORMAT_VERSION: u32 = 8;
 
 /// What went wrong while serializing, parsing, or migrating a scene.
 #[derive(Debug, thiserror::Error)]

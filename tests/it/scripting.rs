@@ -718,7 +718,7 @@ fn every_joint_kind_lands_and_is_undoable() {
 #[test]
 fn retyped_quantities_read_and_write_as_numbers() {
     use gradiance::domain::joint::{JointDef, JointKind};
-    use gradiance::units::{Acceleration2, Damping, Frequency, Length, Stiffness};
+    use gradiance::units::{Acceleration2, Frequency, Length};
     let mut app = paused_app();
     run(
         &mut app,
@@ -739,21 +739,21 @@ fn retyped_quantities_read_and_write_as_numbers() {
     assert_eq!(body_count(&mut app), 1, "sim-get returned numbers");
 
     run(&mut app, "(spawn-box 3 0 1 1)");
-    run(&mut app, "(spring 0 1 150 0.25)");
+    run(&mut app, "(spring 0 1 2.5 0.25)");
     let mut q = app.world_mut().query::<&JointDef>();
     let defs: Vec<JointDef> = q.iter(app.world()).cloned().collect();
     assert_eq!(defs.len(), 1);
     let JointKind::Spring {
         rest_length,
-        stiffness,
-        damping,
+        frequency,
+        damping_ratio,
         range,
     } = defs[0].kind
     else {
         panic!("expected a spring, got {:?}", defs[0].kind);
     };
-    assert_eq!(stiffness, Stiffness(150.0));
-    assert_eq!(damping, Damping(0.25));
+    assert_eq!(frequency, Frequency(2.5));
+    assert!((damping_ratio - 0.25).abs() < f32::EPSILON);
     assert!(
         (rest_length - Length(3.0)).value().abs() < 1e-5,
         "{rest_length:?}"

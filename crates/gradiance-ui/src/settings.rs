@@ -667,18 +667,18 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
             ),
             JointKind::Spring {
                 rest_length,
-                stiffness,
-                damping,
+                frequency,
+                damping_ratio,
                 range,
             } => {
                 let clamp = range.map_or(String::new(), |[lo, hi]| {
-                    format!(" [{:.0},{:.0}]", lo.value(), hi.value())
+                    format!(" [{:.2},{:.2}]", lo.value(), hi.value())
                 });
                 format!(
-                    "Spring rest={:.0} k={:.0} c={:.1}{clamp}",
+                    "Spring rest={:.2} f={:.2}Hz zeta={:.2}{clamp}",
                     rest_length.value(),
-                    stiffness.value(),
-                    damping.value()
+                    frequency.value(),
+                    damping_ratio
                 )
             }
         };

@@ -8,7 +8,7 @@
 
 use crate::labels::body_label;
 use crate::widgets;
-use crate::widgets::{Commit, precise_drag_unit};
+use crate::widgets::{Commit, precise_drag, precise_drag_unit};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_command::intent::PropertyEditIntent;
@@ -16,11 +16,12 @@ use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
 use gradiance_domain::joint::{
-    AngularMotorDef, DEFAULT_BREAK_FORCE, DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS,
-    JointCommon, JointDef, JointKind, LinearMotorDef,
+    AngularMotorDef, DEFAULT_BREAK_FORCE, JointCommon, JointDef, JointKind, LinearMotorDef,
 };
+use gradiance_domain::settings::SimSettings;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::SignalBindings;
+use gradiance_domain::tuning;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_op::{InvokeOp, json};
 use gradiance_physics::queries::PhysicsQueries;
@@ -42,6 +43,8 @@ pub fn joint_inspector(
     index: Res<IdIndex>,
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
+    sim: Res<SimSettings>,
+    kinds: Query<&avian2d::prelude::RigidBody>,
     mut bindings: ResMut<SignalBindings>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut invoke: MessageWriter<InvokeOp>,
@@ -101,7 +104,21 @@ pub fn joint_inspector(
                 }
             }
 
-            if let Some(common) = break_section(ui, def.common) {
+            // A fresh break force scales with the weight the joint carries:
+            // the masses of its moving bodies (brief 4b-4).
+            let moving_mass: f32 = def
+                .referenced_bodies()
+                .filter_map(|b| index.entity(b))
+                .filter(|&e| kinds.get(e).is_ok_and(|k| k.is_dynamic()))
+                .filter_map(|e| physics.mass_of(e))
+                .map(|m| m.value())
+                .sum();
+            let fresh_break = if moving_mass > 0.0 {
+                tuning::default_break_force(moving_mass, sim.gravity.value().length())
+            } else {
+                DEFAULT_BREAK_FORCE
+            };
+            if let Some(common) = break_section(ui, def.common, fresh_break) {
                 next.common = common;
                 changed = true;
             }
@@ -195,15 +212,15 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
         }
         JointKind::Spring {
             rest_length,
-            stiffness,
-            damping,
+            frequency,
+            damping_ratio,
             range,
         } => {
             if let Some(new_kind) = spring_section(
                 ui,
                 rest_length.value(),
-                stiffness.value(),
-                damping.value(),
+                frequency.value(),
+                *damping_ratio,
                 raw(*range, Length::value),
             ) {
                 next.kind = new_kind;
@@ -289,12 +306,16 @@ fn limit_section(
 /// Breaking-limit UI: a "breakable" toggle plus the break-force field (edit
 /// seam: one undo step per gesture). A broken joint says so; undo is the
 /// repair. Returns the new common parameters only on the frame one changed.
-fn break_section(ui: &mut egui::Ui, current: JointCommon) -> Option<JointCommon> {
+fn break_section(ui: &mut egui::Ui, current: JointCommon, fresh: f32) -> Option<JointCommon> {
     let mut result = None;
     let mut breakable = current.break_force.is_some();
-    if ui.checkbox(&mut breakable, "breakable").changed() {
+    if ui
+        .checkbox(&mut breakable, "breakable")
+        .on_hover_text("starts at ten times the weight of the connected bodies")
+        .changed()
+    {
         result = Some(JointCommon {
-            break_force: breakable.then_some(Force(DEFAULT_BREAK_FORCE)),
+            break_force: breakable.then_some(Force(fresh)),
             ..current
         });
     }
@@ -306,8 +327,10 @@ fn break_section(ui: &mut egui::Ui, current: JointCommon) -> Option<JointCommon>
                 ui,
                 egui::Id::new("j-break"),
                 &mut value,
-                DEFAULT_BREAK_FORCE,
-                1.0,
+                fresh,
+                // A drag moves about 1% of the fresh value per point, so a
+                // pebble's and a truck's joints edit alike.
+                (fresh * 0.01).max(1e-3),
                 Dimension::Force.symbol(),
             ) {
                 result = Some(JointCommon {
@@ -462,20 +485,22 @@ fn motor_section(
     result
 }
 
-/// Strut config: rest length, spring constant, damping, and an optional hard
-/// range clamp (off by default = unbounded). The scalars a future curve editor
-/// would let vary nonlinearly. Returns the new `Spring` kind only on the frame
-/// something committed.
+/// Strut config: rest length, natural frequency, damping ratio, and an
+/// optional hard range clamp (off by default = unbounded). Frequency and
+/// ratio are mass-relative (brief 4b-4): the physics seam derives the
+/// stiffness from the bodies' mass, so these feel the same on any body.
+/// Each commits clamped to its `tuning` range. Returns the new `Spring` kind
+/// only on the frame something committed.
 fn spring_section(
     ui: &mut egui::Ui,
     rest_length: f32,
-    stiffness: f32,
-    damping: f32,
+    frequency: f32,
+    damping_ratio: f32,
     range: Option<[f32; 2]>,
 ) -> Option<JointKind> {
     let mut rest = rest_length;
-    let mut k = stiffness;
-    let mut c = damping;
+    let mut f = frequency;
+    let mut zeta = damping_ratio;
     let mut new_range = range;
     let mut edited = false;
 
@@ -493,27 +518,28 @@ fn spring_section(
         }
     });
     ui.horizontal(|ui| {
-        ui.label("stiffness");
+        ui.label("frequency")
+            .on_hover_text("bounces per second, whatever the bodies weigh");
         if let Commit::Done(..) = precise_drag_unit(
             ui,
-            egui::Id::new("spring-k"),
-            &mut k,
-            DEFAULT_SPRING_STIFFNESS,
+            egui::Id::new("spring-f"),
+            &mut f,
+            tuning::SPRING_FREQUENCY.default,
             0.01,
-            Dimension::Stiffness.symbol(),
+            Dimension::Frequency.symbol(),
         ) {
             edited = true;
         }
     });
     ui.horizontal(|ui| {
-        ui.label("damping");
-        if let Commit::Done(..) = precise_drag_unit(
+        ui.label("damping ratio")
+            .on_hover_text("0 bounces forever; 1 settles without overshoot");
+        if let Commit::Done(..) = precise_drag(
             ui,
-            egui::Id::new("spring-c"),
-            &mut c,
-            DEFAULT_SPRING_DAMPING,
-            0.01,
-            Dimension::Damping.symbol(),
+            egui::Id::new("spring-zeta"),
+            &mut zeta,
+            tuning::SPRING_DAMPING_RATIO.default,
+            0.005,
         ) {
             edited = true;
         }
@@ -556,8 +582,8 @@ fn spring_section(
     }
     Some(JointKind::Spring {
         rest_length: Length(rest.max(0.0)),
-        stiffness: gradiance_units::Stiffness(k.max(0.0)),
-        damping: gradiance_units::Damping(c.max(0.0)),
+        frequency: gradiance_units::Frequency(tuning::SPRING_FREQUENCY.clamp(f)),
+        damping_ratio: tuning::SPRING_DAMPING_RATIO.clamp(zeta),
         range: new_range.map(|[lo, hi]| [Length(lo), Length(hi)]),
     })
 }

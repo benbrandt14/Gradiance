@@ -196,8 +196,8 @@ mod tests {
         let mut def = JointDef {
             kind: JointKind::Spring {
                 rest_length: gradiance_units::Length(1.0),
-                stiffness: gradiance_units::Stiffness(100.0),
-                damping: gradiance_units::Damping(0.0),
+                frequency: gradiance_units::Frequency(100.0),
+                damping_ratio: 0.0,
                 range: None,
             },
             common: gradiance_domain::joint::JointCommon::default(),
@@ -215,11 +215,11 @@ mod tests {
             scalar_to_steel(&def.rest_rot_a as &dyn PartialReflect),
             Some(SteelVal::NumV(v)) if (v - 0.5).abs() < 1e-9
         ));
-        let JointKind::Spring { stiffness, .. } = def.kind else {
+        let JointKind::Spring { frequency, .. } = def.kind else {
             panic!("a spring");
         };
         assert!(matches!(
-            scalar_to_steel(&stiffness as &dyn PartialReflect),
+            scalar_to_steel(&frequency as &dyn PartialReflect),
             Some(SteelVal::NumV(v)) if (v - 100.0).abs() < 1e-9
         ));
     }

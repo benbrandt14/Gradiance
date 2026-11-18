@@ -1,5 +1,5 @@
 (
-    version: 7,
+    version: 8,
     app_version: "golden",
     bodies: [
         (
@@ -115,7 +115,7 @@
                     motor: Some((
                         target_velocity: 2.0,
                         max_torque: 0.0,
-                        damping: 30.0,
+                        damping: 360.0,
                         oscillate: false,
                         enabled: true,
                     )),
@@ -141,7 +141,7 @@
                     motor: Some((
                         target_velocity: 2.0,
                         max_force: 0.0,
-                        damping: 30.0,
+                        damping: 360.0,
                         oscillate: false,
                         enabled: true,
                     )),
@@ -163,8 +163,8 @@
             def: (
                 kind: Spring(
                     rest_length: 1.375,
-                    stiffness: 420.0,
-                    damping: 3.5,
+                    frequency: 2.5,
+                    damping_ratio: 0.375,
                     range: Some((0.5, 2.25)),
                 ),
                 common: (

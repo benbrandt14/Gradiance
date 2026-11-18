@@ -128,14 +128,7 @@ pub fn sync_joints(
         // it, hinge limits measure from it — instead of snapping rotated
         // bodies into alignment.
         let basis_b = (def.rest_rot_a - def.rest_rot_b).value();
-        insert_derived_joint(
-            &mut entity_commands,
-            def,
-            body_a,
-            body_b,
-            anchor_b,
-            basis_b,
-        );
+        insert_derived_joint(&mut entity_commands, def, body_a, body_b, anchor_b, basis_b);
 
         if def.common.collide_connected {
             entity_commands.remove::<JointCollisionDisabled>();
@@ -290,7 +283,11 @@ pub fn retune_joints(
                 let Some(mut joint) = distance else { continue };
                 let (mass, _) = reduced_of([joint.body1, joint.body2], &bodies);
                 let stiffness = tuning::spring_stiffness(frequency.value(), mass);
-                let compliance = if stiffness > 0.0 { 1.0 / stiffness } else { 0.0 };
+                let compliance = if stiffness > 0.0 {
+                    1.0 / stiffness
+                } else {
+                    0.0
+                };
                 if differs(joint.compliance, compliance) {
                     joint.compliance = compliance;
                 }
