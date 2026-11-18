@@ -59,6 +59,15 @@ pub struct PhysicsQueries<'w, 's> {
     /// avian's post-solve reaction on each live joint (`joint_sync` inserts
     /// [`JointForces`] on every derived joint) and whether it is disabled.
     joint_forces: Query<'w, 's, (&'static JointForces, Has<JointDisabled>)>,
+    /// The live engine joints, for their derived motor ceilings.
+    engine_joints: Query<
+        'w,
+        's,
+        (
+            Option<&'static RevoluteJoint>,
+            Option<&'static PrismaticJoint>,
+        ),
+    >,
 }
 
 impl PhysicsQueries<'_, '_> {
@@ -169,6 +178,19 @@ impl PhysicsQueries<'_, '_> {
         } else {
             forces.force().length()
         }))
+    }
+
+    /// The torque (N·m, hinge) or force (N, slider) ceiling the physics seam
+    /// derived for a joint's motor — the authored cap, or for an **auto**
+    /// motor the one scaled to the connected bodies
+    /// (`joint_sync::retune_joints`). `None` if `joint` has no live hinge or
+    /// slider (a spring, or not derived yet).
+    pub fn motor_ceiling(&self, joint: Entity) -> Option<f32> {
+        match self.engine_joints.get(joint).ok()? {
+            (Some(revolute), _) => Some(revolute.motor.max_torque),
+            (_, Some(prismatic)) => Some(prismatic.motor.max_force),
+            _ => None,
+        }
     }
 
     /// The entity's `(linear, angular)` velocity, if it simulates.

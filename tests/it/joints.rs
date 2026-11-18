@@ -1289,7 +1289,7 @@ fn an_oscillating_slider_motor_reverses_on_both_slider_kinds() {
         let (mut app, cart, _) = slider_rig(world, 0.0, Vec2::X, Some([-0.5, 0.5]), Some(motor));
         let (mut lo, mut hi) = (f32::MAX, f32::MIN);
         let mut reversals = 0;
-        let mut last_sign = 0.0_f32;
+        let mut last_forward: Option<bool> = None;
         for _ in 0..180 {
             step(&mut app, 1);
             let x = pose_of(&app, cart).pos.x;
@@ -1297,10 +1297,11 @@ fn an_oscillating_slider_motor_reverses_on_both_slider_kinds() {
             hi = hi.max(x);
             let v = linear_velocity(&app, cart).x;
             if v.abs() > 0.5 {
-                if last_sign != 0.0 && v.signum() != last_sign {
+                let forward = v > 0.0;
+                if last_forward.is_some_and(|f| f != forward) {
                     reversals += 1;
                 }
-                last_sign = v.signum();
+                last_forward = Some(forward);
             }
         }
         assert!(

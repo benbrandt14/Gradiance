@@ -127,7 +127,9 @@ pub fn joint_inspector(
                 changed = true;
             }
 
-            changed |= configure_kind(ui, &def.kind, &mut next);
+            // An auto motor shows the ceiling the physics seam derived.
+            let ceiling = physics.motor_ceiling(entity);
+            changed |= configure_kind(ui, &def.kind, &mut next, ceiling);
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -151,8 +153,14 @@ pub fn joint_inspector(
 }
 
 /// Renders the kind-specific config controls, writing any edit into `next.kind`.
-/// Returns whether something changed.
-fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> bool {
+/// `ceiling` is the live motor's derived torque/force cap (shown while the
+/// motor is auto). Returns whether something changed.
+fn configure_kind(
+    ui: &mut egui::Ui,
+    kind: &JointKind,
+    next: &mut JointDef,
+    ceiling: Option<f32>,
+) -> bool {
     let mut changed = false;
     match kind {
         JointKind::Hinge { limits, motor } => {
@@ -165,14 +173,9 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 };
                 changed = true;
             }
-            if let Some(m) = motor_section(
-                ui,
-                motor.map(MotorView::from),
-                "rpm",
-                RAD_PER_S_TO_RPM,
-                "torque",
-                Dimension::Torque.symbol(),
-            ) {
+            if let Some(m) =
+                motor_section(ui, motor.map(MotorView::from), &MotorUnits::HINGE, ceiling)
+            {
                 // Re-read limits from `next` in case both changed.
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Hinge {
@@ -197,14 +200,9 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 };
                 changed = true;
             }
-            if let Some(m) = motor_section(
-                ui,
-                motor.map(MotorView::from),
-                Dimension::Velocity.symbol(),
-                1.0,
-                "force",
-                Dimension::Force.symbol(),
-            ) {
+            if let Some(m) =
+                motor_section(ui, motor.map(MotorView::from), &MotorUnits::SLIDER, ceiling)
+            {
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
                     axis: *axis,
@@ -367,11 +365,45 @@ struct MotorView {
     enabled: bool,
 }
 
-impl MotorView {
-    /// The reset value for a fresh motor. Both domain motors share these
-    /// numbers (see the `DEFAULT_MOTOR_*` consts), so one default is honest.
-    const DEFAULT_VELOCITY: f32 = gradiance_domain::joint::DEFAULT_MOTOR_ANGULAR_VELOCITY;
+/// How one motor kind is shown: its units, its drag step and the motor a
+/// fresh toggle creates.
+struct MotorUnits {
+    /// The shown velocity unit.
+    vel_unit: &'static str,
+    /// SI velocity → shown unit.
+    vel_scale: f32,
+    /// Drag step of the velocity field, in the shown unit.
+    vel_step: f32,
+    /// "torque" or "force".
+    effort_word: &'static str,
+    /// The effort's unit symbol.
+    effort_unit: &'static str,
+    /// A fresh motor of this kind.
+    fresh: fn() -> MotorView,
+}
 
+impl MotorUnits {
+    /// A hinge motor: rpm in whole-rpm steps, torque in N·m.
+    const HINGE: Self = Self {
+        vel_unit: "rpm",
+        vel_scale: RAD_PER_S_TO_RPM,
+        vel_step: 1.0,
+        effort_word: "torque",
+        effort_unit: Dimension::Torque.symbol(),
+        fresh: || MotorView::from(AngularMotorDef::default()),
+    };
+    /// A slider motor: m/s in 0.1 m/s steps, force in N.
+    const SLIDER: Self = Self {
+        vel_unit: Dimension::Velocity.symbol(),
+        vel_scale: 1.0,
+        vel_step: 0.1,
+        effort_word: "force",
+        effort_unit: Dimension::Force.symbol(),
+        fresh: || MotorView::from(LinearMotorDef::default()),
+    };
+}
+
+impl MotorView {
     fn into_angular(self) -> AngularMotorDef {
         AngularMotorDef {
             target_velocity: gradiance_units::AngularVelocity(self.target_velocity),
@@ -425,17 +457,23 @@ impl From<LinearMotorDef> for MotorView {
 fn motor_section(
     ui: &mut egui::Ui,
     current: Option<MotorView>,
-    vel_unit: &str,
-    vel_scale: f32,
-    effort_word: &str,
-    effort_unit: &str,
+    units: &MotorUnits,
+    ceiling: Option<f32>,
 ) -> Option<Option<MotorView>> {
+    let MotorUnits {
+        vel_unit,
+        vel_scale,
+        vel_step,
+        effort_word,
+        effort_unit,
+        fresh,
+    } = *units;
     let mut enabled = current.is_some();
     let mut result = None;
     if ui.checkbox(&mut enabled, "motor").changed() {
         // A new motor is "auto": the physics seam sizes its ceiling to the
         // driven body's real inertia/mass (`max_effort <= 0`).
-        result = Some(enabled.then(|| MotorView::from(AngularMotorDef::default())));
+        result = Some(enabled.then(fresh));
     }
     if let Some(mut m) = current {
         ui.horizontal(|ui| {
@@ -447,8 +485,8 @@ fn motor_section(
                 ui,
                 egui::Id::new("jm-vel"),
                 &mut shown,
-                MotorView::DEFAULT_VELOCITY * vel_scale,
-                0.1 * vel_scale,
+                fresh().target_velocity * vel_scale,
+                vel_step,
                 vel_unit,
             ) {
                 m.target_velocity = shown / vel_scale;
@@ -456,22 +494,30 @@ fn motor_section(
             }
         });
         ui.horizontal(|ui| {
-            // `max_effort <= 0` = auto (physics scales it to the body); drag it
-            // up to pin an explicit cap, reset to 0 for auto again.
+            // `max_effort <= 0` = auto (physics scales it to the body). An
+            // auto field shows the ceiling the physics seam derived, so a
+            // drag starts from it and pins an explicit cap; middle-click
+            // resets to 0, auto again.
             let auto = m.max_effort <= 0.0;
             ui.label(if auto {
                 format!("max {effort_word} (auto)")
             } else {
                 format!("max {effort_word}")
             });
+            let mut shown = if auto {
+                ceiling.unwrap_or(0.0)
+            } else {
+                m.max_effort
+            };
             if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("jm-force"),
-                &mut m.max_effort,
+                &mut shown,
                 0.0,
                 10.0,
                 effort_unit,
             ) {
+                m.max_effort = shown;
                 result = Some(Some(m));
             }
         });
@@ -590,4 +636,43 @@ fn spring_section(
         damping_ratio: tuning::SPRING_DAMPING_RATIO.clamp(zeta),
         range: new_range.map(|[lo, hi]| [Length(lo), Length(hi)]),
     })
+}
+
+#[cfg(test)]
+mod motor_display_tests {
+    use super::*;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    /// The numbers the motor section's fields show, in order.
+    fn shown(current: MotorView, units: &MotorUnits, ceiling: Option<f32>) -> Vec<f64> {
+        let mut harness = egui_kittest::Harness::new_ui(|ui| {
+            motor_section(ui, Some(current), units, ceiling);
+        });
+        harness.run();
+        harness
+            .query_all_by_role(egui::accesskit::Role::SpinButton)
+            .filter_map(|n| n.accesskit_node().numeric_value())
+            .collect()
+    }
+
+    /// A fresh hinge motor reads a round `20 rpm`, and while its torque is
+    /// auto the field shows the ceiling the physics seam derived, not `0`
+    /// (A-1 finding 12, brief A-2). An explicit cap shows itself.
+    #[test]
+    fn a_fresh_hinge_motor_reads_20_rpm_and_its_derived_torque() {
+        let fresh = (MotorUnits::HINGE.fresh)();
+        let values = shown(fresh, &MotorUnits::HINGE, Some(333.0));
+        assert_eq!(values.len(), 2, "{values:?}");
+        assert!((values[0] - 20.0).abs() < 1e-3, "{values:?}");
+        assert!((values[1] - 333.0).abs() < 1e-3, "{values:?}");
+        let pinned = MotorView {
+            max_effort: 50.0,
+            ..fresh
+        };
+        let values = shown(pinned, &MotorUnits::HINGE, Some(333.0));
+        assert!((values[1] - 50.0).abs() < 1e-3, "{values:?}");
+        // A fresh slider motor keeps its own default (2 m/s), not the hinge's.
+        let slider = (MotorUnits::SLIDER.fresh)();
+        assert!((slider.target_velocity - 2.0).abs() < 1e-6);
+    }
 }

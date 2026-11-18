@@ -55,8 +55,10 @@ use serde::{Deserialize, Serialize};
 /// passed to avian unconverted, as a gain of 30: a centre-pinned wheel did
 /// not turn).
 pub const DEFAULT_MOTOR_DAMPING: f32 = 360.0;
-/// Default hinge drive speed (rad/s ≈ 19 rpm).
-pub const DEFAULT_MOTOR_ANGULAR_VELOCITY: f32 = 2.0;
+/// Default hinge drive speed (rad/s): exactly 20 rpm, the unit the
+/// inspector shows, so a fresh motor reads `20 rpm` rather than the
+/// `19.099 rpm` that 2 rad/s gave (brief A-2).
+pub const DEFAULT_MOTOR_ANGULAR_VELOCITY: f32 = 20.0 * std::f32::consts::TAU / 60.0;
 /// Default slider drive speed (m/s).
 pub const DEFAULT_MOTOR_LINEAR_VELOCITY: f32 = 2.0;
 

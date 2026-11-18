@@ -271,7 +271,7 @@ fn stacks(app: &mut App) -> Vec<Vec<u32>> {
         .world_mut()
         .query_filtered::<(&StableId, Option<&SelectionGroup>), With<Body>>()
         .iter(app.world())
-        .map(|(id, g)| (*id, g.map(|g| g.0.clone()).unwrap_or_default()))
+        .map(|(id, g)| (*id, g.map_or_else(Vec::new, |g| g.0.clone())))
         .collect();
     rows.sort_by_key(|(id, _)| id.0);
     rows.into_iter().map(|(_, s)| s).collect()

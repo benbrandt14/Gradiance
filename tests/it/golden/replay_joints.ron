@@ -108,7 +108,7 @@
                 kind: Hinge(
                     limits: Some((-1.0, 1.0)),
                     motor: Some((
-                        target_velocity: 2.0,
+                        target_velocity: 2.0943952,
                         max_torque: 0.0,
                         damping: 360.0,
                         oscillate: false,
