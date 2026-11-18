@@ -1,7 +1,7 @@
 # Panel operations on the registry
 Phase U · `docs/unified-surface-plan.md` § 10 row 6 and § 13 ("`ui`
 registers `panel.*`"); cut from brief U-3 (its Outcome, "Cut") ·
-status: ready
+status: in review
 
 Written by the orchestrator, 2026-11-17 (owner ruling "scoped work": a
 session may write the brief when the work is in the plan).
@@ -100,4 +100,64 @@ no new dependency edge (`gradiance-ui` already depends on `op`);
 
 ## Outcome
 
-(filled by the worker)
+Worker, 2026-11-18, on `d167c93`.
+
+**Landed.**
+- `crates/gradiance-ui/src/panel_ops.rs` (new): `panel.show`, `panel.hide`,
+  `panel.toggle` (`Seam::Editor`, no undo; Lisp `panel-show`, `panel-hide`,
+  `panel-toggle`, field `name`) lower to a `PanelRequest` message that
+  `apply_panel_requests` applies through `PanelToggle`. `panel.open`
+  (Lisp `panel-open?`) and `panel.list` (Lisp `panels`, `[{name, open}]`)
+  are `Seam::Query`. All five read a `PanelMirror` that an
+  `OpContextFillers` entry builds from `Panels::named` (fresh each context,
+  through `run_system_cached`). A name is trimmed and lower-cased; an
+  unknown one is `OpError::Invalid` listing the known names.
+- `gradiance-script`: the four `BUILTINS` rows, `name::PANEL_*`, the
+  `PANELS` reason, `register_panel_verbs`, the shared panel buffers,
+  `drain_panel_requests`, `refresh_panel_mirror`, `PanelRequests` and
+  `PanelStates` are deleted. The catalog has 7 built-ins (unit test).
+- `remote.rs` is registry-only: `call_source`, `literal`, the
+  `ScriptInputs` submit, `SCRIPT_ERROR` and `internal` are deleted. A VM
+  built-in's name is `-32602` "… exists only inside a script run". Module
+  docs updated. `ScriptInputs::submit_with_reply` stays: `src/review.rs`
+  uses it.
+- Docs: `docs/ops.md` regenerated; `docs/scripting.md` (verb rows,
+  built-ins section, "Panels are registered ops", remote section, error
+  table); `CLAUDE.md` scripting rule 2 names `PanelMirror` instead of the
+  deleted `PanelStates`.
+
+**Decisions.**
+- The panel resources (and `DebugSettings`, which `Panels` borrows) and the
+  apply system now install **headless** too (`panel_ops::install`, called
+  from `ops::install`). Without that, every panel op fails headless, so the
+  op-conformance fixture (every op's example must run) and a headless
+  remote client could not use them. The render path no longer inits them.
+- The mirror is read fresh per context instead of published each frame, so
+  `publish_panel_states` is gone too; `apply_panel_requests` runs in
+  `Update` after `OpInvokeSet` and `run_scripts`, so a request applies the
+  frame it was made.
+- `panel-open?` of an unknown name is now an error, not `#f` (brief:
+  unknown name is `Invalid`).
+- `call_source` moved into `tests/it/op_conformance.rs` (its only other
+  user), with its literal-rendering test.
+- `panels` in Lisp: each row is an object, which the Lisp doorway renders
+  as JSON text (as for `ui-inspect`); `(length (panels))` works.
+
+**Tests.** `tests/it/scripting.rs`: the panel cases now drive the real
+panels headless (show/hide/toggle, normalised names, unknown name fails the
+run and lists names, `panel-open?`/`panels` reads, a failed run applies no
+panel request). `tests/it/remote.rs`: built-ins refused (replaces the
+script-error test), `panel.hide`/`panel.toggle` by id, `panel-open?` by
+name, `panel.open` by id, `panels`, no undo step, a panel write refused by
+`gradiance.query`, an unknown name refused. Unit tests in `panel_ops`,
+`registry`, `remote`.
+
+**Checked locally (rustc 1.100.0), all exit 0:** `cargo fmt --all --
+--check`; `cargo clippy --workspace --all-targets -- -D warnings`;
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --lib`;
+`cargo test --test boundaries`; `cargo test -p gradiance-ui --lib`;
+`cargo test -p gradiance-script --lib`; `cargo test -p gradiance --test
+it` (the whole binary: 357 passed). **Not checked:** `cargo test
+--workspace` (owner ruling: CI), the lavapipe snapshot tests (they skip
+here without `GRADIANCE_REQUIRE_GPU=1`), a live `--remote` session over
+HTTP, the app in a window.

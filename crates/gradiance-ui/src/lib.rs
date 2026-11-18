@@ -28,6 +28,7 @@ pub mod node_graph;
 pub mod ops;
 pub mod optimizer;
 pub mod outliner;
+pub mod panel_ops;
 pub mod panels;
 pub mod plot;
 pub mod ports;
@@ -222,19 +223,8 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(Startup, toolbar::load_tool_icons);
         app.init_resource::<icons::Icons>();
         app.add_systems(Startup, icons::load_icons);
-        app.init_resource::<settings::SettingsWindow>();
-        app.init_resource::<inspector::InspectorPanel>();
         app.init_resource::<context_menu::ContextMenu>();
-        app.init_resource::<depth_panel::DepthPanel>();
-        app.init_resource::<console::ScriptConsole>();
-        app.init_resource::<plot::PlotPanel>();
         app.init_resource::<plot::PlotConfig>();
-        app.init_resource::<probe::ProbePanel>();
-        app.init_resource::<node_graph::NodeGraph>();
-        app.init_resource::<outliner::ObjectTreePanel>();
-        app.init_resource::<optimizer::OptimizerExpanded>();
-        app.init_resource::<array_panel::ArrayWindow>();
-        app.init_resource::<review::ReviewWindow>();
         app.add_systems(Startup, review::open_in_review_mode);
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
@@ -276,20 +266,8 @@ impl Plugin for GradianceUiPlugin {
         app.edit_schedule(EguiPrimaryContextPass, |schedule| {
             schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
         });
-        // The panel registry's script seam: apply what `panel-show` and friends
-        // asked for, then publish the state `panel-open?` reads. Both sit in
-        // `Update` rather than the egui pass — they touch no context, and
-        // applying before the pass means a script's request is visible the same
-        // frame it ran.
-        app.add_systems(
-            Update,
-            (
-                context_menu::open_context_menu,
-                panels::apply_panel_requests,
-                panels::publish_panel_states,
-            )
-                .chain(),
-        );
+        // The panel operations (`panel_ops`) install headless with `ops`.
+        app.add_systems(Update, context_menu::open_context_menu);
     }
 }
 

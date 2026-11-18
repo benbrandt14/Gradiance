@@ -6,21 +6,23 @@
 //!
 //! - [`method::OPS`] — the catalog: every op's name, signature, doc,
 //!   governance category and arity.
-//! - [`method::OP`] — invoke one op, in one of two forms:
+//! - [`method::OP`] — invoke one **registry operation** (`gradiance-op`), in
+//!   one of two forms:
 //!   - `{"id": "body.spawn_box", "params": {"x": 0, "y": 2, "w": 1, "h": 1}}`
-//!     — a **registry operation** (`gradiance-op`) with named params, decoded
-//!     by the registry's one serde decoder and applied through the seams it
-//!     names. No Scheme text is built. Its edits reach the dispatcher in the
-//!     next `Update`, like a console line's.
+//!     — named params, decoded by the registry's one serde decoder and
+//!     applied through the seams the operation names. Its edits reach the
+//!     dispatcher in the next `Update`, like a console line's.
 //!   - `{"name": "spawn-box", "args": [0, 2, 1, 1]}` — the same operation by
 //!     its Lisp name with positional args. The args map to the named params
 //!     by declared field order ([`OpEntry::named`](gradiance_op::OpEntry::named),
 //!     the mapping the Lisp doorway uses) and the call goes through the
-//!     registry exactly as the `id` form does. Only a **VM built-in**
-//!     (`crate::registry::BUILTINS`: the panel verbs, the
-//!     invocation-context reads, `ops`/`describe`) is still lowered to **one
-//!     script run**: the args rendered as Scheme literals, submitted to
-//!     [`ScriptInputs`] and run through [`run_scripts`] like a console line.
+//!     registry exactly as the `id` form does.
+//!
+//!   The surface is registry-only: no call builds Scheme text or runs the
+//!   VM. A **VM built-in** (`crate::registry::BUILTINS`: the
+//!   invocation-context reads and `ops`/`describe`) exists only inside a
+//!   script run, so naming one is refused with an invalid-params error that
+//!   says so (brief U-3b); `gradiance.ops` is the remote form of `(ops)`.
 //! - [`method::QUERY`] — the same, restricted to `query` ops: a client
 //!   holding only this method cannot change anything.
 //!
@@ -32,8 +34,8 @@
 //! `world.trigger_event`, `world.write_message`) are **removed**: writes stay
 //! seam-mediated. [`KEPT_BUILTINS`] lists the read-only ones that stay.
 
-use crate::bridge::{OperationRegistry, ScriptInputs, run_scripts};
-use crate::registry::{CatalogEntry, OpCategory};
+use crate::bridge::OperationRegistry;
+use crate::registry::{BUILTINS, CatalogEntry, OpCategory};
 use bevy::prelude::*;
 use bevy::remote::builtin_methods::{
     BRP_GET_COMPONENTS_METHOD, BRP_GET_RESOURCE_METHOD, BRP_LIST_COMPONENTS_METHOD,
@@ -44,7 +46,6 @@ use bevy::remote::{BrpError, BrpResult, RemoteMethods, RemotePlugin, error_codes
 use gradiance_op::OpRegistry;
 use serde_json::Map;
 use serde_json::{Value, json};
-use std::fmt::Write as _;
 use std::net::Ipv4Addr;
 
 /// The method names this surface adds.
@@ -70,11 +71,6 @@ pub const KEPT_BUILTINS: &[&str] = &[
     BRP_LIST_RESOURCES_METHOD,
     BRP_REGISTRY_SCHEMA_METHOD,
 ];
-
-/// The JSON-RPC error code of a run that failed (evaluation error, panic,
-/// budget): in the spec's implementation-defined server-error range. The
-/// error's `message` is the exact text the console log shows.
-pub const SCRIPT_ERROR: i16 = -32000;
 
 /// The port the HTTP transport listens on unless `--remote <port>` says
 /// otherwise (Bevy's default BRP port).
@@ -191,9 +187,8 @@ fn invoke_query(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     invoke(params, world, Some(OpCategory::Query))
 }
 
-/// One call in either form. A registry operation (by `id`, or by Lisp `name`
-/// with positional `args`) goes through the registry; a VM built-in runs as
-/// one script run.
+/// One call in either form: a registry operation by `id`, or by Lisp `name`
+/// with positional `args`. A VM built-in's name is refused.
 fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) -> BrpResult {
     if let Some(Value::Object(fields)) = &params
         && fields.contains_key("id")
@@ -204,35 +199,25 @@ fn invoke(params: Option<Value>, world: &mut World, only: Option<OpCategory>) ->
     let entry = world
         .get_resource::<OpRegistry>()
         .and_then(|registry| registry.by_lisp(&name).cloned());
-    if let Some(entry) = entry {
-        let params = entry
-            .named(args)
-            .map_err(|err| invalid_params(format!("{name}: {err}")))?;
-        return invoke_entry(world, entry.meta.id, entry.meta.seam, params, only);
+    let Some(entry) = entry else {
+        return Err(invalid_params(unknown(&name)));
+    };
+    let params = entry
+        .named(args)
+        .map_err(|err| invalid_params(format!("{name}: {err}")))?;
+    invoke_entry(world, entry.meta.id, entry.meta.seam, params, only)
+}
+
+/// Why `name` is not callable: a VM built-in exists only inside a script
+/// run; anything else is unknown.
+fn unknown(name: &str) -> String {
+    if BUILTINS.iter().any(|builtin| builtin.name == name) {
+        format!(
+            "`{name}` is a VM built-in: it exists only inside a script run, not on the remote surface"
+        )
+    } else {
+        format!("unknown operation `{name}`")
     }
-    let spec = world
-        .get_resource::<OperationRegistry>()
-        .and_then(|registry| registry.0.find(&name).cloned())
-        .ok_or_else(|| invalid_params(format!("unknown operation `{name}`")))?;
-    check_category(&name, spec.category, only)?;
-    let source = call_source(spec.name, &args)?;
-
-    let reply = world
-        .get_resource_mut::<ScriptInputs>()
-        .map(|mut inputs| inputs.submit_with_reply(source.clone()))
-        .ok_or_else(|| internal("the script plugin is not installed"))?;
-    run_scripts(world);
-
-    let outcome = reply
-        .lock()
-        .ok()
-        .and_then(|mut slot| slot.take())
-        .ok_or_else(|| internal("the script run left no outcome"))?;
-    outcome.map_err(|message| BrpError {
-        code: SCRIPT_ERROR,
-        message,
-        data: Some(json!({ "source": source })),
-    })
 }
 
 /// Refuses a call whose category `only` excludes.
@@ -312,75 +297,10 @@ fn parse_params(params: Option<Value>) -> Result<(String, Vec<Value>), BrpError>
     Ok((name, args))
 }
 
-/// `(name arg…)` with every argument rendered as a Scheme literal: the form
-/// a VM built-in's remote call runs as. The conformance tests also use it to
-/// drive the Lisp doorway from an operation's example.
-pub fn call_source(name: &str, args: &[Value]) -> Result<String, BrpError> {
-    let mut source = format!("({name}");
-    for (i, arg) in args.iter().enumerate() {
-        source.push(' ');
-        literal(arg, &mut source).map_err(|why| invalid_params(format!("argument {i}: {why}")))?;
-    }
-    source.push(')');
-    Ok(source)
-}
-
-/// Appends `value` as a Scheme literal: numbers as numbers, strings quoted
-/// and escaped, booleans as `#t`/`#f`, arrays as `(list …)`. `null` and
-/// objects have no literal form and are refused.
-fn literal(value: &Value, out: &mut String) -> Result<(), &'static str> {
-    match value {
-        Value::Bool(b) => out.push_str(if *b { "#t" } else { "#f" }),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                let _ = write!(out, "{i}");
-            } else if let Some(f) = n.as_f64() {
-                // `{:?}` keeps a decimal point (`1.0`), so the VM reads a float.
-                let _ = write!(out, "{f:?}");
-            } else {
-                return Err("number out of range");
-            }
-        }
-        Value::String(s) => {
-            out.push('"');
-            for c in s.chars() {
-                match c {
-                    '"' => out.push_str("\\\""),
-                    '\\' => out.push_str("\\\\"),
-                    '\n' => out.push_str("\\n"),
-                    '\r' => out.push_str("\\r"),
-                    '\t' => out.push_str("\\t"),
-                    c => out.push(c),
-                }
-            }
-            out.push('"');
-        }
-        Value::Array(items) => {
-            out.push_str("(list");
-            for item in items {
-                out.push(' ');
-                literal(item, out)?;
-            }
-            out.push(')');
-        }
-        Value::Null => return Err("null has no Scheme form"),
-        Value::Object(_) => return Err("objects have no Scheme form"),
-    }
-    Ok(())
-}
-
 fn invalid_params(message: impl Into<String>) -> BrpError {
     BrpError {
         code: error_codes::INVALID_PARAMS,
         message: message.into(),
-        data: None,
-    }
-}
-
-fn internal(message: &str) -> BrpError {
-    BrpError {
-        code: error_codes::INTERNAL_ERROR,
-        message: message.to_owned(),
         data: None,
     }
 }
@@ -390,35 +310,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn args_render_as_scheme_literals() {
-        let args = [
-            json!(0),
-            json!(-2.5),
-            json!(true),
-            json!("a \"b\"\n"),
-            json!([1, "x"]),
-        ];
-        assert_eq!(
-            call_source("f", &args).ok().as_deref(),
-            Some(r#"(f 0 -2.5 #t "a \"b\"\n" (list 1 "x"))"#)
-        );
-        assert_eq!(call_source("ops", &[]).ok().as_deref(), Some("(ops)"));
-    }
-
-    #[test]
-    fn whole_floats_stay_floats() {
-        assert_eq!(
-            call_source("f", &[json!(1.0)]).ok().as_deref(),
-            Some("(f 1.0)")
-        );
-    }
-
-    #[test]
-    fn null_and_objects_are_refused() {
-        for bad in [json!(null), json!({"x": 1})] {
-            let err = call_source("f", &[json!(1), bad]).err();
-            assert_eq!(err.map(|e| e.code), Some(error_codes::INVALID_PARAMS));
-        }
+    fn a_builtin_is_refused_as_living_in_a_script_run() {
+        assert!(unknown("tool-x").contains("only inside a script run"));
+        assert_eq!(unknown("no-such-op"), "unknown operation `no-such-op`");
     }
 
     #[test]

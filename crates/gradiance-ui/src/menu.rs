@@ -239,8 +239,8 @@ fn edit_menu(
 ///
 /// Every panel implements [`PanelToggle`], so the two idioms that used to need
 /// separate code paths are one row each — and the rows come from
-/// `Panels::named`, the same registry the `panel-show`/`-hide`/`-toggle` script
-/// verbs resolve against. A panel cannot appear in the menu but not the API, or
+/// `Panels::named`, the same registry the `panel.*` operations
+/// ([`crate::panel_ops`]) resolve against. A panel cannot appear in the menu but not the API, or
 /// the reverse.
 ///
 /// The groups are presentation only: right-dock sections, then the bottom dock

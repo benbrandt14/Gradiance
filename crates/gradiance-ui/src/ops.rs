@@ -26,9 +26,11 @@ use gradiance_op::{
 };
 use serde::Deserialize;
 
-/// Registers this layer's operations, the widget mirror, the screenshot
+/// Registers this layer's operations (the panel ones through
+/// [`crate::panel_ops`]), the widget mirror, the screenshot
 /// request and the systems that queue and take it.
 pub(crate) fn install(app: &mut App) {
+    crate::panel_ops::install(app);
     {
         let mut registry = app.world_mut().resource_mut::<OpRegistry>();
         registry.register::<UiInspect>();

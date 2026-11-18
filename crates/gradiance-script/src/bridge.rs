@@ -45,7 +45,6 @@ use gradiance_op::{
     OpContext, OpEntry, OpError, OpIdSource, OpInvokeSet, OpOutput, OpRegistry, Seam,
     SelectionMirror,
 };
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use steel::rerrs::{ErrorKind, SteelErr};
@@ -63,19 +62,12 @@ type OpQueue = Arc<Mutex<Vec<(&'static str, OpOutput)>>>;
 /// producer / consumer split between the builtins and [`run_scripts`]: the
 /// generated registry verbs read the run pass's context and push their
 /// outputs to the op queue; the built-ins read the per-run invocation context
-/// and the panel mirror, and queue panel requests.
+/// and the catalog.
 struct Shared {
     /// Registry operation outputs, in call order → [`gradiance_op::apply`].
     ops: OpQueue,
     /// The run pass's operation context → registry operations.
     ctx: Arc<Mutex<Arc<OpContext>>>,
-    /// Panel visibility requests emitted by `panel-show`/`-hide`/`-toggle` →
-    /// the [`PanelRequests`] queue the UI drains. `None` means "flip it".
-    panel_requests: Arc<Mutex<Vec<(String, Option<bool>)>>>,
-    /// Read mirror of which panels are open → `panel-open?`. Published by the
-    /// UI each frame, because panel state lives in `gradiance-ui` and the
-    /// script layer sits below it.
-    panel_states: Arc<Mutex<HashMap<String, bool>>>,
     /// The operation catalog → the `ops`/`describe` meta verbs. Refreshed
     /// when registry operations are bound.
     catalog: Arc<Mutex<OperationCatalog>>,
@@ -96,36 +88,32 @@ impl Shared {
         Self {
             ops: Arc::new(Mutex::new(Vec::new())),
             ctx: Arc::new(Mutex::new(Arc::new(OpContext::new(OpIdSource::Random)))),
-            panel_requests: Arc::new(Mutex::new(Vec::new())),
-            panel_states: Arc::new(Mutex::new(HashMap::new())),
             catalog: Arc::new(Mutex::new(OperationCatalog::builtin())),
             action_point: Arc::new(Mutex::new(None)),
             tool_points: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// How far each write queue has filled — taken before a run, so a failed
+    /// How far the op queue has filled — taken before a run, so a failed
     /// run can be [rolled back](Self::rollback) to exactly here without
     /// touching what earlier runs in the same frame queued.
     fn mark(&self) -> QueueMark {
-        QueueMark([queue_len(&self.ops), queue_len(&self.panel_requests)])
+        QueueMark(queue_len(&self.ops))
     }
 
     /// Discards everything queued since `mark`: a run is all or nothing, like
     /// its one undo batch, so a script that fails (eval error, panic, budget)
     /// half-way commits none of its edits, config writes, labels, actions,
-    /// tools, panel requests or signal publishes (all but the panel requests
-    /// are registry outputs in the op queue).
+    /// tools, panel requests or signal publishes (all registry outputs in
+    /// the op queue).
     fn rollback(&self, mark: &QueueMark) {
-        let [ops, panels] = mark.0;
-        queue_truncate(&self.ops, ops);
-        queue_truncate(&self.panel_requests, panels);
+        queue_truncate(&self.ops, mark.0);
     }
 }
 
-/// The fill level of every [`Shared`] write queue at one instant (see
+/// The fill level of the [`Shared`] op queue at one instant (see
 /// [`Shared::mark`]).
-struct QueueMark([usize; 2]);
+struct QueueMark(usize);
 
 fn queue_len<T>(queue: &Mutex<Vec<T>>) -> usize {
     queue.lock().map_or(0, |q| q.len())
@@ -402,37 +390,6 @@ impl WorkspaceLabels {
     }
 }
 
-/// Panel visibility changes a script asked for, drained by the UI.
-///
-/// The UI owns panel state (`gradiance-ui` is above `gradiance-script` in the
-/// layer graph), so a verb cannot write it directly — nor should it, since that
-/// is the same **`EditorState`** seam the View menu uses. The script queues a
-/// request by name; the UI applies it through
-/// `panels::PanelToggle::set_open`, exactly as a menu click does. That is what
-/// makes "a menu item is a registered op" true rather than aspirational.
-///
-/// An unknown name is reported once and dropped — a typo should say so, not
-/// fail silently and not abort the run.
-#[derive(Resource, Default, Debug)]
-pub struct PanelRequests(pub Vec<PanelRequest>);
-
-/// One queued panel change: the panel's name, and what to do to it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PanelRequest {
-    /// The panel's script-facing name (lower-case, e.g. `"properties"`).
-    pub name: String,
-    /// `Some(true)` show, `Some(false)` hide, `None` flip.
-    pub shown: Option<bool>,
-}
-
-/// Which panels are currently open, published by the UI for `panel-open?`.
-///
-/// Reads are total, so a script may ask about any panel; the mirror is how a
-/// *read* crosses the layer boundary the other way. Rebuilt each frame, never
-/// persisted.
-#[derive(Resource, Default, Debug)]
-pub struct PanelStates(pub Vec<(String, bool)>);
-
 /// The steel engine plus the shared buffers it reads/writes. A `NonSend`
 /// resource: the VM is the cold authoring path and lives on the main thread, so
 /// it never needs to be `Send`.
@@ -584,12 +541,11 @@ fn json_to_steel(value: &serde_json::Value) -> SteelVal {
 }
 
 /// Registers the VM built-ins on `engine` ([`BUILTINS`](crate::registry::BUILTINS)):
-/// the invocation-context reads, the panel verbs and the meta verbs. Every
+/// the invocation-context reads and the meta verbs. Every
 /// other verb is a registry operation, bound by [`bind_op`].
 fn register_builtins(engine: &mut Engine, shared: &Shared) {
     register_action_reads(engine, &shared.action_point);
     register_tool_reads(engine, &shared.tool_points);
-    register_panel_verbs(engine, &shared.panel_requests, &shared.panel_states);
     register_meta_verbs(engine, &shared.catalog);
 }
 
@@ -643,39 +599,6 @@ fn register_tool_reads(engine: &mut Engine, points: &ToolPoints) {
             Ok(f64::from(point[axis]))
         });
     }
-}
-
-/// Panel verbs — the script side of the View menu.
-///
-/// Three writes (`panel-show`, `panel-hide`, `panel-toggle`) queue a request
-/// the UI drains; one read (`panel-open?`) consults the mirror the UI
-/// publishes. No verb touches panel state directly: the layer graph forbids it,
-/// and the `EditorState` seam is the point.
-fn register_panel_verbs(
-    engine: &mut Engine,
-    requests: &Arc<Mutex<Vec<(String, Option<bool>)>>>,
-    states: &Arc<Mutex<HashMap<String, bool>>>,
-) {
-    for (verb, shown) in [
-        (name::PANEL_SHOW, Some(true)),
-        (name::PANEL_HIDE, Some(false)),
-        (name::PANEL_TOGGLE, None),
-    ] {
-        let q = Arc::clone(requests);
-        engine.register_fn(verb, move |panel: String| {
-            if let Ok(mut queue) = q.lock() {
-                queue.push((panel, shown));
-            }
-        });
-    }
-
-    let m = Arc::clone(states);
-    engine.register_fn(name::PANEL_OPEN, move |panel: String| -> bool {
-        m.lock()
-            .ok()
-            .and_then(|states| states.get(panel.trim()).copied())
-            .unwrap_or(false)
-    });
 }
 
 /// Homoiconic introspection — the catalog reading itself.
@@ -763,7 +686,6 @@ pub fn run_scripts(world: &mut World) {
     {
         *guard = Arc::new(ctx);
     }
-    refresh_panel_mirror(world);
 
     for run in sources {
         run_one(world, run);
@@ -789,51 +711,6 @@ pub fn run_scripts(world: &mut World) {
     // Editor requests land in their tables in the same frame (a remote
     // call that ran this pass outside the schedule sees them at once).
     crate::ops::apply_editor_requests(world);
-    drain_panel_requests(world);
-}
-
-/// Moves queued panel requests onto the [`PanelRequests`] resource for the UI
-/// to apply. Appends rather than replaces: two scripts in one frame both get
-/// their say, and the UI clears the queue when it drains it.
-fn drain_panel_requests(world: &mut World) {
-    let requests: Vec<(String, Option<bool>)> = world
-        .get_non_send::<ScriptEngine>()
-        .and_then(|engine| {
-            engine
-                .shared
-                .panel_requests
-                .lock()
-                .ok()
-                .map(|mut q| std::mem::take(&mut *q))
-        })
-        .unwrap_or_default();
-    if !requests.is_empty()
-        && let Some(mut queue) = world.get_resource_mut::<PanelRequests>()
-    {
-        queue
-            .0
-            .extend(requests.into_iter().map(|(name, shown)| PanelRequest {
-                name: name.trim().to_lowercase(),
-                shown,
-            }));
-    }
-}
-
-/// Mirrors [`PanelStates`] into the `panel-open?` read snapshot (part of the
-/// per-run read refresh).
-fn refresh_panel_mirror(world: &mut World) {
-    if let (Some(mirror), Some(states)) = (
-        world
-            .get_non_send::<ScriptEngine>()
-            .map(|engine| Arc::clone(&engine.shared.panel_states)),
-        world.get_resource::<PanelStates>(),
-    ) && let Ok(mut mirror) = mirror.lock()
-    {
-        mirror.clear();
-        for (name, open) in &states.0 {
-            mirror.insert(name.clone(), *open);
-        }
-    }
 }
 
 /// Runs one queued source with its invocation context (click point, tool
@@ -929,8 +806,6 @@ impl Plugin for ScriptPlugin {
         app.init_resource::<ScriptActions>();
         app.init_resource::<ScriptTools>();
         app.add_message::<ScriptToolFired>();
-        app.init_resource::<PanelRequests>();
-        app.init_resource::<PanelStates>();
         app.init_resource::<WorkspaceLabels>();
         app.init_resource::<StartupScripts>();
         app.init_resource::<ScriptWatch>();

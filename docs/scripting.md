@@ -177,12 +177,14 @@ across and ±3.5 m up and down); angles are radians.
 (camera-get "zoom_step")     ; zoom multiplier per scroll notch (0.5..0.995)
 (camera-set "pan_speed" 900) ; arrow-key pan, screen px/s; also "orbit_speed_deg"
 
-;; editor — the chrome, through the EditorState seam
+;; editor — the chrome, through the EditorState seam (panel.* operations)
 (panel-show "properties")    ; open a panel — the same toggle the View menu drives
 (panel-hide "console")       ; close one
 (panel-toggle "plot")        ; flip one
 (panel-open? "depth")        ; #t / #f — whether it is showing
+(panels)                     ; every panel: name and whether it is open
 ;; names: outliner properties depth plot nodes console probe array optimizer settings review
+;; an unknown name is a script error that lists these
 
 ;; query — read the committed scene (reads are total)
 (body-count)                 ; number of bodies
@@ -476,10 +478,10 @@ and signal verbs in `crates/gradiance-script/src/ops.rs`. The full list is
 
 A handful of verbs exist only inside a VM run: the invocation-context reads
 (`action-x`, `action-y`, `tool-count`, `tool-x`, `tool-y`: there is no
-action or tool outside a run), the panel verbs (`panel-show`, `panel-hide`,
-`panel-toggle`, `panel-open?`: `gradiance-ui` registers `panel.*` in a
-later brief, cut from U-3) and the introspection pair (`ops`, `describe`: the remote surface has
-`gradiance.ops`). They are the `BUILTINS` table in
+action or tool outside a run) and the introspection pair (`ops`,
+`describe`: the remote surface has `gradiance.ops`). Seven in all; the
+panel verbs became `panel.*` operations in brief U-3b. The remote surface
+refuses a built-in's name (it exists only inside a script run). They are the `BUILTINS` table in
 `crates/gradiance-script/src/registry.rs` (each row says why it is not an
 operation) and a steel builtin in `bridge.rs` under the same `name::`
 constant. Do not add one for anything a remote caller or a menu could use:
@@ -567,8 +569,8 @@ equal is friction the UI deliberately does not expose.
 
 The Edit menu's delete acts on the selection. A verb cannot: `Selection` lives
 in `gradiance-interaction`, which sits **above** `gradiance-script` in the layer
-graph, so the script layer cannot read it — the same asymmetry `panel-open?`
-resolves with a mirror.
+graph, so the script layer cannot read it — the same asymmetry the panel
+operations resolve with a mirror (their owner, `gradiance-ui`, publishes it).
 
 A mirror would be the wrong answer here, though. A script that deletes
 "whatever happens to be selected" depends on invisible state and is not
@@ -602,18 +604,23 @@ set than the script says, with nothing in the scene to show it.
 
 ### Panels are registered ops
 
-`panel-show` and friends resolve against **one** table — `Panels::named` in
-`crates/gradiance-ui/src/panels.rs` — which is the same table the View menu
-renders. Adding a panel is one row there and it appears in both, so the menu
-and the API cannot drift; a unit test asserts every registry name has a menu
-label.
+The panel verbs are `gradiance-op` operations declared by `gradiance-ui`
+(`crates/gradiance-ui/src/panel_ops.rs`, brief U-3b): `panel.show`,
+`panel.hide`, `panel.toggle` (editor seam, no undo step), `panel.open` and
+`panel.list` (queries; Lisp `panel-open?` and `panels`). Lisp, the remote
+surface and the catalog get them from those declarations. They resolve
+against **one** table — `Panels::named` in `crates/gradiance-ui/src/panels.rs`
+— which is the same table the View menu renders. Adding a panel is one row
+there and it appears in both, so the menu and the API cannot drift; a unit
+test asserts every registry name has a menu label.
 
-The verbs add no mutation path. A verb queues a `PanelRequest`; the UI applies
-it through `PanelToggle::set_open`, which is exactly what a menu click does.
-The read direction (`panel-open?`) crosses the layer boundary as a mirror —
-panel state lives in `gradiance-ui`, which sits *above* `gradiance-script`, so
-the UI publishes `PanelStates` each frame rather than the script layer reaching
-up.
+The operations add no mutation path. A write lowers to a `PanelRequest`
+message; the UI applies it through `PanelToggle::set_open`, which is exactly
+what a menu click does. Every call reads a `PanelMirror` the UI layer puts
+into the operation context, so an unknown name is refused at the call with
+the list of known names, and the reads see the state as the run began (one
+snapshot per run). The panel resources exist headless too, so tests and a
+headless remote client see the same panels, undrawn.
 
 `steel` may be declared only by `crates/gradiance-script` and `egui` only by
 `crates/gradiance-ui` — the package graph enforces both, and
@@ -650,22 +657,18 @@ line is written. An edit becomes a command in the next frame's `Update`.
 **The `name` form is the same operation, positionally.** `{"name":
 "spawn-box", "args": [0, 1, 1.6, 1.2]}` maps the args to the named params in
 declared order (the mapping the Lisp doorway uses) and goes through the
-registry exactly like the `id` form: no Scheme text, no console line. Only a
-**VM built-in** (`panel-show` and the other panel verbs, `ops`,
-`describe`, the invocation-context reads) is still one **script run**: the
-args rendered as Scheme literals (numbers, strings, booleans; arrays become
-`(list …)`; `null` and objects are refused), submitted to `ScriptInputs` and
-run through `run_scripts` like a console line, with its snapshot, budget,
-all-or-nothing and console log line. Two calls are two invocations (two
-snapshots); to compose edits atomically, `register-action` a helper and
-invoke it from a script.
+registry exactly like the `id` form: no Scheme text, no console line. The
+surface is **registry-only**: a **VM built-in** (`ops`, `describe`, the
+invocation-context reads) exists only inside a script run, so naming one is
+an invalid-params error that says so (`gradiance.ops` is the remote `(ops)`).
+Two calls are two invocations (two snapshots); to compose edits atomically,
+`register-action` a helper and invoke it from a script.
 
 **Errors** are JSON-RPC errors:
 
 | Code | When | `message` |
 |---|---|---|
-| `-32602` (invalid params) | unknown op, bad params shape, a param that does not decode, a refused value, a non-query op sent to `gradiance.query` | the op's id (or Lisp name) once, then what was wrong |
-| `-32000` (script error) | a VM built-in's run failed (evaluation error, panic, budget) | the console's text, verbatim; `data.source` is the run's source |
+| `-32602` (invalid params) | unknown op, a VM built-in's name, bad params shape, a param that does not decode, a refused value, a non-query op sent to `gradiance.query` | the op's id (or Lisp name) once, then what was wrong |
 
 **Writes stay seam-mediated.** Bevy's built-in world-mutation methods
 (`world.spawn_entity`, `world.insert_components`, `world.mutate_components`,

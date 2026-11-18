@@ -18,9 +18,86 @@ use gradiance::interaction::selection::{SelectTransition, SelectedJoint, Selecti
 use gradiance::op::{InvokeOp, OpEntry, OpIdSource, OpRegistry, OpTrace, Seam, TraceEntry};
 use gradiance::prelude::GameState;
 use gradiance::script::bridge::{ScriptInputs, ScriptLog};
-use gradiance::script::remote::{RemoteControlPlugin, call_source, method};
+use gradiance::script::remote::{RemoteControlPlugin, method};
 use serde_json::{Map, Value, json};
 use std::borrow::Cow;
+use std::fmt::Write as _;
+
+/// `(name arg…)` with every argument rendered as a Scheme literal: drives the
+/// Lisp doorway from an operation's example. (The remote surface built
+/// the same text for VM built-ins until brief U-3b made it registry-only.)
+fn call_source(name: &str, args: &[Value]) -> Result<String, String> {
+    let mut source = format!("({name}");
+    for (i, arg) in args.iter().enumerate() {
+        source.push(' ');
+        literal(arg, &mut source).map_err(|why| format!("argument {i}: {why}"))?;
+    }
+    source.push(')');
+    Ok(source)
+}
+
+/// Appends `value` as a Scheme literal: numbers as numbers, strings quoted
+/// and escaped, booleans as `#t`/`#f`, arrays as `(list …)`. `null` and
+/// objects have no literal form and are refused.
+fn literal(value: &Value, out: &mut String) -> Result<(), &'static str> {
+    match value {
+        Value::Bool(b) => out.push_str(if *b { "#t" } else { "#f" }),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                let _ = write!(out, "{i}");
+            } else if let Some(f) = n.as_f64() {
+                // `{:?}` keeps a decimal point (`1.0`), so the VM reads a float.
+                let _ = write!(out, "{f:?}");
+            } else {
+                return Err("number out of range");
+            }
+        }
+        Value::String(s) => {
+            out.push('"');
+            for c in s.chars() {
+                match c {
+                    '"' => out.push_str("\\\""),
+                    '\\' => out.push_str("\\\\"),
+                    '\n' => out.push_str("\\n"),
+                    '\r' => out.push_str("\\r"),
+                    '\t' => out.push_str("\\t"),
+                    c => out.push(c),
+                }
+            }
+            out.push('"');
+        }
+        Value::Array(items) => {
+            out.push_str("(list");
+            for item in items {
+                out.push(' ');
+                literal(item, out)?;
+            }
+            out.push(')');
+        }
+        Value::Null => return Err("null has no Scheme form"),
+        Value::Object(_) => return Err("objects have no Scheme form"),
+    }
+    Ok(())
+}
+
+#[test]
+fn args_render_as_scheme_literals() {
+    let args = [
+        json!(0),
+        json!(-2.5),
+        json!(1.0),
+        json!(true),
+        json!("a \"b\"\n"),
+        json!([1, "x"]),
+    ];
+    assert_eq!(
+        call_source("f", &args).ok().as_deref(),
+        Some(r#"(f 0 -2.5 1.0 #t "a \"b\"\n" (list 1 "x"))"#)
+    );
+    for bad in [json!(null), json!({"x": 1})] {
+        assert!(call_source("f", &[json!(1), bad]).is_err());
+    }
+}
 
 /// Runs one script whose new ids start at `ids`, and lets it commit.
 fn run_with_ids(app: &mut App, ids: u64, source: &str) {

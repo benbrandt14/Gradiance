@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 69 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 11 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 74 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -89,6 +89,16 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `joint.slider` | `(slider a b x y ax ay)` | edit | `spawn-joint` | — | Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world. | `{"a": 0, "b": 1, "x": -0.2, "y": 1, "ax": 1, "ay": 0}` |
 | `joint.spring` | `(spring a b stiffness damping)` | edit | `spawn-joint` | — | Spring-damper strut between the centres of a and b; rest length is their current distance. | `{"a": 0, "b": 2, "stiffness": 50, "damping": 1}` |
 
+## `panel`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `panel.hide` | `(panel-hide name)` | editor | — | — | Close an editor panel by name. | `{"name": "properties"}` |
+| `panel.list` | `(panels)` | query | — | — | Every editor panel in View-menu order: its name (what the panel operations take) and whether it is open. | `{}` |
+| `panel.open` | `(panel-open? name)` | query | — | — | Whether an editor panel is shown, by name. | `{"name": "properties"}` |
+| `panel.show` | `(panel-show name)` | editor | — | — | Open an editor panel by name, as its View-menu row does (see panel.list for the names). | `{"name": "properties"}` |
+| `panel.toggle` | `(panel-toggle name)` | editor | — | — | Flip an editor panel's visibility by name. | `{"name": "properties"}` |
+
 ## `scene`
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
@@ -146,9 +156,5 @@ These exist only inside a script run and are not registry operations.
 | `(tool-count)` | query | How many points the running script tool collected; NaN outside a tool run. | reads the running action's or tool's own invocation context, which exists only inside one VM run (a remote call or a menu row has none) |
 | `(tool-x i)` | query | World x of the running tool's i-th point (click order); NaN outside a tool run. | reads the running action's or tool's own invocation context, which exists only inside one VM run (a remote call or a menu row has none) |
 | `(tool-y i)` | query | World y of the running tool's i-th point (click order); NaN outside a tool run. | reads the running action's or tool's own invocation context, which exists only inside one VM run (a remote call or a menu row has none) |
-| `(panel-show name)` | editor | Open an editor panel — the same toggle the View menu drives (try (panels)). | panel state lives in gradiance-ui, which registers `panel.*` operations in a later brief (cut from U-3) |
-| `(panel-hide name)` | editor | Close an editor panel by name. | panel state lives in gradiance-ui, which registers `panel.*` operations in a later brief (cut from U-3) |
-| `(panel-toggle name)` | editor | Flip an editor panel's visibility. | panel state lives in gradiance-ui, which registers `panel.*` operations in a later brief (cut from U-3) |
-| `(panel-open? name)` | query | Whether an editor panel is currently shown (reads are total). | panel state lives in gradiance-ui, which registers `panel.*` operations in a later brief (cut from U-3) |
 | `(ops)` | query | List of every registered operation name. | reads the VM's own catalog; the remote surface has `gradiance.ops` for the same list |
 | `(describe name)` | query | The signature and doc string of one operation, as text. | reads the VM's own catalog; the remote surface has `gradiance.ops` for the same list |
