@@ -27,8 +27,10 @@
 //! [`apply_groups_filters`] runs `body.where` against a fresh operation
 //! context and applies the indices through [`SelectTransition`], the
 //! sanctioned seam. A row click is the filter `group:<index>`, so both use
-//! one path. Selection expands to outermost groups there, as a viewport
-//! click does: clicking a nested group's row selects its outer group.
+//! one path. The selection is exactly the query's result, **not** expanded
+//! to outermost groups as a viewport click is: a chip on a mixed group
+//! selects only the matching bodies, and a nested group's row selects that
+//! group (brief A-1).
 //!
 //! The renderer ([`groups_section`]) is a leaf: it reads a prebuilt
 //! [`GroupsModel`] and records what was asked into a [`GroupsOutput`], which
@@ -769,7 +771,8 @@ fn matching_ids(world: &mut World, clauses: &[String]) -> Result<Vec<StableId>, 
         .collect())
 }
 
-/// Sets the body selection to `ids` (group-expanded), or clears it.
+/// Sets the body selection to exactly `ids` (a query result, not
+/// group-expanded), or clears it.
 fn select_ids(
     In(ids): In<Vec<StableId>>,
     mut selection: ResMut<Selection>,
@@ -785,7 +788,7 @@ fn select_ids(
     let transition = if hits.is_empty() {
         SelectTransition::Clear
     } else {
-        SelectTransition::SetBodies(hits)
+        SelectTransition::SetExactly(hits)
     };
     transition.apply(&mut selection, &mut joint, &groups);
 }
