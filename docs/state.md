@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (U-3b in review; phase gate after U-5, #251, 508b6e5;
+Last updated: 2026-11-18 (4b-2 in review; phase gate after U-5, #251, 508b6e5;
 order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
@@ -11,13 +11,11 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-2 in progress** (branch `claude/project-thread-7kscb7`;
-  brief revised 2026-11-18 for the registry: every panel action is an
-  `InvokeOp`, the picker reads `BODY_PROPS`, a new `groups` panel rather
-  than an outliner mode). **U-3b merged** (#253, 5027d96): panel verbs are
-  `panel.*` registry operations owned by `gradiance-ui`, 7 VM built-ins
-  remain, the remote surface is registry-only. Earlier: U-2c #247, 4b-1
-  #248, U-3 #249, U-4 #250, U-5 #251. Agent containers need
+- **Now:** **4b-2 in review** (branch `claude/project-thread-7kscb7`): a
+  `groups` dock panel; every action an `InvokeOp`, the selection through
+  `body.where` + `SelectTransition`; click table and screenshots in the
+  brief's Outcome. **U-3b merged** (#253, 5027d96). Earlier: U-2c #247,
+  4b-1 #248, U-3 #249, U-4 #250, U-5 #251. Agent containers need
   `mesa-vulkan-drivers libvulkan1` for the snapshot tests (without them
   the tests skip unless `GRADIANCE_REQUIRE_GPU=1`). Workers run on Opus
   while Fable lacks usage credits (owner, 2026-11-17). The session

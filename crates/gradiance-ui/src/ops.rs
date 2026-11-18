@@ -31,6 +31,7 @@ use serde::Deserialize;
 /// request and the systems that queue and take it.
 pub(crate) fn install(app: &mut App) {
     crate::panel_ops::install(app);
+    crate::groups::install(app);
     {
         let mut registry = app.world_mut().resource_mut::<OpRegistry>();
         registry.register::<UiInspect>();

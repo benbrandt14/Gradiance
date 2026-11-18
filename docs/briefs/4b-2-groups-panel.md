@@ -1,5 +1,5 @@
 # Groups as editing layers: the panel
-Phase 4b · owner direction 2026-11-16 (quoted in 4b-1) · status: ready
+Phase 4b · owner direction 2026-11-16 (quoted in 4b-1) · status: in review
 (revised 2026-11-18 by the orchestrator, after U-3b: on the registry)
 
 ## Goal
@@ -103,4 +103,107 @@ the clicks for these five tasks, before and after:
 
 ## Outcome
 
-*(worker fills in)*
+Worker, 2026-11-18, branch `claude/project-thread-7kscb7`. Everything in
+Goal and Approach landed; no split was needed.
+
+**What landed**
+
+- `crates/gradiance-ui/src/groups.rs`: the `GroupsPanel` resource
+  (`PanelToggle`; row `"groups"` in `Panels::named`, menu label "Groups",
+  a `Pane::Groups` tab in the right dock), the pure `GroupsModel::build`
+  (rows in tree order with depth, name, member count and first-member
+  swatch; the kinds and palette slots present), and the leaf renderer
+  `groups_section(ui, &model, &mut panel, &mut GroupsOutput)`.
+  - Rows: click selects the group and makes it active; double-click (or the
+    "Rename" button) renames: `group.rename` on Enter or focus loss, Esc
+    cancels.
+  - Edit: 10 palette swatches (`group.set_color`); property picker over
+    `BODY_PROPS` (doc as tooltip) with a `precise_drag` value plus "Apply"
+    (`group.set`), or a checkbox for a flag property; From/to, Linear or
+    Random+seed, Order by (`group.distribute` / `group.scatter`); Split by
+    colour / kind / island and Dissolve (`group.decompose`).
+  - Filter: chips for the kinds and palette colours in the scene, grouped,
+    ungrouped, and removable property ranges; "Clear"; "Group selection"
+    (the Ctrl+G invocation, `key_invocations(EditorAction::Group)`).
+  - Every widget is published as `groups:<name>` (`groups:row:<i>`,
+    `groups:colour:<swatch>`, `groups:prop`, `groups:prop:<prop>`,
+    `groups:distribute`, `groups:split:<key>`, `groups:chip:<label>`,
+    `groups:rename-button`, ...), so `ui.click` drives the panel.
+- Selection: a row click is the filter `group:<i>`; a chip change writes
+  its clause list. Both are a `GroupsFilter` message, which
+  `apply_groups_filters` (exclusive, installed headless) runs as
+  `body.where` against a fresh `OpContext` and applies through
+  `SelectTransition::SetBodies` (empty list: `Clear`).
+- `command::body_prop::BodyProp::is_flag` (one method, so a new flag
+  property needs only its table row and the match there).
+- `inspector::swatch_color32` is `pub(crate)` (shared swatch colour).
+- `docs/ui-design.md`: Groups listed as a dock pane. `docs/ops.md` and
+  `docs/scripting.md` unchanged (no operation changed).
+
+**Five tasks: clicks, before and after** (before = today's menus, viewport
+and console; after = the panel, open)
+
+| Task | Before | After |
+|---|---|---|
+| 1. Recolour a group | 2 clicks (a member in the viewport, a Properties swatch), and only when a member can be found and Properties is open; else console `(group-set-color 0 r g b)` | 2 clicks: row, swatch |
+| 2. Ramp densities across a row of boxes | console only: open it, type `(group-distribute 0 "density" 0.5 5 "x")` | 4 clicks: row, property picker, `density`, Distribute (+ typing lo/hi when not 0.5..5) |
+| 3. Select every red body | shift-click each red body (N clicks); `bodies-where` returns indices but cannot select | 1 click: the `red` chip |
+| 4. Split a mixed group by colour | console `(decompose 0 "color")`; or ungroup, select each colour, Ctrl+G each (2 + N clicks) | 2 clicks: row, By colour |
+| 5. Name a group | console only: `(name-group 0 "wheels")` | double-click row (or row + Rename), type, Enter |
+
+**Screenshots** (ad hoc, not in git; `/mnt/project-files/4b-2/`, driven
+by `ui.click` on `groups:` names over `--remote`): `0-overview.png` (two
+groups: five boxes, four red/blue circles); `1-recolour.png` (row 0 active,
+amber swatch: the boxes are amber, the edit section shows); `2-ramp-density.png`
+(picker on density, Distribute: `body.where density:0.4..0.6` and
+`4.9..5.1` each return one box, the left- and rightmost);
+`4-split-by-colour.png` (Groups (3): the circles split into a red and a
+blue group); `3-select-red.png` (the red chip outlined, exactly the two red
+circles selected); `5-name-group.png` (row 0 reads "boxes"; `group.list`
+returns `["boxes", "", ""]`). `inspect.json` is the `groups:` widget list.
+
+**Decisions (in scope; reversible)**
+
+- **Selection expands to outermost groups**, as every `SetBodies` does: a
+  nested group's row selects its outer group, and a chip on a body in a
+  mixed group selects the whole group. Task 3 above is after task 4 for
+  that reason. Changing it needs a non-expanding transition in
+  `gradiance-interaction` (out of scope).
+- **Active group is panel state, by id**; ops get its index (id order) at
+  click time. It is not derived from the viewport selection.
+- **Chips apply at once** (live filter), so task 3 is one click; Clear (or
+  untoggling the last chip) clears the selection.
+- **A "Rename" button** beside the edit header: an injected pointer at
+  lavapipe frame rates cannot double-click, and it is the keyboardless path.
+- **Distribute bounds and the range builder use plain `DragValue`s**: they
+  are panel parameters for a button, not edits; the set value is the one
+  `precise_drag` (commits on release, one `group.set`).
+
+**Tests**
+
+- `crates/gradiance-ui/src/groups.rs` unit: tree order/depth/names/counts,
+  kinds and palette; rename commits once on Enter with the group index
+  (kittest); flag vs scalar.
+- `tests/it/ui_panels.rs::groups_panel_rows_picker_and_chips_emit_their_operations`
+  (kittest): row, swatch, picker, Distribute (linear and random), By kind,
+  a chip and Group selection record the exact `InvokeOp`s / filter.
+- `tests/it/ui_snapshots.rs::snapshot_groups_panel` + committed
+  `tests/snapshots/ui/groups_panel.png`.
+- `tests/it/ui_groups.rs` (new, intent level; headless has no egui pass so
+  `ui.click` cannot reach the panel): the panel drawn by kittest over a
+  model built from a headless app, its output written into the app: the
+  red chip selects exactly the red bodies and untoggling clears; a row
+  click selects the group, then By colour gives two groups in one undo step.
+- `tests/it/remote.rs`: the panel count is 12 and the known-name list
+  includes `groups`.
+
+**Gates run locally** (rustc 1.100.0): `cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --lib`,
+`cargo test --test boundaries`, `cargo test -p gradiance-ui --lib`,
+`cargo test -p gradiance-command --lib body_prop`,
+`GRADIANCE_REQUIRE_GPU=1 cargo test -p gradiance --test it -- ui_ review
+groups remote op_conformance registry_validation` (62 passed): all green.
+**Not run:** `cargo test --workspace` (CI). Not checked: dock widths below
+260 points (rows wrap; not inspected), a double-click by a real mouse
+(covered by the egui response, not by a test).

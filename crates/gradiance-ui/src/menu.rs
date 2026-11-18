@@ -48,6 +48,8 @@ pub struct Panels<'w> {
     pub node_graph: ResMut<'w, crate::node_graph::NodeGraph>,
     /// Object tree (outliner).
     pub outliner: ResMut<'w, crate::outliner::ObjectTreePanel>,
+    /// Groups panel (groups as editing layers).
+    pub groups: ResMut<'w, crate::groups::GroupsPanel>,
     /// Scripting console.
     pub console: ResMut<'w, crate::console::ScriptConsole>,
     /// Array-pattern options window.
@@ -247,7 +249,7 @@ fn edit_menu(
 /// and floating windows, then scene overlays.
 fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
     // Where a horizontal rule goes, by row index. Presentation, not structure.
-    const GROUPS: [usize; 2] = [4, 9];
+    const GROUPS: [usize; 2] = [5, 10];
     ui.menu_button("View", |ui| {
         let mut rows = panels.named();
         for (i, (name, panel)) in rows.iter_mut().enumerate() {
@@ -267,6 +269,7 @@ fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
 pub(crate) fn menu_label(name: &str) -> &'static str {
     match name {
         "outliner" => "Outliner",
+        "groups" => "Groups",
         "properties" => "Properties",
         "depth" => "Depth",
         "plot" => "Plot",

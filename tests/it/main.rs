@@ -39,6 +39,7 @@ mod scripting;
 mod signals;
 mod tools;
 mod ui_conflicts;
+mod ui_groups;
 mod ui_input;
 mod ui_panels;
 mod ui_registry;

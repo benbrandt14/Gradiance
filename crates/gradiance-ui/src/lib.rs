@@ -18,6 +18,7 @@ pub mod depth_panel;
 pub mod dock;
 pub mod dock_sync;
 pub mod fonts;
+pub mod groups;
 pub mod host;
 pub mod icons;
 pub mod inspector;

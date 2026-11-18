@@ -647,7 +647,7 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
 
 /// A domain color as an egui swatch fill (both are sRGB-encoded; render
 /// converts `Rgba` with `Color::srgba` too).
-fn swatch_color32(c: gradiance_domain::appearance::Rgba) -> egui::Color32 {
+pub(crate) fn swatch_color32(c: gradiance_domain::appearance::Rgba) -> egui::Color32 {
     let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     egui::Color32::from_rgba_unmultiplied(byte(c.r), byte(c.g), byte(c.b), byte(c.a))
 }

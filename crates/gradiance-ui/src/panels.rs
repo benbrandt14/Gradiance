@@ -75,6 +75,7 @@ impl crate::menu::Panels<'_> {
     pub fn named(&mut self) -> Vec<(&'static str, &mut dyn PanelToggle)> {
         vec![
             ("outliner", &mut *self.outliner),
+            ("groups", &mut *self.groups),
             ("properties", &mut *self.inspector),
             ("depth", &mut *self.depth),
             ("plot", &mut *self.plot),
@@ -130,6 +131,7 @@ mod tests {
         // must not read the same list the code does.
         for name in [
             "outliner",
+            "groups",
             "properties",
             "depth",
             "plot",
@@ -157,6 +159,7 @@ mod tests {
     fn registry_names_are_script_shaped() {
         for name in [
             "outliner",
+            "groups",
             "properties",
             "depth",
             "plot",

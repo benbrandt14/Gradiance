@@ -209,3 +209,130 @@ fn lighting_and_scenery_settings_render_rows() {
         harness.get_by_label(label);
     }
 }
+
+/// Two groups, the second nested in the first and named, plus a loose box:
+/// the Groups panel's fixture (also its snapshot's).
+pub fn groups_fixture() -> gradiance::ui::groups::GroupsModel {
+    use gradiance::core::ids::StableId;
+    use gradiance::domain::appearance::PALETTE;
+    use gradiance::domain::group::GroupNames;
+    use gradiance::ui::groups::{BodyFacts, GroupsModel};
+    // Ids in a known order, so each row's swatch (its first member's fill)
+    // is the same every run.
+    let mut ids: Vec<StableId> = (0..4).map(|_| StableId::new()).collect();
+    ids.sort_by_key(|id| id.0);
+    let mut ids = ids.into_iter();
+    let mut body = |groups: &[u32], slot: usize, kind: &'static str| BodyFacts {
+        id: ids.next().unwrap_or_default(),
+        groups: groups.to_vec(),
+        fill: PALETTE[slot].color,
+        kind,
+    };
+    let mut names = GroupNames::default();
+    names.0.insert(2, "wheels".into());
+    GroupsModel::build(
+        vec![
+            body(&[2, 1], 0, "circle"),
+            body(&[2, 1], 0, "circle"),
+            body(&[1], 7, "box"),
+            body(&[], 4, "box"),
+        ],
+        &names,
+        2,
+    )
+}
+
+/// The Groups panel: rows, the property picker, the colour swatches, the
+/// distribute and split buttons and the filter chips each record the
+/// operation (or selection) they stand for, with the group's index.
+#[test]
+fn groups_panel_rows_picker_and_chips_emit_their_operations() {
+    use gradiance::ui::groups::{GroupsFilter, GroupsOutput, GroupsPanel, groups_section};
+    use std::cell::RefCell;
+    let model = groups_fixture();
+    let panel = RefCell::new(GroupsPanel::default());
+    let out = RefCell::new(GroupsOutput::default());
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(320.0, 700.0))
+        .build_ui(|ui| {
+            groups_section(ui, &model, &mut panel.borrow_mut(), &mut out.borrow_mut());
+        });
+    harness.run();
+    // Rows in tree order: the outer group, then the named inner one.
+    harness.get_by_label("Group 0");
+    harness.get_by_label("wheels").click();
+    harness.run();
+    let taken = std::mem::take(&mut *out.borrow_mut());
+    assert_eq!(
+        taken.filter,
+        Some(GroupsFilter {
+            clauses: vec!["group:1".into()]
+        }),
+        "a row click selects its group by index"
+    );
+    assert_eq!(panel.borrow().active(), Some(2));
+
+    harness.get_by_label("colour blue").click();
+    harness.run();
+    // Pick `density` in the edit row's property picker, then distribute.
+    harness
+        .get_all_by_value("friction")
+        .next()
+        .unwrap_or_else(|| panic!("the property picker"))
+        .click();
+    harness.run();
+    harness.get_by_label("density").click();
+    harness.run();
+    harness.get_by_label("Distribute").click();
+    harness.run();
+    harness.get_by_label("Random").click();
+    harness.run();
+    harness.get_by_label("Distribute").click();
+    harness.run();
+    harness.get_by_label("By kind").click();
+    harness.run();
+    harness.get_by_label("box").click();
+    harness.run();
+    harness.get_by_label("Group selection").click();
+    harness.run();
+    drop(harness);
+
+    let out = out.into_inner();
+    let blue = gradiance::domain::appearance::PALETTE[7].color;
+    let got: Vec<(String, serde_json::Value)> = out
+        .invoke
+        .iter()
+        .map(|op| (op.id.to_string(), op.params.clone()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            (
+                "group.set_color".into(),
+                serde_json::json!({"group": 1, "r": blue.r, "g": blue.g, "b": blue.b})
+            ),
+            (
+                "group.distribute".into(),
+                serde_json::json!({"group": 1, "prop": "density", "lo": 0.5, "hi": 5.0, "by": "x"})
+            ),
+            (
+                "group.scatter".into(),
+                serde_json::json!({"group": 1, "prop": "density", "lo": 0.5, "hi": 5.0, "seed": 1})
+            ),
+            (
+                "group.decompose".into(),
+                serde_json::json!({"group": 1, "key": "kind"})
+            ),
+            (
+                "group.create".into(),
+                serde_json::json!({"targets": ["selection"]})
+            ),
+        ]
+    );
+    assert_eq!(
+        out.filter,
+        Some(GroupsFilter {
+            clauses: vec!["kind:box".into()]
+        })
+    );
+}

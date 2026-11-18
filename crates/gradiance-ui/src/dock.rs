@@ -1,5 +1,5 @@
-//! The right **dock**: an [`egui_tiles`] workspace hosting the Outliner, Depth,
-//! Plot, Properties, and Script-console sections as re-arrangeable tabs
+//! The right **dock**: an [`egui_tiles`] workspace hosting the Outliner, Groups,
+//! Depth, Plot, Properties, and Script-console sections as re-arrangeable tabs
 //! — the first `egui_tiles` surface of the desktop-app shell
 //! (`docs/ui-shell-decision.md`).
 //!
@@ -18,6 +18,7 @@
 
 use crate::console::{self, ScriptConsole};
 use crate::depth_panel::{self, DepthPanel};
+use crate::groups::{self, GroupsModel, GroupsOutput, GroupsPanel};
 use crate::inspector::{self, BodyProps, InspectorPanel};
 use crate::outliner::{self, OutlinerClick, OutlinerModel, OutlinerParams};
 use crate::panels::PanelToggle;
@@ -38,6 +39,8 @@ use gradiance_signal::SignalBus;
 pub enum Pane {
     /// The object tree (outliner).
     Tree,
+    /// Groups as editing layers.
+    Groups,
     /// Depth-band editor for the selection.
     Depth,
     /// The live plotter.
@@ -52,6 +55,7 @@ impl Pane {
     fn title(self) -> &'static str {
         match self {
             Self::Tree => "Outliner",
+            Self::Groups => "Groups",
             Self::Depth => "Depth",
             Self::Plot => "Plot",
             Self::Properties => "Properties",
@@ -68,6 +72,26 @@ pub struct ConsoleParams<'w> {
     pub(crate) inputs: ResMut<'w, ScriptInputs>,
     pub(crate) registry: Res<'w, OperationRegistry>,
     pub(crate) log: Res<'w, ScriptLog>,
+}
+
+/// The Groups panel's state, scene read and writers, bundled likewise.
+#[derive(SystemParam)]
+pub struct GroupsParams<'w, 's> {
+    pub(crate) panel: ResMut<'w, GroupsPanel>,
+    pub(crate) bodies: Query<
+        'w,
+        's,
+        (
+            &'static StableId,
+            &'static gradiance_domain::shape::ShapeDef,
+            Option<&'static gradiance_domain::group::SelectionGroup>,
+            Option<&'static Appearance>,
+        ),
+        With<Body>,
+    >,
+    pub(crate) names: Res<'w, gradiance_domain::group::GroupNames>,
+    pub(crate) invoke: MessageWriter<'w, gradiance_op::InvokeOp>,
+    pub(crate) filter: MessageWriter<'w, groups::GroupsFilter>,
 }
 
 /// The plotter's resources, bundled likewise. `bus` is the single signal
@@ -101,6 +125,9 @@ struct DockBehavior<'a, 'wp, 'sp, 'wo> {
     selection: &'a Selection,
     outliner: &'a OutlinerModel,
     outliner_click: &'a mut Option<OutlinerClick>,
+    groups: &'a GroupsModel,
+    groups_panel: &'a mut GroupsPanel,
+    groups_out: &'a mut GroupsOutput,
     plottable: &'a [plot::Series<'a>],
     plot_config: &'a mut PlotConfig,
     console: &'a mut ScriptConsole,
@@ -169,6 +196,13 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         outliner::outliner_section(ui, self.outliner, self.outliner_click);
+                    });
+            }
+            Pane::Groups => {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        groups::groups_section(ui, self.groups, self.groups_panel, self.groups_out);
                     });
             }
             Pane::Depth => {
@@ -290,6 +324,7 @@ pub fn right_dock(
     mut plot: PlotParams,
     mut console: ConsoleParams,
     mut op: OutlinerParams,
+    mut groups: GroupsParams,
     keys: Res<ButtonInput<KeyCode>>,
     mut panels: ResMut<crate::PanelRects>,
     mut dock: ResMut<RightDock>,
@@ -311,6 +346,7 @@ pub fn right_dock(
     // section being toggled.
     let desired: Vec<Pane> = [
         op.panel.is_open().then_some(Pane::Tree),
+        groups.panel.is_open().then_some(Pane::Groups),
         panel.open.then_some(Pane::Depth),
         plot.panel.is_open().then_some(Pane::Plot),
         properties.panel.open.then_some(Pane::Properties),
@@ -335,6 +371,13 @@ pub fn right_dock(
         OutlinerModel::default()
     };
     let mut outliner_click: Option<OutlinerClick> = None;
+    // The groups snapshot, likewise.
+    let groups_model = if groups.panel.is_open() {
+        groups::build_model(&groups.bodies, &groups.names, selection.len())
+    } else {
+        GroupsModel::default()
+    };
+    let mut groups_out = GroupsOutput::default();
     let mut closed: Option<Pane> = None;
 
     // Scope the behavior so its borrows of the section state end before we
@@ -348,6 +391,9 @@ pub fn right_dock(
             selection: &selection,
             outliner: &outliner_model,
             outliner_click: &mut outliner_click,
+            groups: &groups_model,
+            groups_panel: &mut groups.panel,
+            groups_out: &mut groups_out,
             plottable: &plottable,
             plot_config: &mut plot.config,
             console: &mut console.console,
@@ -383,6 +429,7 @@ pub fn right_dock(
     // Signals+Plot is one tab over two toggles, so closing it closes both.
     match closed {
         Some(Pane::Tree) => op.panel.set_open(false),
+        Some(Pane::Groups) => groups.panel.set_open(false),
         Some(Pane::Depth) => panel.open = false,
         Some(Pane::Plot) => plot.panel.set_open(false),
         Some(Pane::Properties) => properties.panel.open = false,
@@ -394,6 +441,12 @@ pub fn right_dock(
     // SelectedJoint the viewport and node graph use, via the sanctioned seam.
     if let Some(click) = outliner_click {
         outliner::apply_click(click, &mut selection, &mut op);
+    }
+    // The groups panel's edits are operations; its selection goes through
+    // `groups::apply_groups_filters`.
+    groups.invoke.write_batch(groups_out.invoke);
+    if let Some(filter) = groups_out.filter {
+        groups.filter.write(filter);
     }
     Ok(())
 }

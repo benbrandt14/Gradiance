@@ -127,7 +127,7 @@ run is a panel whose empty state is its onboarding.
 The ruling generalises the one recorded at `optimize-decision.md:374-386`:
 
 - **Dock pane** — a *view of the model* you keep open while working: Outliner,
-  Properties, Depth, Plot, Node Graph, Script. It earns permanent screen space
+  Groups, Properties, Depth, Plot, Node Graph, Script. It earns permanent screen space
   because it changes as the scene does.
 - **Floating window** — a *rulebook* you open, dial in, and close: Settings,
   the Optimizer's full config, Array options. It is modal in attention if not

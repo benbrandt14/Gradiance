@@ -201,7 +201,7 @@ fn panel_operations_answer_by_id_and_by_name() {
 
     let panels = ok(&mut app, method::QUERY, json!({"name": "panels"}));
     let rows = panels.as_array().cloned().unwrap_or_default();
-    assert_eq!(rows.len(), 11, "{panels}");
+    assert_eq!(rows.len(), 12, "{panels}");
     assert_eq!(
         rows[0],
         json!({"name": "outliner", "open": rows[0]["open"]})
@@ -237,7 +237,7 @@ fn an_unknown_panel_name_is_refused() {
     assert_eq!(err.code, error_codes::INVALID_PARAMS);
     assert!(
         err.message.starts_with("panel.show: no panel named `nope`")
-            && err.message.contains("outliner, properties"),
+            && err.message.contains("outliner, groups, properties"),
         "{}",
         err.message
     );

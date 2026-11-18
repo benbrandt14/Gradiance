@@ -135,6 +135,12 @@ impl BodyProp {
             .map_or("", |r| r.name)
     }
 
+    /// Whether the property is an on/off flag (read as 0 or 1, written
+    /// rounded), so a panel offers a checkbox rather than a number.
+    pub fn is_flag(self) -> bool {
+        matches!(self, Self::Static | Self::Sensor | Self::RotationLock)
+    }
+
     /// The property's value on `body`.
     pub fn read(self, body: &BodySnapshot) -> f64 {
         let p = &body.physics;
