@@ -195,3 +195,18 @@ fn snapshot_glyph_sheet() {
         ui.monospace(glyph::ALL.concat());
     });
 }
+
+/// The Groups panel (brief 4b-2) on the `ui_panels` fixture, its named inner
+/// group active and the red chip on.
+#[test]
+fn snapshot_groups_panel() {
+    use gradiance::ui::groups::{GroupsOutput, GroupsPanel, groups_section};
+    let model = crate::ui_panels::groups_fixture();
+    let mut panel = GroupsPanel::default();
+    panel.set_active(Some(2));
+    panel.set_clauses(vec!["palette:0".into()]);
+    snapshot("groups_panel", egui::vec2(260.0, 440.0), move |ui| {
+        let mut out = GroupsOutput::default();
+        groups_section(ui, &model, &mut panel, &mut out);
+    });
+}
