@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-17 (phase gate after U-5, merged as #251, 508b6e5;
+Last updated: 2026-11-18 (U-3b in review; phase gate after U-5, #251, 508b6e5;
 order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
@@ -11,13 +11,15 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** no brief in flight. Phase gate after the test and control
-  tier (2026-11-17): U-2c #247, 4b-1 #248, U-3 #249, U-4 #250, U-5 #251
-  all merged (main 508b6e5). The app now has a widget registry
-  (`ui.inspect`), screenshots (`ui.screenshot`), in-app input injection
-  (`ui.click/drag/key/text/wheel`) and egui snapshot tests on lavapipe in
-  CI (`GRADIANCE_REQUIRE_GPU=1`). **Next: U-3b** panel ops (no brief yet;
-  scope in the U-3 brief's Outcome, "Cut"), **then 4b-2** (its brief
+- **Now:** **U-3b in review** (branch `claude/project-thread-7kscb7`):
+  panel verbs are `panel.*` registry operations owned by `gradiance-ui`,
+  the four panel VM built-ins are gone (7 remain) and the remote surface is
+  registry-only; the Outcome in `docs/briefs/U-3b-panel-ops.md` lists the
+  decisions. Phase gate before it (2026-11-17): U-2c #247, 4b-1 #248,
+  U-3 #249, U-4 #250, U-5 #251 all merged (main 508b6e5). The app has a
+  widget registry (`ui.inspect`), screenshots (`ui.screenshot`), in-app
+  input injection (`ui.click/drag/key/text/wheel`) and egui snapshot tests
+  on lavapipe in CI (`GRADIANCE_REQUIRE_GPU=1`). **Next: 4b-2** (its brief
   predates the registry: revise it against 4b-1's `command::body_prop`
   table and the U-3/U-4/U-5 checks first). Agent containers need
   `mesa-vulkan-drivers libvulkan1` for the snapshot tests (without them
@@ -35,8 +37,7 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
      `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (done,
      #249); **U-4** in-app input injection (done, #250); **U-5**
-     snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (cut from U-3; replaces the
-     four panel VM built-ins) before 4b-2.
+     snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (in review) before 4b-2.
   6. **4b-2** groups panel (on the new registry).
   7. **U-6** CLI + MCP server.
   8. **U-7** theme tokens, Blender-leaning, together with **4b-3** art

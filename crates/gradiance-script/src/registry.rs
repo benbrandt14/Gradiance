@@ -30,14 +30,6 @@ pub mod name {
     pub const TOOL_X: &str = "tool-x";
     /// `(tool-y i)` — world y of the running tool's i-th point.
     pub const TOOL_Y: &str = "tool-y";
-    /// `(panel-show name)` — open an editor panel by name.
-    pub const PANEL_SHOW: &str = "panel-show";
-    /// `(panel-hide name)` — close an editor panel by name.
-    pub const PANEL_HIDE: &str = "panel-hide";
-    /// `(panel-toggle name)` — flip an editor panel's visibility.
-    pub const PANEL_TOGGLE: &str = "panel-toggle";
-    /// `(panel-open? name)` — whether a panel is currently shown.
-    pub const PANEL_OPEN: &str = "panel-open?";
     /// `(ops)` — list of every operation name.
     pub const OPS: &str = "ops";
     /// `(describe name)` — the signature and doc of one operation.
@@ -116,8 +108,6 @@ pub struct Builtin {
 
 /// Why the invocation-context reads are built-ins.
 const RUN_CONTEXT: &str = "reads the running action's or tool's own invocation context, which exists only inside one VM run (a remote call or a menu row has none)";
-/// Why the panel verbs are built-ins.
-const PANELS: &str = "panel state lives in gradiance-ui, which registers `panel.*` operations in a later brief (cut from U-3)";
 /// Why the introspection verbs are built-ins.
 const META: &str =
     "reads the VM's own catalog; the remote surface has `gradiance.ops` for the same list";
@@ -164,38 +154,6 @@ pub const BUILTINS: &[Builtin] = &[
         category: OpCategory::Query,
         args: 1,
         why: RUN_CONTEXT,
-    },
-    Builtin {
-        name: name::PANEL_SHOW,
-        signature: "(panel-show name)",
-        doc: "Open an editor panel — the same toggle the View menu drives (try (panels)).",
-        category: OpCategory::EditorState,
-        args: 1,
-        why: PANELS,
-    },
-    Builtin {
-        name: name::PANEL_HIDE,
-        signature: "(panel-hide name)",
-        doc: "Close an editor panel by name.",
-        category: OpCategory::EditorState,
-        args: 1,
-        why: PANELS,
-    },
-    Builtin {
-        name: name::PANEL_TOGGLE,
-        signature: "(panel-toggle name)",
-        doc: "Flip an editor panel's visibility.",
-        category: OpCategory::EditorState,
-        args: 1,
-        why: PANELS,
-    },
-    Builtin {
-        name: name::PANEL_OPEN,
-        signature: "(panel-open? name)",
-        doc: "Whether an editor panel is currently shown (reads are total).",
-        category: OpCategory::Query,
-        args: 1,
-        why: PANELS,
     },
     Builtin {
         name: name::OPS,
@@ -327,6 +285,25 @@ mod tests {
         }
     }
 
+    /// The built-ins are the run-context reads and the meta verbs only
+    /// (brief U-3b moved the panel verbs to the registry).
+    #[test]
+    fn the_builtins_are_the_run_context_and_meta_verbs() {
+        let names: Vec<&str> = BUILTINS.iter().map(|b| b.name).collect();
+        assert_eq!(
+            names,
+            [
+                name::ACTION_X,
+                name::ACTION_Y,
+                name::TOOL_COUNT,
+                name::TOOL_X,
+                name::TOOL_Y,
+                name::OPS,
+                name::DESCRIBE
+            ]
+        );
+    }
+
     #[test]
     fn every_builtin_says_why_it_is_not_an_operation() {
         for builtin in BUILTINS {
@@ -339,8 +316,8 @@ mod tests {
         let catalog = OperationCatalog::builtin();
         assert_eq!(catalog.find(name::TOOL_X).map(|o| o.args), Some(1));
         assert_eq!(
-            catalog.find(name::PANEL_SHOW).map(|o| o.category),
-            Some(OpCategory::EditorState)
+            catalog.find(name::DESCRIBE).map(|o| o.category),
+            Some(OpCategory::Query)
         );
         assert!(catalog.find("no-such-op").is_none());
     }

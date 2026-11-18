@@ -8,7 +8,7 @@ use bevy::remote::{BrpResult, RemoteMethodSystemId, RemoteMethods, error_codes};
 use gradiance::command::HistoryInfo;
 use gradiance::prelude::GameState;
 use gradiance::script::bridge::ScriptLog;
-use gradiance::script::remote::{KEPT_BUILTINS, RemoteControlPlugin, SCRIPT_ERROR, method};
+use gradiance::script::remote::{KEPT_BUILTINS, RemoteControlPlugin, method};
 use serde_json::{Value, json};
 
 /// A paused headless app with the remote surface on (no HTTP transport).
@@ -150,25 +150,97 @@ fn an_unknown_op_is_an_invalid_params_error() {
     assert!(err.message.contains("no-such-op"), "{}", err.message);
 }
 
-/// A VM built-in still runs as one script run, so its failure is the
-/// console's text.
+/// The remote surface is registry-only (brief U-3b): a VM built-in exists
+/// only inside a script run, so naming one is refused, and nothing runs.
 #[test]
-fn a_failing_run_returns_the_consoles_message() {
+fn a_vm_builtin_is_refused() {
     let mut app = remote_app();
-    // Wrong arity: steel refuses the call.
-    let err = call(
+    for name in ["tool-x", "action-x", "ops", "describe"] {
+        let err = call(&mut app, method::OP, json!({"name": name, "args": []}))
+            .and_then(Result::err)
+            .unwrap_or_else(|| panic!("{name}: expected an error"));
+        assert_eq!(err.code, error_codes::INVALID_PARAMS, "{name}");
+        assert!(
+            err.message.contains(name) && err.message.contains("only inside a script run"),
+            "{name}: {}",
+            err.message
+        );
+    }
+    assert!(app.world().resource::<ScriptLog>().0.is_empty(), "no run");
+}
+
+/// The panel operations (brief U-3b) answer remotely by id and by name.
+#[test]
+fn panel_operations_answer_by_id_and_by_name() {
+    let mut app = remote_app();
+    ok(
         &mut app,
         method::OP,
-        json!({"name": "tool-x", "args": [1, 2]}),
+        json!({"id": "panel.hide", "params": {"name": "properties"}}),
+    );
+    app.update();
+    let open = ok(
+        &mut app,
+        method::QUERY,
+        json!({"name": "panel-open?", "args": ["properties"]}),
+    );
+    assert_eq!(open, json!(false));
+
+    ok(
+        &mut app,
+        method::OP,
+        json!({"id": "panel.toggle", "params": {"name": "properties"}}),
+    );
+    app.update();
+    let open = ok(
+        &mut app,
+        method::QUERY,
+        json!({"id": "panel.open", "params": {"name": "properties"}}),
+    );
+    assert_eq!(open, json!(true), "toggle flips a closed panel open");
+
+    let panels = ok(&mut app, method::QUERY, json!({"name": "panels"}));
+    let rows = panels.as_array().cloned().unwrap_or_default();
+    assert_eq!(rows.len(), 11, "{panels}");
+    assert_eq!(
+        rows[0],
+        json!({"name": "outliner", "open": rows[0]["open"]})
+    );
+    assert!(
+        rows.contains(&json!({"name": "properties", "open": true})),
+        "{panels}"
+    );
+    // Panel writes are editor state: no undo step.
+    assert_eq!(undo_depth(&app), 0);
+    // And a panel write is not a query.
+    let err = call(
+        &mut app,
+        method::QUERY,
+        json!({"name": "panel-show", "args": ["properties"]}),
     )
     .and_then(Result::err)
     .unwrap_or_else(|| panic!("expected an error"));
-    assert_eq!(err.code, SCRIPT_ERROR);
-    let log = &app.world().resource::<ScriptLog>().0;
-    let entry = log.last().unwrap_or_else(|| panic!("no log entry"));
-    assert!(!entry.ok);
-    assert_eq!(err.message, entry.output, "the console's text, verbatim");
-    assert_eq!(body_count(&mut app), 0);
+    assert_eq!(err.code, error_codes::INVALID_PARAMS);
+}
+
+/// An unknown panel name is refused at the call, naming the known panels.
+#[test]
+fn an_unknown_panel_name_is_refused() {
+    let mut app = remote_app();
+    let err = call(
+        &mut app,
+        method::OP,
+        json!({"id": "panel.show", "params": {"name": "nope"}}),
+    )
+    .and_then(Result::err)
+    .unwrap_or_else(|| panic!("expected an error"));
+    assert_eq!(err.code, error_codes::INVALID_PARAMS);
+    assert!(
+        err.message.starts_with("panel.show: no panel named `nope`")
+            && err.message.contains("outliner, properties"),
+        "{}",
+        err.message
+    );
 }
 
 #[test]

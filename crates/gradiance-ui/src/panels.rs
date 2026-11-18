@@ -16,14 +16,13 @@
 //!
 //! [`Panels::named`](crate::menu::Panels::named) gives every panel a stable lower-case name, which turns
 //! the trait into an actual registry: the View menu is a table over it, and so
-//! are the `panel-show` / `panel-hide` / `panel-toggle` script verbs
-//! ([`apply_panel_requests`]) and the `panel-open?` read
-//! ([`publish_panel_states`]). "A menu item is a registered op" —
-//! `docs/ui-shell-decision.md`'s no-regret item — is that one function.
+//! are the `panel.*` operations ([`crate::panel_ops`]: `panel-show`,
+//! `panel-hide`, `panel-toggle`, `panel-open?`, `panels`). "A menu item is a
+//! registered op" — `docs/ui-shell-decision.md`'s no-regret item — is that
+//! one function.
 //!
-//! Scripting adds no mutation path here: a verb queues a request and the UI
-//! calls `set_open`, which is what a menu click does. The `EditorState` seam is
-//! unchanged.
+//! The operations add no mutation path here: a write lowers to a request and
+//! the UI calls `set_open`, which is what a menu click does.
 
 /// A panel whose visibility can be read and written.
 ///
@@ -62,11 +61,11 @@ macro_rules! impl_panel_toggle {
     };
 }
 
-/// The two systems that make panels scriptable, plus the name table they share.
+/// The name table the View menu and the panel operations share.
 ///
-/// Both live here rather than in `menu.rs` because the *name* is the registry
+/// It lives here rather than in `menu.rs` because the *name* is the registry
 /// key: adding a panel means adding one row to `Panels::named`, and the View
-/// menu, the verbs, and the read mirror all pick it up.
+/// menu, the operations and their read mirror all pick it up.
 impl crate::menu::Panels<'_> {
     /// Every panel with its script-facing name, in View-menu order.
     ///
@@ -87,45 +86,6 @@ impl crate::menu::Panels<'_> {
             ("settings", &mut *self.settings),
             ("review", &mut *self.review),
         ]
-    }
-}
-
-/// Applies the panel changes scripts asked for, then clears the queue.
-///
-/// An unknown name warns once and is dropped: a typo should say so rather than
-/// fail silently, and it must not abort the rest of the run.
-pub fn apply_panel_requests(
-    mut requests: bevy::prelude::ResMut<gradiance_script::bridge::PanelRequests>,
-    mut panels: crate::menu::Panels,
-) {
-    if requests.0.is_empty() {
-        return;
-    }
-    for request in std::mem::take(&mut requests.0) {
-        let mut table = panels.named();
-        if let Some((_, panel)) = table.iter_mut().find(|(name, _)| *name == request.name) {
-            match request.shown {
-                Some(shown) => panel.set_open(shown),
-                None => panel.toggle(),
-            }
-        } else {
-            let known: Vec<&str> = table.iter().map(|(n, _)| *n).collect();
-            bevy::log::warn!("no panel named `{}` — try one of {known:?}", request.name);
-        }
-    }
-}
-
-/// Publishes which panels are open, for the `panel-open?` read.
-///
-/// Panel state lives in this crate and the script layer sits below it, so a
-/// read crosses the boundary as a mirror rather than a dependency edge.
-pub fn publish_panel_states(
-    mut states: bevy::prelude::ResMut<gradiance_script::bridge::PanelStates>,
-    mut panels: crate::menu::Panels,
-) {
-    states.0.clear();
-    for (name, panel) in panels.named() {
-        states.0.push((name.to_owned(), panel.is_open()));
     }
 }
 

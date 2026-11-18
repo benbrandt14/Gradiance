@@ -13,9 +13,7 @@ use crate::harness::{
 };
 use bevy::prelude::*;
 use gradiance::domain::settings::SimSettings;
-use gradiance::script::bridge::{
-    PanelRequest, PanelRequests, PanelStates, ScriptActions, ScriptInputs, ScriptLog,
-};
+use gradiance::script::bridge::{ScriptActions, ScriptInputs, ScriptLog};
 
 /// Submits `source` and advances one frame: `run_scripts` emits the intents,
 /// `dispatch_intents` (later the same frame) turns them into commands.
@@ -891,147 +889,89 @@ fn delete_composes_with_the_query_verbs() {
     assert_eq!(body_count(&mut app), 0);
 }
 
-/// The panel verbs queue a request rather than writing panel state — the UI
-/// layer sits above the script layer, so it could not write it even if the
-/// seam allowed. This asserts the script half: three verbs, three queued
-/// requests, in order, with `None` meaning "flip".
-#[test]
-fn panel_verbs_queue_requests_for_the_ui_to_apply() {
-    let mut app = paused_app();
-    run(
-        &mut app,
-        "(begin (panel-show \"properties\") (panel-hide \"console\") (panel-toggle \"plot\"))",
-    );
-    let queued = &app.world().resource::<PanelRequests>().0;
-    assert_eq!(
-        queued,
-        &[
-            PanelRequest {
-                name: "properties".to_owned(),
-                shown: Some(true),
-            },
-            PanelRequest {
-                name: "console".to_owned(),
-                shown: Some(false),
-            },
-            PanelRequest {
-                name: "plot".to_owned(),
-                shown: None,
-            },
-        ]
-    );
+/// Whether the panel `P` is open in the app's own panel resource.
+fn panel_open<P: Resource + gradiance::ui::panels::PanelToggle>(app: &App) -> bool {
+    app.world().resource::<P>().is_open()
 }
 
-/// A name is normalised (trimmed, lower-cased) on the way in, so
+/// The panel verbs are registry operations (`panel.*`, brief U-3b) owned by
+/// the UI layer: a write lowers to a request the UI applies through
+/// `PanelToggle`, as a View-menu click does. The panel resources exist
+/// headless too, so the whole path runs here: three verbs, three effects,
+/// with `panel-toggle` flipping.
+#[test]
+fn panel_verbs_show_hide_and_toggle_panels() {
+    use gradiance::ui::depth_panel::DepthPanel;
+    use gradiance::ui::inspector::InspectorPanel;
+    use gradiance::ui::plot::PlotPanel;
+    let mut app = paused_app();
+    let plot = panel_open::<PlotPanel>(&app);
+    run(
+        &mut app,
+        "(begin (panel-show \"properties\") (panel-hide \"depth\") (panel-toggle \"plot\"))",
+    );
+    assert_eq!(
+        last_entry(&app).map(|e| e.0),
+        Some(true),
+        "{:?}",
+        last_entry(&app)
+    );
+    assert!(panel_open::<InspectorPanel>(&app));
+    assert!(!panel_open::<DepthPanel>(&app));
+    assert_eq!(panel_open::<PlotPanel>(&app), !plot, "toggle flips");
+    // A request applies once, not every frame.
+    app.update();
+    assert_eq!(panel_open::<PlotPanel>(&app), !plot);
+}
+
+/// A name is normalised (trimmed, lower-cased), so
 /// `(panel-show "  Properties ")` is not a silent no-op.
 #[test]
 fn panel_names_are_normalised_not_taken_literally() {
     let mut app = paused_app();
+    run(&mut app, "(panel-hide \"properties\")");
     run(&mut app, "(panel-show \"  Properties \")");
-    assert_eq!(
-        app.world().resource::<PanelRequests>().0[0].name,
-        "properties"
-    );
+    assert!(panel_open::<gradiance::ui::inspector::InspectorPanel>(&app));
 }
 
-/// `panel-open?` reads the mirror the UI publishes. Headless there is no UI, so
-/// this seeds the mirror directly — which is exactly the contract: the verb
-/// reads `PanelStates` and nothing else, and an unknown panel is `#f` rather
-/// than an error that would abort the run.
+/// An unknown name is an error at the call that lists the known panels, and
+/// (a run being all or nothing) the run's other requests do not land.
 #[test]
-fn panel_open_reads_the_published_mirror() {
+fn an_unknown_panel_name_fails_the_run_and_lists_the_panels() {
     let mut app = paused_app();
-    app.world_mut().resource_mut::<PanelStates>().0 = vec![
-        ("properties".to_owned(), true),
-        ("console".to_owned(), false),
-    ];
+    run(&mut app, "(panel-hide \"depth\")");
+    run(
+        &mut app,
+        "(begin (panel-show \"depth\") (panel-show \"nope\"))",
+    );
+    let (ok, output) = last_entry(&app).expect("logged");
+    assert!(!ok);
+    assert!(
+        output.contains("`nope`") && output.contains("properties"),
+        "{output}"
+    );
+    assert!(!panel_open::<gradiance::ui::depth_panel::DepthPanel>(&app));
+}
+
+/// `panel-open?` and `panels` read the panel mirror the UI layer publishes
+/// into the run's context: the state as the run began (one snapshot per run).
+#[test]
+fn panel_reads_see_the_panels_state() {
+    let mut app = paused_app();
+    run(&mut app, "(panel-show \"properties\")");
+    run(&mut app, "(panel-hide \"console\")");
     // Spawn one box per open panel the script finds: an observable count.
     run(
         &mut app,
         "(begin
            (if (panel-open? \"properties\") (spawn-box 0 0 10 10) 0)
-           (if (panel-open? \"console\") (spawn-box 20 0 10 10) 0)
-           (if (panel-open? \"nope\") (spawn-box 40 0 10 10) 0))",
+           (if (panel-open? \"console\") (spawn-box 20 0 10 10) 0))",
     );
-    assert_eq!(
-        body_count(&mut app),
-        1,
-        "only `properties` was open; a closed and an unknown panel are both #f"
-    );
-}
-
-/// The UI half: `apply_panel_requests` resolves a name against the registry,
-/// applies it through `PanelToggle`, and clears the queue.
-///
-/// This runs the system on a bare `App` with just the panel resources, because
-/// the real UI plugin no-ops without a renderer. It is the half the scripting
-/// test above cannot reach, and it covers the failure mode that matters: an
-/// unknown name must not touch anything, and must not stop the rest of the
-/// batch.
-#[test]
-fn the_ui_applies_queued_panel_requests_and_ignores_unknown_names() {
-    use gradiance::ui::panels::{PanelToggle, apply_panel_requests};
-
-    let mut app = App::new();
-    app.init_resource::<PanelRequests>();
-    app.init_resource::<gradiance::ui::settings::SettingsWindow>();
-    app.init_resource::<gradiance::ui::inspector::InspectorPanel>();
-    app.init_resource::<gradiance::ui::depth_panel::DepthPanel>();
-    app.init_resource::<gradiance::ui::plot::PlotPanel>();
-    app.init_resource::<gradiance::ui::probe::ProbePanel>();
-    app.init_resource::<gradiance::ui::node_graph::NodeGraph>();
-    app.init_resource::<gradiance::ui::outliner::ObjectTreePanel>();
-    app.init_resource::<gradiance::ui::console::ScriptConsole>();
-    app.init_resource::<gradiance::ui::array_panel::ArrayWindow>();
-    app.init_resource::<gradiance::ui::review::ReviewWindow>();
-    app.init_resource::<gradiance::ui::optimizer::OptimizerExpanded>();
-    app.init_resource::<gradiance::domain::settings::DebugSettings>();
-    app.add_systems(Update, apply_panel_requests);
-
-    app.world_mut().resource_mut::<PanelRequests>().0 = vec![
-        PanelRequest {
-            name: "properties".to_owned(),
-            shown: Some(true),
-        },
-        PanelRequest {
-            name: "not-a-panel".to_owned(),
-            shown: Some(true),
-        },
-        // Queued after the bad name: it must still be applied.
-        PanelRequest {
-            name: "depth".to_owned(),
-            shown: Some(true),
-        },
-    ];
-    app.update();
-
-    assert!(
-        app.world()
-            .resource::<gradiance::ui::inspector::InspectorPanel>()
-            .is_open()
-    );
-    assert!(
-        app.world()
-            .resource::<gradiance::ui::depth_panel::DepthPanel>()
-            .is_open(),
-        "an unknown name must not abort the batch"
-    );
-    assert!(
-        app.world().resource::<PanelRequests>().0.is_empty(),
-        "the queue is drained, so a request applies once and not every frame"
-    );
-
-    // And `None` flips rather than setting.
-    app.world_mut().resource_mut::<PanelRequests>().0 = vec![PanelRequest {
-        name: "depth".to_owned(),
-        shown: None,
-    }];
-    app.update();
-    assert!(
-        !app.world()
-            .resource::<gradiance::ui::depth_panel::DepthPanel>()
-            .is_open()
-    );
+    assert_eq!(body_count(&mut app), 1, "only `properties` is open");
+    run(&mut app, "(length (panels))");
+    let (ok, output) = last_entry(&app).expect("logged");
+    assert!(ok, "{output}");
+    assert_eq!(output, "11", "one row per `Panels::named` entry");
 }
 
 #[test]
@@ -1316,6 +1256,7 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
     use gradiance::signal::{SignalBus, SignalParams};
     let mut app = paused_app();
     let gravity = app.world().resource::<SimSettings>().gravity.value().y;
+    let plot = panel_open::<gradiance::ui::plot::PlotPanel>(&app);
     run(
         &mut app,
         "(spawn-box 0 0 40 20)
@@ -1323,7 +1264,7 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
          (signal-set \"half-run\" 1)
          (defparam \"half-param\" 1 0 2)
          (register-action \"Half\" \"(spawn-box 0 0 10 10)\")
-         (panel-show \"properties\")
+         (panel-toggle \"plot\")
          (car (list))",
     );
     assert!(!last_entry(&app).expect("logged").0, "the run failed");
@@ -1336,7 +1277,7 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
         [] as [gradiance::signal::SignalParam; 0]
     );
     assert_eq!(world.resource::<ScriptActions>().user().count(), 0);
-    assert_eq!(world.resource::<PanelRequests>().0, [] as [PanelRequest; 0]);
+    assert_eq!(panel_open::<gradiance::ui::plot::PlotPanel>(&app), plot);
 }
 
 /// Rolling back a failed run does not reach into a successful run queued in

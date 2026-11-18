@@ -172,7 +172,7 @@ Three rules hold that together, and a new verb must obey all three:
    `get_mut`.
 2. **A read never reaches *up* the layer graph.** Where the state a verb wants
    lives above `gradiance-script` — panel visibility, the selection — it either
-   comes from a mirror the upper layer publishes (`PanelStates`) or the verb is
+   comes from a mirror the upper layer publishes (`PanelMirror`, in the operation context) or the verb is
    **indexed** instead (`(delete i)` rather than `(delete-selection)`). A script
    acting on invisible state is not reproducible anyway. Never add an upward
    dependency edge to make a verb work.
