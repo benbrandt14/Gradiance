@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (A-2 handoff, stacked on A-1; A-1 handoff, stacked on 4b-4; 4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
+Last updated: 2026-11-18 (5-2 handoff, stacked on A-2; A-2 handoff, stacked on A-1; A-1 handoff, stacked on 4b-4; 4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
 after U-6, #256, b53b019; order per `docs/unified-surface-plan.md` § 10
 and § 13).
 
@@ -42,7 +42,12 @@ and § 13).
   20 rpm and shows the derived auto torque. Recorded with proposals, not
   fixed: dock opening re-centres the view, short arms lose motor speed
   (not substeps, not the ceiling), field strength scaling (needs a feel
-  question). **U-6** #256 is merged (b53b019): `gradiance ops`,
+  question). **5-2** quantity catalog in review, **stacked on A-2**
+  (branch `claude/project-thread-tw1mvl-5-2`; merge #261 → #260 → #259 →
+  #258 → #257 first): one named table (`domain::quantity`, 14 rows) that
+  the signal sources, sensor ports, node-graph pins, signals panel and plot
+  units read; `quantity.*` operations (`(quantities)`, `(quantity name i)`,
+  `(quantity-between name a b)`, `(quantity-unit name)`). **U-6** #256 is merged (b53b019): `gradiance ops`,
   `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
   app; the catalog carries a params schema and an example per operation.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
@@ -68,7 +73,7 @@ and § 13).
   8. **4b-3** art direction (scene look; in review, #257), then **U-7** theme
      tokens, Blender-leaning (chrome; in review, stacked on #257); then
      **4b-4** scaled defaults (in review, stacked on U-7).
-  9. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
+  9. **Phase 5:** 5-2 (in review), 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).

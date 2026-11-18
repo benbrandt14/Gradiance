@@ -928,7 +928,11 @@ and rulings live in `docs/units-decision.md`; status:
       **v7**: quantities serialize bare, v6 rejected). *Not done, by design:*
       a crate-wide `geometry` retype (shape dimensions, `PosRot`) — separate
       work if wanted.
-- [ ] **P3** `PhysicalQuantity` catalog + signal/plotter binding (unit axes).
+- [x] **P3** `PhysicalQuantity` catalog + signal/plotter binding (unit axes).
+      One named table (`domain::quantity`, brief 5-2): signal sources,
+      sensor ports, node-graph pins, the signals panel and plot units read
+      it; scripts and every other doorway read it through the `quantity.*`
+      operations. *Not done:* set aggregates (Horizon, grouped nodes).
 - [ ] **P4** inspector/settings SI display + input.
 - [ ] **P6** units in the parameter-linking / expression DSL.
 - [ ] *(dedicated path)* arbitrary coordinate frames — `docs/frames-decision.md`,

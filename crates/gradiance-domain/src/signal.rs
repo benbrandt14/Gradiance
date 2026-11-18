@@ -403,6 +403,15 @@ impl SignalSource {
         })
     }
 
+    /// Whether some variant reads the catalog row `name` (`false` for a
+    /// script-only row such as `mass`, which no binding can plot).
+    pub fn binds_quantity(name: &str) -> bool {
+        let nil = StableId(uuid::Uuid::nil());
+        Self::of_quantity(name, Subjects::One(nil))
+            .or_else(|| Self::of_quantity(name, Subjects::Two(nil, nil)))
+            .is_some()
+    }
+
     /// The physical [`Dimension`](gradiance_units::Dimension) this source
     /// reads: its catalog row's (units P3, brief 5-2), which gives every plot
     /// axis, port readout and inspector row its unit label from one place. A
@@ -1112,6 +1121,8 @@ mod tests {
         rows.dedup();
         assert_eq!(rows.len(), 13, "two variants share a catalog row");
         assert_eq!(SignalSource::of_quantity("mass", Subjects::One(a)), None);
+        assert!(!SignalSource::binds_quantity("mass"));
+        assert!(SignalSource::binds_quantity("distance"));
         assert_eq!(
             SignalSource::of_quantity("speed", Subjects::Two(a, b)),
             None

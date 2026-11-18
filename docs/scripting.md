@@ -205,6 +205,19 @@ across and ±3.5 m up and down); angles are radians.
 (tool-count)                 ; points the running script tool collected (NaN otherwise)
 (tool-x i) (tool-y i)        ; its i-th point, click order (NaN outside a tool run)
 
+;; query — the physical quantity catalog (brief 5-2; SI values, live state)
+(quantities)                 ; every quantity name, catalog order
+(quantity-unit "speed")      ; its SI unit symbol: "m/s" ("" for a count)
+(quantity "speed" i)         ; a quantity of the i-th body (NaN if out of range)
+(quantity "joint-angle" j)   ; a joint-* quantity reads the j-th joint
+(quantity-between "distance" a b) ; a two-body quantity
+;; names: speed spin height pos-x contact-force contact-count kinetic-energy
+;; momentum angular-momentum mass distance joint-length joint-angle joint-force
+;; an unknown name, or a name read with the wrong verb, is a script error
+;; that says what to write. The values are the ones the sensor ports and the
+;; plot show (one table: crates/gradiance-domain/src/quantity.rs), read once
+;; before the run like every other query.
+
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
 (register-tool name n src)   ; add a palette tool: n clicks, then src runs once
