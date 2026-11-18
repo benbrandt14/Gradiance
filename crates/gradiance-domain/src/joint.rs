@@ -380,16 +380,42 @@ impl JointDef {
         }
     }
 
+    /// Whether the derived engine joint puts the **world** first: a hinge
+    /// pinned to the world is derived as `(pin, body A)`, so that a positive
+    /// motor speed, the limits and the angle all describe the body turning
+    /// counter-clockwise against the world, as body B turns against body A on
+    /// a body-to-body hinge (brief A-1; before, the pin turned against the
+    /// body and a world-pin motor ran clockwise).
+    #[must_use]
+    pub fn world_first(&self) -> bool {
+        self.body_b.is_none() && matches!(self.kind, JointKind::Hinge { .. })
+    }
+
+    /// The hinge angle avian's limits and motor act on, from both bodies'
+    /// live rotations (`rot_b` = 0 for a world pin): the driven body against
+    /// the reference body, minus the authored rest angle — body B against A,
+    /// or for a world pin ([`world_first`](Self::world_first)) body A against
+    /// the world. 0 at creation; a positive motor speed drives it up.
+    #[must_use]
+    pub fn hinge_angle(&self, rot_a: f32, rot_b: f32) -> f32 {
+        let (rest_a, rest_b) = (self.rest_rot_a.value(), self.rest_rot_b.value());
+        if self.world_first() {
+            hinge_limit_angle(rot_b, rot_a, rest_b, rest_a)
+        } else {
+            hinge_limit_angle(rot_a, rot_b, rest_a, rest_b)
+        }
+    }
+
     /// The joint's live **sensor state** given both endpoint poses — the pure
     /// math behind the `JointLength`/`JointAngle` signal sources (read through
     /// `physics::queries`). Derived, never saved.
     ///
     /// - `length`: distance between the two **world** anchors (`anchor_a` on
     ///   body A, `anchor_b` on body B).
-    /// - `angle`: relative rotation of B against A minus the authored rest
-    ///   angle, wrapped to `(-π, π]` — exactly [`hinge_limit_angle`], the frame
-    ///   avian's hinge limits and the oscillating motor measure in, so a plotted
-    ///   angle compares directly to the authored `[min, max]`.
+    /// - `angle`: [`hinge_angle`](Self::hinge_angle), wrapped to `(-π, π]` —
+    ///   the frame avian's hinge limits and the oscillating motor measure in,
+    ///   so a plotted angle compares directly to the authored `[min, max]`.
+    ///   For a world pin it is body A against the world.
     ///
     /// A **world pin** (`body_b == None`) passes [`WORLD_POSE`] for `pose_b`:
     /// its `anchor_b` is already a world point and the derived static pin sits
@@ -400,12 +426,7 @@ impl JointDef {
         let world_b = pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(self.anchor_b.value());
         JointSensors {
             length: Length(world_a.distance(world_b)),
-            angle: Angle(hinge_limit_angle(
-                pose_a.rot,
-                pose_b.rot,
-                self.rest_rot_a.value(),
-                self.rest_rot_b.value(),
-            )),
+            angle: Angle(self.hinge_angle(pose_a.rot, pose_b.rot)),
         }
     }
 }
@@ -435,10 +456,12 @@ mod tests {
         // [min, max] apply directly.
         assert!(hinge_limit_angle(0.7, 0.2, 0.7, 0.2).abs() < 1e-6);
         assert!(hinge_limit_angle(-1.3, 2.4, -1.3, 2.4).abs() < 1e-6);
-        // A world pin (body B is the static anchor at rot 0, rest 0): the
-        // angle is body A's deviation from its authored rest.
-        let rest_a = 0.5;
-        assert!((hinge_limit_angle(0.5 + 0.3, 0.0, rest_a, 0.0) - (-0.3)).abs() < 1e-6);
+        // A world pin (the static anchor at rot 0, rest 0) puts the world
+        // first: the angle is body A's deviation from its authored rest.
+        let def = hinge(None, 0.5);
+        assert!(def.world_first());
+        assert!((def.hinge_angle(0.5 + 0.3, 0.0) - 0.3).abs() < 1e-6);
+        assert!(!hinge(Some(StableId::new()), 0.5).world_first());
     }
 
     fn pose(x: f32, y: f32, rot: f32) -> PosRot {
@@ -502,9 +525,11 @@ mod tests {
         let s = def.sensor_state(pose(a.x, a.y, 0.5), WORLD_POSE);
         assert!(close(s.length.value(), 0.5), "{s:?}");
         assert!(s.angle.value().abs() < 1e-6);
-        // Body A swings +0.3: the limit-frame angle is the pin relative to A.
+        // Body A swings +0.3 (counter-clockwise): the angle is the body
+        // against the world, so it reads +0.3, the sign the gizmo's limit
+        // arc (`rest_rot_a + [min, max]`) and a positive motor use.
         let s2 = def.sensor_state(pose(a.x, a.y, 0.8), WORLD_POSE);
-        assert!(close(s2.angle.value(), -0.3), "{s2:?}");
+        assert!(close(s2.angle.value(), 0.3), "{s2:?}");
     }
 
     #[test]

@@ -8,6 +8,8 @@
 use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
+use bevy::ecs::system::RunSystemOnce;
+use gradiance::core::ids::IdIndex;
 use gradiance::prelude::*;
 
 fn spawn_body(app: &mut App, record: BodyRecord) -> StableId {
@@ -626,6 +628,38 @@ fn world_pin_hinge_limit_holds_the_swing() {
     );
 }
 
+/// Asymmetric world-pin limits apply in the frame the gizmo draws them in
+/// (`rest_rot_a + [min, max]`, the body against the world): a rod pinned at
+/// its left end with limits [-0.2, 0.6] swings down to -0.2, not to -0.6
+/// (before brief A-1 the limits bound the pin against the body, mirrored).
+#[test]
+fn world_pin_hinge_limits_are_the_body_against_the_world() {
+    let mut app = headless_app();
+    let rod_id = spawn_body(&mut app, box_record(Vec2::new(0.8, 0.0), 1.6, 0.2));
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: Some([gradiance::units::Angle(-0.2), gradiance::units::Angle(0.6)]),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: rod_id,
+            body_b: None,
+            anchor_a: gradiance::units::Displacement(Vec2::new(-0.8, 0.0)),
+            anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
+        },
+    );
+    step(&mut app, 120);
+    let rot = pose_of(&app, rod_id).rot;
+    assert!(
+        (rot - -0.2).abs() < 0.1,
+        "the rod rests on its lower limit -0.2 (rot {rot})"
+    );
+}
+
 // ---------- Rest-orientation frames (user snapshot regressions) ----------
 
 /// The user's snapshot gradiance-1783344618.ron distilled: a rotated body
@@ -1048,4 +1082,59 @@ fn motorized_slider_drives_body_along_its_axis() {
         "slider stays on its axis (y = {})",
         pose_of(&app, slider_id).pos.y
     );
+}
+
+/// A positive hinge motor speed turns the driven body **counter-clockwise**
+/// against its reference, on a body-to-body hinge (body B against body A)
+/// and on a world pin (the body against the world) alike, and the joint's
+/// angle sensor rises with it. A world pin used to drive the pin against the
+/// body, so the same speed turned the body clockwise (brief A-1).
+#[test]
+fn a_positive_hinge_motor_turns_counter_clockwise_on_both_hinge_kinds() {
+    for world in [false, true] {
+        let mut app = headless_app();
+        // The static base sits off to the side, clear of the arm: on a world
+        // pin the two are not connected and would collide.
+        let mut base = box_record(Vec2::new(0.0, 3.0), 0.5, 0.5);
+        base.physics.rigid_body = RigidBody::Static;
+        let base_id = spawn_body(&mut app, base);
+        let arm_id = spawn_body(&mut app, box_record(Vec2::ZERO, 1.6, 0.2));
+        let (a, b) = if world {
+            (arm_id, None)
+        } else {
+            (base_id, Some(arm_id))
+        };
+        // Body-to-body: the base's anchor (0, -3) is the arm's centre.
+        let anchor_a = if world { Vec2::ZERO } else { Vec2::new(0.0, -3.0) };
+        let mut def = hinge(a, b, anchor_a, Vec2::ZERO);
+        def.kind = JointKind::Hinge {
+            limits: None,
+            motor: Some(AngularMotorDef {
+                target_velocity: gradiance::units::AngularVelocity(2.0),
+                ..default()
+            }),
+        };
+        let joint_id = spawn_joint(&mut app, def);
+        step(&mut app, 30);
+        let w = angular_velocity(&app, arm_id);
+        assert!(
+            (w - 2.0).abs() < 0.2,
+            "world pin {world}: the arm turns at +2 rad/s, not {w}"
+        );
+        let joint = entity_of(&app, joint_id).unwrap();
+        let angle = app
+            .world_mut()
+            .run_system_once(
+                move |q: gradiance::physics::queries::PhysicsQueries, index: Res<IdIndex>| {
+                    q.joint_angle(joint, &index).map(|a| a.value())
+                },
+            )
+            .unwrap()
+            .unwrap();
+        let rot = pose_of(&app, arm_id).rot;
+        assert!(
+            (angle - rot).abs() < 1e-3 && rot > 0.5,
+            "world pin {world}: the sensor reads the arm's turn ({angle} vs {rot})"
+        );
+    }
 }

@@ -54,12 +54,7 @@ pub fn drive_oscillating_motors(
                 // omitted the basis and the motor just drove into the stop).
                 // Both the angle and the reversal decision are pure, tested
                 // domain functions.
-                let rel = gradiance_domain::joint::hinge_limit_angle(
-                    rot(a),
-                    rot_b,
-                    def.rest_rot_a.value(),
-                    def.rest_rot_b.value(),
-                );
+                let rel = def.hinge_angle(rot(a), rot_b);
                 if let Some(v) = gradiance_domain::joint::oscillate_target(
                     rel,
                     min.value(),

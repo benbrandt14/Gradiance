@@ -279,7 +279,8 @@ fn drive(samples: &[f32], target: f32) -> Drive {
 
 /// A box wheel driven by a default hinge motor at its centre: pinned to the
 /// world (`ground = false`) or to a static ground body that is the joint's
-/// body A. Returns the relative speed (B against A) per frame for `secs`.
+/// body A. Returns the wheel's speed per frame for `secs`: on both, a
+/// positive motor speed turns the wheel counter-clockwise (brief A-1).
 fn hinge_wheel(size: f32, density: f32, ground: bool, secs: f32) -> Vec<f32> {
     let mut app = headless_app();
     let id = spawn_body(&mut app, body(Vec2::ZERO, size, size, density));
@@ -287,22 +288,19 @@ fn hinge_wheel(size: f32, density: f32, ground: bool, secs: f32) -> Vec<f32> {
         limits: None,
         motor: Some(AngularMotorDef::default()),
     };
-    let sign = if ground {
+    if ground {
         let g = spawn_body(&mut app, fixed(Vec2::new(0.0, -size), 20.0 * size, size));
         spawn_joint(
             &mut app,
             joint(kind, g, Some(id), Vec2::new(0.0, size), Vec2::ZERO),
         );
-        1.0
     } else {
-        // A world pin: the pin is body B, so B against A is minus the wheel.
         spawn_joint(&mut app, joint(kind, id, None, Vec2::ZERO, Vec2::ZERO));
-        -1.0
-    };
+    }
     (0..(secs * FPS) as usize)
         .map(|_| {
             step(&mut app, 1);
-            sign * omega(&app, id)
+            omega(&app, id)
         })
         .collect()
 }
@@ -348,7 +346,7 @@ fn a_default_hinge_motor_lifts_an_arm_of_a_metre_or_more() {
         for frame in 0..120 {
             step(&mut app, 1);
             if frame >= 30 {
-                slowest = slowest.min(-omega(&app, id));
+                slowest = slowest.min(omega(&app, id));
             }
         }
         assert!(
@@ -679,7 +677,7 @@ fn sweep() {
             for frame in 0..120 {
                 step(&mut app, 1);
                 if frame >= 30 {
-                    slowest = slowest.min(-omega(&app, id));
+                    slowest = slowest.min(omega(&app, id));
                 }
             }
             row.push(slowest);

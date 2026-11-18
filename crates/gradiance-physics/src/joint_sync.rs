@@ -127,8 +127,21 @@ pub fn sync_joints(
         // *creation-time* pose — welds hold it, sliders lock rotation to
         // it, hinge limits measure from it — instead of snapping rotated
         // bodies into alignment.
-        let basis_b = (def.rest_rot_a - def.rest_rot_b).value();
-        insert_derived_joint(&mut entity_commands, def, body_a, body_b, anchor_b, basis_b);
+        //
+        // A world-pin hinge is derived world first, `(pin, body A)`, so its
+        // motor, limits and angle describe the body against the world
+        // (`JointDef::world_first`); the basis is then the opposite angle.
+        let ends = if def.world_first() {
+            [(body_b, anchor_b), (body_a, def.anchor_a.value())]
+        } else {
+            [(body_a, def.anchor_a.value()), (body_b, anchor_b)]
+        };
+        let basis_2 = if def.world_first() {
+            (def.rest_rot_b - def.rest_rot_a).value()
+        } else {
+            (def.rest_rot_a - def.rest_rot_b).value()
+        };
+        insert_derived_joint(&mut entity_commands, def, ends, basis_2);
 
         if def.common.collide_connected {
             entity_commands.remove::<JointCollisionDisabled>();
@@ -139,23 +152,22 @@ pub fn sync_joints(
 }
 
 /// Inserts the engine joint (and, for a strut, its damping) for `def`'s kind.
-/// `anchor_b` is body-B local (or `Vec2::ZERO` for a world pin); `basis_b`
-/// carries the authored rest orientation. The mass-derived values (a motor's
+/// `ends` are the engine's two bodies in order, each with its local anchor
+/// (a world pin's derived anchor entity has `Vec2::ZERO`); `basis_2` is the
+/// second body's rest orientation. The mass-derived values (a motor's
 /// ceiling and gain, a spring's stiffness) are [`retune_joints`]'s.
 fn insert_derived_joint(
     entity_commands: &mut EntityCommands,
     def: &JointDef,
-    body_a: Entity,
-    body_b: Entity,
-    anchor_b: Vec2,
-    basis_b: f32,
+    [(body_1, anchor_1), (body_2, anchor_2)]: [(Entity, Vec2); 2],
+    basis_2: f32,
 ) {
     match &def.kind {
         JointKind::Hinge { limits, motor } => {
-            let mut joint = RevoluteJoint::new(body_a, body_b)
-                .with_local_anchor1(def.anchor_a.value())
-                .with_local_anchor2(anchor_b)
-                .with_local_basis2(basis_b);
+            let mut joint = RevoluteJoint::new(body_1, body_2)
+                .with_local_anchor1(anchor_1)
+                .with_local_anchor2(anchor_2)
+                .with_local_basis2(basis_2);
             if let Some([min, max]) = limits {
                 joint = joint.with_angle_limits(min.value(), max.value());
             }
@@ -169,10 +181,10 @@ fn insert_derived_joint(
             limits,
             motor,
         } => {
-            let mut joint = PrismaticJoint::new(body_a, body_b)
-                .with_local_anchor1(def.anchor_a.value())
-                .with_local_anchor2(anchor_b)
-                .with_local_basis2(basis_b)
+            let mut joint = PrismaticJoint::new(body_1, body_2)
+                .with_local_anchor1(anchor_1)
+                .with_local_anchor2(anchor_2)
+                .with_local_basis2(basis_2)
                 .with_slider_axis(*axis);
             if let Some([min, max]) = limits {
                 joint = joint.with_limits(min.value(), max.value());
@@ -197,9 +209,9 @@ fn insert_derived_joint(
                 Some([lo, hi]) => (lo.value(), hi.value()),
                 None => (rest_length.value(), rest_length.value()),
             };
-            let joint = DistanceJoint::new(body_a, body_b)
-                .with_local_anchor1(def.anchor_a.value())
-                .with_local_anchor2(anchor_b)
+            let joint = DistanceJoint::new(body_1, body_2)
+                .with_local_anchor1(anchor_1)
+                .with_local_anchor2(anchor_2)
                 .with_limits(min, max)
                 .with_compliance(0.0);
             entity_commands.insert((
