@@ -137,7 +137,14 @@ impl Operation for Hinge {
             motor: None,
         };
         let anchor = Vec2::new(self.x.0, self.y.0);
-        Ok(spawn(joint_record(ctx, a, b, [anchor, anchor], kind, false)))
+        Ok(spawn(joint_record(
+            ctx,
+            a,
+            b,
+            [anchor, anchor],
+            kind,
+            false,
+        )))
     }
 }
 
@@ -191,7 +198,14 @@ impl Operation for Slider {
             motor: None,
         };
         let anchor = Vec2::new(self.x.0, self.y.0);
-        Ok(spawn(joint_record(ctx, a, b, [anchor, anchor], kind, false)))
+        Ok(spawn(joint_record(
+            ctx,
+            a,
+            b,
+            [anchor, anchor],
+            kind,
+            false,
+        )))
     }
 }
 

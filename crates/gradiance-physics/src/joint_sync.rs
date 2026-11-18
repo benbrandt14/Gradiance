@@ -266,8 +266,8 @@ pub fn retune_joints(
     // avian steps the fixed timestep scaled by the physics clock's relative
     // speed (`SimSettings::speed`), split into substeps.
     #[expect(clippy::cast_precision_loss, reason = "a small substep count")]
-    let substep_secs = fixed.timestep().as_secs_f32() * physics_time.relative_speed()
-        / substeps.0.max(1) as f32;
+    let substep_secs =
+        fixed.timestep().as_secs_f32() * physics_time.relative_speed() / substeps.0.max(1) as f32;
     for (def, revolute, prismatic, distance) in &mut joints {
         match &def.kind {
             JointKind::Hinge { motor: Some(m), .. } => {

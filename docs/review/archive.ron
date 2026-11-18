@@ -450,5 +450,32 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief 4b-4 Decisions 2; gradiance_domain::tuning::motor_gain.",
         ),
+        (
+            question: (
+                id: "world-pin-sign",
+                title: "Which way does a positive motor speed turn a world-pinned body?",
+                source: "brief A-1 Findings (motors); state.md retained \"world-pin angle sign (2-1)\"",
+                description: r#"A world-pin hinge was derived (body, pin), so avian drove the pin against the body: a positive speed turned a world-pinned body clockwise while body B of a body-to-body hinge turned counter-clockwise, asymmetric limits applied mirrored against the arc the gizmo draws, and the angle sensor read minus the body's turn."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Counter-clockwise, as body B on a hinge",
+                        caption: r#"Recommended. Derive a world-pin hinge (pin, body): a positive speed, the limits and the angle sensor all describe the body against the world, matching the gizmo's arc and the body-to-body hinge. Saved world-pin motors and asymmetric limits turn the other way after loading (format changes freely; no migration)."#,
+                    ),
+                    (
+                        label: "Keep clockwise, document it",
+                        caption: r#"No behaviour change; the inspector would need a note, the gizmo arc would have to be mirrored to match the limits, and a script reading the angle sensor keeps the opposite sign from a hinge."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "world-pin-sign",
+                title: "Which way does a positive motor speed turn a world-pinned body?",
+                choice: Picked("Counter-clockwise, as body B on a hinge"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive: one option leaves the gizmo, the limits and the sensor disagreeing. World-pin sliders are not changed yet (A-1 Findings).",
+                answered_at: "2026-11-18T22:00:00Z",
+            ),
+            ingested_as: "Brief A-1 Decisions 1; gradiance_domain::joint::JointDef::world_first.",
+        ),
     ],
 )

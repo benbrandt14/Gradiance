@@ -7,8 +7,8 @@
 
 use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::RigidBody;
-use bevy::prelude::*;
 use bevy::ecs::system::RunSystemOnce;
+use bevy::prelude::*;
 use gradiance::core::ids::IdIndex;
 use gradiance::prelude::*;
 
@@ -1105,7 +1105,11 @@ fn a_positive_hinge_motor_turns_counter_clockwise_on_both_hinge_kinds() {
             (base_id, Some(arm_id))
         };
         // Body-to-body: the base's anchor (0, -3) is the arm's centre.
-        let anchor_a = if world { Vec2::ZERO } else { Vec2::new(0.0, -3.0) };
+        let anchor_a = if world {
+            Vec2::ZERO
+        } else {
+            Vec2::new(0.0, -3.0)
+        };
         let mut def = hinge(a, b, anchor_a, Vec2::ZERO);
         def.kind = JointKind::Hinge {
             limits: None,
@@ -1126,7 +1130,8 @@ fn a_positive_hinge_motor_turns_counter_clockwise_on_both_hinge_kinds() {
             .world_mut()
             .run_system_once(
                 move |q: gradiance::physics::queries::PhysicsQueries, index: Res<IdIndex>| {
-                    q.joint_angle(joint, &index).map(|a| a.value())
+                    q.joint_angle(joint, &index)
+                        .map(gradiance::units::Angle::value)
                 },
             )
             .unwrap()

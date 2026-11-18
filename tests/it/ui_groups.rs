@@ -216,7 +216,11 @@ fn a_chip_on_a_mixed_group_selects_only_the_matching_bodies() {
     assert_eq!(names, Some(2));
     let members = invoke(app.world_mut(), "group.members", json!({"group": inner}))
         .unwrap_or_else(|e| panic!("members: {e}"));
-    assert_eq!(members, Some(json!([0, 1])), "the inner group is still [0, 1]");
+    assert_eq!(
+        members,
+        Some(json!([0, 1])),
+        "the inner group is still [0, 1]"
+    );
     app.world_mut().write_message(GroupsFilter {
         clauses: vec![format!("group:{inner}")],
     });

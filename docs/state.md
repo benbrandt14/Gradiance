@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
+Last updated: 2026-11-18 (A-1 handoff, stacked on 4b-4; 4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
 after U-6, #256, b53b019; order per `docs/unified-surface-plan.md` § 10
 and § 13).
 
@@ -26,7 +26,15 @@ and § 13).
   #258, then it): springs authored as frequency + damping ratio (format v8),
   the motor gain fix (the default motor did not turn), clamped restitution
   and friction, weight-scaled break force, behaviour tests
-  (`tests/it/defaults.rs`), review question `spring-feel`. **U-6** #256 is merged (b53b019): `gradiance ops`,
+  (`tests/it/defaults.rs`), review question `spring-feel`. **A-1**
+  screenshot audit in review, **stacked on 4b-4** (branch
+  `claude/project-thread-tw1mvl-a1`; merge #257, #258, #259, then it):
+  six fixes (drag tools started one step late; world-pin hinge reversed;
+  motor gain ignored the sim speed; Groups chips selected whole groups;
+  the `spring` verb anchored b at a's centre, which also bent the
+  `spring-feel` scenes; the palette covered the bottom dock), two findings
+  for new briefs (world-pin slider reversed, overlapping groups); images
+  in `/mnt/project-files/a-1/`. **U-6** #256 is merged (b53b019): `gradiance ops`,
   `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
   app; the catalog carries a params schema and an example per operation.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
@@ -114,7 +122,9 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - backlash, cams, planar contact (undefined);
   - torque-based breaking (2-2);
   - rod fixed end = merge, `spawn-rod`, rod inspector (2-3);
-  - world-pin angle sign, joint node-graph block (2-1);
+  - joint node-graph block (2-1); the world-pin **slider** is still
+    derived body-first, so its travel and motor run mirrored (A-1 finding
+    7; needs a brief: extend `JointDef::world_first` to sliders);
   - a 2 m flat drop lands 1–4 cm sideways in avian (2-5);
   - unaudited despawned-entity `insert` pattern (2-5);
   - elastica/flexure from #194 (after Phase 5).
@@ -130,15 +140,11 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - alignment during creation tools (1-5);
   - grid coverage from the frustum (1-1);
   - tangent-snap toggle and the tangent glyph bar always horizontal (1-7);
-  - faint alignment guide;
-  - the select tool grabs the snap point nearest the drag's first moved
-    frame, so a fast drag (long first step) can land a body offset by half
-    its size (found by U-4's injected drag; README notes it).
+  - faint alignment guide.
 - **Scripting:**
-  - groups panel (4b-2): selection expands to the outermost group, so a
-    nested group's row selects its parent and a colour chip on a mixed
-    group selects the whole group; dock widths below 260 points and a real
-    double-click are unchecked;
+  - groups panel (4b-2): dock widths below 260 points and a real
+    double-click are unchecked; grouping a body that is already grouped
+    puts it in two sibling groups (A-1 finding 8; needs a brief);
   - `bodies-where` has no label filter: labels live in `gradiance-script`,
     above `command`, and need a mirror first (4b-1 Outcome);
   - verbs for `ToolDefaults`/`SnapConfig`/joint props;
@@ -207,7 +213,6 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - world (0,0) is window (640,370) at 100 points/m; prefer widget names
     from `ui.inspect`;
   - a gesture plays over the next frames: wait before the next grab;
-  - the select tool grabs the snap point nearest the first moved frame;
   - indexed verbs in one run read the pre-run snapshot, so apply them from a
     second, hot-reloaded script.
 - Where `docs/agent-context.md` and `CLAUDE.md` disagree, `CLAUDE.md` wins.

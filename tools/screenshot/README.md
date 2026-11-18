@@ -53,9 +53,12 @@ Things learned the hard way:
   up. Prefer widget names from `ui.inspect` over measured points.
 - **A gesture plays over the next frames** (one pointer event per frame) and
   the call returns at once: wait a moment before the next screenshot.
-- **The select tool grabs the snap point nearest the drag's first moved
-  frame** (a body's centre or an edge midpoint) and puts it on the cursor, so
-  a drag with a long first step can land a body offset by half its size.
+- **The select tool grabs the snap point nearest the press** (a body's
+  centre or an edge midpoint) and puts it on the cursor (brief A-1 fixed the
+  one-frame-late press that made a fast drag grab from its first step).
+- `ui.click`/`ui.drag` press the **left** button only and `ui.key` releases
+  its modifiers, so the context menu, right-drag rotate, Shift-click and
+  Ctrl-drag cannot be driven from here yet.
 - **Physics runs slow** at software-rendering frame rates; wait longer than you
   think for motion to settle, and compare two grabs to see whether anything is
   still moving (`compare -metric AE a.png b.png diff.png`, ImageMagick).
