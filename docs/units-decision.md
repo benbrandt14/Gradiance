@@ -40,7 +40,7 @@ quantity is a bare `f32`/`Vec2` whose unit lives only in a doc comment:
 | torque | implicit | N·m |
 | friction, restitution, gravity_scale, `speed` | dimensionless | dimensionless |
 | timestep (`timestep_hz`) | Hz | Hz (1/s) |
-| spring stiffness / damping (M20 struts) | avian compliance/damping | N/m, N·s/m |
+| spring frequency / damping ratio (M20 struts; mass-relative since 4b-4, the N/m stiffness is derived) | avian compliance/damping | Hz, 1 |
 
 ## The four rulings
 

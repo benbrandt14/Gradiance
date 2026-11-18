@@ -230,8 +230,8 @@ mod tests {
             5.0,
             1e-6
         ));
-        assert!(reduced(inverse(5.0, false), inverse(0.0, true)) == 0.0);
-        assert!(inverse(f32::INFINITY, true) == 0.0);
+        assert!(reduced(inverse(5.0, false), inverse(0.0, true)).abs() < f32::EPSILON);
+        assert!(inverse(f32::INFINITY, true).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -244,16 +244,16 @@ mod tests {
         }
         // Stiffer with frequency (monotonic), zero when nothing moves.
         assert!(spring_stiffness(2.0, 1.0) > spring_stiffness(1.0, 1.0));
-        assert!(spring_stiffness(1.5, 0.0) == 0.0);
+        assert!(spring_stiffness(1.5, 0.0).abs() < f32::EPSILON);
     }
 
     #[test]
     fn critical_damping_rate_is_twice_omega() {
         let omega = TAU * 1.5;
         assert!(close(spring_damping_rate(1.5, 1.0), 2.0 * omega, 1e-6));
-        assert!(spring_damping_rate(1.5, 0.0) == 0.0);
+        assert!(spring_damping_rate(1.5, 0.0).abs() < f32::EPSILON);
         assert!(
-            spring_damping_rate(1.5, -1.0) == 0.0,
+            spring_damping_rate(1.5, -1.0).abs() < f32::EPSILON,
             "negative ratio clamps"
         );
     }
@@ -263,7 +263,7 @@ mod tests {
         let dt = 1.0 / 360.0;
         assert!(close(motor_gain(36.0, dt), 0.1, 1e-5));
         assert!((motor_gain(1.0e6, dt) - 1.0).abs() < f32::EPSILON);
-        assert!(motor_gain(-5.0, dt) == 0.0);
+        assert!(motor_gain(-5.0, dt).abs() < f32::EPSILON);
     }
 
     #[test]

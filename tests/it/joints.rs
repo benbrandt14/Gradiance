@@ -876,7 +876,9 @@ fn world_pinned_tilted_motor_oscillates() {
         if delta * last_delta < -1e-6 {
             direction_changes += 1;
         }
-        if delta.abs() > 1e-6 {
+        // A turnaround frame moves ~1e-5 rad now that the motor reverses
+        // in one substep (brief 4b-4); only real motion sets the direction.
+        if delta.abs() > 1e-3 {
             last_delta = delta;
         }
         last_angle = angle;

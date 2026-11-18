@@ -1,5 +1,5 @@
 (
-    version: 7,
+    version: 8,
     app_version: "golden",
     bodies: [
         (
@@ -110,7 +110,7 @@
                     motor: Some((
                         target_velocity: 2.0,
                         max_torque: 0.0,
-                        damping: 30.0,
+                        damping: 360.0,
                         oscillate: false,
                         enabled: true,
                     )),

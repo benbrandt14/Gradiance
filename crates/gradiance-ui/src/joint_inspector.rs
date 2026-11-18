@@ -109,9 +109,13 @@ pub fn joint_inspector(
             let moving_mass: f32 = def
                 .referenced_bodies()
                 .filter_map(|b| index.entity(b))
-                .filter(|&e| kinds.get(e).is_ok_and(|k| k.is_dynamic()))
+                .filter(|&e| {
+                    kinds
+                        .get(e)
+                        .is_ok_and(avian2d::prelude::RigidBody::is_dynamic)
+                })
                 .filter_map(|e| physics.mass_of(e))
-                .map(|m| m.value())
+                .map(gradiance_units::Mass::value)
                 .sum();
             let fresh_break = if moving_mass > 0.0 {
                 tuning::default_break_force(moving_mass, sim.gravity.value().length())

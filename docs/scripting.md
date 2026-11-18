@@ -115,7 +115,7 @@ across and ±3.5 m up and down); angles are radians.
 ;; edit — relationships between bodies (b < 0 pins to the world)
 (hinge a b x y)              ; revolute joint at world point (x, y) → its handle
 (slider a b x y ax ay)       ; prismatic joint at (x, y) along world axis (ax, ay)
-(spring a b stiffness damping) ; spring-damper strut between the two centres
+(spring a b hz ratio)         ; spring-damper strut between the two centres
 
 ;; edit — a body's authored properties (the inspector's fields as ops)
 (place i x y angle)          ; move and rotate the i-th body
@@ -516,9 +516,12 @@ Two things the verbs handle for you, because getting them wrong is subtle:
   scene rather than silently dropped. A body hinged to itself becomes a world
   pin too.
 
-Unlike the strut tool, `(spring …)` takes stiffness explicitly rather than
-sizing it from the connected mass: a fixture whose stiffness depends on a mass
-heuristic stops being reproducible the moment the shape changes.
+`(spring …)` is authored like the spring tool's strut, mass-relative: a
+natural frequency in Hz (the tool's default 1.5) and a damping ratio (0 =
+undamped, 1 = critical; default 0.1). The physics seam derives the stiffness
+from the connected bodies' current mass, so `(spring a b 1.5 0.1)` bounces
+with the same period on a pebble and on a truck, and keeps it when a body's
+density changes (brief 4b-4; ranges in `gradiance_domain::tuning`).
 
 There is no `weld` verb because there is no weld *joint* — in this engine
 welding is `merge` (one CSG body) or make-static, not a constraint.

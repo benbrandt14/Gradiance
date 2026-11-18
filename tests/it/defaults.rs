@@ -12,7 +12,12 @@
 //! `cargo test --test it defaults::sweep -- --ignored --nocapture`.
 
 // Test-only file: unwraps are the failure mechanism; the sweep prints.
-#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::cast_precision_loss)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::print_stdout,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines
+)]
 
 use crate::harness::{box_record, entity_of, headless_app, step};
 use avian2d::prelude::{

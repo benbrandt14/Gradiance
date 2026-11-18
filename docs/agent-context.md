@@ -180,7 +180,7 @@ they did before the split.
   `merge` into one CSG body, or make-static); the
   physics seam derives the avian joint via `Changed<>`. `Spring` (the **strut**
   tool) maps to avian's `DistanceJoint` + `JointDamping`: `rest_length`,
-  `stiffness`, `damping`, optional `range` clamp; drawn as a non-colliding coil
+  `frequency` (Hz), `damping_ratio` (mass-relative, brief 4b-4), optional `range` clamp; drawn as a non-colliding coil
   gizmo. Its three scalar knobs are the ones a future curve editor would vary
   nonlinearly.
 - **Tools** are `ToolContext → (preview, commit-intent)`: a `DraftTool` (draw)
