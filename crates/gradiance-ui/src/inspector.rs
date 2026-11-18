@@ -217,7 +217,7 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
             &mut density,
             1.0,
             0.01,
-            Dimension::Density.symbol(),
+            Dimension::Density,
         ) {
             commit_to_selection(
                 selection,
@@ -501,7 +501,7 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
         } => {
             ui.horizontal(|ui| {
                 ui.label("w");
-                let m = Dimension::Length.symbol();
+                let m = Dimension::Length;
                 let cw = precise_drag_unit(ui, ui.id().with("shape-w"), &mut width, 1.0, 0.01, m);
                 ui.label("h");
                 let ch = precise_drag_unit(ui, ui.id().with("shape-h"), &mut height, 1.0, 0.01, m);
@@ -529,7 +529,7 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
                     &mut radius,
                     0.5,
                     0.01,
-                    Dimension::Length.symbol(),
+                    Dimension::Length,
                 ) {
                     commit_to_selection(
                         selection,
@@ -552,11 +552,11 @@ pub fn shape_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
             half_length,
             radius,
         } => {
-            let m = Dimension::Length.symbol();
+            let m = crate::unit_fields::display(ui.ctx(), Dimension::Length);
             ui.label(format!(
-                "rod · length {:.3} {m} · thickness {:.3} {m}",
-                2.0 * half_length,
-                2.0 * radius
+                "rod · length {} · thickness {}",
+                m.format(2.0 * half_length, 3),
+                m.format(2.0 * radius, 3)
             ));
         }
         ShapeDef::HalfPlane => {
@@ -685,7 +685,7 @@ pub fn depth_section(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyP
     ui.horizontal(|ui| {
         ui.label("front")
             .on_hover_text("depth of the front face (0 = the interaction plane)");
-        let m = Dimension::Length.symbol();
+        let m = Dimension::Length;
         let cn = precise_drag_unit(ui, ui.id().with("depth-near"), &mut near, 0.0, 0.01, m);
         ui.label("back")
             .on_hover_text("depth of the back face (thicker = spans more layers)");

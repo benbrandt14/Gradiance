@@ -251,6 +251,34 @@ pub struct ChromeSettings {
     pub chrome: Chrome,
 }
 
+/// How the editor shows physical quantities: degrees or radians, and the
+/// length scale (Settings > Interface, `units.display`; brief 5-3).
+///
+/// **Workstation config** (CLAUDE.md invariant 4), classified like
+/// [`ChromeSettings`]: it describes the person reading the fields, not the
+/// scene, so it is never undone, and it is not written into the scene file
+/// either: opening someone's scene must not switch your fields to their
+/// units. Display only: authored values, the save format, scripts and
+/// operations stay base SI. It moves to the workstation file with
+/// [`ChromeSettings`] (brief U-10).
+#[derive(
+    Resource,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bevy::reflect::Reflect,
+)]
+#[serde(default)]
+pub struct UnitSettings {
+    /// The display preference (angle unit, length scale).
+    pub prefs: gradiance_units::UnitPrefs,
+}
+
 /// Tool-creation defaults (editor configuration, the Config seam).
 ///
 /// Non-authored, non-persisted workstation preferences the tools consult at

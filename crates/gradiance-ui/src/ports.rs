@@ -21,6 +21,7 @@ use gradiance_domain::signal::{
     GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource, Subjects,
 };
 use gradiance_physics::queries::PhysicsQueries;
+use gradiance_units::Dimension;
 
 /// A body's **sensor ports** as `(label, source)` — the read-only scene reads
 /// it publishes: every body row of the quantity catalog
@@ -67,6 +68,16 @@ pub fn unit(source: &SignalSource) -> &'static str {
     source.dimension().symbol()
 }
 
+/// A sensor readout: a base-SI `value` in the unit the display preference
+/// picks for `dimension`, at a fixed two places so a live row does not
+/// jitter (`0.50 m`, `90.00°`). The joint inspector's limits use the same
+/// preference, so an angle sensor and the limits it is read against agree
+/// (brief 5-3).
+pub fn readout(ctx: &egui::Context, dimension: Dimension, value: f32) -> String {
+    let unit = crate::unit_fields::display(ctx, dimension);
+    format!("{:.2}{}", unit.from_si(f64::from(value)), unit.suffix())
+}
+
 /// Renders a body's sensor ports as live read-only rows (name → value → a
 /// **plot** toggle) plus its derived mass — the read-only half of "every datum
 /// is a port". The plot toggle adds/removes a `SignalSink::Plot` binding for
@@ -101,7 +112,7 @@ pub fn sensor_readouts(
                 row.read_body(&physics.body(e, position, dt))
             });
             match value {
-                Some(mass) => ui.monospace(format!("{mass:.2} {}", row.dimension.symbol())),
+                Some(mass) => ui.monospace(readout(ui.ctx(), row.dimension, mass)),
                 None => widgets::empty_state(ui, "—"),
             };
         });
@@ -130,7 +141,7 @@ pub fn sensor_rows(
         ui.horizontal(|ui| {
             ui.label(label);
             match gradiance_signal::read_source(&source, index, physics, transforms, dt) {
-                Some(value) => ui.monospace(format!("{value:.2} {}", unit(&source))),
+                Some(value) => ui.monospace(readout(ui.ctx(), source.dimension(), value)),
                 None => widgets::empty_state(ui, "—"),
             };
             let plotted = plot_index(bindings, &source).is_some();

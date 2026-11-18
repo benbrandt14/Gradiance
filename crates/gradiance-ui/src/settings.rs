@@ -20,7 +20,7 @@ use gradiance_domain::settings::{
     RenderSettings, ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
 };
 use gradiance_domain::shape::ShapeDef;
-use gradiance_units::Dimension;
+use gradiance_units::{AngleUnit, Dimension, DisplayUnit, LengthUnit};
 
 /// Which settings tab is open.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +80,7 @@ pub fn settings_window(
     mut scenery: ResMut<ScenerySettings>,
     mut debug: ResMut<DebugSettings>,
     mut chrome: ResMut<gradiance_domain::settings::ChromeSettings>,
+    mut units: ResMut<gradiance_domain::settings::UnitSettings>,
     readouts: DebugReadouts,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -139,7 +140,11 @@ pub fn settings_window(
                     ui.separator();
                     debug_readouts(ui, &readouts);
                 }
-                SettingsTab::Interface => interface_tab(ui, &mut chrome),
+                SettingsTab::Interface => {
+                    interface_tab(ui, &mut chrome);
+                    ui.separator();
+                    units_section(ui, &mut units);
+                }
             }
         });
     window.open = open;
@@ -200,6 +205,52 @@ fn interface_tab(
     );
 }
 
+/// The Interface tab's units (brief 5-3): how every field shows angles and
+/// lengths. Workstation config: written directly, never undone, not saved
+/// with the scene (the same write `units.display` makes). Display only:
+/// values stay SI, and a value typed with its unit (`25 cm`, `90 deg`)
+/// converts whatever is shown.
+fn units_section(ui: &mut egui::Ui, units: &mut ResMut<gradiance_domain::settings::UnitSettings>) {
+    widgets::section_header(ui, "Units");
+    let current = units.prefs;
+    egui::Grid::new("units-display")
+        .num_columns(2)
+        .show(ui, |ui| {
+            ui.label("angles");
+            ui.horizontal(|ui| {
+                for (angle, label) in [(AngleUnit::Degrees, "degrees"), (AngleUnit::Radians, "radians")] {
+                    if ui
+                        .selectable_label(current.angle == angle, label)
+                        .on_hover_text("how angle fields and readouts show (yours, not the scene's)")
+                        .clicked()
+                        && current.angle != angle
+                    {
+                        units.prefs.angle = angle;
+                    }
+                }
+            });
+            ui.end_row();
+            ui.label("lengths");
+            ui.horizontal(|ui| {
+                for length in LengthUnit::ALL {
+                    if ui
+                        .selectable_label(current.length == length, length.name())
+                        .on_hover_text("how length fields and readouts show (yours, not the scene's)")
+                        .clicked()
+                        && current.length != length
+                    {
+                        units.prefs.length = length;
+                    }
+                }
+            });
+            ui.end_row();
+        });
+    widgets::hint(
+        ui,
+        "Type a value with its unit in any field (25 cm, 90 deg, 2 kN, 2*pi); a bare number is in the unit shown.",
+    );
+}
+
 /// `SimSettings` fields [`simulation_tab`] draws by hand; any field added
 /// later still appears, through the reflect grid below them.
 pub(crate) const SIM_HAND_DRAWN: &[&str] = &[
@@ -222,21 +273,25 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
         egui::Grid::new("sim-gravity")
             .num_columns(2)
             .show(ui, |ui| {
-                gravity_changed |= widgets::labelled_drag(
+                // The polar angle is kept in degrees; the field shows the
+                // preferred angle unit (brief 5-3).
+                gravity_changed |= widgets::labelled_quantity(
                     ui,
-                    &format!("direction ({})", glyph::DEGREE),
+                    "direction",
                     &mut angle,
                     -180.0..=180.0,
                     1.0,
-                    "counter-clockwise from +x; straight down is -90",
+                    "counter-clockwise from +x; straight down is -90 degrees",
+                    DisplayUnit::DEGREES,
                 );
-                gravity_changed |= widgets::labelled_drag(
+                gravity_changed |= widgets::labelled_quantity(
                     ui,
-                    &format!("strength ({})", Dimension::Acceleration.symbol()),
+                    "strength",
                     &mut magnitude,
                     0.0..=1000.0,
                     0.1,
                     "gravity magnitude; 0 = weightless",
+                    DisplayUnit::canonical(Dimension::Acceleration),
                 );
                 ui.label(
                     egui::RichText::new(format!(
@@ -272,13 +327,14 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
                 1..=64,
                 "solver substeps per physics step: stiffer, more accurate, slower",
             );
-            widgets::labelled_drag(
+            widgets::labelled_quantity(
                 ui,
-                &format!("timestep ({})", Dimension::Frequency.symbol()),
+                "timestep",
                 &mut sim.timestep_hz.0,
                 10.0..=480.0,
                 1.0,
                 "physics steps per second",
+                DisplayUnit::canonical(Dimension::Frequency),
             );
             widgets::labelled_drag(
                 ui,
@@ -410,10 +466,7 @@ fn grid_snap_tab(
         ui,
         egui::Id::new("grid"),
         grid.bypass_change_detection(),
-        &[
-            ("spacing", Dimension::Length.symbol()),
-            ("origin", Dimension::Length.symbol()),
-        ],
+        &[],
         GRID_HAND_DRAWN,
     );
     grid.set_changed();
@@ -425,7 +478,7 @@ fn grid_snap_tab(
         ui,
         egui::Id::new("snap"),
         snap.bypass_change_detection(),
-        &[("rotation_step_deg", "°")],
+        &[("rotation_step_deg", DisplayUnit::DEGREES)],
     );
     snap.set_changed();
     ui.separator();
@@ -520,14 +573,16 @@ fn lighting_tab(
     });
     ui.horizontal(|ui| {
         ui.label("shadow reach");
-        changed |= ui
-            .add(
-                egui::DragValue::new(&mut settings.shadow_distance.0)
-                    .speed(2.0)
-                    .suffix(" m"),
-            )
-            .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
-            .changed();
+        let reach = crate::unit_fields::display(ui.ctx(), Dimension::Length);
+        changed |= crate::unit_fields::drag_value(
+            ui,
+            &mut settings.shadow_distance.0,
+            2.0,
+            None,
+            reach,
+        )
+        .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
+        .changed();
     });
     if changed {
         lighting.set_changed();
@@ -544,10 +599,7 @@ fn lighting_tab(
         ui,
         egui::Id::new("scenery"),
         scenery.bypass_change_detection(),
-        &[
-            ("back_offset", Dimension::Length.symbol()),
-            ("perspective_deg", "°"),
-        ],
+        &[("perspective_deg", DisplayUnit::DEGREES)],
     );
     // reflect_grid edits aren't reported; conservatively mark touched.
     scenery.set_changed();

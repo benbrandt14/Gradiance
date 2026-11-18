@@ -25,6 +25,7 @@
 use crate::widgets;
 use bevy::prelude::*;
 use bevy_egui::egui;
+use gradiance_units::{Dimension, DisplayUnit, UnitPrefs};
 use std::collections::{HashSet, VecDeque};
 
 /// Plot panel visibility.
@@ -75,9 +76,10 @@ fn series_color(ui: &egui::Ui, i: usize) -> egui::Color32 {
 }
 
 /// One plottable series: a bus signal's recorded history with the timestamps
-/// that go with it. `unit` is the SI symbol of the series' binding source
-/// dimension (the P3 catalog) — empty for params, computed signals, and
-/// anything without a dimensioned source.
+/// that go with it. `unit` is the unit the series is drawn in: the display
+/// preference's unit for its binding source's dimension (the P3 catalog;
+/// brief 5-3), a pure number for params, computed signals, and anything
+/// without a dimensioned source. The history itself stays SI.
 ///
 /// `values` and `times` are the same length (the bus records them together),
 /// but the projection to plot points does not assume it.
@@ -85,8 +87,8 @@ fn series_color(ui: &egui::Ui, i: usize) -> egui::Color32 {
 pub struct Series<'a> {
     /// The bus name, as shown in the legend and the picker.
     pub name: &'a str,
-    /// SI unit symbol, or empty.
-    pub unit: &'static str,
+    /// The shown unit (a pure number when the series has none).
+    pub unit: DisplayUnit,
     /// Recorded samples, oldest first.
     pub values: &'a VecDeque<f32>,
     /// Simulated seconds for each sample.
@@ -96,10 +98,10 @@ pub struct Series<'a> {
 impl Series<'_> {
     /// The legend/axis label: the name, plus the unit when the series has one.
     pub fn label(&self) -> String {
-        if self.unit.is_empty() {
+        if self.unit.symbol.is_empty() {
             self.name.to_owned()
         } else {
-            format!("{}  [{}]", self.name, self.unit)
+            format!("{}  [{}]", self.name, self.unit.symbol)
         }
     }
 
@@ -110,7 +112,7 @@ impl Series<'_> {
         self.times
             .iter()
             .zip(self.values.iter())
-            .map(|(&t, &v)| [f64::from(t), f64::from(v)])
+            .map(|(&t, &v)| [f64::from(t), self.unit.from_si(f64::from(v))])
             .collect::<Vec<_>>()
             .into()
     }
@@ -125,18 +127,22 @@ impl Series<'_> {
 pub fn plottable_series<'a>(
     bus: &'a gradiance_signal::SignalBus,
     bindings: &gradiance_domain::signal::SignalBindings,
+    prefs: UnitPrefs,
 ) -> Vec<Series<'a>> {
     bus.entries()
         .filter(|(name, e)| e.history().len() >= 2 && is_plottable(name))
-        .map(|(name, e)| Series {
-            name,
-            unit: bindings
+        .map(|(name, e)| {
+            let dimension = bindings
                 .0
                 .iter()
                 .find(|b| b.name == name)
-                .map_or("", |b| b.source.dimension().symbol()),
-            values: e.history(),
-            times: e.times(),
+                .map_or(Dimension::Dimensionless, |b| b.source.dimension());
+            Series {
+                name,
+                unit: prefs.display(dimension),
+                values: e.history(),
+                times: e.times(),
+            }
         })
         .collect()
 }
@@ -304,7 +310,8 @@ mod tests {
     use super::{Series, is_plottable, visible_series};
     use gradiance_core::ids::StableId;
     use gradiance_signal::SignalSource;
-    use std::collections::{HashSet, VecDeque};
+    use gradiance_units::{Dimension, DisplayUnit, UnitPrefs};
+use std::collections::{HashSet, VecDeque};
 
     #[test]
     fn sensor_ref_names_stay_out_of_the_plot() {
@@ -322,7 +329,7 @@ mod tests {
         let times: VecDeque<f32> = [0.0, 0.1].into_iter().collect();
         let series = |name| Series {
             name,
-            unit: "",
+            unit: DisplayUnit::canonical(Dimension::Dimensionless),
             values: &values,
             times: &times,
         };
@@ -352,7 +359,7 @@ mod tests {
         let times: VecDeque<f32> = [0.0, 0.1, 5.0].into_iter().collect();
         let series = Series {
             name: "speed",
-            unit: "m/s",
+            unit: DisplayUnit::canonical(Dimension::Velocity),
             values: &values,
             times: &times,
         };
@@ -371,7 +378,7 @@ mod tests {
         let times: VecDeque<f32> = [0.0, 0.1].into_iter().collect();
         let series = Series {
             name: "x",
-            unit: "",
+            unit: DisplayUnit::canonical(Dimension::Dimensionless),
             values: &values,
             times: &times,
         };

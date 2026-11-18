@@ -356,7 +356,11 @@ pub fn right_dock(
     // The depth section's plan view: the whole scene, selection highlighted.
     let rows = depth_rows(&selection, &bodies);
     // The plot pane's series list, computed from the bus.
-    let plottable = plot::plottable_series(&plot.bus, &props.bindings);
+    let plottable = plot::plottable_series(
+        &plot.bus,
+        &props.bindings,
+        crate::unit_fields::prefs(ctx),
+    );
     // The outliner snapshot (empty when the pane is closed).
     let outliner_model = if op.panel.is_open() {
         outliner::build_model(&op, &selection)
