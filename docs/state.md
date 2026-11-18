@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (U-7 handoff, stacked on 4b-3 #257; phase gate
+Last updated: 2026-11-18 (4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
 after U-6, #256, b53b019; order per `docs/unified-surface-plan.md` § 10
 and § 13).
 
@@ -21,7 +21,12 @@ and § 13).
   first): `ui::theme` chrome tokens, Blender-dark default, the accent and
   selection from the scene look, presets (`chrome.apply`, workstation
   config, not saved), the colour scanner now covers `gradiance-ui`,
-  review question `chrome`. **U-6** #256 is merged (b53b019): `gradiance ops`,
+  review question `chrome`. **4b-4** scaled defaults in review, **stacked
+  on U-7** (branch `claude/project-thread-tw1mvl-4b4`; merge #257, then
+  #258, then it): springs authored as frequency + damping ratio (format v8),
+  the motor gain fix (the default motor did not turn), clamped restitution
+  and friction, weight-scaled break force, behaviour tests
+  (`tests/it/defaults.rs`), review question `spring-feel`. **U-6** #256 is merged (b53b019): `gradiance ops`,
   `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
   app; the catalog carries a params schema and an example per operation.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
@@ -46,7 +51,7 @@ and § 13).
   7. **U-6** CLI + MCP server (done, #256).
   8. **4b-3** art direction (scene look; in review, #257), then **U-7** theme
      tokens, Blender-leaning (chrome; in review, stacked on #257); then
-     **4b-4** scaled defaults.
+     **4b-4** scaled defaults (in review, stacked on U-7).
   9. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
