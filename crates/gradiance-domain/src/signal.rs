@@ -326,7 +326,7 @@ impl SignalSource {
         Some(format!("{tag}@{}", id.0))
     }
 
-    /// The [`quantity`](crate::quantity) catalog row this source reads, by
+    /// The [`quantity`] catalog row this source reads, by
     /// name. `None` for a [`Named`](Self::Named) bus value, which is not a
     /// scene read. The one place a variant meets the catalog: every other
     /// fact about the read (dimension, label, reader) comes from the row.

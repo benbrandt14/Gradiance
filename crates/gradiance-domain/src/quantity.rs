@@ -482,25 +482,26 @@ mod tests {
     /// The value every row must read off [`known_body`] / [`known_joint`]
     /// (and the origin body, for the pair). A row missing here fails the
     /// test, so every reader is checked.
+    const EXPECTED: &[(&str, f32)] = &[
+        ("speed", 5.0),
+        ("spin", 2.0),
+        ("height", 4.0),
+        ("pos-x", 3.0),
+        ("contact-force", 19.6),
+        ("contact-count", 2.0),
+        // ½·2·25 + ½·0.5·4
+        ("kinetic-energy", 26.0),
+        ("momentum", 10.0),
+        ("angular-momentum", -1.0),
+        ("mass", 2.0),
+        ("distance", 5.0),
+        ("joint-length", 0.75),
+        ("joint-angle", 0.25),
+        ("joint-force", 12.0),
+    ];
+
     fn expected(name: &str) -> Option<f32> {
-        Some(match name {
-            "speed" => 5.0,
-            "spin" => 2.0,
-            "height" => 4.0,
-            "pos-x" => 3.0,
-            "contact-force" => 19.6,
-            "contact-count" => 2.0,
-            // ½·2·25 + ½·0.5·4
-            "kinetic-energy" => 26.0,
-            "momentum" => 10.0,
-            "angular-momentum" => -1.0,
-            "mass" => 2.0,
-            "distance" => 5.0,
-            "joint-length" => 0.75,
-            "joint-angle" => 0.25,
-            "joint-force" => 12.0,
-            _ => return None,
-        })
+        EXPECTED.iter().find(|(n, _)| *n == name).map(|(_, v)| *v)
     }
 
     #[test]

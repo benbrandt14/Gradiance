@@ -30,6 +30,7 @@ mod op_conformance;
 mod packing;
 mod persistence;
 mod physics_sync;
+mod quantities;
 mod reflect_intents;
 mod registry_validation;
 mod remote;
