@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (4b-2 in review; phase gate after U-5, #251, 508b6e5;
+Last updated: 2026-11-18 (phase gate after 4b-2, #254, 666e614;
 order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
@@ -11,15 +11,18 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-2 in review** (branch `claude/project-thread-7kscb7`): a
-  `groups` dock panel; every action an `InvokeOp`, the selection through
-  `body.where` + `SelectTransition`; click table and screenshots in the
-  brief's Outcome. **U-3b merged** (#253, 5027d96). Earlier: U-2c #247,
-  4b-1 #248, U-3 #249, U-4 #250, U-5 #251. Agent containers need
-  `mesa-vulkan-drivers libvulkan1` for the snapshot tests (without them
-  the tests skip unless `GRADIANCE_REQUIRE_GPU=1`). Workers run on Opus
-  while Fable lacks usage credits (owner, 2026-11-17). The session
-  permission check can refuse a merge: then the owner merges (#253, 2026-11-18).
+- **Now:** no brief in flight. Phase gate after U-3b and 4b-2
+  (2026-11-18): **U-3b** #253 (panel verbs are `panel.*` registry
+  operations; 7 VM built-ins remain; the remote surface is registry-only)
+  and **4b-2** #254 (a `groups` dock panel; every action an `InvokeOp`;
+  click table and screenshots in the brief's Outcome) are merged (main
+  666e614). **Next: U-6** CLI + MCP server (no brief yet): both project
+  the registry, which now covers panels and groups with no special cases.
+  Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
+  tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
+  Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
+  The session permission check can refuse a merge: then the owner merges
+  (#253, #254, 2026-11-18).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
@@ -32,8 +35,8 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
      `set-color`, which fixes review scenes re-rolling colours).
   5. **U-3** widget registry + `ui.inspect` + `ui.screenshot` (done,
      #249); **U-4** in-app input injection (done, #250); **U-5**
-     snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (in review) before 4b-2.
-  6. **4b-2** groups panel (on the new registry).
+     snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (done, #253).
+  6. **4b-2** groups panel (done, #254).
   7. **U-6** CLI + MCP server.
   8. **U-7** theme tokens, Blender-leaning, together with **4b-3** art
      direction; then **4b-4** scaled defaults.
@@ -118,6 +121,10 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
     frame, so a fast drag (long first step) can land a body offset by half
     its size (found by U-4's injected drag; README notes it).
 - **Scripting:**
+  - groups panel (4b-2): selection expands to the outermost group, so a
+    nested group's row selects its parent and a colour chip on a mixed
+    group selects the whole group; dock widths below 260 points and a real
+    double-click are unchecked;
   - `bodies-where` has no label filter: labels live in `gradiance-script`,
     above `command`, and need a mirror first (4b-1 Outcome);
   - verbs for `ToolDefaults`/`SnapConfig`/joint props;
