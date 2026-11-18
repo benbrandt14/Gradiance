@@ -7,6 +7,7 @@
 //! evaluates them (the bus, the derived color override, the per-frame
 //! evaluator) lives in the `signal` layer crate.
 
+use crate::quantity::{self, PhysicalQuantity};
 use bevy::prelude::*;
 use colorgrad::Gradient;
 use gradiance_core::ids::StableId;
@@ -56,6 +57,15 @@ pub enum SignalSource {
     /// — by a script
     /// (`signal-set`), a future node, or another binding.
     Named(String),
+}
+
+/// The ids a [`SignalSource`] reads its quantity off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subjects {
+    /// One body or one joint.
+    One(StableId),
+    /// Two bodies.
+    Two(StableId, StableId),
 }
 
 /// Input-domain mapping: `value` is normalized to `t ∈ [0, 1]` over
@@ -316,26 +326,90 @@ impl SignalSource {
         Some(format!("{tag}@{}", id.0))
     }
 
+    /// The [`quantity`](crate::quantity) catalog row this source reads, by
+    /// name. `None` for a [`Named`](Self::Named) bus value, which is not a
+    /// scene read. The one place a variant meets the catalog: every other
+    /// fact about the read (dimension, label, reader) comes from the row.
+    pub const fn quantity_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::Speed(_) => "speed",
+            Self::Spin(_) => "spin",
+            Self::Height(_) => "height",
+            Self::PosX(_) => "pos-x",
+            Self::Distance(..) => "distance",
+            Self::ContactForce(_) => "contact-force",
+            Self::ContactCount(_) => "contact-count",
+            Self::KineticEnergy(_) => "kinetic-energy",
+            Self::Momentum(_) => "momentum",
+            Self::AngularMomentum(_) => "angular-momentum",
+            Self::JointLength(_) => "joint-length",
+            Self::JointAngle(_) => "joint-angle",
+            Self::JointForce(_) => "joint-force",
+            Self::Named(_) => return None,
+        })
+    }
+
+    /// The catalog row this source reads (see
+    /// [`quantity_name`](Self::quantity_name)).
+    pub fn quantity(&self) -> Option<&'static PhysicalQuantity> {
+        quantity::quantity(self.quantity_name()?)
+    }
+
+    /// The ids this source names: one body or joint, or two bodies.
+    pub const fn subjects(&self) -> Option<Subjects> {
+        Some(match self {
+            Self::Speed(id)
+            | Self::Spin(id)
+            | Self::Height(id)
+            | Self::PosX(id)
+            | Self::ContactForce(id)
+            | Self::ContactCount(id)
+            | Self::KineticEnergy(id)
+            | Self::Momentum(id)
+            | Self::AngularMomentum(id)
+            | Self::JointLength(id)
+            | Self::JointAngle(id)
+            | Self::JointForce(id) => Subjects::One(*id),
+            Self::Distance(a, b) => Subjects::Two(*a, *b),
+            Self::Named(_) => return None,
+        })
+    }
+
+    /// The catalog row and the ids it is read off: everything a reader
+    /// needs. `None` for a [`Named`](Self::Named) bus value.
+    pub fn reading(&self) -> Option<(&'static PhysicalQuantity, Subjects)> {
+        Some((self.quantity()?, self.subjects()?))
+    }
+
+    /// The source that reads the catalog row `name` off `subjects` (the
+    /// inverse of [`reading`](Self::reading)). `None` when no variant reads
+    /// that row (a script-only row such as `mass`) or the ids do not fit it.
+    pub fn of_quantity(name: &str, subjects: Subjects) -> Option<Self> {
+        Some(match (name, subjects) {
+            ("speed", Subjects::One(id)) => Self::Speed(id),
+            ("spin", Subjects::One(id)) => Self::Spin(id),
+            ("height", Subjects::One(id)) => Self::Height(id),
+            ("pos-x", Subjects::One(id)) => Self::PosX(id),
+            ("contact-force", Subjects::One(id)) => Self::ContactForce(id),
+            ("contact-count", Subjects::One(id)) => Self::ContactCount(id),
+            ("kinetic-energy", Subjects::One(id)) => Self::KineticEnergy(id),
+            ("momentum", Subjects::One(id)) => Self::Momentum(id),
+            ("angular-momentum", Subjects::One(id)) => Self::AngularMomentum(id),
+            ("joint-length", Subjects::One(id)) => Self::JointLength(id),
+            ("joint-angle", Subjects::One(id)) => Self::JointAngle(id),
+            ("joint-force", Subjects::One(id)) => Self::JointForce(id),
+            ("distance", Subjects::Two(a, b)) => Self::Distance(a, b),
+            _ => return None,
+        })
+    }
+
     /// The physical [`Dimension`](gradiance_units::Dimension) this source
-    /// reads — the P3 catalog binding (`docs/units-decision.md`) that gives
-    /// every plot axis, port readout, and inspector row its unit label from
-    /// one place instead of a hard-coded string per call site. `ContactCount`
-    /// and a `Named` script value carry no declared dimension.
+    /// reads: its catalog row's (units P3, brief 5-2), which gives every plot
+    /// axis, port readout and inspector row its unit label from one place. A
+    /// `Named` script value carries no declared dimension.
     pub fn dimension(&self) -> gradiance_units::Dimension {
-        use gradiance_units::Dimension;
-        match self {
-            Self::Speed(_) => Dimension::Velocity,
-            Self::Spin(_) => Dimension::AngularVelocity,
-            Self::Height(_) | Self::PosX(_) | Self::Distance(..) | Self::JointLength(_) => {
-                Dimension::Length
-            }
-            Self::JointAngle(_) => Dimension::Angle,
-            Self::ContactForce(_) | Self::JointForce(_) => Dimension::Force,
-            Self::KineticEnergy(_) => Dimension::Energy,
-            Self::Momentum(_) => Dimension::Momentum,
-            Self::AngularMomentum(_) => Dimension::AngularMomentum,
-            Self::ContactCount(_) | Self::Named(_) => Dimension::Dimensionless,
-        }
+        self.quantity()
+            .map_or(gradiance_units::Dimension::Dimensionless, |q| q.dimension)
     }
 
     /// Parses a canonical sensor bus name back to its source (inverse of
@@ -976,6 +1050,72 @@ mod tests {
         // Non-body sources have no canonical name.
         assert_eq!(SignalSource::Named("x".into()).bus_name(), None);
         assert_eq!(SignalSource::from_bus_name("nonsense"), None);
+    }
+
+    /// Every source variant, one of each (`Named` included).
+    fn every_source(a: StableId, b: StableId) -> Vec<SignalSource> {
+        vec![
+            SignalSource::Speed(a),
+            SignalSource::Spin(a),
+            SignalSource::Height(a),
+            SignalSource::PosX(a),
+            SignalSource::Distance(a, b),
+            SignalSource::ContactForce(a),
+            SignalSource::ContactCount(a),
+            SignalSource::KineticEnergy(a),
+            SignalSource::Momentum(a),
+            SignalSource::AngularMomentum(a),
+            SignalSource::JointLength(a),
+            SignalSource::JointAngle(a),
+            SignalSource::JointForce(a),
+            SignalSource::Named("x".into()),
+        ]
+    }
+
+    #[test]
+    fn every_scene_source_names_a_catalog_row_of_its_shape() {
+        use crate::quantity::Subject;
+        let (a, b) = (StableId::new(), StableId::new());
+        let mut rows = Vec::new();
+        for source in every_source(a, b) {
+            let Some((row, subjects)) = source.reading() else {
+                assert!(
+                    matches!(source, SignalSource::Named(_)),
+                    "{source:?} names no catalog row (typo in quantity_name?)"
+                );
+                continue;
+            };
+            // The ids fit the row's subject...
+            let fits = matches!(
+                (row.subject(), subjects),
+                (Subject::Body | Subject::Joint, Subjects::One(_))
+                    | (Subject::BodyPair, Subjects::Two(..))
+            );
+            assert!(fits, "{source:?} reads {} with {subjects:?}", row.name);
+            // ...joint variants read joint rows...
+            let joint_variant = matches!(
+                source,
+                SignalSource::JointLength(_)
+                    | SignalSource::JointAngle(_)
+                    | SignalSource::JointForce(_)
+            );
+            assert_eq!(joint_variant, row.subject() == Subject::Joint, "{source:?}");
+            // ...the inverse rebuilds the variant, and the unit is the row's.
+            assert_eq!(
+                SignalSource::of_quantity(row.name, subjects),
+                Some(source.clone())
+            );
+            assert_eq!(source.dimension(), row.dimension);
+            rows.push(row.name);
+        }
+        rows.sort_unstable();
+        rows.dedup();
+        assert_eq!(rows.len(), 13, "two variants share a catalog row");
+        assert_eq!(SignalSource::of_quantity("mass", Subjects::One(a)), None);
+        assert_eq!(
+            SignalSource::of_quantity("speed", Subjects::Two(a, b)),
+            None
+        );
     }
 
     #[test]

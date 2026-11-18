@@ -5,8 +5,9 @@
 //! widgets — it exposes named **ports**. A **sensor** port is a read-only live
 //! quantity (a [`SignalSource`] scene read: height, speed, contact force); an
 //! **actuator** port is a writable channel (a [`SignalSink`]: fill / tracer
-//! color). One curated catalog, reused by the inspector readouts and the
-//! node-graph canvas, read through the single
+//! color). The sensors are the quantity catalog's rows
+//! (`gradiance_domain::quantity`, brief 5-2), reused by the inspector
+//! readouts and the node-graph canvas, read through the single
 //! [`read_source`](gradiance_signal::read_source) reader — no parallel "read a
 //! body quantity" implementation.
 
@@ -15,39 +16,39 @@ use bevy::prelude::*;
 use bevy_egui::egui;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
+use gradiance_domain::quantity::{Subject, quantities_of, quantity};
 use gradiance_domain::signal::{
-    GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource,
+    GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource, Subjects,
 };
 use gradiance_physics::queries::PhysicsQueries;
-use gradiance_units::Mass;
 
 /// A body's **sensor ports** as `(label, source)` — the read-only scene reads
-/// it publishes. The single catalog behind the inspector readouts and the
-/// canvas output pins.
-pub fn body_sensors(id: StableId) -> [(&'static str, SignalSource); 9] {
-    [
-        ("speed", SignalSource::Speed(id)),
-        ("spin", SignalSource::Spin(id)),
-        ("height", SignalSource::Height(id)),
-        ("pos x", SignalSource::PosX(id)),
-        ("force", SignalSource::ContactForce(id)),
-        ("contacts", SignalSource::ContactCount(id)),
-        ("energy", SignalSource::KineticEnergy(id)),
-        ("momentum", SignalSource::Momentum(id)),
-        ("ang mom", SignalSource::AngularMomentum(id)),
-    ]
+/// it publishes: every body row of the quantity catalog
+/// (`gradiance_domain::quantity`) that a [`SignalSource`] can bind, in catalog
+/// order, labelled from the row. The single list behind the inspector
+/// readouts and the canvas output pins.
+pub fn body_sensors(id: StableId) -> Vec<(&'static str, SignalSource)> {
+    sensors_of(Subject::Body, id)
 }
 
 /// A joint's **sensor ports** as `(label, source)` — its live length and
 /// angle (`JointDef::sensor_state`) and its linear reaction force (avian's
-/// `JointForces`), all read through `physics::queries`. The catalog behind
-/// the joint inspector's readouts.
-pub fn joint_sensors(id: StableId) -> [(&'static str, SignalSource); 3] {
-    [
-        ("length", SignalSource::JointLength(id)),
-        ("angle", SignalSource::JointAngle(id)),
-        ("force", SignalSource::JointForce(id)),
-    ]
+/// `JointForces`): the catalog's joint rows. The list behind the joint
+/// inspector's readouts.
+pub fn joint_sensors(id: StableId) -> Vec<(&'static str, SignalSource)> {
+    sensors_of(Subject::Joint, id)
+}
+
+/// The catalog rows read off `subject` that a source can bind, as ports.
+fn sensors_of(subject: Subject, id: StableId) -> Vec<(&'static str, SignalSource)> {
+    quantities_of(subject)
+        .filter_map(|q| {
+            Some((
+                q.label,
+                SignalSource::of_quantity(q.name, Subjects::One(id))?,
+            ))
+        })
+        .collect()
 }
 
 /// A body's **actuator ports** as `(label, sink)` — the writable color
@@ -90,13 +91,21 @@ pub fn sensor_readouts(
         dt,
         bindings,
     );
-    ui.horizontal(|ui| {
-        ui.label("mass");
-        match index.entity(id).and_then(|e| physics.mass_of(e)) {
-            Some(mass) => ui.monospace(format!("{:.2} {}", mass.value(), Mass::UNIT)),
-            None => widgets::empty_state(ui, "—"),
-        };
-    });
+    // Mass is a catalog row no signal source binds (it is not plotted), so
+    // it reads here directly through the row's reader.
+    if let Some(row) = quantity("mass") {
+        ui.horizontal(|ui| {
+            ui.label(row.label);
+            let value = index.entity(id).and_then(|e| {
+                let position = transforms.get(e).ok().map(|t| t.translation.truncate());
+                row.read_body(&physics.body(e, position, dt))
+            });
+            match value {
+                Some(mass) => ui.monospace(format!("{mass:.2} {}", row.dimension.symbol())),
+                None => widgets::empty_state(ui, "—"),
+            };
+        });
+    }
 }
 
 /// Renders sensor ports as live read-only rows (name → value → a **plot**
@@ -175,5 +184,37 @@ mod tests {
         assert_eq!(body_actuators(id).len(), 2, "fill + tracer actuator ports");
         let joint_units: Vec<&str> = joint_sensors(id).iter().map(|(_, s)| unit(s)).collect();
         assert_eq!(joint_units, ["m", "rad", "N"], "joint ports carry SI units");
+    }
+
+    #[test]
+    fn every_port_is_a_catalog_row() {
+        // The no-drift half on the UI side: a port reads its catalog row,
+        // carries the row's label and unit, and names this id.
+        let id = StableId::new();
+        for (label, source) in body_sensors(id).into_iter().chain(joint_sensors(id)) {
+            let (row, subjects) = source.reading().expect("a port reads a catalog row");
+            assert_eq!(row.label, label);
+            assert_eq!(unit(&source), row.dimension.symbol());
+            assert_eq!(subjects, Subjects::One(id));
+        }
+        // Every body row a source can bind is a port (mass is script-only).
+        let names: Vec<&str> = body_sensors(id)
+            .iter()
+            .filter_map(|(_, s)| s.quantity_name())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "speed",
+                "spin",
+                "height",
+                "pos-x",
+                "contact-force",
+                "contact-count",
+                "kinetic-energy",
+                "momentum",
+                "angular-momentum"
+            ]
+        );
     }
 }

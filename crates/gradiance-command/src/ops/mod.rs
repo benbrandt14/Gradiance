@@ -9,7 +9,8 @@
 //! one existing body, [`sets`] edits several at once (booleans, groups),
 //! [`joint`] makes and removes relationships, [`scene`] holds the history,
 //! the new scene, a count and the settings write, [`look`] the scene look
-//! and its settings writes, and [`query`] the read-only queries.
+//! and its settings writes, [`query`] the read-only queries, and
+//! [`quantity`] the quantity catalog's reads.
 //!
 //! # Targets and the selection
 //!
@@ -25,6 +26,7 @@ pub mod body;
 pub mod group;
 pub mod joint;
 pub mod look;
+pub mod quantity;
 pub mod query;
 pub mod scene;
 pub mod sets;
@@ -139,9 +141,11 @@ pub(crate) fn joint_of(
 }
 
 /// Publishes this layer's mirrors into a new operation context: the scene
-/// snapshot and the simulation, render, lighting and scenery settings.
+/// snapshot, the quantity samples and the simulation, render, lighting and
+/// scenery settings.
 fn fill_context(world: &mut World, ctx: &mut OpContext) {
     ctx.insert(snapshot_scene(world));
+    ctx.insert(gradiance_signal::sample_quantities(world));
     if let Some(settings) = world.get_resource::<SimSettings>() {
         ctx.insert(settings.clone());
     }
@@ -175,6 +179,7 @@ impl Plugin for SceneOpsPlugin {
             scene::register(&mut registry);
             look::register(&mut registry);
             query::register(&mut registry);
+            quantity::register(&mut registry);
         }
         app.world_mut()
             .resource_mut::<OpContextFillers>()

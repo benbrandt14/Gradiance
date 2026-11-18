@@ -29,11 +29,14 @@
 pub mod compile;
 
 use avian2d::prelude::Physics;
+use bevy::ecs::system::SystemState;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_core::states::GameState;
-use gradiance_domain::Body;
+use gradiance_domain::quantity::{BodySample, JointSample, QuantitySamples, Subject};
+use gradiance_domain::signal::Subjects;
+use gradiance_domain::{Body, Joint};
 use gradiance_physics::queries::PhysicsQueries;
 use std::collections::VecDeque;
 
@@ -256,10 +259,14 @@ pub fn evaluate_computed(
 
 /// Reads a scene [`SignalSource`] to a scalar — the single shared reader the
 /// binding evaluator and the inspector's sensor-port readouts both use (one
-/// reader, no parallel implementations). [`SignalSource::Named`] is bus-only
-/// (resolved by the caller against the [`SignalBus`]); everything else is a
-/// scene read through the `physics::queries` facade + `Transform`. `None` when
-/// a referenced body isn't resolvable this frame.
+/// reader, no parallel implementations). The source names a row of the
+/// quantity catalog (`gradiance_domain::quantity`), whose reader runs over the
+/// `physics::queries` facade ([`PhysicsQueries::body`] / [`joint`]) — one
+/// trait call per read, allocation-free. [`SignalSource::Named`] is bus-only
+/// (resolved by the caller against the [`SignalBus`]). `None` when a
+/// referenced body isn't resolvable this frame.
+///
+/// [`joint`]: PhysicsQueries::joint
 pub fn read_source(
     source: &SignalSource,
     index: &IdIndex,
@@ -267,52 +274,63 @@ pub fn read_source(
     transforms: &Query<&Transform, With<Body>>,
     dt: f32,
 ) -> Option<f32> {
-    let pos_of = |id: StableId| -> Option<Vec2> {
-        index
-            .entity(id)
-            .and_then(|e| transforms.get(e).ok())
-            .map(|t| t.translation.truncate())
+    let (row, subjects) = source.reading()?;
+    let body = |id: StableId| {
+        let entity = index.entity(id)?;
+        let position = transforms
+            .get(entity)
+            .ok()
+            .map(|t| t.translation.truncate());
+        Some(physics.body(entity, position, dt))
     };
-    match source {
-        SignalSource::Speed(id) => index
-            .entity(*id)
-            .and_then(|e| physics.velocity_of(e))
-            .map(|(v, _)| v.magnitude().value()),
-        SignalSource::Spin(id) => index
-            .entity(*id)
-            .and_then(|e| physics.velocity_of(e))
-            .map(|(_, w)| w.value().abs()),
-        SignalSource::Height(id) => pos_of(*id).map(|p| p.y),
-        SignalSource::PosX(id) => pos_of(*id).map(|p| p.x),
-        SignalSource::Distance(a, b) => match (pos_of(*a), pos_of(*b)) {
-            (Some(pa), Some(pb)) => Some(pa.distance(pb)),
-            _ => None,
-        },
-        SignalSource::ContactForce(id) => index
-            .entity(*id)
-            .map(|e| physics.net_contact_impulse(e).magnitude().value() / dt),
-        SignalSource::ContactCount(id) => {
-            index.entity(*id).map(|e| physics.touching_count(e) as f32)
+    match (row.subject(), subjects) {
+        (Subject::Body, Subjects::One(id)) => row.read_body(&body(id)?),
+        (Subject::BodyPair, Subjects::Two(a, b)) => row.read_pair(&body(a)?, &body(b)?),
+        (Subject::Joint, Subjects::One(id)) => {
+            row.read_joint(&physics.joint(index.entity(id)?, index))
         }
-        SignalSource::KineticEnergy(id) => index
-            .entity(*id)
-            .and_then(|e| Some(physics.kinetic_energy_of(e)?.value())),
-        SignalSource::Momentum(id) => index
-            .entity(*id)
-            .and_then(|e| Some(physics.momentum_of(e)?.value())),
-        SignalSource::AngularMomentum(id) => index
-            .entity(*id)
-            .and_then(|e| Some(physics.angular_momentum_of(e)?.value())),
-        SignalSource::JointLength(id) => index
-            .entity(*id)
-            .and_then(|e| Some(physics.joint_length(e, index)?.value())),
-        SignalSource::JointAngle(id) => index
-            .entity(*id)
-            .and_then(|e| Some(physics.joint_angle(e, index)?.value())),
-        SignalSource::JointForce(id) => index
-            .entity(*id)
-            .and_then(|e| Some(physics.joint_force(e)?.value())),
-        SignalSource::Named(_) => None,
+        _ => None,
+    }
+}
+
+/// Captures every body's and joint's catalog reads once
+/// ([`QuantitySamples`]): the mirror the `quantity` operations read, so a
+/// script run sees one snapshot (scripting rule 3). Empty in a world without
+/// the physics engine's resources (a headless fixture).
+pub fn sample_quantities(world: &mut World) -> QuantitySamples {
+    if !world.contains_resource::<avian2d::prelude::ContactGraph>()
+        || !world.contains_resource::<IdIndex>()
+    {
+        return QuantitySamples::default();
+    }
+    let dt = world
+        .get_resource::<Time<Fixed>>()
+        .map_or(1.0 / 60.0, |t| t.timestep().as_secs_f32())
+        .max(1e-6);
+    let mut state: SystemState<(
+        PhysicsQueries,
+        Res<IdIndex>,
+        Query<(Entity, &StableId, Option<&Transform>), With<Body>>,
+        Query<(Entity, &StableId), With<Joint>>,
+    )> = SystemState::new(world);
+    let Ok((physics, index, bodies, joints)) = state.get(world) else {
+        return QuantitySamples::default();
+    };
+    QuantitySamples {
+        bodies: bodies
+            .iter()
+            .map(|(entity, id, transform)| {
+                let position = transform.map(|t| t.translation.truncate());
+                (
+                    *id,
+                    BodySample::capture(&physics.body(entity, position, dt)),
+                )
+            })
+            .collect(),
+        joints: joints
+            .iter()
+            .map(|(entity, id)| (*id, JointSample::capture(&physics.joint(entity, &index))))
+            .collect(),
     }
 }
 

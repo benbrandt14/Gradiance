@@ -57,7 +57,7 @@ fn scene_read(
 }
 
 /// The metadata every query shares: no menu, no chord, no undo step.
-const fn query(
+pub(super) const fn query(
     id: &'static str,
     lisp: &'static str,
     doc: &'static str,

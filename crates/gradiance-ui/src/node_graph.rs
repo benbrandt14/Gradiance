@@ -32,7 +32,9 @@ use egui_snarl::ui::{BackgroundPattern, PinInfo, SnarlStyle, SnarlViewer, WireSt
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
+use gradiance_domain::quantity::Subject;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::signal::Subjects;
 use gradiance_interaction::selection::Selection;
 use gradiance_physics::queries::PhysicsQueries;
 use gradiance_signal::{
@@ -229,50 +231,24 @@ impl NodeGraph {
     }
 }
 
-/// The index of the sensor output pin a scene [`SignalSource`] maps to — must
-/// match the order of [`body_sensors`]. `None` for sources that aren't a
-/// single body's sensor port (distance, named, joint sensors — joints have no
-/// canvas block yet).
+/// The index of the sensor output pin a scene [`SignalSource`] maps to: its
+/// position in [`body_sensors`] (the catalog's body rows). `None` for sources
+/// that aren't a single body's sensor port (distance, named, joint sensors —
+/// joints have no canvas block yet).
 fn sensor_index(source: &SignalSource) -> Option<usize> {
-    match source {
-        SignalSource::Speed(_) => Some(0),
-        SignalSource::Spin(_) => Some(1),
-        SignalSource::Height(_) => Some(2),
-        SignalSource::PosX(_) => Some(3),
-        SignalSource::ContactForce(_) => Some(4),
-        SignalSource::ContactCount(_) => Some(5),
-        SignalSource::KineticEnergy(_) => Some(6),
-        SignalSource::Momentum(_) => Some(7),
-        SignalSource::AngularMomentum(_) => Some(8),
-        SignalSource::Distance(..)
-        | SignalSource::JointLength(_)
-        | SignalSource::JointAngle(_)
-        | SignalSource::JointForce(_)
-        | SignalSource::Named(_) => None,
-    }
+    let Some(Subjects::One(id)) = source.subjects() else {
+        return None;
+    };
+    body_sensors(id).iter().position(|(_, s)| s == source)
 }
 
 /// The `(GraphKey, output index)` a binding source resolves to, if it maps to
 /// a producer block on the canvas.
 fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
-    match source {
-        SignalSource::Named(name) => Some((GraphKey::Param(name.clone()), 0)),
-        SignalSource::Distance(..) => None,
-        other => {
-            let id = *match other {
-                SignalSource::Speed(id)
-                | SignalSource::Spin(id)
-                | SignalSource::Height(id)
-                | SignalSource::PosX(id)
-                | SignalSource::ContactForce(id)
-                | SignalSource::ContactCount(id)
-                | SignalSource::KineticEnergy(id)
-                | SignalSource::Momentum(id)
-                | SignalSource::AngularMomentum(id) => id,
-                _ => return None,
-            };
-            Some((GraphKey::Body(id), sensor_index(other)?))
-        }
+    match (source, source.subjects()) {
+        (SignalSource::Named(name), _) => Some((GraphKey::Param(name.clone()), 0)),
+        (_, Some(Subjects::One(id))) => Some((GraphKey::Body(id), sensor_index(source)?)),
+        _ => None,
     }
 }
 
@@ -734,25 +710,14 @@ fn binding_input_values(
 /// The bodies a binding references (source + sink).
 fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
     let mut ids = Vec::new();
-    match &binding.source {
-        SignalSource::Speed(id)
-        | SignalSource::Spin(id)
-        | SignalSource::Height(id)
-        | SignalSource::PosX(id)
-        | SignalSource::ContactForce(id)
-        | SignalSource::ContactCount(id)
-        | SignalSource::KineticEnergy(id)
-        | SignalSource::Momentum(id)
-        | SignalSource::AngularMomentum(id) => ids.push(*id),
-        SignalSource::Distance(a, b) => {
-            ids.push(*a);
-            ids.push(*b);
+    // A joint sensor references a joint, not a body: no body block.
+    if let Some((row, subjects)) = binding.source.reading()
+        && row.subject() != Subject::Joint
+    {
+        match subjects {
+            Subjects::One(id) => ids.push(id),
+            Subjects::Two(a, b) => ids.extend([a, b]),
         }
-        // A joint sensor references a joint, not a body: no body block.
-        SignalSource::JointLength(_)
-        | SignalSource::JointAngle(_)
-        | SignalSource::JointForce(_)
-        | SignalSource::Named(_) => {}
     }
     match &binding.sink {
         SignalSink::Fill(id) | SignalSink::TracerColor(id) => ids.push(*id),
