@@ -12,7 +12,7 @@ use gradiance::script::remote::{KEPT_BUILTINS, RemoteControlPlugin, method};
 use serde_json::{Value, json};
 
 /// A paused headless app with the remote surface on (no HTTP transport).
-fn remote_app() -> App {
+pub(crate) fn remote_app() -> App {
     let mut app = headless_app_with(|app| {
         app.add_plugins(RemoteControlPlugin { port: None });
     });
@@ -24,7 +24,7 @@ fn remote_app() -> App {
 }
 
 /// Calls one method as the BRP server would; `None` if it is not served.
-fn call(app: &mut App, name: &str, params: Value) -> Option<BrpResult> {
+pub(crate) fn call(app: &mut App, name: &str, params: Value) -> Option<BrpResult> {
     let id = match app.world().resource::<RemoteMethods>().get(name)? {
         RemoteMethodSystemId::Instant(id) => *id,
         RemoteMethodSystemId::Watching(_) => return None,

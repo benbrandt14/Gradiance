@@ -37,7 +37,11 @@
 //! - [`remote`] — the **external control surface**: Bevy's remote protocol
 //!   (JSON-RPC over HTTP, localhost, off unless `--remote`) bound to the
 //!   operation registry: a call is one registry invocation (a VM built-in is
-//!   one script run). Bevy's built-in world-mutation methods are removed.
+//!   refused: it exists only inside a script run). Bevy's built-in world-mutation methods are removed.
+//!
+//! - [`client`] — the **client doorways**: `gradiance ops` / `gradiance op`
+//!   on the command line and `gradiance mcp` (the Model Context Protocol on
+//!   stdio). Thin clients of a running app's [`remote`] surface; no ECS.
 //!
 //! - [`budget`] — the wall-clock budget one script run gets before it is
 //!   stopped (a guard against runaway scripts, not a scheduler).
@@ -50,6 +54,7 @@
 pub mod actions;
 pub mod bridge;
 pub mod budget;
+pub mod client;
 pub mod ops;
 pub mod reflect_bridge;
 pub mod registry;

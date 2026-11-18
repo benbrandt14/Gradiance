@@ -225,6 +225,8 @@ cargo clippy --workspace --all-targets -- -D warnings   # lint gate == CI
 cargo test --workspace                       # includes tests/boundaries.rs (layer rules)
 cargo run                                    # native app; needs libasound2-dev libudev-dev
 cargo run --features dev                     # dev inner loop: dynamic linking + asset hot-reload
+cargo run -- --remote                        # app with the remote surface (127.0.0.1:15702)
+cargo run -- ops | op <id> … | mcp           # CLI / MCP clients of that app (docs/scripting.md)
 ```
 
 Shared lint policy lives in `[workspace.lints]` (root `Cargo.toml`); every
