@@ -360,7 +360,8 @@ fn the_toolchain_pin_is_one_version() {
     );
 }
 
-/// The colour constructors a literal scene colour would be written with.
+/// The colour constructors a literal scene or chrome colour would be
+/// written with (bevy, the domain `Rgba`, egui's `Color32`).
 const COLOUR_CONSTRUCTORS: &[&str] = &[
     "Color::srgb(",
     "Color::srgba(",
@@ -379,7 +380,18 @@ const COLOUR_CONSTRUCTORS: &[&str] = &[
     "Srgba::rgb(",
     "Rgba::rgb(",
     "Rgba::from_hsl(",
+    "Color32::from_rgb(",
+    "Color32::from_rgba_unmultiplied(",
+    "Color32::from_rgba_premultiplied(",
+    "Color32::from_gray(",
+    "Color32::from_black_alpha(",
+    "Color32::from_white_alpha(",
+    "Color32::from_additive_luminance(",
+    "Color32::from_hex(",
 ];
+
+/// egui's named colours that are not a colour choice: no paint at all.
+const NOT_A_COLOUR: &[&str] = &["Color32::TRANSPARENT", "Color32::PLACEHOLDER"];
 
 /// Whether `code` builds a colour from a number written in place: one of
 /// [`COLOUR_CONSTRUCTORS`] whose first argument starts with a digit (or a
@@ -395,6 +407,12 @@ fn colour_literal(code: &str) -> bool {
     let named = ["css::", "palettes::", "Color::WHITE", "Color::BLACK"]
         .iter()
         .any(|n| code.contains(n));
+    // egui's named constants (`Color32::WHITE`, `Color32::GRAY`, …).
+    let egui_named = code.match_indices("Color32::").any(|(at, n)| {
+        let rest = &code[at..];
+        rest[n.len()..].starts_with(|c: char| c.is_ascii_uppercase())
+            && !NOT_A_COLOUR.iter().any(|ok| rest.starts_with(ok))
+    });
     // A colour field set from a number: `r: 0.1` (not `near: 0.1`).
     let field = ["r: ", "red: "].iter().any(|n| {
         code.match_indices(n).any(|(at, _)| {
@@ -406,21 +424,21 @@ fn colour_literal(code: &str) -> bool {
                 && code[at + n.len()..].starts_with(|c: char| c.is_ascii_digit() || c == '.')
         })
     });
-    literal_arg || named || field
+    literal_arg || named || egui_named || field
 }
 
-/// **One source for scene colour** (brief 4b-3): a colour written as
-/// numbers lives in `gradiance_domain::theme` and nowhere else, as a
-/// non-ASCII glyph lives in `ui::fonts::glyph`. Test modules are exempt
-/// (fixtures name colours), and so is `gradiance-ui`: chrome colour is
-/// egui's and its tokens are brief U-7's (`docs/unified-surface-plan.md`
-/// § 7.1). The `debug` overlay colours live in the theme too, as data.
+/// **One source for colour** (briefs 4b-3 and U-7): a colour written as
+/// numbers lives in a theme module and nowhere else, as a non-ASCII glyph
+/// lives in `ui::fonts::glyph`. Scene colour (and the `debug` overlay
+/// colours) is `gradiance_domain::theme`; chrome colour is
+/// `gradiance_ui::theme`'s tokens (`docs/unified-surface-plan.md` § 7.1).
+/// Test modules are exempt (fixtures name colours).
 #[test]
 fn scene_colours_have_one_source() {
     let root = repo_root();
     let allowed = [
         "crates/gradiance-domain/src/theme.rs",
-        "crates/gradiance-ui/",
+        "crates/gradiance-ui/src/theme.rs",
     ];
     let mut found = Vec::new();
     for file in workspace_sources() {
@@ -467,4 +485,16 @@ fn the_colour_scanner_sees_literals() {
     assert!(colour_literal("r: 0.08,"));
     assert!(!colour_literal("near: 0.5,"));
     assert!(!colour_literal("angular: 0.0,"));
+    assert!(colour_literal("egui::Color32::from_rgb(120, 200, 255)"));
+    assert!(colour_literal("egui::Color32::from_gray(70)"));
+    assert!(colour_literal(
+        ".fill(egui::Color32::from_black_alpha(170))"
+    ));
+    assert!(colour_literal(".color(egui::Color32::WHITE)"));
+    assert!(colour_literal("Stroke::new(1.0, egui::Color32::GRAY)"));
+    assert!(!colour_literal(
+        "egui::Color32::from_rgba_unmultiplied(shade, shade, shade, 200)"
+    ));
+    assert!(!colour_literal(".fill(egui::Color32::TRANSPARENT)"));
+    assert!(!colour_literal("fn f(c: egui::Color32) -> egui::Color32 {"));
 }

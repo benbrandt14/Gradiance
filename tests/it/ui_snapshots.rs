@@ -29,6 +29,7 @@ use gradiance::ui::curve::curve_editor;
 use gradiance::ui::fonts::{self, glyph};
 use gradiance::ui::plot::{PlotConfig, Series, plot_section};
 use gradiance::ui::reflect_grid::reflect_grid;
+use gradiance::ui::theme;
 use gradiance::ui::toolbar::tools_palette_ui;
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -105,7 +106,7 @@ fn gpu() -> Option<MutexGuard<'static, ()>> {
 }
 
 /// Renders `ui` in a central panel of `size` logical points (1 pixel per
-/// point) with the editor's fonts and dark theme, and compares it with
+/// point) with the editor's fonts and default chrome (`ui::theme`), and compares it with
 /// `tests/snapshots/ui/<name>.png`.
 fn snapshot(name: &str, size: egui::Vec2, mut ui: impl FnMut(&mut egui::Ui)) {
     let Some(_gpu) = gpu() else { return };
@@ -122,6 +123,7 @@ fn snapshot(name: &str, size: egui::Vec2, mut ui: impl FnMut(&mut egui::Ui)) {
             egui::CentralPanel::default().show(root, &mut ui);
         });
     fonts::install(&harness.ctx);
+    theme::install(&harness.ctx, &theme::ChromeTheme::default());
     harness.run();
     harness.snapshot_options(name, &options);
 }

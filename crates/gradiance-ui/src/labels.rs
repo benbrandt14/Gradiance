@@ -75,14 +75,15 @@ pub fn draw_workspace_labels(
             .pivot(egui::Align2::CENTER_BOTTOM)
             .interactable(false)
             .show(ctx, |ui| {
+                let tokens = crate::theme::tokens(ui.ctx());
                 egui::Frame::new()
-                    .fill(egui::Color32::from_black_alpha(160))
+                    .fill(tokens.overlay)
                     .corner_radius(4.0)
                     .inner_margin(egui::Margin::symmetric(6, 2))
                     .show(ui, |ui| {
                         ui.label(
                             egui::RichText::new(name)
-                                .color(egui::Color32::from_rgb(235, 235, 220))
+                                .color(tokens.overlay_text)
                                 .monospace()
                                 .size(12.0),
                         );

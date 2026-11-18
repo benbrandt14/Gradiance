@@ -349,13 +349,8 @@ fn draw_layer_grid(painter: &egui::Painter, view: &Projection) {
         }
         let y = view.y_of(d);
         let hue = layer_hue(layer.min(31));
-        let c = gradiance_domain::appearance::Rgba::from_hsl(hue, 0.6, 0.5);
-        let color = egui::Color32::from_rgba_unmultiplied(
-            (c.r * 255.0) as u8,
-            (c.g * 255.0) as u8,
-            (c.b * 255.0) as u8,
-            60,
-        );
+        let color =
+            crate::theme::color32(gradiance_domain::theme::debug::layer(hue).with_alpha(0.235));
         painter.line_segment(
             [
                 egui::pos2(view.rect.left(), y),
@@ -380,6 +375,7 @@ fn draw_layer_grid(painter: &egui::Painter, view: &Projection) {
 /// read as different things: layers are the fixed lattice, depth lines are
 /// where the content actually sits.
 fn draw_depth_lines(painter: &egui::Painter, view: &Projection, lines: &[f32]) {
+    let weak = crate::theme::tokens(painter.ctx()).text_weak;
     for &depth in lines {
         let y = view.y_of(depth);
         painter.line_segment(
@@ -387,7 +383,7 @@ fn draw_depth_lines(painter: &egui::Painter, view: &Projection, lines: &[f32]) {
                 egui::pos2(view.rect.left(), y),
                 egui::pos2(view.rect.right(), y),
             ],
-            egui::Stroke::new(1.0, egui::Color32::from_gray(120)),
+            egui::Stroke::new(1.0, weak),
         );
     }
 }
@@ -400,6 +396,7 @@ fn draw_footprints(
     rows: &[PlanRow],
     drag: Option<BandDrag>,
 ) {
+    let tokens = crate::theme::tokens(painter.ctx());
     for row in rows {
         let shown = match drag {
             Some(d) if d.id == Some(row.id) => d.current,
@@ -420,7 +417,11 @@ fn draw_footprints(
             2.0,
             egui::Stroke::new(
                 if row.selected { 2.0 } else { 1.0 },
-                egui::Color32::from_gray(if row.selected { 240 } else { 120 }),
+                if row.selected {
+                    tokens.text_strong
+                } else {
+                    tokens.text_weak
+                },
             ),
             egui::StrokeKind::Outside,
         );

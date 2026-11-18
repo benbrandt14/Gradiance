@@ -89,3 +89,41 @@ fn look_ops_name_their_errors_and_list_the_looks() {
     assert!((world.resource::<ScenerySettings>().perspective_deg - 15.0).abs() < 1e-6);
     assert!(op(&mut app, "render.set", json!({"path": "nope", "value": 1})).is_err());
 }
+
+/// The chrome preset (brief U-7) is workstation config: `chrome.apply`
+/// switches it with no undo step, it is not saved with the scene, and an
+/// unknown name lists the presets.
+#[test]
+fn the_chrome_preset_is_workstation_config() {
+    use gradiance::domain::settings::{Chrome, ChromeSettings};
+    let mut app = paused_app();
+    op(
+        &mut app,
+        "body.spawn_box",
+        json!({"x": 0, "y": 0, "w": 1, "h": 1}),
+    )
+    .expect("spawns");
+    assert_eq!(
+        app.world().resource::<ChromeSettings>().chrome,
+        Chrome::Blender
+    );
+    let before = undo_depth(&app);
+    op(&mut app, "chrome.apply", json!({"name": "blender-blue"})).expect("applies");
+    assert_eq!(
+        app.world().resource::<ChromeSettings>().chrome,
+        Chrome::BlenderBlue
+    );
+    assert_eq!(undo_depth(&app), before, "no undo step");
+    let saved = gradiance::scene::EnvironmentRecord::capture(app.world());
+    let text = format!("{saved:?}").to_lowercase();
+    assert!(!text.contains("chrome"), "not in the scene file: {text}");
+    let err = op(&mut app, "chrome.apply", json!({"name": "neon"})).expect_err("unknown");
+    assert!(
+        err.contains("blender-blue") && err.contains("stock"),
+        "{err}"
+    );
+    assert_eq!(
+        op(&mut app, "chrome.list", json!({})).expect("lists"),
+        Some(json!(["blender", "blender-blue", "stock"]))
+    );
+}

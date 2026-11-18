@@ -146,7 +146,7 @@ fn computed_block(
         // `(defsignal …)` for now — the node canvas replaces this later.
         ui.monospace(egui::RichText::new(expr_rpn(&signal.expr)).weak());
         if let Some((_, err)) = compiled.errors.iter().find(|(n, _)| *n == signal.name) {
-            ui.colored_label(egui::Color32::from_rgb(220, 120, 120), err);
+            ui.colored_label(ui.visuals().error_fg_color, err);
         }
     }
     if let Some(i) = remove {

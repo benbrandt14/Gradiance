@@ -67,13 +67,12 @@ pub struct PlotConfig {
 
 crate::impl_panel_toggle!(PlotPanel, open);
 
-/// Colours cycled across the plotted signals.
-const SIGNAL_COLORS: [egui::Color32; 4] = [
-    egui::Color32::from_rgb(120, 200, 255),
-    egui::Color32::from_rgb(255, 190, 120),
-    egui::Color32::from_rgb(150, 230, 150),
-    egui::Color32::from_rgb(230, 150, 230),
-];
+/// The colour of the `i`-th plotted signal: the chrome's series tokens,
+/// cycled.
+fn series_color(ui: &egui::Ui, i: usize) -> egui::Color32 {
+    let series = crate::theme::tokens(ui.ctx()).series;
+    series[i % series.len()]
+}
 
 /// One plottable series: a bus signal's recorded history with the timestamps
 /// that go with it. `unit` is the SI symbol of the series' binding source
@@ -224,6 +223,7 @@ fn plot_header(
 /// All visible series on one shared-axis plot — the comparison view.
 fn overlay_plot(ui: &mut egui::Ui, visible: &[Series<'_>], reset: bool) {
     let height = ui.available_height().max(MIN_PLOT_HEIGHT);
+    let colors: Vec<_> = (0..visible.len()).map(|i| series_color(ui, i)).collect();
     base_plot("plot-overlay", height)
         .legend(egui_plot::Legend::default())
         .show(ui, |plot_ui| {
@@ -233,7 +233,7 @@ fn overlay_plot(ui: &mut egui::Ui, visible: &[Series<'_>], reset: bool) {
             for (i, series) in visible.iter().enumerate() {
                 plot_ui.line(
                     egui_plot::Line::new(series.label(), series.points())
-                        .color(SIGNAL_COLORS[i % SIGNAL_COLORS.len()])
+                        .color(colors[i])
                         .width(1.5),
                 );
             }
@@ -246,6 +246,7 @@ fn stacked_plots(ui: &mut egui::Ui, visible: &[Series<'_>], reset: bool) {
     let each = (ui.available_height() / visible.len() as f32).max(MIN_PLOT_HEIGHT);
     for (i, series) in visible.iter().enumerate() {
         ui.label(egui::RichText::new(series.label()).small().weak());
+        let color = series_color(ui, i);
         base_plot(format!("plot-{}", series.name), each)
             // Share the time axis (x only) and the cursor across the stack, so
             // zooming or hovering one series lines up with the rest.
@@ -257,7 +258,7 @@ fn stacked_plots(ui: &mut egui::Ui, visible: &[Series<'_>], reset: bool) {
                 }
                 plot_ui.line(
                     egui_plot::Line::new(series.label(), series.points())
-                        .color(SIGNAL_COLORS[i % SIGNAL_COLORS.len()])
+                        .color(color)
                         .width(1.5),
                 );
             });

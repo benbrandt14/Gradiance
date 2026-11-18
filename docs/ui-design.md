@@ -7,8 +7,9 @@ them, plus the rules that decide where a new surface goes.
 
 Scope: `crates/gradiance-ui` only — the one crate allowed to import `egui`
 (invariant 4). Interaction rules for the *scene* (tools, gestures, snapping)
-live in `docs/roadmap.md` and the tool docs; this is about chrome, plus
-§ 7, the scene look the chrome sits over (brief 4b-3).
+live in `docs/roadmap.md` and the tool docs; this is about chrome (its
+colours: § 8, brief U-7), plus § 7, the scene look the chrome sits over
+(brief 4b-3).
 
 ---
 
@@ -291,8 +292,8 @@ keep the decisions out of the draw call.
 
 The scene — bodies, outlines, backdrop, grounds, lights, and every gizmo
 drawn over them — has one source of colour: `gradiance_domain::theme`. The
-chrome's tokens are U-7's (`docs/unified-surface-plan.md` § 7.1); U-7 may
-read the scene **accent** (`Ink::accent`, the selection colour) from here.
+chrome's tokens are § 8's; they read the scene **accent** (`Ink::accent`,
+the selection colour) from here.
 
 ### Looks
 
@@ -335,8 +336,9 @@ change with the look.
 ### Rules the tests hold
 
 - **One source.** `tests/boundaries.rs` (`scene_colours_have_one_source`)
-  fails on a colour written as numbers (or a `css::` name) outside
-  `theme.rs`, in every crate but `gradiance-ui`. Add a token, not a literal.
+  fails on a colour written as numbers (or a `css::` / `Color32::` name)
+  outside the two theme modules (`gradiance_domain::theme`, `ui::theme`).
+  Add a token, not a literal.
 - **Contrast** (`theme::floors`, WCAG ratio): fill and rod vs backdrop ≥ 3,
   outline vs fill ≥ 3, ink vs backdrop ≥ 3, joint face vs outline ≥ 3,
   ground vs backdrop ≥ 1.2 (a surface, not an object).
@@ -351,3 +353,67 @@ shadow is a flat step. The camera uses a linear tone curve, so the top band
 shows a fill exactly as authored. SSAO stays off: at this scale it changes
 nothing visible (4b-3 Outcome); outlines and banded, layered shadows carry
 the contact cues instead.
+
+---
+
+## 8. Chrome tokens (brief U-7)
+
+The panels draw with **semantic tokens** from `ui::theme`, never with
+colours. `ChromeTheme` is one resolved token set; `visuals()` turns it into
+`egui::Visuals`, and `theme::tokens(ctx)` hands it to a panel that paints
+itself. `ui/src/theme.rs` is the only file in `gradiance-ui` that may write
+a colour as numbers (the one-source scanner, § 7).
+
+| Token | Use | Blender dark |
+|---|---|---|
+| `panel` | docks, side panels | `#303030` |
+| `header` | menu bar, dock tab strips | `#1d1d1d` |
+| `window` | floating windows, menus, popups | `#282828` |
+| `field` | text/number entry, plot and console backgrounds | `#1d1d1d` |
+| `widget` / `widget_hovered` | a button's inner, under the pointer | `#545454` / `#656565` |
+| `outline` / `border` | widget outlines, separators / window edges | `#3d3d3d` / `#161616` |
+| `text` / `text_strong` / `text_weak` | labels / hovered, pressed, selected / hints | `#e6e6e6` / `#ffffff` / `#9e9e9e` |
+| `accent` | the scene look's `Ink::accent`, as authored | studio `#cf5604` |
+| `selected` | selection highlight behind `text_strong` | the accent, darkened to 4.5:1 |
+| `accent_text` | the accent as text (hyperlinks) | the accent, lightened to 4.5:1 |
+| `warning` / `error` / `ok` | report text | `#f0a030` / `#ff7070` / `#78c878` |
+
+Plus the content inks panels paint themselves: `series` (plot lines, the
+curve), `handle`, `chart_grid`, console `syntax_*`, the node canvas
+(`canvas`, `canvas_dot`, `node`, `node_header`, `node_outline`, `pin_in`,
+`pin_out`), the label plates (`overlay`, `overlay_text`), the view cube
+(`cube_*`) and the dials (`dial`, `muted`).
+
+### One accent
+
+The chrome has no accent of its own: it is the active scene look's, so a
+selected tool, tab or list row and a selected body are one hue, and the
+chrome follows Settings ▸ Rendering ▸ Look. The swatch rows (inspector,
+Groups panel) show palette slots in the look's tone too.
+
+### Presets
+
+`Chrome` (`gradiance_domain::settings`) names three token sets: `blender`
+(the default), `blender-blue` (Blender's own `#4772b3` selection; the
+canvas keeps the look's accent) and `stock` (egui's own dark visuals, the
+look before U-7). Settings ▸ Interface picks one; so does
+`(chrome-apply "…")`. The preset is **workstation config**: it describes
+the person at the editor, so it is never undone; and, like `ToolDefaults`,
+it is not written into the scene file, so opening someone's scene never
+restyles your panels (a workstation file is U-10's). The owner's pick is
+the review question `chrome`.
+
+### Rules the tests hold
+
+- **Contrast** (`ui::theme` tests, WCAG): every text token — normal, strong,
+  weak, accent text, warning, error, ok, console syntax — reads at ≥ 4.5:1
+  on every surface it sits on (panel, window, field, header; strong text on
+  the hovered widget and on the selection), for both Blender presets over
+  every scene look. Text over the scene sits on the `overlay` plate and
+  reads at ≥ 4.5:1 over every look's backdrop. Plot series and the curve
+  handle are marks: ≥ 3:1 on `field`. `stock` is exempt: it is egui's, kept
+  for comparison (its weak text is 2.7:1).
+- **One accent:** the selection keeps the accent's hue (channel order) in
+  every look.
+- **Lean Blender:** the default surfaces are neutral greys, and no two
+  adjacent surfaces differ by 2:1 or more (low-contrast chrome).

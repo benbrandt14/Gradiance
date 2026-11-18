@@ -77,6 +77,7 @@ pub fn view_cube(
                 (center + egui::vec2(v.x, -v.y) * HALF, v.z)
             };
             let painter = ui.painter_at(rect);
+            let tokens = crate::theme::tokens(ui.ctx());
 
             // Faces, back-to-front by view depth.
             let faces: [(Vec3, &str); 6] = [
@@ -116,7 +117,7 @@ pub fn view_cube(
                 .collect();
                 let hovered = hover.is_some_and(|h| point_in_quad(h, &corners));
                 let shade = (105.0 + depth * 65.0) as u8;
-                let (fill, edge) = face_colors(hovered, shade);
+                let (fill, edge) = face_colors(&tokens, hovered, shade);
                 painter.add(egui::Shape::convex_polygon(
                     corners.clone(),
                     fill,
@@ -127,7 +128,7 @@ pub fn view_cube(
                     egui::Align2::CENTER_CENTER,
                     *label,
                     egui::FontId::proportional(11.0),
-                    egui::Color32::from_gray(30),
+                    tokens.cube_label,
                 );
             }
 
@@ -172,16 +173,17 @@ pub fn view_cube(
 /// A cube face's translucent `(fill, edge)` colors — faces are semi-transparent
 /// so the scene reads behind the cube, with a brighter edge highlight (brightest
 /// on the hovered face) so the cube's silhouette stays crisp.
-fn face_colors(hovered: bool, shade: u8) -> (egui::Color32, egui::Color32) {
+fn face_colors(
+    tokens: &crate::theme::ChromeTheme,
+    hovered: bool,
+    shade: u8,
+) -> (egui::Color32, egui::Color32) {
     if hovered {
-        (
-            egui::Color32::from_rgba_unmultiplied(190, 175, 90, 235),
-            egui::Color32::from_gray(220),
-        )
+        (tokens.cube_hovered, tokens.cube_edge_hovered)
     } else {
         (
             egui::Color32::from_rgba_unmultiplied(shade, shade, shade, 200),
-            egui::Color32::from_gray(130),
+            tokens.cube_edge,
         )
     }
 }

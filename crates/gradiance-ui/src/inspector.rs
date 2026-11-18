@@ -583,7 +583,7 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
             let current =
                 (c.r, c.g, c.b) == (appearance.fill.r, appearance.fill.g, appearance.fill.b);
             let button = egui::Button::new("")
-                .fill(swatch_color32(c))
+                .fill(swatch_color32(ui.ctx(), c))
                 .min_size(egui::vec2(16.0, 16.0))
                 .selected(current);
             if ui.add(button).on_hover_text(swatch.name).clicked() {
@@ -645,11 +645,14 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
     }
 }
 
-/// A domain color as an egui swatch fill (both are sRGB-encoded; render
-/// converts `Rgba` with `Color::srgba` too).
-pub(crate) fn swatch_color32(c: gradiance_domain::appearance::Rgba) -> egui::Color32 {
-    let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    egui::Color32::from_rgba_unmultiplied(byte(c.r), byte(c.g), byte(c.b), byte(c.a))
+/// A body colour as an egui swatch fill, in the active scene look's tone
+/// ([`SceneTheme::display`](gradiance_domain::theme::SceneTheme::display)):
+/// a palette slot shows as the canvas shows it, a custom colour as authored.
+pub(crate) fn swatch_color32(
+    ctx: &egui::Context,
+    c: gradiance_domain::appearance::Rgba,
+) -> egui::Color32 {
+    crate::theme::color32(crate::theme::tokens(ctx).look.display(c))
 }
 
 /// The depth editor: numeric front/back faces of the authored band

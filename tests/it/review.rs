@@ -94,7 +94,7 @@ fn expected_bodies(question: &str) -> &'static [usize] {
         "fillet-bulge" => &[3, 3],
         "shading" => &[8, 8, 8],
         // ground + 12 bodies (docs/review/scenes/look/scene.scm)
-        "look" | "toon-lighting" => &[13, 13, 13],
+        "look" | "toon-lighting" | "chrome" => &[13, 13, 13],
         _ => &[],
     }
 }

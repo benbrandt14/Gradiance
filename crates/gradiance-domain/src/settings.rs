@@ -176,6 +176,81 @@ impl CameraSettings {
     }
 }
 
+/// A chrome preset: which token set the editor's panels are drawn with
+/// (brief U-7; the tokens are `gradiance_ui::theme`). Names only: the
+/// colours live in the UI crate, the one crate that knows egui.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
+pub enum Chrome {
+    /// Blender's default dark greys; the selection highlight is the scene
+    /// look's accent, so a selected row and a selected body agree.
+    #[default]
+    Blender,
+    /// Blender's greys with Blender's own blue selection highlight (the
+    /// scene accent stays on the canvas).
+    BlenderBlue,
+    /// The UI toolkit's stock dark visuals, as the editor looked before
+    /// U-7 (kept for comparison).
+    Stock,
+}
+
+impl Chrome {
+    /// Every preset, in menu order (the first is the default).
+    pub const ALL: [Self; 3] = [Self::Blender, Self::BlenderBlue, Self::Stock];
+
+    /// The stable name operations and review scenes use.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Blender => "blender",
+            Self::BlenderBlue => "blender-blue",
+            Self::Stock => "stock",
+        }
+    }
+
+    /// The menu label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Blender => "Blender dark",
+            Self::BlenderBlue => "Blender dark, blue selection",
+            Self::Stock => "Stock (before U-7)",
+        }
+    }
+
+    /// The preset called `name`, if any.
+    #[must_use]
+    pub fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.name() == name)
+    }
+}
+
+/// The chrome preset in use (Settings > Interface, `chrome.apply`).
+///
+/// **Workstation config** (CLAUDE.md invariant 4): it describes the person
+/// at the editor, not the scene, so it is never undone. Like
+/// [`ToolDefaults`] it is not written into the scene file either: a scene
+/// opened from someone else must not change your panels. A workstation file
+/// is brief U-10's (dock layouts); the preset moves there with them.
+#[derive(
+    Resource,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bevy::reflect::Reflect,
+)]
+#[serde(default)]
+pub struct ChromeSettings {
+    /// The active preset.
+    pub chrome: Chrome,
+}
+
 /// Tool-creation defaults (editor configuration, the Config seam).
 ///
 /// Non-authored, non-persisted workstation preferences the tools consult at

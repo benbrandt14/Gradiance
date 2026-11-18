@@ -405,14 +405,15 @@ fn region_tags(
             .pivot(egui::Align2::CENTER_BOTTOM)
             .interactable(false)
             .show(ctx, |ui| {
+                let tokens = crate::theme::tokens(ui.ctx());
                 egui::Frame::new()
-                    .fill(egui::Color32::from_black_alpha(170))
+                    .fill(tokens.overlay)
                     .corner_radius(4.0)
                     .inner_margin(egui::Margin::symmetric(8, 3))
                     .show(ui, |ui| {
                         ui.label(
                             egui::RichText::new(format!("{}  {}", option_letter(i), region.label))
-                                .color(egui::Color32::WHITE)
+                                .color(tokens.text_strong)
                                 .strong(),
                         );
                     });

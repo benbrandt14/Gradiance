@@ -221,7 +221,7 @@ impl GroupsModel {
             bodies
                 .iter()
                 .find(|b| b.id == id)
-                .map_or(Rgba::rgb(1.0, 1.0, 1.0), |b| b.fill)
+                .map_or_else(unpainted, |b| b.fill)
         };
         let row = |i: usize, depth: usize| {
             let g = &index.groups[i];
@@ -231,10 +231,7 @@ impl GroupsModel {
                 name: names.get(g.id).unwrap_or_default().to_owned(),
                 count: g.members.len(),
                 depth,
-                fill: g
-                    .members
-                    .first()
-                    .map_or(Rgba::rgb(1.0, 1.0, 1.0), |m| fill_of(*m)),
+                fill: g.members.first().map_or_else(unpainted, |m| fill_of(*m)),
             }
         };
         // Depth-first from the roots; `seen` guards against a malformed
@@ -502,7 +499,7 @@ fn colour_row(ui: &mut egui::Ui, group: usize, out: &mut GroupsOutput) {
             let response = ui
                 .add(
                     egui::Button::new("")
-                        .fill(crate::inspector::swatch_color32(c))
+                        .fill(crate::inspector::swatch_color32(ui.ctx(), c))
                         .min_size(egui::vec2(16.0, 16.0)),
                 )
                 .on_hover_text(entry.name);
@@ -614,7 +611,7 @@ fn chip(ui: &mut egui::Ui, panel: &mut GroupsPanel, clause: &str, label: &str, f
     if let Some(c) = fill {
         // A colour chip keeps its colour either way: dim when off, full and
         // outlined when on.
-        let colour = crate::inspector::swatch_color32(c);
+        let colour = crate::inspector::swatch_color32(ui.ctx(), c);
         button = if on {
             button
                 .fill(colour)
@@ -652,11 +649,16 @@ fn prop_picker(ui: &mut egui::Ui, salt: &str, prop: &mut usize, name: &str) {
     publish(name, &response);
 }
 
+/// The fill of a body with no `Appearance` (as the canvas draws it).
+fn unpainted() -> Rgba {
+    gradiance_domain::appearance::Appearance::default().fill
+}
+
 /// A small filled square.
 fn swatch(ui: &mut egui::Ui, fill: Rgba, size: egui::Vec2) {
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
     ui.painter()
-        .rect_filled(rect, 2.0, crate::inspector::swatch_color32(fill));
+        .rect_filled(rect, 2.0, crate::inspector::swatch_color32(ui.ctx(), fill));
 }
 
 fn set(group: usize, prop: &str, v: f64) -> InvokeOp {
@@ -703,7 +705,7 @@ pub(crate) fn build_model(
         .map(|(id, shape, groups, appearance)| BodyFacts {
             id: *id,
             groups: groups.map_or_default(|g| g.0.clone()),
-            fill: appearance.map_or(Rgba::rgb(1.0, 1.0, 1.0), |a| a.fill),
+            fill: appearance.map_or_else(unpainted, |a| a.fill),
             kind: shape.kind_label(),
         })
         .collect();

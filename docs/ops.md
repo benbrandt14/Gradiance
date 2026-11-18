@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 79 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 81 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -55,6 +55,13 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 |---|---|---|---|---|---|---|
 | `camera.get` | `(camera-get path)` | query | — | — | Read a camera-feel setting: "zoom_step", "pan_speed", "orbit_speed_deg"; NaN if the path does not resolve. | `{"path": "zoom_step"}` |
 | `camera.set` | `(camera-set path value)` | config | — | — | Set a camera-feel setting by reflect-path (workstation config, never undone). | `{"path": "pan_speed", "value": 900}` |
+
+## `chrome`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `chrome.apply` | `(chrome-apply name)` | config | — | — | Draw the editor panels with a chrome preset (blender, blender-blue, stock); workstation config, never undone. | `{"name": "blender"}` |
+| `chrome.list` | `(chromes)` | query | — | — | Every chrome preset's name, in menu order (the first is the default). | `{}` |
 
 ## `edit`
 

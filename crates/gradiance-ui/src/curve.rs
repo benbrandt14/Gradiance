@@ -112,10 +112,11 @@ pub fn curve_editor(ui: &mut egui::Ui, id_salt: &str, curve: &mut Curve) -> bool
 
 /// Paints the reference diagonal, the sampled curve, and the control points.
 fn draw(plot_ui: &mut egui_plot::PlotUi<'_>, curve: &Curve) {
+    let tokens = crate::theme::tokens(plot_ui.ctx());
     // The identity, so you can see at a glance which way the curve bends.
     plot_ui.line(
         egui_plot::Line::new("identity", vec![[0.0, 0.0], [1.0, 1.0]])
-            .color(egui::Color32::from_gray(70))
+            .color(tokens.chart_grid)
             .width(1.0),
     );
     let samples: Vec<[f64; 2]> = (0..=CURVE_SAMPLES)
@@ -126,7 +127,7 @@ fn draw(plot_ui: &mut egui_plot::PlotUi<'_>, curve: &Curve) {
         .collect();
     plot_ui.line(
         egui_plot::Line::new("curve", samples)
-            .color(egui::Color32::from_rgb(120, 200, 255))
+            .color(tokens.series[0])
             .width(2.0),
     );
     let points: Vec<[f64; 2]> = curve
@@ -137,7 +138,7 @@ fn draw(plot_ui: &mut egui_plot::PlotUi<'_>, curve: &Curve) {
     plot_ui.points(
         egui_plot::Points::new("points", points)
             .radius(4.0)
-            .color(egui::Color32::from_rgb(255, 220, 140)),
+            .color(tokens.handle),
     );
 }
 

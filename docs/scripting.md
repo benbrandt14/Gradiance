@@ -176,6 +176,9 @@ across and ±3.5 m up and down); angles are radians.
 ;; camera feel — workstation config: saved with the scene, never undone
 (camera-get "zoom_step")     ; zoom multiplier per scroll notch (0.5..0.995)
 (camera-set "pan_speed" 900) ; arrow-key pan, screen px/s; also "orbit_speed_deg"
+;; chrome preset — workstation config: never undone, not saved (brief U-7)
+(chromes)                    ; ("blender" "blender-blue" "stock")
+(chrome-apply "blender-blue") ; draw the panels with another preset
 
 ;; editor — the chrome, through the EditorState seam (panel.* operations)
 (panel-show "properties")    ; open a panel — the same toggle the View menu drives

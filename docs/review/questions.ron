@@ -88,5 +88,32 @@ Bodies keep their palette slot across looks: a red body stays red, in the look's
                 ),
             ],
         ),
+        (
+            id: "chrome",
+            title: "Which panel chrome should be the default?",
+            source: "Phase U, brief U-7 theme tokens (docs/briefs/U-7-theme-tokens.md); plan section 7.1",
+            description: r#"The panels (not the scene) now draw with theme tokens. Three presets of the same tokens; the default leans to Blender's default dark theme: neutral greys (#303030 panels, #1d1d1d tab strips and fields, #545454 buttons), bright text, and one accent.
+
+The accent is the scene look's accent (the colour a selected body is outlined in), so a selected tool, tab or row and a selected body are one hue; it changes with Settings > Rendering > Look. "Blue selection" keeps Blender's own blue (#4772b3) for the panels instead, so panels and canvas use two highlight colours. "Stock" is how the panels looked before (egui's dark theme: darker panels, grey 140 text, weak text at 2.7:1).
+
+Try: click tools in the palette, open Settings and switch tabs, open the View menu, select a body and read the Properties panel, apply another look (Settings > Rendering > Look, or (look-apply "blueprint") in the console) and see the accent follow. The preset is yours, not the scene's: it is not saved and not undone (Settings > Interface)."#,
+            options: [
+                (
+                    label: "Blender dark, scene accent",
+                    caption: "Blender's greys; selection in the look's accent (studio: orange). The new default.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/chrome/blender.scm"],
+                ),
+                (
+                    label: "Blender dark, blue selection",
+                    caption: "Blender's greys and Blender's blue selection; the canvas keeps the look's accent.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/chrome/blender-blue.scm"],
+                ),
+                (
+                    label: "Stock (before)",
+                    caption: "egui's stock dark theme, as before U-7: darker, dimmer text, teal selection.",
+                    scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/chrome/stock.scm"],
+                ),
+            ],
+        ),
     ],
 )

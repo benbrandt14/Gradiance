@@ -2,8 +2,9 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (phase gate after U-6, #256, b53b019;
-order per `docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-18 (U-7 handoff, stacked on 4b-3 #257; phase gate
+after U-6, #256, b53b019; order per `docs/unified-surface-plan.md` § 10
+and § 13).
 
 ## Position
 
@@ -14,7 +15,13 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
 - **Now:** **4b-3** art direction in review (PR #257): three scene looks
   (`gradiance_domain::theme`, studio default), one colour source
   (boundaries test), toon bands now visible (cap winding, light levels,
-  banded planes), review questions `look` and `toon-lighting` added. **U-6** #256 is merged (b53b019): `gradiance ops`,
+  banded planes), review questions `look` and `toon-lighting` added.
+  **U-7** theme tokens in review, **stacked on 4b-3** (branch
+  `claude/project-thread-tw1mvl-u7`, base #257's branch; merge #257
+  first): `ui::theme` chrome tokens, Blender-dark default, the accent and
+  selection from the scene look, presets (`chrome.apply`, workstation
+  config, not saved), the colour scanner now covers `gradiance-ui`,
+  review question `chrome`. **U-6** #256 is merged (b53b019): `gradiance ops`,
   `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
   app; the catalog carries a params schema and an example per operation.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
@@ -38,7 +45,8 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   6. **4b-2** groups panel (done, #254).
   7. **U-6** CLI + MCP server (done, #256).
   8. **4b-3** art direction (scene look; in review, #257), then **U-7** theme
-     tokens, Blender-leaning (chrome); then **4b-4** scaled defaults.
+     tokens, Blender-leaning (chrome; in review, stacked on #257); then
+     **4b-4** scaled defaults.
   9. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
@@ -67,6 +75,8 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   - **Merge freely when CI is green** and no tests or checks were removed to
     get there (2026-11-16).
   - **Orchestrator rotation at gates is skipped.**
+  - **Stacked PRs (2026-11-18):** threads keep working as stacked PRs, one
+    branch per brief on the previous; the owner merges bottom-up.
   - **UI and op-surface direction** (2026-11-17, `docs/unified-surface-plan.md`
     § 0): excellent egui polish is now wanted (overrides `orchestration.md`
     Future intent 1's "don't polish"); lean to Blender's theme; upgrade crates

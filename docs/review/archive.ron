@@ -369,5 +369,32 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief U-6 Decisions 1.",
         ),
+        (
+            question: (
+                id: "chrome-preset-persistence",
+                title: "Is the chrome preset saved with the scene?",
+                source: "brief U-7 Decisions; CLAUDE.md invariant 4 (workstation config)",
+                description: r#"The chrome preset (Settings > Interface, `chrome-apply`) is workstation config: it describes the person at the editor, so undo never touches it. Invariant 4's workstation resources (`GridSettings`, `SnapConfig`, `CameraSettings`) are also written into the scene file; `ToolDefaults` is not."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not saved (like ToolDefaults)",
+                        caption: r#"Recommended. Opening someone else's scene never restyles your panels; the preset resets to the default at start-up until U-10 adds a workstation file (dock layouts), where it moves. No format change."#,
+                    ),
+                    (
+                        label: "Saved with the scene (like the grid)",
+                        caption: r#"The preset survives a restart through the last saved scene, but each scene file carries one, so opening an older or shared file switches your chrome. One more `EnvironmentRecord` field and regenerated goldens."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chrome-preset-persistence",
+                title: "Is the chrome preset saved with the scene?",
+                choice: Picked("Not saved (like ToolDefaults)"),
+                note: "Decided by the session, not by the owner. Owner instruction, 2026-11-17: Go with your best estimates for all these questions.",
+                answered_at: "2026-11-18T16:00:00Z",
+            ),
+            ingested_as: "Brief U-7 Decisions; docs/ui-design.md sec. 8 Presets.",
+        ),
     ],
 )

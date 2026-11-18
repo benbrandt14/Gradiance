@@ -38,6 +38,8 @@ pub enum SettingsTab {
     Lighting,
     /// Debug overlays and internals readouts.
     Debug,
+    /// The chrome preset (workstation config, brief U-7).
+    Interface,
 }
 
 /// Read-only internals shown by the Debug tab.
@@ -77,6 +79,7 @@ pub fn settings_window(
     mut lighting: ResMut<LightingSettings>,
     mut scenery: ResMut<ScenerySettings>,
     mut debug: ResMut<DebugSettings>,
+    mut chrome: ResMut<gradiance_domain::settings::ChromeSettings>,
     readouts: DebugReadouts,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -96,6 +99,7 @@ pub fn settings_window(
                 ui.selectable_value(&mut window.tab, SettingsTab::Rendering, "Rendering");
                 ui.selectable_value(&mut window.tab, SettingsTab::Lighting, "Lighting");
                 ui.selectable_value(&mut window.tab, SettingsTab::Debug, "Debug");
+                ui.selectable_value(&mut window.tab, SettingsTab::Interface, "Interface");
             });
             ui.separator();
             match window.tab {
@@ -135,6 +139,7 @@ pub fn settings_window(
                     ui.separator();
                     debug_readouts(ui, &readouts);
                 }
+                SettingsTab::Interface => interface_tab(ui, &mut chrome),
             }
         });
     window.open = open;
@@ -167,6 +172,32 @@ fn look_picker(
             }
         }
     });
+}
+
+/// The Interface tab: the chrome preset (brief U-7). Workstation config:
+/// written directly, never undone, not saved with the scene (the same
+/// write `chrome.apply` makes).
+fn interface_tab(
+    ui: &mut egui::Ui,
+    chrome: &mut ResMut<gradiance_domain::settings::ChromeSettings>,
+) {
+    use gradiance_domain::settings::Chrome;
+    widgets::section_header(ui, "Chrome");
+    let current = chrome.chrome;
+    for preset in Chrome::ALL {
+        if ui
+            .selectable_label(current == preset, preset.label())
+            .on_hover_text("draw the panels with this preset (yours, not the scene's)")
+            .clicked()
+            && current != preset
+        {
+            chrome.chrome = preset;
+        }
+    }
+    widgets::hint(
+        ui,
+        "The selection highlight follows the scene look's accent (Rendering > Look).",
+    );
 }
 
 /// `SimSettings` fields [`simulation_tab`] draws by hand; any field added
@@ -282,14 +313,15 @@ fn gravity_dial(ui: &mut egui::Ui, angle_deg: &mut f32, magnitude: f32) -> bool 
         }
     }
     let painter = ui.painter_at(rect);
-    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, egui::Color32::GRAY));
+    let tokens = crate::theme::tokens(ui.ctx());
+    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, tokens.dial));
     let a = angle_deg.to_radians();
     let dir = egui::vec2(a.cos(), -a.sin());
     // Weightless: a dot, not an arrow — there is no direction to show.
     let color = if magnitude > f32::EPSILON {
         ui.visuals().strong_text_color()
     } else {
-        egui::Color32::from_gray(90)
+        tokens.muted
     };
     painter.arrow(center, dir * RADIUS, egui::Stroke::new(2.0, color));
     response.on_hover_text("drag to aim gravity");
@@ -565,24 +597,14 @@ fn sun_gadget(ui: &mut egui::Ui, index: usize, light: &mut KeyLightSettings) -> 
     }
 
     let painter = ui.painter_at(rect);
-    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, egui::Color32::GRAY));
-    painter.circle_stroke(
-        center,
-        RADIUS * 0.5,
-        egui::Stroke::new(0.5, egui::Color32::from_gray(90)),
-    );
+    let tokens = crate::theme::tokens(ui.ctx());
+    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, tokens.dial));
+    painter.circle_stroke(center, RADIUS * 0.5, egui::Stroke::new(0.5, tokens.muted));
     let azimuth = light.azimuth_deg.to_radians();
     let r = (1.0 - (light.elevation_deg / 90.0).clamp(0.0, 1.0)) * RADIUS;
     let handle = center + egui::vec2(azimuth.cos(), -azimuth.sin()) * r;
-    painter.line_segment(
-        [center, handle],
-        egui::Stroke::new(1.0, egui::Color32::from_gray(120)),
-    );
-    let tint = egui::Color32::from_rgb(
-        (light.color.r * 255.0) as u8,
-        (light.color.g * 255.0) as u8,
-        (light.color.b * 255.0) as u8,
-    );
+    painter.line_segment([center, handle], egui::Stroke::new(1.0, tokens.dial));
+    let tint = crate::theme::color32(light.color.with_alpha(1.0));
     painter.circle_filled(handle, 6.0, tint);
     response.on_hover_text("drag the sun: angle = light direction, center = head-on");
     changed

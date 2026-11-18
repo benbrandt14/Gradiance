@@ -75,6 +75,7 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<gradiance_domain::settings::DebugSettings>();
         app.init_resource::<gradiance_domain::settings::ToolDefaults>();
         app.init_resource::<gradiance_domain::settings::CameraSettings>();
+        app.init_resource::<gradiance_domain::settings::ChromeSettings>();
         // Register the config-seam settings for reflection: the scripting
         // registry addresses these resources by reflected type name
         // (see `docs/script-lisp-decision.md`).
@@ -83,6 +84,7 @@ impl Plugin for InteractionPlugin {
         app.register_type::<gradiance_domain::settings::DebugSettings>();
         app.register_type::<gradiance_domain::settings::ToolDefaults>();
         app.register_type::<gradiance_domain::settings::CameraSettings>();
+        app.register_type::<gradiance_domain::settings::ChromeSettings>();
         // The layout optimizer: its config is a settings-style resource (the
         // Config seam — UI edits it directly), its session is transient editor
         // state, and its two request messages are not command intents.

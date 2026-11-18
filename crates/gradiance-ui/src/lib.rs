@@ -38,6 +38,7 @@ pub mod reflect_grid;
 pub mod review;
 pub mod settings;
 pub mod signals;
+pub mod theme;
 pub mod toolbar;
 pub mod vendor;
 pub mod view_cube;
@@ -236,6 +237,7 @@ impl Plugin for GradianceUiPlugin {
             (
                 widget_registry::begin_frame,
                 fonts::install_fonts,
+                theme::apply_chrome,
                 menu::menu_bar,
                 toolbar::toolbar,
                 dock::right_dock,
