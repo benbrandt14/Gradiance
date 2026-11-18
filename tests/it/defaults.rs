@@ -421,8 +421,8 @@ fn a_default_slider_motor_reaches_its_speed_at_any_mass() {
         let vs: Vec<f32> = (0..60)
             .map(|_| {
                 step(&mut app, 1);
-                // The world pin is body B: B against A is minus the body.
-                -app.world().get::<LinearVelocity>(e).map_or(0.0, |v| v.0.x)
+                // A world pin drives the body along the axis (brief A-2).
+                app.world().get::<LinearVelocity>(e).map_or(0.0, |v| v.0.x)
             })
             .collect();
         let d = drive(&vs, target);

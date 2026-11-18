@@ -128,9 +128,10 @@ pub fn sync_joints(
         // it, hinge limits measure from it — instead of snapping rotated
         // bodies into alignment.
         //
-        // A world-pin hinge is derived world first, `(pin, body A)`, so its
-        // motor, limits and angle describe the body against the world
-        // (`JointDef::world_first`); the basis is then the opposite angle.
+        // A world-pin hinge or slider is derived world first, `(pin, body
+        // A)`, so its motor, limits and angle or travel describe the body
+        // against the world (`JointDef::world_first`); the basis is then the
+        // opposite angle.
         let ends = if def.world_first() {
             [(body_b, anchor_b), (body_a, def.anchor_a.value())]
         } else {
@@ -181,11 +182,20 @@ fn insert_derived_joint(
             limits,
             motor,
         } => {
+            // The axis is authored in body A's frame. Derived world first,
+            // the first body is the pin (rotation 0), so the axis is carried
+            // into the world at body A's rest angle — the direction the tool
+            // drew (`JointDef::slider_frame`).
+            let axis_1 = if def.world_first() {
+                Vec2::from_angle((def.rest_rot_a - def.rest_rot_b).value()).rotate(*axis)
+            } else {
+                *axis
+            };
             let mut joint = PrismaticJoint::new(body_1, body_2)
                 .with_local_anchor1(anchor_1)
                 .with_local_anchor2(anchor_2)
                 .with_local_basis2(basis_2)
-                .with_slider_axis(*axis);
+                .with_slider_axis(axis_1);
             if let Some([min, max]) = limits {
                 joint = joint.with_limits(min.value(), max.value());
             }

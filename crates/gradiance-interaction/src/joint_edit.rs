@@ -80,10 +80,12 @@ pub fn glyph_distance(
 ) -> f32 {
     match &def.kind {
         JointKind::Hinge { .. } => (anchor.distance(p) - HINGE_RING_PX * s).max(0.0),
-        JointKind::Slider { axis, limits, .. } => {
-            let dir = Vec2::from_angle(rot_a).rotate(*axis);
+        JointKind::Slider { limits, .. } => {
+            let Some((origin, dir)) = def.slider_frame(anchor, rot_a) else {
+                return f32::INFINITY;
+            };
             let (from, to) = slider_span(
-                anchor,
+                origin,
                 dir,
                 limits.map(|[lo, hi]| [lo.value(), hi.value()]),
                 s,
@@ -123,14 +125,13 @@ pub fn limit_handles(
             ])
         }
         JointKind::Slider {
-            axis,
             limits: Some([min, max]),
             ..
         } => {
-            let dir = Vec2::from_angle(rot_a).rotate(*axis);
+            let (origin, dir) = def.slider_frame(anchor, rot_a)?;
             Some([
-                (anchor + dir * min.value(), LimitEnd::Min),
-                (anchor + dir * max.value(), LimitEnd::Max),
+                (origin + dir * min.value(), LimitEnd::Min),
+                (origin + dir * max.value(), LimitEnd::Max),
             ])
         }
         _ => None,
@@ -149,12 +150,11 @@ pub fn dragged_limits(
 ) -> Option<[f32; 2]> {
     match &def.kind {
         JointKind::Slider {
-            axis,
             limits: Some([min, max]),
             ..
         } => {
-            let dir = Vec2::from_angle(rot_a).rotate(*axis);
-            let t = (p - anchor).dot(dir);
+            let (origin, dir) = def.slider_frame(anchor, rot_a)?;
+            let t = (p - origin).dot(dir);
             let (min, max) = (min.value(), max.value());
             Some(match end {
                 LimitEnd::Min => [t.min(max - 1.0), max],
@@ -502,5 +502,42 @@ pub fn clear_joint_on_tool_change(
         drag.joint = None;
         limit_drag.target = None;
         limit_drag.tentative = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gradiance_core::ids::StableId;
+    use gradiance_domain::joint::JointCommon;
+    use gradiance_units::{Angle, Displacement};
+
+    /// A world-pin slider's limit handles stay at the pin's travel while the
+    /// body slides, and a handle drag measures from the pin (brief A-2: they
+    /// used to ride on the body's anchor, mirrored against the engine).
+    #[test]
+    fn world_pin_slider_handles_measure_from_the_pin() {
+        let def = JointDef {
+            kind: JointKind::Slider {
+                axis: Vec2::X,
+                limits: Some([Length(0.0), Length(2.0)]),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: StableId::new(),
+            body_b: None,
+            anchor_a: Displacement(Vec2::ZERO),
+            anchor_b: Displacement(Vec2::new(1.0, 0.0)),
+            rest_rot_a: Angle(0.0),
+            rest_rot_b: Angle(0.0),
+        };
+        // The body's anchor has slid 1.5 m along the travel.
+        let anchor = Vec2::new(2.5, 0.0);
+        let [(min, _), (max, _)] = limit_handles(&def, anchor, 0.0, 1.0).unwrap();
+        assert!(min.distance(Vec2::new(1.0, 0.0)) < 1e-6, "{min}");
+        assert!(max.distance(Vec2::new(3.0, 0.0)) < 1e-6, "{max}");
+        let dragged = dragged_limits(&def, anchor, 0.0, Vec2::new(4.0, 0.0), LimitEnd::Max);
+        assert_eq!(dragged, Some([0.0, 3.0]));
+        assert!(glyph_distance(&def, anchor, 0.0, None, Vec2::new(1.0, 0.0), 1.0) < 1e-6);
     }
 }

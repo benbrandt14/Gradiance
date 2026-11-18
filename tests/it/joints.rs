@@ -1183,3 +1183,129 @@ fn the_motor_gain_follows_the_simulation_speed() {
         "gain at speed 1: {full}, at 0.5: {half}"
     );
 }
+
+/// A slider rig for the world-pin vs body-to-body comparisons (brief A-2):
+/// a 0.4 m box at the origin, rotated `rot`, on a slider whose **world**
+/// axis is `world_axis` through the box's centre. `world` pins it to the
+/// world; otherwise a static base off to the side (clear of the box) is
+/// body A, so the box is body B. Returns `(app, box id, joint id)`.
+fn slider_rig(
+    world: bool,
+    rot: f32,
+    world_axis: Vec2,
+    limits: Option<[f32; 2]>,
+    motor: Option<LinearMotorDef>,
+) -> (App, StableId, StableId) {
+    let mut app = headless_app();
+    let mut base = box_record(Vec2::new(0.0, 3.0), 0.5, 0.5);
+    base.physics.rigid_body = RigidBody::Static;
+    let base_id = spawn_body(&mut app, base);
+    let mut cart = box_record(Vec2::ZERO, 0.4, 0.4);
+    cart.pose.rot = rot;
+    let cart_id = spawn_body(&mut app, cart);
+    // The axis is authored in body A's local frame.
+    let rot_a = if world { rot } else { 0.0 };
+    let def = JointDef {
+        kind: JointKind::Slider {
+            axis: Vec2::from_angle(-rot_a).rotate(world_axis),
+            limits: limits.map(|l| l.map(gradiance::units::Length)),
+            motor,
+        },
+        common: JointCommon::default(),
+        body_a: if world { cart_id } else { base_id },
+        body_b: (!world).then_some(cart_id),
+        anchor_a: gradiance::units::Displacement(if world {
+            Vec2::ZERO
+        } else {
+            Vec2::new(0.0, -3.0)
+        }),
+        anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+        rest_rot_a: gradiance::units::Angle(rot_a),
+        rest_rot_b: gradiance::units::Angle(if world { 0.0 } else { rot }),
+    };
+    let joint_id = spawn_joint(&mut app, def);
+    (app, cart_id, joint_id)
+}
+
+/// Reads a body's avian linear velocity (m/s), or zero before the solver runs.
+fn linear_velocity(app: &App, id: StableId) -> Vec2 {
+    entity_of(app, id)
+        .and_then(|e| app.world().get::<avian2d::prelude::LinearVelocity>(e))
+        .map_or(Vec2::ZERO, |v| v.0)
+}
+
+/// A positive slider motor speed drives the slid body **along** the drawn
+/// axis, on a body-to-body slider (body B against body A) and on a world pin
+/// (the body against the world) alike — also when the body is rotated, so
+/// the axis is carried into the pin's frame. A world pin used to drive the
+/// pin against the body, so the same speed ran the body backwards (A-1
+/// finding 7, brief A-2).
+#[test]
+fn a_positive_slider_motor_drives_along_the_axis_on_both_slider_kinds() {
+    let dir = Vec2::from_angle(0.5);
+    for world in [false, true] {
+        let motor = LinearMotorDef {
+            target_velocity: gradiance::units::Velocity(1.0),
+            ..default()
+        };
+        let (mut app, cart, _) = slider_rig(world, 0.5, dir, None, Some(motor));
+        step(&mut app, 30);
+        let v = linear_velocity(&app, cart);
+        assert!(
+            (v.dot(dir) - 1.0).abs() < 0.1 && v.perp_dot(dir).abs() < 0.05,
+            "world pin {world}: the cart runs at +1 m/s along the axis, not {v}"
+        );
+    }
+}
+
+/// Asymmetric slider limits bound the slid body on the drawn side of the
+/// anchor on both slider kinds: an axis pointing down with travel [0, 1]
+/// lets gravity pull the cart 1 m **below** the anchor. A world pin used to
+/// bound the pin against the body, so the cart could not drop at all.
+#[test]
+fn world_pin_slider_limits_are_the_body_against_the_world() {
+    for world in [false, true] {
+        let (mut app, cart, _) = slider_rig(world, 0.0, Vec2::NEG_Y, Some([0.0, 1.0]), None);
+        step(&mut app, 120);
+        let y = pose_of(&app, cart).pos.y;
+        assert!(
+            (y - -1.0).abs() < 0.05,
+            "world pin {world}: the cart rests on its far limit 1 m down (y {y})"
+        );
+    }
+}
+
+/// An oscillating slider motor reverses at both ends of its travel on a
+/// world pin as on a body-to-body slider (the oscillate seam skipped world
+/// pins before brief A-2, so the motor drove into one stop and stayed).
+#[test]
+fn an_oscillating_slider_motor_reverses_on_both_slider_kinds() {
+    for world in [false, true] {
+        let motor = LinearMotorDef {
+            target_velocity: gradiance::units::Velocity(2.0),
+            oscillate: true,
+            ..default()
+        };
+        let (mut app, cart, _) = slider_rig(world, 0.0, Vec2::X, Some([-0.5, 0.5]), Some(motor));
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        let mut reversals = 0;
+        let mut last_sign = 0.0_f32;
+        for _ in 0..180 {
+            step(&mut app, 1);
+            let x = pose_of(&app, cart).pos.x;
+            lo = lo.min(x);
+            hi = hi.max(x);
+            let v = linear_velocity(&app, cart).x;
+            if v.abs() > 0.5 {
+                if last_sign != 0.0 && v.signum() != last_sign {
+                    reversals += 1;
+                }
+                last_sign = v.signum();
+            }
+        }
+        assert!(
+            reversals >= 2 && lo < -0.4 && hi > 0.4,
+            "world pin {world}: the cart sweeps its travel [{lo}, {hi}] with {reversals} reversals"
+        );
+    }
+}

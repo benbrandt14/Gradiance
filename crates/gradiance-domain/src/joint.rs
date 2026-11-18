@@ -380,15 +380,64 @@ impl JointDef {
         }
     }
 
-    /// Whether the derived engine joint puts the **world** first: a hinge
-    /// pinned to the world is derived as `(pin, body A)`, so that a positive
-    /// motor speed, the limits and the angle all describe the body turning
-    /// counter-clockwise against the world, as body B turns against body A on
-    /// a body-to-body hinge (brief A-1; before, the pin turned against the
-    /// body and a world-pin motor ran clockwise).
+    /// Whether the derived engine joint puts the **world** first: a hinge or
+    /// slider pinned to the world is derived as `(pin, body A)`, so that a
+    /// positive motor speed, the limits and the angle or travel all describe
+    /// the body moving against the world, as body B moves against body A on
+    /// a body-to-body joint: a hinge turns it counter-clockwise, a slider
+    /// drives it along the drawn axis (briefs A-1, A-2; before, the pin moved
+    /// against the body, so a world-pin motor ran backwards and its limits
+    /// were mirrored). A spring is symmetric and keeps its order.
     #[must_use]
     pub fn world_first(&self) -> bool {
-        self.body_b.is_none() && matches!(self.kind, JointKind::Hinge { .. })
+        self.body_b.is_none()
+            && matches!(
+                self.kind,
+                JointKind::Hinge { .. } | JointKind::Slider { .. }
+            )
+    }
+
+    /// A **slider**'s travel frame in world space: the origin its `[min, max]`
+    /// limits are measured from and the unit axis direction, given body A's
+    /// world anchor and live rotation; `None` for other kinds. The gizmo, the
+    /// limit handles and the oscillate seam all read it, so they agree with
+    /// the engine joint.
+    ///
+    /// Body-to-body, the travel starts at body A's anchor and turns with
+    /// body A (body B slides along it). On a world pin
+    /// ([`world_first`](Self::world_first)) the travel is fixed in the world:
+    /// it starts at the pin and points along the axis at body A's authored
+    /// rest angle, and body A's anchor slides along it.
+    #[must_use]
+    pub fn slider_frame(&self, anchor_a_world: Vec2, rot_a: f32) -> Option<(Vec2, Vec2)> {
+        let JointKind::Slider { axis, .. } = self.kind else {
+            return None;
+        };
+        Some(if self.world_first() {
+            (
+                self.anchor_b.value(),
+                Vec2::from_angle(self.rest_rot_a.value()).rotate(axis),
+            )
+        } else {
+            (anchor_a_world, Vec2::from_angle(rot_a).rotate(axis))
+        })
+    }
+
+    /// A **slider**'s live travel — the position avian's limits and motor act
+    /// on — from both bodies' poses ([`WORLD_POSE`] for a world pin's
+    /// `pose_b`): the slid anchor's offset from the
+    /// [`slider_frame`](Self::slider_frame) origin along its axis. 0 at
+    /// creation; a positive motor speed drives it up. `None` for other kinds.
+    #[must_use]
+    pub fn slider_travel(&self, pose_a: PosRot, pose_b: PosRot) -> Option<f32> {
+        let world_a = self.anchor_world(pose_a.pos, pose_a.rot);
+        let (origin, dir) = self.slider_frame(world_a, pose_a.rot)?;
+        let slid = if self.world_first() {
+            world_a
+        } else {
+            pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(self.anchor_b.value())
+        };
+        Some((slid - origin).dot(dir))
     }
 
     /// The hinge angle avian's limits and motor act on, from both bodies'
@@ -607,5 +656,47 @@ mod tests {
             rest_rot_b: Angle(0.0),
         };
         assert!(close(def.limit_reference_angle(1.3), 1.3));
+    }
+
+    /// A world-pin slider's travel is fixed in the world at the pin, along
+    /// the axis at body A's rest angle, and reads body A's offset from the
+    /// pin; a body-to-body slider's starts at body A's anchor and reads body
+    /// B's offset (brief A-2).
+    #[test]
+    fn a_world_pin_slider_measures_the_body_from_the_pin() {
+        let rest = std::f32::consts::FRAC_PI_2;
+        let mut def = hinge(None, rest);
+        def.kind = JointKind::Slider {
+            axis: Vec2::X,
+            limits: None,
+            motor: None,
+        };
+        def.anchor_b = Displacement(Vec2::new(1.0, 2.0));
+        assert!(def.world_first());
+        // The body has slid 0.5 m up its (world +Y) axis.
+        let pose_a = PosRot {
+            pos: Vec2::new(1.0, 2.5),
+            rot: rest,
+        };
+        let anchor = def.anchor_world(pose_a.pos, pose_a.rot);
+        let (origin, dir) = def.slider_frame(anchor, pose_a.rot).unwrap();
+        assert!(origin.distance(Vec2::new(1.0, 2.0)) < 1e-6);
+        assert!(dir.distance(Vec2::Y) < 1e-6);
+        assert!(close(def.slider_travel(pose_a, WORLD_POSE).unwrap(), 0.5));
+
+        // Body-to-body: B sits 0.5 m along A's (rotated) axis.
+        def.body_b = Some(StableId::new());
+        def.anchor_b = Displacement(Vec2::ZERO);
+        let pose_a = PosRot {
+            pos: Vec2::ZERO,
+            rot: rest,
+        };
+        let pose_b = PosRot {
+            pos: Vec2::new(0.0, 0.5),
+            rot: 0.0,
+        };
+        assert!(!def.world_first());
+        assert!(close(def.slider_travel(pose_a, pose_b).unwrap(), 0.5));
+        assert!(hinge(None, 0.0).slider_travel(pose_a, pose_b).is_none());
     }
 }

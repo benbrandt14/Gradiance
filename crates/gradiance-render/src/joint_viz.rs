@@ -95,12 +95,13 @@ pub fn draw_joints(
                     draw_angular_motor(&mut gizmos, anchor, *m, s, snap);
                 }
             }
-            JointKind::Slider {
-                axis,
-                motor,
-                limits,
-            } => {
-                let dir = Vec2::from_angle(pose_a.rot).rotate(*axis);
+            JointKind::Slider { motor, limits, .. } => {
+                // The travel is measured from body A's anchor, or on a world
+                // pin from the pin (`JointDef::slider_frame`), where the
+                // engine measures it.
+                let Some((origin, dir)) = def.slider_frame(anchor, pose_a.rot) else {
+                    continue;
+                };
                 // With travel limits the axis line shows the exact allowed
                 // travel (plus end caps); unlimited prismatics keep the
                 // long reference line. A live handle drag previews its
@@ -111,7 +112,7 @@ pub fn draw_joints(
                     limits.map(|[lo, hi]| [lo.value(), hi.value()]),
                 );
                 let span_color = if live { accent } else { color };
-                let (from, to) = slider_span(anchor, dir, limits, s);
+                let (from, to) = slider_span(origin, dir, limits, s);
                 let perp = Vec2::new(-dir.y, dir.x) * 4.0 * s;
                 gizmos.line_2d(from, to, span_color);
                 if limits.is_some() {

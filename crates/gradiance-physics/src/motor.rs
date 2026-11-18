@@ -8,6 +8,7 @@
 use avian2d::prelude::{PrismaticJoint, RevoluteJoint};
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
+use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{JointDef, JointKind};
 
 /// Angular/linear buffer before a limit at which the motor reverses.
@@ -66,20 +67,30 @@ pub fn drive_oscillating_motors(
                 }
             }
             JointKind::Slider {
-                axis,
                 limits: Some([min, max]),
                 motor: Some(m),
+                ..
             } if m.oscillate && m.enabled => {
                 let Ok(mut joint) = prismatics.get_mut(entity) else {
                     continue;
                 };
-                let Some(b) = def.body_b.and_then(|id| index.entity(id)) else {
+                // The travel in the engine joint's frame, world pins included
+                // (`JointDef::slider_travel`; a world pin's body B is the
+                // world at the identity pose).
+                let pose = |e: Entity| PosRot {
+                    pos: pos(e),
+                    rot: rot(e),
+                };
+                let pose_b = match def.body_b {
+                    Some(id) => {
+                        let Some(b) = index.entity(id) else { continue };
+                        pose(b)
+                    }
+                    None => gradiance_domain::joint::WORLD_POSE,
+                };
+                let Some(t) = def.slider_travel(pose(a), pose_b) else {
                     continue;
                 };
-                let dir = Vec2::from_angle(rot(a)).rotate(*axis);
-                let anchor_a_world = pos(a) + Vec2::from_angle(rot(a)).rotate(def.anchor_a.value());
-                let anchor_b_world = pos(b) + Vec2::from_angle(rot(b)).rotate(def.anchor_b.value());
-                let t = (anchor_b_world - anchor_a_world).dot(dir);
                 if let Some(v) = gradiance_domain::joint::oscillate_target(
                     t,
                     min.value(),
