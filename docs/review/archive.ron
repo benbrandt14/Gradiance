@@ -472,10 +472,41 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                 question: "world-pin-sign",
                 title: "Which way does a positive motor speed turn a world-pinned body?",
                 choice: Picked("Counter-clockwise, as body B on a hinge"),
-                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive: one option leaves the gizmo, the limits and the sensor disagreeing. World-pin sliders are not changed yet (A-1 Findings).",
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive: one option leaves the gizmo, the limits and the sensor disagreeing. World-pin sliders are not changed yet (A-1 Findings); brief A-2 applied the same rule to them.",
                 answered_at: "2026-11-18T22:00:00Z",
             ),
             ingested_as: "Brief A-1 Decisions 1; gradiance_domain::joint::JointDef::world_first.",
+        ),
+        (
+            question: (
+                id: "group-overlap",
+                title: "What does grouping a body that is already in a group do?",
+                source: "brief A-1 Findings 8 (selection); brief A-2",
+                description: r#"Groups are stacks of ids on each body, innermost first, and are meant to nest. Grouping pushed a fresh id onto each target only, so grouping one member of a group with an outside body put that member in two sibling groups (the panel then drew one nested under the other), and grouping part of a group pushed the new group outside the larger one. The viewport selects whole outermost groups, so this was reached through the group verb, the Groups panel chips (which select exactly) and scripts."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Close over: a member brings its group",
+                        caption: r#"Recommended. A group the new set only partly holds joins it whole (as a viewport click selects it), repeated until nothing overlaps; a set inside one group nests inside it. No existing group changes membership; one undo step. Cost: grouping one wheel of a car with the ground groups the whole car with it."#,
+                    ),
+                    (
+                        label: "Re-parent the member",
+                        caption: r#"Take the picked member out of its old group into the new one. Edits an existing group silently, can leave a one-body group, and loses the member's inner groups."#,
+                    ),
+                    (
+                        label: "Refuse",
+                        caption: r#"Report no effect when a target's group is only partly picked. Safe, but the Groups panel's chips and scripts then cannot group a filter result that cuts across a group."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "group-overlap",
+                title: "What does grouping a body that is already in a group do?",
+                choice: Picked("Close over: a member brings its group"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive enough for review mode: the result is visible only in the Groups panel tree, and the other two options either edit an existing group silently or refuse a common case.",
+                answered_at: "2026-11-18T23:30:00Z",
+            ),
+            ingested_as: "Brief A-2 Decisions; gradiance_domain::group::GroupIndex::close_over and insertion_depth.",
         ),
     ],
 )

@@ -44,8 +44,10 @@ pub(crate) fn fresh_group_id(world: &mut World) -> u32 {
     group_index(world).fresh_id(&names)
 }
 
-/// Wraps the targets in one fresh group (pushed *around* any groups they
-/// already form — hierarchical).
+/// Wraps the targets in one fresh group (around any groups they already
+/// form — hierarchical). Groups never overlap: a target's group that the
+/// set only partly holds joins whole, and a set inside one group nests
+/// inside it ([`GroupIndex::close_over`], brief A-2).
 #[derive(Debug)]
 pub struct GroupCommand {
     /// Bodies to group.
@@ -67,13 +69,16 @@ impl GameCommand for GroupCommand {
         // Called for the `?`: every target must resolve before we touch any.
         prior_groups(world, &self.targets)?;
         let next = fresh_group_id(world);
-        for &id in &self.targets {
+        let index = group_index(world);
+        let members = index.close_over(&self.targets);
+        for &id in &members {
             if let Some(entity) = world.resource::<IdIndex>().entity(id) {
                 let mut stack = world
                     .get::<SelectionGroup>(entity)
                     .cloned()
                     .unwrap_or(SelectionGroup(Vec::new()));
-                stack.0.push(next);
+                let depth = index.insertion_depth(&stack.0, &members);
+                stack.0.insert(depth, next);
                 world.entity_mut(entity).insert(stack);
             }
         }

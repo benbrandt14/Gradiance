@@ -11,6 +11,7 @@ use gradiance::command::intent::LoadSceneIntent;
 use gradiance::core::ids::StableId;
 use gradiance::domain::Body;
 use gradiance::domain::appearance::Appearance;
+use gradiance::domain::group::SelectionGroup;
 use gradiance::op::{OpIdSource, invoke};
 use gradiance::scene::{SceneRecord, from_ron, to_ron};
 use gradiance::script::bridge::ScriptInputs;
@@ -262,4 +263,82 @@ fn set_color_is_reversible() {
     undo(&mut app);
     step(&mut app, 1);
     assert_eq!(values::<Appearance>(&mut app), before);
+}
+
+/// Every body's group stack, in id order (empty when ungrouped).
+fn stacks(app: &mut App) -> Vec<Vec<u32>> {
+    let mut rows: Vec<(StableId, Vec<u32>)> = app
+        .world_mut()
+        .query_filtered::<(&StableId, Option<&SelectionGroup>), With<Body>>()
+        .iter(app.world())
+        .map(|(id, g)| (*id, g.map(|g| g.0.clone()).unwrap_or_default()))
+        .collect();
+    rows.sort_by_key(|(id, _)| id.0);
+    rows.into_iter().map(|(_, s)| s).collect()
+}
+
+/// Groups nest or stay apart; they never overlap: every two groups are
+/// disjoint or one holds the other, and each body's stack runs from the
+/// smallest group to the largest.
+fn assert_groups_nest(stacks: &[Vec<u32>]) {
+    let members = |g: u32| -> Vec<usize> {
+        (0..stacks.len())
+            .filter(|&i| stacks[i].contains(&g))
+            .collect()
+    };
+    for stack in stacks {
+        for pair in stack.windows(2) {
+            let (inner, outer) = (members(pair[0]), members(pair[1]));
+            assert!(
+                inner.iter().all(|m| outer.contains(m)),
+                "group {} sits inside {} but is not a subset: {stacks:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+}
+
+/// Grouping a member of a group with an outside body groups the member's
+/// whole group (as a viewport click selects it): the circles' group nests
+/// inside the new one, and no body is in two sibling groups (A-1 finding 8,
+/// brief A-2; archive entry `group-overlap`).
+#[test]
+fn grouping_a_grouped_body_wraps_its_whole_group() {
+    let mut app = scene();
+    let depth = undo_depth(&app);
+    assert_eq!(
+        op(&mut app, "group.create", json!({"targets": [2, 3]})),
+        Some(json!(1))
+    );
+    assert_eq!(undo_depth(&app), depth + 1, "one step");
+    let after = stacks(&mut app);
+    assert_groups_nest(&after);
+    let outer = after[3][0];
+    assert!(
+        after.iter().all(|s| s.last() == Some(&outer)),
+        "the new group holds all four bodies: {after:?}"
+    );
+    undo(&mut app);
+    step(&mut app, 1);
+    assert!(stacks(&mut app)[3].is_empty(), "undo restores the box");
+}
+
+/// Grouping part of a group nests the new group **inside** it: the outer
+/// group still holds all three circles (a click still selects them all),
+/// and the two picked circles share an inner group.
+#[test]
+fn grouping_part_of_a_group_nests_inside_it() {
+    let mut app = scene();
+    let before = stacks(&mut app);
+    let circles = before[0][0];
+    op(&mut app, "group.create", json!({"targets": [0, 1]}));
+    let after = stacks(&mut app);
+    assert_groups_nest(&after);
+    for (i, stack) in after.iter().enumerate().take(3) {
+        assert_eq!(stack.last(), Some(&circles), "circle {i}: {after:?}");
+    }
+    assert_eq!(after[0], after[1], "the two picked circles share a stack");
+    assert_eq!(after[0].len(), 2, "{after:?}");
+    assert_eq!(after[2], vec![circles]);
 }
