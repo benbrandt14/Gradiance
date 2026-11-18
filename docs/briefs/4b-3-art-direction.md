@@ -2,7 +2,7 @@
 Phase 4b · owner direction 2026-11-16 · "Take artistic liberty (in visual
 instances like SSAO or in color pallette/theme) to ensure consistency and
 fluency. If default SSAO is unclear, determine how an artistic direction may
-be maintained and provide options." · status: ready
+be maintained and provide options." · status: in progress (revised 2026-11-18)
 
 ## Goal
 
@@ -70,6 +70,28 @@ For this brief that means:
   put the before and after in review mode;
 - a full visuals revamp and a 2D-lighting crate are **not** this brief
   (`docs/state.md`, retained, UI/render).
+
+## Revision (orchestrator, 2026-11-18, on `b53b019`)
+
+The brief predates `docs/unified-surface-plan.md`. Three changes:
+
+- **Scope cut: the egui chrome theme moves to U-7.** Plan § 7.1 puts
+  semantic chrome tokens (`ui::theme` driving `egui::Visuals`,
+  Blender-leaning) in U-7, and § 10 row 9 pairs U-7 with this brief. This
+  brief owns the **scene** look: body palette, gizmo/glyph/grid/guide
+  colours, background and planes, lighting, toon bands, SSAO, borders.
+  It may set the one **accent** colour and the selection highlight as
+  scene tokens that U-7 then reads; it does not restyle panels.
+- **Tooling.** Screenshots go through `tools/screenshot/session.sh`
+  (U-3/U-4: `ui.screenshot`, `ui.click`, `ui.key`) or the CLI from U-6
+  (`gradiance op ui.screenshot --path …`). Set the scene with a
+  `--script` file so every direction uses the same framing.
+- **Owner questions.** The before/after of the toon-band lighting and
+  the direction choice are interactive: add them to
+  `docs/review/questions.ron` with scenes (review mode), do not ask in
+  chat. Implement the recommended direction as the default meanwhile.
+  Non-interactive choices (where a preset lives, test thresholds) are the
+  worker's, recorded in the Outcome.
 
 ## Approach
 
