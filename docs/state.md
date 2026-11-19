@@ -88,6 +88,10 @@ and § 13).
      tokens, Blender-leaning (chrome; in review, stacked on #257); then
      **4b-4** scaled defaults (in review, stacked on U-7).
   9. **Phase 5:** 5-2 (in review), 5-3 (in review), **U-8** number-field behaviours (in review), then 5-4, 5-5.
+  9b. **R-1..R-4** run & read surface (owner-ranked 2026-11-19; roadmap
+      § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
+      load/dump/export operations, the headless `gradiance run`,
+      insert + clipboard, packing as an operation.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).

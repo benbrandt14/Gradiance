@@ -605,6 +605,34 @@ the two interpolation modes cover the shapes in practice.
   menu-local radius field. Fillets of existing corners of one body, chamfers
   and smooth subtract/intersect remain open
 
+## Run & read surface (planned 2026-11-19, briefs R-1..R-4)
+
+Owner-ranked from a low-effort brainstorm (2026-11-19). A script, the CLI or
+an MCP client can edit a scene but cannot run an experiment: no operation
+plays, steps, saves, loads or exports. Each item reuses an existing seam and
+adds no dependency. Order is the owner's priority; it sits after Phase 5 and
+before U-9 (`docs/state.md`).
+
+1. **R-1** run & read operations (`docs/briefs/R-1-run-read-surface.md`):
+   `sim.play` / `sim.pause` / `sim.step n` / `sim.time`; `scene.dump`
+   (`SceneRecord` as JSON); `scene.save` / `scene.load` (the existing
+   persist requests); `signal.history` / `signal.export` (CSV from the
+   `SignalBus`). About 1.5–2 days.
+2. **R-2** headless rollout runner `gradiance run`
+   (`docs/briefs/R-2-headless-rollout.md`): R-1 composed with no window.
+   1–2 days. Unblocks sweeps, system identification, Phase 6 replay tests.
+3. **R-3** insert a scene file + copy/paste bodies as RON text
+   (`docs/briefs/R-3-insert-and-clipboard.md`; audit row 13). About 1 day.
+4. **R-4** packing as an operation with indexed targets
+   (`docs/briefs/R-4-pack-op.md`). 0.5–1 day.
+
+**Rejected by the owner (2026-11-19), do not re-propose without new facts:**
+- *Session macro recording to `.scm`*: tool gestures emit intents, not
+  operations, so a recorder captures only part of the edits. U-11 (Adjust
+  Last Operation) needs op-level history first.
+- *Ruler / measure tool*: script tools have no previews yet (3-5,
+  retained), so it is new native UI work, not low effort.
+
 ## Scripting & symbolic modeling (design accepted)
 
 Direction is ratified in `docs/script-lisp-decision.md`: a Lisp/DSL over a
