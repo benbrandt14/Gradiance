@@ -89,10 +89,13 @@ fn leaf_widget(
     field: &mut dyn bevy::reflect::PartialReflect,
     stored: Option<DisplayUnit>,
 ) -> bool {
-    if let (Some(v), Some(unit)) = (field.try_downcast_mut::<f32>(), stored) {
+    // A plain number is a dimensionless field: the same behaviours (typed
+    // maths, Ctrl snap, Esc; brief U-8), no unit.
+    let unit = stored.unwrap_or(DisplayUnit::canonical(Dimension::Dimensionless));
+    if let Some(v) = field.try_downcast_mut::<f32>() {
         return crate::unit_fields::stored_drag(ui, v, None, 0.5, unit).changed();
     }
-    if let (Some(v), Some(unit)) = (field.try_downcast_mut::<Vec2>(), stored) {
+    if let Some(v) = field.try_downcast_mut::<Vec2>() {
         let mut changed = false;
         ui.horizontal(|ui| {
             for c in [&mut v.x, &mut v.y] {
@@ -101,34 +104,11 @@ fn leaf_widget(
         });
         return changed;
     }
-    if let Some(v) = field.try_downcast_mut::<f32>() {
-        return ui
-            .add(
-                egui::DragValue::new(v)
-                    .speed(0.5)
-                    // Typed maths (`2*pi`, `90/4`): the one parser.
-                    .custom_parser(|t| {
-                        DisplayUnit::canonical(Dimension::Dimensionless)
-                            .parse(t)
-                            .ok()
-                            .map(f64::from)
-                    }),
-            )
-            .changed();
-    }
     if let Some(v) = field.try_downcast_mut::<bool>() {
         return ui.checkbox(v, "").changed();
     }
     if let Some(v) = field.try_downcast_mut::<u32>() {
         return ui.add(egui::DragValue::new(v).speed(0.1)).changed();
-    }
-    if let Some(v) = field.try_downcast_mut::<Vec2>() {
-        let mut changed = false;
-        ui.horizontal(|ui| {
-            changed |= ui.add(egui::DragValue::new(&mut v.x).speed(0.5)).changed();
-            changed |= ui.add(egui::DragValue::new(&mut v.y).speed(0.5)).changed();
-        });
-        return changed;
     }
     // Dimensional newtype (`Length(f32)`, `Acceleration2(Vec2)`): edit the
     // value it wraps, so a typed quantity renders as the number it was.

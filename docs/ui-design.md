@@ -131,11 +131,13 @@ names `DisplayUnit::DEGREES` in the grid's table.
 
 ### Every number field behaves like Blender's (brief U-8)
 
-One function, `ui::unit_fields::number_field`, carries the behaviours; every
-numeric row reaches it (`precise_drag*` on the edit seam, `labelled_drag`,
-`labelled_quantity` and the reflect grid on the config seam; only
-`labelled_drag_u32` is a plain egui drag). Do not add one with a raw
-`egui::DragValue`.
+One function, `ui::unit_fields::number_field`, carries the behaviours.
+`precise_drag*` (edit seam), `labelled_drag`, `labelled_quantity` and the
+reflect grid's number rows (config seam) reach it. Panels that still build
+a raw `egui::DragValue` (optimizer, node graph, groups, signals, array,
+context menu, a few settings rows, integer fields) have only egui's own
+Shift and typed numbers until they move onto these helpers; do not add a
+new one.
 
 | Gesture | Effect |
 |---|---|
