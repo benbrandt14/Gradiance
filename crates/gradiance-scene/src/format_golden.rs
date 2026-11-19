@@ -30,6 +30,7 @@ use gradiance_domain::joint::{AngularMotorDef, JointCommon, JointDef, JointKind,
 use gradiance_domain::node::{NodeAttachment, NodeKind};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::thruster::Thruster;
 use gradiance_domain::tracer::{TracePattern, Tracer};
 
 const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/v8_every_quantity.ron");
@@ -130,23 +131,42 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
         app_version: "golden".into(),
         bodies: vec![field_body, tracer_body],
         joints: vec![joint(16, hinge), joint(17, slider), joint(18, spring)],
-        nodes: vec![NodeRecord {
-            id: id(32),
-            pose: PosRot {
-                pos: Vec2::new(-2.0, 1.0),
-                rot: 0.0,
+        nodes: vec![
+            NodeRecord {
+                id: id(32),
+                pose: PosRot {
+                    pos: Vec2::new(-2.0, 1.0),
+                    rot: 0.0,
+                },
+                attachment: NodeAttachment {
+                    target: Some(id(1)),
+                    offset: q("(0.1875, -0.8125)"),
+                },
+                kind: NodeKind::Tracer(Tracer {
+                    fade_secs: q("4.5"),
+                    size: q("0.03125"),
+                    pattern: TracePattern::Line,
+                }),
+                appearance: Appearance::default(),
             },
-            attachment: NodeAttachment {
-                target: Some(id(1)),
-                offset: q("(0.1875, -0.8125)"),
+            // A thruster (brief N-3): its thrust and axis are quantities.
+            NodeRecord {
+                id: id(33),
+                pose: PosRot {
+                    pos: Vec2::new(1.0, 0.25),
+                    rot: 0.0,
+                },
+                attachment: NodeAttachment {
+                    target: Some(id(1)),
+                    offset: q("(-0.3125, 0.4375)"),
+                },
+                kind: NodeKind::Thruster(Thruster {
+                    thrust: q("12.5"),
+                    angle: q("0.625"),
+                }),
+                appearance: Appearance::default(),
             },
-            kind: NodeKind::Tracer(Tracer {
-                fade_secs: q("4.5"),
-                size: q("0.03125"),
-                pattern: TracePattern::Line,
-            }),
-            appearance: Appearance::default(),
-        }],
+        ],
         environment,
     }
 }

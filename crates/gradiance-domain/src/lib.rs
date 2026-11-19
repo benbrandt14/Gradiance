@@ -21,6 +21,7 @@ pub mod settings;
 pub use gradiance_geometry::shape;
 pub mod signal;
 pub mod theme;
+pub mod thruster;
 pub mod tracer;
 pub mod tuning;
 pub mod workspace;

@@ -249,8 +249,9 @@ impl NodeRecord {
         ));
         // The tracer kind also gets a `Tracer` component so the trail sampler
         // drives it uniformly with body tracers.
-        let gradiance_domain::node::NodeKind::Tracer(tracer) = self.kind;
-        entity.insert(tracer);
+        if let Some(tracer) = self.kind.tracer() {
+            entity.insert(tracer);
+        }
         entity.id()
     }
 }

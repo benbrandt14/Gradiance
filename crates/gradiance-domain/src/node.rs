@@ -2,9 +2,10 @@
 //!
 //! A **behavior node** is an authored entity that lives in the scene like a
 //! body or a joint, but represents a piece of the signal dataflow
-//! (`docs/signal-dataflow.md`) rather than physical matter. Today the one
-//! kind is the [`Tracer`](crate::tracer::Tracer) node — a placeable
-//! trajectory probe — but the framework is deliberately general: every
+//! (`docs/signal-dataflow.md`) rather than physical matter. Today there are
+//! two kinds: the [`Tracer`](crate::tracer::Tracer) node — a placeable
+//! trajectory probe — and the [`Thruster`](crate::thruster::Thruster) node —
+//! a push at a point of a body (brief N-3). The framework is general: every
 //! future **sensor** (velocity/force reader) and **actuator** (a driver
 //! that writes a signal) becomes another [`NodeKind`], its own tool, and
 //! its own selectable glyph. This is the "eventually all sensors and
@@ -66,14 +67,20 @@ impl NodeAttachment {
 /// are **not** placeable nodes: they are ports on objects (read via
 /// [`SignalSource`](crate::signal::SignalSource), written via
 /// [`SignalSink`](crate::signal::SignalSink)), wired in the node
-/// editor. The one remaining placeable node kind is the **tracer** — a
-/// trajectory probe you can drop anywhere or ride on a body.
+/// editor. The placeable node kinds are the **tracer** — a trajectory probe
+/// you can drop anywhere or ride on a body — and the **thruster**, which
+/// pushes the body it rides.
 #[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub enum NodeKind {
     /// A trajectory-trail probe (the placeable [`Tracer`]).
     ///
     /// [`Tracer`]: crate::tracer::Tracer
     Tracer(crate::tracer::Tracer),
+    /// A push at a point of the body the node rides (the placeable
+    /// [`Thruster`], brief N-3).
+    ///
+    /// [`Thruster`]: crate::thruster::Thruster
+    Thruster(crate::thruster::Thruster),
 }
 
 impl NodeKind {
@@ -81,6 +88,15 @@ impl NodeKind {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Tracer(_) => "tracer",
+            Self::Thruster(_) => "thruster",
+        }
+    }
+
+    /// The tracer payload, if this is a tracer node.
+    pub const fn tracer(&self) -> Option<crate::tracer::Tracer> {
+        match self {
+            Self::Tracer(t) => Some(*t),
+            Self::Thruster(_) => None,
         }
     }
 }

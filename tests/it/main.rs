@@ -48,6 +48,7 @@ mod script_tools;
 mod script_units;
 mod scripting;
 mod signals;
+mod thrusters;
 mod tools;
 mod ui_conflicts;
 mod ui_groups;

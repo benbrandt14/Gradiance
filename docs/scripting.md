@@ -122,6 +122,11 @@ across and ±3.5 m up and down); angles are radians.
 (slider a b x y ax ay)       ; prismatic joint at (x, y) along world axis (ax, ay)
 (spring a b hz ratio)         ; spring-damper strut between the two centres
 
+;; edit — behavior nodes on a body (brief N-3)
+(thruster i x y angle thrust) ; push body i at world point (x, y) with thrust N
+                             ; along the world angle (radians) → its handle;
+                             ; the point and axis ride and turn with the body
+
 ;; edit — a body's authored properties (the inspector's fields as ops)
 (place i x y angle)          ; move and rotate the i-th body
 (set-friction i v)           ; Coulomb friction (both coefficients)

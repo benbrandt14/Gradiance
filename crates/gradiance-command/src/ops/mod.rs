@@ -7,7 +7,8 @@
 //!
 //! The files split by family: [`spawn`] authors new geometry, [`body`] edits
 //! one existing body, [`sets`] edits several at once (booleans, groups),
-//! [`joint`] makes and removes relationships, [`scene`] holds the history,
+//! [`joint`] makes and removes relationships, [`node`] places behavior
+//! nodes (a thruster), [`scene`] holds the history,
 //! the new scene, a count and the settings write, [`look`] the scene look
 //! and its settings writes, [`query`] the read-only queries,
 //! [`quantity`] the quantity catalog's reads, and [`units`] the unit
@@ -27,6 +28,7 @@ pub mod body;
 pub mod group;
 pub mod joint;
 pub mod look;
+pub mod node;
 pub mod quantity;
 pub mod query;
 pub mod scene;
@@ -187,6 +189,7 @@ impl Plugin for SceneOpsPlugin {
             group::register(&mut registry);
             sets::register(&mut registry);
             joint::register(&mut registry);
+            node::register(&mut registry);
             scene::register(&mut registry);
             look::register(&mut registry);
             query::register(&mut registry);

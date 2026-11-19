@@ -22,8 +22,10 @@ use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
 use gradiance_domain::settings::RenderSettings;
 use gradiance_domain::theme::active;
 use gradiance_domain::tracer::Tracer;
+use gradiance_interaction::camera::CameraScale;
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_interaction::selection::Selection;
+use gradiance_physics::drive::SignalDrive;
 use std::collections::VecDeque;
 
 /// Hard cap on samples per trail (a slow-fading fast body can't grow
@@ -183,48 +185,95 @@ pub fn draw_traces(
     }
 }
 
+/// The flame of a thruster pushing with its default thrust, in screen
+/// pixels; it scales with the thrust.
+pub const FLAME_PX: f32 = 18.0;
+/// The longest flame, as a multiple of [`FLAME_PX`].
+pub const MAX_FLAME: f32 = 4.0;
+
+/// A thruster flame's length as a multiple of [`FLAME_PX`]: proportional to
+/// `|thrust|` against the default, capped at [`MAX_FLAME`]. Pure.
+#[must_use]
+pub fn flame_scale(thrust: f32) -> f32 {
+    if !thrust.is_finite() {
+        return 0.0;
+    }
+    (thrust.abs() / gradiance_domain::thruster::DEFAULT_THRUST).min(MAX_FLAME)
+}
+
 /// Draws each behavior node's glyph (a small ring at its position, labelled
 /// by kind), so a placed node is visible and shows its selection state.
-/// Attached nodes draw a tether to their target.
+/// Attached nodes draw a tether to their target. A thruster draws a flame
+/// out of its back, scaled by the thrust it pushes with (a signal drive's
+/// when one is bound). Sizes are screen-constant (`CameraScale`).
 pub fn draw_node_glyphs(
     selection: Res<Selection>,
     index: Res<IdIndex>,
-    nodes: Query<(Entity, &Transform, &NodeKind, &NodeAttachment, &Appearance)>,
+    nodes: Query<(
+        Entity,
+        &Transform,
+        &NodeKind,
+        &NodeAttachment,
+        &Appearance,
+        Option<&SignalDrive>,
+    )>,
     bodies: Query<&Transform, With<Body>>,
+    cam_scale: Res<CameraScale>,
     settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let theme = active(settings.as_deref());
-    for (entity, transform, kind, attachment, appearance) in &nodes {
+    let s = cam_scale.0;
+    for (entity, transform, kind, attachment, appearance, drive) in &nodes {
         let p = transform.translation.truncate();
         let selected = selection.contains(entity);
         let base = Color::from(theme.display(appearance.fill).with_alpha(1.0));
         // A double ring marks the node; brighter + larger when selected.
-        let r = if selected { 8.0 } else { 6.0 };
+        let r = if selected { 8.0 * s } else { 6.0 * s };
         gizmos.circle_2d(Isometry2d::from_translation(p), r, base);
         gizmos.circle_2d(
             Isometry2d::from_translation(p),
-            r - 2.5,
+            r - 2.5 * s,
             if selected {
                 theme.ink.accent.into()
             } else {
                 base
             },
         );
-        // A comet-tail tick marks the tracer (the one placeable node kind).
+        let body = attachment
+            .target
+            .and_then(|target| index.entity(target))
+            .and_then(|e| bodies.get(e).ok())
+            .map(gradiance_core::units::PosRot::from_transform);
         match kind {
+            // A comet-tail tick marks the tracer.
             NodeKind::Tracer(_) => {
-                gizmos.line_2d(p, p + Vec2::new(-r - 4.0, 0.0), base.with_alpha(0.6));
+                gizmos.line_2d(p, p + Vec2::new(-r - 4.0 * s, 0.0), base.with_alpha(0.6));
+            }
+            // A flame out of the back marks the thruster: it points against
+            // the push and grows with the thrust.
+            NodeKind::Thruster(thruster) => {
+                let thrust = drive
+                    .and_then(|d| d.thrust)
+                    .unwrap_or_else(|| thruster.thrust.value());
+                let push = thruster.axis(body.map_or(0.0, |b| b.rot));
+                let back = if thrust < 0.0 { push } else { -push };
+                let length = flame_scale(thrust) * FLAME_PX * s;
+                let side = back.perp() * (r * 0.6);
+                let root = p + back * r;
+                let flame = Color::from(theme.ink.danger.with_alpha(0.9));
+                if length > 0.0 {
+                    let tip = root + back * length;
+                    gizmos.line_2d(root + side, tip, flame);
+                    gizmos.line_2d(root - side, tip, flame);
+                }
+                // The nozzle: a short bar across the back.
+                gizmos.line_2d(root + side, root - side, base);
             }
         }
         // Tether to the attached body.
-        if let Some(target) = attachment.target
-            && let Some(body_pos) = index
-                .entity(target)
-                .and_then(|e| bodies.get(e).ok())
-                .map(|t| t.translation.truncate())
-        {
-            gizmos.line_2d(p, body_pos, base.with_alpha(0.25));
+        if let Some(body) = body {
+            gizmos.line_2d(p, body.pos, base.with_alpha(0.25));
         }
     }
 }
@@ -242,4 +291,19 @@ pub fn install_sampling(app: &mut App) {
         )
             .chain(),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_flame_grows_with_the_thrust_up_to_a_cap() {
+        let d = gradiance_domain::thruster::DEFAULT_THRUST;
+        assert!((flame_scale(d) - 1.0).abs() < 1e-6);
+        assert!((flame_scale(-d * 0.5) - 0.5).abs() < 1e-6, "either way");
+        assert!((flame_scale(d * 100.0) - MAX_FLAME).abs() < 1e-6);
+        assert!(flame_scale(0.0).abs() < 1e-6);
+        assert!(flame_scale(f32::NAN).abs() < 1e-6);
+    }
 }

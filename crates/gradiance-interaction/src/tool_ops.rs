@@ -8,7 +8,8 @@
 //! that [`apply_tool_requests`] turns into the `NextState<ToolState>` a
 //! palette click sets. The declared chord is the tool's existing letter
 //! (`interaction::input`'s map is unchanged; the chord is metadata the
-//! status bar and the menus show).
+//! status bar and the menus show). The thruster has no letter: the editor
+//! keymap is not settled, and a new tool adds no key.
 //!
 //! Also here: each tool's **hint table** ([`hints`]), the mouse and key
 //! gestures the status bar shows for the active tool. A tool's gestures are
@@ -43,7 +44,8 @@ macro_rules! tool_ops {
                     doc: $doc,
                     seam: Seam::Editor,
                     menu: Some($menu),
-                    chord: Some($chord),
+                    // "" = a tool with no key of its own.
+                    chord: if $chord.is_empty() { None } else { Some($chord) },
                     undo: None,
                     example: "{}",
                 };
@@ -91,6 +93,8 @@ tool_ops! {
         "Use the cut tool: drag a stroke across the bodies to cut.";
     UseTracer => ToolState::Tracer, "tool.tracer", "tracer-tool", "Tools/Tracer", "N",
         "Use the tracer tool: click a body (or empty space) to place a tracer.";
+    UseThruster => ToolState::Thruster, "tool.thruster", "thruster-tool", "Tools/Thruster", "",
+        "Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push.";
 }
 
 /// The operation that picks `tool`, if it is a built-in.
@@ -158,6 +162,7 @@ pub fn hints(tool: ToolState) -> &'static [Hint] {
         ],
         ToolState::Cut => &[("Drag", "cut along the stroke")],
         ToolState::Tracer => &[("Click a body", "attach"), ("Click empty", "free tracer")],
+        ToolState::Thruster => &[("Click a body", "push up"), ("Drag", "aim the push")],
         ToolState::Script(_) => &[("Click", "add a point"), ("Esc or right-click", "cancel")],
     }
 }
@@ -182,6 +187,7 @@ mod tests {
             ToolState::Ground,
             ToolState::Cut,
             ToolState::Tracer,
+            ToolState::Thruster,
         ];
         assert_eq!(TOOL_OPS.len(), built_in.len());
         for tool in built_in {

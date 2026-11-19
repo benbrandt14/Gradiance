@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-19 (N-2 handoff; before that N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-19 (N-3 handoff; before that N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,7 +12,17 @@ Last updated: 2026-11-19 (N-2 handoff; before that N-1; before that R-4, Phase R
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **N-2** graph input keys is done (in review; branch
+- **Now:** **N-3** thruster node is done (in review; branch
+  `claude/project-thread-tw1mvl-n3`): `NodeKind::Thruster` (thrust in N, an
+  axis in the body's frame) pushes its body at its point
+  (`physics::thrust::apply_thrusters`, one allocation-free `FixedUpdate`
+  system, once per step); the Thruster tool (no key; click pushes up, a drag
+  aims); a flame glyph scaled by thrust; the `Thrust` actuator sink with a
+  thruster block on the node canvas; `(thruster body x y angle thrust)`
+  (`node.thruster`); duplicate copies a thruster's drive; node glyphs are
+  screen-sized now; six decisions in `archive.ron`. **Next: N-4** air drag
+  and wind.
+  **N-2** graph input keys is done (in review; branch
   `claude/project-thread-tw1mvl-n2`): a node-graph **Key** block
   (`BlockOp::Key`, scene content via `ComputedSignals`) reads 1 (or
   -1/0/1 for a pair) while its key is held in play, published as derived
@@ -21,7 +31,7 @@ Last updated: 2026-11-19 (N-2 handoff; before that N-1; before that R-4, Phase R
   editor's bare-key uses of a bound key yield (no editor binding changed);
   a capture button and clash warnings in the block footer; `(defkey …)`
   and `(ui-key key [hold])`; new edge interaction → signal; six decisions
-  in `archive.ron`. **Next: N-3** thruster.
+  in `archive.ron`.
   **N-1** signal actuators is done (in review; branch
   `claude/project-thread-tw1mvl-n1`): bindings drive a hinge/slider motor's
   speed and cap, a body's field strength and gravity scale through the
@@ -109,7 +119,8 @@ Last updated: 2026-11-19 (N-2 handoff; before that N-1; before that R-4, Phase R
       § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
-  9c. **N-1** (done, in review), **N-2** (done, in review), **N-3..N-9** nonlinear dynamics & multibody play (owner-approved
+  9c. **N-1** (done, in review), **N-2** (done, in review), **N-3** (done,
+      in review), **N-4..N-9** nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +

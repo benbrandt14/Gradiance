@@ -420,7 +420,8 @@ pub fn evaluate_signals(
             | SignalSink::MotorSpeed(_)
             | SignalSink::MotorCap(_)
             | SignalSink::FieldStrength(_)
-            | SignalSink::GravityScale(_) => {}
+            | SignalSink::GravityScale(_)
+            | SignalSink::Thrust(_) => {}
         }
     }
 
@@ -489,6 +490,7 @@ pub fn desired_drive(id: StableId, bindings: &[SignalBinding], bus: &SignalBus) 
             SignalSink::MotorCap(_) => &mut drive.motor_cap,
             SignalSink::FieldStrength(_) => &mut drive.field_strength,
             SignalSink::GravityScale(_) => &mut drive.gravity_scale,
+            SignalSink::Thrust(_) => &mut drive.thrust,
             SignalSink::Fill(_) | SignalSink::TracerColor(_) | SignalSink::Plot => continue,
         };
         *slot = Some(value);
@@ -646,6 +648,22 @@ mod tests {
         let ball_drive = desired_drive(ball, &bindings, &bus);
         assert_eq!(ball_drive.gravity_scale, Some(0.25));
         assert!(desired_drive(StableId::new(), &bindings, &bus).is_empty());
+    }
+
+    #[test]
+    fn a_thrust_binding_drives_its_thruster_node() {
+        let (thruster, wheel) = (StableId::new(), StableId::new());
+        let bindings = [
+            actuator("burn", SignalSink::Thrust(thruster)),
+            actuator("spin", SignalSink::MotorSpeed(wheel)),
+        ];
+        let mut bus = SignalBus::default();
+        bus.publish("burn", 12.5, false);
+        bus.publish("spin", 3.0, false);
+        let drive = desired_drive(thruster, &bindings, &bus);
+        assert_eq!(drive.thrust, Some(12.5));
+        assert_eq!(drive.motor_speed, None, "another target's field");
+        assert_eq!(desired_drive(wheel, &bindings, &bus).thrust, None);
     }
 
     #[test]

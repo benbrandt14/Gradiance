@@ -384,6 +384,9 @@ pub fn labelled_drag_int<T: egui::emath::Numeric>(
     changed
 }
 
+/// The largest thrust the thruster field takes, either way (N).
+const MAX_THRUST: f32 = 1.0e5;
+
 /// The behavior-node kind editor widgets.
 ///
 /// Lives here rather than beside any one host because it has three: the
@@ -446,6 +449,42 @@ pub fn node_kind_editor(
             });
             // Mid-drag the working value is in `next` too: report only a
             // finished edit.
+            if !committed {
+                return None;
+            }
+        }
+        NodeKind::Thruster(thruster) => {
+            // The same edit seam as the tracer's: one undo step per drag.
+            let defaults = gradiance_domain::thruster::Thruster::default();
+            let mut committed = false;
+            ui.horizontal(|ui| {
+                ui.label("thrust");
+                committed |= matches!(
+                    precise_drag_clamped(
+                        ui,
+                        ui.id().with((salt, "thruster-thrust")),
+                        &mut thruster.thrust.0,
+                        defaults.thrust.0,
+                        0.1,
+                        -MAX_THRUST..=MAX_THRUST,
+                        Dimension::Force,
+                    ),
+                    Commit::Done(..)
+                );
+                ui.label("axis");
+                committed |= matches!(
+                    precise_drag_clamped(
+                        ui,
+                        ui.id().with((salt, "thruster-angle")),
+                        &mut thruster.angle.0,
+                        defaults.angle.0,
+                        0.01,
+                        -core::f32::consts::TAU..=core::f32::consts::TAU,
+                        Dimension::Angle,
+                    ),
+                    Commit::Done(..)
+                );
+            });
             if !committed {
                 return None;
             }

@@ -47,6 +47,7 @@ fn toolbar_palette_lists_all_tools_and_reports_clicks() {
         "Ground (G)",
         "Cut (K)",
         "Tracer (N)",
+        "Thruster",
     ] {
         harness.get_by_label(label);
     }

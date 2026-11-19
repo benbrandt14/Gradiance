@@ -13,7 +13,10 @@
 //!   strength in place of `FieldSource::strength`;
 //! - **gravity scale** — [`drive_gravity_scale`] adds avian's per-body
 //!   [`ConstantLinearAcceleration`] for the difference between the driven
-//!   and the authored scale (the authored `GravityScale` stays untouched).
+//!   and the authored scale (the authored `GravityScale` stays untouched);
+//! - **thrust** — [`apply_thrusters`](crate::thrust::apply_thrusters) pushes
+//!   with the driven thrust in place of the thruster node's authored one
+//!   (brief N-3).
 //!
 //! Like `SignalColorOverride`, the drive is **derived**: never saved, never in
 //! undo records, never read by commands (invariant 5). Unbinding removes it,
@@ -24,8 +27,8 @@ use bevy::prelude::*;
 use gradiance_domain::Body;
 
 /// The derived per-target actuator override: only the fields a binding
-/// drives are `Some`. Lives on the joint or body entity its binding names
-/// (by `StableId`); removed when no binding drives that target.
+/// drives are `Some`. Lives on the joint, body or node entity its binding
+/// names (by `StableId`); removed when no binding drives that target.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
 pub struct SignalDrive {
     /// Motor target speed (rad/s for a hinge, m/s for a slider).
@@ -37,6 +40,8 @@ pub struct SignalDrive {
     pub field_strength: Option<f32>,
     /// Gravity scale (a ratio).
     pub gravity_scale: Option<f32>,
+    /// A thruster node's thrust (N; brief N-3). Lives on the node entity.
+    pub thrust: Option<f32>,
 }
 
 impl SignalDrive {
@@ -46,6 +51,7 @@ impl SignalDrive {
             && self.motor_cap.is_none()
             && self.field_strength.is_none()
             && self.gravity_scale.is_none()
+            && self.thrust.is_none()
     }
 }
 

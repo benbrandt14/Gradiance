@@ -274,6 +274,9 @@ pub enum SignalSink {
     FieldStrength(StableId),
     /// A body's **gravity scale** (a ratio; `1` is plain gravity).
     GravityScale(StableId),
+    /// A thruster node's **thrust** (N), keyed by the node's id (brief N-3).
+    /// Drives only a thruster node.
+    Thrust(StableId),
 }
 
 /// The physical quantity an actuator sink sets, by what it is set on.
@@ -283,13 +286,15 @@ pub enum ActuatorTarget {
     Joint(StableId),
     /// A body (field strength, gravity scale).
     Body(StableId),
+    /// A behavior node (a thruster's thrust).
+    Node(StableId),
 }
 
 impl ActuatorTarget {
     /// The target's id, whatever it is.
     pub const fn id(self) -> StableId {
         match self {
-            Self::Joint(id) | Self::Body(id) => id,
+            Self::Joint(id) | Self::Body(id) | Self::Node(id) => id,
         }
     }
 }
@@ -535,6 +540,10 @@ impl SignalSink {
                 let (r, t) = remap_id(*a, id_map);
                 (Self::GravityScale(r), t)
             }
+            Self::Thrust(a) => {
+                let (r, t) = remap_id(*a, id_map);
+                (Self::Thrust(r), t)
+            }
         }
     }
 
@@ -543,6 +552,7 @@ impl SignalSink {
         Some(match self {
             Self::MotorSpeed(id) | Self::MotorCap(id) => ActuatorTarget::Joint(*id),
             Self::FieldStrength(id) | Self::GravityScale(id) => ActuatorTarget::Body(*id),
+            Self::Thrust(id) => ActuatorTarget::Node(*id),
             Self::Fill(_) | Self::TracerColor(_) | Self::Plot => return None,
         })
     }
@@ -557,6 +567,7 @@ impl SignalSink {
             Self::MotorSpeed(_) => D::AngularVelocity,
             Self::MotorCap(_) if linear => D::Force,
             Self::MotorCap(_) => D::Torque,
+            Self::Thrust(_) => D::Force,
             Self::FieldStrength(_) => D::Acceleration,
             Self::GravityScale(_) | Self::Fill(_) | Self::TracerColor(_) | Self::Plot => {
                 D::Dimensionless
@@ -574,6 +585,7 @@ impl SignalSink {
             Self::MotorCap(_) => "motor cap",
             Self::FieldStrength(_) => "field",
             Self::GravityScale(_) => "gravity",
+            Self::Thrust(_) => "thrust",
         }
     }
 }
@@ -1101,6 +1113,12 @@ mod tests {
             SignalSink::GravityScale(id).dimension(false),
             D::Dimensionless
         );
+        assert_eq!(
+            SignalSink::Thrust(id).actuator(),
+            Some(ActuatorTarget::Node(id))
+        );
+        assert_eq!(SignalSink::Thrust(id).dimension(false), D::Force);
+        assert_eq!(SignalSink::Thrust(id).label(), "thrust");
     }
 
     #[test]
