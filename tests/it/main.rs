@@ -14,6 +14,7 @@ mod harness;
 mod adjust_last;
 mod array_drag;
 mod booleans;
+mod clipboard;
 mod client;
 mod csg;
 mod defaults;

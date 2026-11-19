@@ -76,6 +76,8 @@ pub struct MenuWriters<'w> {
     /// differ.
     invoke: MessageWriter<'w, InvokeOp>,
     snapshot: MessageWriter<'w, SnapshotRequest>,
+    /// Edit ▸ Paste: the clipboard bridge reads the text (`clipboard`).
+    paste: MessageWriter<'w, gradiance_interaction::input::PasteRequest>,
     exit: MessageWriter<'w, AppExit>,
 }
 
@@ -154,6 +156,15 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
                 .write(InvokeOp::with("scene.load", json!({"path": ""})));
             ui.close();
         }
+        if ui.button("Insert…").clicked() {
+            // A scene file's objects added to this one (brief R-3); an
+            // empty path is the dialog, `[]` keeps the file's positions.
+            writers.invoke.write(InvokeOp::with(
+                "scene.insert",
+                json!({"path": "", "at": []}),
+            ));
+            ui.close();
+        }
         ui.separator();
         if ui.button("Save").clicked() {
             // An empty path: the last one, else the dialog (`scene.save`).
@@ -223,6 +234,24 @@ fn edit_menu(
             writers
                 .invoke
                 .write_batch(key_invocations(EditorAction::Redo));
+            ui.close();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(has_selection, egui::Button::new("Copy"))
+            .clicked()
+        {
+            writers
+                .invoke
+                .write_batch(key_invocations(EditorAction::Copy));
+            ui.close();
+        }
+        if ui.button("Paste").clicked() {
+            // From the menu the pointer is on the menu, not the canvas: the
+            // copy lands where it was copied (Ctrl+V: at the cursor).
+            writers
+                .paste
+                .write(gradiance_interaction::input::PasteRequest { at: None });
             ui.close();
         }
         ui.separator();

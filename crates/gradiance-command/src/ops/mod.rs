@@ -103,7 +103,7 @@ pub(crate) fn body_of<'s>(
 /// member would author a *different* set than the caller wrote, and nothing
 /// in the scene would show it. `"selection"` is the exception: an empty
 /// selection is a set with no members.
-pub(crate) fn body_set(
+pub fn body_set(
     ctx: &OpContext,
     scene: &SceneSnapshot,
     targets: &[Target],

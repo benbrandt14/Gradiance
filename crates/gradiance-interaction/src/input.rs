@@ -46,6 +46,10 @@ pub enum EditorAction {
     Group,
     /// Ungroup the selection (Ctrl+Shift+G).
     Ungroup,
+    /// Copy the selection as scene text (Ctrl+C; brief R-3).
+    Copy,
+    /// Paste scene text from the clipboard at the cursor (Ctrl+V; brief R-3).
+    Paste,
     /// Switch to the given tool (see `default_input_map` for the keys).
     /// Carrying the [`ToolState`] directly means a new tool adds one key
     /// binding — no parallel variant, match arm, or tool list to update.
@@ -86,6 +90,8 @@ fn default_input_map() -> InputMap<EditorAction> {
             .with(ModifierKey::Shift)
             .with(KeyCode::KeyG),
     );
+    map.insert(A::Copy, ModifierKey::Control.with(KeyCode::KeyC));
+    map.insert(A::Paste, ModifierKey::Control.with(KeyCode::KeyV));
     map.insert(A::Tool(ToolState::Select), KeyCode::KeyS);
     map.insert(A::Tool(ToolState::Drag), KeyCode::KeyD);
     map.insert(A::Tool(ToolState::Box), KeyCode::KeyB);
@@ -118,6 +124,15 @@ impl Plugin for EditorInputPlugin {
         app.world_mut().spawn((EditorControls, default_input_map()));
     }
 }
+
+/// The actions whose keys a hovered number field keeps (Delete/Backspace
+/// reset it, Ctrl+C/Ctrl+V copy and paste its value; A-3 decision
+/// `field-ctrl-chords`).
+const FIELD_ACTIONS: [EditorAction; 3] = [
+    EditorAction::DeleteSelection,
+    EditorAction::Copy,
+    EditorAction::Paste,
+];
 
 /// One row of the key link table: pressing `action` invokes the operation
 /// `id` with the params `params` builds.
@@ -171,7 +186,23 @@ pub const KEY_OPS: &[KeyOp] = &[
         id: "group.ungroup",
         params: || json!({"targets": ["selection"]}),
     },
+    KeyOp {
+        action: EditorAction::Copy,
+        id: "edit.copy",
+        params: || json!({"targets": ["selection"]}),
+    },
 ];
+
+/// Ctrl+V on the canvas (or Edit ▸ Paste): paste the clipboard's scene text.
+/// The clipboard is the UI layer's (egui's), so the key cannot name the
+/// text; the UI layer reads the clipboard and invokes `edit.paste` with it
+/// (brief R-3).
+#[derive(Message, Debug, Clone, Copy, PartialEq)]
+pub struct PasteRequest {
+    /// Where the pasted bodies are centred (the cursor); `None` keeps the
+    /// copied positions.
+    pub at: Option<Vec2>,
+}
 
 impl KeyOp {
     /// The invocation this row makes.
@@ -199,6 +230,7 @@ pub struct ShortcutWriters<'w> {
     save: MessageWriter<'w, gradiance_persist::SaveSceneRequest>,
     transport: MessageWriter<'w, crate::transport::SimTransport>,
     snapshot: MessageWriter<'w, gradiance_persist::SnapshotRequest>,
+    paste: MessageWriter<'w, PasteRequest>,
 }
 
 /// Translates just-pressed actions into operation invocations / state
@@ -216,10 +248,12 @@ pub fn apply_shortcuts(
     mut next_tool: ResMut<NextState<ToolState>>,
     mut scale_frame: ResMut<crate::tools::handles::ScaleFrame>,
     mut last_path: ResMut<gradiance_persist::LastScenePath>,
+    cursor: Res<crate::cursor::CursorWorldPos>,
 ) {
     // Typing in a UI field must never trigger editor shortcuts. A number
     // field under the pointer owns its own keys, but not the editor's Ctrl
-    // chords (it takes only Ctrl+C and Ctrl+V, which no action uses).
+    // chords (it takes Ctrl+C and Ctrl+V, which copy and paste bodies on
+    // the canvas: the field's win, brief R-3).
     let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
     let on_field = keyboard_captured.0 && field_keys.0;
     if keyboard_captured.0 && !(on_field && ctrl) {
@@ -231,14 +265,17 @@ pub fn apply_shortcuts(
 
     // The edits: one table, rows in order. Ungroup's chord (Ctrl+Shift+G)
     // also satisfies Group's, so Group yields to it. Delete and Backspace
-    // stay the field's.
+    // and Ctrl+C stay the field's.
     let ungrouping = actions.just_pressed(&EditorAction::Ungroup);
     for row in KEY_OPS {
         let shadowed = (row.action == EditorAction::Group && ungrouping)
-            || (on_field && row.action == EditorAction::DeleteSelection);
+            || (on_field && FIELD_ACTIONS.contains(&row.action));
         if actions.just_pressed(&row.action) && !shadowed {
             writers.invoke.write(row.invoke());
         }
+    }
+    if actions.just_pressed(&EditorAction::Paste) && !on_field {
+        writers.paste.write(PasteRequest { at: cursor.0 });
     }
     if actions.just_pressed(&EditorAction::TogglePause) {
         // The transport's one path: `sim.play` / `sim.pause` write the same
