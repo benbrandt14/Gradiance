@@ -250,6 +250,23 @@ which panes are in it.
 Each tab's ✕ turns the section's View-menu toggle off, so the two never
 disagree about what is open.
 
+### Workspaces and areas (brief U-10)
+
+A **workspace** is a saved dock layout: which editors each dock shows, how
+the tiles split, and each dock's size (`domain::workspace::Workspace`, panel
+names only). The tabs sit in the top bar after the menus; the active one is
+the selected (accent) tab, `+` saves the docks under a new name, and a saved
+tab's context menu deletes it. The presets (**Layout**, **Scripting**,
+**Signals**) are code (`ui::workspaces::presets`), never stored. Applying a
+workspace is the one place a dock's tree is built whole
+(`dock_sync::tree_from_layout`); otherwise `sync_panes` still edits tiles in
+place. A workspace sets the dock editors only: floating windows and the
+status bar keep their state.
+
+An **area** is a dock tile: the dropdown at the right of a right-dock tab
+strip switches the shown tile to another editor (`panel.swap`), in place.
+The bottom dock has one editor, so it has no dropdown.
+
 ---
 
 ## 4. Write seams (the rule chrome is built around)

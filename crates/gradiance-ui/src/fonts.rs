@@ -87,6 +87,8 @@ pub mod glyph {
     pub const SCOPE: &str = "\u{25ad}"; // ▭
     /// A small forward marker, as on the per-sensor plot toggle.
     pub const TRIANGLE_RIGHT: &str = "\u{25b8}"; // ▸
+    /// A small downward marker: a dropdown (a dock tile's editor-type menu).
+    pub const TRIANGLE_DOWN: &str = "\u{25be}"; // ▾
 
     // --- Units and maths ------------------------------------------------
     /// Degrees.
@@ -129,6 +131,7 @@ pub mod glyph {
         PARAM,
         SCOPE,
         TRIANGLE_RIGHT,
+        TRIANGLE_DOWN,
         DEGREE,
         SQUARED,
         TIMES,

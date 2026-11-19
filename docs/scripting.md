@@ -193,6 +193,14 @@ across and ±3.5 m up and down); angles are radians.
 ;; names: outliner groups properties depth plot nodes console probe array optimizer
 ;;        settings review search status
 ;; an unknown name is a script error that lists these
+(panel-swap "outliner" "console") ; a dock tile switches its editor in place (brief U-10)
+;; workspaces — saved dock layouts; workstation config: saved with the scene,
+;; never undone (brief U-10)
+(workspace-select "Scripting") ; presets: Layout Scripting Signals; or a saved one
+(layout-save "Mine")         ; save the docks (editors, splits, sizes) and make it active
+(layout-apply)               ; put the docks back to the active workspace's saved layout
+(workspaces)                 ; every tab: name, preset?, active?
+(workspace-delete "Mine")    ; a saved one; presets cannot be deleted
 
 ;; tools — one operation per tool (brief U-9), the same pick the palette makes
 (box-tool)                   ; also select-tool drag-tool circle-tool polygon-tool hinge-tool
@@ -706,6 +714,14 @@ into the operation context, so an unknown name is refused at the call with
 the list of known names, and the reads see the state as the run began (one
 snapshot per run). The panel resources exist headless too, so tests and a
 headless remote client see the same panels, undrawn.
+
+Workspaces and areas (`crates/gradiance-ui/src/workspaces.rs`, brief U-10)
+follow the same shape: `layout.save`, `layout.apply`,
+`layout.workspace.select`, `layout.workspace.delete` and `panel.swap` lower
+to messages the UI applies (visibility through `PanelToggle`, the dock trees
+through `dock_sync`); `layout.workspace.list` reads a `WorkspaceMirror`. The
+docks' trees are kept in `Update` by `workspaces::sync_docks`, so a headless
+run has them too and a test can read a dock's tile order.
 
 `steel` may be declared only by `crates/gradiance-script` and `egui` only by
 `crates/gradiance-ui` — the package graph enforces both, and

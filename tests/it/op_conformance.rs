@@ -134,6 +134,8 @@ fn fixture() -> App {
     run_with_ids(&mut app, 20, "(begin (hinge 3 -1 3 1) (group (list 3 4)))");
     run_with_ids(&mut app, 30, "(spawn-circle 0 6 0.5)");
     run_with_ids(&mut app, 40, "(undo)");
+    // A saved workspace, so `layout.workspace.delete`'s example has one.
+    run_with_ids(&mut app, 50, "(layout-save \"Mine\")");
     app.insert_resource(OpIdSource::Random);
     let history = app.world().resource::<HistoryInfo>();
     assert_eq!(history.redo_depth, 1, "the fixture leaves one step to redo");

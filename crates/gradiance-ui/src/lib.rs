@@ -49,6 +49,7 @@ pub mod vendor;
 pub mod view_cube;
 pub mod widget_registry;
 pub mod widgets;
+pub mod workspaces;
 
 use bevy::prelude::*;
 use bevy_egui::{
@@ -256,8 +257,8 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(Startup, review::open_in_review_mode);
         app.init_resource::<PanelRects>();
         app.init_resource::<menu::AboutWindow>();
-        app.init_resource::<dock::RightDock>();
-        app.init_resource::<bottom_dock::BottomDock>();
+        // The docks' trees (`RightDock`, `BottomDock`) install headless with
+        // the workspace operations (`workspaces::install`).
         app.init_resource::<pie::PieMenu>();
         app.add_systems(
             EguiPrimaryContextPass,

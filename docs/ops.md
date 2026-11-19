@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 106 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 112 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -96,6 +96,16 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `joint.slider` | `(slider a b x y ax ay)` | edit | `spawn-joint` | — | Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world. | `{"a": 0, "b": 1, "x": -0.2, "y": 1, "ax": 1, "ay": 0}` |
 | `joint.spring` | `(spring a b frequency damping_ratio)` | edit | `spawn-joint` | — | Spring-damper strut between the centres of a and b; rest length is their current distance. | `{"a": 0, "b": 2, "frequency": 1.5, "damping_ratio": 0.1}` |
 
+## `layout`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `layout.apply` | `(layout-apply)` | editor | — | — | Put the docks back to the active workspace's saved layout. | `{}` |
+| `layout.save` | `(layout-save name)` | editor | — | — | Save the docks' layout (editors, splits, sizes) as a workspace and make it active; a saved one of that name is replaced. Workstation config: saved with the scene, never undone. | `{"name": "Mine"}` |
+| `layout.workspace.delete` | `(workspace-delete name)` | editor | — | — | Delete a saved workspace by name (presets stay). Deleting the active one makes Layout active and leaves the docks as they are. | `{"name": "Mine"}` |
+| `layout.workspace.list` | `(workspaces)` | query | — | — | Every workspace in tab order: its name, whether it is a preset, and whether it is active. | `{}` |
+| `layout.workspace.select` | `(workspace-select name)` | editor | — | — | Switch to a workspace by name (a preset: Layout, Scripting, Signals; or a saved one): its tab becomes active and the docks take its layout. | `{"name": "Scripting"}` |
+
 ## `lighting`
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
@@ -117,6 +127,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `panel.list` | `(panels)` | query | — | — | Every editor panel in View-menu order: its name (what the panel operations take) and whether it is open. | `{}` |
 | `panel.open` | `(panel-open? name)` | query | — | — | Whether an editor panel is shown, by name. | `{"name": "properties"}` |
 | `panel.show` | `(panel-show name)` | editor | — | — | Open an editor panel by name, as its View-menu row does (see panel.list for the names). | `{"name": "properties"}` |
+| `panel.swap` | `(panel-swap from to)` | editor | — | — | Switch the dock tile showing one editor to another, in place, as the tile's editor-type menu does. If `to` is shown elsewhere the two exchange tiles; if `from` is not shown, `to` just opens. Right dock: outliner, groups, depth, plot, properties, console; bottom: nodes. | `{"from": "outliner", "to": "console"}` |
 | `panel.toggle` | `(panel-toggle name)` | editor | — | — | Flip an editor panel's visibility by name. | `{"name": "properties"}` |
 
 ## `quantity`

@@ -52,6 +52,35 @@ pub enum Pane {
 }
 
 impl Pane {
+    /// Every right-dock editor, in the order a newly opened set is tabbed:
+    /// what a tile's editor-type menu offers (brief U-10).
+    pub const ALL: [Self; 6] = [
+        Self::Tree,
+        Self::Groups,
+        Self::Depth,
+        Self::Plot,
+        Self::Properties,
+        Self::Console,
+    ];
+
+    /// The pane's panel name in [`Panels::named`](crate::menu::Panels::named)
+    /// — what layouts and the `panel.*` operations call it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Tree => "outliner",
+            Self::Groups => "groups",
+            Self::Depth => "depth",
+            Self::Plot => "plot",
+            Self::Properties => "properties",
+            Self::Console => "console",
+        }
+    }
+
+    /// The pane a panel name shows in the right dock, if it docks there.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.name() == name)
+    }
+
     fn title(self) -> &'static str {
         match self {
             Self::Tree => "Outliner",
@@ -105,11 +134,38 @@ pub struct PlotParams<'w> {
 
 /// The right dock's `egui_tiles` layout. [`sync_panes`](crate::dock_sync::sync_panes)
 /// keeps its tiles in step with the open set by adding and removing individual
-/// tiles, so splits and tab order survive. Editor view-state; never persisted.
-#[derive(Resource, Default)]
+/// tiles, so splits and tab order survive. Editor view-state; persisted only
+/// as a saved workspace ([`crate::workspaces`]).
+#[derive(Resource)]
 pub struct RightDock {
-    tree: Option<egui_tiles::Tree<Pane>>,
+    pub(crate) tree: Option<egui_tiles::Tree<Pane>>,
+    /// The dock's width when last drawn, in points.
+    pub(crate) size: f32,
+    /// A width a workspace asked for, applied on the next draw.
+    pub(crate) pending_size: Option<f32>,
 }
+
+impl Default for RightDock {
+    fn default() -> Self {
+        Self {
+            tree: None,
+            size: RIGHT_DOCK_WIDTH,
+            pending_size: None,
+        }
+    }
+}
+
+impl RightDock {
+    /// The panes in depth-first tile order (empty when the dock is closed).
+    pub fn pane_order(&self) -> Vec<Pane> {
+        self.tree
+            .as_ref()
+            .map_or_default(crate::dock_sync::pane_order)
+    }
+}
+
+/// The right dock's default width, in points.
+pub const RIGHT_DOCK_WIDTH: f32 = 240.0;
 
 /// Routes each `egui_tiles` pane to its section renderer, holding the state the
 /// renderers need for this frame. The writer and the signals bundle carry
@@ -139,6 +195,9 @@ struct DockBehavior<'a, 'wp, 'sp, 'wo> {
     /// section's *open toggle* off, and those resources are borrowed by the
     /// caller for the duration of this borrow.
     closed: &'a mut Option<Pane>,
+    /// Set by a tile's editor-type menu: `(shown, wanted)`, invoked as
+    /// `panel.swap` after the tree renders (brief U-10).
+    swap: &'a mut Option<(Pane, Pane)>,
 }
 
 impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
@@ -178,6 +237,46 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_, '_, '_, '_> {
             all_panes_must_have_tabs: true,
             ..Default::default()
         }
+    }
+
+    /// The tile's **editor-type menu** (Blender's area dropdown): pick
+    /// another editor for the tab set's shown tile. The pick becomes a
+    /// `panel.swap` invocation, so a script can do the same.
+    fn top_bar_right_ui(
+        &mut self,
+        tiles: &egui_tiles::Tiles<Pane>,
+        ui: &mut egui::Ui,
+        _tile_id: egui_tiles::TileId,
+        tabs: &egui_tiles::Tabs,
+        _scroll_offset: &mut f32,
+    ) {
+        let Some(egui_tiles::Tile::Pane(shown)) = tabs.active.and_then(|id| tiles.get(id)) else {
+            return;
+        };
+        let shown = *shown;
+        let response = ui
+            .menu_button(crate::fonts::glyph::TRIANGLE_DOWN, |ui| {
+                for pane in Pane::ALL {
+                    let row = ui.selectable_label(pane == shown, pane.title());
+                    crate::widget_registry::publish_target(
+                        &format!("right_dock:pick:{}", pane.name()),
+                        row.rect,
+                    );
+                    if row.clicked() {
+                        if pane != shown {
+                            *self.swap = Some((shown, pane));
+                        }
+                        ui.close();
+                    }
+                }
+            })
+            .response
+            .on_hover_text("Editor type");
+        // Named by the editor it switches, so a tile is addressable.
+        crate::widget_registry::publish_target(
+            &format!("right_dock:editor:{}", shown.name()),
+            response.rect,
+        );
     }
 
     fn pane_ui(
@@ -334,21 +433,10 @@ pub fn right_dock(
         }
     }
 
-    // Which panes are visible, in a stable order. `sync_panes` adds and removes
-    // individual tiles, so a user's splits and tab order survive an unrelated
-    // section being toggled.
-    let desired: Vec<Pane> = [
-        op.panel.is_open().then_some(Pane::Tree),
-        groups.panel.is_open().then_some(Pane::Groups),
-        panel.open.then_some(Pane::Depth),
-        plot.panel.is_open().then_some(Pane::Plot),
-        properties.panel.open.then_some(Pane::Properties),
-        console.console.is_open().then_some(Pane::Console),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    crate::dock_sync::sync_panes(&mut dock.tree, "right-dock-tiles", &desired);
+    // Which panes are present was settled in `Update` by
+    // `workspaces::sync_docks` (through `sync_panes`, which keeps a user's
+    // splits and tab order).
+    let pending_size = dock.pending_size.take();
     let Some(tree) = dock.tree.as_mut() else {
         return Ok(());
     };
@@ -373,6 +461,7 @@ pub fn right_dock(
     };
     let mut groups_out = GroupsOutput::default();
     let mut closed: Option<Pane> = None;
+    let mut swap: Option<(Pane, Pane)> = None;
 
     // Scope the behavior so its borrows of the section state end before we
     // drain the outliner click back into the selection below.
@@ -395,6 +484,7 @@ pub fn right_dock(
             registry: &console.registry,
             log: &console.log,
             closed: &mut closed,
+            swap: &mut swap,
         };
 
         // egui 0.36 panels dock inside a `Ui`; build the screen-root one.
@@ -406,9 +496,14 @@ pub fn right_dock(
                 // Above the status bar (drawn first, brief U-9).
                 .max_rect(panels.above_bottom(ctx.viewport_rect())),
         );
-        egui::Panel::right("right-dock-panel")
+        let mut dock_panel = egui::Panel::right("right-dock-panel")
             .resizable(true)
-            .default_size(240.0)
+            .default_size(RIGHT_DOCK_WIDTH);
+        // A workspace's width holds for one frame; egui keeps it after.
+        if let Some(size) = pending_size {
+            dock_panel = dock_panel.exact_size(size);
+        }
+        dock_panel
             .show(&mut root, |ui| {
                 tree.ui(&mut behavior, ui);
             })
@@ -418,6 +513,13 @@ pub fn right_dock(
     // Claim the dock's rect so input over it doesn't leak to the scene.
     panels.push(panel_rect);
     crate::widget_registry::publish_rect("right_dock", panel_rect);
+    dock.size = panel_rect.width();
+    if let Some((shown, wanted)) = swap {
+        groups.invoke.write(gradiance_op::InvokeOp::with(
+            "panel.swap",
+            gradiance_op::json!({"from": shown.name(), "to": wanted.name()}),
+        ));
+    }
 
     // A closed tab turns its section's toggle off — the same state the View
     // menu edits, so the two agree and the pane doesn't reappear next frame.

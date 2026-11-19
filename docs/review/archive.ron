@@ -1366,5 +1366,113 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "domain::settings::RenderSettings; theme::Look::render, Look::ramp",
         ),
+        (
+            question: (
+                id: "workspace-storage",
+                title: "Where are saved workspaces stored?",
+                source: "Brief U-10 editor areas and saved workspaces (docs/briefs/U-10-areas-workspaces.md)",
+                description: r#"The brief left it open whether a per-user config file exists. None does: workstation config (grid, snap, camera) travels in the scene file."#,
+                decision: true,
+                options: [
+                    (
+                        label: "With the scene, as workstation config",
+                        caption: r#"A Workspaces resource (gradiance-domain::workspace) is one more EnvironmentRecord field, outside the scene_content! list: saved and loaded with the scene, never undone, never part of authored_eq. Defaulted when absent, so FORMAT_VERSION stays 8. The presets are code, not file content, so a new build's presets reach old files. Loading a scene does not re-apply its active workspace."#,
+                    ),
+                    (
+                        label: "A new per-user config file",
+                        caption: r#"Cost: a config path, a load/save seam and a format of its own, for one resource; better done once for grid, snap, camera and workspaces together."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "workspace-storage",
+                title: "Where are saved workspaces stored?",
+                choice: Picked("With the scene, as workstation config"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "domain::workspace::Workspaces; scene::records::EnvironmentRecord::workspaces",
+        ),
+        (
+            question: (
+                id: "workspace-presets",
+                title: "What do the three preset workspaces hold?",
+                source: "Brief U-10 editor areas and saved workspaces (docs/briefs/U-10-areas-workspaces.md)",
+                description: r#"Today's start-up has every dock closed, so a literal Layout preset would be an empty viewport."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Blender-like presets; start-up unchanged",
+                        caption: r#"Layout: Outliner over Properties (0.4/0.6) in a 240-point right dock. Scripting: Outliner over the console tabbed with Properties (0.35/0.65), right dock 480. Signals: Plot over Properties (0.6/0.4), right dock 380, the node graph in a 340-point bottom dock. A workspace sets the seven dock editors only: floating windows and the status bar are left as they are. No workspace is applied at start-up, so the start-up chrome and the snapshot tests do not change; the Layout tab is active."#,
+                    ),
+                    (
+                        label: "Layout = docks closed",
+                        caption: r#"Faithful to start-up, but the tab would only close things."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "workspace-presets",
+                title: "What do the three preset workspaces hold?",
+                choice: Picked("Blender-like presets; start-up unchanged"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "ui::workspaces::presets",
+        ),
+        (
+            question: (
+                id: "workspace-tab-row",
+                title: "Where do the workspace tabs sit, and what do apply and select mean?",
+                source: "Brief U-10 editor areas and saved workspaces (docs/briefs/U-10-areas-workspaces.md)",
+                description: r#"The tab row needs a place; layout.apply and layout.workspace.select need distinct meanings."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Top bar after Help; apply = revert",
+                        caption: r#"The tabs follow the menus in the top bar, as Blender's do; the active tab is the selected (accent) one; + saves the docks under a new name; a saved tab's context menu deletes it. layout.workspace.select makes a workspace active and applies its saved layout. layout.apply re-applies the active one's saved layout (undoes drift). A workspace does not keep unsaved changes per tab: switching away and back shows the saved layout. A preset's name cannot be saved over or deleted."#,
+                    ),
+                    (
+                        label: "A separate row under the menu bar",
+                        caption: r#"Cost: another 24 points of height off the viewport for three tabs."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "workspace-tab-row",
+                title: "Where do the workspace tabs sit, and what do apply and select mean?",
+                choice: Picked("Top bar after Help; apply = revert"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "ui::workspaces::workspace_tabs; menu::menu_bar",
+        ),
+        (
+            question: (
+                id: "area-editor-menu",
+                title: "Which tiles get an editor-type menu?",
+                source: "Brief U-10 editor areas and saved workspaces (docs/briefs/U-10-areas-workspaces.md)",
+                description: r#"The right dock hosts six editors; the bottom dock hosts only the node graph, and its renderer state is separate."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Right dock tiles only",
+                        caption: r#"Each right-dock tab strip has a small dropdown that switches the shown tile to another right-dock editor through the new panel.swap operation (Lisp panel-swap); if the wanted editor is shown elsewhere the two exchange tiles. The bottom dock has one editor, so it gets no menu, and panel.swap refuses a switch across docks. Moving the node graph into the right dock (or the outliner into the bottom) needs one pane type for both docks: later work."#,
+                    ),
+                    (
+                        label: "One pane type for both docks",
+                        caption: r#"Cost: merging the two dock behaviours and their system parameters; out of proportion for this brief."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "area-editor-menu",
+                title: "Which tiles get an editor-type menu?",
+                choice: Picked("Right dock tiles only"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "ui::dock::DockBehavior::top_bar_right_ui; ui::workspaces::PanelSwap",
+        ),
     ],
 )
