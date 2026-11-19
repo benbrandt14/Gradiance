@@ -284,7 +284,11 @@ missing foundation:**
 - Curvilinear abstraction: tools operate in grid coordinates (polygon
   edges curve in polar grids) (3.3) — *moved out of M18: a Phase 5 decision note
   (`docs/orchestration.md` § Phase 1), since it shares the seam with
-  simulation planes.*
+  simulation planes. Decided 2026-11-19 (brief 5-5,
+  `docs/curvilinear-tools-decision.md`): tools compute in plane-local 2D,
+  points snap through the grid's chart, edges stay straight (a polar
+  edge does not curve); an arc-on-a-ring constructor and a radial/ring
+  lock are a later option.*
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4) —
   *stability and snap-off landed (brief 1-4): circles snap to their exact
   features (`geometry::snap_features`: quadrants, exact nearest point), not
@@ -943,8 +947,10 @@ and rulings live in `docs/units-decision.md`; status:
       (`q`, `convert`, `unit-of`; the 5-3 parser; brief 5-4). *Not done:*
       the node graph's block constants are plain number fields with no
       parser (a UI follow-up); no dimensional type in steel.
-- [ ] *(dedicated path)* arbitrary coordinate frames — `docs/frames-decision.md`,
-      door held open by the frame-agnostic catalog + `WorldScale` seam.
+- [ ] *(dedicated path)* arbitrary coordinate frames — `docs/frames-decision.md`
+      (decided 2026-11-19, brief 5-5: a `PlaneFrame` value type at the
+      2D↔3D lift, phases F1–F5; planes and datums become authored entities
+      only with their first consumer) and `docs/curvilinear-tools-decision.md`.
 
 ## Horizon — larger directions (design goals, not scheduled)
 
@@ -956,7 +962,8 @@ them and cross-cutting passes leave the right seams.
   M18/M21; builds on `docs/sdf-geometry-decision.md`). Dimensioned constraints
   are unit-bearing, so the engineering-units pass (typed `Length`/`Angle`, the
   DSL parse layer) is a direct enabler; sketch planes/datums tie into
-  coordinate frames.
+  coordinate frames (`docs/frames-decision.md` phase F5: datums reuse the
+  authored plane entity).
 - **Grouped node behaviors.** Behavior nodes that reduce over a selection/group
   — average / min / max / sum of a quantity across bodies (extends the signals
   + behavior-node model). Consumes the `PhysicalQuantity` catalog: an aggregate
@@ -966,8 +973,10 @@ them and cross-cutting passes leave the right seams.
   avian world + `DepthBand` / `INTERACTION_PLANE_Z`) to multiple simulation
   planes and, ultimately, real 3D. The largest structural item: swaps the
   physics layer (avian2d → 3D), generalizes depth→volume, and consumes the
-  units pass's 3D-ready seams (`units::mass_of`, `units::world`) and the
-  coordinate-frames path.
+  units pass's 3D-ready seams (`units::mass_of`; `units::world` is only the
+  camera scale since the P2 flip) and the coordinate-frames path
+  (`docs/frames-decision.md`: the `PlaneFrame` lift and its ratchet, F1–F3,
+  come first; authored planes, F4, arrive with the engine decision).
 
 ## Backlog / later
 

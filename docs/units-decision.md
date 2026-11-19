@@ -176,6 +176,11 @@ dedicated path — keep the door open.* So this pass includes:
   **frame-agnostic** (values carry dimension, not a frame), and the
   `WorldScale` seam is where a frame transform later composes. Nothing in
   this pass forecloses frames; a `docs/frames-decision.md` follows.
+  *Decided 2026-11-19 (brief 5-5):* after the P2 flip there is no
+  `WorldScale` type and `units::world` is only the camera's scale, so the
+  frame composes at the 2D↔3D lift (`PosRot`'s seam) as a `PlaneFrame`
+  value type instead (`docs/frames-decision.md`; tools:
+  `docs/curvilinear-tools-decision.md`).
 
 ## Architecture
 
@@ -227,8 +232,10 @@ check that `PIXELS_PER_METER` is named only in `core::world`.
 - **New unit dimension** → one `Dimension` variant + canonical unit +
   formatter.
 - **2D→3D density** → edit `units::mass_of` + one `dimension.rs` line.
-- **Coordinate frames** → compose a transform at the `WorldScale` seam; the
-  catalog is already frame-agnostic.
+- **Coordinate frames** → compose a transform at the 2D↔3D lift
+  (`PlaneFrame`, `docs/frames-decision.md`; originally planned at the
+  `WorldScale` seam, which the P2 flip removed); the catalog is already
+  frame-agnostic.
 - **Never** reintroduce a bare `f32` for a dimensional value in authored or
   UI-facing code — a boundary test scans `domain` records for non-allowlisted
   `f32` fields, mirroring the serde-confinement test.
@@ -241,8 +248,9 @@ extension, not a rewrite:
 
 - **Full 3D / multiple simulation planes.** The `units::mass_of(Density,
   Area)` seam is the density-dimension cut-point (2D→3D is one function + one
-  `dimension.rs` line), and `core::world::WorldScale` is where per-plane
-  transforms compose. Typed quantities are already dimension-only, not
+  `dimension.rs` line), and per-plane transforms compose at the 2D↔3D
+  lift as a `PlaneFrame` value (`docs/frames-decision.md`; this said
+  `core::world::WorldScale` before the P2 flip removed it). Typed quantities are already dimension-only, not
   plane-bound, so a second plane adds a frame at the seam, not new scalar
   types.
 - **Grouped node behaviors.** Handled by the set-valued catalog readers
@@ -354,8 +362,10 @@ extension, not a rewrite:
    built from blocks, not typed text, so there is no expression field for
    a unit literal to go into. Giving those fields `unit_fields::drag_value`
    with a dimension per port is a UI follow-up.
-- **(dedicated later) coordinate frames** — `docs/frames-decision.md`;
-  door held open by the frame-agnostic catalog + `WorldScale` seam.
+- **(dedicated later) coordinate frames** — `docs/frames-decision.md`
+  (decided 2026-11-19, brief 5-5: a `PlaneFrame` value type at the 2D↔3D
+  lift, phases F1–F5) and `docs/curvilinear-tools-decision.md` (tools
+  compute plane-local; edges stay straight in polar grids).
 
 ## Verification & risk
 

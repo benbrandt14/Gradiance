@@ -1008,5 +1008,67 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "crates/gradiance-render/src/toon.wesl (the glint loop).",
         ),
+        (
+            question: (
+                id: "frames-option",
+                title: "Where do coordinate frames live?",
+                source: "Phase 5, brief 5-5 frames and tool coordinates decision (docs/briefs/5-5-frames-decision.md)",
+                description: r#"The consumer is multiple simulation planes, then 3D. An inventory found 60 sites in 23 Rust files that build or drop the third axis by hand (51 not routed through a named seam), 1 shader line, 78 gizmo calls that draw in world XY, and the 2D engine. There is no WorldScale type since the P2 flip, so a frame cannot compose there; the seam on the path is the 2D-to-3D lift (PosRot). Detail: docs/frames-decision.md."#,
+                decision: true,
+                options: [
+                    (
+                        label: "(a) Frame value type",
+                        caption: r#"A PlaneFrame value type (ported from PR #208) in gradiance-core at the 2D-to-3D lift, one instance (world XY); route every site through it and add a CI ratchet. Authored and saved state stays plane-local 2D. Cost: small, no format change. Gives no datums or named planes yet."#,
+                    ),
+                    (
+                        label: "(b) Authored datums",
+                        caption: r#"Frames and simulation planes become authored entities that bodies reference by StableId, with commands, records, undo, inspector and verbs. Unlocks named and moving planes and CAD sketch planes. Cost: large, a format bump, and it still needs (a)'s lift; nothing consumes it yet."#,
+                    ),
+                    (
+                        label: "(c) Defer to the 3D engine",
+                        caption: r#"Decide frames with the engine choice (PR #208's question). Cost: nothing now, but unrouted sites keep growing, and the engine choice itself needs the plane seam first."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "frames-option",
+                title: "Where do coordinate frames live?",
+                choice: Picked("(a) Frame value type"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. (a) now (phases F1-F3); (b) for planes and datums when a brief first authors a second plane or a sketch plane (F4-F5), referenced by StableId, not by index; not (c).",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "docs/frames-decision.md (recommendation and phases F0-F5); docs/briefs/5-5-frames-decision.md Outcome.",
+        ),
+        (
+            question: (
+                id: "curvilinear-edges",
+                title: "Does a polygon edge drawn in a polar grid curve?",
+                source: "Phase 5, brief 5-5; roadmap M18 (3.3) curvilinear abstraction",
+                description: r#"Tools compute in the active plane's local 2D coordinates and points already snap through the grid's chart (polar snaps to ring and spoke crossings). The open part is the edge between two points. Detail: docs/curvilinear-tools-decision.md."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Straight edges",
+                        caption: r#"Points snap in the chart; edges are straight in the plane, as today. Grid coordinates are a view, never stored. Cost: an arc along a ring needs a separate constructor."#,
+                    ),
+                    (
+                        label: "Edges follow the chart",
+                        caption: r#"An edge is linear in (r, theta): a spiral segment, an arc when both ends share a ring. Cost: no exact SDF leaf (a sampled polyline or a new leaf), and the person's grid setting would change the document's geometry."#,
+                    ),
+                    (
+                        label: "Straight, plus arc tools",
+                        caption: r#"Straight edges, plus an arc-on-a-ring constructor and a radial/ring lock as tool options. Cost: two new tool features; neither exists, so no scene can show them yet."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "curvilinear-edges",
+                title: "Does a polygon edge drawn in a polar grid curve?",
+                choice: Picked("Straight edges"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. The arc constructor and the radial/ring lock (the third option) are retained as a later Snapping/tools item; they become a review question once a scene can show them.",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "docs/curvilinear-tools-decision.md; docs/frames-decision.md phase F3 (chart functions).",
+        ),
     ],
 )
