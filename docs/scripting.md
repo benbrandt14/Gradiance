@@ -190,8 +190,15 @@ across and ±3.5 m up and down); angles are radians.
 (panel-toggle "plot")        ; flip one
 (panel-open? "depth")        ; #t / #f — whether it is showing
 (panels)                     ; every panel: name and whether it is open
-;; names: outliner properties depth plot nodes console probe array optimizer settings review
+;; names: outliner groups properties depth plot nodes console probe array optimizer
+;;        settings review search status
 ;; an unknown name is a script error that lists these
+
+;; tools — one operation per tool (brief U-9), the same pick the palette makes
+(box-tool)                   ; also select-tool drag-tool circle-tool polygon-tool hinge-tool
+                             ; prismatic-tool spring-tool rod-tool weld-tool ground-tool
+                             ; cut-tool tracer-tool; editor seam, no undo step
+(ui-search "del")            ; the ids F3 search lists for "del", best first
 
 ;; query — read the committed scene (reads are total)
 (body-count)                 ; number of bodies
@@ -360,8 +367,10 @@ durable identity.
 Widget names come from the **widget registry** (`ui::widget_registry`, a
 port of SolidCraft's `ui-registry`): an area publishes its rect under its own
 name (`menu`, `transport`, `tools`, `right_dock`, `bottom_dock`,
-`view_cube`); a widget inside it is `<area>:<name>` (`tools:Box`, one per
-palette tool, script tools included). A panel names a widget by calling
+`view_cube`, `status`, `search`, `pie`); a widget inside it is
+`<area>:<name>` (`tools:Box`, one per palette tool, script tools included;
+`search:field` and `search:<row>` while F3 search is open, `pie:<slice>`
+while the tools pie is). A panel names a widget by calling
 `widget_registry::publish_target` (rect and handle) or `publish_rect` while
 it draws. Headless there is no egui pass: `ui-inspect` answers an empty list
 and `ui-screenshot` logs that there is no window.

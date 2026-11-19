@@ -95,6 +95,8 @@ fn expected_bodies(question: &str) -> &'static [usize] {
         "shading" => &[8, 8, 8],
         // the look scene (ground + 12) + the cut box's pentagon and triangle
         "toon-highlights" => &[15, 15, 15, 15],
+        // a ground and three bodies, the status bar shown or hidden
+        "status-bar-and-pie" => &[4, 4],
         _ => &[],
     }
 }

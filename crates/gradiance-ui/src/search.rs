@@ -40,6 +40,9 @@ pub struct SearchPanel {
     pub query: String,
     /// The highlighted row (Enter invokes it).
     pub highlight: usize,
+    /// Until an arrow key moves it, the highlight follows the first row that
+    /// can run (the rows arrive a frame after the text that ranks them).
+    seek: bool,
     /// Give the text field the keyboard on the next draw.
     focus: bool,
 }
@@ -53,6 +56,7 @@ impl crate::panels::PanelToggle for SearchPanel {
         if open && !self.open {
             self.query.clear();
             self.highlight = 0;
+            self.seek = true;
             self.focus = true;
         }
         self.open = open;
@@ -117,7 +121,7 @@ fn why_disabled(entry: &OpEntry, params: &Value, ctx: &OpContext) -> Option<Stri
         Ok(output) if output.writes_nothing() && output.value().is_none() => {
             let on_selection = params.as_object().is_some_and(|o| !o.is_empty());
             Some(if on_selection {
-                "nothing selected it applies to".to_owned()
+                "nothing it applies to is selected".to_owned()
             } else {
                 "nothing to do now".to_owned()
             })
@@ -136,7 +140,8 @@ fn rank_candidates(query: &str, candidates: &[(&OpEntry, Value)]) -> Vec<usize> 
             Field::new(meta.menu.unwrap_or_default(), 3),
             Field::new(meta.lisp, 3),
             Field::new(meta.id, 2),
-            Field::new(meta.doc, 1),
+            // A doc is prose: a scattered-letter match there means nothing.
+            Field::exact(meta.doc, 1),
         ]
     })
 }
@@ -188,6 +193,8 @@ pub fn refresh_search(world: &mut World) {
 
 /// The most rows the box shows at once (it scrolls past that).
 const MAX_ROWS: usize = 12;
+/// One row's height in points (a label line and a doc line).
+const ROW_HEIGHT: f32 = 40.0;
 /// The box's width in points.
 const WIDTH: f32 = 460.0;
 
@@ -220,11 +227,16 @@ pub fn search_ui(
         return None;
     }
     let last = rows.len().saturating_sub(1);
+    if panel.seek {
+        panel.highlight = rows.iter().position(|r| r.disabled.is_none()).unwrap_or(0);
+    }
     if down {
         panel.highlight = (panel.highlight + 1).min(last);
+        panel.seek = false;
     }
     if up {
         panel.highlight = panel.highlight.saturating_sub(1);
+        panel.seek = false;
     }
     panel.highlight = panel.highlight.min(last);
     let mut chosen = None;
@@ -254,15 +266,19 @@ pub fn search_ui(
                     panel.focus = false;
                 }
                 if field.changed() {
-                    panel.highlight = 0;
+                    panel.seek = true;
                 }
                 ui.separator();
                 if rows.is_empty() {
                     crate::widgets::empty_state(ui, "No operation matches: try fewer letters");
                     return;
                 }
+                // An area's first pass sizes it small: ask for the rows'
+                // height outright, up to `MAX_ROWS`.
+                let shown_rows = rows.len().min(MAX_ROWS) as f32;
                 egui::ScrollArea::vertical()
-                    .max_height(MAX_ROWS as f32 * 34.0)
+                    .min_scrolled_height(shown_rows * ROW_HEIGHT)
+                    .max_height(MAX_ROWS as f32 * ROW_HEIGHT)
                     .show(ui, |ui| {
                         for (i, row) in rows.iter().enumerate() {
                             if let Some(invocation) = row_ui(ui, row, i == panel.highlight, &tokens)
@@ -414,7 +430,7 @@ mod tests {
             ..SearchPanel::default()
         };
         panel.set_open(true);
-        assert!(panel.open && panel.focus);
+        assert!(panel.open && panel.focus && panel.seek);
         assert_eq!((panel.query.as_str(), panel.highlight), ("", 0));
         // Showing an open box again keeps what was typed.
         panel.query.push('x');

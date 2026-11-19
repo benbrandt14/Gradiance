@@ -15,7 +15,7 @@
 //! | a prefix of the field | 80 |
 //! | a prefix of a word in the field | 60 |
 //! | a substring | 40 |
-//! | a subsequence (`spb` in `spawn-box`) | 10, plus 4 per character that starts a word, at most 30 |
+//! | a subsequence (`spb` in `spawn-box`), unless the field is [`Field::exact`] | 10, plus 4 per character that starts a word, at most 30 |
 //!
 //! Matching ignores case. Words split at anything that is not a letter or a
 //! digit, so `spawn-box`, `Edit/Delete selection` and `body.spawn_box` all
@@ -32,18 +32,38 @@ pub struct Field<'a> {
     pub text: &'a str,
     /// What a match in this field counts for (a name outranks a doc).
     pub weight: u32,
+    /// Whether a subsequence counts (off for prose, where scattered letters
+    /// match nearly any query).
+    pub fuzzy: bool,
 }
 
 impl<'a> Field<'a> {
     /// A field of `text` that counts `weight` times.
     pub fn new(text: &'a str, weight: u32) -> Self {
-        Self { text, weight }
+        Self {
+            text,
+            weight,
+            fuzzy: true,
+        }
+    }
+
+    /// A field where only whole, prefix, word and substring matches count.
+    pub fn exact(text: &'a str, weight: u32) -> Self {
+        Self {
+            fuzzy: false,
+            ..Self::new(text, weight)
+        }
     }
 }
 
 /// The score of one query term in one text, or `None` when it does not
 /// match. `term` must already be lower-case.
 pub fn term_score(term: &str, text: &str) -> Option<u32> {
+    match_score(term, text, true)
+}
+
+/// [`term_score`], with the subsequence match only when `fuzzy`.
+fn match_score(term: &str, text: &str, fuzzy: bool) -> Option<u32> {
     if term.is_empty() {
         return Some(0);
     }
@@ -59,6 +79,9 @@ pub fn term_score(term: &str, text: &str) -> Option<u32> {
     }
     if text.contains(term) {
         return Some(40);
+    }
+    if !fuzzy {
+        return None;
     }
     subsequence(term, &text)
 }
@@ -97,7 +120,9 @@ pub fn score(query: &str, fields: &[Field<'_>]) -> Option<u32> {
     for term in query.split_whitespace() {
         let best = fields
             .iter()
-            .filter_map(|field| term_score(term, field.text).map(|s| s * field.weight))
+            .filter_map(|field| {
+                match_score(term, field.text, field.fuzzy).map(|s| s * field.weight)
+            })
             .max()?;
         total += best;
     }
@@ -166,6 +191,9 @@ mod tests {
         assert_eq!(score("delete zebra", &fields), None);
         // Only the doc matches: weight 1.
         assert_eq!(score("body", &fields), Some(60));
+        // Prose takes no scattered-letter match.
+        assert_eq!(score("dlb", &[Field::exact("delete the body", 1)]), None);
+        assert!(score("dlb", &[Field::new("delete the body", 1)]).is_some());
     }
 
     #[test]

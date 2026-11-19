@@ -216,6 +216,28 @@ Before the trait there were two idioms (a `pub open: bool` field, and a private
 field behind hand-written accessors) and every consumer paid for both. The
 `impl_panel_toggle!` macro writes the implementation for the common case.
 
+### Surfaces over the registry (brief U-9)
+
+Three surfaces are pure projections of the operation registry, so a new
+operation reaches them with no edit in `gradiance-ui`:
+
+- **F3 search** (`ui::search`): a box over every operation a click can run
+  (not a query; params empty or only objects, filled by the selection:
+  `OpEntry::selection_params`). Typing ranks rows by name, menu path, Lisp
+  name, id and doc (`gradiance_op::search`); arrows, Enter or a click
+  invoke through `InvokeOp`; Esc or F3 closes. A row whose dry lowering
+  fails or writes nothing is greyed and says why. `ui.search` returns the
+  same ranking as ids.
+- **Status bar** (`ui::status_bar`, panel `status`, on by default): the
+  active tool and its key (from its `tool.*` operation), its gestures (the
+  tool's hint table, `interaction::tool_ops::hints`), F3 and Q, and at the
+  right the selection count and Playing or Paused. It is drawn before the
+  docks, which stand on it (`PanelRects::above_bottom`).
+- **Pie menus** (`ui::pie`): up to eight operation ids in one table
+  (`TOOLS_PIE`), clockwise from the top. Q held over the canvas opens the
+  tools pie; release over a slice runs it, release back in the centre
+  cancels, a tap keeps it open for a click.
+
 ### Docks preserve layout
 
 `ui::dock_sync::sync_panes` adds and removes individual tiles. It exists
@@ -282,6 +304,8 @@ copy for reading; the code wins.
 | `Ctrl+G` / `Ctrl+Shift+G` | Group / ungroup |
 | `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+O` | Save / Save As / Open |
 | `F12` | Snapshot |
+| `F3` | Search operations (brief U-9) |
+| `Q` (hold over the canvas) | Tools pie (brief U-9) |
 | `` ` `` | Script console |
 | `\` | Plot |
 

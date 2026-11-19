@@ -119,7 +119,9 @@ fn a_disabled_row_says_why_and_enter_skips_it() {
             }
         },
         SearchState {
-            rows: all,
+            // Only the greyed row: the box highlights the first row that can
+            // run, and here there is none.
+            rows: all.into_iter().filter(|r| r.id == "body.delete").collect(),
             ..SearchState::default()
         },
     );

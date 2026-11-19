@@ -1070,5 +1070,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "docs/curvilinear-tools-decision.md; docs/frames-decision.md phase F3 (chart functions).",
         ),
+        (
+            question: (
+                id: "search-pie-keys",
+                title: "Which keys open F3 search and the tools pie?",
+                source: "Brief U-9 (docs/briefs/U-9-search-status-pie.md)",
+                description: r#"The brief names F3 and Q; both were free (interaction::input binds Ctrl+Z/Y/A/S/O/G, Delete, Backspace, Space, Escape, F, F12 and the tool letters S D B C P H W R T L G K N). Keys are out of scope (owner, 2026-11-17): no current binding may change."#,
+                decision: true,
+                options: [
+                    (
+                        label: "F3 and Q",
+                        caption: r#"F3 toggles the search box; Q held over the canvas opens the tools pie. Both are read in the egui pass (like the console's backtick), so a focused text field never sees them as commands. Cost: Q is taken for one pie; a second pie needs another key."#,
+                    ),
+                    (
+                        label: "F3 only",
+                        caption: r#"Search on F3, the pie only from a menu. Cost: a pie that needs a menu click loses its point."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "search-pie-keys",
+                title: "Which keys open F3 search and the tools pie?",
+                choice: Picked("F3 and Q"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. Neither key had a binding; no existing binding changed.",
+                answered_at: "2026-11-19T20:00:00Z",
+            ),
+            ingested_as: "ui::search, ui::pie; docs/ui-design.md section 5",
+        ),
+        (
+            question: (
+                id: "tools-pie-slices",
+                title: "Which eight tools are on the tools pie, and in what order?",
+                source: "Brief U-9 (docs/briefs/U-9-search-status-pie.md)",
+                description: r#"There are 13 tools and a pie holds 8 (one per compass direction). Slices are operation ids in one table (ui::pie::TOOLS_PIE), clockwise from the top."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Select first, shapes right, links left",
+                        caption: r#"N Select, NE Box, E Circle, SE Polygon, S Cut, SW Spring, W Hinge, NW Drag: the two pick tools at the top, the shape tools down the right, the link tools down the left, Cut at the bottom. Prismatic, Rod, Weld, Ground and Tracer stay on the palette and in F3."#,
+                    ),
+                    (
+                        label: "Palette order",
+                        caption: r#"The palette's first eight in its order (Select, Drag, Box, Circle, Polygon, Hinge, Prismatic, Spring). Cost: Cut drops off and the order follows a column, not a circle."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "tools-pie-slices",
+                title: "Which eight tools are on the tools pie, and in what order?",
+                choice: Picked("Select first, shapes right, links left"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. The pie's feel is in the review question status-bar-and-pie.",
+                answered_at: "2026-11-19T20:00:00Z",
+            ),
+            ingested_as: "ui::pie::TOOLS_PIE",
+        ),
+        (
+            question: (
+                id: "pie-gestures",
+                title: "How does the pie open, pick and cancel?",
+                source: "Brief U-9 (docs/briefs/U-9-search-status-pie.md)",
+                description: r#"The brief: Q held over the canvas opens it, release over a slice picks, release in the centre cancels, or click."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Hold-release, tap keeps it open",
+                        caption: r#"Hold Q, flick toward a slice, release: picked. Leave the centre and come back, release: cancelled. A tap (released without leaving the centre) leaves it open: a click on a slice picks it, a click in the centre, Esc or Q again closes it. The tap rule is time-free, so it does not depend on the frame rate."#,
+                    ),
+                    (
+                        label: "Hold-release only",
+                        caption: r#"A release in the centre always cancels. Cost: a tap opens and closes the pie at once, so the pie cannot be used with a click."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pie-gestures",
+                title: "How does the pie open, pick and cancel?",
+                choice: Picked("Hold-release, tap keeps it open"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. ",
+                answered_at: "2026-11-19T20:00:00Z",
+            ),
+            ingested_as: "ui::pie (module docs)",
+        ),
+        (
+            question: (
+                id: "search-candidates",
+                title: "Which operations does F3 list, and when is a row greyed?",
+                source: "Brief U-9 (docs/briefs/U-9-search-status-pie.md)",
+                description: r#"The registry has no enable predicate (checked: OpMeta has menu, chord, undo label and seam only). Most operations take numbers a click cannot supply."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Click-runnable ops, dry-run enable",
+                        caption: r#"Every non-query operation whose params a click can fill: none, or only object targets, which become the selection (OpEntry::selection_params). 24 today (the 11 edit, context and file rows plus the 13 tool operations). A row is greyed when lowering it against the context its click would meet fails (its error is the reason) or writes nothing (nothing it applies to is selected). Ranking: name 4, menu path and Lisp name 3, id 2, doc 1 (doc without scattered-letter matches); every term must match; stable for ties."#,
+                    ),
+                    (
+                        label: "Every operation",
+                        caption: r#"List all 100 operations and open a params form for the rest. Cost: a form per operation is a new surface (it is U-11's Adjust Last Operation territory)."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "search-candidates",
+                title: "Which operations does F3 list, and when is a row greyed?",
+                choice: Picked("Click-runnable ops, dry-run enable"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. Operations with numeric params (fillet radius, spawns) are not listed; a params form is later work.",
+                answered_at: "2026-11-19T20:00:00Z",
+            ),
+            ingested_as: "gradiance_op::search, ui::search",
+        ),
+        (
+            question: (
+                id: "tool-operations",
+                title: "How does a tool become an operation?",
+                source: "Brief U-9 (docs/briefs/U-9-search-status-pie.md)",
+                description: r#"The pie's rows are operation ids and the status bar reads a tool's name and key from the registry, so the tools need operations. None existed."#,
+                decision: true,
+                options: [
+                    (
+                        label: "One operation per tool",
+                        caption: r#"tool.select, tool.box, ... (13), editor seam, no undo step, chord = the tool's letter, menu Tools/<name>; Lisp select-tool, box-tool, .... Each appears in F3, the pie and the catalog with no table of its own."#,
+                    ),
+                    (
+                        label: "One tool.use with a name",
+                        caption: r#"One operation with a name param. Cost: F3 and the pie would need params per row, and the catalog would hide which tools exist."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "tool-operations",
+                title: "How does a tool become an operation?",
+                choice: Picked("One operation per tool"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. The keys still switch tools directly (interaction::input is unchanged; keys are out of scope).",
+                answered_at: "2026-11-19T20:00:00Z",
+            ),
+            ingested_as: "interaction::tool_ops; docs/ops.md",
+        ),
+        (
+            question: (
+                id: "status-bar-default",
+                title: "What does the status bar show, and is it on by default?",
+                source: "Brief U-9 (docs/briefs/U-9-search-status-pie.md)",
+                description: r#"The brief: a bottom strip with the active tool's mouse and key hints, the sim state and the selection count; a PanelToggle, on by default."#,
+                decision: true,
+                options: [
+                    (
+                        label: "On, tool + hints + state",
+                        caption: r#"On by default (panel status; View > Status bar; panel-hide). Left: the tool and its key from its operation, its gestures from the tool's hint table, then F3 search and Q tools pie. Right: the selection count and Playing or Paused. 22 points high, small text in theme tokens; the docks stand on it."#,
+                    ),
+                    (
+                        label: "Off by default",
+                        caption: r#"Hidden until turned on. Cost: the hints exist to be seen by someone who does not know them yet."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "status-bar-default",
+                title: "What does the status bar show, and is it on by default?",
+                choice: Picked("On, tool + hints + state"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. Whether it should show by default is the review question status-bar-and-pie.",
+                answered_at: "2026-11-19T20:00:00Z",
+            ),
+            ingested_as: "ui::status_bar; interaction::tool_ops::hints",
+        ),
     ],
 )
