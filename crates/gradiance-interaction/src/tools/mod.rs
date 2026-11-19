@@ -45,8 +45,8 @@ use gradiance_physics::queries::PhysicsQueries;
 pub struct ActiveGesture(pub bool);
 
 /// All tool gesture drivers run in this set. Click-through selection runs
-/// after it, so it observes this frame's [`ActiveGesture`] and commit
-/// intents when deciding whether a click fell through.
+/// after it, so it observes this frame's [`ActiveGesture`] and commits
+/// when deciding whether a click fell through.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ToolDriverSet;
 
@@ -127,6 +127,7 @@ impl Plugin for ToolsPlugin {
                 .before(gradiance_command::CommandDispatchSet),
         );
         app.init_resource::<click_select::ClickThrough>();
+        app.init_resource::<click_select::ToolCommitted>();
         app.add_systems(
             Update,
             click_select::click_through_select

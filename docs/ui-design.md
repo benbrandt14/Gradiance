@@ -156,7 +156,9 @@ entry on Enter, a key, a wheel notch or a menu row at once, and a cancelled
 drag never. A hovered or dragged field claims the keyboard
 (`unit_fields::claim_keys` → `KeyboardCaptured`), so Backspace over a field
 does not also delete the selection; keys reach a field only while the
-pointer is over it, never as global keys. A middle click over a panel
+pointer is over it, never as global keys. The editor's other Ctrl chords
+pass a hovered field (`FieldKeys`, brief A-3): Ctrl+Z with the pointer
+resting on a field still undoes; a field with text focus takes them all. A middle click over a panel
 never orbits the view (the camera orbits only off the UI). On the config
 seam a reset is a settings write like any other: a scene-content setting
 records it as one undo step (`commit_settings_edits`).

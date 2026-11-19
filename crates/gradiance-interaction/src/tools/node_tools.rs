@@ -20,9 +20,22 @@ use gradiance_scene::NodeRecord;
 
 /// Places a node of `kind` on release: attached to the body under the
 /// cursor (offset in its frame) or free. One click commits one `SpawnNode`.
-fn place_node(ctx: &ManipContext, world: &ToolWorld, kind: NodeKind) -> ManipOutput {
-    if ctx.left != GesturePhase::Released {
-        return ManipOutput::default();
+/// `armed` is set by a press on the canvas and spent by the release, so a
+/// release that ends a click on the UI (a menu, a panel, the palette) places
+/// nothing: the driver reports every release, wherever it lands.
+fn place_node(
+    ctx: &ManipContext,
+    world: &ToolWorld,
+    armed: &mut bool,
+    kind: NodeKind,
+) -> ManipOutput {
+    match ctx.left {
+        GesturePhase::Pressed => {
+            *armed = true;
+            return ManipOutput::default();
+        }
+        GesturePhase::Released if std::mem::take(armed) => {}
+        _ => return ManipOutput::default(),
     }
     let Some(p) = ctx.cursor else {
         return ManipOutput::default();
@@ -60,7 +73,10 @@ macro_rules! node_tool {
     ($ty:ident, $doc:literal, $make:expr) => {
         #[doc = $doc]
         #[derive(Resource, Default, Debug)]
-        pub struct $ty;
+        pub struct $ty {
+            /// A canvas press is waiting for its release.
+            armed: bool,
+        }
 
         impl ManipTool for $ty {
             fn update(
@@ -70,7 +86,7 @@ macro_rules! node_tool {
                 _: &Selection,
             ) -> ManipOutput {
                 let make: fn() -> NodeKind = $make;
-                place_node(ctx, world, make())
+                place_node(ctx, world, &mut self.armed, make())
             }
             fn drafting(&self) -> bool {
                 false

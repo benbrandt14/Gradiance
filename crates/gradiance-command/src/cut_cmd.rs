@@ -42,10 +42,19 @@ enum Replacement {
 struct CutOutcome {
     /// The body's pre-cut state (undo restores it verbatim).
     original: BodyRecord,
-    /// Affected joints: the pre-cut record, and the rewired definition
-    /// (`None` = the joint is deleted by this cut).
-    joint_changes: Vec<(JointRecord, Option<JointDef>)>,
     replacement: Replacement,
+}
+
+/// What one stroke does: the bodies it severs or swallows, and the joints
+/// on them.
+#[derive(Debug, Default)]
+struct CutStage {
+    outcomes: Vec<CutOutcome>,
+    /// Affected joints, each once: the pre-cut record, and the rewired
+    /// definition (`None` = the joint is deleted by this cut). A joint
+    /// whose two bodies are both cut has both ends rewired in one
+    /// definition.
+    joint_changes: Vec<(JointRecord, Option<JointDef>)>,
 }
 
 /// Cuts every body crossed by the stroke from `a` to `b`.
@@ -85,7 +94,7 @@ impl CutCommand {
     }
 
     /// Computes what the stroke does to every body it crosses.
-    fn stage(&self, world: &mut World) -> Vec<CutOutcome> {
+    fn stage(&self, world: &mut World) -> CutStage {
         let mut outcomes = Vec::new();
         let bodies: Vec<Entity> = {
             let mut query = world.query_filtered::<Entity, With<Body>>();
@@ -123,21 +132,16 @@ impl CutCommand {
                 Replacement::Split { pieces }
             };
 
-            let joint_changes = match &replacement {
-                Replacement::Destroy => crate::joint_cmd::joints_referencing(world, &[original.id])
-                    .into_iter()
-                    .map(|(_, record)| (record, None))
-                    .collect(),
-                Replacement::Split { pieces } => rewire_joints(world, &original, pieces),
-            };
-
             outcomes.push(CutOutcome {
                 original,
-                joint_changes,
                 replacement,
             });
         }
-        outcomes
+        let joint_changes = rewire_joints(world, &outcomes);
+        CutStage {
+            outcomes,
+            joint_changes,
+        }
     }
 }
 
@@ -207,46 +211,62 @@ pub(crate) fn replace_with_pieces(
     Ok(())
 }
 
-/// Reattaches each joint on a split body to the piece containing its
-/// anchor (remapping the anchor into the piece frame), or deletes it.
+/// Reattaches each joint on a cut body to the piece containing its anchor
+/// (remapping the anchor into the piece frame), or deletes it when its body
+/// was swallowed or no piece holds the anchor. Each joint is staged once,
+/// so a joint between two cut bodies has both ends rewired.
 fn rewire_joints(
     world: &mut World,
-    original: &BodyRecord,
-    pieces: &[BodyRecord],
+    outcomes: &[CutOutcome],
 ) -> Vec<(JointRecord, Option<JointDef>)> {
-    // Piece centroids in the original body's local frame.
-    let piece_offsets: Vec<Vec2> = pieces
-        .iter()
-        .map(|p| Vec2::from_angle(-original.pose.rot).rotate(p.pose.pos - original.pose.pos))
-        .collect();
-
-    crate::joint_cmd::joints_referencing(world, &[original.id])
+    let ids: Vec<StableId> = outcomes.iter().map(|o| o.original.id).collect();
+    crate::joint_cmd::joints_referencing(world, &ids)
         .into_iter()
         .map(|(_, record)| {
-            let on_body_a = record.def.body_a == original.id;
-            let anchor = if on_body_a {
-                record.def.anchor_a.value()
-            } else {
-                record.def.anchor_b.value()
-            };
-            let mut rewired = None;
-            for (piece, offset) in pieces.iter().zip(piece_offsets.iter()) {
-                if shape_contains(&piece.shape, anchor - *offset) {
-                    let mut def = record.def.clone();
-                    if on_body_a {
-                        def.body_a = piece.id;
-                        def.anchor_a = Displacement(anchor - *offset);
+            let def = outcomes
+                .iter()
+                .try_fold(record.def.clone(), |def, outcome| {
+                    if def.body_a == outcome.original.id {
+                        rewire_end(def, outcome, true)
+                    } else if def.body_b == Some(outcome.original.id) {
+                        rewire_end(def, outcome, false)
                     } else {
-                        def.body_b = Some(piece.id);
-                        def.anchor_b = Displacement(anchor - *offset);
+                        Some(def)
                     }
-                    rewired = Some(def);
-                    break;
-                }
-            }
-            (record, rewired)
+                });
+            (record, def)
         })
         .collect()
+}
+
+/// One end of `def` (body a when `on_a`) moved onto the piece of `outcome`
+/// that contains its anchor, or `None` when no piece does.
+fn rewire_end(mut def: JointDef, outcome: &CutOutcome, on_a: bool) -> Option<JointDef> {
+    let Replacement::Split { pieces } = &outcome.replacement else {
+        return None;
+    };
+    let original = &outcome.original;
+    let anchor = if on_a {
+        def.anchor_a.value()
+    } else {
+        def.anchor_b.value()
+    };
+    pieces.iter().find_map(|piece| {
+        // The piece's centroid in the original body's local frame.
+        let offset =
+            Vec2::from_angle(-original.pose.rot).rotate(piece.pose.pos - original.pose.pos);
+        if !shape_contains(&piece.shape, anchor - offset) {
+            return None;
+        }
+        if on_a {
+            def.body_a = piece.id;
+            def.anchor_a = Displacement(anchor - offset);
+        } else {
+            def.body_b = Some(piece.id);
+            def.anchor_b = Displacement(anchor - offset);
+        }
+        Some(def.clone())
+    })
 }
 
 /// Even-odd containment against a polygon-leaf shape.
@@ -269,24 +289,22 @@ pub(crate) fn aabbs_overlap(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
 
 impl GameCommand for CutCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
-        let outcomes = self.stage(world);
-        if outcomes.is_empty() {
+        let stage = self.stage(world);
+        if stage.outcomes.is_empty() {
             return Err(CommandError::NoEffect);
         }
-        for outcome in &outcomes {
+        for outcome in &stage.outcomes {
             match &outcome.replacement {
                 Replacement::Split { pieces } => {
                     replace_with_pieces(world, &outcome.original, pieces)?;
-                    apply_joint_changes(world, &outcome.joint_changes)?;
                 }
                 Replacement::Destroy => {
                     let entity = resolve(world, outcome.original.id)?;
                     world.despawn(entity);
-                    apply_joint_changes(world, &outcome.joint_changes)?;
                 }
             }
         }
-        Ok(())
+        apply_joint_changes(world, &stage.joint_changes)
     }
 
     fn name(&self) -> &'static str {

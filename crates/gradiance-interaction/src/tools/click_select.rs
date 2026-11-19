@@ -6,10 +6,12 @@
 //! "Consumed" is decided by evidence, not tool-specific knowledge: the click
 //! falls through only if the release ends a sub-deadzone gesture, the active
 //! tool is not mid-draft (a polygon between vertex clicks must keep its
-//! clicks), and no authoring intent (`SpawnBody`/`Cut`/`SpawnJoint`) was
-//! emitted this frame. Selection is applied through [`SelectTransition`] —
-//! the same seam the select tool uses — so the joint-xor-bodies invariant
-//! and group expansion hold unchanged.
+//! clicks), and no tool committed anything between the press and the
+//! release ([`ToolCommitted`], set by the one commit seam, so a polygon
+//! closed on the press and a weld made on the release both count).
+//! Selection is applied through [`SelectTransition`] — the same seam the
+//! select tool uses — so the joint-xor-bodies invariant and group expansion
+//! hold unchanged.
 
 use crate::PointerOverUi;
 use crate::joint_edit::SuppressSelectPress;
@@ -18,9 +20,7 @@ use crate::selection::{SelectTransition, SelectedJoint, Selection};
 use crate::snap::SnappedCursor;
 use crate::tools::ActiveGesture;
 use crate::tools::context::ToolWorld;
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use gradiance_command::intent::{CutIntent, SpawnBodyIntent, SpawnJointIntent};
 use gradiance_core::states::ToolState;
 use gradiance_domain::Body;
 use gradiance_domain::group::SelectionGroup;
@@ -36,23 +36,16 @@ pub struct ClickThrough {
     press: Option<Vec2>,
     /// Whether the cursor left the click deadzone since the press.
     moved: bool,
+    /// Whether a tool committed between the press and now.
+    consumed: bool,
 }
 
-/// This frame's authoring-intent evidence: if any tool committed, the click
-/// belonged to that tool. Readers are drained every frame so the release
-/// frame observes exactly the intents written this frame.
-#[derive(SystemParam)]
-pub struct CommitEvidence<'w, 's> {
-    spawns: MessageReader<'w, 's, SpawnBodyIntent>,
-    cuts: MessageReader<'w, 's, CutIntent>,
-    joints: MessageReader<'w, 's, SpawnJointIntent>,
-}
-
-impl CommitEvidence<'_, '_> {
-    fn any_this_frame(&mut self) -> bool {
-        self.spawns.read().count() + self.cuts.read().count() + self.joints.read().count() > 0
-    }
-}
+/// Set by the tool commit seam (`ToolCommitWriters::emit`) whenever a tool
+/// commits, of any kind; read and cleared each frame by
+/// [`click_through_select`]. A click that made a commit belonged to the
+/// tool.
+#[derive(Resource, Default, Debug)]
+pub struct ToolCommitted(pub bool);
 
 /// Update system (after the tool drivers): applies the click-through
 /// selection on a release that no tool consumed. Runs in every tool state so
@@ -69,16 +62,17 @@ pub fn click_through_select(
     cam_scale: Res<crate::camera::CameraScale>,
     world: ToolWorld,
     mut track: ResMut<ClickThrough>,
-    mut evidence: CommitEvidence,
+    mut committed: ResMut<ToolCommitted>,
     mut selection: ResMut<Selection>,
     mut joint_sel: ResMut<SelectedJoint>,
     groups: Query<(Entity, &SelectionGroup), With<Body>>,
 ) {
-    let committed = evidence.any_this_frame();
+    let committed = std::mem::take(&mut committed.0);
 
     if buttons.just_pressed(MouseButton::Left) {
         track.press = (!over_ui.0 && !suppress.0).then_some(snapped.raw).flatten();
         track.moved = false;
+        track.consumed = false;
     } else if buttons.pressed(MouseButton::Left)
         && let (Some(start), Some(p)) = (track.press, snapped.raw)
     {
@@ -88,6 +82,9 @@ pub fn click_through_select(
         }
     }
 
+    // A commit on the press frame (a polygon closed by clicking its start)
+    // counts as much as one on the release frame (a weld).
+    track.consumed |= committed;
     if !buttons.just_released(MouseButton::Left) {
         return;
     }
@@ -99,9 +96,9 @@ pub fn click_through_select(
         return;
     }
     // Evidence the click belonged to the active tool: it moved, a draft is
-    // still in progress (polygon vertices, connector endpoints), or a commit
-    // intent was written this frame.
-    if track.moved || active.0 || committed {
+    // still in progress (polygon vertices, connector endpoints), or the
+    // tool committed between the press and the release.
+    if track.moved || active.0 || track.consumed {
         return;
     }
 

@@ -12,8 +12,11 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** the screenshot audit of tools, motors, selection, slicing and
-  multi-body joints (owner request 2026-11-18).
+- **Now:** next planning stage (orchestrator).
+  **A-3** second screenshot audit is done (#277: six fixes with tests:
+  cuts through jointed pairs, Ctrl chords over a hovered field,
+  click-through after any tool commit, the tracer on UI clicks, a tall
+  bottom dock, context-menu Ungroup; findings and images in the brief).
   **U-11** Adjust Last Operation is done (#276, stacked on U-10: `LastOp`
   from an operation journal, `edit.adjust_last` / `edit.last_op`,
   `body.array` for the array gesture, the bottom-left panel; four
@@ -63,7 +66,7 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   7. **U-6** CLI + MCP server (done, #256).
   8. **4b-3** art direction (done, #257), **U-7** theme tokens (done,
      #258), **4b-4** scaled defaults (done, #259); audit **A-1** (done,
-     #260) and **A-2** (done, #261).
+     #260) and **A-2** (done, #261); second audit **A-3** (done, #277).
   9. **Phase 5:** 5-2 (done, #262), 5-3 (done, #263), **U-8** number-field
      behaviours (done, #264), then **5-4** (done, #266), **U-8b** middle
      click resets every number field (done, #268), **4b-5** toon bands on the bodies

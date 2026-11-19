@@ -52,6 +52,15 @@ pub struct PointerOverUi(pub bool);
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct KeyboardCaptured(pub bool);
 
+/// True while the keyboard is captured only because the pointer is on a
+/// number field (no text edit has focus). The field owns its keys then
+/// (Backspace, `-`, Esc, Ctrl+C, Ctrl+V; brief U-8), but the editor's
+/// other Ctrl chords (undo, redo, save, group…) still reach the editor:
+/// Ctrl+Z with the pointer resting on a field undoes (brief A-3). Written
+/// by the UI layer with [`KeyboardCaptured`], read here.
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct FieldKeys(pub bool);
+
 /// Installs the interaction layer.
 #[derive(Default)]
 pub struct InteractionPlugin;
@@ -60,6 +69,7 @@ impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PointerOverUi>();
         app.init_resource::<KeyboardCaptured>();
+        app.init_resource::<FieldKeys>();
         app.init_resource::<pointer::PointerButtons>();
         app.init_resource::<cursor::CursorWorldPos>();
         app.init_resource::<selection::Selection>();
