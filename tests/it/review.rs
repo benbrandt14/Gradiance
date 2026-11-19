@@ -97,6 +97,8 @@ fn expected_bodies(question: &str) -> &'static [usize] {
         "look" | "toon-lighting" | "chrome" => &[13, 13, 13],
         // three static hooks + a pebble, a box and a dense box
         "spring-feel" => &[6, 6, 6, 6],
+        // a ground and a pinned arm
+        "units-display" => &[2, 2, 2],
         _ => &[],
     }
 }

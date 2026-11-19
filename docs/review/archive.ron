@@ -508,5 +508,32 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief A-2 Decisions; gradiance_domain::group::GroupIndex::close_over and insertion_depth.",
         ),
+        (
+            question: (
+                id: "units-display-saved",
+                title: "Is the unit display saved with the scene?",
+                source: "brief 5-3 (Done when: \"the preference is classified, saved and never undone\"); CLAUDE.md invariant 4",
+                description: r#"The unit display (degrees or radians, m / cm / mm) is workstation config: it describes the person reading the fields, not the scene, so undo never touches it. Grid, snap and camera feel are workstation config that is still written into the scene file; the chrome preset (brief U-7) is workstation config that is not. The brief predates U-7 and said "saved"."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not saved, as the chrome preset",
+                        caption: r#"Recommended. Opening someone's scene never switches your fields to their units. Cost: the choice resets to degrees and metres on restart until the workstation file (brief U-10) holds it with the chrome preset and dock layouts."#,
+                    ),
+                    (
+                        label: "Saved with the scene, as the grid",
+                        caption: r#"Survives a restart through the scene file. Cost: a scene from someone else changes how your fields read, and the scene file carries a person's preference."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "units-display-saved",
+                title: "Is the unit display saved with the scene?",
+                choice: Picked("Not saved, as the chrome preset"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive: no scene can show where a preference is stored. The interactive half (which units are the default) is the review question units-display.",
+                answered_at: "2026-11-19T01:00:00Z",
+            ),
+            ingested_as: "Brief 5-3 Decisions; gradiance_domain::settings::UnitSettings.",
+        ),
     ],
 )

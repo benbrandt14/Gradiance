@@ -145,5 +145,30 @@ The scene hangs three bodies from hooks: a 0.15 m pebble, a 1 m box and a dense 
                 ),
             ],
         ),
+        (
+            id: "units-display",
+            title: "Which units should the fields show by default?",
+            source: "Phase 5, brief 5-3 type a value with its unit (docs/briefs/5-3-units-input.md)",
+            description: r#"Every number field on a physical quantity now shows its unit and accepts a typed value with a unit: 25 cm, 90 deg, 2 kN, 1 m/s^2, or maths such as 2*pi and 90/4. A bare number means the unit the field shows. Values are always stored in SI (metres, radians); this only changes what you read and what a bare number means. Settings > Interface > Units switches it at any time, and it is yours, not the scene's (not saved, not undone).
+
+The scene is a 1 m arm pinned to the world. Look at Settings > Simulation (gravity direction), Settings > Grid & Snap (spacing, rotation step), then click the arm and read its size in Properties, and click the pin (or the arm, then its joint) to see the hinge's angle sensor; tick angle limits to see them in the same unit. Type 45 deg or 0.5 rad into a limit and see both convert."#,
+            options: [
+                (
+                    label: "Degrees and metres (default)",
+                    caption: "Angles in degrees (gravity direction -90; a hinge's limits start at -90 to 90), lengths in metres (the arm is 1 m).",
+                    scripts: ["scenes/units-display/scene.scm", "scenes/units-display/pin.scm", "scenes/units-display/deg-m.scm"],
+                ),
+                (
+                    label: "Radians and metres",
+                    caption: "Pure SI: angles in radians (gravity direction -1.57; limits start at -1.57 to 1.57), as scripts and saved files use.",
+                    scripts: ["scenes/units-display/scene.scm", "scenes/units-display/pin.scm", "scenes/units-display/rad-m.scm"],
+                ),
+                (
+                    label: "Degrees and centimetres",
+                    caption: "Desk-scale lengths: the arm is 100 cm wide, 25 cm tall; angles in degrees.",
+                    scripts: ["scenes/units-display/scene.scm", "scenes/units-display/pin.scm", "scenes/units-display/deg-cm.scm"],
+                ),
+            ],
+        ),
     ],
 )
