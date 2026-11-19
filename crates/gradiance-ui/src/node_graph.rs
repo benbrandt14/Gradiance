@@ -23,7 +23,7 @@
 //! [`egui-snarl`]: https://crates.io/crates/egui-snarl
 //! [`SignalBinding`]: gradiance_domain::signal::SignalBinding
 
-use crate::ports::{body_actuators, body_sensors};
+use crate::ports::{body_actuators, body_sensors, joint_actuators, joint_sensors};
 use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -31,10 +31,11 @@ use bevy_egui::egui;
 use egui_snarl::ui::{BackgroundPattern, PinInfo, SnarlStyle, SnarlViewer, WireStyle};
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use gradiance_core::ids::{IdIndex, StableId};
-use gradiance_domain::Body;
+use gradiance_domain::joint::{JointDef, JointKind};
 use gradiance_domain::quantity::Subject;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::Subjects;
+use gradiance_domain::{Body, Joint};
 use gradiance_interaction::selection::Selection;
 use gradiance_physics::queries::PhysicsQueries;
 use gradiance_signal::{
@@ -49,6 +50,9 @@ use std::collections::{HashMap, HashSet};
 enum GraphKey {
     /// A scene body (its sensor/actuator ports), by id.
     Body(StableId),
+    /// A scene joint (its sensor ports, and its motor's actuator ports), by
+    /// id (brief N-1).
+    Joint(StableId),
     /// A `defparam` knob, by name.
     Param(String),
     /// A `defsignal` modulator, by name.
@@ -71,6 +75,16 @@ enum NodeData {
         id: StableId,
         name: Option<String>,
         kind: &'static str,
+    },
+    /// A joint block: outputs are `joint_sensors`; a motorised hinge or
+    /// slider has `joint_actuators` inputs (motor speed, motor cap). `kind`
+    /// is the label ("hinge", "slider", "spring"); `linear` picks the motor
+    /// units (a slider's m/s and N).
+    Joint {
+        id: StableId,
+        kind: &'static str,
+        motor: bool,
+        linear: bool,
     },
     /// A param block: one output (its published bus name).
     Param(String),
@@ -104,6 +118,7 @@ impl NodeData {
     fn key(&self) -> GraphKey {
         match self {
             Self::Body { id, .. } => GraphKey::Body(*id),
+            Self::Joint { id, .. } => GraphKey::Joint(*id),
             Self::Param(name) => GraphKey::Param(name.clone()),
             Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
             Self::Scope => GraphKey::Scope,
@@ -113,7 +128,7 @@ impl NodeData {
 
     fn role(&self) -> Role {
         match self {
-            Self::Body { .. } => Role::Body,
+            Self::Body { .. } | Self::Joint { .. } => Role::Body,
             Self::Param(_) => Role::Producer,
             Self::Computed { .. } => Role::Modulator,
             Self::Scope => Role::Scope,
@@ -125,6 +140,7 @@ impl NodeData {
     fn title(&self) -> String {
         match self {
             Self::Body { name, kind, .. } => name.clone().unwrap_or_else(|| (*kind).to_owned()),
+            Self::Joint { kind, .. } => (*kind).to_owned(),
             Self::Param(name) => format!("⊙ {name}"),
             Self::Computed { name, .. } => format!("ƒ {name}"),
             Self::Scope => "▭ Scope".to_owned(),
@@ -136,6 +152,7 @@ impl NodeData {
     fn output_source(&self, index: usize) -> Option<SignalSource> {
         match self {
             Self::Body { id, .. } => body_sensors(*id).get(index).map(|(_, s)| s.clone()),
+            Self::Joint { id, .. } => joint_sensors(*id).get(index).map(|(_, s)| s.clone()),
             Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
             Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
             Self::Scope | Self::Comment { .. } => None,
@@ -146,6 +163,9 @@ impl NodeData {
     fn input_sink(&self, index: usize) -> Option<SignalSink> {
         match self {
             Self::Body { id, .. } => body_actuators(*id).get(index).map(|(_, s)| s.clone()),
+            Self::Joint {
+                id, motor: true, ..
+            } => joint_actuators(*id).get(index).map(|(_, s)| s.clone()),
             Self::Scope => (index == 0).then_some(SignalSink::Plot),
             _ => None,
         }
@@ -231,33 +251,38 @@ impl NodeGraph {
     }
 }
 
-/// The index of the sensor output pin a scene [`SignalSource`] maps to: its
-/// position in [`body_sensors`] (the catalog's body rows). `None` for sources
-/// that aren't a single body's sensor port (distance, named, joint sensors —
-/// joints have no canvas block yet).
-fn sensor_index(source: &SignalSource) -> Option<usize> {
-    let Some(Subjects::One(id)) = source.subjects() else {
-        return None;
-    };
-    body_sensors(id).iter().position(|(_, s)| s == source)
-}
-
 /// The `(GraphKey, output index)` a binding source resolves to, if it maps to
-/// a producer block on the canvas.
+/// a producer block on the canvas: a param or computed block by name, a body
+/// sensor in [`body_sensors`] order, a joint sensor in [`joint_sensors`]
+/// order. `None` for a two-body source (distance), which has no block.
 fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
-    match (source, source.subjects()) {
+    match (source, source.reading()) {
         (SignalSource::Named(name), _) => Some((GraphKey::Param(name.clone()), 0)),
-        (_, Some(Subjects::One(id))) => Some((GraphKey::Body(id), sensor_index(source)?)),
+        (_, Some((row, Subjects::One(id)))) if row.subject() == Subject::Joint => Some((
+            GraphKey::Joint(id),
+            joint_sensors(id).iter().position(|(_, s)| s == source)?,
+        )),
+        (_, Some((_, Subjects::One(id)))) => Some((
+            GraphKey::Body(id),
+            body_sensors(id).iter().position(|(_, s)| s == source)?,
+        )),
         _ => None,
     }
 }
 
 /// The `(GraphKey, input index)` a binding sink resolves to — body actuator
-/// pins, or the Scope block's input for `Plot`.
+/// pins in [`body_actuators`] order, a joint's motor pins in
+/// [`joint_actuators`] order, or the Scope block's input for `Plot`.
 fn sink_pin(sink: &SignalSink) -> (GraphKey, usize) {
+    let at = |pins: &[(&str, SignalSink)]| pins.iter().position(|(_, s)| s == sink).unwrap_or(0);
     match sink {
-        SignalSink::Fill(id) => (GraphKey::Body(*id), 0),
-        SignalSink::TracerColor(id) => (GraphKey::Body(*id), 1),
+        SignalSink::Fill(id)
+        | SignalSink::TracerColor(id)
+        | SignalSink::FieldStrength(id)
+        | SignalSink::GravityScale(id) => (GraphKey::Body(*id), at(&body_actuators(*id))),
+        SignalSink::MotorSpeed(id) | SignalSink::MotorCap(id) => {
+            (GraphKey::Joint(*id), at(&joint_actuators(*id)))
+        }
         SignalSink::Plot => (GraphKey::Scope, 0),
     }
 }
@@ -275,6 +300,7 @@ pub struct GraphParams<'w, 's> {
     pub(crate) params: ResMut<'w, SignalParams>,
     pub(crate) computed: ResMut<'w, ComputedSignals>,
     pub(crate) bodies: Query<'w, 's, (&'static StableId, &'static ShapeDef), With<Body>>,
+    pub(crate) joints: Query<'w, 's, (&'static StableId, &'static JointDef), With<Joint>>,
     pub(crate) selection: ResMut<'w, Selection>,
     pub(crate) ids: Query<'w, 's, &'static StableId>,
     pub(crate) physics: PhysicsQueries<'w, 's>,
@@ -296,6 +322,7 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
         &gp.params,
         &gp.computed,
         &gp.bodies,
+        &gp.joints,
     );
     reconcile(&mut gp.graph, desired);
     rebuild_wires(&mut gp.graph, &gp.bindings);
@@ -556,6 +583,10 @@ fn output_pin_values(
                 .iter()
                 .map(|(_, s)| read_source(s, index, physics, body_transforms, dt))
                 .collect(),
+            NodeData::Joint { id, .. } => joint_sensors(*id)
+                .iter()
+                .map(|(_, s)| read_source(s, index, physics, body_transforms, dt))
+                .collect(),
             NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
             NodeData::Scope | NodeData::Comment { .. } => Vec::new(),
         };
@@ -628,6 +659,7 @@ fn collect_desired(
     params: &SignalParams,
     computed: &ComputedSignals,
     bodies: &Query<(&StableId, &ShapeDef), With<Body>>,
+    joints: &Query<(&StableId, &JointDef), With<Joint>>,
 ) -> Vec<NodeData> {
     let kinds: HashMap<StableId, &'static str> = bodies
         .iter()
@@ -647,14 +679,28 @@ fn collect_desired(
             }
         }
     }
-    // Bodies feeding a modulation block (a canonical sensor name in its expr).
+    // Joints a binding names (a joint sensor source or a motor sink).
+    let mut shown_joints: HashSet<StableId> = HashSet::new();
+    for binding in &bindings.0 {
+        if let Some((GraphKey::Joint(id), _)) = source_pin(&binding.source) {
+            shown_joints.insert(id);
+        }
+        if let (GraphKey::Joint(id), _) = sink_pin(&binding.sink) {
+            shown_joints.insert(id);
+        }
+    }
+    // Bodies and joints feeding a modulation block (a canonical sensor name
+    // in its expr).
     for signal in &computed.0 {
         for input in signal.expr.inputs() {
-            if let Some(source) = SignalSource::from_bus_name(&input)
-                && let Some((GraphKey::Body(id), _)) = source_pin(&source)
-                && live.contains(&id)
-            {
-                shown.insert(id);
+            match SignalSource::from_bus_name(&input).and_then(|s| source_pin(&s)) {
+                Some((GraphKey::Body(id), _)) if live.contains(&id) => {
+                    shown.insert(id);
+                }
+                Some((GraphKey::Joint(id), _)) => {
+                    shown_joints.insert(id);
+                }
+                _ => {}
             }
         }
     }
@@ -669,6 +715,21 @@ fn collect_desired(
             inputs: signal.expr.inputs(),
             block: signal.block.clone(),
         });
+    }
+    // A joint block for every joint a wire names, and for every motorised
+    // hinge or slider on a body already on the canvas: its motor pins are
+    // where a drive is wired (brief N-1).
+    for (id, def) in joints {
+        let motor = joint_motor(def);
+        let on_canvas = def.referenced_bodies().any(|b| shown.contains(&b));
+        if shown_joints.contains(id) || (motor.is_some() && on_canvas) {
+            items.push(NodeData::Joint {
+                id: *id,
+                kind: joint_kind_label(&def.kind),
+                motor: motor.is_some(),
+                linear: motor.unwrap_or(false),
+            });
+        }
     }
     for id in shown {
         items.push(NodeData::Body {
@@ -687,6 +748,25 @@ fn collect_desired(
         }));
     }
     items
+}
+
+/// Whether a joint has a motor a drive can reach: `Some(linear)` for a
+/// motorised hinge (`false`) or slider (`true`), `None` otherwise.
+fn joint_motor(def: &JointDef) -> Option<bool> {
+    match &def.kind {
+        JointKind::Hinge { motor: Some(_), .. } => Some(false),
+        JointKind::Slider { motor: Some(_), .. } => Some(true),
+        JointKind::Hinge { .. } | JointKind::Slider { .. } | JointKind::Spring { .. } => None,
+    }
+}
+
+/// A joint block's title: its kind.
+const fn joint_kind_label(kind: &JointKind) -> &'static str {
+    match kind {
+        JointKind::Hinge { .. } => "hinge",
+        JointKind::Slider { .. } => "slider",
+        JointKind::Spring { .. } => "spring",
+    }
 }
 
 /// The live value driving each bound input pin — `map[key][input]` is the bus
@@ -720,8 +800,11 @@ fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
         }
     }
     match &binding.sink {
-        SignalSink::Fill(id) | SignalSink::TracerColor(id) => ids.push(*id),
-        SignalSink::Plot => {}
+        SignalSink::Fill(id)
+        | SignalSink::TracerColor(id)
+        | SignalSink::FieldStrength(id)
+        | SignalSink::GravityScale(id) => ids.push(*id),
+        SignalSink::Plot | SignalSink::MotorSpeed(_) | SignalSink::MotorCap(_) => {}
     }
     ids
 }
@@ -1083,6 +1166,13 @@ impl SnarlViewer<NodeData> for GraphViewer {
     fn inputs(&mut self, node: &NodeData) -> usize {
         match node {
             NodeData::Body { id, .. } => body_actuators(*id).len(),
+            NodeData::Joint { id, motor, .. } => {
+                if *motor {
+                    joint_actuators(*id).len()
+                } else {
+                    0
+                }
+            }
             NodeData::Param(_) | NodeData::Comment { .. } => 0,
             NodeData::Computed { inputs, block, .. } => block
                 .as_ref()
@@ -1094,6 +1184,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
     fn outputs(&mut self, node: &NodeData) -> usize {
         match node {
             NodeData::Body { id, .. } => body_sensors(*id).len(),
+            NodeData::Joint { id, .. } => joint_sensors(*id).len(),
             NodeData::Param(_) | NodeData::Computed { .. } => 1,
             NodeData::Scope | NodeData::Comment { .. } => 0,
         }
@@ -1105,30 +1196,38 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
-        let name = match snarl.get_node(pin.id.node) {
-            Some(NodeData::Body { id, .. }) => body_actuators(*id)
-                .get(pin.id.input)
-                .map_or_else(String::new, |(l, _)| (*l).to_owned()),
+        // An actuator pin carries its unit: the colour channels take a
+        // dimensionless transfer, the physical ones (brief N-1) an SI value.
+        let actuator = |pins: &[(&'static str, SignalSink)], linear: bool| {
+            pins.get(pin.id.input).map_or_else(
+                || (String::new(), ""),
+                |(l, s)| ((*l).to_owned(), s.dimension(linear).symbol()),
+            )
+        };
+        let (name, unit) = match snarl.get_node(pin.id.node) {
+            Some(NodeData::Body { id, .. }) => actuator(&body_actuators(*id), false),
+            Some(NodeData::Joint { id, linear, .. }) => actuator(&joint_actuators(*id), *linear),
             Some(NodeData::Computed {
                 inputs,
                 block: None,
                 ..
-            }) => inputs.get(pin.id.input).cloned().unwrap_or_default(),
+            }) => (inputs.get(pin.id.input).cloned().unwrap_or_default(), ""),
             Some(NodeData::Computed {
                 block: Some(op), ..
-            }) => op
-                .input_slots()
-                .get(pin.id.input)
-                .map_or_else(String::new, |(l, _)| (*l).to_owned()),
-            Some(NodeData::Scope) => "signals".to_owned(),
-            _ => String::new(),
+            }) => (
+                op.input_slots()
+                    .get(pin.id.input)
+                    .map_or_else(String::new, |(l, _)| (*l).to_owned()),
+                "",
+            ),
+            Some(NodeData::Scope) => ("signals".to_owned(), ""),
+            _ => (String::new(), ""),
         };
         let key = snarl.get_node(pin.id.node).map(NodeData::key);
         let value = key
             .as_ref()
             .and_then(|k| Self::value_at(&self.input_values, k, pin.id.input));
-        // Actuator inputs (fill/tracer colour channels) are dimensionless.
-        ui.label(pin_label(&name, value, ""));
+        ui.label(pin_label(&name, value, unit));
         PinInfo::circle().with_fill(crate::theme::tokens(ui.ctx()).pin_in)
     }
 
@@ -1141,6 +1240,10 @@ impl SnarlViewer<NodeData> for GraphViewer {
         // Sensor output ports carry the SI unit of their quantity (P3 catalog).
         let (name, unit) = match snarl.get_node(pin.id.node) {
             Some(NodeData::Body { id, .. }) => body_sensors(*id).get(pin.id.output).map_or_else(
+                || (String::new(), ""),
+                |(l, s)| ((*l).to_owned(), s.dimension().symbol()),
+            ),
+            Some(NodeData::Joint { id, .. }) => joint_sensors(*id).get(pin.id.output).map_or_else(
                 || (String::new(), ""),
                 |(l, s)| ((*l).to_owned(), s.dimension().symbol()),
             ),
@@ -1270,6 +1373,9 @@ impl SnarlViewer<NodeData> for GraphViewer {
                     ui.close();
                 }
             }
+            Some(NodeData::Joint { .. }) => {
+                widgets::empty_state(ui, "shown while a wire or a body on the canvas names it");
+            }
             Some(NodeData::Scope) | None => {
                 widgets::empty_state(ui, "the plot output");
             }
@@ -1327,14 +1433,15 @@ impl SnarlViewer<NodeData> for GraphViewer {
         let id = *id;
         for binding in &self.bindings {
             let (key, _) = sink_pin(&binding.sink);
-            if key != GraphKey::Body(id) {
+            // An actuator takes the raw value: no domain or gradient to edit.
+            if key != GraphKey::Body(id) || binding.sink.actuator().is_some() {
                 continue;
             }
             let mut map = binding.map;
             let mut gradient = binding.gradient;
             let mut changed = false;
             ui.horizontal(|ui| {
-                ui.small(sink_label(&binding.sink));
+                ui.small(binding.sink.label());
                 let rest = SignalMap::default();
                 changed |= widgets::config_field(rest.in_min, 1.0)
                     .prefix("[")
@@ -1363,15 +1470,6 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 ));
             }
         }
-    }
-}
-
-/// A short label for an actuator sink channel.
-fn sink_label(sink: &SignalSink) -> &'static str {
-    match sink {
-        SignalSink::Fill(_) => "fill",
-        SignalSink::TracerColor(_) => "tracer",
-        SignalSink::Plot => "plot",
     }
 }
 

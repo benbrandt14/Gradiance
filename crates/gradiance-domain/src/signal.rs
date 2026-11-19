@@ -245,9 +245,15 @@ impl GradientSpec {
 }
 
 /// What a signal drives. Color sinks write the derived
-/// `SignalColorOverride` (in the `signal` layer); `Plot`
-/// only publishes (every binding's value
-/// lands on the bus and in the plot panel regardless).
+/// `SignalColorOverride` (in the `signal` layer); **actuator** sinks (brief
+/// N-1) write the derived `SignalDrive` the physics layer reads in place of
+/// the authored value; `Plot` only publishes (every binding's value lands on
+/// the bus and in the plot panel regardless).
+///
+/// An actuator sink takes the source value **as is**, in the base SI unit of
+/// its [`dimension`](Self::dimension): the map, curve and gradient shape a
+/// colour, not a force. Scale or shape a drive upstream with a computed
+/// signal (a gain, a curve block, an RPN expression).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub enum SignalSink {
     /// Tint a body's fill (render override; authored appearance untouched).
@@ -256,6 +262,36 @@ pub enum SignalSink {
     TracerColor(StableId),
     /// Publish/plot only.
     Plot,
+    /// A hinge's or slider's **motor speed** (rad/s or m/s), keyed by the
+    /// joint's id. Drives only a joint with an authored, enabled motor.
+    MotorSpeed(StableId),
+    /// A hinge's **torque** or a slider's **force** cap (N·m or N), keyed by
+    /// the joint's id. Used as is (`0` stops the motor pushing), never the
+    /// authored "auto" rule.
+    MotorCap(StableId),
+    /// A body's **field strength** (m/s², the authored `FieldSource`
+    /// convention: positive repels). Drives only a body with a field.
+    FieldStrength(StableId),
+    /// A body's **gravity scale** (a ratio; `1` is plain gravity).
+    GravityScale(StableId),
+}
+
+/// The physical quantity an actuator sink sets, by what it is set on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActuatorTarget {
+    /// A joint (motor speed, motor cap).
+    Joint(StableId),
+    /// A body (field strength, gravity scale).
+    Body(StableId),
+}
+
+impl ActuatorTarget {
+    /// The target's id, whatever it is.
+    pub const fn id(self) -> StableId {
+        match self {
+            Self::Joint(id) | Self::Body(id) => id,
+        }
+    }
 }
 
 /// One source → map → gradient → sink wire.
@@ -483,6 +519,61 @@ impl SignalSink {
                 (Self::TracerColor(r), t)
             }
             Self::Plot => (Self::Plot, false),
+            Self::MotorSpeed(a) => {
+                let (r, t) = remap_id(*a, id_map);
+                (Self::MotorSpeed(r), t)
+            }
+            Self::MotorCap(a) => {
+                let (r, t) = remap_id(*a, id_map);
+                (Self::MotorCap(r), t)
+            }
+            Self::FieldStrength(a) => {
+                let (r, t) = remap_id(*a, id_map);
+                (Self::FieldStrength(r), t)
+            }
+            Self::GravityScale(a) => {
+                let (r, t) = remap_id(*a, id_map);
+                (Self::GravityScale(r), t)
+            }
+        }
+    }
+
+    /// What an **actuator** sink drives (`None` for a colour or plot sink).
+    pub const fn actuator(&self) -> Option<ActuatorTarget> {
+        Some(match self {
+            Self::MotorSpeed(id) | Self::MotorCap(id) => ActuatorTarget::Joint(*id),
+            Self::FieldStrength(id) | Self::GravityScale(id) => ActuatorTarget::Body(*id),
+            Self::Fill(_) | Self::TracerColor(_) | Self::Plot => return None,
+        })
+    }
+
+    /// The physical dimension of the value this sink takes. A motor sink's
+    /// depends on the joint: `linear` is a slider (m/s, N), otherwise a hinge
+    /// (rad/s, N·m). Colour and plot sinks take a dimensionless transfer.
+    pub const fn dimension(&self, linear: bool) -> gradiance_units::Dimension {
+        use gradiance_units::Dimension as D;
+        match self {
+            Self::MotorSpeed(_) if linear => D::Velocity,
+            Self::MotorSpeed(_) => D::AngularVelocity,
+            Self::MotorCap(_) if linear => D::Force,
+            Self::MotorCap(_) => D::Torque,
+            Self::FieldStrength(_) => D::Acceleration,
+            Self::GravityScale(_) | Self::Fill(_) | Self::TracerColor(_) | Self::Plot => {
+                D::Dimensionless
+            }
+        }
+    }
+
+    /// A short label for the channel ("fill", "motor speed", …).
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Fill(_) => "fill",
+            Self::TracerColor(_) => "tracer",
+            Self::Plot => "plot",
+            Self::MotorSpeed(_) => "motor speed",
+            Self::MotorCap(_) => "motor cap",
+            Self::FieldStrength(_) => "field",
+            Self::GravityScale(_) => "gravity",
         }
     }
 }
@@ -915,6 +1006,53 @@ mod tests {
             in_max: 5.0,
         };
         assert!(degenerate.normalize(9.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn actuator_sinks_name_their_target_and_unit() {
+        use gradiance_units::Dimension as D;
+        let id = StableId::new();
+        assert_eq!(
+            SignalSink::MotorSpeed(id).actuator(),
+            Some(ActuatorTarget::Joint(id))
+        );
+        assert_eq!(
+            SignalSink::GravityScale(id).actuator(),
+            Some(ActuatorTarget::Body(id))
+        );
+        assert_eq!(SignalSink::Fill(id).actuator(), None);
+        assert_eq!(SignalSink::Plot.actuator(), None);
+        assert_eq!(
+            SignalSink::MotorSpeed(id).dimension(false),
+            D::AngularVelocity
+        );
+        assert_eq!(SignalSink::MotorSpeed(id).dimension(true), D::Velocity);
+        assert_eq!(SignalSink::MotorCap(id).dimension(false), D::Torque);
+        assert_eq!(SignalSink::MotorCap(id).dimension(true), D::Force);
+        assert_eq!(
+            SignalSink::FieldStrength(id).dimension(false),
+            D::Acceleration
+        );
+        assert_eq!(
+            SignalSink::GravityScale(id).dimension(false),
+            D::Dimensionless
+        );
+    }
+
+    #[test]
+    fn duplicating_a_driven_joint_copies_its_motor_binding() {
+        let (old, new) = (StableId::new(), StableId::new());
+        let binding = SignalBinding {
+            name: "drive".into(),
+            source: SignalSource::Named("osc".into()),
+            map: SignalMap::default(),
+            curve: None,
+            gradient: GradientSpec::default(),
+            sink: SignalSink::MotorSpeed(old),
+        };
+        let copy = remap_binding(&binding, &[(old, new)]).expect("touches the joint");
+        assert_eq!(copy.sink, SignalSink::MotorSpeed(new));
+        assert!(remap_binding(&binding, &[(StableId::new(), new)]).is_none());
     }
 
     #[test]

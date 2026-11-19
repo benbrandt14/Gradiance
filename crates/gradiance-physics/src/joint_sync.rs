@@ -14,6 +14,7 @@
 //! restores the joint. The sync then derives avian's [`JointDisabled`] from
 //! that flag; `JointDisabled` itself is never saved.
 
+use crate::drive::{SignalDrive, undriven_target};
 use avian2d::prelude::*;
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
@@ -260,6 +261,11 @@ fn reduced_of(
 /// stiffness from its authored frequency. Runs every frame after
 /// [`sync_joints`]; it writes only on a difference, so a density edit or a
 /// resize retunes a joint without re-creating it (brief 4b-4).
+///
+/// It is also where a motor's **signal drive** lands (brief N-1): a
+/// [`SignalDrive`] speed or cap replaces the authored one in the live engine
+/// joint, and with no drive the authored speed is restored
+/// ([`undriven_target`]), so unbinding needs no command.
 #[expect(clippy::type_complexity, reason = "one optional engine joint per kind")]
 pub fn retune_joints(
     mut joints: Query<(
@@ -267,6 +273,7 @@ pub fn retune_joints(
         Option<&mut RevoluteJoint>,
         Option<&mut PrismaticJoint>,
         Option<&mut DistanceJoint>,
+        Option<&SignalDrive>,
     )>,
     bodies: Query<(&RigidBody, &ComputedMass, &ComputedAngularInertia)>,
     fixed: Res<Time<Fixed>>,
@@ -278,31 +285,57 @@ pub fn retune_joints(
     #[expect(clippy::cast_precision_loss, reason = "a small substep count")]
     let substep_secs =
         fixed.timestep().as_secs_f32() * physics_time.relative_speed() / substeps.0.max(1) as f32;
-    for (def, revolute, prismatic, distance) in &mut joints {
+    for (def, revolute, prismatic, distance, drive) in &mut joints {
+        let drive = drive.copied().unwrap_or_default();
         match &def.kind {
             JointKind::Hinge { motor: Some(m), .. } => {
                 let Some(mut joint) = revolute else { continue };
                 let (_, inertia) = reduced_of([joint.body1, joint.body2], &bodies);
-                let ceiling =
-                    motor_ceiling(m.max_torque.value(), inertia, MOTOR_TORQUE_PER_INERTIA);
+                let ceiling = drive.motor_cap.map_or_else(
+                    || motor_ceiling(m.max_torque.value(), inertia, MOTOR_TORQUE_PER_INERTIA),
+                    |cap| cap.max(0.0),
+                );
                 let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
+                let target = drive.motor_speed.unwrap_or_else(|| {
+                    undriven_target(
+                        m.target_velocity.value(),
+                        m.oscillate,
+                        joint.motor.target_velocity,
+                    )
+                });
                 if differs(joint.motor.max_torque, ceiling) {
                     joint.motor.max_torque = ceiling;
                 }
                 if joint.motor.motor_model != model {
                     joint.motor.motor_model = model;
                 }
+                if differs(joint.motor.target_velocity, target) {
+                    joint.motor.target_velocity = target;
+                }
             }
             JointKind::Slider { motor: Some(m), .. } => {
                 let Some(mut joint) = prismatic else { continue };
                 let (mass, _) = reduced_of([joint.body1, joint.body2], &bodies);
-                let ceiling = motor_ceiling(m.max_force.value(), mass, MOTOR_FORCE_PER_MASS);
+                let ceiling = drive.motor_cap.map_or_else(
+                    || motor_ceiling(m.max_force.value(), mass, MOTOR_FORCE_PER_MASS),
+                    |cap| cap.max(0.0),
+                );
                 let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
+                let target = drive.motor_speed.unwrap_or_else(|| {
+                    undriven_target(
+                        m.target_velocity.value(),
+                        m.oscillate,
+                        joint.motor.target_velocity,
+                    )
+                });
                 if differs(joint.motor.max_force, ceiling) {
                     joint.motor.max_force = ceiling;
                 }
                 if joint.motor.motor_model != model {
                     joint.motor.motor_model = model;
+                }
+                if differs(joint.motor.target_velocity, target) {
+                    joint.motor.target_velocity = target;
                 }
             }
             JointKind::Spring { frequency, .. } => {

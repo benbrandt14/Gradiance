@@ -52,13 +52,25 @@ fn sensors_of(subject: Subject, id: StableId) -> Vec<(&'static str, SignalSource
         .collect()
 }
 
-/// A body's **actuator ports** as `(label, sink)` — the writable color
-/// channels a bound signal can drive. The catalog behind the canvas input pins.
-pub fn body_actuators(id: StableId) -> [(&'static str, SignalSink); 2] {
+/// A body's **actuator ports** as `(label, sink)` — the writable channels a
+/// bound signal can drive: the two colour channels, then the physical ones
+/// (field strength, gravity scale; brief N-1). The catalog behind the canvas
+/// input pins.
+pub fn body_actuators(id: StableId) -> [(&'static str, SignalSink); 4] {
     [
-        ("fill", SignalSink::Fill(id)),
-        ("tracer", SignalSink::TracerColor(id)),
+        SignalSink::Fill(id),
+        SignalSink::TracerColor(id),
+        SignalSink::FieldStrength(id),
+        SignalSink::GravityScale(id),
     ]
+    .map(|sink| (sink.label(), sink))
+}
+
+/// A motorised joint's **actuator ports** as `(label, sink)`: its motor speed
+/// and its torque or force cap (brief N-1). The canvas input pins of a joint
+/// block.
+pub fn joint_actuators(id: StableId) -> [(&'static str, SignalSink); 2] {
+    [SignalSink::MotorSpeed(id), SignalSink::MotorCap(id)].map(|sink| (sink.label(), sink))
 }
 
 /// A short unit label for a sensor source's readout — the catalog dimension's
