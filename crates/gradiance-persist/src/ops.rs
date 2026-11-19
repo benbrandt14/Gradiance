@@ -19,9 +19,9 @@
 //! selection's part of the [`SceneDump`] as scene text (to the clipboard,
 //! through [`ClipboardWrite`], which the UI layer drains); `edit.paste`
 //! adds such a text. Insert and paste lower to one
-//! [`InsertIntent`](gradiance_command::intent::InsertIntent) whose records
+//! [`gradiance_command::intent::InsertIntent`] whose records
 //! already carry fresh ids from the context
-//! ([`fresh_copy`](gradiance_command::insert_cmd::fresh_copy)), so one
+//! ([`gradiance_command::insert_cmd::fresh_copy`]), so one
 //! call is one undo step and the caller gets the new bodies' ids back.
 
 use crate::{LoadSceneRequest, SaveSceneRequest};
@@ -327,9 +327,10 @@ impl Operation for PasteScene {
     }
 }
 
-/// `edit.paste`'s example: one 1 m box, as `edit.copy` writes it (the
-/// fields a copy leaves at their defaults may be left out).
-const PASTE_EXAMPLE: &str = r#"{"text": "(version: 8, app_version: \"\", bodies: [(id: (\"00000000-0000-0000-0000-00000000000a\"), pose: (pos: (0.0, 1.0), rot: 0.0), shape: Box(width: 1.0, height: 1.0), appearance: (fill: (r: 0.8, g: 0.5, b: 0.2, a: 1.0)))], joints: [], environment: ())", "at": [2, 3]}"#;
+/// `edit.paste`'s example: one 1 m box, as `edit.copy` writes it less the
+/// fields that default when absent (physics, appearance, depth, groups,
+/// nodes, the environment's settings).
+const PASTE_EXAMPLE: &str = r#"{"text": "(version: 8, app_version: \"\", bodies: [(id: (\"00000000-0000-0000-0000-00000000000a\"), pose: (pos: (0.0, 1.0), rot: 0.0), shape: Box(width: 1.0, height: 1.0))], joints: [], environment: ())", "at": [2, 3]}"#;
 
 #[cfg(test)]
 mod tests {

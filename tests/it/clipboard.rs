@@ -239,7 +239,7 @@ fn a_bad_insert_is_an_error_and_changes_nothing() {
     );
     step(&mut app, 2);
     assert_eq!(history(&app).0, depth);
-    assert!(capture(&mut app).bodies.is_empty());
+    assert_eq!(capture(&mut app).bodies.len(), 0);
 }
 
 #[test]

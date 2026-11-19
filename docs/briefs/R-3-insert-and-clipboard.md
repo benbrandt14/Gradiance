@@ -82,6 +82,9 @@ Worker, 2026-11-19, branch `claude/project-thread-tw1mvl-r3`.
   centres at `at`; Ctrl+A, Ctrl+C, Ctrl+V paste at the cursor in one step;
   Ctrl+C / Ctrl+V on a hovered field do nothing to the scene). Unit tests
   for `fresh_copy`, `fragment`, the anchor, `at` and the paste example.
+- `BodyRecord::appearance` defaults when absent (`#[serde(default)]`), so
+  hand-written scene text for a paste may leave it out (as physics, depth
+  and groups already could). What a save writes is unchanged.
 - Docs: `docs/scripting.md` (verb list and § "Parts and the clipboard"),
   `docs/ops.md` regenerated.
 

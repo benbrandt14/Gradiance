@@ -8,11 +8,11 @@
 //! every body, joint and node a new [`StableId`] (minted by the caller: an
 //! operation takes them from its context) and moves the set by an offset,
 //! through the same helpers duplicate and array use
-//! ([`remap_joint_def`](crate::spawn::remap_joint_def),
-//! [`remap_node`](crate::spawn::remap_node)): a joint keeps both ends
+//! (`spawn::remap_joint_def`,
+//! `spawn::remap_node`): a joint keeps both ends
 //! inside the set, a world pin's anchor moves with it. [`InsertCommand`]
 //! then gives the groups fresh ids against the live scene
-//! ([`remap_clone_groups`](crate::spawn::remap_clone_groups), as a
+//! (`spawn::remap_clone_groups`, as a
 //! duplicate does) and carries their names over. Nothing here clones a
 //! live entity: the records are the fragment's.
 //!

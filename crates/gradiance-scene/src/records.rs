@@ -49,7 +49,9 @@ pub struct BodyRecord {
     /// Authored physics (avian components, grouped for the record).
     #[serde(default)]
     pub physics: BodyPhysics,
-    /// Authored appearance.
+    /// Authored appearance (defaulted when absent: hand-written scene text
+    /// for a paste may leave it out, brief R-3).
+    #[serde(default)]
     pub appearance: Appearance,
     /// Authored depth band (extrusion *and* collision volume, v5+).
     #[serde(default)]
