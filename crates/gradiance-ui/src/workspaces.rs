@@ -420,30 +420,34 @@ pub fn workspace_tabs(ui: &mut egui::Ui, workspaces: &Workspaces, invoke: &mut V
         }
     }
     let draft_id = egui::Id::new("workspace-save-draft");
-    let save = ui.menu_button("+", |ui| {
-        ui.label("Save the docks as a workspace");
-        let mut draft: String = ui.data_mut(|d| d.get_temp(draft_id).unwrap_or_default());
-        let field = ui.add(
-            egui::TextEdit::singleline(&mut draft)
-                .hint_text("Name")
-                .char_limit(MAX_NAME),
-        );
-        crate::widget_registry::publish_target("menu:workspace-name", field.rect);
-        let name = draft.trim().to_owned();
-        let valid = !name.is_empty() && !is_preset(&name);
-        let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        let button = ui.add_enabled(valid, egui::Button::new("Save"));
-        crate::widget_registry::publish_target("menu:workspace-save-confirm", button.rect);
-        if valid && (button.clicked() || enter) {
-            invoke.push(InvokeOp::with("layout.save", json!({"name": name})));
-            draft.clear();
-            ui.close();
-        }
-        ui.data_mut(|d| d.insert_temp(draft_id, draft));
-    });
-    let save = save
-        .response
-        .on_hover_text("Save the docks as a new workspace");
+    // Stays open while the name is typed: a click inside (on the field) must
+    // not close it, which the menu bar's close-on-click default would.
+    let config = egui::containers::menu::MenuConfig::new()
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+    let (save, _) = egui::containers::menu::MenuButton::new("+")
+        .config(config)
+        .ui(ui, |ui| {
+            ui.label("Save the docks as a workspace");
+            let mut draft: String = ui.data_mut(|d| d.get_temp(draft_id).unwrap_or_default());
+            let field = ui.add(
+                egui::TextEdit::singleline(&mut draft)
+                    .hint_text("Name")
+                    .char_limit(MAX_NAME),
+            );
+            crate::widget_registry::publish_target("menu:workspace-name", field.rect);
+            let name = draft.trim().to_owned();
+            let valid = !name.is_empty() && !is_preset(&name);
+            let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let button = ui.add_enabled(valid, egui::Button::new("Save"));
+            crate::widget_registry::publish_target("menu:workspace-save-confirm", button.rect);
+            if valid && (button.clicked() || enter) {
+                invoke.push(InvokeOp::with("layout.save", json!({"name": name})));
+                draft.clear();
+                ui.close();
+            }
+            ui.data_mut(|d| d.insert_temp(draft_id, draft));
+        });
+    let save = save.on_hover_text("Save the docks as a new workspace");
     crate::widget_registry::publish_target("menu:workspace-save", save.rect);
 }
 
