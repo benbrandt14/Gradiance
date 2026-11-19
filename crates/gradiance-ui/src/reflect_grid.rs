@@ -58,7 +58,11 @@ pub fn reflect_grid_except(
             let stored = units.iter().find(|(n, _)| *n == name).map(|(_, u)| *u);
             // A stored-in-degrees name says so (`rotation_step_deg`); the
             // field shows the preferred unit, so the label drops it.
-            let pretty = name.trim_end_matches("_deg").replace('_', " ");
+            let pretty = match stored {
+                Some(_) => name.trim_end_matches("_deg"),
+                None => name,
+            }
+            .replace('_', " ");
             ui.label(pretty);
             changed |= leaf_widget(ui, id.with(name), field, stored);
             ui.end_row();

@@ -179,6 +179,10 @@ across and ±3.5 m up and down); angles are radians.
 ;; chrome preset — workstation config: never undone, not saved (brief U-7)
 (chromes)                    ; ("blender" "blender-blue" "stock")
 (chrome-apply "blender-blue") ; draw the panels with another preset
+;; unit display — workstation config: never undone, not saved (brief 5-3).
+;; Display only: every verb still reads and writes SI (metres, radians).
+(units-shown)                ; ("deg" "m") -- how fields show angles, lengths
+(display-units "rad" "cm")   ; angles: deg rad; lengths: m cm mm
 
 ;; editor — the chrome, through the EditorState seam (panel.* operations)
 (panel-show "properties")    ; open a panel — the same toggle the View menu drives

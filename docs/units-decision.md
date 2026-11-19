@@ -183,6 +183,8 @@ dedicated path — keep the door open.* So this pass includes:
 gradiance-units  (NEW — bottom node, no gradiance deps, minimal bevy)
   ├─ quantity.rs   typed newtypes (base-SI f32/Vec2) + the arithmetic we use
   ├─ dimension.rs  Dimension enum → canonical unit + formatter/parser
+  ├─ expr.rs       the one typed-value parser (`25 cm`, `2*pi`) — 5-3
+  ├─ display.rs    UnitPrefs (deg/rad, m/cm/mm) → DisplayUnit format/parse — 5-3
   ├─ mass.rs       mass_of(Density, Area) — the ONE density×geometry seam
   └─ world.rs      PIXELS_PER_METER + SI⇄px conversions (the one scale seam)
 
@@ -205,7 +207,8 @@ physics            touches avian world-units ONLY through core::world;
                    catalog's read traits (LiveBody, LiveJoint).
 signal             SignalSource → catalog quantity; values carry dimension.
 render             SI→px for draw at the seam (never mid-shader).
-ui                 units::format/parse; unit-system display toggle.
+ui                 unit_fields: every quantity field shows/parses through
+                   DisplayUnit; the UnitSettings preference (5-3).
 ```
 
 `tests/boundaries.rs` gains `gradiance-units` as a new bottom DAG node (no
@@ -320,8 +323,18 @@ extension, not a rewrite:
    stiffness, damping, range), and settings (shadow reach) format SI with a
    `precise_drag_unit` suffix and use metre-scale reset/sensitivity — fixing
    pixel-era drag scales the flip missed (a width reset gave a 100 m box).
-   *Remaining:* unit-aware *input* parsing (`Dimension::parse`) and a
-   unit-system display toggle.
+   *Landed in 5-3:* unit-aware input and a display preference. One parser,
+   `gradiance_units::expr` (pure; numbers, `+ - * / ^`, brackets,
+   juxtaposition `25 cm`, `pi`/`tau`, a unit table with the prefixes the
+   tool uses, angle as its own base so `Hz` is not `rad/s`), fitted to a
+   field by `DisplayUnit::parse` (a bare number is in the shown unit).
+   `UnitPrefs` (degrees or radians; m, cm or mm) is a workstation resource
+   (`domain::settings::UnitSettings`, not saved, not undone, op
+   `units.display`), published into egui once per frame
+   (`ui::unit_fields`) so every quantity field, the reflect grid, the
+   sensor readouts and the plot follow it. The joint limits and an angle
+   sensor now read in the same unit. Hand-written; no external crate was
+   needed (ruling 1 still allows one behind this API for P6).
 6. **P6 — units in the expression DSL.** Dimensional quantities in
    parameter-linking menus; adopt an external parse crate behind the units
    API if multi-unit entry is wanted.

@@ -114,6 +114,21 @@ This is the distinction that matters and it is invisible in the rendering:
 
 Converting every site to `precise_drag` would be wrong, not merely wasteful.
 
+### A quantity field names its dimension, not its unit (brief 5-3)
+
+A field on a physical quantity passes a `Dimension` (`precise_drag_unit`,
+edit seam) or a stored `DisplayUnit` (`labelled_quantity`, config seam), never
+a unit string. `ui::unit_fields` then shows the value in the unit the
+workstation preference picks (degrees or radians; m, cm or mm; the canonical
+SI unit otherwise) with the unit after the number, and parses typed entry
+through the one parser (`gradiance_units::expr`): `25 cm`, `90 deg`, `2 kN`,
+`2*pi`. A bare number is in the shown unit; an entry of another dimension, or
+one that does not parse, leaves the value as it was. Values stay SI. A field
+whose unit is its own (a hinge motor in rpm) uses `precise_drag_in`. The
+reflect grid recognises a quantity newtype by its type name, so a new
+settings field gets its unit with no table row; a plain `f32` kept in degrees
+names `DisplayUnit::DEGREES` in the grid's table.
+
 ### Empty states say what to do
 
 "No series selected — pick one above", not "No data". Every `empty_state` in
