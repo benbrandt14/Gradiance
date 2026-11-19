@@ -207,6 +207,7 @@ pub fn apply_shortcuts(
     actions: Query<&ActionState<EditorAction>, With<EditorControls>>,
     keys: Res<ButtonInput<KeyCode>>,
     keyboard_captured: Res<crate::KeyboardCaptured>,
+    field_keys: Res<crate::FieldKeys>,
     mut writers: ShortcutWriters,
     mut selection: ResMut<Selection>,
     mut selected_joint: ResMut<crate::selection::SelectedJoint>,
@@ -218,8 +219,12 @@ pub fn apply_shortcuts(
     mut scale_frame: ResMut<crate::tools::handles::ScaleFrame>,
     mut last_path: ResMut<gradiance_persist::LastScenePath>,
 ) {
-    // Typing in a UI field must never trigger editor shortcuts.
-    if keyboard_captured.0 {
+    // Typing in a UI field must never trigger editor shortcuts. A number
+    // field under the pointer owns its own keys, but not the editor's Ctrl
+    // chords (it takes only Ctrl+C and Ctrl+V, which no action uses).
+    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+    let on_field = keyboard_captured.0 && field_keys.0;
+    if keyboard_captured.0 && !(on_field && ctrl) {
         return;
     }
     let Ok(actions) = actions.single() else {
@@ -227,10 +232,12 @@ pub fn apply_shortcuts(
     };
 
     // The edits: one table, rows in order. Ungroup's chord (Ctrl+Shift+G)
-    // also satisfies Group's, so Group yields to it.
+    // also satisfies Group's, so Group yields to it. Delete and Backspace
+    // stay the field's.
     let ungrouping = actions.just_pressed(&EditorAction::Ungroup);
     for row in KEY_OPS {
-        let shadowed = row.action == EditorAction::Group && ungrouping;
+        let shadowed = (row.action == EditorAction::Group && ungrouping)
+            || (on_field && row.action == EditorAction::DeleteSelection);
         if actions.just_pressed(&row.action) && !shadowed {
             writers.invoke.write(row.invoke());
         }
@@ -278,7 +285,6 @@ pub fn apply_shortcuts(
     }
     // Bare-letter hotkeys (tools, frame toggle) must not fire as part of
     // a Ctrl chord — Ctrl+S is "save", not "save and switch to select".
-    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
     if ctrl {
         return;
     }

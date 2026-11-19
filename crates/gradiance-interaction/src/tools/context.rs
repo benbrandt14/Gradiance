@@ -394,12 +394,16 @@ pub struct ToolCommitWriters<'w> {
     props: MessageWriter<'w, PropertyEditIntent>,
     rods: MessageWriter<'w, gradiance_command::intent::SpawnRodIntent>,
     script_tools: MessageWriter<'w, gradiance_core::script_tools::ScriptToolFired>,
+    committed: ResMut<'w, crate::tools::click_select::ToolCommitted>,
 }
 
 impl ToolCommitWriters<'_> {
     /// Translates a commit into its intent message — the single point where
     /// a tool's front-end-agnostic action re-enters the command seam.
     pub fn emit(&mut self, commit: ToolCommit) {
+        // Whatever the commit, the click that made it was the tool's: the
+        // click-through selection must not also take it.
+        self.committed.0 = true;
         match commit {
             ToolCommit::SpawnBody(record) => {
                 self.spawn.write(SpawnBodyIntent { record: *record });

@@ -277,6 +277,84 @@ fn joints_whose_anchor_material_is_destroyed_are_deleted() {
     assert_eq!(joints, 1, "undo restores the deleted joint");
 }
 
+/// A-3: one stroke through **both** bodies of a body-to-body hinge. Each
+/// body's rewiring was staged against the pre-cut world and written whole,
+/// so the second write put the first body's original (despawned) id back
+/// into the joint.
+#[test]
+fn a_cut_through_both_jointed_bodies_rewires_both_ends() {
+    let mut app = paused_app();
+    let a = spawn_box_at(&mut app, Vec2::ZERO, 100.0, 20.0);
+    let b = spawn_box_at(&mut app, Vec2::new(0.0, 10.0), 100.0, 20.0);
+    // The hinge sits at world (-40, 5), inside both boxes.
+    let joint_def = JointDef {
+        kind: JointKind::Hinge {
+            limits: None,
+            motor: None,
+        },
+        common: JointCommon::default(),
+        body_a: a,
+        body_b: Some(b),
+        anchor_a: gradiance::units::Displacement(Vec2::new(-40.0, 5.0)),
+        anchor_b: gradiance::units::Displacement(Vec2::new(-40.0, -5.0)),
+        rest_rot_a: gradiance::units::Angle(0.0),
+        rest_rot_b: gradiance::units::Angle(0.0),
+    };
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def: joint_def.clone(),
+        },
+    });
+    app.update();
+
+    cut(&mut app, Vec2::new(0.0, -30.0), Vec2::new(0.0, 40.0), 4.0);
+    assert_eq!(body_count(&mut app), 4, "both boxes severed");
+
+    let def = app
+        .world_mut()
+        .query::<&JointDef>()
+        .single(app.world())
+        .expect("the hinge survives: its anchor is in both left pieces")
+        .clone();
+    let host_a = entity_of(&app, def.body_a).expect("body a is a live piece");
+    let host_b =
+        entity_of(&app, def.body_b.expect("still body-to-body")).expect("body b is a live piece");
+    for (host, anchor) in [(host_a, def.anchor_a), (host_b, def.anchor_b)] {
+        let at = app
+            .world()
+            .get::<Transform>(host)
+            .unwrap()
+            .translation
+            .truncate();
+        let world = at + anchor.value();
+        assert!(
+            world.distance(Vec2::new(-40.0, 5.0)) < 1.0,
+            "world anchor preserved on both ends (got {world})"
+        );
+    }
+
+    undo(&mut app);
+    assert_eq!(body_count(&mut app), 2);
+    let def = app
+        .world_mut()
+        .query::<&JointDef>()
+        .single(app.world())
+        .expect("undo restores the joint")
+        .clone();
+    assert_eq!(def, joint_def, "joint def restored verbatim");
+    redo(&mut app);
+    assert_eq!(body_count(&mut app), 4, "redo replays the cut");
+    let def = app
+        .world_mut()
+        .query::<&JointDef>()
+        .single(app.world())
+        .expect("redo keeps the rewired joint")
+        .clone();
+    assert!(entity_of(&app, def.body_a).is_some());
+    assert!(entity_of(&app, def.body_b.unwrap()).is_some());
+}
+
 #[test]
 fn a_cut_that_swallows_a_body_destroys_it() {
     let mut app = paused_app();

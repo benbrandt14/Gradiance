@@ -389,3 +389,143 @@ fn bad_points_are_refused_and_text_and_wheel_queue() {
     );
     assert!(bad.is_err(), "{bad:?}");
 }
+
+/// A-3: Ctrl+Z with the pointer resting on a number field undoes. The
+/// field still owns its bare keys: Backspace over it deletes nothing.
+#[test]
+fn ctrl_z_over_a_hovered_number_field_undoes() {
+    use gradiance::interaction::selection::Selection;
+    use gradiance::interaction::{FieldKeys, KeyboardCaptured};
+    let mut app = windowed_app();
+    let keep = box_record(Vec2::new(-200.0, 0.0), 40.0, 20.0);
+    let keep_id = keep.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: keep });
+    app.update();
+    let record = box_record(Vec2::ZERO, 40.0, 20.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    let before = undo_len(&app);
+    // What the UI layer writes while the pointer is on a field (no focus):
+    // headless there is no egui pass to overwrite it.
+    app.insert_resource(KeyboardCaptured(true));
+    app.insert_resource(FieldKeys(true));
+
+    let keep_entity = entity_of(&app, keep_id).unwrap_or_else(|| panic!("no body"));
+    app.world_mut().resource_mut::<Selection>().set(keep_entity);
+    op(&mut app, "ui.key", json!({"key": "Backspace"})).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(
+        entity_of(&app, keep_id).is_some(),
+        "Backspace is the field's"
+    );
+    assert_eq!(undo_len(&app), before);
+
+    op(&mut app, "ui.key", json!({"key": "Ctrl+Z"})).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..5 {
+        app.update();
+    }
+    assert_eq!(
+        undo_len(&app),
+        before - 1,
+        "Ctrl+Z over a field undid one step"
+    );
+    assert!(entity_of(&app, id).is_none(), "the spawn is undone");
+
+    // A text edit with focus keeps every key, Ctrl chords included.
+    app.insert_resource(FieldKeys(false));
+    op(&mut app, "ui.key", json!({"key": "Ctrl+Z"})).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..5 {
+        app.update();
+    }
+    assert_eq!(undo_len(&app), before - 1, "typing swallows Ctrl+Z");
+}
+
+/// Welds two overlapping boxes with one click of the weld tool.
+fn weld_click(app: &mut App) {
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Weld);
+    app.update();
+    op(app, "ui.click", json!({"at": [640, 370]})).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..6 {
+        app.update();
+    }
+}
+
+/// A-3: a click a tool used is not also a selection click. A weld commits
+/// a merge (not one of the three intents the click-through looked for), so
+/// the welded body was selected; a polygon closed by clicking its first
+/// vertex commits on the press, so the release selected the new polygon.
+#[test]
+fn a_click_that_a_tool_commits_does_not_select() {
+    use gradiance::interaction::selection::Selection;
+    let mut app = windowed_app();
+    for x in [-15.0, 15.0] {
+        let record = box_record(Vec2::new(x, 0.0), 40.0, 20.0);
+        app.world_mut().write_message(SpawnBodyIntent { record });
+        app.update();
+    }
+    app.update(); // colliders
+    weld_click(&mut app);
+    let mut bodies = app.world_mut().query_filtered::<Entity, With<Body>>();
+    assert_eq!(bodies.iter(app.world()).count(), 1, "the weld merged them");
+    assert!(
+        app.world().resource::<Selection>().is_empty(),
+        "the weld click selected the welded body"
+    );
+
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Polygon);
+    app.update();
+    for p in [[700, 300], [800, 300], [800, 200], [700, 300]] {
+        op(&mut app, "ui.click", json!({"at": p})).unwrap_or_else(|e| panic!("{e}"));
+        for _ in 0..4 {
+            app.update();
+        }
+    }
+    assert_eq!(bodies.iter(app.world()).count(), 2, "the polygon closed");
+    assert!(
+        app.world().resource::<Selection>().is_empty(),
+        "the closing click selected the new polygon"
+    );
+}
+
+/// A-3: with the Tracer tool active, a click on the UI (a menu, the
+/// palette) placed a free tracer where the pointer was: the driver reports
+/// every release, and the tracer placed on any release. A click on the
+/// canvas still places one.
+#[test]
+fn a_tracer_is_placed_only_by_a_click_on_the_canvas() {
+    use gradiance::interaction::PointerOverUi;
+    let mut app = windowed_app();
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Tracer);
+    app.update();
+    let nodes = |app: &mut App| {
+        app.world_mut()
+            .query::<&gradiance::domain::node::NodeKind>()
+            .iter(app.world())
+            .count()
+    };
+
+    // What the UI layer writes while the pointer is on a menu.
+    app.insert_resource(PointerOverUi(true));
+    op(&mut app, "ui.click", json!({"at": [53, 11]})).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..5 {
+        app.update();
+    }
+    assert_eq!(nodes(&mut app), 0, "a click on the UI placed a tracer");
+
+    app.insert_resource(PointerOverUi(false));
+    op(&mut app, "ui.click", json!({"at": [640, 370]})).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..5 {
+        app.update();
+    }
+    assert_eq!(nodes(&mut app), 1, "a canvas click places one tracer");
+}

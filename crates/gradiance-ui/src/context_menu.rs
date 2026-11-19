@@ -368,6 +368,9 @@ pub fn context_menu(
         .iter()
         .filter_map(|e| props.ids.get(e).ok().copied())
         .collect();
+    // Ungroup has something to undo only when a selected body is in a group
+    // (brief A-3: it was enabled on any selection, a click that did nothing).
+    let any_grouped = selection.iter().any(|e| groups.contains(e));
 
     let at = menu.world;
     let mut fillet_radius = menu.fillet_radius.0;
@@ -524,7 +527,7 @@ pub fn context_menu(
                     close = true;
                 }
                 if ui
-                    .add_enabled(!selected_ids.is_empty(), egui::Button::new("Ungroup"))
+                    .add_enabled(any_grouped, egui::Button::new("Ungroup"))
                     .clicked()
                 {
                     writers

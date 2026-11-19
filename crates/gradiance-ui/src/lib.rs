@@ -104,9 +104,11 @@ impl PanelRects {
     /// The top `y` of the panels docked to the bottom edge (the status bar,
     /// and the bottom dock standing on it), or the viewport bottom when none.
     /// Panels stack: one whose bottom meets the inset found so far raises it.
-    /// The filter requires a panel to sit in the lower half so the
-    /// full-height right dock (whose bottom also touches the edge) doesn't
-    /// count.
+    /// A bottom panel spans from the left edge (the status bar, the bottom
+    /// dock), which tells it from the right dock, whose bottom also meets
+    /// the inset. (The filter used to require the panel's top in the lower
+    /// half, so a bottom dock half the window tall, as the Signals workspace
+    /// opens it, was ignored: brief A-3.)
     pub fn bottom_inset(&self, viewport: egui::Rect) -> f32 {
         let mut inset = viewport.bottom();
         loop {
@@ -115,7 +117,8 @@ impl PanelRects {
                 .iter()
                 .filter(|r| {
                     (r.bottom() - inset).abs() < 2.0
-                        && r.top() > viewport.center().y
+                        && (r.left() - viewport.left()).abs() < 2.0
+                        && r.top() > viewport.top() + 2.0
                         && r.top() < inset - 0.5
                 })
                 .map(egui::Rect::top)
@@ -398,6 +401,7 @@ fn capture_pointer_over_ui(
     mut contexts: EguiContexts,
     mut over_ui: ResMut<PointerOverUi>,
     mut keyboard: ResMut<gradiance_interaction::KeyboardCaptured>,
+    mut field_keys: ResMut<gradiance_interaction::FieldKeys>,
     mut panels: ResMut<PanelRects>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -407,8 +411,12 @@ fn capture_pointer_over_ui(
     let pointer = ctx.pointer_latest_pos();
     over_ui.0 = ctx.is_pointer_over_egui() || pointer_over_panels(&panels.0, pointer);
     // A hovered or dragged number field owns Backspace, `-`, Esc and
-    // Ctrl+C/V (brief U-8), though egui does not report it as typing.
-    keyboard.0 = ctx.egui_wants_keyboard_input() | unit_fields::take_key_claim(ctx);
+    // Ctrl+C/V (brief U-8), though egui does not report it as typing; the
+    // editor's other Ctrl chords still pass it (`FieldKeys`, brief A-3).
+    let typing = ctx.egui_wants_keyboard_input();
+    let field = unit_fields::take_key_claim(ctx);
+    keyboard.0 = typing | field;
+    field_keys.0 = field && !typing;
     panels.0.clear();
     Ok(())
 }
@@ -479,6 +487,36 @@ mod tests {
         ));
         assert!((panels.bottom_inset(viewport) - 400.0).abs() < 1e-3);
         assert!((panels.right_inset(viewport) - 560.0).abs() < 1e-3);
+    }
+
+    /// A-3: the Signals workspace opens a bottom dock half the window tall;
+    /// its top at (or above) the middle still makes it a bottom panel.
+    #[test]
+    fn a_tall_bottom_dock_still_insets_the_bottom() {
+        let viewport = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1280.0, 720.0));
+        let mut panels = PanelRects::default();
+        // Status bar, right dock above it, bottom dock left of the right dock.
+        panels.push(Rect::from_min_max(
+            Pos2::new(0.0, 698.0),
+            Pos2::new(1280.0, 720.0),
+        ));
+        panels.push(Rect::from_min_max(
+            Pos2::new(900.0, 22.0),
+            Pos2::new(1280.0, 698.0),
+        ));
+        for top in [360.0, 300.0] {
+            let mut panels = PanelRects(panels.0.clone());
+            panels.push(Rect::from_min_max(
+                Pos2::new(0.0, top),
+                Pos2::new(900.0, 698.0),
+            ));
+            assert!(
+                (panels.bottom_inset(viewport) - top).abs() < 1e-3,
+                "bottom dock at {top}: inset {}",
+                panels.bottom_inset(viewport)
+            );
+            assert!((panels.scene_rect(viewport).max.y - top).abs() < 1e-3);
+        }
     }
 
     #[test]
