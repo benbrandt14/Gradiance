@@ -54,6 +54,7 @@ pub mod diagnostics;
 pub mod dispatch;
 pub mod filter;
 pub mod group_cmd;
+pub mod insert_cmd;
 pub mod intent;
 pub mod joint_cmd;
 pub mod merge_cmd;
@@ -92,6 +93,10 @@ pub enum CommandError {
     /// A referenced body no longer exists.
     #[error("no live entity for stable id {0}")]
     MissingEntity(StableId),
+    /// An object to create carries an id the scene already holds (an
+    /// insert never replaces or aliases an object, brief R-3).
+    #[error("stable id {0} is already in the scene")]
+    IdTaken(StableId),
     /// The command resolved to nothing to do (not recorded in history).
     #[error("command had no effect")]
     NoEffect,
