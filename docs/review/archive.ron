@@ -2103,5 +2103,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "tests/it/script_examples.rs",
         ),
+        (
+            question: (
+                id: "actuator-raw-value",
+                title: "How does a bound value become a motor speed, a cap, a field strength or a gravity scale?",
+                source: "Brief N-1 signals that drive physics (docs/briefs/N-1-signal-actuators.md)",
+                description: r#"A colour binding maps its value into [0, 1] (domain, optional curve) and then through a gradient. A physical sink needs a value in a unit, not a colour."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The raw value, in the sink's SI unit",
+                        caption: r#"An actuator takes the source value as is: rad/s or m/s for motor speed, N·m or N for the cap, m/s² for field strength, a ratio for gravity scale. The Signals list hides domain, gradient and curve for an actuator; scaling and shaping are done upstream with computed blocks (gain, curve, RPN)."#,
+                    ),
+                    (
+                        label: "Map into an output range",
+                        caption: r#"Adds output min/max fields to every binding and a second meaning for the domain; more to edit, and two places to scale a drive."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "actuator-raw-value",
+                title: "How does a bound value become a motor speed, a cap, a field strength or a gravity scale?",
+                choice: Picked("The raw value, in the sink's SI unit"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "signal::desired_drive, domain::signal::SignalSink",
+        ),
+        (
+            question: (
+                id: "gravity-scale-drive",
+                title: "How does a driven gravity scale reach the solver without writing the authored GravityScale?",
+                source: "Brief N-1 signals that drive physics (docs/briefs/N-1-signal-actuators.md)",
+                description: r#"GravityScale is an authored avian component (saved, undoable). A drive must be derived (invariant 5)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A derived per-body acceleration",
+                        caption: r#"physics::drive::drive_gravity_scale adds avian's ConstantLinearAcceleration = gravity x (driven - authored) while the drive holds and removes it after. The authored GravityScale stays as saved; the correction follows gravity edits."#,
+                    ),
+                    (
+                        label: "Swap GravityScale while driven",
+                        caption: r#"Simpler, but writes an authored component every frame: a save mid-run would store the driven value."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gravity-scale-drive",
+                title: "How does a driven gravity scale reach the solver without writing the authored GravityScale?",
+                choice: Picked("A derived per-body acceleration"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "gradiance_physics::drive",
+        ),
+        (
+            question: (
+                id: "motor-cap-drive",
+                title: "What does a driven motor cap of zero mean?",
+                source: "Brief N-1 signals that drive physics (docs/briefs/N-1-signal-actuators.md)",
+                description: r#"An authored cap of 0 means auto (scaled to the body). avian reads a non-positive cap as unlimited."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Used as is; 0 or less switches the motor off",
+                        caption: r#"A driven cap is never the auto rule. A positive value is the torque or force ceiling; zero or less disables the live motor while it holds, so a signal can cut a motor. Unbinding restores the authored cap and enabled flag."#,
+                    ),
+                    (
+                        label: "Follow the authored rule (0 = auto)",
+                        caption: r#"A signal could then never stop a motor by its cap."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "motor-cap-drive",
+                title: "What does a driven motor cap of zero mean?",
+                choice: Picked("Used as is; 0 or less switches the motor off"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "physics::joint_sync::retune_joints",
+        ),
+        (
+            question: (
+                id: "actuator-precedence",
+                title: "What wins when a drive meets an oscillating, disabled or missing motor or field?",
+                source: "Brief N-1 signals that drive physics (docs/briefs/N-1-signal-actuators.md)",
+                description: r#"Motors can oscillate at their limits, be disabled, or not exist; field strength needs an authored field."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The drive wins on speed; it never creates or enables",
+                        caption: r#"A driven motor speed overrides the oscillation while it holds. A drive does not switch on a disabled motor, add a motor to a bare hinge, or add a field to a body without one: the binding is inert there. With no drive the authored speed comes back (an oscillating motor keeps its current direction). Two bindings on one field: the later binding wins."#,
+                    ),
+                    (
+                        label: "Drives create what they need",
+                        caption: r#"Would make a derived override author new behaviour, which belongs to the inspector and its undo step."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "actuator-precedence",
+                title: "What wins when a drive meets an oscillating, disabled or missing motor or field?",
+                choice: Picked("The drive wins on speed; it never creates or enables"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "physics::drive::undriven_target, physics::motor",
+        ),
+        (
+            question: (
+                id: "joint-blocks-in-graph",
+                title: "Where do the motor pins live on the node canvas?",
+                source: "Brief N-1 signals that drive physics (docs/briefs/N-1-signal-actuators.md)",
+                description: r#"Brief N-1 decision 2 puts the actuator pins on the canvas, but joints had no block (2-1 left a TODO; the joint block is in the retained list). Motor sinks are keyed by the joint."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A minimal joint block",
+                        caption: r#"A joint block shows its sensors (length, angle, force) as outputs and, for a motorised hinge or slider, motor speed and motor cap as inputs with units. It appears when a wire names the joint, or when it is a motorised hinge or slider on a body already on the canvas. Bodies gain field and gravity pins. No joint-specific editing or layout beyond this."#,
+                    ),
+                    (
+                        label: "Motor pins on the body block",
+                        caption: r#"No new block, but a body with two motors has ambiguous pins, and a world pin has only one body."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "joint-blocks-in-graph",
+                title: "Where do the motor pins live on the node canvas?",
+                choice: Picked("A minimal joint block"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "ui::node_graph (GraphKey::Joint), ui::ports::joint_actuators",
+        ),
+        (
+            question: (
+                id: "actuator-script-verb",
+                title: "Should scripts get a verb to create a binding (including an actuator)?",
+                source: "Brief N-1 signals that drive physics (docs/briefs/N-1-signal-actuators.md)",
+                description: r#"Bindings are made in the node graph and the Signals list (config seam), and saved with the scene. No operation creates one today."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not in N-1",
+                        caption: r#"The brief does not ask for it; N-1 lands the sinks, the drive and the pins. A signal.bind / signal.unbind operation pair is a small follow-up (it would also serve N-2 and N-3 tests)."#,
+                    ),
+                    (
+                        label: "Add signal.bind now",
+                        caption: r#"Widens the brief and the operation surface without a brief."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "actuator-script-verb",
+                title: "Should scripts get a verb to create a binding (including an actuator)?",
+                choice: Picked("Not in N-1"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "docs/briefs/N-1-signal-actuators.md Outcome",
+        ),
     ],
 )

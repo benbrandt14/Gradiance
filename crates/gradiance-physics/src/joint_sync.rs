@@ -291,10 +291,9 @@ pub fn retune_joints(
             JointKind::Hinge { motor: Some(m), .. } => {
                 let Some(mut joint) = revolute else { continue };
                 let (_, inertia) = reduced_of([joint.body1, joint.body2], &bodies);
-                let ceiling = drive.motor_cap.map_or_else(
-                    || motor_ceiling(m.max_torque.value(), inertia, MOTOR_TORQUE_PER_INERTIA),
-                    |cap| cap,
-                );
+                let ceiling = drive.motor_cap.unwrap_or_else(|| {
+                    motor_ceiling(m.max_torque.value(), inertia, MOTOR_TORQUE_PER_INERTIA)
+                });
                 let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
                 let target = drive.motor_speed.unwrap_or_else(|| {
                     undriven_target(
@@ -322,10 +321,9 @@ pub fn retune_joints(
             JointKind::Slider { motor: Some(m), .. } => {
                 let Some(mut joint) = prismatic else { continue };
                 let (mass, _) = reduced_of([joint.body1, joint.body2], &bodies);
-                let ceiling = drive.motor_cap.map_or_else(
-                    || motor_ceiling(m.max_force.value(), mass, MOTOR_FORCE_PER_MASS),
-                    |cap| cap,
-                );
+                let ceiling = drive.motor_cap.unwrap_or_else(|| {
+                    motor_ceiling(m.max_force.value(), mass, MOTOR_FORCE_PER_MASS)
+                });
                 let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
                 let target = drive.motor_speed.unwrap_or_else(|| {
                     undriven_target(

@@ -332,10 +332,10 @@ fn sink_choices(binding: &SignalBinding) -> Vec<SignalSink> {
         | SignalSink::FieldStrength(id)
         | SignalSink::GravityScale(id) => Some((Subject::Body, *id)),
         SignalSink::MotorSpeed(id) | SignalSink::MotorCap(id) => Some((Subject::Joint, *id)),
-        SignalSink::Plot => match binding.source.reading() {
-            Some((row, Subjects::One(id) | Subjects::Two(id, _))) => Some((row.subject(), id)),
-            None => None,
-        },
+        SignalSink::Plot => binding
+            .source
+            .reading()
+            .map(|(row, Subjects::One(id) | Subjects::Two(id, _))| (row.subject(), id)),
     };
     let mut out: Vec<SignalSink> = match target {
         Some((Subject::Joint, id)) => crate::ports::joint_actuators(id)
