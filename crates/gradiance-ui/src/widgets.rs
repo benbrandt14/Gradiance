@@ -229,31 +229,6 @@ pub fn labelled_drag_u32(
     changed
 }
 
-#[cfg(test)]
-mod layout_tests {
-    use super::*;
-
-    /// The helpers must not panic on an empty context — they are called from
-    /// every pane, including headless where there is no real UI.
-    #[test]
-    fn the_layout_helpers_render_headlessly() {
-        // egui's own test harness: builds a real `Ui` without a window, which
-        // is the path every headless panel test takes.
-        egui::__run_test_ui(|ui| {
-            let _ = section_header(ui, "Section");
-            let _ = hint(ui, "what this is for");
-            let _ = empty_state(ui, "Nothing selected");
-            let _ = close_button(ui, "remove");
-            egui::Grid::new("t").num_columns(2).show(ui, |ui| {
-                let mut v = 1.0_f32;
-                let _ = labelled_drag(ui, "value", &mut v, 0.0..=2.0, 0.01, "hover");
-                let mut n = 3_u32;
-                let _ = labelled_drag_u32(ui, "count", &mut n, 1..=9, "hover");
-            });
-        });
-    }
-}
-
 /// The behavior-node kind editor widgets.
 ///
 /// Lives here rather than beside any one host because it has three: the
@@ -293,4 +268,29 @@ pub fn node_kind_editor(
         }
     }
     (next != *kind).then_some(next)
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    /// The helpers must not panic on an empty context — they are called from
+    /// every pane, including headless where there is no real UI.
+    #[test]
+    fn the_layout_helpers_render_headlessly() {
+        // egui's own test harness: builds a real `Ui` without a window, which
+        // is the path every headless panel test takes.
+        egui::__run_test_ui(|ui| {
+            let _ = section_header(ui, "Section");
+            let _ = hint(ui, "what this is for");
+            let _ = empty_state(ui, "Nothing selected");
+            let _ = close_button(ui, "remove");
+            egui::Grid::new("t").num_columns(2).show(ui, |ui| {
+                let mut v = 1.0_f32;
+                let _ = labelled_drag(ui, "value", &mut v, 0.0..=2.0, 0.01, "hover");
+                let mut n = 3_u32;
+                let _ = labelled_drag_u32(ui, "count", &mut n, 1..=9, "hover");
+            });
+        });
+    }
 }

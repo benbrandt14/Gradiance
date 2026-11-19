@@ -310,8 +310,8 @@ mod tests {
     use super::{Series, is_plottable, visible_series};
     use gradiance_core::ids::StableId;
     use gradiance_signal::SignalSource;
-    use gradiance_units::{Dimension, DisplayUnit, UnitPrefs};
-use std::collections::{HashSet, VecDeque};
+    use gradiance_units::{Dimension, DisplayUnit};
+    use std::collections::{HashSet, VecDeque};
 
     #[test]
     fn sensor_ref_names_stay_out_of_the_plot() {

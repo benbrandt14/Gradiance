@@ -160,9 +160,12 @@ fn configure_kind(
     let mut changed = false;
     match kind {
         JointKind::Hinge { limits, motor } => {
-            if let Some(k) =
-                limit_section(ui, raw(*limits, Angle::value), "angle limits", Dimension::Angle)
-            {
+            if let Some(k) = limit_section(
+                ui,
+                raw(*limits, Angle::value),
+                "angle limits",
+                Dimension::Angle,
+            ) {
                 next.kind = JointKind::Hinge {
                     limits: k.map(|[lo, hi]| [Angle(lo), Angle(hi)]),
                     motor: *motor,
@@ -186,9 +189,12 @@ fn configure_kind(
             limits,
             motor,
         } => {
-            if let Some(k) =
-                limit_section(ui, raw(*limits, Length::value), "travel limits", Dimension::Length)
-            {
+            if let Some(k) = limit_section(
+                ui,
+                raw(*limits, Length::value),
+                "travel limits",
+                Dimension::Length,
+            ) {
                 next.kind = JointKind::Slider {
                     axis: *axis,
                     limits: k.map(|[lo, hi]| [Length(lo), Length(hi)]),

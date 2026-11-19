@@ -218,10 +218,15 @@ fn units_section(ui: &mut egui::Ui, units: &mut ResMut<gradiance_domain::setting
         .show(ui, |ui| {
             ui.label("angles");
             ui.horizontal(|ui| {
-                for (angle, label) in [(AngleUnit::Degrees, "degrees"), (AngleUnit::Radians, "radians")] {
+                for (angle, label) in [
+                    (AngleUnit::Degrees, "degrees"),
+                    (AngleUnit::Radians, "radians"),
+                ] {
                     if ui
                         .selectable_label(current.angle == angle, label)
-                        .on_hover_text("how angle fields and readouts show (yours, not the scene's)")
+                        .on_hover_text(
+                            "how angle fields and readouts show (yours, not the scene's)",
+                        )
                         .clicked()
                         && current.angle != angle
                     {
@@ -235,7 +240,9 @@ fn units_section(ui: &mut egui::Ui, units: &mut ResMut<gradiance_domain::setting
                 for length in LengthUnit::ALL {
                     if ui
                         .selectable_label(current.length == length, length.name())
-                        .on_hover_text("how length fields and readouts show (yours, not the scene's)")
+                        .on_hover_text(
+                            "how length fields and readouts show (yours, not the scene's)",
+                        )
                         .clicked()
                         && current.length != length
                     {
@@ -574,15 +581,10 @@ fn lighting_tab(
     ui.horizontal(|ui| {
         ui.label("shadow reach");
         let reach = crate::unit_fields::display(ui.ctx(), Dimension::Length);
-        changed |= crate::unit_fields::drag_value(
-            ui,
-            &mut settings.shadow_distance.0,
-            2.0,
-            None,
-            reach,
-        )
-        .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
-        .changed();
+        changed |=
+            crate::unit_fields::drag_value(ui, &mut settings.shadow_distance.0, 2.0, None, reach)
+                .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
+                .changed();
     });
     if changed {
         lighting.set_changed();

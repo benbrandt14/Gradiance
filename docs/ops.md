@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 85 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 87 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -179,6 +179,13 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `ui.screenshot` | `(ui-screenshot path)` | editor | — | — | Save a PNG of the window (scene and panels) at path, once the view settles (150 ms and 3 frames at least); returns the path at once, the file follows. | `{"path": "screenshot.png"}` |
 | `ui.text` | `(ui-text text)` | editor | — | — | Type text into the focused field (click it first) in one frame; a newline presses Enter. Typed text trips no key shortcut. | `{"text": "1.5"}` |
 | `ui.wheel` | `(ui-wheel at lines)` | editor | — | — | Move to a widget name or point [x y], then turn the wheel by lines (> 0: up, away from you), as real input. | `{"at": [640, 370], "lines": 1}` |
+
+## `units`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `units.display` | `(display-units angle length)` | config | — | — | Show angles in deg or rad and lengths in m, cm or mm in every field (display only; workstation config, never undone). | `{"angle": "rad", "length": "cm"}` |
+| `units.shown` | `(units-shown)` | query | — | — | The units the fields show, as (angle length), e.g. ("deg" "m"). | `{}` |
 
 ## `workspace`
 

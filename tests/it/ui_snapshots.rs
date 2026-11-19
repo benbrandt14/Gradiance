@@ -180,7 +180,7 @@ fn snapshot_plot_pane() {
     snapshot("plot_pane", egui::vec2(360.0, 240.0), move |ui| {
         let series = [Series {
             name: "wave",
-            unit: "m",
+            unit: gradiance::units::DisplayUnit::canonical(gradiance::units::Dimension::Length),
             values: &wave,
             times: &times,
         }];

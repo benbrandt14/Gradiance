@@ -232,7 +232,8 @@ mod tests {
         assert!((old - 1.0).abs() < 1e-6, "{commits:?}");
         assert!((new - 0.25).abs() < 1e-6, "{commits:?}");
         assert!((value - 0.25).abs() < 1e-6);
-        assert!(text.iter().any(|t| t == "0.25 m"), "{text:?}");
+        // egui paints the number and the suffix as two texts.
+        assert!(text.concat().contains("0.250 m"), "{text:?}");
     }
 
     /// Under a centimetre preference the same field shows centimetres, a
@@ -246,7 +247,7 @@ mod tests {
         let mut value = 1.0;
         let ctx = egui::Context::default();
         let shown = frame(&ctx, prefs, &mut value, vec![]).text;
-        assert!(shown.iter().any(|t| t == "100 cm"), "{shown:?}");
+        assert!(shown.concat().contains("100.0 cm"), "{shown:?}");
         let (commits, _) = type_into(prefs, &mut value, "40");
         assert_eq!(commits.len(), 1, "{commits:?}");
         assert!((value - 0.4).abs() < 1e-6, "{value}");

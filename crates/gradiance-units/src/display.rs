@@ -14,9 +14,7 @@ use bevy::reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 /// How angles show: degrees or radians.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 pub enum AngleUnit {
     /// Degrees (`°`, `°/s`). The default: the joint inspector's limits
     /// were already shown in degrees.
@@ -47,9 +45,7 @@ impl AngleUnit {
 }
 
 /// How lengths show: metres, centimetres or millimetres.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 pub enum LengthUnit {
     /// Metres, as stored.
     #[default]
@@ -94,9 +90,7 @@ impl LengthUnit {
 /// cover angular velocity too (`°/s` or `rad/s`); the length scale covers
 /// lengths only (a velocity stays `m/s`). Every other dimension shows its
 /// canonical SI unit.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Reflect)]
 #[serde(default)]
 pub struct UnitPrefs {
     /// How angles show.
@@ -269,8 +263,14 @@ mod tests {
         assert_eq!(cm.parse("25"), Ok(0.25));
         assert_eq!(cm.parse("25 cm"), Ok(0.25));
         assert_eq!(cm.parse("0.25 m"), Ok(0.25));
-        assert_eq!(cm.parse("25 cm"), DisplayUnit::canonical(Dimension::Length).parse("25 cm"));
-        assert_eq!(DisplayUnit::canonical(Dimension::Length).parse("25"), Ok(25.0));
+        assert_eq!(
+            cm.parse("25 cm"),
+            DisplayUnit::canonical(Dimension::Length).parse("25 cm")
+        );
+        assert_eq!(
+            DisplayUnit::canonical(Dimension::Length).parse("25"),
+            Ok(25.0)
+        );
         assert_eq!(cm.format(0.25, 2), "25 cm");
     }
 
@@ -308,10 +308,25 @@ mod tests {
             .parse("90 deg")
             .unwrap_err();
         assert_eq!(err.to_string(), "expected m (or a plain number), got rad");
-        assert!(DisplayUnit::canonical(Dimension::Dimensionless).parse("1 m").is_err());
-        assert!(DisplayUnit::canonical(Dimension::Frequency).parse("2 kHz").is_ok());
-        assert!(DisplayUnit::canonical(Dimension::AngularVelocity).parse("2 Hz").is_err());
-        assert_eq!(DisplayUnit::canonical(Dimension::Force).parse("1e40 kN"), Err(ExprError::NotFinite));
+        assert!(
+            DisplayUnit::canonical(Dimension::Dimensionless)
+                .parse("1 m")
+                .is_err()
+        );
+        assert!(
+            DisplayUnit::canonical(Dimension::Frequency)
+                .parse("2 kHz")
+                .is_ok()
+        );
+        assert!(
+            DisplayUnit::canonical(Dimension::AngularVelocity)
+                .parse("2 Hz")
+                .is_err()
+        );
+        assert_eq!(
+            DisplayUnit::canonical(Dimension::Force).parse("1e40 kN"),
+            Err(ExprError::NotFinite)
+        );
     }
 
     #[test]
@@ -327,7 +342,9 @@ mod tests {
                 let unit = prefs.display(d);
                 assert_eq!(unit.dimension, d);
                 let text = unit.format(1.25, 4);
-                let back = unit.parse(&text).unwrap_or_else(|e| panic!("{d:?} {text}: {e}"));
+                let back = unit
+                    .parse(&text)
+                    .unwrap_or_else(|e| panic!("{d:?} {text}: {e}"));
                 assert!((back - 1.25).abs() < 1e-4, "{d:?}: {text} -> {back}");
             }
         }

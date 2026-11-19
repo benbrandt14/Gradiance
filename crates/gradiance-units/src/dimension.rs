@@ -204,7 +204,6 @@ fn trim_zeros(s: &str) -> String {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,9 +220,27 @@ mod tests {
             )*};
         }
         check!(
-            Time, Length, Area, Angle, Mass, Density, Velocity, AngularVelocity, Acceleration,
-            Force, Torque, Stiffness, Damping, Frequency, Energy, Momentum, AngularMomentum,
-            Displacement, Velocity2, Acceleration2, Force2
+            Time,
+            Length,
+            Area,
+            Angle,
+            Mass,
+            Density,
+            Velocity,
+            AngularVelocity,
+            Acceleration,
+            Force,
+            Torque,
+            Stiffness,
+            Damping,
+            Frequency,
+            Energy,
+            Momentum,
+            AngularMomentum,
+            Displacement,
+            Velocity2,
+            Acceleration2,
+            Force2
         );
         // No dimension names an impulse (N·s); it is read-only.
         assert_eq!(Dimension::of_quantity("Impulse"), None);

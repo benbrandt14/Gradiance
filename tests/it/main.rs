@@ -49,3 +49,4 @@ mod ui_panels;
 mod ui_registry;
 mod ui_snapshots;
 mod unit_commands;
+mod units_display;

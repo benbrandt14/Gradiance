@@ -251,10 +251,17 @@ mod tests {
         };
         let text = draw(&mut value, gradiance_units::AngleUnit::Degrees);
         assert!(text.iter().any(|t| t == "rotation step"), "{text:?}");
-        assert!(text.iter().any(|t| t == "90\u{b0}"), "{text:?}");
+        assert!(text.concat().contains("90.0\u{b0}"), "{text:?}");
         let text = draw(&mut value, gradiance_units::AngleUnit::Radians);
-        assert!(text.iter().any(|t| t.starts_with("1.57") && t.ends_with(" rad")), "{text:?}");
-        assert!((value.rotation_step_deg - 90.0).abs() < 1e-6, "showing never writes");
+        let joined = text.concat();
+        assert!(
+            joined.contains("1.57") && joined.contains(" rad"),
+            "{text:?}"
+        );
+        assert!(
+            (value.rotation_step_deg - 90.0).abs() < 1e-6,
+            "showing never writes"
+        );
     }
 
     #[derive(bevy::reflect::Reflect, Default)]
@@ -271,8 +278,13 @@ mod tests {
         let text = painted_text(&mut probe);
         assert!(!text.iter().any(|t| t.contains("unsupported")), "{text:?}");
         let accel = gradiance_units::Acceleration::UNIT;
-        for shown in ["1.25 m".to_owned(), format!("0.5 {accel}"), format!("-9.75 {accel}")] {
-            assert!(text.iter().any(|t| *t == shown), "no {shown} in {text:?}");
+        for shown in [
+            "1.25 m".to_owned(),
+            format!("0.5 {accel}"),
+            format!("-9.75 {accel}"),
+        ] {
+            // egui paints the number and the suffix as two texts.
+            assert!(text.concat().contains(&shown), "no {shown} in {text:?}");
         }
         // The display preference reaches the grid: a length in centimetres.
         let cm = gradiance_units::UnitPrefs {
@@ -280,7 +292,7 @@ mod tests {
             ..Default::default()
         };
         let text = painted_text_in(&mut probe, cm);
-        assert!(text.iter().any(|t| t == "125 cm"), "{text:?}");
+        assert!(text.concat().contains("125 cm"), "{text:?}");
         // The detector itself: a genuinely unsupported field says so.
         let text = painted_text(&mut Unsupported::default());
         assert!(text.iter().any(|t| t.contains("unsupported")), "{text:?}");

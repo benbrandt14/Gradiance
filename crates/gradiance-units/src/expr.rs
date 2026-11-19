@@ -318,9 +318,9 @@ fn tokenize(text: &str) -> Result<Vec<Token<'_>>, ExprError> {
                 while chars.peek().is_some_and(|&(i, _)| i < end) {
                     chars.next();
                 }
-                let n = text[start..end]
-                    .parse::<f64>()
-                    .map_err(|_| ExprError::Unexpected(format!("number `{}`", &text[start..end])))?;
+                let n = text[start..end].parse::<f64>().map_err(|_| {
+                    ExprError::Unexpected(format!("number `{}`", &text[start..end]))
+                })?;
                 out.push(Token::Number(n));
                 continue;
             }
@@ -651,7 +651,10 @@ mod tests {
             evaluate("3 furlongs"),
             Err(ExprError::UnknownUnit("furlongs".into()))
         );
-        assert!(matches!(evaluate("1 m + 1 s"), Err(ExprError::Mismatch(..))));
+        assert!(matches!(
+            evaluate("1 m + 1 s"),
+            Err(ExprError::Mismatch(..))
+        ));
         assert!(matches!(evaluate("2 * * 3"), Err(ExprError::Unexpected(_))));
         assert!(matches!(evaluate("(1 + 2"), Err(ExprError::Unexpected(_))));
         assert!(matches!(evaluate("1 + 2)"), Err(ExprError::Unexpected(_))));
