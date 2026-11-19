@@ -10,6 +10,7 @@ pub mod construct;
 pub mod contour;
 pub mod contours;
 pub mod extrusion;
+pub mod face_field;
 pub mod hull;
 pub mod polygonize;
 pub mod sat;

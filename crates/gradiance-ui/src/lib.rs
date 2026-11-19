@@ -35,6 +35,7 @@ pub mod pie;
 pub mod plot;
 pub mod ports;
 pub mod probe;
+pub mod ramp_editor;
 pub mod reflect_grid;
 pub mod review;
 pub mod search;

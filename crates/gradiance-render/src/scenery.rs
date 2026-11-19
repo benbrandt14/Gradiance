@@ -179,6 +179,7 @@ pub fn apply_scenery(
             mat.extension = crate::plane::PlaneExtension {
                 plane: mat.extension.plane,
                 toon: mat.extension.toon,
+                ramp: mat.extension.ramp.clone(),
                 ..crate::plane::PlaneExtension::for_plane(Vec3::Z, 0.0, backdrop, 0.0)
             };
         }

@@ -13,6 +13,10 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
 - **Now:** **U-10** (editor areas + saved workspaces; no brief yet).
+  **4b-6** toon ramp is done (#274, stacked on U-9: a colour ramp shared by
+  every body with a gradient picker in Settings > Rendering > Ramp, matte,
+  dithered band edges, front faces rounded from the outline; review
+  question `toon-ramp` open, `toon-highlights` withdrawn).
   **U-9** F3 search, status bar and tools pie is done (#272, stacked on
   5-5; tool operations `tool.*`, `ui.search`; review question
   `status-bar-and-pie` open).
@@ -64,6 +68,9 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
       joint load colour.
+  9d. **4b-6** toon ramp (done, #274): themed gradient ramp + picker, matte,
+      dithered band edges, normals from the shape (owner direction with a
+      reference image, 2026-11-19; supersedes `toon-highlights`).
   10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10** (now)
       editor areas + saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).

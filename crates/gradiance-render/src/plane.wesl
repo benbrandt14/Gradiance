@@ -32,13 +32,38 @@ struct HorizonData {
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> plane: PlaneData;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101) var<uniform> fade: FadeData;
 struct ToonData {
-    // The bodies' toon parameters: x = band count (0 = smooth), z = white
-    // point. Only the banding applies here (no rim, no glint).
+    // The bodies' toon parameters: x = toon on, z = white point. Only the
+    // ramp and its dither apply here (no rim, no glint, no relief).
     data: vec4<f32>,
+}
+struct ToonRamp {
+    // The bodies' sampled ramp (toon.wesl): sRGB tones; params x = linear,
+    // y = dither width, z = pixels per dither cell, w = toon on.
+    tones: array<vec4<f32>, 128>,
+    params: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(102) var<uniform> horizon: HorizonData;
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var<uniform> toon: ToonData;
+@group(constants::MATERIAL_BIND_GROUP) @binding(104) var<uniform> ramp: ToonRamp;
+
+// The ramp tone at `level` (toon.wesl's `ramp_tone`).
+fn ramp_tone(level: f32) -> vec3<f32> {
+    let l = clamp(level, 0.0, 1.0);
+    if ramp.params.x > 0.5 {
+        let pos = l * 127.0;
+        let i = min(u32(pos), 126u);
+        return mix(ramp.tones[i].rgb, ramp.tones[i + 1u].rgb, pos - f32(i));
+    }
+    return ramp.tones[min(u32(l * 128.0), 127u)].rgb;
+}
+
+// Hard light per channel (toon.wesl's `hard_light`).
+fn hard_light(base: vec3<f32>, tone: vec3<f32>) -> vec3<f32> {
+    let multiply = 2.0 * base * tone;
+    let screen = 1.0 - 2.0 * (1.0 - base) * (1.0 - tone);
+    return select(screen, multiply, tone < vec3(0.5));
+}
 
 // 4x4 Bayer threshold — the opaque pass has no blending, so the inside
 // reveal is a screen-door dissolve (brief: the band is ~0.5 m of camera
@@ -79,15 +104,17 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
 
-    // Toon bands, as on the bodies (toon.wesl): the lit/albedo ratio is
-    // quantized, so a shadow on the plane is a flat step, and overlapping
-    // shadows from two lights are two steps.
-    let bands = toon.data.x;
-    if bands >= 1.0 {
+    // The bodies' ramp (toon.wesl): the lit/albedo ratio picks a tone, so
+    // a shadow on the plane is a flat step in the bodies' shadow hue, and
+    // overlapping shadows from two lights are two steps; edges dither alike.
+    if toon.data.x > 0.5 {
         let base = max(pbr_input.material.base_color.rgb, vec3(1e-3));
         let lit = out.color.rgb / base;
         let level = clamp(dot(lit, vec3(0.2126, 0.7152, 0.0722)) / toon.data.z, 0.0, 1.0);
-        out.color = vec4(base * (ceil(level * bands) / bands), out.color.a);
+        let cell = floor(in.position.xy / ramp.params.z);
+        let jitter = (bayer4(cell) - 0.5) * 2.0 * ramp.params.y;
+        let tone = ramp_tone(level + jitter);
+        out.color = vec4(pow(hard_light(pow(base, vec3(1.0 / 2.2)), tone), vec3(2.2)), out.color.a);
     }
 
     // Dot grid (ground planes only; spacing 0 disables it on the back

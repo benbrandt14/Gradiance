@@ -17,6 +17,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<LookApply>();
     registry.register::<LookList>();
     registry.register::<RenderSet>();
+    registry.register::<RenderRamp>();
     registry.register::<LightingSet>();
     registry.register::<ScenerySet>();
 }
@@ -80,7 +81,8 @@ impl Operation for LookList {
     }
 }
 
-/// Set one render setting by reflect-path (`"bands"`, `"white_point"`).
+/// Set one render setting by reflect-path (`"dither"`, `"white_point"`,
+/// `"ramp.stops[1].position"`, `"ramp.stops[0].color.r"`).
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
 pub struct RenderSet {
@@ -94,17 +96,81 @@ impl Operation for RenderSet {
     const META: OpMeta = OpMeta {
         id: "render.set",
         lisp: "render-set",
-        doc: "Set a render (toon) setting by reflect-path, e.g. \"bands\", \"rim_strength\", \"white_point\" (a settled edit is one undo step).",
+        doc: "Set a render (toon) setting by reflect-path, e.g. \"dither\", \"white_point\", \"ramp.stops[1].position\", \"ramp.stops[0].color.r\" (a settled edit is one undo step).",
         seam: Seam::Config,
         menu: None,
         chord: None,
         undo: Some(name::SETTINGS),
-        example: r#"{"path": "bands", "value": 3}"#,
+        example: r#"{"path": "dither", "value": 0.1}"#,
     };
 
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         let settings = ctx.get::<RenderSettings>()?;
         Ok(OpOutput::none().setting(settings, &self.path, self.value)?)
+    }
+}
+
+/// Replace the toon colour ramp (brief 4b-6): its interpolation and every
+/// stop, as flat `position r g b` groups. One stop's value is `render.set`'s
+/// (`"ramp.stops[1].position"`); adding or removing stops is this.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct RenderRamp {
+    /// `constant` (hard bands) or `linear`.
+    pub interp: String,
+    /// `position r g b` per stop (each in 0..1; tones by hard light, 0.5
+    /// grey shows a fill as authored), one to `MAX_STOPS` stops.
+    pub stops: Vec<f32>,
+}
+
+impl Operation for RenderRamp {
+    const META: OpMeta = OpMeta {
+        id: "render.ramp",
+        lisp: "render-ramp",
+        doc: "Replace the toon colour ramp: interp (constant, linear) and stops as flat position r g b groups; 0.5 grey shows a fill as authored (a settled edit is one undo step).",
+        seam: Seam::Config,
+        menu: None,
+        chord: None,
+        undo: Some(name::SETTINGS),
+        example: r#"{"interp": "constant", "stops": [0.0, 0.3, 0.25, 0.35, 0.6, 0.5, 0.5, 0.5]}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        use gradiance_domain::appearance::Rgba;
+        use gradiance_domain::ramp::{ColorRamp, MAX_STOPS, RampInterp};
+        let interp = RampInterp::ALL
+            .into_iter()
+            .find(|i| i.name() == self.interp)
+            .ok_or_else(|| {
+                OpError::Invalid(format!(
+                    "no ramp interpolation `{}` (constant, linear)",
+                    self.interp
+                ))
+            })?;
+        let (groups, rest) = self.stops.as_chunks::<4>();
+        if !rest.is_empty() || groups.is_empty() || groups.len() > MAX_STOPS {
+            return Err(OpError::Invalid(format!(
+                "stops are 1 to {MAX_STOPS} groups of `position r g b` ({} numbers given)",
+                self.stops.len()
+            )));
+        }
+        if self.stops.iter().any(|v| !v.is_finite()) {
+            return Err(OpError::Invalid("stops must be finite numbers".into()));
+        }
+        let stops: Vec<(f32, Rgba)> = groups
+            .iter()
+            .map(|&[position, r, g, b]| {
+                (
+                    position,
+                    Rgba::rgb(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)),
+                )
+            })
+            .collect();
+        let settings = ctx.get::<RenderSettings>()?;
+        Ok(OpOutput::none().replace_setting(RenderSettings {
+            ramp: ColorRamp::new(interp, &stops),
+            ..settings.clone()
+        }))
     }
 }
 

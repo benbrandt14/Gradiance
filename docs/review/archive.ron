@@ -635,7 +635,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                         caption: "Navy backdrop, pale chalk pieces with ink outlines, light grid; one cool light, three bands, a stronger rim.",
                         scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
                         settings: (
-                            render: (look: Blueprint, bands: 3, rim_strength: 0.35, white_point: 1.0, specular: 0.0, relief: 0.0),
+                            render: (look: Blueprint, rim_strength: 0.35, white_point: 1.0, specular: 0.0, relief: 0.0, ramp: (interp: Constant, stops: [(position: 0.0, color: (r: 0.27, g: 0.3, b: 0.38, a: 1.0)), (position: 0.33333334, color: (r: 0.4, g: 0.42, b: 0.46, a: 1.0)), (position: 0.6666667, color: (r: 0.5, g: 0.5, b: 0.5, a: 1.0))]), dither: 0.0),
                             lighting: (
                                 lights: [(azimuth_deg: 110.0, elevation_deg: 45.0, color: (r: 0.9, g: 0.95, b: 1.0, a: 1.0), illuminance: 3000.0, shadows: true)],
                                 ambient: 670.0,
@@ -648,7 +648,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                         caption: "Paper-white backdrop, bold saturated pieces, black outlines; one light, two bands (lit or shadow), no rim or glint.",
                         scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
                         settings: (
-                            render: (look: Poster, bands: 2, rim_strength: 0.0, white_point: 1.0, specular: 0.0, relief: 0.0),
+                            render: (look: Poster, rim_strength: 0.0, white_point: 1.0, specular: 0.0, relief: 0.0, ramp: (interp: Constant, stops: [(position: 0.0, color: (r: 0.36, g: 0.36, b: 0.36, a: 1.0)), (position: 0.5, color: (r: 0.5, g: 0.5, b: 0.5, a: 1.0))]), dither: 0.0),
                             lighting: (
                                 lights: [(azimuth_deg: 135.0, elevation_deg: 45.0, color: (r: 1.0, g: 1.0, b: 1.0, a: 1.0), illuminance: 2450.0, shadows: true)],
                                 ambient: 750.0,
@@ -1231,6 +1231,140 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                 answered_at: "2026-11-19T20:00:00Z",
             ),
             ingested_as: "ui::status_bar; interaction::tool_ops::hints",
+        ),
+        (
+            question: (
+                id: "toon-highlights",
+                title: "Which toon bands should a body show on its own face?",
+                source: "Review answer `toon-lighting` (2026-11-19): bands on the objects themselves, like specular highlights, not only in their shadows; brief 4b-5",
+                description: r#"A body's front face is flat, so it had one normal and one light value: one band over the whole face, and the bands showed only in the shadows. The studio specular glint (0.25) never landed on a front face in the head-on view. Measured on lavapipe: the box, the circle and the polygon each showed one band on their face.
+
+        The shader now lights a front face as a shallow dome over the face (lighting only: the outline and the physics stay flat). Two settings use it, both under Settings > Rendering: "relief" steps the diffuse bands across the face, brightest toward the key light (top left), darker toward the bottom right; "specular" puts a hard two-step highlight (a halo and a core) in the key light's hue on each face, toward the light. The options are the four combinations; the scene is the look scene with a pentagon and a triangle (top right) beside the boxes and circles.
+
+        Look at the teal box, the green circle and the blue polygons, at the long thin bodies (the chain, the ramp: the highlight stretches with the body), then press play and watch the bands follow each body as it turns. Try Settings > Rendering > relief (0 to about 1.5) if you want a stronger or weaker step."#,
+                options: [
+                    (
+                        label: "Relief + glint",
+                        caption: "The new default: relief 0.8 and specular 0.25. Each face steps through two or three bands and carries a two-step highlight.",
+                        scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    ),
+                    (
+                        label: "Glint only",
+                        caption: "Relief 0, specular 0.25: faces stay one band; each carries the two-step highlight toward the key light.",
+                        scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                        settings: (render: (relief: 0.0)),
+                    ),
+                    (
+                        label: "Relief only",
+                        caption: "Relief 0.8, specular 0: bands step across each face, no highlight.",
+                        scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                        settings: (render: (specular: 0.0)),
+                    ),
+                    (
+                        label: "Flat (before)",
+                        caption: "Relief 0, specular 0: one band per face, as before this change (the old glint never reached a front face).",
+                        scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                        settings: (render: (relief: 0.0, specular: 0.0)),
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-highlights",
+                title: "Which toon bands should a body show on its own face?",
+                choice: NoneOfThese("A themed gradient ramp for the falloff, matte with tasteful dithering or pixelation, more use of the geometry (owner, in chat, with a reference image)."),
+                note: "Withdrawn, not asked: the owner answered its direction in chat on 2026-11-19 with docs/briefs/assets/4b-6-reference.gif ('more like this for the toon shader ... more themed gradient picker for the fall off ... more matte with tasteful dithering or pixelation'). Brief 4b-6 supersedes it; the follow-up question is toon-ramp.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "docs/briefs/4b-6-toon-ramp.md",
+        ),
+        (
+            question: (
+                id: "toon-ramp-blend",
+                title: "How does a ramp tone tint a body?",
+                source: "Brief 4b-6 toon ramp (docs/briefs/4b-6-toon-ramp.md)",
+                description: r#"Every body must go through the same falloff (owner: so objects don't look so dissimilar), so a ramp stop is a tone applied to the body's own fill, not a colour that replaces it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Hard light",
+                        caption: r#"Per channel in gamma space: a tone below mid grey multiplies (2 base tone), above it screens toward the tone; mid grey (0.5) shows the fill as authored. Shadows can shift hue and a lit patch can be lighter than the fill. Cost: a stop's colour is a tint, not what you see; the editor shows three fills through the ramp."#,
+                    ),
+                    (
+                        label: "Multiply",
+                        caption: r#"Fill times tone. Cost: nothing can be lighter than the authored fill, so there is no lit patch."#,
+                    ),
+                    (
+                        label: "Replace",
+                        caption: r#"The stop colour is the colour. Cost: every body would be the same colours; palette fills are lost."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-ramp-blend",
+                title: "How does a ramp tone tint a body?",
+                choice: Picked("Hard light"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "domain::ramp (shade, hard_light); toon.wesl, plane.wesl",
+        ),
+        (
+            question: (
+                id: "toon-face-field",
+                title: "Where does a front face's rounded normal come from?",
+                source: "Brief 4b-6 toon ramp (docs/briefs/4b-6-toon-ramp.md)",
+                description: r#"The brief wants the falloff to come from the shape: a pillow or bevel normal from the distance to the outline. A front cap's vertices all lie on its outline, so no vertex attribute can carry that distance."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Baked face field",
+                        caption: r#"Per body, the distance and direction to the polygonized outline sampled once on the CPU into a small linear RGBA8 texture over the face frame (64 texels on the long side), rebaked with the mesh. The shader tilts the normal by a quarter-round profile: relief at the outline, nothing a bevel fraction of the deepest depth in. Exact for circles, boxes, holes and cuts. Cost: one small image per body (16 KB at most)."#,
+                    ),
+                    (
+                        label: "Interior cap vertices",
+                        caption: r#"Inset rings in the cap mesh carrying the distance. Cost: stitching rings with different vertex counts after an offset, for every shape."#,
+                    ),
+                    (
+                        label: "Analytic SDF in the shader",
+                        caption: r#"Evaluate the shape in the fragment shader. Cost: polygons and CSG trees do not fit a uniform."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-face-field",
+                title: "Where does a front face's rounded normal come from?",
+                choice: Picked("Baked face field"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "geometry::face_field; render::extrude_sync, toon::attach_face_fields",
+        ),
+        (
+            question: (
+                id: "toon-ramp-settings",
+                title: "What happens to the band count, the glint and the old relief?",
+                source: "Brief 4b-6 toon ramp (docs/briefs/4b-6-toon-ramp.md)",
+                description: r#"The ramp makes the band count redundant, and the brief wants a matte default."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Ramp replaces bands; glint off",
+                        caption: r#"RenderSettings::bands is removed (its stops are the bands; an old file's bands field is ignored, so FORMAT_VERSION stays 8). specular stays as a setting but is 0 in every look. relief keeps its name and now scales the face-field tilt (0 flat, 1 edge-on at the outline); the 4b-5 dome is the shader's fallback when a body has no field. Dither and relief stay studio-only, as 4b-5 decided for relief; blueprint and poster ship flat two- and three-band ramps at their old band edges."#,
+                    ),
+                    (
+                        label: "Keep bands as a quantizer",
+                        caption: r#"Quantize the level before the ramp. Cost: two controls for one thing, and a linear ramp could never be smooth."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-ramp-settings",
+                title: "What happens to the band count, the glint and the old relief?",
+                choice: Picked("Ramp replaces bands; glint off"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "domain::settings::RenderSettings; theme::Look::render, Look::ramp",
         ),
     ],
 )

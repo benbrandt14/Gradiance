@@ -57,12 +57,15 @@ pub struct PlaneExtension {
     /// backdrop, which is also the camera clear color).
     #[uniform(102)]
     pub horizon: Vec4,
-    /// The toon banding the bodies use ([`params_of`](crate::toon::params_of)):
-    /// `x` = band count (0 = smooth), `z` = white point. Kept equal to the
-    /// bodies' by `toon::apply_render_settings`, so a shadow on the back
-    /// plane or a ground steps through the same bands as a body.
+    /// The toon parameters the bodies use ([`params_of`](crate::toon::params_of)):
+    /// `x` = toon on, `z` = white point. Kept equal to the bodies' by
+    /// `toon::apply_render_settings`, with [`ramp`](Self::ramp), so a
+    /// shadow on the back plane or a ground takes the bodies' tones.
     #[uniform(103)]
     pub toon: Vec4,
+    /// The bodies' ramp and dither ([`ToonRamp`](crate::toon::ToonRamp)).
+    #[uniform(104)]
+    pub ramp: crate::toon::ToonRamp,
 }
 
 impl PlaneExtension {
@@ -76,6 +79,7 @@ impl PlaneExtension {
             fade: Vec4::new(dot_spacing, HORIZON_FADE.0, HORIZON_FADE.1, 0.0),
             horizon: Vec4::new(h.red, h.green, h.blue, 1.0),
             toon: Vec4::ZERO,
+            ramp: crate::toon::ToonRamp::default(),
         }
     }
 }
@@ -180,6 +184,7 @@ pub fn sync_ground_planes(
             1.0,
         );
         material.extension.toon = crate::toon::params_of(&render);
+        material.extension.ramp = crate::toon::ramp_of(&render);
         let handle = materials.add(material);
         // Grounds render through this material, not the body toon material.
         commands

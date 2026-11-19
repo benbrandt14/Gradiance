@@ -264,3 +264,9 @@ Unchanged from prior experience: `lyon::path::Path` builder, `FillTessellator::t
   (path relative to the calling file, `src/` stripped) and reference them as
   `"embedded://<crate>/<dir>/file.wesl"`. `ShaderRef: From<&'static str>`.
 - `bevy_shader` is re-exported as `bevy::shader` (home of `ShaderRef`).
+- A per-material texture on an extension: `#[texture(N)] #[sampler(N+1)] field:
+  Option<Handle<Image>>` (`None` binds a fallback image, so flag presence in a
+  uniform). Sample it with `textureSampleLevel` when the call may sit after a
+  non-uniform branch; `textureSample` and `dpdx` need uniform control flow
+  (brief 4b-6, `toon.wesl`). A fixed-size uniform array (`[Vec4; 128]` in a
+  `ShaderType` struct) works as `array<vec4<f32>, 128>`.

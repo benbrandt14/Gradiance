@@ -21,16 +21,22 @@
 //! here too, pure, so the consistency tests run without a renderer.
 
 use crate::appearance::{Rgba, Swatch};
+use crate::ramp::{ColorRamp, RampInterp};
 use crate::settings::{KeyLightSettings, LightingSettings, RenderSettings, ScenerySettings};
 use gradiance_units::Length;
 use serde::{Deserialize, Serialize};
 
-/// Studio's face relief ([`RenderSettings::relief`]): the slope a front
-/// face's normal reaches at its outline. Measured on lavapipe (brief 4b-5):
-/// with the studio lights a box and a polygon step through three bands on
-/// their own face and a circle through two (0.6 left a thin second band;
-/// 1.0 darkened the far third of each face).
-pub const STUDIO_RELIEF: f32 = 0.8;
+/// Studio's face relief ([`RenderSettings::relief`]): how far a front
+/// face's normal tilts at the outline (1 = edge-on). Brief 4b-6 derives the
+/// tilt from the distance to the outline; see [`STUDIO_BEVEL`].
+pub const STUDIO_RELIEF: f32 = 1.0;
+
+/// Studio's bevel ([`RenderSettings::bevel`]): the relief reaches this far
+/// in from the outline, as a fraction of the shape's half-thickness. On
+/// lavapipe (brief 4b-6) 0.45 left a circle a flat puck, 0.7 turned a box
+/// into a pyramid; 0.6 rounds a circle most of the way and keeps a box a
+/// slab with lit, chamfered edges.
+pub const STUDIO_BEVEL: f32 = 0.6;
 
 /// A named scene look. Scene content: it lives in
 /// [`RenderSettings::look`], so it is saved with the scene and a change is
@@ -80,25 +86,60 @@ impl Look {
 
     /// The render settings this look starts from.
     ///
-    /// Only studio lights its faces as a dome ([`STUDIO_RELIEF`]): blueprint
-    /// and poster are flat-colour styles, so their faces stay one tone and
-    /// their bands stay in the shadows.
+    /// Only studio lights its faces with relief ([`STUDIO_RELIEF`]) and
+    /// dithers its band edges: blueprint and poster are flat-colour styles,
+    /// so their faces stay one tone and their bands stay in the shadows.
+    /// No look has a glint: the matte default (brief 4b-6) puts a lit patch
+    /// in the ramp instead.
     #[must_use]
     pub fn render(self) -> RenderSettings {
-        let (bands, rim_strength, white_point, specular, relief) = match self {
-            Self::Studio => (4, 0.2, 1.0, 0.25, STUDIO_RELIEF),
-            Self::Blueprint => (3, 0.35, 1.0, 0.0, 0.0),
-            Self::Poster => (2, 0.0, 1.0, 0.0, 0.0),
+        let (rim_strength, white_point, relief, dither) = match self {
+            Self::Studio => (0.2, STUDIO_WHITE_POINT, STUDIO_RELIEF, STUDIO_DITHER),
+            Self::Blueprint => (0.35, 1.0, 0.0, 0.0),
+            Self::Poster => (0.0, 1.0, 0.0, 0.0),
         };
         RenderSettings {
             look: self,
             toon_enabled: true,
-            bands,
+            ramp: self.ramp(),
+            dither,
+            dither_scale: STUDIO_DITHER_SCALE,
             rim_strength,
             white_point,
-            specular,
+            specular: 0.0,
             relief,
+            bevel: STUDIO_BEVEL,
         }
+    }
+
+    /// The colour ramp this look starts from (brief 4b-6; tones by hard
+    /// light, `ramp` module docs).
+    ///
+    /// - **Studio:** five bands, matching the lights (`lighting`): lit by
+    ///   both lights the fill shows as authored, a face turned to the key
+    ///   gets a warm cream patch, and the shadows shift hue toward a cool
+    ///   mauve as they deepen (not only darker).
+    /// - **Blueprint:** three cool bands at the old thirds.
+    /// - **Poster:** two bands, lit or shadow.
+    #[must_use]
+    pub fn ramp(self) -> ColorRamp {
+        use crate::ramp::neutral;
+        let stops: Vec<(f32, Rgba)> = match self {
+            Self::Studio => vec![
+                (0.0, STUDIO_RAMP_DEEP),
+                (0.3, STUDIO_RAMP_SHADOW),
+                (0.5, STUDIO_RAMP_MID),
+                (0.68, neutral()),
+                (0.9, STUDIO_RAMP_LIT),
+            ],
+            Self::Blueprint => vec![
+                (0.0, BLUEPRINT_RAMP_SHADOW),
+                (1.0 / 3.0, BLUEPRINT_RAMP_MID),
+                (2.0 / 3.0, neutral()),
+            ],
+            Self::Poster => vec![(0.0, POSTER_RAMP_SHADOW), (0.5, neutral())],
+        };
+        ColorRamp::new(RampInterp::Constant, &stops)
     }
 
     /// The lighting this look starts from.
@@ -357,6 +398,29 @@ const fn swatch(name: &'static str, r: f32, g: f32, b: f32) -> Swatch {
 /// White light (an untinted lamp).
 pub const WHITE_LIGHT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
 /// The studio key: a warm lamp.
+/// Studio's white point: a face lit by both lights lands at about 0.76 of
+/// the ramp (the authored-fill band), so a face turned toward the key can
+/// rise into the lit patch above it (brief 4b-6, measured on lavapipe).
+pub const STUDIO_WHITE_POINT: f32 = 1.25;
+/// Studio's band-edge dither width, in lighting levels.
+pub const STUDIO_DITHER: f32 = 0.025;
+/// Screen pixels per dither cell (every look).
+pub const STUDIO_DITHER_SCALE: f32 = 2.0;
+/// Studio ramp: both shadows, a cool mauve-brown (hue-shifted, not only
+/// darker).
+const STUDIO_RAMP_DEEP: Rgba = Rgba::rgb(0.28, 0.25, 0.32);
+/// Studio ramp: one light's shadow.
+const STUDIO_RAMP_SHADOW: Rgba = Rgba::rgb(0.34, 0.31, 0.37);
+/// Studio ramp: the fill's shadow, nearly the fill.
+const STUDIO_RAMP_MID: Rgba = Rgba::rgb(0.42, 0.4, 0.43);
+/// Studio ramp: the lit patch, a warm cream in the key light's hue.
+const STUDIO_RAMP_LIT: Rgba = Rgba::rgb(0.72, 0.7, 0.56);
+/// Blueprint ramp: the shadow, toward navy.
+const BLUEPRINT_RAMP_SHADOW: Rgba = Rgba::rgb(0.27, 0.3, 0.38);
+/// Blueprint ramp: the middle band.
+const BLUEPRINT_RAMP_MID: Rgba = Rgba::rgb(0.4, 0.42, 0.46);
+/// Poster ramp: the shadow (about half the light, as its old two bands).
+const POSTER_RAMP_SHADOW: Rgba = Rgba::rgb(0.36, 0.36, 0.36);
 const STUDIO_KEY: Rgba = Rgba::rgb(1.0, 0.95, 0.88);
 /// The studio fill: a cool sky. Also the tint of a light added in the
 /// Lighting tab.

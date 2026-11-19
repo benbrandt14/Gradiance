@@ -394,28 +394,47 @@ pub struct RenderSettings {
     /// look's preset; setting only this field re-tones colours and keeps
     /// the rest.
     pub look: crate::theme::Look,
-    /// Quantize lighting into bands (toon look). Off = smooth matte PBR.
+    /// Toon shading (the ramp, the dither, the face relief). Off = smooth
+    /// matte PBR.
     pub toon_enabled: bool,
-    /// Number of light bands when toon shading is on.
-    pub bands: u32,
+    /// The colour ramp lighting is looked up in (brief 4b-6): stops over
+    /// the lighting level `0..1`, each a tone that tints every body the
+    /// same way (`ramp` module docs). Each look ships one.
+    pub ramp: crate::ramp::ColorRamp,
+    /// Band-edge dither: how far (in lighting levels) to either side of a
+    /// stop edge pixels pick one tone or the other in an ordered (Bayer
+    /// 4x4) screen pattern, so a band edge is a pattern, not a hard line.
+    /// 0 = hard edges.
+    #[serde(default = "default_dither")]
+    pub dither: f32,
+    /// Screen pixels per dither cell: 1 is a fine grain, 3 or 4 a chunky,
+    /// pixel-art one. The outline and silhouette stay crisp.
+    #[serde(default = "default_dither_scale")]
+    pub dither_scale: f32,
     /// Rim-light strength (0 = none) — silhouettes read better in toon.
     pub rim_strength: f32,
-    /// Lit/albedo ratio mapped to the top band. Raise it if everything
-    /// saturates into one flat band; lower it if the scene looks dark.
+    /// Lit/albedo ratio mapped to the top of the ramp. Raise it if
+    /// everything lands in the top band; lower it if the scene looks dark.
     #[serde(default = "default_white_point")]
     pub white_point: f32,
-    /// Quantized specular glint strength (0 = none): a hard, two-step toon
-    /// highlight in the strongest light's hue. The front face reads as a
-    /// shallow dome for it, so the glint lands on every body's face, toward
-    /// the light (brief 4b-5).
+    /// Quantized specular glint strength (0 = none, the matte default): a
+    /// hard, two-step toon highlight in the strongest light's hue (brief
+    /// 4b-5). A lit patch belongs in the ramp instead.
     #[serde(default = "default_specular")]
     pub specular: f32,
-    /// Face relief (0 = flat faces): how far a body's front face is lit as
-    /// a shallow dome, its normal tilting by this slope at the outline. The
-    /// bands then step across the face, brightest toward the key light.
-    /// Lighting only: the shape and the physics stay flat (brief 4b-5).
+    /// Face relief (0 = flat faces): how far a front face's normal tilts
+    /// at its outline, toward the outline (1 = a quarter round, edge-on at
+    /// the outline). The tilt comes from the shape: the distance to its
+    /// outline (brief 4b-6), so a circle reads as a rounded body and a box
+    /// as a slab with lit edges. Lighting only: the shape and the physics
+    /// stay flat.
     #[serde(default = "default_relief")]
     pub relief: f32,
+    /// How far in from the outline the relief reaches, as a fraction of
+    /// the shape's half-thickness (its deepest point): 1 rounds a circle
+    /// into a dome, smaller keeps a flat middle and rounds the edges.
+    #[serde(default = "default_bevel")]
+    pub bevel: f32,
 }
 
 fn default_white_point() -> f32 {
@@ -428,6 +447,18 @@ fn default_specular() -> f32 {
 
 fn default_relief() -> f32 {
     RenderSettings::default().relief
+}
+
+fn default_dither() -> f32 {
+    RenderSettings::default().dither
+}
+
+fn default_dither_scale() -> f32 {
+    RenderSettings::default().dither_scale
+}
+
+fn default_bevel() -> f32 {
+    RenderSettings::default().bevel
 }
 
 impl Default for RenderSettings {

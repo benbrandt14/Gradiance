@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(lighting.lights, LightingSettings::default().lights);
         let render = settings.render.as_ref().unwrap();
         assert!(!render.toon_enabled);
-        assert_eq!(render.bands, RenderSettings::default().bands);
+        assert_eq!(render.ramp, RenderSettings::default().ramp);
         assert!(settings.sim.is_none());
     }
 
@@ -761,13 +761,13 @@ mod tests {
         env.sim.speed = 2.0;
         let over = SettingsOverride {
             render: Some(RenderSettings {
-                bands: 2,
+                dither: 0.25,
                 ..RenderSettings::default()
             }),
             ..SettingsOverride::default()
         };
         over.apply_to(&mut env);
-        assert_eq!(env.render.bands, 2);
+        assert!((env.render.dither - 0.25).abs() < f32::EPSILON);
         assert!((env.sim.speed - 2.0).abs() < f32::EPSILON);
     }
 }

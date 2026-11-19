@@ -1568,3 +1568,25 @@ fn a_query_of_a_missing_body_reads_nan() {
     );
     assert_eq!(last_entry(&app), Some((true, "1".to_string())));
 }
+
+/// The toon ramp (brief 4b-6) is scriptable: `render-ramp` takes the
+/// interpolation and a flat `position r g b` list, `render-set` reaches one
+/// stop by reflect-path.
+#[test]
+fn a_script_replaces_and_edits_the_toon_ramp() {
+    use gradiance::domain::ramp::RampInterp;
+    use gradiance::domain::settings::RenderSettings;
+    let mut app = paused_app();
+    run(
+        &mut app,
+        "(render-ramp \"linear\" (list 0 0.3 0.25 0.35 0.6 0.5 0.5 0.5))",
+    );
+    step(&mut app, 1);
+    let ramp = app.world().resource::<RenderSettings>().ramp.clone();
+    assert_eq!(ramp.interp, RampInterp::Linear);
+    assert_eq!(ramp.stops.len(), 2);
+    run(&mut app, "(render-set \"ramp.stops[1].position\" 0.75)");
+    step(&mut app, 1);
+    let ramp = &app.world().resource::<RenderSettings>().ramp;
+    assert!((ramp.stops[1].position - 0.75).abs() < 1e-6);
+}
