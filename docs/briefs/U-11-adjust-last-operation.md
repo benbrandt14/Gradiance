@@ -1,6 +1,6 @@
 # Adjust Last Operation
 Phase U · `docs/unified-surface-plan.md` § 7.2 (row "Adjust Last
-Operation panel"), § 10 row 11 · status: ready
+Operation panel"), § 10 row 11 · status: in review
 
 Written by the orchestrator, 2026-11-19 (owner ruling "scoped work").
 
@@ -77,4 +77,101 @@ editor areas (U-10), multi-op batches.
 
 ## Outcome
 
-*(worker fills in)*
+Worker, 2026-11-19, PR #276 (stacked on U-10, #275). The branch also holds
+the U-10 follow-up commit that regenerates the four replay goldens for the
+`workspaces` field (orchestrator request).
+
+### Facts checked (the brief's "unverified")
+
+- **A tool commit records no operation.** `ToolCommitWriters::emit` writes
+  intents directly; nothing names an operation id or params. So tool
+  gestures are adjustable only where the gesture commits through an
+  operation: this PR routes the **array gesture** through a new
+  `body.array` operation. Drawn bodies, moves, scales, joints and cuts are
+  not adjustable (cut; their records carry tool defaults no operation
+  takes yet).
+- **There was no array operation** (the brief's "Done when" names array):
+  added `body.array` (Lisp `array-copies`: targets, count, step [x y], rows,
+  cross [x y]).
+
+### Landed
+
+- `gradiance-op::last_op` (new): `OpJournal` (each applied call of an
+  edit operation with an undo label: id, params, the selection its context
+  held), `LastOp`/`LastOpRecord` (the call plus the history revision after
+  its step), `journal`, `invoke_as` (invoke against a given selection, or
+  none) and `set_param` (dotted path; the new value takes the field's JSON
+  kind, a whole number is written as an integer). `invoke` journals; the
+  Lisp bridge journals each queued call (no selection).
+- `CommandStack::revision` (moves with every recorded, undone or redone
+  step and every clear; `clear()` keeps it moving). The dispatcher drains
+  the journal: one journalled call plus one recorded command in a pass =
+  the `LastOp`; any other history change retires it; `expire_last_op`
+  (`Last`) retires it after a settings step or a closed run.
+- `AdjustLastIntent` (drained first in `dispatch_intents`): checks the
+  record is still at the stack's revision, undoes the step through the
+  stack, `invoke_as` with the recorded selection; the operation's intent
+  drains in the same pass. If the params do not lower, or the command
+  records nothing, the step is redone and stays adjustable.
+- Operations: `edit.adjust_last` (Lisp `adjust-last field value`; undo
+  label none: it replaces the newest step), `edit.last_op` (query,
+  `{id, params}` or null), `body.array`. `docs/ops.md` regenerated.
+- `ui::adjust_panel` (new): rows from `OpEntry::schema` + the params
+  (numbers/quantities = `precise_drag_unit`, counts = new
+  `widgets::precise_drag_int`, booleans = checkbox, fixed number lists = a
+  row, targets/text read-only), title = menu label or Lisp name in words,
+  collapsible header, bottom left right of the palette above the bottom
+  docks; widget names `adjust_last`, `adjust_last:header`,
+  `adjust_last:<path>`. A commit invokes `edit.adjust_last` via `InvokeOp`.
+- Rule (record): the panel shows when the newest step is one operation
+  call's and the operation has an editable param. Not adjustable: gesture
+  commits other than array, undo/redo, runs, settings edits, loads, a
+  script run of several edits, ops with only targets (delete).
+- Docs: `docs/ui-design.md` § 3 "Adjust Last Operation"; verb rows in
+  `docs/scripting.md`; four `decision: true` entries in `archive.ron`
+  (`adjust-record-rule`, `adjust-tool-gestures`, `adjust-op-shape`,
+  `adjust-panel-form`).
+
+### Tests
+
+`tests/it/adjust_last.rs` (7): spawn-box then adjust w and h → one step,
+new shape, undo removes the body; adjust after an undo does nothing; a
+gesture-style intent retires the record; a script line and a fillet merge
+(radius) are adjustable, a two-edit script is not; an array by count and
+`step.0`; a refused adjustment keeps the step; `edit.last_op`.
+`op_conformance`: the side-door row for `ArrayIntent` removed (the gesture
+invokes `body.array`); a planted `LastOp` lets every doorway lower
+`edit.adjust_last`'s example, and the history test checks it keeps the
+depth with the operation's label. Unit tests: `set_param` (2), panel rows
+(3).
+
+### Measured / checked locally
+
+fmt, clippy (`--workspace --all-targets -D warnings`), doc
+(`-D warnings`), `--test boundaries`, `-p gradiance-op`,
+`-p gradiance-command`, `-p gradiance-ui --lib`, and `--test it` for
+`adjust_last op_conformance array_drag history scripting remote
+ui_surfaces` (128 passed), `replay::` (4). Screenshots on lavapipe:
+spawn box panel, `w` dragged 1.000 → 1.950 m in the panel (one body, new
+width), array 3×2 adjusted to count 6 (14 circles), fillet merge radius
+dragged 0.1 → 0.33 m, collapsed header, undo after adjust (both boxes
+back, panel gone).
+
+### Not checked
+
+`cargo test --workspace` (CI); `ui_snapshots` (no snapshot changed: the
+panel is not in a snapshot test); the panel at small window sizes; an
+adjust while the simulation plays (allowed: the undo is a differential
+restore, then the operation runs again).
+
+### For later
+
+- Enum params as a combo: the params schema names no enum variants yet
+  (no operation param is an enum today).
+- Other tool gestures (draw, move, scale, joints, cut) need operations
+  that take the tool defaults before they can be adjusted.
+- A re-invoked spawn mints a new id, so the body's colour (derived from
+  its id) changes on each adjustment.
+- `adjust-last` with a value the operation cannot decode (a fraction for a
+  count) is accepted by the call and refused at dispatch (logged), not
+  returned as the call's error.

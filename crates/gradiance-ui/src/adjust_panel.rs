@@ -201,7 +201,10 @@ fn number(ui: &mut egui::Ui, slot: &NumberSlot, out: &mut Vec<InvokeOp>) {
     );
     let commit = shown.inner;
     if let Commit::Done(_, new) = commit {
-        out.push(adjust(&slot.path, json!(new)));
+        // The shortest decimal that reads back as this `f32` (`1.95`, not
+        // `1.9500000476837158`), so the params stay as a person wrote them.
+        let value = new.to_string().parse::<f64>().unwrap_or(f64::from(new));
+        out.push(adjust(&slot.path, json!(value)));
     }
 }
 
