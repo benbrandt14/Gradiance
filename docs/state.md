@@ -18,8 +18,9 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   on 2026-11-19 (main 3f211ab): 4b-3 scene looks, U-7 chrome tokens, 4b-4
   scaled defaults (format v8), A-1 screenshot audit (6 fixes), A-2 audit
   follow-ups, 5-2 quantity catalog, 5-3 unit input, U-8 number fields.
-  Each brief's Outcome holds its decisions and cuts. No open review
-  questions: the six answered on 2026-11-19 are in `archive.ron`.
+  Each brief's Outcome holds its decisions and cuts. The six review
+  answers of 2026-11-19 are in `archive.ron`. Open review question:
+  `toon-highlights` (4b-5).
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
   tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
   Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
