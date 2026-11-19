@@ -6,7 +6,7 @@
 //! tone ([`SceneTheme::display`]), so a look change rebuilds every body's
 //! material.
 
-use crate::toon::{ToonExtension, ToonMaterial, face_of, params_of};
+use crate::toon::{ToonExtension, ToonMaterial, face_of, params_of, ramp_of};
 use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::{Appearance, Rgba};
@@ -45,8 +45,8 @@ fn body_material(
             // nonzero reflectance) the banded luminance is view-dependent
             // and every front face — all sharing one normal — jumps bands
             // *simultaneously* as the camera tilts, snapping the whole
-            // scene's color. The stylized highlight is the shader's
-            // quantized glint instead.
+            // scene's color. A lit patch is a ramp tone instead (brief
+            // 4b-6), and the optional glint is the shader's.
             perceptual_roughness: 1.0,
             reflectance: 0.0,
             metallic: 0.0,
@@ -71,6 +71,9 @@ fn body_material(
         extension: ToonExtension {
             params: params_of(settings),
             face: face_of(settings),
+            ramp: ramp_of(settings),
+            // `toon::attach_face_fields` hands over the body's baked field.
+            field: None,
         },
     }
 }

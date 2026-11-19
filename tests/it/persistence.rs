@@ -196,7 +196,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
         proptest::collection::vec(joint_seed_strategy(), 0..6),
         (-2000.0f32..2000.0, -2000.0f32..2000.0),
         0.0f32..5.0,
-        (any::<bool>(), 1u32..12, 0.0f32..1.0),
+        (any::<bool>(), 0.0f32..0.5, 0.0f32..1.0),
     )
         .prop_map(|(bodies, seeds, gravity, speed, render)| {
             let joints = seeds
@@ -267,7 +267,7 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                     },
                     render: RenderSettings {
                         toon_enabled: render.0,
-                        bands: render.1,
+                        dither: render.1,
                         rim_strength: render.2,
                         ..RenderSettings::default()
                     },

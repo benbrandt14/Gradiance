@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 105 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 106 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -132,7 +132,8 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
-| `render.set` | `(render-set path value)` | config | `settings` | — | Set a render (toon) setting by reflect-path, e.g. "bands", "rim_strength", "white_point" (a settled edit is one undo step). | `{"path": "bands", "value": 3}` |
+| `render.ramp` | `(render-ramp interp stops)` | config | `settings` | — | Replace the toon colour ramp: interp (constant, linear) and stops as flat position r g b groups; 0.5 grey shows a fill as authored (a settled edit is one undo step). | `{"interp": "constant", "stops": [0.0, 0.3, 0.25, 0.35, 0.6, 0.5, 0.5, 0.5]}` |
+| `render.set` | `(render-set path value)` | config | `settings` | — | Set a render (toon) setting by reflect-path, e.g. "dither", "white_point", "ramp.stops[1].position", "ramp.stops[0].color.r" (a settled edit is one undo step). | `{"path": "dither", "value": 0.1}` |
 
 ## `scene`
 

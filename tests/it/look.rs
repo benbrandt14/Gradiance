@@ -70,7 +70,18 @@ fn look_ops_name_their_errors_and_list_the_looks() {
         op(&mut app, "look.list", json!({})).expect("lists"),
         Some(json!(["studio", "blueprint", "poster"]))
     );
-    op(&mut app, "render.set", json!({"path": "bands", "value": 2})).expect("sets");
+    op(
+        &mut app,
+        "render.set",
+        json!({"path": "ramp.stops[1].position", "value": 0.4}),
+    )
+    .expect("sets");
+    op(
+        &mut app,
+        "render.set",
+        json!({"path": "ramp.stops[0].color.g", "value": 0.1}),
+    )
+    .expect("sets");
     op(
         &mut app,
         "lighting.set",
@@ -84,7 +95,9 @@ fn look_ops_name_their_errors_and_list_the_looks() {
     )
     .expect("sets");
     let world = app.world();
-    assert_eq!(world.resource::<RenderSettings>().bands, 2);
+    let ramp = &world.resource::<RenderSettings>().ramp;
+    assert!((ramp.stops[1].position - 0.4).abs() < 1e-6);
+    assert!((ramp.stops[0].color.g - 0.1).abs() < 1e-6);
     assert!((world.resource::<LightingSettings>().lights[0].elevation_deg - 20.0).abs() < 1e-6);
     assert!((world.resource::<ScenerySettings>().perspective_deg - 15.0).abs() < 1e-6);
     assert!(op(&mut app, "render.set", json!({"path": "nope", "value": 1})).is_err());
@@ -125,5 +138,87 @@ fn the_chrome_preset_is_workstation_config() {
     assert_eq!(
         op(&mut app, "chrome.list", json!({})).expect("lists"),
         Some(json!(["blender", "blender-blue", "stock"]))
+    );
+}
+
+/// The colour ramp (brief 4b-6) is scene content: `render.ramp` replaces it
+/// in one undo step (stops sorted, colours clamped), undo restores the
+/// look's ramp, and a malformed stop list names what is wrong. The Lisp
+/// verb takes the same flat stop list.
+#[test]
+fn the_ramp_is_replaced_in_one_undo_step() {
+    use gradiance::domain::ramp::RampInterp;
+    let mut app = paused_app();
+    op(
+        &mut app,
+        "body.spawn_box",
+        json!({"x": 0, "y": 0, "w": 1, "h": 1}),
+    )
+    .expect("spawns");
+    let before = undo_depth(&app);
+    op(
+        &mut app,
+        "render.ramp",
+        json!({"interp": "linear", "stops": [0.7, 0.5, 0.5, 0.5, 0.0, 0.2, 0.1, 1.5]}),
+    )
+    .expect("replaces");
+    let ramp = app.world().resource::<RenderSettings>().ramp.clone();
+    assert_eq!(ramp.interp, RampInterp::Linear);
+    assert_eq!(ramp.stops.len(), 2);
+    assert!(ramp.stops[0].position.abs() < f32::EPSILON, "sorted");
+    assert!(
+        (ramp.stops[0].color.b - 1.0).abs() < f32::EPSILON,
+        "clamped"
+    );
+    assert_eq!(undo_depth(&app), before + 1, "one step");
+    undo(&mut app);
+    step(&mut app, 2);
+    assert_eq!(
+        app.world().resource::<RenderSettings>().ramp,
+        Look::Studio.ramp()
+    );
+    for stops in [json!([]), json!([0.0, 0.5, 0.5])] {
+        let err = op(
+            &mut app,
+            "render.ramp",
+            json!({"interp": "constant", "stops": stops}),
+        )
+        .expect_err("malformed");
+        assert!(err.contains("position r g b"), "{err}");
+    }
+    let err = op(
+        &mut app,
+        "render.ramp",
+        json!({"interp": "smooth", "stops": [0.0, 0.5, 0.5, 0.5]}),
+    )
+    .expect_err("unknown interp");
+    assert!(err.contains("linear"), "{err}");
+}
+
+/// A ramp-editor gesture writes the ramp in place every frame (the config
+/// seam, as the Settings window does); the settled result is one undo step,
+/// however many frames the drag took (brief 4b-6).
+#[test]
+fn a_ramp_drag_over_many_frames_is_one_undo_step() {
+    let mut app = paused_app();
+    op(
+        &mut app,
+        "body.spawn_box",
+        json!({"x": 0, "y": 0, "w": 1, "h": 1}),
+    )
+    .expect("spawns");
+    let before = undo_depth(&app);
+    for frame in 1..=8 {
+        let mut render = app.world_mut().resource_mut::<RenderSettings>();
+        render.ramp.move_stop(1, 0.3 + frame as f32 * 0.01);
+        step(&mut app, 1);
+    }
+    step(&mut app, 3);
+    assert_eq!(undo_depth(&app), before + 1, "one step for the gesture");
+    undo(&mut app);
+    step(&mut app, 2);
+    assert_eq!(
+        app.world().resource::<RenderSettings>().ramp,
+        Look::Studio.ramp()
     );
 }

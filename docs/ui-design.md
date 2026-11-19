@@ -95,6 +95,7 @@ green suite is not evidence a variant is *used* — only that its file is on dis
 | `labelled_drag` / `labelled_drag_int` | A `ConfigField` as a labelled grid row. |
 | `precise_drag` / `precise_drag_unit` / `precise_drag_clamped` | A numeric row on the **edit** seam. |
 | `node_kind_editor` | Behavior-node fields, shared by three hosts. |
+| `ramp_editor::ramp_editor` | A colour ramp (the toon falloff, brief 4b-6): Blender-style stop markers under a tone bar, fill previews, the selected stop's position and tone. |
 
 Each returns an `egui::Response` so `.on_hover_text(…)` chains — a helper that
 returns `()` silently forbids a tooltip, which is how hints ended up inline as
@@ -374,9 +375,9 @@ settings to its preset; editing those afterwards keeps the look.
 
 | Look | Name | Backdrop | Pieces | Light | Bands |
 |---|---|---|---|---|---|
-| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 4, rim 0.2, glint 0.25 |
-| Blueprint | `blueprint` | navy | pale chalk tones (L 0.84), navy ink outlines | one cool key | 3, rim 0.35 |
-| Flat graphic | `poster` | paper white | bold tones (L 0.615), black outlines | one key | 2, no rim or glint |
+| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 5-stop ramp (mauve shadows, cream lit patch), dither, relief, rim 0.2, matte |
+| Blueprint | `blueprint` | navy | pale chalk tones (L 0.84), navy ink outlines | one cool key | 3 cool stops, rim 0.35, flat faces |
+| Flat graphic | `poster` | paper white | bold tones (L 0.615), black outlines | one key | 2 stops, no rim, flat faces |
 
 **Why studio is the default:** it is the only look whose two lights make
 the toon bands read in a plain 2D view (overlapping shadows step through
@@ -417,9 +418,14 @@ change with the look.
 
 ### Lighting and bands
 
-Light levels are set against the toon white point (1.0): see
-`Look::lighting`. The back plane and grounds are banded like bodies, so a
-shadow is a flat step. The camera uses a linear tone curve, so the top band
+Light levels are set against the toon white point: see
+`Look::lighting`. Since brief 4b-6 the lit/albedo level indexes a colour
+ramp (`domain::ramp`, Settings > Rendering > Ramp) whose tones tint every
+fill by hard light (mid grey = the fill as authored), so all bodies share
+one falloff; band edges dither in screen space (`dither`, `dither_scale`),
+and a front face is lit as a rounded body from its distance to its outline
+(`relief`, `bevel`; `geometry::face_field`). The back plane and grounds use
+the same ramp, so a shadow is a flat step in the bodies' shadow hue. The camera uses a linear tone curve, so the top band
 shows a fill exactly as authored. SSAO stays off: at this scale it changes
 nothing visible (4b-3 Outcome); outlines and banded, layered shadows carry
 the contact cues instead.

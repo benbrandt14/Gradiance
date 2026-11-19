@@ -15,6 +15,7 @@ pub mod layers;
 pub mod node;
 pub mod props;
 pub mod quantity;
+pub mod ramp;
 pub mod settings;
 pub use gradiance_geometry::shape;
 pub mod signal;

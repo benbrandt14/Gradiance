@@ -71,6 +71,7 @@ impl Plugin for GradianceRenderPlugin {
                 extrude_sync::sync_body_meshes,
                 material_sync::sync_body_materials,
                 plane::sync_ground_planes,
+                toon::attach_face_fields,
             ),
         );
         app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default());

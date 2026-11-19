@@ -121,13 +121,15 @@ pub fn settings_window(
                 SettingsTab::Rendering => {
                     look_picker(ui, &mut render, &mut lighting, &mut scenery);
                     ui.separator();
-                    // `look` is the picker above.
+                    ramp_section(ui, render.bypass_change_detection());
+                    ui.separator();
+                    // `look` is the picker above, `ramp` the ramp editor.
                     reflect_grid_except(
                         ui,
                         egui::Id::new("render"),
                         render.bypass_change_detection(),
                         &[],
-                        &["look"],
+                        &["look", "ramp"],
                     );
                     render.set_changed();
                 }
@@ -177,6 +179,18 @@ fn look_picker(
             }
         }
     });
+}
+
+/// The toon ramp (brief 4b-6): the gradient picker for the falloff. Scene
+/// content: written in place like the rest of the tab, a settled edit is one
+/// undo step (`commit_settings_edits`); reset restores the look's ramp.
+fn ramp_section(ui: &mut egui::Ui, render: &mut RenderSettings) {
+    widgets::section_header(ui, "Ramp");
+    let theme = render.look.theme();
+    // Three palette fills through the ramp: every body shares the falloff.
+    let fills = [0, 4, 8].map(|slot| theme.palette[slot].color);
+    let default = render.look.ramp();
+    crate::ramp_editor::ramp_editor(ui, "render-ramp", &mut render.ramp, &fills, &default);
 }
 
 /// The Interface tab: the chrome preset (brief U-7). Workstation config:

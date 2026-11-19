@@ -165,11 +165,63 @@
         render: (
             look: Studio,
             toon_enabled: true,
-            bands: 4,
+            ramp: (
+                interp: Constant,
+                stops: [
+                    (
+                        position: 0.0,
+                        color: (
+                            r: 0.28,
+                            g: 0.25,
+                            b: 0.32,
+                            a: 1.0,
+                        ),
+                    ),
+                    (
+                        position: 0.3,
+                        color: (
+                            r: 0.34,
+                            g: 0.31,
+                            b: 0.37,
+                            a: 1.0,
+                        ),
+                    ),
+                    (
+                        position: 0.5,
+                        color: (
+                            r: 0.42,
+                            g: 0.4,
+                            b: 0.43,
+                            a: 1.0,
+                        ),
+                    ),
+                    (
+                        position: 0.68,
+                        color: (
+                            r: 0.5,
+                            g: 0.5,
+                            b: 0.5,
+                            a: 1.0,
+                        ),
+                    ),
+                    (
+                        position: 0.9,
+                        color: (
+                            r: 0.72,
+                            g: 0.7,
+                            b: 0.56,
+                            a: 1.0,
+                        ),
+                    ),
+                ],
+            ),
+            dither: 0.025,
+            dither_scale: 2.0,
             rim_strength: 0.2,
-            white_point: 1.0,
-            specular: 0.25,
-            relief: 0.8,
+            white_point: 1.25,
+            specular: 0.0,
+            relief: 1.0,
+            bevel: 0.6,
         ),
         lighting: (
             lights: [
