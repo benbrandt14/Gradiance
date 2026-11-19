@@ -290,9 +290,10 @@ fn binding_row(
     }
     ui.horizontal(|ui| {
         ui.label("domain");
-        ui.add(egui::DragValue::new(&mut binding.map.in_min).speed(1.0));
+        let rest = gradiance_domain::signal::SignalMap::default();
+        widgets::config_field(rest.in_min, 1.0).show(ui, &mut binding.map.in_min);
         ui.label("→");
-        ui.add(egui::DragValue::new(&mut binding.map.in_max).speed(1.0));
+        widgets::config_field(rest.in_max, 1.0).show(ui, &mut binding.map.in_max);
         egui::ComboBox::from_id_salt(ui.id().with(("gradient", i)))
             .selected_text(format!("{:?}", binding.gradient))
             .show_ui(ui, |ui| {

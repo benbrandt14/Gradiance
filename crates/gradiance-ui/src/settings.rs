@@ -274,6 +274,8 @@ pub(crate) const SIM_HAND_DRAWN: &[&str] = &[
 fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
     widgets::section_header(ui, "Gravity");
     let (mut angle, mut magnitude) = sim.gravity_polar();
+    let defaults = SimSettings::default();
+    let (default_angle, default_magnitude) = defaults.gravity_polar();
     let mut gravity_changed = false;
     ui.horizontal(|ui| {
         gravity_changed |= gravity_dial(ui, &mut angle, magnitude);
@@ -282,23 +284,23 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
             .show(ui, |ui| {
                 // The polar angle is kept in degrees; the field shows the
                 // preferred angle unit (brief 5-3).
-                gravity_changed |= widgets::labelled_quantity(
+                gravity_changed |= widgets::labelled_drag(
                     ui,
                     "direction",
-                    &mut angle,
-                    -180.0..=180.0,
-                    1.0,
                     "counter-clockwise from +x; straight down is -90 degrees",
-                    DisplayUnit::DEGREES,
+                    &mut angle,
+                    widgets::config_field(default_angle, 1.0)
+                        .range(-180.0..=180.0)
+                        .stored(DisplayUnit::DEGREES),
                 );
-                gravity_changed |= widgets::labelled_quantity(
+                gravity_changed |= widgets::labelled_drag(
                     ui,
                     "strength",
-                    &mut magnitude,
-                    0.0..=1000.0,
-                    0.1,
                     "gravity magnitude; 0 = weightless",
-                    DisplayUnit::canonical(Dimension::Acceleration),
+                    &mut magnitude,
+                    widgets::config_field(default_magnitude, 0.1)
+                        .range(0.0..=1000.0)
+                        .unit(Dimension::Acceleration),
                 );
                 ui.label(
                     egui::RichText::new(format!(
@@ -322,34 +324,33 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
             widgets::labelled_drag(
                 ui,
                 "speed",
-                &mut sim.speed,
-                0.0..=10.0,
-                0.01,
                 "simulation speed multiplier; 1 = real time",
+                &mut sim.speed,
+                widgets::config_field(defaults.speed, 0.01).range(0.0..=10.0),
             );
-            widgets::labelled_drag_u32(
+            let substeps = widgets::config_field(defaults.substeps as f32, 0.2).range(1.0..=64.0);
+            widgets::labelled_drag_int(
                 ui,
                 "substeps",
-                &mut sim.substeps,
-                1..=64,
                 "solver substeps per physics step: stiffer, more accurate, slower",
+                &mut sim.substeps,
+                substeps,
             );
-            widgets::labelled_quantity(
+            widgets::labelled_drag(
                 ui,
                 "timestep",
-                &mut sim.timestep_hz.0,
-                10.0..=480.0,
-                1.0,
                 "physics steps per second",
-                DisplayUnit::canonical(Dimension::Frequency),
+                &mut sim.timestep_hz.0,
+                widgets::config_field(defaults.timestep_hz.0, 1.0)
+                    .range(10.0..=480.0)
+                    .unit(Dimension::Frequency),
             );
             widgets::labelled_drag(
                 ui,
                 "plane friction",
-                &mut sim.plane_friction,
-                0.0..=5.0,
-                0.01,
                 "Coulomb friction against the back plane (top-down mode); 0 = off",
+                &mut sim.plane_friction,
+                widgets::config_field(defaults.plane_friction, 0.01).range(0.0..=5.0),
             );
         });
     reflect_grid_except(ui, egui::Id::new("sim"), sim, &[], SIM_HAND_DRAWN);
@@ -396,30 +397,28 @@ fn gravity_dial(ui: &mut egui::Ui, angle_deg: &mut f32, magnitude: f32) -> bool 
 fn camera_tab(ui: &mut egui::Ui, camera: &mut CameraSettings) -> bool {
     let mut changed = false;
     let (lo, hi) = CameraSettings::ZOOM_STEP_RANGE;
+    let defaults = CameraSettings::default();
     egui::Grid::new("camera").num_columns(2).show(ui, |ui| {
         changed |= widgets::labelled_drag(
             ui,
             "zoom step",
-            &mut camera.zoom_step,
-            lo..=hi,
-            0.002,
             "zoom multiplier per scroll notch: closer to 1 is gentler",
+            &mut camera.zoom_step,
+            widgets::config_field(defaults.zoom_step, 0.002).range(lo..=hi),
         );
         changed |= widgets::labelled_drag(
             ui,
             "pan speed (px/s)",
-            &mut camera.pan_speed,
-            0.0..=5000.0,
-            5.0,
             "arrow-key pan speed in screen pixels per second",
+            &mut camera.pan_speed,
+            widgets::config_field(defaults.pan_speed, 5.0).range(0.0..=5000.0),
         );
         changed |= widgets::labelled_drag(
             ui,
             &format!("orbit speed ({}/px)", glyph::DEGREE),
-            &mut camera.orbit_speed_deg,
-            0.0..=5.0,
-            0.005,
             "middle-drag orbit sensitivity",
+            &mut camera.orbit_speed_deg,
+            widgets::config_field(defaults.orbit_speed_deg, 0.005).range(0.0..=5.0),
         );
     });
     if ui.button("Reset to defaults").clicked() {
@@ -510,6 +509,8 @@ fn lighting_tab(
     let mut changed = false;
     let mut remove: Option<usize> = None;
     let count = settings.lights.len();
+    let light_default = gradiance_domain::settings::KeyLightSettings::default();
+    let defaults = LightingSettings::default();
     for (index, light) in settings.lights.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("Light {}", index + 1)).strong());
@@ -523,8 +524,8 @@ fn lighting_tab(
                 changed |= color_row(ui, "color", &mut light.color);
                 ui.horizontal(|ui| {
                     ui.label("strength");
-                    changed |= ui
-                        .add(egui::DragValue::new(&mut light.illuminance).speed(100.0))
+                    changed |= widgets::config_field(light_default.illuminance, 100.0)
+                        .show(ui, &mut light.illuminance)
                         .changed();
                 });
                 changed |= ui.checkbox(&mut light.shadows, "casts shadows").changed();
@@ -551,8 +552,8 @@ fn lighting_tab(
     widgets::section_header(ui, "Scene");
     ui.horizontal(|ui| {
         ui.label("ambient");
-        changed |= ui
-            .add(egui::DragValue::new(&mut settings.ambient).speed(5.0))
+        changed |= widgets::config_field(defaults.ambient, 5.0)
+            .show(ui, &mut settings.ambient)
             .changed();
     });
     changed |= ui
@@ -580,11 +581,11 @@ fn lighting_tab(
     });
     ui.horizontal(|ui| {
         ui.label("shadow reach");
-        let reach = crate::unit_fields::display(ui.ctx(), Dimension::Length);
-        changed |=
-            crate::unit_fields::drag_value(ui, &mut settings.shadow_distance.0, 2.0, None, reach)
-                .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
-                .changed();
+        changed |= widgets::config_field(defaults.shadow_distance.0, 2.0)
+            .unit(Dimension::Length)
+            .show(ui, &mut settings.shadow_distance.0)
+            .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
+            .changed();
     });
     if changed {
         lighting.set_changed();

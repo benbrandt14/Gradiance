@@ -35,6 +35,7 @@ use gradiance_optimize::{
     Boundary, EdgeAlignment, LayerRule, Objective, ObjectiveWeights, PackConfig, RotationMode,
     ShelfOrder, SolverKind,
 };
+use gradiance_units::Dimension;
 
 /// Everything the Optimizer panel reads and writes, bundled so both hosts
 /// stay under Bevy's system-parameter limit.
@@ -220,6 +221,7 @@ fn preset_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     widgets::section_header(ui, "Goal");
     let mut w = opt.config.weights;
+    let dw = PackConfig::default().weights;
     let mut changed = false;
     egui::Grid::new("pack-weights")
         .num_columns(2)
@@ -228,42 +230,37 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             changed |= widgets::labelled_drag(
                 ui,
                 "shrink",
-                &mut w.extent,
-                0.0..=10.0,
-                0.05,
                 "make the overall bounding measure smaller",
+                &mut w.extent,
+                widgets::config_field(dw.extent, 0.05).range(0.0..=10.0),
             );
             changed |= widgets::labelled_drag(
                 ui,
                 "fill",
-                &mut w.fill,
-                0.0..=10.0,
-                0.05,
                 "drive the filled-area ÷ bounding-area ratio toward 1",
+                &mut w.fill,
+                widgets::config_field(dw.fill, 0.05).range(0.0..=10.0),
             );
             changed |= widgets::labelled_drag(
                 ui,
                 "close gaps",
-                &mut w.gap,
-                -5.0..=10.0,
-                0.05,
                 "squeeze the leftover space between neighbours (negative pushes them apart)",
+                &mut w.gap,
+                widgets::config_field(dw.gap, 0.05).range(-5.0..=10.0),
             );
             changed |= widgets::labelled_drag(
                 ui,
                 "line up",
-                &mut w.parallel,
-                0.0..=10.0,
-                0.05,
                 "reward edges pointing the same way — turns a dense pile into a tidy block",
+                &mut w.parallel,
+                widgets::config_field(dw.parallel, 0.05).range(0.0..=10.0),
             );
             changed |= widgets::labelled_drag(
                 ui,
                 "contact",
-                &mut w.contact,
-                -5.0..=10.0,
-                0.05,
                 "positive: minimize how much bodies touch. negative: pull them flush",
+                &mut w.contact,
+                widgets::config_field(dw.contact, 0.05).range(-5.0..=10.0),
             );
         });
     if changed {
@@ -283,14 +280,13 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     }
 
     ui.horizontal(|ui| {
+        let defaults = PackConfig::default();
         let mut neighbors = opt.config.gap_neighbors;
-        if ui
-            .add(
-                egui::DragValue::new(&mut neighbors)
-                    .speed(0.2)
-                    .range(1..=32)
-                    .prefix("gap neighbours "),
-            )
+        let field = widgets::config_field(defaults.gap_neighbors as f32, 0.2);
+        if field
+            .range(1.0..=32.0)
+            .prefix("gap neighbours ")
+            .show_int(ui, &mut neighbors)
             .on_hover_text(
                 "how many nearest neighbours the gap term measures against. A count, \
                  not a radius — a radius can be escaped by spreading out.",
@@ -300,13 +296,10 @@ fn goal_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             opt.config.gap_neighbors = neighbors;
         }
         let mut neighborhood = opt.config.neighborhood;
-        if ui
-            .add(
-                egui::DragValue::new(&mut neighborhood)
-                    .speed(0.05)
-                    .range(0.0..=10.0)
-                    .prefix("contact reach ×"),
-            )
+        if widgets::config_field(defaults.neighborhood, 0.05)
+            .range(0.0..=10.0)
+            .prefix("contact reach ×")
+            .show(ui, &mut neighborhood)
             .on_hover_text("how far the contact term looks, as a multiple of the mean body size")
             .changed()
         {
@@ -475,14 +468,11 @@ fn constraint_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     widgets::section_header(ui, "Constraints");
 
     let mut clearance = opt.config.clearance;
-    if ui
-        .add(
-            egui::DragValue::new(&mut clearance)
-                .speed(0.005)
-                .range(0.0..=5.0)
-                .suffix(" m")
-                .prefix("gap "),
-        )
+    if widgets::config_field(PackConfig::default().clearance, 0.005)
+        .range(0.0..=5.0)
+        .unit(Dimension::Length)
+        .prefix("gap ")
+        .show(ui, &mut clearance)
         .on_hover_text("required space between packed bodies (0 packs flush)")
         .changed()
     {
@@ -514,11 +504,14 @@ fn constraint_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     ui.horizontal(|ui| {
         ui.label("settle toward")
             .on_hover_text("a direction the arrangement drifts while packing (0,0 = none)");
-        let cx = ui
-            .add(egui::DragValue::new(&mut bias.x).speed(0.05).prefix("x "))
+        let rest = PackConfig::default().gravity_bias;
+        let cx = widgets::config_field(rest.x, 0.05)
+            .prefix("x ")
+            .show(ui, &mut bias.x)
             .changed();
-        let cy = ui
-            .add(egui::DragValue::new(&mut bias.y).speed(0.05).prefix("y "))
+        let cy = widgets::config_field(rest.y, 0.05)
+            .prefix("y ")
+            .show(ui, &mut bias.y)
             .changed();
         if cx || cy {
             opt.config.gravity_bias = bias;
@@ -555,20 +548,19 @@ fn rotation_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 .on_hover_text("the usual choice for boxy parts");
             let stepped = matches!(next, RotationMode::Steps { .. });
             if ui.selectable_label(stepped, "N steps").clicked() && !stepped {
-                next = RotationMode::Steps { steps: 8 };
+                next = RotationMode::Steps {
+                    steps: DEFAULT_STEPS,
+                };
             }
             ui.selectable_value(&mut next, RotationMode::Free, "Any angle")
                 .on_hover_text("largest search space; needs the most iterations");
         });
     if let RotationMode::Steps { steps } = next {
         let mut n = steps;
-        if ui
-            .add(
-                egui::DragValue::new(&mut n)
-                    .range(1..=64)
-                    .prefix("steps ")
-                    .speed(0.2),
-            )
+        if widgets::config_field(DEFAULT_STEPS as f32, 0.2)
+            .range(1.0..=64.0)
+            .prefix("steps ")
+            .show_int(ui, &mut n)
             .on_hover_text("allowed orientations around a full turn")
             .changed()
         {
@@ -607,6 +599,15 @@ fn layer_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 }
 
 /// The container constraint and its numbers.
+/// What picking a boundary starts it at, and what its fields reset to.
+const DEFAULT_RATIO: f32 = 1.0;
+/// A rectangle boundary's side, metres.
+const DEFAULT_SIDE: f32 = 4.0;
+/// A circle boundary's radius, metres.
+const DEFAULT_RADIUS: f32 = 3.0;
+/// Orientations a stepped rotation starts with.
+const DEFAULT_STEPS: u32 = 8;
+
 fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     let current = opt.config.boundary;
     let mut next = current;
@@ -625,7 +626,9 @@ fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 .clicked()
                 && !matches!(next, Boundary::Aspect { .. })
             {
-                next = Boundary::Aspect { ratio: 1.0 };
+                next = Boundary::Aspect {
+                    ratio: DEFAULT_RATIO,
+                };
             }
             if ui
                 .selectable_label(matches!(next, Boundary::Rect { .. }), "Rectangle")
@@ -634,8 +637,8 @@ fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 && !matches!(next, Boundary::Rect { .. })
             {
                 next = Boundary::Rect {
-                    width: 4.0,
-                    height: 4.0,
+                    width: DEFAULT_SIDE,
+                    height: DEFAULT_SIDE,
                 };
             }
             if ui
@@ -644,47 +647,38 @@ fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
                 .clicked()
                 && !matches!(next, Boundary::Circle { .. })
             {
-                next = Boundary::Circle { radius: 3.0 };
+                next = Boundary::Circle {
+                    radius: DEFAULT_RADIUS,
+                };
             }
         });
 
     match &mut next {
         Boundary::Free => {}
         Boundary::Aspect { ratio } => {
-            ui.add(
-                egui::DragValue::new(ratio)
-                    .speed(0.05)
-                    .range(0.05..=20.0)
-                    .prefix("w:h "),
-            )
-            .on_hover_text("1 = square, 2 = twice as wide as tall");
+            widgets::config_field(DEFAULT_RATIO, 0.05)
+                .range(0.05..=20.0)
+                .prefix("w:h ")
+                .show(ui, ratio)
+                .on_hover_text("1 = square, 2 = twice as wide as tall");
         }
         Boundary::Rect { width, height } => {
             ui.horizontal(|ui| {
-                ui.add(
-                    egui::DragValue::new(width)
-                        .speed(0.05)
+                for (value, prefix) in [(width, "w "), (height, "h ")] {
+                    widgets::config_field(DEFAULT_SIDE, 0.05)
                         .range(0.01..=1000.0)
-                        .prefix("w ")
-                        .suffix(" m"),
-                );
-                ui.add(
-                    egui::DragValue::new(height)
-                        .speed(0.05)
-                        .range(0.01..=1000.0)
-                        .prefix("h ")
-                        .suffix(" m"),
-                );
+                        .unit(Dimension::Length)
+                        .prefix(prefix)
+                        .show(ui, value);
+                }
             });
         }
         Boundary::Circle { radius } => {
-            ui.add(
-                egui::DragValue::new(radius)
-                    .speed(0.05)
-                    .range(0.01..=1000.0)
-                    .prefix("r ")
-                    .suffix(" m"),
-            );
+            widgets::config_field(DEFAULT_RADIUS, 0.05)
+                .range(0.01..=1000.0)
+                .unit(Dimension::Length)
+                .prefix("r ")
+                .show(ui, radius);
         }
     }
     if next != current {
@@ -695,6 +689,7 @@ fn boundary_control(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 /// Stopping rules and the preview pace.
 fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     widgets::section_header(ui, "Convergence");
+    let defaults = PackConfig::default();
     egui::Grid::new("pack-convergence")
         .num_columns(2)
         .spacing([8.0, 2.0])
@@ -702,13 +697,10 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             ui.label("tolerance")
                 .on_hover_text("relative improvement below which the run is called converged");
             let mut tolerance = opt.config.tolerance;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut tolerance)
-                        .speed(1e-5)
-                        .range(1e-9..=1.0)
-                        .custom_formatter(|v, _| format!("{v:.1e}")),
-                )
+            if widgets::config_field(defaults.tolerance, 1e-5)
+                .range(1e-9..=1.0)
+                .scientific()
+                .show(ui, &mut tolerance)
                 .changed()
             {
                 opt.config.tolerance = tolerance;
@@ -718,12 +710,9 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             ui.label("patience")
                 .on_hover_text("iterations without improvement before stopping");
             let mut patience = opt.config.patience;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut patience)
-                        .range(1..=100_000)
-                        .speed(1.0),
-                )
+            if widgets::config_field(defaults.patience as f32, 1.0)
+                .range(1.0..=100_000.0)
+                .show_int(ui, &mut patience)
                 .changed()
             {
                 opt.config.patience = patience;
@@ -733,12 +722,9 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             ui.label("max iterations")
                 .on_hover_text("hard ceiling per attempt");
             let mut max_iterations = opt.config.max_iterations;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut max_iterations)
-                        .range(1..=1_000_000)
-                        .speed(10.0),
-                )
+            if widgets::config_field(defaults.max_iterations as f32, 10.0)
+                .range(1.0..=1_000_000.0)
+                .show_int(ui, &mut max_iterations)
                 .changed()
             {
                 opt.config.max_iterations = max_iterations;
@@ -748,12 +734,9 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             ui.label("iters / frame")
                 .on_hover_text("higher finishes sooner; lower makes the ghost readable");
             let mut per_frame = opt.config.iterations_per_frame;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut per_frame)
-                        .range(1..=10_000)
-                        .speed(1.0),
-                )
+            if widgets::config_field(defaults.iterations_per_frame as f32, 1.0)
+                .range(1.0..=10_000.0)
+                .show_int(ui, &mut per_frame)
                 .changed()
             {
                 opt.config.iterations_per_frame = per_frame;
@@ -763,13 +746,10 @@ fn convergence_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             ui.label("max step")
                 .on_hover_text("furthest a body may move in one iteration");
             let mut max_step = opt.config.max_step;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut max_step)
-                        .speed(0.01)
-                        .range(1e-4..=100.0)
-                        .suffix(" m"),
-                )
+            if widgets::config_field(defaults.max_step, 0.01)
+                .range(1e-4..=100.0)
+                .unit(Dimension::Length)
+                .show(ui, &mut max_step)
                 .changed()
             {
                 opt.config.max_step = max_step;
@@ -802,6 +782,7 @@ fn tuning_controls(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
 /// where this method stops.
 fn naive_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
     let mut p = opt.config.naive;
+    let dp = PackConfig::default().naive;
     let mut changed = false;
     egui::Grid::new("pack-naive")
         .num_columns(2)
@@ -810,20 +791,18 @@ fn naive_tuning(ui: &mut egui::Ui, opt: &mut OptimizerPanel) {
             changed |= widgets::labelled_drag(
                 ui,
                 "separation",
-                &mut p.separation_gain,
-                0.01..=1.0,
-                0.01,
                 "fraction of each overlap resolved per iteration",
+                &mut p.separation_gain,
+                widgets::config_field(dp.separation_gain, 0.01).range(0.01..=1.0),
             );
             changed |= widgets::labelled_drag(
                 ui,
                 "attraction",
-                &mut p.attraction,
-                0.0..=0.5,
-                0.005,
                 "inward pull per iteration — turn it up and bodies interpenetrate, \
                  down and they stop with visible slack. There is no setting that \
                  packs tightly, which is the finding",
+                &mut p.attraction,
+                widgets::config_field(dp.attraction, 0.005).range(0.0..=0.5),
             );
         });
     if changed {

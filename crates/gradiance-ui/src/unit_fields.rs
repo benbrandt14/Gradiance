@@ -7,7 +7,7 @@
 //! through. [`drag_value`] shows a base-SI value in a [`DisplayUnit`] and
 //! parses a typed entry back through [`DisplayUnit::parse`] (the one parser,
 //! [`gradiance_units::expr`]). [`crate::widgets::precise_drag_unit`] (edit
-//! seam), [`crate::widgets::labelled_quantity`] (config seam) and the
+//! seam), [`crate::widgets::ConfigField`] (config seam) and the
 //! reflect grid's quantity rows all call it.
 
 use bevy::prelude::*;
@@ -265,6 +265,45 @@ pub fn number_field(
     unit: DisplayUnit,
     default: Option<f32>,
 ) -> Field {
+    number_field_as(ui, value, speed, range, unit, default, Format::default())
+}
+
+/// How a field writes its number around the value and its unit (brief
+/// U-8b): the fields that moved off a raw `egui::DragValue` keep their
+/// look.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Format {
+    /// Text before the number (`"gap "`).
+    pub prefix: &'static str,
+    /// Text after the number and its unit (`"]"`).
+    pub suffix: &'static str,
+    /// Fixed decimals; `Some(0)` is a whole number, and the value is
+    /// rounded to it.
+    pub decimals: Option<usize>,
+    /// Shown as `1.0e-4`.
+    pub scientific: bool,
+}
+
+impl Format {
+    /// A whole number.
+    pub const INTEGER: Self = Self {
+        prefix: "",
+        suffix: "",
+        decimals: Some(0),
+        scientific: false,
+    };
+}
+
+/// [`number_field`] written in `format`.
+pub fn number_field_as(
+    ui: &mut Ui,
+    value: &mut f32,
+    speed: f32,
+    range: Option<RangeInclusive<f32>>,
+    unit: DisplayUnit,
+    default: Option<f32>,
+    format: Format,
+) -> Field {
     // The DragValue's own id (it takes the next auto id), so the parser can
     // file a refusal under it before the response exists.
     let id = ui.next_auto_id();
@@ -288,16 +327,26 @@ pub fn number_field(
     let mut shown = spec.shown(*value);
     let mut drag = egui::DragValue::new(&mut shown)
         .speed(spec.shown(speed))
-        .suffix(unit.suffix())
+        .prefix(format.prefix)
+        .suffix(format!("{}{}", unit.suffix(), format.suffix))
         // Apply a typed entry on Enter or focus loss only: with egui's
         // default every keystroke that parses is written, so Esc after
         // typing would keep the half-typed value.
         .update_while_editing(false)
+        // Showing a value never writes it: an out-of-range value (a
+        // pixel-era tracer size) stays until the person edits it.
+        .clamp_existing_to_range(false)
         .custom_parser(move |text| {
             parse_entry(&ctx, unit, bad_id, text).map(|si| unit.from_si(f64::from(si)))
         });
     if let Some((lo, hi)) = shown_range {
         drag = drag.range(lo..=hi);
+    }
+    if let Some(decimals) = format.decimals {
+        drag = drag.fixed_decimals(decimals);
+    }
+    if format.scientific {
+        drag = drag.custom_formatter(|v, _| format!("{v:.1e}"));
     }
     let mut response = ui.add(drag);
     if response.changed() {
@@ -318,6 +367,9 @@ pub fn number_field(
     menu(ui, &response, &spec, &mut instant);
     show_bad_entry(ui, &response, spec.bad_id);
 
+    if format.decimals == Some(0) {
+        *instant.value = instant.value.round();
+    }
     if (*instant.value - before).abs() > 0.0 {
         response.mark_changed();
     }
@@ -474,23 +526,31 @@ fn show_bad_entry(ui: &Ui, response: &egui::Response, bad_id: egui::Id) {
 
 /// A drag over a value kept in `stored` (a settings field in degrees, or a
 /// canonical SI field), shown in the unit the preference picks for its
-/// dimension. `range` and `speed` are in `stored`.
+/// dimension. `range`, `speed` and `default` are in `stored`; with a
+/// default, Backspace, a middle click and the menu's Reset put it back
+/// (the config seam: the caller writes the value, no gesture bookkeeping).
 pub fn stored_drag(
     ui: &mut Ui,
     value: &mut f32,
     range: Option<RangeInclusive<f32>>,
     speed: f32,
     stored: DisplayUnit,
+    default: Option<f32>,
+    format: Format,
 ) -> egui::Response {
     let to_si = |v: f32| stored.to_si(f64::from(v)) as f32;
     let shown = display(ui.ctx(), stored.dimension);
     let mut si = to_si(*value);
     let range = range.map(|r| to_si(*r.start())..=to_si(*r.end()));
-    let response = drag_value(ui, &mut si, to_si(speed), range, shown);
-    if response.changed() {
+    let default = default.map(to_si);
+    let field = number_field_as(ui, &mut si, to_si(speed), range, shown, default, format);
+    if field.response.changed() {
         *value = stored.from_si(f64::from(si)) as f32;
+        if format.decimals == Some(0) {
+            *value = value.round();
+        }
     }
-    response
+    field.response
 }
 
 #[cfg(test)]
@@ -823,6 +883,75 @@ mod behaviour_tests {
         h.key_press(egui::Key::Backspace);
         h.run();
         assert_eq!(h.state().commits, vec![(2.0, 1.0)]);
+    }
+
+    /// Presses and releases `button` over the field, one frame each, as a
+    /// mouse does.
+    fn click_by(h: &mut Harness<'_, Probe>, button: egui::PointerButton) {
+        let at = field(h).center();
+        h.hover_at(at);
+        h.run();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos: at,
+                button,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+        }
+    }
+
+    /// Brief U-8b (owner note on `number-fields`): a middle click puts the
+    /// default back, as one undo step.
+    #[test]
+    fn a_middle_click_resets_a_field_once() {
+        let mut h = harness(2.0, 1.0, Dimension::Length);
+        click_by(&mut h, egui::PointerButton::Middle);
+        assert_eq!(h.state().commits, vec![(2.0, 1.0)]);
+        let shown = h.get_by_role(Role::SpinButton).value().unwrap_or_default();
+        assert!(shown.contains("1.00"), "{shown}");
+        // At the default already, a middle click commits nothing.
+        click_by(&mut h, egui::PointerButton::Middle);
+        assert_eq!(h.state().commits.len(), 1, "{:?}", h.state().commits);
+    }
+
+    /// A middle click on a field with no default (a config row) leaves it
+    /// alone and does not start typing.
+    #[test]
+    fn a_middle_click_without_a_default_changes_nothing() {
+        let ctx = egui::Context::default();
+        let mut value = 2.0_f32;
+        let run = |events: Vec<egui::Event>, value: &mut f32| {
+            let mut rect = egui::Rect::NOTHING;
+            let mut focused = false;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let r = drag_value(ui, value, 0.01, None, DisplayUnit::DEGREES);
+                    rect = r.rect;
+                    focused = r.has_focus();
+                },
+            );
+            output.textures_delta.clear();
+            (rect, focused)
+        };
+        let (rect, _) = run(vec![], &mut value);
+        let at = rect.center();
+        let press = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Middle,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        run(vec![egui::Event::PointerMoved(at)], &mut value);
+        run(vec![press(true)], &mut value);
+        let (_, focused) = run(vec![press(false)], &mut value);
+        assert!((value - 2.0).abs() < 1e-6, "{value}");
+        assert!(!focused, "a middle click does not open the text entry");
     }
 
     #[test]

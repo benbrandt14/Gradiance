@@ -78,11 +78,12 @@ impl BackgroundMenu<'_> {
         ui.label(egui::RichText::new("Background").weak());
         ui.horizontal(|ui| {
             ui.label("plane friction");
-            ui.add(
-                egui::DragValue::new(&mut self.sim.plane_friction)
-                    .speed(0.01)
-                    .range(0.0..=5.0),
+            widgets::config_field(
+                gradiance_domain::settings::SimSettings::default().plane_friction,
+                0.01,
             )
+            .range(0.0..=5.0)
+            .show(ui, &mut self.sim.plane_friction)
             .on_hover_text("top-down mode: bodies rub on the back plane (0 = off)");
         });
         let top_down = self.sim.gravity.value().length() < 1e-3;
@@ -565,11 +566,12 @@ pub fn context_menu(
                 egui::Grid::new("context-menu-fillet").show(ui, |ui| {
                     widgets::labelled_drag(
                         ui,
-                        "Fillet radius (m)",
-                        &mut fillet_radius,
-                        0.01..=10.0,
-                        0.005,
+                        "Fillet radius",
                         "blend radius of Merge with fillet; also joins bodies less than half of it apart",
+                        &mut fillet_radius,
+                        widgets::config_field(FilletRadius::default().0, 0.005)
+                            .range(0.01..=10.0)
+                            .unit(gradiance_units::Dimension::Length),
                     );
                 });
                 // The other body booleans: the first-selected body hosts the

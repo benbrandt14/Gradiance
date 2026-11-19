@@ -381,6 +381,7 @@ fn edit_section(
     out: &mut GroupsOutput,
 ) {
     let group = row.index;
+    let rest = GroupsPanel::default();
     ui.horizontal(|ui| {
         widgets::section_header(ui, &format!("Edit {}", row.label()));
         // The same as a double-click on the row, for a pointer that cannot
@@ -433,9 +434,9 @@ fn edit_section(
             // Distribute: lo..hi over the members.
             ui.label("From");
             ui.horizontal(|ui| {
-                ui.add(egui::DragValue::new(&mut panel.lo).speed(0.01));
+                widgets::config_field(rest.lo, 0.01).show(ui, &mut panel.lo);
                 ui.label("to");
-                ui.add(egui::DragValue::new(&mut panel.hi).speed(0.01));
+                widgets::config_field(rest.hi, 0.01).show(ui, &mut panel.hi);
             });
             ui.end_row();
 
@@ -450,7 +451,7 @@ fn edit_section(
 
             if panel.random {
                 ui.label("Seed");
-                ui.add(egui::DragValue::new(&mut panel.seed).speed(1.0));
+                widgets::config_field(rest.seed as f32, 1.0).show_int(ui, &mut panel.seed);
             } else {
                 ui.label("Order by");
                 egui::ComboBox::from_id_salt("groups-by")
@@ -564,9 +565,10 @@ fn filter_section(
     }
     ui.horizontal_wrapped(|ui| {
         prop_picker(ui, "groups-range-prop", &mut panel.range_prop, "range-prop");
-        ui.add(egui::DragValue::new(&mut panel.range_lo).speed(0.01));
+        let rest = GroupsPanel::default();
+        widgets::config_field(rest.range_lo, 0.01).show(ui, &mut panel.range_lo);
         ui.label("..");
-        ui.add(egui::DragValue::new(&mut panel.range_hi).speed(0.01));
+        widgets::config_field(rest.range_hi, 0.01).show(ui, &mut panel.range_hi);
         let add = ui
             .button("Add range")
             .on_hover_text("Keep bodies whose property is in this range.");

@@ -47,6 +47,8 @@ struct Seen {
     pressed: bool,
     just_pressed: bool,
     just_released: bool,
+    /// The middle button went down or up this frame.
+    middle_edge: bool,
     window_events: usize,
 }
 
@@ -65,6 +67,8 @@ fn record(
         pressed: buttons.pressed(left),
         just_pressed: buttons.just_pressed(left),
         just_released: buttons.just_released(left),
+        middle_edge: buttons.just_pressed(MouseButton::Middle)
+            || buttons.just_released(MouseButton::Middle),
         window_events: events.read().count(),
     });
 }
@@ -148,6 +152,42 @@ fn a_click_by_name_plays_move_press_release_at_the_widget() {
             .as_ref()
             .is_err_and(|e| e.contains("no widget `tools:Nope`")),
         "{unknown:?}"
+    );
+}
+
+/// `ui.click_button` names the button (brief U-8b: a middle click resets a
+/// number field): the same move, press, release, on the middle button only.
+#[test]
+fn a_named_button_click_presses_that_button() {
+    let mut app = windowed_app();
+    assert_eq!(
+        op(
+            &mut app,
+            "ui.click_button",
+            json!({"at": [25.0, 145.0], "button": "middle"})
+        ),
+        Ok(None)
+    );
+    for _ in 0..4 {
+        app.update();
+    }
+    let log = app.world().resource::<SeenLog>().0.clone();
+    assert_eq!(log[0].cursor, Some(Vec2::new(25.0, 145.0)));
+    assert!(log[1].middle_edge && log[2].middle_edge, "{log:?}");
+    assert!(!log[3].middle_edge, "{log:?}");
+    assert!(
+        log.iter().all(|s| !s.pressed && !s.just_released),
+        "the left button stays up: {log:?}"
+    );
+    let bad = op(
+        &mut app,
+        "ui.click_button",
+        json!({"at": [1.0, 1.0], "button": "side"}),
+    );
+    assert!(
+        bad.as_ref()
+            .is_err_and(|e| e.contains("not left, middle or right")),
+        "{bad:?}"
     );
 }
 

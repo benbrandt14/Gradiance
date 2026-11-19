@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 90 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 91 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -173,6 +173,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `ui.click` | `(ui-click at)` | editor | — | — | Click (left button) at a widget name from ui.inspect or a window point [x y]: move, press, release, one frame each, as real input. | `{"at": [640, 370]}` |
+| `ui.click_button` | `(ui-click-button at button)` | editor | — | — | Click with a named button (left, middle or right) at a widget name from ui.inspect or a window point [x y]: move, press, release, one frame each. A middle click on a number field resets it to its default. | `{"at": [640, 370], "button": "middle"}` |
 | `ui.drag` | `(ui-drag from to steps)` | editor | — | — | Drag (left button) from one widget name or point [x y] to another in steps frames (1-200): move, press, the steps, release, as real input; a tool commits one step on release. | `{"from": [640, 370], "to": [740, 370], "steps": 10}` |
 | `ui.inspect` | `(ui-inspect prefix)` | query | — | — | List the widgets drawn last frame whose name starts with prefix ("" for all): name, area, rect [x0 y0 x1 y1] and handle [x y] in logical points. | `{"prefix": ""}` |
 | `ui.key` | `(ui-key key)` | editor | — | — | Press and release a key chord, written as menus show it (Ctrl+Z, Ctrl+Shift+G, Delete, Escape, F1, A): modifiers down, key down, key up, modifiers up, one frame each. | `{"key": "Escape"}` |

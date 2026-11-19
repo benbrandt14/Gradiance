@@ -1335,11 +1335,14 @@ impl SnarlViewer<NodeData> for GraphViewer {
             let mut changed = false;
             ui.horizontal(|ui| {
                 ui.small(sink_label(&binding.sink));
-                changed |= ui
-                    .add(egui::DragValue::new(&mut map.in_min).speed(1.0).prefix("["))
+                let rest = SignalMap::default();
+                changed |= widgets::config_field(rest.in_min, 1.0)
+                    .prefix("[")
+                    .show(ui, &mut map.in_min)
                     .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut map.in_max).speed(1.0).suffix("]"))
+                changed |= widgets::config_field(rest.in_max, 1.0)
+                    .suffix("]")
+                    .show(ui, &mut map.in_max)
                     .changed();
                 egui::ComboBox::from_id_salt(ui.id().with(("grad", &binding.name)))
                     .selected_text(format!("{gradient:?}"))
@@ -1380,21 +1383,21 @@ fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
         BlockOp::Gain { k, .. } => {
             ui.horizontal(|ui| {
                 ui.small("k");
-                changed |= ui.add(egui::DragValue::new(k).speed(0.05)).changed();
+                changed |= widgets::config_field(1.0, 0.05).show(ui, k).changed();
             });
         }
         BlockOp::Oscillator { amp, freq } => {
             ui.horizontal(|ui| {
                 ui.small("amp");
-                changed |= ui.add(egui::DragValue::new(amp).speed(0.05)).changed();
+                changed |= widgets::config_field(1.0, 0.05).show(ui, amp).changed();
                 ui.small("freq");
-                changed |= ui.add(egui::DragValue::new(freq).speed(0.05)).changed();
+                changed |= widgets::config_field(1.0, 0.05).show(ui, freq).changed();
             });
         }
         BlockOp::Constant { value } => {
             ui.horizontal(|ui| {
                 ui.small("value");
-                changed |= ui.add(egui::DragValue::new(value).speed(0.05)).changed();
+                changed |= widgets::config_field(1.0, 0.05).show(ui, value).changed();
             });
         }
         // The only block whose parameter is a shape: the curve editor sits in

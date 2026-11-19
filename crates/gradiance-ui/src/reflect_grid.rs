@@ -11,14 +11,16 @@
 //! hatch is a hand-written row next to the grid — see the grid-system
 //! picker in `settings.rs`).
 
+use crate::widgets::config_field;
 use bevy::math::Vec2;
-use bevy::reflect::{Reflect, ReflectMut, ReflectRef};
+use bevy::reflect::{PartialReflect, Reflect, ReflectMut, ReflectRef};
 use bevy_egui::egui::{self, Ui};
 use gradiance_units::{Dimension, DisplayUnit};
 
 /// Renders editable widgets for every reflected field of `value`.
-/// Returns true if anything changed.
-pub fn reflect_grid(ui: &mut Ui, id: egui::Id, value: &mut dyn Reflect) -> bool {
+/// Returns true if anything changed. A number resets (Backspace, middle
+/// click, Reset) to the same field of `T::default()` (brief U-8b).
+pub fn reflect_grid<T: Reflect + Default>(ui: &mut Ui, id: egui::Id, value: &mut T) -> bool {
     reflect_grid_units(ui, id, value, &[])
 }
 
@@ -26,10 +28,10 @@ pub fn reflect_grid(ui: &mut Ui, id: egui::Id, value: &mut dyn Reflect) -> bool 
 /// name to the unit its number is **stored** in (a settings angle kept in
 /// degrees is [`DisplayUnit::DEGREES`]). Such a field shows and parses in
 /// the preferred unit for that dimension. Quantity newtypes need no row.
-pub fn reflect_grid_units(
+pub fn reflect_grid_units<T: Reflect + Default>(
     ui: &mut Ui,
     id: egui::Id,
-    value: &mut dyn Reflect,
+    value: &mut T,
     units: &[(&str, DisplayUnit)],
 ) -> bool {
     reflect_grid_except(ui, id, value, units, &[])
@@ -38,10 +40,24 @@ pub fn reflect_grid_units(
 /// [`reflect_grid_units`] minus the fields named in `skip` — the ones the
 /// caller already drew by hand (an escape-hatch row such as the grid-system
 /// picker), so they don't appear a second time as "(unsupported)".
-pub fn reflect_grid_except(
+pub fn reflect_grid_except<T: Reflect + Default>(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut T,
+    units: &[(&str, DisplayUnit)],
+    skip: &[&str],
+) -> bool {
+    let defaults = T::default();
+    grid(ui, id, value, Some(&defaults), units, skip)
+}
+
+/// The grid over a reflected struct; `defaults` is a value of the same
+/// type whose fields the numbers reset to.
+fn grid(
     ui: &mut Ui,
     id: egui::Id,
     value: &mut dyn Reflect,
+    defaults: Option<&dyn Reflect>,
     units: &[(&str, DisplayUnit)],
     skip: &[&str],
 ) -> bool {
@@ -49,12 +65,17 @@ pub fn reflect_grid_except(
     let ReflectMut::Struct(s) = value.reflect_mut() else {
         return false;
     };
+    let defaults = match defaults.map(|d| d.reflect_ref()) {
+        Some(ReflectRef::Struct(d)) => Some(d),
+        _ => None,
+    };
     let names = grid_rows(s, skip);
     egui::Grid::new(id).num_columns(2).show(ui, |ui| {
         for name in &names {
             let Some(field) = s.field_mut(name) else {
                 continue;
             };
+            let default = defaults.and_then(|d| d.field(name));
             let stored = units.iter().find(|(n, _)| *n == name).map(|(_, u)| *u);
             // A stored-in-degrees name says so (`rotation_step_deg`); the
             // field shows the preferred unit, so the label drops it.
@@ -64,7 +85,7 @@ pub fn reflect_grid_except(
             }
             .replace('_', " ");
             ui.label(pretty);
-            changed |= leaf_widget(ui, id.with(name), field, stored);
+            changed |= leaf_widget(ui, id.with(name), field, default, stored);
             ui.end_row();
         }
     });
@@ -81,26 +102,38 @@ fn grid_rows(s: &dyn bevy::reflect::structs::Struct, skip: &[&str]) -> Vec<Strin
         .collect()
 }
 
-/// One field's widget. `stored` is the unit a number is kept in, when it is
-/// a quantity (from the caller's table, or the newtype's own dimension).
+/// One field's widget. `default` is the same field of the type's default
+/// value; `stored` is the unit a number is kept in, when it is a quantity
+/// (from the caller's table, or the newtype's own dimension).
 fn leaf_widget(
     ui: &mut Ui,
     id: egui::Id,
-    field: &mut dyn bevy::reflect::PartialReflect,
+    field: &mut dyn PartialReflect,
+    default: Option<&dyn PartialReflect>,
     stored: Option<DisplayUnit>,
 ) -> bool {
     // A plain number is a dimensionless field: the same behaviours (typed
-    // maths, Ctrl snap, Esc; brief U-8), no unit.
+    // maths, Ctrl snap, Esc, reset; briefs U-8, U-8b), no unit.
     let unit = stored.unwrap_or(DisplayUnit::canonical(Dimension::Dimensionless));
+    let number = |ui: &mut Ui, value: &mut f32, default: Option<f32>| {
+        let field = config_field(default.unwrap_or(0.0), 0.5).stored(unit);
+        let field = if default.is_some() {
+            field
+        } else {
+            field.no_default()
+        };
+        field.show(ui, value).changed()
+    };
     if let Some(v) = field.try_downcast_mut::<f32>() {
-        return crate::unit_fields::stored_drag(ui, v, None, 0.5, unit).changed();
+        let default = default.and_then(|d| d.try_downcast_ref::<f32>()).copied();
+        return number(ui, v, default);
     }
     if let Some(v) = field.try_downcast_mut::<Vec2>() {
+        let default = default.and_then(|d| d.try_downcast_ref::<Vec2>()).copied();
         let mut changed = false;
         ui.horizontal(|ui| {
-            for c in [&mut v.x, &mut v.y] {
-                changed |= crate::unit_fields::stored_drag(ui, c, None, 0.5, unit).changed();
-            }
+            changed |= number(ui, &mut v.x, default.map(|d| d.x));
+            changed |= number(ui, &mut v.y, default.map(|d| d.y));
         });
         return changed;
     }
@@ -108,7 +141,14 @@ fn leaf_widget(
         return ui.checkbox(v, "").changed();
     }
     if let Some(v) = field.try_downcast_mut::<u32>() {
-        return ui.add(egui::DragValue::new(v).speed(0.1)).changed();
+        let default = default.and_then(|d| d.try_downcast_ref::<u32>()).copied();
+        let field = config_field(default.unwrap_or(0) as f32, 0.1).range(0.0..=u32::MAX as f32);
+        let field = if default.is_some() {
+            field
+        } else {
+            field.no_default()
+        };
+        return field.show_int(ui, v).changed();
     }
     // Dimensional newtype (`Length(f32)`, `Acceleration2(Vec2)`): edit the
     // value it wraps, so a typed quantity renders as the number it was.
@@ -121,14 +161,19 @@ fn leaf_widget(
         && let Some(inner) = ts.field_mut(0)
     {
         let stored = stored.or(dimension.map(DisplayUnit::canonical));
-        return leaf_widget(ui, id, inner, stored);
+        let default = match default.map(|d| d.reflect_ref()) {
+            Some(ReflectRef::TupleStruct(d)) => d.field(0),
+            _ => None,
+        };
+        return leaf_widget(ui, id, inner, default, stored);
     }
     // Nested struct: recurse in an indented block.
     if matches!(field.reflect_ref(), ReflectRef::Struct(_)) {
         let mut changed = false;
         ui.vertical(|ui| {
             if let Some(reflect) = field.try_as_reflect_mut() {
-                changed = reflect_grid(ui, id.with("nested"), reflect);
+                let default = default.and_then(|d| d.try_as_reflect());
+                changed = grid(ui, id.with("nested"), reflect, default, &[], &[]);
             }
         });
         return changed;
@@ -157,12 +202,15 @@ mod tests {
     }
 
     /// Every text the grid paints for `value` in one headless frame.
-    fn painted_text(value: &mut dyn Reflect) -> Vec<String> {
+    fn painted_text<T: Reflect + Default>(value: &mut T) -> Vec<String> {
         painted_text_in(value, gradiance_units::UnitPrefs::default())
     }
 
     /// [`painted_text`] under a unit display preference.
-    fn painted_text_in(value: &mut dyn Reflect, prefs: gradiance_units::UnitPrefs) -> Vec<String> {
+    fn painted_text_in<T: Reflect + Default>(
+        value: &mut T,
+        prefs: gradiance_units::UnitPrefs,
+    ) -> Vec<String> {
         let ctx = egui::Context::default();
         crate::unit_fields::install(&ctx, prefs);
         // Two frames: a grid's first frame may be an invisible sizing pass.
@@ -246,6 +294,63 @@ mod tests {
             (value.rotation_step_deg - 90.0).abs() < 1e-6,
             "showing never writes"
         );
+    }
+
+    /// A settings struct whose defaults are not zero.
+    #[derive(bevy::reflect::Reflect, Debug, PartialEq)]
+    struct Tuned {
+        gain: f32,
+        count: u32,
+        reach: gradiance_units::Length,
+    }
+
+    impl Default for Tuned {
+        fn default() -> Self {
+            Self {
+                gain: 1.5,
+                count: 3,
+                reach: gradiance_units::Length(2.0),
+            }
+        }
+    }
+
+    /// Brief U-8b: a grid number resets to the same field of the type's
+    /// default on a middle click (a float, a count, a quantity newtype).
+    #[test]
+    fn a_middle_click_resets_a_grid_number_to_the_type_default() {
+        use egui::accesskit::Role;
+        use egui_kittest::Harness;
+        use egui_kittest::kittest::Queryable;
+        let mut h = Harness::new_ui_state(
+            |ui, t: &mut Tuned| {
+                reflect_grid(ui, egui::Id::new("tuned"), t);
+            },
+            Tuned {
+                gain: 4.0,
+                count: 9,
+                reach: gradiance_units::Length(7.0),
+            },
+        );
+        h.run();
+        let centres: Vec<egui::Pos2> = h
+            .get_all_by_role(Role::SpinButton)
+            .map(|n| n.rect().center())
+            .collect();
+        assert_eq!(centres.len(), 3);
+        for at in centres {
+            h.hover_at(at);
+            h.run();
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton {
+                    pos: at,
+                    button: egui::PointerButton::Middle,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                });
+                h.run();
+            }
+        }
+        assert_eq!(*h.state(), Tuned::default());
     }
 
     #[derive(bevy::reflect::Reflect, Default)]
