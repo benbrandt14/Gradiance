@@ -129,6 +129,31 @@ reflect grid recognises a quantity newtype by its type name, so a new
 settings field gets its unit with no table row; a plain `f32` kept in degrees
 names `DisplayUnit::DEGREES` in the grid's table.
 
+### Every number field behaves like Blender's (brief U-8)
+
+One function, `ui::unit_fields::number_field`, carries the behaviours; every
+numeric row reaches it (`precise_drag*` on the edit seam, `labelled_drag`,
+`labelled_quantity` and the reflect grid on the config seam; only
+`labelled_drag_u32` is a plain egui drag). Do not add one with a raw
+`egui::DragValue`.
+
+| Gesture | Effect |
+|---|---|
+| Drag | Scrub; **Shift** = 1/10 speed; **Ctrl** snaps (`gradiance_units::step`: 10° for angles, a tenth of a range's decade, else whole units or about one step per 10 points); Ctrl+Shift = a tenth of the snap |
+| Esc during a drag | The value goes back; nothing commits |
+| Click, type | A number or maths with units, applied on Enter / focus loss; Esc keeps the old value; a refused entry outlines red and says why for 4 s |
+| Hover + Backspace / `-` / Ctrl+wheel | Default / negate / one snap step per notch |
+| Hover + Ctrl+C / Ctrl+V | Copy the value with its unit / paste text through the parser |
+| Middle-click, right-click | Default; a menu with Copy, Paste, Reset to default |
+
+On the edit seam each of these is **one** commit: a drag on release, a typed
+entry on Enter, a key, a wheel notch or a menu row at once, and a cancelled
+drag never. A hovered or dragged field claims the keyboard
+(`unit_fields::claim_keys` → `KeyboardCaptured`), so Backspace over a field
+does not also delete the selection; keys reach a field only while the
+pointer is over it, never as global keys. Reset needs a default: config
+rows have none, so their Backspace and Reset do nothing.
+
 ### Empty states say what to do
 
 "No series selected — pick one above", not "No data". Every `empty_state` in

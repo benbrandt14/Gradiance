@@ -170,5 +170,36 @@ The scene is a 1 m arm pinned to the world. Look at Settings > Simulation (gravi
                 ),
             ],
         ),
+        (
+            id: "number-fields",
+            title: "Do the number fields feel right to drag, snap and step?",
+            source: "Phase 5, brief U-8 number-field behaviours (docs/briefs/U-8-number-fields.md)",
+            description: r#"Every number field now behaves like Blender's. Click the box (or the pin) and try the fields in Properties, and the rows in Settings:
+
+- Drag to scrub. Hold Shift for 1/10 speed. Press Esc while dragging: the value goes back and nothing is recorded (Ctrl+Z has nothing new).
+- Hold Ctrl while dragging to snap: angles to 10 degrees; a length or force to whole units, or coarser when the field drags fast (about one step per 10 points of movement); a plain ratio such as friction to 0.1; a settings row with a range to a tenth of its range's decade. Ctrl+Shift snaps to a tenth of that.
+- Over a field without clicking: Backspace resets it to its default, minus negates it, Ctrl+wheel steps it by the snap step (one undo step per notch), Ctrl+C / Ctrl+V copy and paste the value with its unit.
+- Right-click a field: Copy, Paste, Reset to default.
+- Type a bad entry (3 furlongs, 2 * * 3, 25 cm into an angle): the field outlines red and says why for a few seconds.
+
+All three options load the same scene: pick the verdict that matches how it felt, and say which field felt wrong in the note."#,
+            options: [
+                (
+                    label: "Keep as built",
+                    caption: "Shift is 1/10, Ctrl snaps as described, the wheel steps by the snap step.",
+                    scripts: ["scenes/number-fields/scene.scm"],
+                ),
+                (
+                    label: "Snap finer",
+                    caption: "Ctrl should snap to whole units of the shown unit only (never coarser), and ratios to 0.01.",
+                    scripts: ["scenes/number-fields/scene.scm"],
+                ),
+                (
+                    label: "Scrub slower",
+                    caption: "The plain drag moves too fast for comfort; halve every field's drag speed.",
+                    scripts: ["scenes/number-fields/scene.scm"],
+                ),
+            ],
+        ),
     ],
 )

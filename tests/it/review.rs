@@ -99,6 +99,8 @@ fn expected_bodies(question: &str) -> &'static [usize] {
         "spring-feel" => &[6, 6, 6, 6],
         // a ground and a pinned arm
         "units-display" => &[2, 2, 2],
+        // a ground and a hinged box (docs/review/scenes/number-fields)
+        "number-fields" => &[2, 2, 2],
         _ => &[],
     }
 }
