@@ -4158,10 +4158,12 @@ dependencies = [
  "bevy",
  "gradiance-command",
  "gradiance-core",
+ "gradiance-op",
  "gradiance-scene",
  "rfd",
  "ron",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

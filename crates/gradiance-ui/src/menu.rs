@@ -18,8 +18,8 @@ use gradiance_domain::Body;
 use gradiance_domain::settings::GridSettings;
 use gradiance_interaction::input::{EditorAction, key_invocations};
 use gradiance_interaction::selection::Selection;
-use gradiance_op::InvokeOp;
-use gradiance_persist::{LoadSceneRequest, SaveSceneRequest, SnapshotRequest};
+use gradiance_op::{InvokeOp, json};
+use gradiance_persist::SnapshotRequest;
 use gradiance_scene::FORMAT_VERSION;
 
 /// The About dialog's visibility (Help ▸ About).
@@ -75,8 +75,6 @@ pub struct MenuWriters<'w> {
     /// write that key's invocations ([`key_invocations`]), so the two cannot
     /// differ.
     invoke: MessageWriter<'w, InvokeOp>,
-    save: MessageWriter<'w, SaveSceneRequest>,
-    load: MessageWriter<'w, LoadSceneRequest>,
     snapshot: MessageWriter<'w, SnapshotRequest>,
     exit: MessageWriter<'w, AppExit>,
 }
@@ -150,12 +148,18 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
             ui.close();
         }
         if ui.button("Open…").clicked() {
-            writers.load.write(LoadSceneRequest { path: None });
+            // An empty path: the dialog (`scene.load`, brief R-1).
+            writers
+                .invoke
+                .write(InvokeOp::with("scene.load", json!({"path": ""})));
             ui.close();
         }
         ui.separator();
         if ui.button("Save").clicked() {
-            writers.save.write(SaveSceneRequest { path: None });
+            // An empty path: the last one, else the dialog (`scene.save`).
+            writers
+                .invoke
+                .write(InvokeOp::with("scene.save", json!({"path": ""})));
             ui.close();
         }
         if ui.button("Save snapshot").clicked() {

@@ -9,6 +9,7 @@ use bevy_egui::{EguiContexts, egui};
 use gradiance_core::script_tools::{ScriptToolSpec, ScriptTools};
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_interaction::tools::handles::ScaleFrame;
+use gradiance_op::InvokeOp;
 
 /// Tool-palette entries grouped into sections (Blender-style), in workflow
 /// order — pick/move, create a shape, connect with a constraint, then modify.
@@ -97,7 +98,7 @@ pub fn toolbar(
     tool: Res<State<ToolState>>,
     mut next_tool: ResMut<NextState<ToolState>>,
     game: Res<State<GameState>>,
-    mut next_game: ResMut<NextState<GameState>>,
+    mut invoke: MessageWriter<InvokeOp>,
     mut frame: ResMut<ScaleFrame>,
     mut rig: ResMut<gradiance_interaction::camera::CameraRig>,
     panel_rects: Res<crate::PanelRects>,
@@ -131,11 +132,13 @@ pub fn toolbar(
                     (Icon::Play, format!("{} Play", glyph::PLAY))
                 };
                 if icons::icon_text_button(ui, &icons, icon, &label).clicked() {
-                    next_game.set(if playing {
-                        GameState::Paused
+                    // The transport operations (brief R-1): the button, the
+                    // Space key and a client take one path.
+                    invoke.write(InvokeOp::new(if playing {
+                        "sim.pause"
                     } else {
-                        GameState::Playing
-                    });
+                        "sim.play"
+                    }));
                 }
                 ui.separator();
                 let label = match *frame {

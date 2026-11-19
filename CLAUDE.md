@@ -20,7 +20,7 @@ domain → core, geometry             scene → core, domain
 optimize → core, geometry (+bevy for Reflect)
 physics → core, domain, geometry, units
 signal → kernel, domain, physics    command → scene, signal, op (+ lower)
-persist → scene, command            interaction → command, optimize, persist (+ lower)
+persist → scene, command, op        interaction → command, optimize, persist (+ lower)
 render → interaction, units (+ lower)   script → command, signal, op (+ lower)
 ui → everything except render
 ```

@@ -213,7 +213,12 @@ fn the_crate_dag_matches_the_architecture() {
         // The operation registry (U-1): above core only.
         ("op", &["core"]),
         ("optimize", &["core", "geometry"]),
-        ("persist", &["command", "core", "scene"]),
+        (
+            "persist",
+            // op: the scene-file operations (`scene.save`, `scene.load`,
+            // `scene.dump`) register where the disk is (R-1).
+            &["command", "core", "op", "scene"],
+        ),
         ("physics", &["core", "domain", "geometry", "units"]),
         (
             "render",
