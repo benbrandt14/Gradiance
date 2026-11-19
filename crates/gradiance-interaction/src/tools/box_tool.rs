@@ -186,12 +186,18 @@ mod tests {
     const CORNERS: &ToolDefaults = &ToolDefaults {
         slider_limits: true,
         box_three_point: false,
+        chain_link: gradiance_units::Length(0.25),
+        chain_width: gradiance_units::Length(0.06),
+        chain_pins: gradiance_domain::settings::ChainPins::Bodies,
     };
 
     /// The three-point constructor's tool defaults.
     const THREE_POINT: &ToolDefaults = &ToolDefaults {
         slider_limits: true,
         box_three_point: true,
+        chain_link: gradiance_units::Length(0.25),
+        chain_width: gradiance_units::Length(0.06),
+        chain_pins: gradiance_domain::settings::ChainPins::Bodies,
     };
 
     /// Builds a two-corner-mode context at a phase/cursor with default

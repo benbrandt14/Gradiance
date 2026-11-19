@@ -6,7 +6,7 @@
 //! the [`OpRegistry`]; none names these types.
 //!
 //! The files split by family: [`spawn`] authors new geometry, [`body`] edits
-//! one existing body, [`sets`] edits several at once (booleans, groups),
+//! one existing body, [`chain`] lays a hinged chain of links, [`sets`] edits several at once (booleans, groups),
 //! [`joint`] makes and removes relationships, [`node`] places behavior
 //! nodes (a thruster), [`scene`] holds the history,
 //! the new scene, a count and the settings write, [`look`] the scene look
@@ -25,6 +25,7 @@
 //! ends) it names the primary (first-selected) body.
 
 pub mod body;
+pub mod chain;
 pub mod group;
 pub mod joint;
 pub mod look;
@@ -186,6 +187,7 @@ impl Plugin for SceneOpsPlugin {
             let mut registry = app.world_mut().resource_mut::<OpRegistry>();
             spawn::register(&mut registry);
             body::register(&mut registry);
+            chain::register(&mut registry);
             group::register(&mut registry);
             sets::register(&mut registry);
             joint::register(&mut registry);
