@@ -12,7 +12,7 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-10** (editor areas + saved workspaces; no brief yet).
+- **Now:** **U-10** editor areas + saved workspaces (brief `docs/briefs/U-10-areas-workspaces.md`).
   **4b-6** toon ramp is done (#274, stacked on U-9: a colour ramp shared by
   every body with a gradient picker in Settings > Rendering > Ramp, matte,
   dithered band edges, front faces rounded from the outline; review
