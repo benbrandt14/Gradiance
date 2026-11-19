@@ -535,5 +535,32 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief 5-3 Decisions; gradiance_domain::settings::UnitSettings.",
         ),
+        (
+            question: (
+                id: "number-field-keys",
+                title: "Who gets Backspace, minus, Esc and Ctrl+C/V over a number field?",
+                source: "brief U-8 number-field behaviours; docs/unified-surface-plan.md 7.2 (Backspace = default, - = negate)",
+                description: r#"Blender's number fields act on keys while the pointer is over them, without a click. The app's own keys use the same ones (Backspace deletes the selection, Esc deselects, Ctrl+C / Ctrl+V copy and paste bodies), and egui does not report a hovered field as typing, so both would act. The owner put the keymap out of scope."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A hovered field takes the keys",
+                        caption: r#"Recommended. While a number field is hovered or dragged it claims the keyboard (KeyboardCaptured), so Backspace over a field resets the field and never deletes the selection. Keys act on a field only under the pointer; nothing becomes a global key."#,
+                    ),
+                    (
+                        label: "Fields act only when clicked",
+                        caption: r#"No conflict, but Backspace and minus then edit the typed text, so the hover keys of plan 7.2 do not exist."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "number-field-keys",
+                title: "Who gets Backspace, minus, Esc and Ctrl+C/V over a number field?",
+                choice: Picked("A hovered field takes the keys"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive in the sense of feel: it is which surface owns a key. The feel of the behaviours is the review question number-fields.",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "Brief U-8 Decisions; gradiance_ui::unit_fields::claim_keys.",
+        ),
     ],
 )
