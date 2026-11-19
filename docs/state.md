@@ -2,9 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-19 (U-8 handoff, stacked on 5-3; 5-3 handoff, stacked on 5-2; 5-2 handoff, stacked on A-2; A-2 handoff, stacked on A-1; A-1 handoff, stacked on 4b-4; 4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
-after U-6, #256, b53b019; order per `docs/unified-surface-plan.md` § 10
-and § 13).
+Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
+3f211ab; order per `docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -12,63 +11,17 @@ and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **4b-3** art direction in review (PR #257): three scene looks
-  (`gradiance_domain::theme`, studio default), one colour source
-  (boundaries test), toon bands now visible (cap winding, light levels,
-  banded planes), review questions `look` and `toon-lighting` added.
-  **U-7** theme tokens in review, **stacked on 4b-3** (branch
-  `claude/project-thread-tw1mvl-u7`, base #257's branch; merge #257
-  first): `ui::theme` chrome tokens, Blender-dark default, the accent and
-  selection from the scene look, presets (`chrome.apply`, workstation
-  config, not saved), the colour scanner now covers `gradiance-ui`,
-  review question `chrome`. **4b-4** scaled defaults in review, **stacked
-  on U-7** (branch `claude/project-thread-tw1mvl-4b4`; merge #257, then
-  #258, then it): springs authored as frequency + damping ratio (format v8),
-  the motor gain fix (the default motor did not turn), clamped restitution
-  and friction, weight-scaled break force, behaviour tests
-  (`tests/it/defaults.rs`), review question `spring-feel`. **A-1**
-  screenshot audit in review, **stacked on 4b-4** (branch
-  `claude/project-thread-tw1mvl-a1`; merge #257, #258, #259, then it):
-  six fixes (drag tools started one step late; world-pin hinge reversed;
-  motor gain ignored the sim speed; Groups chips selected whole groups;
-  the `spring` verb anchored b at a's centre, which also bent the
-  `spring-feel` scenes; the palette covered the bottom dock), two findings
-  for new briefs (world-pin slider reversed, overlapping groups); images
-  in `/mnt/project-files/a-1/`. **A-2** audit follow-ups in review (PR
-  #261, branch `claude/project-thread-tw1mvl-a2`, **stacked on A-1** #260
-  → #259 → #258 → #257; merge those first): world-pin sliders derived
-  pin-first like hinges; grouping a grouped body brings its whole group and
-  a subset nests inside (archive `group-overlap`); the motor inspector reads
-  20 rpm and shows the derived auto torque. Recorded with proposals, not
-  fixed: dock opening re-centres the view, short arms lose motor speed
-  (not substeps, not the ceiling), field strength scaling (needs a feel
-  question). **5-2** quantity catalog in review, **stacked on A-2**
-  (branch `claude/project-thread-tw1mvl-5-2`; merge #261 → #260 → #259 →
-  #258 → #257 first): one named table (`domain::quantity`, 14 rows) that
-  the signal sources, sensor ports, node-graph pins, signals panel and plot
-  units read; `quantity.*` operations (`(quantities)`, `(quantity name i)`,
-  `(quantity-between name a b)`, `(quantity-unit name)`). **5-3** typed units in review, **stacked on 5-2**
-  (branch `claude/project-thread-tw1mvl-5-3`; merge #262 → #261 → #260 →
-  #259 → #258 → #257 first): one parser (`gradiance_units::expr`: `25 cm`,
-  `90 deg`, `2*pi`) behind every quantity field, a workstation unit display
-  (degrees/radians, m/cm/mm; `units.display`, not saved, not undone) that
-  fields, sensor readouts and the plot follow; review question
-  `units-display`. **U-8** number fields in review, **stacked on 5-3**
-  (branch `claude/project-thread-tw1mvl-u8`; merge #263 → #262 → #261 →
-  #260 → #259 → #258 → #257 first): one `unit_fields::number_field` with
-  Blender's behaviours (Esc cancels a drag, Ctrl snaps by
-  `gradiance_units::step`, a refused entry says why, hover Backspace /
-  `-` / Ctrl+wheel / Ctrl+C/V, right-click Copy/Paste/Reset), one commit
-  per gesture; a hovered field claims the keys (archive
-  `number-field-keys`); pointer wrap cut; review question `number-fields`.
-  **U-6** #256 is merged (b53b019): `gradiance ops`,
-  `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
-  app; the catalog carries a params schema and an example per operation.
+- **Now:** **5-4** DSL units in progress. The stack #257–#264 merged
+  on 2026-11-19 (main 3f211ab): 4b-3 scene looks, U-7 chrome tokens, 4b-4
+  scaled defaults (format v8), A-1 screenshot audit (6 fixes), A-2 audit
+  follow-ups, 5-2 quantity catalog, 5-3 unit input, U-8 number fields.
+  Each brief's Outcome holds its decisions and cuts. Open review
+  questions: `look`, `toon-lighting`, `chrome`, `spring-feel`,
+  `units-display`, `number-fields`.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
   tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
   Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
-  The session permission check refuses thread merges: the owner merges
-  (#253, #254, #256, 2026-11-18).
+  The session permission check refuses thread merges: the owner merges.
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
@@ -84,10 +37,11 @@ and § 13).
      snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (done, #253).
   6. **4b-2** groups panel (done, #254).
   7. **U-6** CLI + MCP server (done, #256).
-  8. **4b-3** art direction (scene look; in review, #257), then **U-7** theme
-     tokens, Blender-leaning (chrome; in review, stacked on #257); then
-     **4b-4** scaled defaults (in review, stacked on U-7).
-  9. **Phase 5:** 5-2 (in review), 5-3 (in review), **U-8** number-field behaviours (in review), then 5-4, 5-5.
+  8. **4b-3** art direction (done, #257), **U-7** theme tokens (done,
+     #258), **4b-4** scaled defaults (done, #259); audit **A-1** (done,
+     #260) and **A-2** (done, #261).
+  9. **Phase 5:** 5-2 (done, #262), 5-3 (done, #263), **U-8** number-field
+     behaviours (done, #264), then **5-4** (in progress), 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).
