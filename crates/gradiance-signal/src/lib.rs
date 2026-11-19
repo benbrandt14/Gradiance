@@ -37,13 +37,14 @@ use gradiance_core::states::GameState;
 use gradiance_domain::quantity::{BodySample, JointSample, QuantitySamples, Subject};
 use gradiance_domain::signal::Subjects;
 use gradiance_domain::{Body, Joint};
+use gradiance_physics::drive::SignalDrive;
 use gradiance_physics::queries::PhysicsQueries;
 use std::collections::VecDeque;
 
 pub use gradiance_domain::signal::{
-    BlockOp, ComputedSignal, ComputedSignals, Curve, CurveInterp, GradientSpec, SignalBinding,
-    SignalBindings, SignalExpr, SignalMap, SignalParam, SignalParams, SignalSink, SignalSource,
-    remap_binding,
+    ActuatorTarget, BlockOp, ComputedSignal, ComputedSignals, Curve, CurveInterp, GradientSpec,
+    SignalBinding, SignalBindings, SignalExpr, SignalMap, SignalParam, SignalParams, SignalSink,
+    SignalSource, remap_binding,
 };
 
 /// The reserved input name for elapsed simulated seconds (the "clock" every
@@ -227,7 +228,7 @@ pub fn recompile_signals(computed: Res<ComputedSignals>, mut cache: ResMut<Compi
 /// value. Targeted: only names actually referenced by a computed signal are
 /// published (a disconnected sensor costs nothing).
 pub fn publish_sensor_refs(
-    computed: Res<ComputedSignals>,
+    computed: Res<CompiledSignals>,
     index: Res<IdIndex>,
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
@@ -242,12 +243,14 @@ pub fn publish_sensor_refs(
     bus.set_time(sim.elapsed_secs());
     let recording = *game.get() == GameState::Playing || step.active();
     let dt = fixed.timestep().as_secs_f32().max(1e-6);
-    for signal in &computed.0 {
-        for input in signal.expr.inputs() {
-            if let Some(source) = SignalSource::from_bus_name(&input)
+    // The compiled input lists, not `expr.inputs()`: those were collected
+    // once at compile time, so this pass allocates nothing.
+    for (_, signal) in &computed.compiled {
+        for input in &signal.inputs {
+            if let Some(source) = SignalSource::from_bus_name(input)
                 && let Some(value) = read_source(&source, &index, &physics, &transforms, dt)
             {
-                bus.publish(&input, value, recording);
+                bus.publish(input, value, recording);
             }
         }
     }
@@ -272,13 +275,15 @@ pub fn evaluate_computed(
         bus.publish(&param.name, param.value, recording);
     }
     bus.publish(TIME_INPUT, time.elapsed_secs(), recording);
+    // A stack array, not a `Vec`: a compiled signal has at most `MAX_VARS`
+    // inputs (the compiler refuses more), so the frame loop allocates nothing.
+    let mut vars = [0.0_f32; gradiance_kernel::MAX_VARS];
     for (name, signal) in &computed.compiled {
-        let vars: Vec<f32> = signal
-            .inputs
-            .iter()
-            .map(|input| bus.get(input).unwrap_or(0.0))
-            .collect();
-        let value = signal.kernel.eval(&vars);
+        let n = signal.inputs.len().min(vars.len());
+        for (slot, input) in vars.iter_mut().zip(&signal.inputs) {
+            *slot = bus.get(input).unwrap_or(0.0);
+        }
+        let value = signal.kernel.eval(&vars[..n]);
         bus.publish(name, value, recording);
     }
 }
@@ -370,6 +375,7 @@ pub fn evaluate_signals(
     bindings: Res<SignalBindings>,
     params: Res<SignalParams>,
     computed: Res<ComputedSignals>,
+    compiled: Res<CompiledSignals>,
     script_names: Res<ScriptSignals>,
     index: Res<IdIndex>,
     transforms: Query<&Transform, With<Body>>,
@@ -408,7 +414,13 @@ pub fn evaluate_signals(
                     desired.entry(entity).or_default().trail = Some(color);
                 }
             }
-            SignalSink::Plot => {}
+            // Plot publishes only; an actuator's value is read off the bus
+            // by `drive_actuators`, after this pass.
+            SignalSink::Plot
+            | SignalSink::MotorSpeed(_)
+            | SignalSink::MotorCap(_)
+            | SignalSink::FieldStrength(_)
+            | SignalSink::GravityScale(_) => {}
         }
     }
 
@@ -421,10 +433,11 @@ pub fn evaluate_signals(
         name == TIME_INPUT
             || bindings.0.iter().any(|b| b.name == name)
             || params.0.iter().any(|p| p.name == name)
-            || computed
-                .0
+            || computed.0.iter().any(|c| c.name == name)
+            || compiled
+                .compiled
                 .iter()
-                .any(|c| c.name == name || c.expr.inputs().iter().any(|i| i == name))
+                .any(|(_, c)| c.inputs.iter().any(|i| i == name))
             || script_names.0.iter().any(|n| n == name)
     });
 
@@ -455,6 +468,80 @@ pub fn evaluate_signals(
     }
 }
 
+/// The [`SignalDrive`] the bindings ask of target `id`: each actuator binding
+/// whose sink names `id` sets its field to the binding's value on the bus
+/// (published this frame by [`evaluate_signals`]). A binding with no value
+/// yet, or a non-finite one, sets nothing: a NaN must never reach the solver.
+/// When two bindings drive the same field, the later one wins (authored
+/// order, like a cycle's last-frame rule). Pure over its inputs; allocates
+/// nothing.
+pub fn desired_drive(id: StableId, bindings: &[SignalBinding], bus: &SignalBus) -> SignalDrive {
+    let mut drive = SignalDrive::default();
+    for binding in bindings {
+        if binding.sink.actuator().map(ActuatorTarget::id) != Some(id) {
+            continue;
+        }
+        let Some(value) = bus.get(&binding.name).filter(|v| v.is_finite()) else {
+            continue;
+        };
+        let slot = match binding.sink {
+            SignalSink::MotorSpeed(_) => &mut drive.motor_speed,
+            SignalSink::MotorCap(_) => &mut drive.motor_cap,
+            SignalSink::FieldStrength(_) => &mut drive.field_strength,
+            SignalSink::GravityScale(_) => &mut drive.gravity_scale,
+            SignalSink::Fill(_) | SignalSink::TracerColor(_) | SignalSink::Plot => continue,
+        };
+        *slot = Some(value);
+    }
+    drive
+}
+
+/// **The actuator pass** (brief N-1): one system over the bindings and the
+/// [`SignalDrive`] query. Each driven entity's drive is recomputed
+/// ([`desired_drive`]) and written only on a difference; a drive no binding
+/// sets any more is removed (the authored value returns with no command); a
+/// bound target without one gets it. Runs after [`evaluate_signals`], so it
+/// reads this frame's values; the physics layer applies the drives in
+/// `PostUpdate`, before the next step.
+///
+/// Cost: `O(D·B + A·B)` id comparisons for `D` live drives, `A`
+/// actuator bindings and `B` bindings, plus one bus lookup (a scan of the bus names) per match, with no
+/// allocation in the steady state (a command is queued only when a drive
+/// appears or goes).
+pub fn drive_actuators(
+    mut commands: Commands,
+    bindings: Res<SignalBindings>,
+    bus: Res<SignalBus>,
+    index: Res<IdIndex>,
+    mut drives: Query<(Entity, &StableId, &mut SignalDrive)>,
+) {
+    for (entity, id, mut drive) in &mut drives {
+        let next = desired_drive(*id, &bindings.0, &bus);
+        if next.is_empty() {
+            commands.entity(entity).try_remove::<SignalDrive>();
+        } else if *drive != next {
+            *drive = next;
+        }
+    }
+    for binding in &bindings.0 {
+        let Some(target) = binding.sink.actuator() else {
+            continue;
+        };
+        let Some(entity) = index.entity(target.id()) else {
+            continue;
+        };
+        if drives.contains(entity) {
+            continue;
+        }
+        let next = desired_drive(target.id(), &bindings.0, &bus);
+        if !next.is_empty() {
+            // `try_`: the target may be despawned before the queue applies
+            // (the same race as the colour override's).
+            commands.entity(entity).try_insert(next);
+        }
+    }
+}
+
 /// Installs the signal dataflow: the bindings/bus resources and the
 /// per-frame evaluator (headless too — tests drive it directly).
 #[derive(Default)]
@@ -481,6 +568,7 @@ impl Plugin for SignalPlugin {
                 publish_sensor_refs,
                 evaluate_computed,
                 evaluate_signals,
+                drive_actuators,
             )
                 .chain()
                 // A step request that lands this frame is seen by every
@@ -522,6 +610,42 @@ mod tests {
         }
         let entry = bus.entries().next().unwrap().1;
         assert_eq!(entry.history().len(), HISTORY_CAP);
+    }
+
+    fn actuator(name: &str, sink: SignalSink) -> SignalBinding {
+        SignalBinding {
+            name: name.into(),
+            source: SignalSource::Named(name.into()),
+            map: SignalMap::default(),
+            curve: None,
+            gradient: GradientSpec::default(),
+            sink,
+        }
+    }
+
+    #[test]
+    fn a_drive_holds_only_the_fields_bound_to_its_target() {
+        let (wheel, ball) = (StableId::new(), StableId::new());
+        let bindings = [
+            actuator("spin", SignalSink::MotorSpeed(wheel)),
+            actuator("cap", SignalSink::MotorCap(wheel)),
+            actuator("float", SignalSink::GravityScale(ball)),
+            actuator("tint", SignalSink::Fill(wheel)),
+            actuator("pending", SignalSink::FieldStrength(wheel)),
+        ];
+        let mut bus = SignalBus::default();
+        bus.publish("spin", 3.0, false);
+        bus.publish("cap", f32::NAN, false);
+        bus.publish("float", 0.25, false);
+        bus.publish("tint", 9.0, false);
+        let drive = desired_drive(wheel, &bindings, &bus);
+        assert_eq!(drive.motor_speed, Some(3.0));
+        assert_eq!(drive.motor_cap, None, "a NaN never reaches the solver");
+        assert_eq!(drive.field_strength, None, "no value on the bus yet");
+        assert_eq!(drive.gravity_scale, None, "another target's field");
+        let ball_drive = desired_drive(ball, &bindings, &bus);
+        assert_eq!(ball_drive.gravity_scale, Some(0.25));
+        assert!(desired_drive(StableId::new(), &bindings, &bus).is_empty());
     }
 
     #[test]

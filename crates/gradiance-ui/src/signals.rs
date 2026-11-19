@@ -288,53 +288,68 @@ fn binding_row(
                 .on_hover_text("a name published by a script via (signal-set name value)");
         });
     }
+    // An actuator (brief N-1) takes the raw value in its SI unit: the
+    // domain, gradient and curve shape a colour, so they are not shown.
+    let actuator = binding.sink.actuator().is_some();
     ui.horizontal(|ui| {
-        ui.label("domain");
-        let rest = gradiance_domain::signal::SignalMap::default();
-        widgets::config_field(rest.in_min, 1.0).show(ui, &mut binding.map.in_min);
-        ui.label("→");
-        widgets::config_field(rest.in_max, 1.0).show(ui, &mut binding.map.in_max);
-        egui::ComboBox::from_id_salt(ui.id().with(("gradient", i)))
-            .selected_text(format!("{:?}", binding.gradient))
-            .show_ui(ui, |ui| {
-                for option in GradientSpec::ALL {
-                    ui.selectable_value(&mut binding.gradient, option, format!("{option:?}"));
-                }
-            });
-        let sink_label = match binding.sink {
-            SignalSink::Fill(_) => "→ fill",
-            SignalSink::TracerColor(_) => "→ tracer",
-            SignalSink::Plot => "→ plot",
-        };
+        if actuator {
+            ui.label("raw value");
+        } else {
+            ui.label("domain");
+            let rest = gradiance_domain::signal::SignalMap::default();
+            widgets::config_field(rest.in_min, 1.0).show(ui, &mut binding.map.in_min);
+            ui.label("→");
+            widgets::config_field(rest.in_max, 1.0).show(ui, &mut binding.map.in_max);
+            egui::ComboBox::from_id_salt(ui.id().with(("gradient", i)))
+                .selected_text(format!("{:?}", binding.gradient))
+                .show_ui(ui, |ui| {
+                    for option in GradientSpec::ALL {
+                        ui.selectable_value(&mut binding.gradient, option, format!("{option:?}"));
+                    }
+                });
+        }
         egui::ComboBox::from_id_salt(ui.id().with(("sink", i)))
-            .selected_text(sink_label)
+            .selected_text(format!("→ {}", binding.sink.label()))
             .show_ui(ui, |ui| {
-                // Re-targeting keeps the sink's body: reuse the current one
-                // (falling back to the source's body for Plot → color flips).
-                let target = match &binding.sink {
-                    SignalSink::Fill(id) | SignalSink::TracerColor(id) => Some(*id),
-                    // A joint has no fill/tracer to recolor.
-                    SignalSink::Plot => match binding.source.reading() {
-                        Some((row, Subjects::One(id) | Subjects::Two(id, _)))
-                            if row.subject() != Subject::Joint =>
-                        {
-                            Some(id)
-                        }
-                        _ => None,
-                    },
-                };
-                if let Some(target) = target {
-                    ui.selectable_value(&mut binding.sink, SignalSink::Fill(target), "fill");
-                    ui.selectable_value(
-                        &mut binding.sink,
-                        SignalSink::TracerColor(target),
-                        "tracer",
-                    );
+                for sink in sink_choices(binding) {
+                    let label = sink.label();
+                    ui.selectable_value(&mut binding.sink, sink, label);
                 }
-                ui.selectable_value(&mut binding.sink, SignalSink::Plot, "plot");
             });
     });
-    curve_section(ui, i, binding);
+    if !actuator {
+        curve_section(ui, i, binding);
+    }
+}
+
+/// The sinks a binding can be re-targeted to, keeping its object: a body's
+/// colour and physical channels, a motorised joint's motor channels, and the
+/// plot. A plot binding offers the channels of the object its source reads.
+fn sink_choices(binding: &SignalBinding) -> Vec<SignalSink> {
+    let target = match &binding.sink {
+        SignalSink::Fill(id)
+        | SignalSink::TracerColor(id)
+        | SignalSink::FieldStrength(id)
+        | SignalSink::GravityScale(id) => Some((Subject::Body, *id)),
+        SignalSink::MotorSpeed(id) | SignalSink::MotorCap(id) => Some((Subject::Joint, *id)),
+        SignalSink::Plot => binding
+            .source
+            .reading()
+            .map(|(row, Subjects::One(id) | Subjects::Two(id, _))| (row.subject(), id)),
+    };
+    let mut out: Vec<SignalSink> = match target {
+        Some((Subject::Joint, id)) => crate::ports::joint_actuators(id)
+            .into_iter()
+            .map(|(_, s)| s)
+            .collect(),
+        Some((_, id)) => crate::ports::body_actuators(id)
+            .into_iter()
+            .map(|(_, s)| s)
+            .collect(),
+        None => Vec::new(),
+    };
+    out.push(SignalSink::Plot);
+    out
 }
 
 /// The optional response curve, collapsed by default: a checkbox that adds or

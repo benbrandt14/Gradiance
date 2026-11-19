@@ -19,6 +19,7 @@
 //!   couples through its [`FieldMass`] (area × density), so cutting a source
 //!   redistributes — never changes — its total field.
 
+use crate::drive::SignalDrive;
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::platform::collections::HashMap;
@@ -106,6 +107,7 @@ pub struct Fields<'w, 's> {
             &'static FieldMass,
             &'static ShapeDef,
             &'static Transform,
+            Option<&'static SignalDrive>,
         ),
         With<Body>,
     >,
@@ -136,26 +138,32 @@ impl Fields<'_, '_> {
         self.sources
             .iter()
             .filter(move |(e, ..)| Some(*e) != exclude)
-            .filter_map(move |(entity, source, field_mass, shape, transform)| {
-                let pose = gradiance_core::units::PosRot::from_transform(transform);
-                let local = Vec2::from_angle(-pose.rot).rotate(p - pose.pos);
-                let d = sdf::eval(shape, local).max(0.0);
-                let away = Vec2::from_angle(pose.rot)
-                    .rotate(sdf::gradient(shape, local, GRADIENT_EPS))
-                    .normalize_or_zero();
-                if away == Vec2::ZERO {
-                    return None;
-                }
-                // Positive strength repels: acceleration along the outward
-                // gradient. Negative attracts. Coupling scales with the
-                // source's field mass, so a cut redistributes the field
-                // across the pieces instead of duplicating it.
-                let coupling = source.strength.value() * (field_mass.0 / REFERENCE_FIELD_MASS);
-                let accel = away
-                    * (coupling * falloff_factor(source.falloff, d))
-                        .clamp(-MAX_FIELD_ACCEL, MAX_FIELD_ACCEL);
-                (accel.length() >= MIN_FIELD_ACCEL).then_some((entity, accel))
-            })
+            .filter_map(
+                move |(entity, source, field_mass, shape, transform, drive)| {
+                    let pose = gradiance_core::units::PosRot::from_transform(transform);
+                    let local = Vec2::from_angle(-pose.rot).rotate(p - pose.pos);
+                    let d = sdf::eval(shape, local).max(0.0);
+                    let away = Vec2::from_angle(pose.rot)
+                        .rotate(sdf::gradient(shape, local, GRADIENT_EPS))
+                        .normalize_or_zero();
+                    if away == Vec2::ZERO {
+                        return None;
+                    }
+                    // Positive strength repels: acceleration along the outward
+                    // gradient. Negative attracts. Coupling scales with the
+                    // source's field mass, so a cut redistributes the field
+                    // across the pieces instead of duplicating it.
+                    // A signal drive replaces the authored strength (brief N-1).
+                    let strength = drive
+                        .and_then(|d| d.field_strength)
+                        .unwrap_or_else(|| source.strength.value());
+                    let coupling = strength * (field_mass.0 / REFERENCE_FIELD_MASS);
+                    let accel = away
+                        * (coupling * falloff_factor(source.falloff, d))
+                            .clamp(-MAX_FIELD_ACCEL, MAX_FIELD_ACCEL);
+                    (accel.length() >= MIN_FIELD_ACCEL).then_some((entity, accel))
+                },
+            )
     }
 }
 

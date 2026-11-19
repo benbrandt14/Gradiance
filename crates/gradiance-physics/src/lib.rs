@@ -10,6 +10,7 @@
 //! ordinary `Static` body with a large box shape.
 
 pub mod body_sync;
+pub mod drive;
 pub mod fields;
 pub mod grab;
 pub mod hold;
@@ -101,6 +102,7 @@ impl Plugin for GradiancePhysicsPlugin {
                 joint_sync::guard_dangling_joints,
                 joint_sync::sync_joints,
                 joint_sync::retune_joints,
+                drive::drive_gravity_scale,
             )
                 .chain()
                 .in_set(BodySyncSet),

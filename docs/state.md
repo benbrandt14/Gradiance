@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-19 (R-4 handoff, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-19 (N-1 handoff; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,15 +12,21 @@ Last updated: 2026-11-19 (R-4 handoff, Phase R complete; before that R-3, R-2, R
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **R-4** packing as an operation is done (in review; branch
-  `claude/project-thread-tw1mvl-r4`): `pack.run` (`(pack targets)`; the
+- **Now:** **N-1** signal actuators is done (in review; branch
+  `claude/project-thread-tw1mvl-n1`): bindings drive a hinge/slider motor's
+  speed and cap, a body's field strength and gravity scale through the
+  derived `physics::drive::SignalDrive` (never saved, never undone;
+  unbinding restores the authored value); one allocation-free actuator
+  system; actuator pins and a minimal joint block on the node canvas; six
+  decisions in `archive.ron`. **Next: N-2** graph input keys.
+  **Phase R is complete.**
+  **R-4** packing as an operation is done (#281 merged): `pack.run` (`(pack targets)`; the
   Optimizer panel invokes the same operation with the selection),
   `pack.status`, `pack.apply`, `pack.cancel`, `pack.get`, `pack.set`; a run
   packs in id order, so a script run and a panel run commit one layout
   (test); R-1's stray root `swing.ron` / `swing.csv` removed and the doc
   example test writes into a temp directory; four decisions in
-  `archive.ron`. **Phase R is complete. Next: the orchestrator plans the
-  next stage, N-1..N-9** (nonlinear dynamics & multibody play).
+  `archive.ron`.
   **R-3** insert + clipboard is done (#280): `scene.insert` (File ▸ Insert…),
   `edit.copy` / `edit.paste` (Ctrl+C / Ctrl+V on the canvas, Edit ▸
   Copy / Paste) over scene RON text, one `insert` undo step each, fresh
@@ -93,7 +99,7 @@ Last updated: 2026-11-19 (R-4 handoff, Phase R complete; before that R-3, R-2, R
       § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
-  9c. **N-1..N-9** nonlinear dynamics & multibody play (owner-approved
+  9c. **N-1** (done, in review), **N-2..N-9** nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
@@ -169,7 +175,9 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - backlash, cams, planar contact (undefined);
   - torque-based breaking (2-2);
   - rod fixed end = merge, `spawn-rod`, rod inspector (2-3);
-  - joint node-graph block (2-1);
+  - joint node-graph block (2-1): a minimal one landed with N-1 (sensor
+    outputs, motor inputs); editing, "add to node editor" and layout remain;
+  - `signal.bind` / `signal.unbind` operations (N-1 Outcome);
   - short gravity-loaded arms lose motor speed (0.1 m arm ~27% slowest);
     substeps and the ceiling are not the cause (A-2 Outcome, proposal);
   - field strength does not scale with the source size (fixed 1 m falloff,

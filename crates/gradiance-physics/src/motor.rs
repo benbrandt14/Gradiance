@@ -5,6 +5,7 @@
 //! (velocity tracking, max force, damping); this system only implements
 //! the Algodoo "back and forth" behavior on top.
 
+use crate::drive::SignalDrive;
 use avian2d::prelude::{PrismaticJoint, RevoluteJoint};
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
@@ -18,12 +19,17 @@ const TRANSLATION_BUFFER: f32 = 0.02;
 /// Reverses oscillating motors at their limits.
 pub fn drive_oscillating_motors(
     index: Res<IdIndex>,
-    defs: Query<(Entity, &JointDef)>,
+    defs: Query<(Entity, &JointDef, Option<&SignalDrive>)>,
     transforms: Query<&GlobalTransform>,
     mut revolutes: Query<&mut RevoluteJoint>,
     mut prismatics: Query<&mut PrismaticJoint>,
 ) {
-    for (entity, def) in &defs {
+    for (entity, def, drive) in &defs {
+        // A signal-driven speed wins over the oscillation (brief N-1): the
+        // signal is the person's chosen direction.
+        if drive.is_some_and(|d| d.motor_speed.is_some()) {
+            continue;
+        }
         let Some(a) = index.entity(def.body_a) else {
             continue;
         };

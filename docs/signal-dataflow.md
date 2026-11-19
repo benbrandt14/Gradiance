@@ -62,6 +62,18 @@ same regardless of how many points were placed.
   render sync prefers over authored `Appearance` and drops when the
   binding goes), or `Plot` (publish-only). **Authored state is never
   touched** — remove the binding and the authored look returns.
+- **Actuator sinks** (brief N-1) drive physics the same way: a joint's
+  **motor speed** and **motor cap**, a body's **field strength** and
+  **gravity scale**. `signal::drive_actuators` (one system, allocation-free
+  in the steady state) writes the derived `physics::drive::SignalDrive` on
+  the target; physics prefers it over the authored value
+  (`retune_joints` for motors, `Fields` for strength, a derived
+  `ConstantLinearAcceleration` for gravity scale). An actuator takes the
+  **raw value** in its SI unit — no map, curve or gradient; shape it
+  upstream with a computed block. Unbinding removes the drive and the
+  authored value returns with no command. A drive never enables a disabled
+  motor or adds a motor or field; a driven cap of 0 or less switches the
+  motor off.
 - **The bus** (`SignalBus`) is the wire protocol: every binding publishes
   its value under its name (with a rolling history the plot panel draws;
   recording pauses with the simulation). Scripts publish with
@@ -84,6 +96,7 @@ same regardless of how many points were placed.
 | `SignalBus`, `ScriptSignals` | derived | rebuilt continuously; never persisted; bus hygiene drops entries whose binding/param/computed/script producer is gone |
 | `CompiledSignals` | derived | the compiled kernels behind `ComputedSignals`, rebuilt by `recompile_signals` on change — keeps the *compile* step off the frame loop |
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
+| `SignalDrive` | derived component (`physics::drive`) | written by `drive_actuators` on a joint or body; consumed by `retune_joints`, `Fields`, `drive_gravity_scale`; removed with its last actuator binding; never saved or undone |
 | `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer tool today, sensors/actuators next; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
 
 ## Sensors & actuators are object ports, not tools
@@ -197,8 +210,11 @@ below), not a rearchitecture. What still accretes on the same seams:
   compile through `script::kernel` — the allocation-free tape — not the VM;
   richer expressions reuse that path.
 - **More ports accrete**: writable authored scalars as actuator ports (a
-  derived per-field shadow that respects invariant #5), gizmo tints, emissive,
-  sim parameters — each a new catalog entry in `ui::ports` + a `SignalSink`.
+  derived per-field shadow that respects invariant #5 — `SignalDrive` is the
+  first, brief N-1), gizmo tints, emissive, sim parameters — each a new
+  catalog entry in `ui::ports` + a `SignalSink`. Joints have a minimal block
+  since N-1: sensor outputs, and motor speed / cap inputs on a motorised
+  hinge or slider.
 
 ## Using it today
 
