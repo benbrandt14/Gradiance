@@ -772,6 +772,6 @@ fn pack_status_reads_the_run_and_apply_commits_a_held_one() {
 
     // One body, or a target that names nothing, starts nothing.
     let none = invoke(app.world_mut(), "pack.run", json!({"targets": [0]}));
-    assert!(matches!(none, Ok(_)));
+    assert!(none.is_ok());
     assert!(invoke(app.world_mut(), "pack.run", json!({"targets": [0, 99]})).is_err());
 }
