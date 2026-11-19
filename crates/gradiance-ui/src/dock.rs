@@ -542,6 +542,10 @@ pub fn right_dock(
     // The groups panel's edits are operations; its selection goes through
     // `groups::apply_groups_filters`.
     groups.invoke.write_batch(groups_out.invoke);
+    // The Properties strip's optimizer buttons, through the same writer.
+    groups
+        .invoke
+        .write_batch(properties.optimizer.take_requests());
     if let Some(filter) = groups_out.filter {
         groups.filter.write(filter);
     }

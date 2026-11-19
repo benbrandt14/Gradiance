@@ -53,6 +53,7 @@ pub(crate) fn install(app: &mut App) {
     app.init_resource::<crate::console::ScriptConsole>();
     app.init_resource::<crate::array_panel::ArrayWindow>();
     app.init_resource::<crate::optimizer::OptimizerExpanded>();
+    app.init_resource::<crate::optimizer::OptimizerRequests>();
     app.init_resource::<crate::review::ReviewWindow>();
     app.init_resource::<crate::search::SearchPanel>();
     app.init_resource::<crate::status_bar::StatusBar>();

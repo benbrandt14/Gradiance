@@ -14,9 +14,14 @@ use gradiance::interaction::selection::Selection;
 use gradiance::optimize::{Boundary, LayerRule, PackConfig, RotationMode, SolverKind};
 use gradiance::prelude::*;
 
-/// Spawns a box and returns its id.
+/// Spawns a box and returns its id. Ids rise in spawn order: a run packs in
+/// id order (brief R-4), so a test's packing order is its spawn order, not a
+/// random one (the shelf's result depends on the order).
 fn spawn_box(app: &mut App, pos: Vec2, w: f32, h: f32) -> StableId {
-    let record = box_record(pos, w, h);
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut record = box_record(pos, w, h);
+    record.id = StableId(uuid::Uuid::from_u128(0x7000_0000 + u128::from(n)));
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
     app.update();
@@ -357,6 +362,10 @@ fn depth_aware_packing_beats_flat_packing_on_the_same_bodies() {
         let mut ids = Vec::new();
         for i in 0..6 {
             let mut record = box_record(Vec2::new(i as f32 * 3.0, 0.0), 0.5, 0.5);
+            // Ids in spawn order: a run packs in id order (brief R-4), and
+            // the shelf stacks the two bands when they alternate. Random ids
+            // would give a random item order, so a random result.
+            record.id = StableId(uuid::Uuid::from_u128(0x6000 + i as u128));
             let slab = gradiance::core::constants::LAYER_HEIGHT;
             record.depth = if i % 2 == 0 {
                 DepthBand::metres(0.0, slab)

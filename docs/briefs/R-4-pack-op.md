@@ -57,6 +57,15 @@ Worker, 2026-11-19, branch `claude/project-thread-tw1mvl-r4`.
   strip and the Optimizer window invoke `pack.run` with `["selection"]`,
   `pack.apply` and `pack.cancel` (`InvokeOp`) instead of writing the
   messages. A panel run reaches the session one frame later than before.
+  The panel holds no `InvokeOp` writer of its own (a second writer in the
+  dock and context-menu systems is a B0002 conflict, which CI's
+  `ui_conflicts` caught): its buttons queue into `OptimizerRequests`, and
+  each host (`right_dock`, `context_menu`, `optimizer_window`) writes them
+  with its one writer (`OptimizerPanel::take_requests`).
+- Packing tests: a run packs in id order, and the shelf's result depends on
+  the order, so with random ids `depth_aware_packing_beats_flat_packing…`
+  was flaky. `spawn_box` and that test now give ids that rise in spawn order
+  (what the selection order used to give).
 - Tests (`tests/it/packing.rs`): `a_lisp_pack_and_a_panel_pack_commit_the_same_layout`
   (the "done when": a Lisp `(pack (list 4 2 0 1 3))` and the panel's
   `pack.run` on a reversed selection commit equal poses, one

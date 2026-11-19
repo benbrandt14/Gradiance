@@ -47,10 +47,19 @@ pub struct OptimizerPanel<'w> {
     pub config: ResMut<'w, PackConfig>,
     /// The live run, read-only here.
     pub session: Res<'w, PackSession>,
-    invoke: MessageWriter<'w, InvokeOp>,
+    /// The operations the buttons asked for this frame. The panel holds no
+    /// `InvokeOp` writer of its own: each host already has one, and a second
+    /// in the same system is a parameter conflict (B0002). The host writes
+    /// them with [`OptimizerPanel::take_requests`].
+    requests: ResMut<'w, OptimizerRequests>,
     /// Whether the full rulebook is expanded in the Properties pane.
     pub expanded: ResMut<'w, OptimizerExpanded>,
 }
+
+/// Operations the Optimizer's buttons asked for, waiting for their host to
+/// write them (see [`OptimizerPanel::take_requests`]).
+#[derive(Resource, Default, Debug)]
+pub struct OptimizerRequests(Vec<InvokeOp>);
 
 /// Whether the floating Optimizer window is showing.
 #[derive(Resource, Default, Debug)]
@@ -62,7 +71,7 @@ impl OptimizerPanel<'_> {
     /// Asks for a run over the current selection: `pack.run`, the
     /// operation a script invokes with indices.
     pub fn request_pack(&mut self) {
-        self.invoke.write(InvokeOp::with(
+        self.requests.0.push(InvokeOp::with(
             "pack.run",
             json!({"targets": ["selection"]}),
         ));
@@ -70,12 +79,21 @@ impl OptimizerPanel<'_> {
 
     /// Applies the best layout found so far.
     pub fn apply(&mut self) {
-        self.invoke.write(InvokeOp::new("pack.apply"));
+        self.requests.0.push(InvokeOp::new("pack.apply"));
     }
 
     /// Throws the run away.
     pub fn cancel(&mut self) {
-        self.invoke.write(InvokeOp::new("pack.cancel"));
+        self.requests.0.push(InvokeOp::new("pack.cancel"));
+    }
+
+    /// The operations asked for since the last call, for the host system to
+    /// write with its own `InvokeOp` writer.
+    pub fn take_requests(&mut self) -> Vec<InvokeOp> {
+        if self.requests.0.is_empty() {
+            return Vec::new();
+        }
+        std::mem::take(&mut self.requests.0)
     }
 }
 
@@ -152,6 +170,7 @@ pub fn optimizer_window(
     mut contexts: bevy_egui::EguiContexts,
     selection: Res<Selection>,
     mut opt: OptimizerPanel,
+    mut invoke: MessageWriter<InvokeOp>,
 ) -> Result {
     if !opt.expanded.0 {
         return Ok(());
@@ -172,6 +191,7 @@ pub fn optimizer_window(
     if !open {
         opt.expanded.0 = false;
     }
+    invoke.write_batch(opt.take_requests());
     Ok(())
 }
 
