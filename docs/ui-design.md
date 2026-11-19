@@ -239,6 +239,27 @@ operation reaches them with no edit in `gradiance-ui`:
   tools pie; release over a slice runs it, release back in the centre
   cancels, a tap keeps it open for a click.
 
+### Adjust Last Operation (brief U-11)
+
+A fourth projection of the registry. When one operation call (a menu row,
+F3, a key, a script line, the remote surface, or the array gesture, which
+commits through `body.array`) makes the newest undo step, the panel
+`ui::adjust_panel` shows at the viewport's bottom left, right of the tool
+palette and above the bottom docks: a collapsible title (the operation's
+menu label, else its Lisp name in words) and one row per param, built from
+the params schema (`OpEntry::schema`) and the call's params (`LastOp`).
+Numbers and quantities are `precise_drag` fields (edit seam: one commit per
+gesture, on release; the reset value is the operation's example), counts are
+whole-number fields, booleans checkboxes, fixed-length number lists a row of
+fields; object targets and text show read-only. A commit invokes
+`edit.adjust_last`, which undoes the step and runs the operation again with
+the edited param, against the selection the first call read: still one undo
+step. The panel hides when nothing is adjustable: the newest step came from
+a gesture that is no operation, an undo or redo, a run, a settings edit, a
+load, a batch of several calls, or an operation with no editable param (a
+delete). It is not a View-menu panel: like Blender's, it is there exactly
+while there is something to adjust.
+
 ### Docks preserve layout
 
 `ui::dock_sync::sync_panes` adds and removes individual tiles. It exists

@@ -11,6 +11,7 @@
 
 mod harness;
 
+mod adjust_last;
 mod array_drag;
 mod booleans;
 mod client;

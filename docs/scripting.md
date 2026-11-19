@@ -111,6 +111,11 @@ across and ±3.5 m up and down); angles are radians.
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
 (delete i)                   ; delete the i-th body (id order, as body-x)
 (undo) (redo)                ; walk the command stack — Edit ▸ Undo/Redo as ops
+(last-op)                    ; the operation that made the newest step: {id, params}
+(adjust-last "w" 2.5)        ; set one of its params and run it again in place of
+                             ; its step: still one undo step (field "step.0" for
+                             ; a list element); an error when the newest step is
+                             ; not one operation call's (a gesture, an undo, a run)
 
 ;; edit — relationships between bodies (b < 0 pins to the world)
 (hinge a b x y)              ; revolute joint at world point (x, y) → its handle
@@ -136,6 +141,9 @@ across and ±3.5 m up and down); angles are radians.
 ;; less than radius/2 apart, which a plain merge refuses as disconnected.
 ;; Fillets render as a curve from ~4 contour cells (shape extent / 96 each:
 ;; about 0.1 m on a 2 m body); smaller radii read as a chamfer.
+(array-copies (list i …) n (list dx dy) rows (list cx cy))
+                             ; n copies at (dx, dy) steps, plus rows more rows at
+                             ; (cx, cy): the Ctrl-drag array as one undo step
 (delete-joint i)             ; remove the i-th joint
 
 ;; edit — sets of bodies (one list argument; Ctrl+G / Ctrl+Shift+G as ops)

@@ -147,6 +147,15 @@ pub(crate) fn joint_of(
 /// scenery settings.
 fn fill_context(world: &mut World, ctx: &mut OpContext) {
     ctx.insert(snapshot_scene(world));
+    // The last operation, while the history is still at its step.
+    let revision = world
+        .get_resource::<crate::CommandStack>()
+        .map(crate::CommandStack::revision);
+    let last = world
+        .get_resource::<gradiance_op::LastOp>()
+        .and_then(|last| last.0.clone())
+        .filter(|last| Some(last.step) == revision);
+    ctx.insert(gradiance_op::LastOp(last));
     ctx.insert(gradiance_signal::sample_quantities(world));
     if let Some(settings) = world.get_resource::<SimSettings>() {
         ctx.insert(settings.clone());

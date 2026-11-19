@@ -9,6 +9,7 @@
 use crate::array_cmd::ArrayCommand;
 use crate::cut_cmd::CutCommand;
 use crate::group_cmd::{GroupCommand, NameGroupCommand, RegroupCommand, UngroupCommand};
+use crate::intent::AdjustLastIntent;
 use crate::intent::name;
 use crate::intent::{
     ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
@@ -27,6 +28,7 @@ use crate::transform_cmd::CommitTransformCommand;
 use crate::{CommandStack, GameCommand};
 use bevy::prelude::*;
 use gradiance_core::states::GameState;
+use gradiance_op::{LastOp, LastOpRecord, OpJournal};
 
 fn drain<M: Message + Reflect + bevy::reflect::TypePath>(world: &mut World) -> Vec<M> {
     let drained: Vec<M> = gradiance_core::messages::drain(world);
@@ -108,6 +110,17 @@ command_intents! {
 /// Failed commands log a warning and are not recorded; the intent is
 /// simply consumed.
 pub fn dispatch_intents(world: &mut World) {
+    let revision = world.resource::<CommandStack>().revision();
+    // An adjustment first: its undo and the re-invoked operation's intent
+    // must precede this frame's drain, so the new step lands in this pass.
+    let adjusting = gradiance_core::messages::drain::<AdjustLastIntent>(world)
+        .pop()
+        .and_then(|request| {
+            world.resource_scope(|world, mut stack: Mut<CommandStack>| {
+                begin_adjust(&mut stack, world, request)
+            })
+        });
+
     let mut commands: Vec<Box<dyn GameCommand>> = Vec::new();
     drain_command_intents(world, &mut commands);
 
@@ -133,10 +146,43 @@ pub fn dispatch_intents(world: &mut World) {
         if live_run && undos > 0 {
             stack.push_boundary(world);
         }
-        execute(&mut stack, world, commands, undos, redos);
+        let pushed = execute(&mut stack, world, commands, undos, redos);
         if clear {
-            *stack = CommandStack::default();
+            stack.clear();
             trace!(target: "gradiance_command::command", "history cleared");
+        }
+        let calls = world
+            .get_resource_mut::<OpJournal>()
+            .map_or_default(|mut journal| std::mem::take(&mut journal.0));
+        let last = match (adjusting, pushed) {
+            // The re-invoked operation recorded nothing (its command failed):
+            // put its step back, still adjustable.
+            (Some(record), 0) => {
+                warn!(
+                    id = record.call.id,
+                    "adjust: the operation recorded no step; restored it"
+                );
+                stack.redo(world);
+                Some(LastOpRecord {
+                    step: stack.revision(),
+                    ..record
+                })
+            }
+            // One operation call made the one new step: it is the last
+            // operation. Anything else that moved the history retires it.
+            (_, 1) if undos == 0 && redos == 0 && !clear && calls.len() == 1 => {
+                calls.into_iter().next().map(|call| LastOpRecord {
+                    call,
+                    step: stack.revision(),
+                })
+            }
+            _ if stack.revision() != revision => None,
+            _ => world
+                .get_resource::<LastOp>()
+                .and_then(|last| last.0.clone()),
+        };
+        if let Some(mut slot) = world.get_resource_mut::<LastOp>() {
+            slot.set_if_neq(LastOp(last));
         }
         world.insert_resource(crate::HistoryInfo {
             undo_depth: stack.undo_len(),
@@ -147,20 +193,79 @@ pub fn dispatch_intents(world: &mut World) {
     });
 }
 
-/// Applies the batch through the stack. `CommandStack` logs each applied /
-/// undone / redone command; explicit undo/redo additionally trace their
-/// meta-op (`RUST_LOG=gradiance_command=trace`).
+/// Starts an adjustment (brief U-11): when `request` is for the last
+/// operation and the history is still at its step, undoes the step through
+/// the stack and invokes the operation again with the new params, against
+/// the selection the first call read. Its intent then drains with this
+/// frame's. Returns the record it replaces, or `None` when nothing was done
+/// (a stale or mismatched request, or params that do not lower: the step is
+/// redone and stays as it was).
+fn begin_adjust(
+    stack: &mut CommandStack,
+    world: &mut World,
+    request: AdjustLastIntent,
+) -> Option<LastOpRecord> {
+    let record = world
+        .get_resource::<LastOp>()
+        .and_then(|last| last.0.clone());
+    let Some(record) = record.filter(|r| {
+        r.step == stack.revision() && r.step == request.step && r.call.id == request.id
+    }) else {
+        warn!(
+            id = request.id,
+            "adjust: that is no longer the last operation"
+        );
+        return None;
+    };
+    stack.undo(world)?;
+    match gradiance_op::invoke_as(
+        world,
+        request.id,
+        request.params,
+        record.call.selection.clone(),
+    ) {
+        Ok(_) => Some(record),
+        Err(err) => {
+            warn!(id = request.id, "adjust: {err}");
+            stack.redo(world);
+            if let Some(mut last) = world.get_resource_mut::<LastOp>() {
+                last.0 = Some(LastOpRecord {
+                    step: stack.revision(),
+                    ..record
+                });
+            }
+            None
+        }
+    }
+}
+
+/// Retires the [`LastOp`] once the history has moved past its step by a
+/// path other than the dispatcher (a settled settings edit, a closed
+/// simulation run). Runs in `Last`, before the next frame's panel.
+pub fn expire_last_op(stack: Res<CommandStack>, last: Option<ResMut<LastOp>>) {
+    if let Some(mut last) = last
+        && last.0.as_ref().is_some_and(|r| r.step != stack.revision())
+    {
+        last.0 = None;
+    }
+}
+
+/// Applies the batch through the stack and returns how many commands it
+/// recorded. `CommandStack` logs each applied / undone / redone command;
+/// explicit undo/redo additionally trace their meta-op
+/// (`RUST_LOG=gradiance_command=trace`).
 fn execute(
     stack: &mut CommandStack,
     world: &mut World,
     commands: Vec<Box<dyn GameCommand>>,
     undos: usize,
     redos: usize,
-) {
+) -> usize {
+    let mut pushed = 0;
     for command in commands {
         // push_apply logs the applied/failed command; a failed intent is
         // consumed without corrupting history.
-        let _ = stack.push_apply(command, world);
+        pushed += usize::from(stack.push_apply(command, world).is_ok());
     }
     for _ in 0..undos {
         if let Some(name) = stack.undo(world) {
@@ -172,4 +277,5 @@ fn execute(
             trace!(target: "gradiance_command::command", op = name::REDO, command = name, "reapplied");
         }
     }
+    pushed
 }

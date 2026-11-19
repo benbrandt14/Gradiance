@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 112 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 115 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -16,6 +16,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `body.array` | `(array-copies targets count step rows cross)` | edit | `array` | — | Copy the listed bodies count times at step (x y, metres), plus rows more rows at cross: one undo step, as the Ctrl-drag array gesture. A count of 0 is a no-op; at most 512 per axis. | `{"targets": [0], "count": 2, "step": [1.2, 0], "rows": 0, "cross": [0, 0]}` |
 | `body.count` | `(body-count)` | query | — | — | Number of authored bodies in the committed scene. | `{}` |
 | `body.count_at` | `(count-at x y)` | query | — | — | Number of bodies whose shape contains the world point (x, y). | `{"x": 0, "y": 1}` |
 | `body.cut` | `(cut ax ay bx by width)` | edit | `cut` | — | Sever every body crossed by the stroke a→b of the given width (metres). | `{"ax": -2, "ay": 1, "bx": 2, "by": 1, "width": 0.05}` |
@@ -67,6 +68,8 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `edit.adjust_last` | `(adjust-last field value)` | edit | — | — | Set one param of the last operation (field "w", "step.0") and run it again in place of its undo step: still one step. Errors when the newest step is not an operation's. | `{"field": "r", "value": 0.75}` |
+| `edit.last_op` | `(last-op)` | query | — | — | The operation that made the newest undo step, as {id, params} (what Adjust Last Operation edits); null when there is none. | `{}` |
 | `edit.redo` | `(redo)` | edit | — | Edit/Redo, Ctrl+Shift+Z | Redo the last undone command — the same step Edit ▸ Redo takes. | `{}` |
 | `edit.undo` | `(undo)` | edit | — | Edit/Undo, Ctrl+Z | Undo the last command — the same step Edit ▸ Undo takes. | `{}` |
 

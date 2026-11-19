@@ -1474,5 +1474,113 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "ui::dock::DockBehavior::top_bar_right_ui; ui::workspaces::PanelSwap",
         ),
+        (
+            question: (
+                id: "adjust-record-rule",
+                title: "When is the newest step adjustable?",
+                source: "Brief U-11 Adjust Last Operation (docs/briefs/U-11-adjust-last-operation.md)",
+                description: r#"The brief asks for a LastOp record set when an edit-seam operation commits one undo step and cleared by anything else that touches the history."#,
+                decision: true,
+                options: [
+                    (
+                        label: "One call made the one new step",
+                        caption: r#"Every doorway notes each applied call of an edit operation with an undo label (id, params, the selection its context held) in an OpJournal; the dispatcher makes it the LastOp when exactly one such call and exactly one recorded command happened in that pass. Any other history change (another step, undo, redo, clear, a settings step, a closed run, a load, a batch of several calls, a gesture that is no operation) retires it, through a revision counter on the command stack. A re-invocation reads the recorded selection, so a selection change in between does not retarget it; scripts record none (rule 2)."#,
+                    ),
+                    (
+                        label: "Record per command",
+                        caption: r#"Tag each command with its op. Cost: the command layer would need to know op ids per intent row; batches are ambiguous."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "adjust-record-rule",
+                title: "When is the newest step adjustable?",
+                choice: Picked("One call made the one new step"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "gradiance_op::last_op; command::dispatch::begin_adjust; CommandStack::revision",
+        ),
+        (
+            question: (
+                id: "adjust-tool-gestures",
+                title: "Which tool gestures are adjustable?",
+                source: "Brief U-11 Adjust Last Operation (docs/briefs/U-11-adjust-last-operation.md)",
+                description: r#"Tool gestures commit intents directly, not operations; the brief allows cutting tool-gesture adjust."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The array gesture only",
+                        caption: r#"The Ctrl-drag array commits through a new body.array operation (Lisp array-copies; bodies by id), so it is adjustable (count, step, rows, cross). Drawn bodies, moves, scales, joints and cuts still commit their intent: their records carry tool defaults that no operation takes yet."#,
+                    ),
+                    (
+                        label: "Every gesture",
+                        caption: r#"Route every ToolCommit through an operation. Cost: new operations for draw, move, scale, joints with the tool defaults; larger than this brief."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "adjust-tool-gestures",
+                title: "Which tool gestures are adjustable?",
+                choice: Picked("The array gesture only"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "interaction::tools::context::array_invocation; command::ops::sets::Array",
+        ),
+        (
+            question: (
+                id: "adjust-op-shape",
+                title: "What does the adjust operation take?",
+                source: "Brief U-11 Adjust Last Operation (docs/briefs/U-11-adjust-last-operation.md)",
+                description: r#"Scripts and the remote surface need to drive the adjustment, and the panel needs one commit per gesture."#,
+                decision: true,
+                options: [
+                    (
+                        label: "One field per call",
+                        caption: r#"edit.adjust_last {field, value}: a dotted path into the params (w, step.0) and a number, flag or text; the value takes the field's own JSON kind (a count rounds). Declared undo None (it records no step of its own; it replaces the newest). edit.last_op (Lisp last-op) returns {id, params} or null."#,
+                    ),
+                    (
+                        label: "Whole params",
+                        caption: r#"Take the full params object. Cost: Lisp has no object literal, and the panel edits one field at a time anyway."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "adjust-op-shape",
+                title: "What does the adjust operation take?",
+                choice: Picked("One field per call"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "command::ops::scene::{AdjustLast, LastOpQuery}",
+        ),
+        (
+            question: (
+                id: "adjust-panel-form",
+                title: "Where does the panel sit and what does it show?",
+                source: "Brief U-11 Adjust Last Operation (docs/briefs/U-11-adjust-last-operation.md)",
+                description: r#"The brief asks for a collapsible panel at the viewport's bottom left with fields from the params schema."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Bottom left, not a View-menu panel",
+                        caption: r#"Anchored right of the tool palette and above the bottom docks; a frameless title toggles collapse (editor state). It shows only while the newest step is adjustable and the operation has an editable param, like Blender's, so it gets no View-menu row. Numbers and quantities are precise_drag fields (reset = the operation's example value), counts whole-number fields, flags checkboxes, fixed number lists a row; targets and text read-only. Enum combos are not built: the params schema names no enum's variants yet."#,
+                    ),
+                    (
+                        label: "A View-menu panel",
+                        caption: r#"Register it in Panels::named. Cost: a toggle for something that is empty most of the time."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "adjust-panel-form",
+                title: "Where does the panel sit and what does it show?",
+                choice: Picked("Bottom left, not a View-menu panel"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:30:00Z",
+            ),
+            ingested_as: "ui::adjust_panel",
+        ),
     ],
 )

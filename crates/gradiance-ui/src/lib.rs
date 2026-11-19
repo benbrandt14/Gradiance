@@ -9,6 +9,7 @@
 //! `Changed<>`/`resource_changed` (physics applies `SimSettings`; UI never
 //! touches avian).
 
+pub mod adjust_panel;
 pub mod array_panel;
 pub mod bottom_dock;
 pub mod console;
@@ -260,6 +261,7 @@ impl Plugin for GradianceUiPlugin {
         // The docks' trees (`RightDock`, `BottomDock`) install headless with
         // the workspace operations (`workspaces::install`).
         app.init_resource::<pie::PieMenu>();
+        app.init_resource::<adjust_panel::AdjustPanel>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
@@ -287,6 +289,8 @@ impl Plugin for GradianceUiPlugin {
                     // (brief A-1: it covered the bottom dock's tabs).
                     toolbar::toolbar,
                     probe::probe_panel,
+                    // Bottom left of the viewport, over the scene (U-11).
+                    adjust_panel::adjust_last_panel,
                     context_menu::context_menu,
                     // Over everything else (brief U-9).
                     search::search_window,

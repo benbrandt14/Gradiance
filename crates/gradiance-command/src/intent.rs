@@ -288,6 +288,21 @@ pub struct BooleanIntent {
 #[derive(Message, Debug, Clone, Copy, Default, Reflect)]
 pub struct ClearHistoryIntent;
 
+/// Request to adjust the last operation (brief U-11): undo its step and
+/// invoke it again with `params`, recording one step in its place. Ignored
+/// unless the history is still at `step` and the last operation is `id`.
+/// Written by the `edit.adjust_last` operation only.
+// Trace: dispatch.rs → CommandStack::undo → gradiance_op::invoke_as → the operation's intent → its command.
+#[derive(Message, Debug, Clone)]
+pub struct AdjustLastIntent {
+    /// The operation's id.
+    pub id: &'static str,
+    /// The whole params object, with the adjusted field.
+    pub params: gradiance_op::Value,
+    /// The history revision the adjustment was made against.
+    pub step: u64,
+}
+
 /// Request to undo the last command.
 // Trace: dispatch.rs → CommandStack::undo (mod.rs).
 #[derive(Message, Debug, Clone, Copy, Default, Reflect)]

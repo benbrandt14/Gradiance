@@ -135,6 +135,10 @@ pub struct CommandStack {
     labels: VecDeque<&'static str>,
     /// Index of the current authored state within `states`.
     cursor: usize,
+    /// Counts every change of the history (a step recorded, undone or
+    /// redone, the history cleared). Adjust Last Operation holds the value
+    /// right after its step and is valid while it still matches.
+    revision: u64,
 }
 
 impl CommandStack {
@@ -167,6 +171,7 @@ impl CommandStack {
                 self.states.push_back(SceneRecord::capture(world));
                 self.labels.push_back(command.name());
                 self.cursor += 1;
+                self.revision += 1;
                 self.evict_to_cap();
                 Ok(())
             }
@@ -230,6 +235,7 @@ impl CommandStack {
         self.states.push_back(live);
         self.labels.push_back(label);
         self.cursor += 1;
+        self.revision += 1;
         self.evict_to_cap();
         true
     }
@@ -252,6 +258,7 @@ impl CommandStack {
         // bodies that have settled under simulation keep their live poses.
         self.states[to].restore_diff(&self.states[from], world);
         self.cursor = to;
+        self.revision += 1;
         debug!(name = undone, "command undone");
         Some(undone)
     }
@@ -265,9 +272,26 @@ impl CommandStack {
         let (from, to) = (self.cursor, self.cursor + 1);
         self.states[to].restore_diff(&self.states[from], world);
         self.cursor = to;
+        self.revision += 1;
         let redone = self.labels[to];
         debug!(name = redone, "command redone");
         Some(redone)
+    }
+
+    /// The history's revision: a counter that moves with every recorded,
+    /// undone or redone step and every clear, never backwards.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Empties the history. The revision moves on rather than restarting,
+    /// so a [`LastOp`](gradiance_op::LastOp) taken before it never matches
+    /// again.
+    pub fn clear(&mut self) {
+        *self = Self {
+            revision: self.revision + 1,
+            ..Self::default()
+        };
     }
 
     /// Number of commands available to undo.
@@ -413,6 +437,7 @@ impl Plugin for CommandPlugin {
         app.add_message::<intent::UndoIntent>();
         app.add_message::<intent::RedoIntent>();
         app.add_message::<intent::ClearHistoryIntent>();
+        app.add_message::<intent::AdjustLastIntent>();
         app.register_type::<intent::UndoIntent>();
         app.register_type::<intent::RedoIntent>();
         // Marker components that only appear inside `Option`al record
@@ -435,6 +460,10 @@ impl Plugin for CommandPlugin {
             OnEnter(gradiance_core::states::GameState::Paused),
             close_sim_run,
         );
+        // Adjust Last Operation: a step recorded anywhere but through the
+        // dispatcher (a settings edit, a closed run) retires the last
+        // operation before the panel draws again.
+        app.add_systems(Last, dispatch::expire_last_op);
         // Dev-only observability: trace the per-frame Changed<> sync-match
         // counts (the deferred pipeline's cause→symptom gap; see
         // `docs/architecture.md`). Intents and commands trace from `dispatch`.

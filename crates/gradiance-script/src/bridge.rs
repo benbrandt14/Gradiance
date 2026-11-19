@@ -56,7 +56,16 @@ use steel::steel_vm::register_fn::RegisterFn;
 /// operation's id and output, for [`gradiance_op::apply`]. Shared between the
 /// generated verbs (producers) and the exclusive [`run_scripts`] system
 /// (consumer).
-type OpQueue = Arc<Mutex<Vec<(&'static str, OpOutput)>>>;
+type OpQueue = Arc<Mutex<Vec<QueuedOp>>>;
+
+/// One registry call a script made: the operation (for the journal), its
+/// params when the call records an undo step (Adjust Last Operation, brief
+/// U-11), and its output for [`gradiance_op::apply`].
+struct QueuedOp {
+    entry: OpEntry,
+    params: Option<serde_json::Value>,
+    output: OpOutput,
+}
 
 /// The buffers the steel builtins capture, cloned into each closure. A
 /// producer / consumer split between the builtins and [`run_scripts`]: the
@@ -510,6 +519,7 @@ fn bind_op(engine: &mut Engine, shared: &Shared, entry: OpEntry) {
                 format!("{lisp}: the operation context is unavailable"),
             )
         })?;
+        let journalled = entry.records_step().then(|| params.clone());
         let output = entry.lower(params, &ctx).map_err(failed)?;
         let value = match output.value() {
             // A query's "nothing there" (NaN, which JSON carries as `null`)
@@ -519,7 +529,11 @@ fn bind_op(engine: &mut Engine, shared: &Shared, entry: OpEntry) {
             value => value.map_or(SteelVal::Void, json_to_steel),
         };
         if let Ok(mut queue) = ops.lock() {
-            queue.push((entry.meta.id, output));
+            queue.push(QueuedOp {
+                entry: entry.clone(),
+                params: journalled,
+                output,
+            });
         }
         Ok(value)
     };
@@ -693,7 +707,7 @@ pub fn run_scripts(world: &mut World) {
 
     // Drain the op queue (releasing the engine borrow first), then write each
     // registry operation's output in call order through `gradiance_op::apply`.
-    let ops: Vec<(&'static str, OpOutput)> = world
+    let ops: Vec<QueuedOp> = world
         .get_non_send::<ScriptEngine>()
         .and_then(|engine| {
             engine
@@ -704,8 +718,12 @@ pub fn run_scripts(world: &mut World) {
                 .map(|mut q| std::mem::take(&mut *q))
         })
         .unwrap_or_default();
-    for (id, output) in ops {
-        gradiance_op::apply(world, id, output);
+    for op in ops {
+        gradiance_op::apply(world, op.entry.meta.id, op.output);
+        // A script has no selection mirror (scripting rule 2).
+        if let Some(params) = op.params {
+            gradiance_op::journal(world, &op.entry, params, None);
+        }
     }
 
     // Editor requests land in their tables in the same frame (a remote

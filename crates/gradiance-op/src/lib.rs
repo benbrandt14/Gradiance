@@ -20,6 +20,7 @@
 //! order, for the Lisp positional mapping and for schemas); it does not decode.
 
 mod context;
+mod last_op;
 mod output;
 pub mod reflect_path;
 mod registry;
@@ -28,6 +29,7 @@ pub mod search;
 mod target;
 
 pub use context::{OpContext, OpContextFillers, OpIdSource};
+pub use last_op::{LastOp, LastOpRecord, OpCall, OpJournal, invoke_as, journal, set_param};
 pub use output::{OpOutput, OpTrace, TraceEntry, apply};
 pub use registry::{
     InvokeOp, OpEntry, OpError, OpInvokeSet, OpMeta, OpPlugin, OpRegistry, Operation, Seam, invoke,
