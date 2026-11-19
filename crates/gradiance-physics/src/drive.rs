@@ -30,7 +30,8 @@ use gradiance_domain::Body;
 pub struct SignalDrive {
     /// Motor target speed (rad/s for a hinge, m/s for a slider).
     pub motor_speed: Option<f32>,
-    /// Motor torque or force cap (N·m or N), used as is.
+    /// Motor torque or force cap (N·m or N), used as is; `<= 0` switches
+    /// the motor off.
     pub motor_cap: Option<f32>,
     /// Field strength (m/s²; positive repels).
     pub field_strength: Option<f32>,

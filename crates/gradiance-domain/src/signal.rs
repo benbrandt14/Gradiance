@@ -266,8 +266,8 @@ pub enum SignalSink {
     /// joint's id. Drives only a joint with an authored, enabled motor.
     MotorSpeed(StableId),
     /// A hinge's **torque** or a slider's **force** cap (N·m or N), keyed by
-    /// the joint's id. Used as is (`0` stops the motor pushing), never the
-    /// authored "auto" rule.
+    /// the joint's id. Used as is, never the authored "auto" rule; `0` or
+    /// less switches the motor off while it holds.
     MotorCap(StableId),
     /// A body's **field strength** (m/s², the authored `FieldSource`
     /// convention: positive repels). Drives only a body with a field.

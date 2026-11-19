@@ -293,7 +293,7 @@ pub fn retune_joints(
                 let (_, inertia) = reduced_of([joint.body1, joint.body2], &bodies);
                 let ceiling = drive.motor_cap.map_or_else(
                     || motor_ceiling(m.max_torque.value(), inertia, MOTOR_TORQUE_PER_INERTIA),
-                    |cap| cap.max(0.0),
+                    |cap| cap,
                 );
                 let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
                 let target = drive.motor_speed.unwrap_or_else(|| {
@@ -305,6 +305,12 @@ pub fn retune_joints(
                 });
                 if differs(joint.motor.max_torque, ceiling) {
                     joint.motor.max_torque = ceiling;
+                }
+                // avian reads a non-positive cap as "unlimited", so a driven
+                // cap of zero or less switches the motor off instead.
+                let enabled = m.enabled && drive.motor_cap.is_none_or(|cap| cap > 0.0);
+                if joint.motor.enabled != enabled {
+                    joint.motor.enabled = enabled;
                 }
                 if joint.motor.motor_model != model {
                     joint.motor.motor_model = model;
@@ -318,7 +324,7 @@ pub fn retune_joints(
                 let (mass, _) = reduced_of([joint.body1, joint.body2], &bodies);
                 let ceiling = drive.motor_cap.map_or_else(
                     || motor_ceiling(m.max_force.value(), mass, MOTOR_FORCE_PER_MASS),
-                    |cap| cap.max(0.0),
+                    |cap| cap,
                 );
                 let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
                 let target = drive.motor_speed.unwrap_or_else(|| {
@@ -330,6 +336,12 @@ pub fn retune_joints(
                 });
                 if differs(joint.motor.max_force, ceiling) {
                     joint.motor.max_force = ceiling;
+                }
+                // avian reads a non-positive cap as "unlimited", so a driven
+                // cap of zero or less switches the motor off instead.
+                let enabled = m.enabled && drive.motor_cap.is_none_or(|cap| cap > 0.0);
+                if joint.motor.enabled != enabled {
+                    joint.motor.enabled = enabled;
                 }
                 if joint.motor.motor_model != model {
                     joint.motor.motor_model = model;

@@ -11,6 +11,7 @@
 
 mod harness;
 
+mod actuators;
 mod adjust_last;
 mod array_drag;
 mod booleans;
