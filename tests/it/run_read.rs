@@ -58,12 +58,7 @@ fn temp_dir(tag: &str) -> PathBuf {
 fn pendulum(app: &mut App) {
     op(app, "body.spawn_circle", json!({"x": 1, "y": 2, "r": 0.2})).expect("spawns");
     step(app, 2);
-    op(
-        app,
-        "joint.hinge",
-        json!({"a": 0, "b": -1, "x": 0, "y": 2}),
-    )
-    .expect("hinges");
+    op(app, "joint.hinge", json!({"a": 0, "b": -1, "x": 0, "y": 2})).expect("hinges");
     step(app, 2);
 }
 
@@ -159,7 +154,10 @@ fn a_dump_survives_save_and_load() {
     let saved = op(&mut app, "scene.save", json!({"path": text})).expect("saves");
     assert_eq!(saved, Some(Value::from(text.clone())));
     step(&mut app, 1);
-    assert!(path.exists(), "the file is written the frame it is asked for");
+    assert!(
+        path.exists(),
+        "the file is written the frame it is asked for"
+    );
 
     op(&mut app, "scene.new", json!({})).expect("clears");
     step(&mut app, 2);
@@ -200,10 +198,7 @@ fn stepped_signals_record_and_export_as_csv() {
         .expect("a value");
     let samples = history.as_array().expect("a list");
     assert!(samples.len() >= 30, "stepping records: {}", samples.len());
-    let times: Vec<f64> = samples
-        .iter()
-        .map(|s| s[0].as_f64().expect("t"))
-        .collect();
+    let times: Vec<f64> = samples.iter().map(|s| s[0].as_f64().expect("t")).collect();
     assert!(times.windows(2).all(|w| w[0] <= w[1]), "oldest first");
     // `t` is the clock itself.
     assert!(samples.iter().all(|s| s[0].as_f64() == s[1].as_f64()));

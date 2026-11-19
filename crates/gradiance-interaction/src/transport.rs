@@ -79,7 +79,9 @@ fn fill_clock_mirror(world: &mut World, ctx: &mut OpContext) {
     let playing = world
         .get_resource::<State<GameState>>()
         .is_some_and(|state| *state.get() == GameState::Playing);
-    let steps_left = world.get_resource::<SimStep>().map_or(0, SimStep::remaining);
+    let steps_left = world
+        .get_resource::<SimStep>()
+        .map_or(0, SimStep::remaining);
     ctx.insert(SimClock {
         time,
         playing,

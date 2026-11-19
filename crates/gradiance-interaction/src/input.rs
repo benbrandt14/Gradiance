@@ -243,7 +243,9 @@ pub fn apply_shortcuts(
     if actions.just_pressed(&EditorAction::TogglePause) {
         // The transport's one path: `sim.play` / `sim.pause` write the same
         // request (brief R-1).
-        writers.transport.write(crate::transport::SimTransport::Toggle);
+        writers
+            .transport
+            .write(crate::transport::SimTransport::Toggle);
     }
     if actions.just_pressed(&EditorAction::SelectAll) {
         let all = bodies.iter().collect();

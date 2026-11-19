@@ -390,16 +390,12 @@ impl Operation for SignalHistory {
 
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         let histories = ctx.get::<SignalHistories>()?;
-        let samples: Vec<Value> = histories
-            .0
-            .get(&self.name)
-            .map(|samples| {
-                samples
-                    .iter()
-                    .map(|&(t, v)| json!([f64::from(t), f64::from(v)]))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let samples: Vec<Value> = histories.0.get(&self.name).map_or_default(|samples| {
+            samples
+                .iter()
+                .map(|&(t, v)| json!([f64::from(t), f64::from(v)]))
+                .collect()
+        });
         Ok(OpOutput::none().returning(Value::Array(samples)))
     }
 }
