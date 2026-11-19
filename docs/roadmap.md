@@ -937,9 +937,12 @@ and rulings live in `docs/units-decision.md`; status:
       shows its unit and takes a typed value with one (`25 cm`, `90 deg`,
       `2*pi`; one parser, `gradiance_units::expr`, brief 5-3); a workstation
       preference picks degrees or radians and m / cm / mm
-      (`units.display`). *Not done:* the console and scripts do not read
-      typed units yet (P6, brief 5-4).
-- [ ] **P6** units in the parameter-linking / expression DSL.
+      (`units.display`).
+- [x] **P6** units in the parameter-linking / expression DSL. Scripts
+      write numbers in any unit and convert at the authoring boundary
+      (`q`, `convert`, `unit-of`; the 5-3 parser; brief 5-4). *Not done:*
+      the node graph's block constants are plain number fields with no
+      parser (a UI follow-up); no dimensional type in steel.
 - [ ] *(dedicated path)* arbitrary coordinate frames — `docs/frames-decision.md`,
       door held open by the frame-agnostic catalog + `WorldScale` seam.
 

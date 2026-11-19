@@ -562,5 +562,59 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief U-8 Decisions; gradiance_ui::unit_fields::claim_keys.",
         ),
+        (
+            question: (
+                id: "script-unit-verbs",
+                title: "How does a script write a number in a unit?",
+                source: "brief 5-4 Goal (a quantity literal or constructor that converts to SI); docs/units-decision.md P6",
+                description: r#"Verbs take SI and must keep doing so. A number in another unit can be written with one verb per unit ((cm 25), (deg 90)) or with one verb that takes the unit as text ((q 25 "cm")). The unit table holds min, t, g, in, h and s, which a script already uses as names (min is a Scheme built-in)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "One verb, the unit as text",
+                        caption: r#"Recommended. (q 25 "cm"), plus (convert v from to) and (unit-of u). The unit text is anything a number field reads (km/h, N m, deg/s), through the same parser. Short names are one define each, shown in docs/scripting.md. No new global names that shadow a script's own."#,
+                    ),
+                    (
+                        label: "One verb per unit",
+                        caption: r#"(cm 25) reads shortest, but adds about thirty global names, some of them (min, t, g, in) already in use, and a composed unit such as km/h has no verb."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "script-unit-verbs",
+                title: "How does a script write a number in a unit?",
+                choice: Picked("One verb, the unit as text"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive: it is a naming choice with no scene to look at.",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "Brief 5-4 Decisions; gradiance_command::ops::units (units.si, units.convert, units.of).",
+        ),
+        (
+            question: (
+                id: "script-unit-check",
+                title: "How far does a scripted value carry its dimension?",
+                source: "brief 5-4 Goal (\"carries its dimension far enough to catch a mistake\"; out of scope: a dimensional type checker in steel, changing verb argument units)",
+                description: r#"A steel number has no unit. Catching (spawn-circle 0 0 (q 90 "deg")) would need either a unit-carrying value type in steel or spawn verbs that check a unit, and both are out of scope."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Checked at a conversion",
+                        caption: r#"Recommended. convert refuses two units of different dimensions, and a catalog quantity name stands for its SI unit, so (convert 90 "deg" "height") stops the run with "expected m, got rad". A converted number is plain again."#,
+                    ),
+                    (
+                        label: "A tagged value type in steel",
+                        caption: r#"Catches more, but every verb would have to accept and unwrap the new type: a dimensional type system, which the brief rules out."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "script-unit-check",
+                title: "How far does a scripted value carry its dimension?",
+                choice: Picked("Checked at a conversion"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: go with your best estimates). Not interactive.",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "Brief 5-4 Decisions; gradiance_units::convert::convert_values.",
+        ),
     ],
 )

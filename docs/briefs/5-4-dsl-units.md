@@ -2,7 +2,8 @@
 Phase 5 · units P6 · "units in the parameter-linking / expression DSL …
 Dimensional quantities in parameter-linking menus; adopt an external parse
 crate behind the units API if multi-unit entry is wanted."
-(`docs/units-decision.md` § Phasing 6) · status: ready (after 5-3)
+(`docs/units-decision.md` § Phasing 6) · status: in review (branch
+`claude/project-thread-tw1mvl`, PR #266)
 
 ## Goal
 
@@ -65,4 +66,89 @@ tapes, changing verb argument units, imperial unless free, `docs/state.md`.
 
 ## Outcome
 
-*(worker fills in)*
+Branch `claude/project-thread-tw1mvl` (PR #266), on main 3f211ab.
+
+### Landed
+
+- **`gradiance_units::convert`** (pure, tested): `to_si(value, unit)`,
+  `convert(value, from, to)` / `convert_values` (refuses two units of
+  different dimensions, `ExprError::WrongDimension`), `si_unit(Dimension)`,
+  `si_symbol(unit)` (the SI symbol of what a unit measures; a canonical
+  symbol answers itself so `J` reads `J`, not `N·m`), `known_units()`.
+  Every function calls 5-3's `expr::evaluate`: one parser for fields and
+  scripts.
+- **Three operations** (`crates/gradiance-command/src/ops/units.rs`,
+  `Seam::Query`, pure, no snapshot read): `units.si` `(q 25 "cm")` → 0.25;
+  `units.convert` `(convert 0.25 "m" "cm")` → 25, where a catalog quantity
+  name stands for its SI unit (`(convert 90 "km/h" "speed")` → 25,
+  `(convert 90 "deg" "height")` → error); `units.of` `(unit-of "km/h")` →
+  `"m/s"`, in `quantity-unit`'s symbols. A parser error is
+  `OpError::Invalid` quoting the unit; an unknown unit lists the table.
+  `docs/ops.md` regenerated.
+- **Dimension query:** `(quantity-unit name)` already landed in 5-2; `unit-of`
+  is its counterpart for a unit, and the two compare equal for every
+  catalog row (test).
+- **Docs:** `docs/scripting.md` verb reference lines and a `## Units`
+  section with a mixed-unit scene and its SI twin (both run by
+  `script_examples`); `units-decision.md` P6 and the architecture sketch;
+  `roadmap.md` P6 ticked with its "not done".
+
+### Decisions (archive, `decision: true`)
+
+- `script-unit-verbs`: one verb with the unit as text (`q`), not one verb
+  per unit. The unit table holds `min`, `t`, `g`, `in`, `h`, `s`, which
+  scripts already use as names (`min` is a Scheme built-in), and a
+  composed unit (`km/h`) would have no verb. Short names are one `define`
+  each; the docs show `(define (cm x) (q x "cm"))`.
+- `script-unit-check`: the dimension is checked at a conversion, not
+  carried by a steel value. A converted number is plain again, so
+  `(spawn-circle 0 0 (q 90 "deg"))` is not caught (documented). A tagged
+  value type would be the dimensional type system the brief rules out.
+- **Units do not touch the kernel.** They convert at the authoring
+  boundary; `gradiance-kernel` and `SignalExpr` are unchanged.
+- **No external crate, no lockfile change.** Ruling 1's trigger
+  ("multi-unit entry needs it") did not fire: the 5-3 parser reads every
+  unit the verbs need.
+
+### Measured
+
+- Node-graph "parameter-linking" fields: the block constants (gain `k`,
+  oscillator `amp`/`freq`, constant `value`) and the bindings' `[in_min,
+  in_max]` are plain `egui::DragValue`s (`crates/gradiance-ui/src/node_graph.rs`
+  ≈L1339–1397, `signals.rs` ≈L293) with no parser, and `SignalExpr` is
+  built from blocks, not typed text. There is no expression field for a
+  unit literal to go into, so step 3 is a follow-up (below).
+- `gradiance-units`: every unit in the table converts to SI equal to the
+  field parser reading `"{value} {unit}"` and converts back (round trip);
+  mismatch and bad-unit errors; `si_symbol` for every `Dimension`.
+- `tests/it/script_units.rs`: the operations agree with `evaluate` and
+  round-trip through `unit-of`; a script spawns from `q`/`convert`
+  values; `q` with `furlong`, `convert` deg→height and m→s, and a malformed
+  unit each fail the run with the reason in the console log and spawn
+  nothing; the docs' mixed-unit scene spawns the same four bodies (bounds,
+  position, rotation to 1e-5) as its SI twin.
+
+### Not checked
+
+- The full `cargo test --workspace` (CI runs it).
+- The verbs in the running app's console (headless script path only).
+
+### For later
+
+- Number fields for the node graph's block constants and binding ranges
+  through `ui::unit_fields::drag_value`, with a dimension per port
+  (plain-number maths at least; unit literals where the port has a
+  dimension).
+- A unit-carrying value in steel, or spawn verbs that accept a unit, if a
+  stronger check is ever wanted (out of scope here).
+
+### Checked locally
+
+`cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --
+-D warnings`; `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+--lib`; `cargo test --test boundaries`; `cargo test -p gradiance-units`,
+`-p gradiance-script`, `-p gradiance-scene --lib review` (the archive
+parses); `cargo test --test it` filtered to `script_units::`,
+`script_examples::`, `scripting::`, `op_conformance::`,
+`registry_validation::`, `quantities::`, `remote::`, `client::`. All
+green. rustc 1.100.0 (the pin). `Cargo.lock` unchanged.

@@ -185,6 +185,7 @@ gradiance-units  (NEW — bottom node, no gradiance deps, minimal bevy)
   ├─ dimension.rs  Dimension enum → canonical unit + formatter/parser
   ├─ expr.rs       the one typed-value parser (`25 cm`, `2*pi`) — 5-3
   ├─ display.rs    UnitPrefs (deg/rad, m/cm/mm) → DisplayUnit format/parse — 5-3
+  ├─ convert.rs    script conversions (q, convert, unit-of) over expr — 5-4
   ├─ mass.rs       mass_of(Density, Area) — the ONE density×geometry seam
   └─ world.rs      PIXELS_PER_METER + SI⇄px conversions (the one scale seam)
 
@@ -335,9 +336,24 @@ extension, not a rewrite:
    sensor readouts and the plot follow it. The joint limits and an angle
    sensor now read in the same unit. Hand-written; no external crate was
    needed (ruling 1 still allows one behind this API for P6).
-6. **P6 — units in the expression DSL.** Dimensional quantities in
-   parameter-linking menus; adopt an external parse crate behind the units
-   API if multi-unit entry is wanted.
+6. **P6 — units in the expression DSL** (script slice landed, brief 5-4).
+   Three pure query operations (`gradiance-command/src/ops/units.rs`) over
+   `gradiance_units::convert`, which calls the 5-3 parser: `(q 25 "cm")`
+   → 0.25 (a number in a unit, in SI), `(convert 0.25 "m" "cm")` → 25
+   (between units of one dimension; a catalog quantity name stands for its
+   SI unit, so `(convert 90 "deg" "height")` is an error), and
+   `(unit-of "km/h")` → `"m/s"` (what a unit measures, in
+   `quantity-unit`'s symbols). Verbs keep taking SI; units convert at the
+   authoring boundary and never reach `gradiance-kernel`. A converted
+   number is plain again: there is no dimensional type in steel.
+   No external crate: the hand-written parser already reads every unit the
+   tool needs (ruling 1's trigger, "multi-unit entry needs it", did not
+   fire). *Not done:* the node graph's block constants (gain `k`,
+   oscillator `amp`/`freq`, constant `value`) and the bindings' input
+   ranges are plain `egui::DragValue`s with no parser, and `SignalExpr` is
+   built from blocks, not typed text, so there is no expression field for
+   a unit literal to go into. Giving those fields `unit_fields::drag_value`
+   with a dimension per port is a UI follow-up.
 - **(dedicated later) coordinate frames** — `docs/frames-decision.md`;
   door held open by the frame-agnostic catalog + `WorldScale` seam.
 

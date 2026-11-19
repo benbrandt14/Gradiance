@@ -9,8 +9,9 @@
 //! one existing body, [`sets`] edits several at once (booleans, groups),
 //! [`joint`] makes and removes relationships, [`scene`] holds the history,
 //! the new scene, a count and the settings write, [`look`] the scene look
-//! and its settings writes, [`query`] the read-only queries, and
-//! [`quantity`] the quantity catalog's reads.
+//! and its settings writes, [`query`] the read-only queries,
+//! [`quantity`] the quantity catalog's reads, and [`units`] the unit
+//! conversions a script writes its numbers with.
 //!
 //! # Targets and the selection
 //!
@@ -31,6 +32,7 @@ pub mod query;
 pub mod scene;
 pub mod sets;
 pub mod spawn;
+pub mod units;
 
 use crate::CommandDispatchSet;
 use crate::snapshot::{BodySnapshot, SceneSnapshot, snapshot_scene};
@@ -180,6 +182,7 @@ impl Plugin for SceneOpsPlugin {
             look::register(&mut registry);
             query::register(&mut registry);
             quantity::register(&mut registry);
+            units::register(&mut registry);
         }
         app.world_mut()
             .resource_mut::<OpContextFillers>()

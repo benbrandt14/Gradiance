@@ -29,6 +29,8 @@
 //! `2*pi`): number fields read through [`DisplayUnit::parse`], which fits
 //! the result to the field's dimension and display unit ([`UnitPrefs`]).
 //! [`step`] is the Ctrl-snap increment those fields use (brief U-8).
+//! [`convert`] is the same parser for scripts (brief 5-4): a number in a
+//! unit, in SI, and conversions that check the two units' dimensions.
 //!
 //! # 2D density
 //!
@@ -36,6 +38,7 @@
 //! place, [`mass_of`]. A future 3D jump is that one function plus one
 //! [`dimension`] line — see `docs/units-decision.md`.
 
+pub mod convert;
 pub mod dimension;
 pub mod display;
 pub mod expr;

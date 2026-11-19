@@ -222,6 +222,17 @@ across and ±3.5 m up and down); angles are radians.
 ;; plot show (one table: crates/gradiance-domain/src/quantity.rs), read once
 ;; before the run like every other query.
 
+;; units — numbers in the units you think in, converted to SI (brief 5-4)
+(q 25 "cm")                  ; 0.25 -- a number in a unit, in SI
+(q 90 "deg")                 ; 1.5708 (pi/2); units: m km cm mm um in ft kg g mg t
+                             ; s ms min h rad mrad deg rev turn N mN kN MN J mJ kJ
+                             ; Hz kHz rpm, and anything they compose: "km/h" "N m"
+(convert 0.25 "m" "cm")      ; 25 -- between two units of one dimension
+(convert 90 "km/h" "speed")  ; 25 -- a quantity name stands for its SI unit
+(unit-of "km/h")             ; "m/s" -- what a unit measures, as quantity-unit says
+;; an unknown unit, or a conversion between dimensions (convert 90 "deg" "m"),
+;; is a script error. See "Units" below.
+
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
 (register-tool name n src)   ; add a palette tool: n clicks, then src runs once
@@ -386,6 +397,47 @@ the `WindowEvent` around each), and a move sets the window's cursor, so
 egui and the tools both see real input; the OS pointer follows. Keys arrive
 without window focus. Headless, keys and buttons still reach `ButtonInput`
 (there is no cursor and no egui).
+
+## Units
+
+Every verb takes and returns SI: metres, radians, kilograms, seconds. A
+number written in another unit goes through `q` first, which converts it
+with the same parser a typed number field uses (`25 cm`, `90 deg`, `km/h`),
+so a field and a script read units the same way. Short names are one
+`define` each; the verbs do not add them, because `min`, `t`, `in` and `g`
+are already names a script uses.
+
+A ramp, a ball and a crate, in the units a drawing would give:
+
+```scheme
+;; units: mixed
+(define (cm x) (q x "cm"))
+(define (deg x) (q x "deg"))
+(spawn-ground 0 (cm -250) 0)
+(spawn-box-rot (cm -150) (cm -150) (cm 300) (cm 20) (deg 15))
+(spawn-circle (cm -250) (cm 50) (q 120 "mm"))
+(spawn-box (q 3 "ft") (cm -200) (cm 40) (cm 40))
+```
+
+The same scene in SI (a test checks that the two spawn the same bodies):
+
+```scheme
+;; units: SI
+(spawn-ground 0 -2.5 0)
+(spawn-box-rot -1.5 -1.5 3 0.2 0.2617993878)
+(spawn-circle -2.5 0.5 0.12)
+(spawn-box 0.9144 -2 0.4 0.4)
+```
+
+A converted value is a plain number again, so `(spawn-circle 0 0 (q 90
+"deg"))` is not caught. To check what a value is meant to be, convert it
+*to a quantity*: `(convert 90 "km/h" "speed")` is 25, while
+`(convert 90 "deg" "height")` stops the run with `expected m, got rad`.
+`(unit-of u)` reports what a unit measures in the symbols `quantity-unit`
+uses, so `(equal? (unit-of "km/h") (quantity-unit "speed"))` is `#t`.
+
+Units stop at the authoring boundary: the signal kernel and the node
+graph's block constants stay plain numbers (`docs/units-decision.md` § P6).
 
 ## Examples
 

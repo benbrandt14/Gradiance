@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 87 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 90 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -184,8 +184,11 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `units.convert` | `(convert value from to)` | query | — | — | A number from one unit to another of the same dimension: (convert 0.25 "m" "cm") is 25. A quantity name stands for its SI unit, so (convert 90 "km/h" "speed") is 25 and (convert 90 "deg" "height") is an error. | `{"value": 0.25, "from": "m", "to": "cm"}` |
 | `units.display` | `(display-units angle length)` | config | — | — | Show angles in deg or rad and lengths in m, cm or mm in every field (display only; workstation config, never undone). | `{"angle": "rad", "length": "cm"}` |
+| `units.of` | `(unit-of unit)` | query | — | — | The SI unit symbol of what a unit measures, as quantity-unit reports it: (unit-of "km/h") is "m/s" ("" for a plain number). | `{"unit": "km/h"}` |
 | `units.shown` | `(units-shown)` | query | — | — | The units the fields show, as (angle length), e.g. ("deg" "m"). | `{}` |
+| `units.si` | `(q value unit)` | query | — | — | A number in a unit, in SI: (q 25 "cm") is 0.25, (q 90 "deg") is pi/2. A unit the parser does not read is an error. | `{"value": 25, "unit": "cm"}` |
 
 ## `workspace`
 
