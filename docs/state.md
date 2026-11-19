@@ -12,7 +12,7 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** the screenshot audit of tools, motors, selection, slicing and
+- **Now:** **A-3** second screenshot audit (brief `docs/briefs/A-3-second-audit.md`).
   multi-body joints (owner request 2026-11-18).
   **U-11** Adjust Last Operation is done (#276, stacked on U-10: `LastOp`
   from an operation journal, `edit.adjust_last` / `edit.last_op`,
