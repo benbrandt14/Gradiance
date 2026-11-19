@@ -4115,6 +4115,7 @@ dependencies = [
  "gradiance-persist",
  "gradiance-physics",
  "gradiance-scene",
+ "gradiance-signal",
  "gradiance-units",
  "leafwing-input-manager",
  "serde",

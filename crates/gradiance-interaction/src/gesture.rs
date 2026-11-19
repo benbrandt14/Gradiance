@@ -118,7 +118,7 @@ pub fn grid_basis(grid: &GridSettings) -> [Vec2; 2] {
 
 /// Reads modifier keys (and the grid's frame) into [`GestureConstraints`].
 pub fn update_gesture_constraints(
-    keys: Res<ButtonInput<KeyCode>>,
+    keys: crate::graph_keys::EditorKeys,
     grid: Res<GridSettings>,
     mut constraints: ResMut<GestureConstraints>,
 ) {

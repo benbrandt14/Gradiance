@@ -364,7 +364,7 @@ pub fn step_pack(mut session: ResMut<PackSession>, config: Res<PackConfig>) {
 /// `Escape`, and emits the single transform command.
 pub fn finish_pack(
     mut controls: MessageReader<PackControl>,
-    keys: Res<ButtonInput<KeyCode>>,
+    keys: crate::graph_keys::EditorKeys,
     keyboard_captured: Res<crate::KeyboardCaptured>,
     config: Res<PackConfig>,
     mut session: ResMut<PackSession>,
