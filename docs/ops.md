@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 127 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 133 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -123,6 +123,17 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 |---|---|---|---|---|---|---|
 | `look.apply` | `(look-apply name)` | config | `settings` | — | Apply a scene look by name (studio, blueprint, poster): palette tone, overlay ink, render, lighting and scenery presets — one undo step. | `{"name": "blueprint"}` |
 | `look.list` | `(looks)` | query | — | — | Every scene look's name, in menu order (the first is the default). | `{}` |
+
+## `pack`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `pack.apply` | `(pack-apply)` | editor | — | — | Apply the packing run's best layout now and end it (the Optimizer's Apply): that is pack's commit-transform step; nothing when no run is loaded. | `{}` |
+| `pack.cancel` | `(pack-cancel)` | editor | — | — | End the packing run and leave every body where it was (the Optimizer's Cancel, Escape). No undo step. | `{}` |
+| `pack.get` | `(pack-get path)` | query | — | — | Read a number of the packing rulebook by reflect-path ("clearance", "max_iterations", "weights.extent", …); NaN if the path does not resolve to a number. | `{"path": "clearance"}` |
+| `pack.run` | `(pack targets)` | edit | `commit-transform` | — | Start the layout solver on the listed bodies (id order; the Optimizer's rulebook, pack-set) and commit their new poses as one commit-transform step when it finishes (at pack-apply when auto_apply is off). Returns at once; read pack-status. Fewer than two distinct bodies is a no-op. | `{"targets": [0, 1, 2]}` |
+| `pack.set` | `(pack-set path value)` | config | — | — | Set a number or switch (0/1) of the packing rulebook by reflect-path, as the Optimizer window does (workstation config, never saved or undone). | `{"path": "clearance", "value": 0.05}` |
+| `pack.status` | `(pack-status)` | query | — | — | The packing run as an object: state (idle, running, finished, applied, cancelled) and, past idle, the solver, status, bodies, iterations, progress, shrinkage and the start and best scores (extent, fill, overlap, violations, min_gap, bounds). | `{}` |
 
 ## `panel`
 

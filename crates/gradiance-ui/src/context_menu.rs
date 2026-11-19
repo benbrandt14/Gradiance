@@ -819,6 +819,8 @@ pub fn context_menu(
         })
         .response;
     menu.fillet_radius.0 = fillet_radius;
+    // The optimizer entry's buttons, through the menu's one writer.
+    writers.invoke.write_batch(panels.optimizer.take_requests());
 
     if close || response.clicked_elsewhere() {
         menu.open = false;

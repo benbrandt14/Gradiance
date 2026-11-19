@@ -469,6 +469,35 @@ pointer stay the field's (copy and paste its value), and a focused text
 field takes every key. The clipboard is egui's; where no system clipboard
 can be reached, a paste reads the app's last copy.
 
+### Packing (brief R-4)
+
+The layout optimizer (`docs/optimize-decision.md`) is reachable as
+operations. `pack.run` starts a run on the listed bodies and returns at
+once; the run iterates over the next frames, draws its ghost, and commits
+the new poses as **one** `commit-transform` step when it finishes, exactly
+as the Optimizer panel's runs do. The panel and the context menu invoke the
+same `pack.run` with the selection, so a script run and a panel run over
+the same bodies and the same rulebook commit the same layout: a run packs
+its bodies in id order, whatever order they were listed or clicked in.
+
+```scheme
+(pack-set "clearance" 0.05)  ; the Optimizer window's rulebook (workstation config)
+(pack (list 0 1 2))          ; arrange bodies 0, 1 and 2; one undo step when done
+;; a later run:
+(pack-status)                ; {"state":"applied","shrinkage":0.6,…} as JSON text
+```
+
+| Verb | Id | Seam | What it does |
+|---|---|---|---|
+| `(pack targets)` | `pack.run` | edit | Starts the solver on the listed bodies (fewer than two: a no-op; a target that names nothing: an error). One `commit-transform` step when the run finishes, or at `pack-apply` when `auto_apply` is off. Ground planes are left out. |
+| `(pack-status)` | `pack.status` | query | `state` (`idle`, `running`, `finished` = held for `pack-apply`, `applied`, `cancelled`) and, past idle, the report: solver, status, bodies, iterations, progress, shrinkage, the start and best scores. The last run's report stays until the next start. |
+| `(pack-apply)` | `pack.apply` | editor | Commits the best layout so far and ends the run (the panel's Apply). |
+| `(pack-cancel)` | `pack.cancel` | editor | Ends the run and moves nothing (the panel's Cancel, Escape). |
+| `(pack-get path)` / `(pack-set path v)` | `pack.get` / `pack.set` | query / config | A number or switch (0/1) of `PackConfig` by reflect-path: `clearance`, `max_iterations`, `iterations_per_frame`, `auto_apply`, `keep_groups`, `weights.extent`, … Workstation config: never saved, never undone. The solver, objective and the other choice fields are set in the Optimizer window. |
+
+Inside one script run, `(pack …)` then `(pack-status)` reads the old state
+(rule 3); poll `pack.status` from a later call, as for `sim-time`.
+
 ### The window: inspect and screenshot (brief U-3)
 
 ```scheme

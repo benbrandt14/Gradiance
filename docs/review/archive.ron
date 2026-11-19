@@ -1995,5 +1995,113 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "command::insert_cmd::InsertCommand, persist::ops::insert_output",
         ),
+        (
+            question: (
+                id: "pack-target-order",
+                title: "In what order does a pack take its bodies?",
+                source: "Brief R-4 packing as an operation (docs/briefs/R-4-pack-op.md)",
+                description: r#"The panel used to pack the selection in selection (click) order; a script names indices in any order. Item order can change a solver's result, so the same bodies could pack differently from two doorways."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Id order, always",
+                        caption: r#"start_pack sorts the request's ids (and drops repeats) before it builds the problem, so the panel, a script and a remote client give one layout for one set of bodies and one rulebook."#,
+                    ),
+                    (
+                        label: "The caller's order",
+                        caption: r#"Keeps the old panel behaviour. Cost: a script cannot reproduce a panel run unless it lists the bodies in the order they were clicked."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pack-target-order",
+                title: "In what order does a pack take its bodies?",
+                choice: Picked("Id order, always"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "interaction::pack::start_pack",
+        ),
+        (
+            question: (
+                id: "pack-op-seams",
+                title: "How do the packing operations declare their seam and undo step?",
+                source: "Brief R-4 packing as an operation (docs/briefs/R-4-pack-op.md)",
+                description: r#"A run commits its step frames after pack.run returns (when it finishes, or at pack.apply when auto_apply is off), as scene.load's step lands after its request."#,
+                decision: true,
+                options: [
+                    (
+                        label: "pack.run: edit, commit-transform; the rest editor/config/query",
+                        caption: r#"pack.run declares the one commit-transform step a run records (the default rulebook finishes and applies within frames). pack.apply and pack.cancel are editor state with no step of their own: apply commits pack.run's step, cancel records none. pack.set is workstation config (PackConfig is never saved or undone); pack.get and pack.status are queries."#,
+                    ),
+                    (
+                        label: "Every packing operation editor state",
+                        caption: r#"Honest about the delay, but the catalog would then show no step for an operation that does record one."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pack-op-seams",
+                title: "How do the packing operations declare their seam and undo step?",
+                choice: Picked("pack.run: edit, commit-transform; the rest editor/config/query"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "interaction::pack_ops",
+        ),
+        (
+            question: (
+                id: "pack-status-shape",
+                title: "What does pack.status return after a run has ended?",
+                source: "Brief R-4 packing as an operation (docs/briefs/R-4-pack-op.md)",
+                description: r#"The session is cleared when a run applies or cancels, so a client polling after an auto-apply would read nothing."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A state plus the last run's report",
+                        caption: r#"state is idle, running, finished (held for pack.apply), applied or cancelled; past idle it carries the solver, status, bodies, iterations, progress, shrinkage and the start and best scores. The last outcome is kept until the next start. In Lisp the object arrives as JSON text, as other object values do."#,
+                    ),
+                    (
+                        label: "Only the live run",
+                        caption: r#"Simpler, but a script cannot read the result of a run that auto-applied."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pack-status-shape",
+                title: "What does pack.status return after a run has ended?",
+                choice: Picked("A state plus the last run's report"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "interaction::pack::PackOutcome, interaction::pack_ops::status_value",
+        ),
+        (
+            question: (
+                id: "doc-example-outputs",
+                title: "Where do the scripting doc examples write files when the test runs them?",
+                source: "Brief R-4 packing as an operation (docs/briefs/R-4-pack-op.md)",
+                description: r#"R-1's example (save-scene "swing.ron") and (signal-export "swing.csv" ...) ran with the repository as working directory, so every test run rewrote two tracked files at the root."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A scratch directory, redirected by the test",
+                        caption: r#"script_examples rewrites the path argument of save-scene and signal-export into a per-process temp directory, removes it afterwards, and a unit test pins the rewrite; the doc keeps its readable relative paths. swing.ron and swing.csv are removed from git."#,
+                    ),
+                    (
+                        label: "Change the doc to absolute temp paths",
+                        caption: r#"No test logic, but the user-facing example would show a machine-specific path."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "doc-example-outputs",
+                title: "Where do the scripting doc examples write files when the test runs them?",
+                choice: Picked("A scratch directory, redirected by the test"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:00:00Z",
+            ),
+            ingested_as: "tests/it/script_examples.rs",
+        ),
     ],
 )

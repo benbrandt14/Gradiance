@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-19 (R-3 handoff; before that R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-19 (R-4 handoff, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,12 +12,20 @@ Last updated: 2026-11-19 (R-3 handoff; before that R-2, R-1; before that, the ph
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **R-3** insert + clipboard is done (in review; branch
-  `claude/project-thread-tw1mvl-r3`): `scene.insert` (File ▸ Insert…),
+- **Now:** **R-4** packing as an operation is done (in review; branch
+  `claude/project-thread-tw1mvl-r4`): `pack.run` (`(pack targets)`; the
+  Optimizer panel invokes the same operation with the selection),
+  `pack.status`, `pack.apply`, `pack.cancel`, `pack.get`, `pack.set`; a run
+  packs in id order, so a script run and a panel run commit one layout
+  (test); R-1's stray root `swing.ron` / `swing.csv` removed and the doc
+  example test writes into a temp directory; four decisions in
+  `archive.ron`. **Phase R is complete. Next: the orchestrator plans the
+  next stage, N-1..N-9** (nonlinear dynamics & multibody play).
+  **R-3** insert + clipboard is done (#280): `scene.insert` (File ▸ Insert…),
   `edit.copy` / `edit.paste` (Ctrl+C / Ctrl+V on the canvas, Edit ▸
   Copy / Paste) over scene RON text, one `insert` undo step each, fresh
   ids for everything, nested groups and their names kept; four decisions
-  in `archive.ron`. **Next: R-4** (packing as an operation).
+  in `archive.ron`.
   **R-2** headless rollout is done (`gradiance run scene.ron [--script
   s.scm]… --steps N [--csv out.csv] [--signals a,b]`, no window, the same
   CSV byte for byte on a re-run). **R-1** run & read surface is done (#278 merged): nine
@@ -81,7 +89,7 @@ Last updated: 2026-11-19 (R-3 handoff; before that R-2, R-1; before that, the ph
      click resets every number field (done, #268), **4b-5** toon bands on the bodies
      (done, #270; both from owner notes, 2026-11-19), then **5-5** (done,
      #271; `docs/frames-decision.md`, `docs/curvilinear-tools-decision.md`).
-  9b. **R-1** (done, #278), **R-2** (done), **R-3** (done, in review), **R-4** run & read surface (owner-ranked 2026-11-19; roadmap
+  9b. **R-1** (done, #278), **R-2** (done), **R-3** (done, #280), **R-4** (done, in review) run & read surface (owner-ranked 2026-11-19; roadmap
       § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
