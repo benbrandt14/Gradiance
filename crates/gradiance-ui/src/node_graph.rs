@@ -1737,14 +1737,18 @@ mod tests {
         changed
     }
 
-    fn key_down(key: egui::Key) -> egui::Event {
-        egui::Event::Key {
-            key,
-            physical_key: None,
-            pressed: true,
-            repeat: false,
-            modifiers: egui::Modifiers::default(),
-        }
+    /// A key going down and, in the same pass, up again (egui reads a key
+    /// still down from an earlier pass as a repeat).
+    fn key_down(key: egui::Key) -> Vec<egui::Event> {
+        [true, false]
+            .map(|pressed| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: egui::Modifiers::default(),
+            })
+            .to_vec()
     }
 
     #[test]
@@ -1752,12 +1756,12 @@ mod tests {
         let ctx = egui::Context::default();
         let listening = egui::Id::new(("graph-key-capture", "in-1", "+"));
         let mut key = "E".to_owned();
-        assert!(!capture_pass(&ctx, &mut key, vec![key_down(egui::Key::W)]));
+        assert!(!capture_pass(&ctx, &mut key, key_down(egui::Key::W)));
         assert_eq!(key, "E", "not listening: a key is the editor's");
         assert!(!crate::unit_fields::take_key_claim(&ctx));
 
         ctx.data_mut(|d| d.insert_temp(listening, true));
-        assert!(capture_pass(&ctx, &mut key, vec![key_down(egui::Key::W)]));
+        assert!(capture_pass(&ctx, &mut key, key_down(egui::Key::W)));
         assert_eq!(key, "W", "the pressed key is bound");
         assert!(
             crate::unit_fields::take_key_claim(&ctx),
@@ -1766,11 +1770,7 @@ mod tests {
         assert_eq!(ctx.data(|d| d.get_temp::<bool>(listening)), None);
 
         ctx.data_mut(|d| d.insert_temp(listening, true));
-        assert!(!capture_pass(
-            &ctx,
-            &mut key,
-            vec![key_down(egui::Key::Escape)]
-        ));
+        assert!(!capture_pass(&ctx, &mut key, key_down(egui::Key::Escape)));
         assert_eq!(key, "W", "Escape cancels");
         assert_eq!(ctx.data(|d| d.get_temp::<bool>(listening)), None);
     }
