@@ -131,13 +131,14 @@ impl fmt::Display for RunError {
         match self {
             Self::Usage(why) => write!(f, "{why}"),
             Self::Scene(why) => write!(f, "scene: {why}"),
-            Self::Script { path, message } => write!(f, "{}: {message}", path.display()),
+            Self::Script { path, message } | Self::Write { path, message } => {
+                write!(f, "{}: {message}", path.display())
+            }
             Self::Step(why) => write!(f, "sim.step: {why}"),
             Self::Stalled { remaining } => {
                 write!(f, "the simulation stopped with {remaining} steps owed")
             }
             Self::Signals(why) => write!(f, "signals: {why}"),
-            Self::Write { path, message } => write!(f, "{}: {message}", path.display()),
         }
     }
 }
@@ -404,21 +405,20 @@ fn signals_csv_of(app: &mut App, names: Option<&[String]>) -> Result<String, Run
     let histories = ctx
         .get::<SignalHistories>()
         .map_err(|e| RunError::Signals(e.to_string()))?;
-    let names: Vec<String> = match names {
-        Some(names) => names.to_vec(),
-        None => {
-            let bus = app.world().resource::<SignalBus>();
-            let mut all: Vec<String> = bus
-                .entries()
-                .map(|(name, _)| name)
-                .filter(|name| *name != TIME_INPUT)
-                .map(str::to_owned)
-                .collect();
-            if all.is_empty() {
-                all.push(TIME_INPUT.to_owned());
-            }
-            all
+    let names: Vec<String> = if let Some(names) = names {
+        names.to_vec()
+    } else {
+        let bus = app.world().resource::<SignalBus>();
+        let mut all: Vec<String> = bus
+            .entries()
+            .map(|(name, _)| name)
+            .filter(|name| *name != TIME_INPUT)
+            .map(str::to_owned)
+            .collect();
+        if all.is_empty() {
+            all.push(TIME_INPUT.to_owned());
         }
+        all
     };
     signals_csv(histories, &names).map_err(|e| RunError::Signals(e.to_string()))
 }

@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-19 (R-1 handoff; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-19 (R-2 handoff; before that R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,12 +12,13 @@ Last updated: 2026-11-19 (R-1 handoff; before that, the phase gate after the sta
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **R-1** run & read surface is done (in review; branch
-  `claude/project-thread-tw1mvl-r1`): `sim.play`, `sim.pause`, `sim.step`,
-  `sim.time`, `scene.dump`, `scene.save`, `scene.load`, `signal.history`,
-  `signal.export`; File ▸ Open/Save, Ctrl+O/Ctrl+S, Space and the transport
-  button go through them; four decisions in `archive.ron`. **Next: R-2**
-  (the headless `gradiance run`).
+- **Now:** **R-2** headless rollout is done (in review; branch
+  `claude/project-thread-tw1mvl-r2`): `gradiance run scene.ron [--script
+  s.scm]… --steps N [--csv out.csv] [--signals a,b]`, no window, the same
+  CSV byte for byte on a re-run; `gradiance::run` also builds the test
+  harness's app; four decisions in `archive.ron`. **Next: R-3** (insert +
+  clipboard). **R-1** run & read surface is done (#278 merged): nine
+  `sim.*`/`scene.*`/`signal.*` operations.
   **A-3** second screenshot audit is done (#277: six fixes with tests:
   cuts through jointed pairs, Ctrl chords over a hovered field,
   click-through after any tool commit, the tracer on UI clicks, a tall
@@ -77,7 +78,7 @@ Last updated: 2026-11-19 (R-1 handoff; before that, the phase gate after the sta
      click resets every number field (done, #268), **4b-5** toon bands on the bodies
      (done, #270; both from owner notes, 2026-11-19), then **5-5** (done,
      #271; `docs/frames-decision.md`, `docs/curvilinear-tools-decision.md`).
-  9b. **R-1** (done, in review), **R-2..R-4** run & read surface (owner-ranked 2026-11-19; roadmap
+  9b. **R-1** (done, #278), **R-2** (done, in review), **R-3..R-4** run & read surface (owner-ranked 2026-11-19; roadmap
       § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.

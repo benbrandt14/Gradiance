@@ -227,6 +227,7 @@ cargo run                                    # native app; needs libasound2-dev 
 cargo run --features dev                     # dev inner loop: dynamic linking + asset hot-reload
 cargo run -- --remote                        # app with the remote surface (127.0.0.1:15702)
 cargo run -- ops | op <id> … | mcp           # CLI / MCP clients of that app (docs/scripting.md)
+cargo run -- run s.ron --steps N [--csv o.csv] # headless rollout to CSV, no window (brief R-2)
 ```
 
 Shared lint policy lives in `[workspace.lints]` (root `Cargo.toml`); every

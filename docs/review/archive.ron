@@ -1775,5 +1775,113 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "op::OpContextFillers::add_for, op::OpContext::build_for, script::bridge::mentions",
         ),
+        (
+            question: (
+                id: "run-csv-rows",
+                title: "Which rows does gradiance run write?",
+                source: "Brief R-2 headless rollout (docs/briefs/R-2-headless-rollout.md)",
+                description: r#"A rollout of N steps records signals once per update. The frame a sim.step request lands records the state before the first step, but the sensor publisher ran before the transport and the clock after it, so t had that row and a body sensor did not."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The start state, then one row per step",
+                        caption: r#"The signal recorders run after a new physics::TransportSet that holds apply_sim_transport, so every signal records the landing frame or none does. A run of N steps writes N+1 rows, t = 0, dt, ..., N dt: the first row is the initial condition a fit needs. Applies to the app too; no per-frame cost."#,
+                    ),
+                    (
+                        label: "Exactly N rows",
+                        caption: r#"Drop samples at the start time. Cost: the initial condition is lost, and the t/sensor mismatch stays in the app."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "run-csv-rows",
+                title: "Which rows does gradiance run write?",
+                choice: Picked("The start state, then one row per step"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "physics::TransportSet, run::rollout",
+        ),
+        (
+            question: (
+                id: "run-history-cap",
+                title: "How does a rollout keep more than 600 samples?",
+                source: "Brief R-2 headless rollout (docs/briefs/R-2-headless-rollout.md)",
+                description: r#"The signal bus keeps the last 600 samples per signal (the plot window). A rollout of more steps would lose its start."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Lift the cap for the run",
+                        caption: r#"SignalBus::set_history_cap; the runner sets usize::MAX. Recording only happens while stepping, so memory is bounded by the steps asked for. The app keeps 600. signal.export and the CSV stay one function (signals_csv)."#,
+                    ),
+                    (
+                        label: "A separate per-step recorder",
+                        caption: r#"A runner-only system that appends rows each step. Cost: a second recording path that can drift from the bus."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "run-history-cap",
+                title: "How does a rollout keep more than 600 samples?",
+                choice: Picked("Lift the cap for the run"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "signal::SignalBus::set_history_cap",
+        ),
+        (
+            question: (
+                id: "run-defaults",
+                title: "What does gradiance run write without --csv or --signals?",
+                source: "Brief R-2 headless rollout (docs/briefs/R-2-headless-rollout.md)",
+                description: r#"The brief makes --csv and --signals optional and does not say what their absence means."#,
+                decision: true,
+                options: [
+                    (
+                        label: "stdout, every signal but t",
+                        caption: r#"No --csv: the CSV goes to stdout, so a shell sweep can pipe it. No --signals: every signal on the bus but t (t is already the first column), or t alone when the bus holds nothing else. --csv must end in .csv, as for signal.export. Exit codes match the client CLI: 1 failed, 2 usage."#,
+                    ),
+                    (
+                        label: "Require both",
+                        caption: r#"Cost: the simplest sweep needs a temp file per run."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "run-defaults",
+                title: "What does gradiance run write without --csv or --signals?",
+                choice: Picked("stdout, every signal but t"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "run::parse_args, run::rollout",
+        ),
+        (
+            question: (
+                id: "run-one-thread",
+                title: "Does gradiance run pin the thread count?",
+                source: "Brief R-2 headless rollout (docs/briefs/R-2-headless-rollout.md)",
+                description: r#"avian2d is built with its default parallel feature. Two runs must give the same CSV bit for bit."#,
+                decision: true,
+                options: [
+                    (
+                        label: "One compute thread",
+                        caption: r#"The runner sets TaskPoolOptions::with_num_threads(1), so the order of work is the same on every machine. Measured: the falling-box test is also bit-identical with 4 threads, so this is a guarantee by construction, not a fix. Cost: large scenes run slower than they could."#,
+                    ),
+                    (
+                        label: "Default pools",
+                        caption: r#"Faster on big scenes. Cost: determinism rests on avian's parallel paths, which the test only samples."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "run-one-thread",
+                title: "Does gradiance run pin the thread count?",
+                choice: Picked("One compute thread"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T18:00:00Z",
+            ),
+            ingested_as: "run::rollout",
+        ),
     ],
 )

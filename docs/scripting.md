@@ -409,6 +409,32 @@ and are not confined to it (as `ui.screenshot`). Inside one script run every
 read sees the state before the run (rule 3), so `(sim-step 60)` and
 `(sim-time)` in one run read the old time: poll from a later run.
 
+### Headless rollout: `gradiance run` (brief R-2)
+
+```sh
+gradiance run scene.ron --script probe.scm --steps 600 --csv out.csv --signals h,t
+# a sweep is a shell loop; with no --csv the CSV goes to stdout
+for g in 1 2 4; do
+  sed "s/GAIN/$g/" sweep.scm > /tmp/s.scm
+  gradiance run arm.ron --script /tmp/s.scm --steps 300 > "arm-$g.csv"
+done
+```
+
+Loads the scene (`scene.load`), runs each script once in order (the
+ordinary script doorway, so every verb works), finishes any steps a script
+asked for with `(sim-step k)`, then advances exactly `--steps N` fixed
+physics steps (`sim.step`) with no window and no GPU, and writes the
+recorded signals as CSV (`signals_csv`, the function `signal.export` uses).
+Rows: the state before the first step, then one per step, so `N + 1` rows
+at `t = 0, dt, …` (plus any a script's own steps recorded). The 600-sample
+plot window does not apply: a run keeps every sample. `--signals` names the
+columns (default: every signal on the bus but `t`, or `t` alone). Two runs
+of the same inputs give the same CSV byte for byte (one compute thread, one
+fixed tick per update). Exit codes: `0` done, `1` a scene that does not
+read or parse, a script error, an unknown signal or a failed write, `2` a
+usage error (`gradiance run --help`). `run` is a host, not a client: it
+builds its own app (`gradiance::run::rollout`) and needs no `--remote` app.
+
 ### The window: inspect and screenshot (brief U-3)
 
 ```scheme
