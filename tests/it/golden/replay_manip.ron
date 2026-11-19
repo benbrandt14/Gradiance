@@ -345,5 +345,9 @@
         params: ([]),
         computed: ([]),
         group_names: ({}),
+        workspaces: (
+            saved: [],
+            active: "Layout",
+        ),
     ),
 )
