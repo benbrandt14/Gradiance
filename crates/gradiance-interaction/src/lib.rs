@@ -28,6 +28,7 @@ pub mod node_edit;
 pub mod ops;
 pub mod overlay;
 pub mod pack;
+pub mod pack_ops;
 pub mod pointer;
 pub mod selection;
 pub mod snap;
@@ -121,6 +122,7 @@ impl Plugin for InteractionPlugin {
         ops::install(app);
         tool_ops::install(app);
         transport::install(app);
+        pack_ops::install(app);
         app.configure_sets(Update, InteractionSet.before(gradiance_op::OpInvokeSet));
 
         app.add_plugins(input::EditorInputPlugin);

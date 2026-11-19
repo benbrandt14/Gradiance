@@ -1,11 +1,14 @@
 //! The close-packing session: run a [`gradiance_optimize`] solver over the
 //! selection across frames, preview it, and commit it as one command.
 //!
-//! This is the ECS half of the optimizer. The solver itself is pure math in
+//! This is the ECS half of the optimizer. Its operations (`pack.run`,
+//! `pack.status`, `pack.apply`, `pack.cancel`, `pack.get`, `pack.set`; brief
+//! R-4) are in [`crate::pack_ops`]: the Optimizer panel invokes the same
+//! `pack.run` a script does, with the selection as its targets. The solver itself is pure math in
 //! `gradiance-optimize`; everything here is the editor plumbing around it:
 //!
 //! ```text
-//! StartPackRequest ─▶ start_pack   (gather selection geometry → PackProblem)
+//! StartPackRequest ─▶ start_pack   (gather the targets' geometry → PackProblem)
 //!                        │
 //!                        ▼
 //!                   PackSession ──▶ step_pack   (advance N iterations/frame)
@@ -56,15 +59,35 @@ use gradiance_optimize::{
 };
 
 use crate::overlay::OverlayGizmos;
-use crate::selection::Selection;
+use gradiance_core::ids::IdIndex;
 
-/// Request to start (or restart) a packing run over the current selection.
+/// Request to start (or restart) a packing run over the listed bodies.
 ///
-/// Written by the UI — the context menu entry and the inspector's Optimizer
-/// panel. Starting is not a world mutation, so this is a plain request
-/// message rather than a command intent.
-#[derive(Message, Debug, Clone, Copy, Default, Reflect)]
-pub struct StartPackRequest;
+/// Written by the `pack.run` operation, which the Optimizer panel and the
+/// context menu invoke with the selection and a script with indices (brief
+/// R-4). Starting is not a world mutation, so this is a plain request
+/// message rather than a command intent. The request carries its bodies so
+/// that the run never reads the selection (scripting rule 2): what is
+/// packed is what the caller named.
+#[derive(Message, Debug, Clone, Default, PartialEq, Eq, Reflect)]
+pub struct StartPackRequest {
+    /// The bodies to arrange. Order does not matter: [`start_pack`] packs
+    /// them in id order, so the same set gives the same layout from every
+    /// doorway. Ids that name no body (or a ground plane) are skipped.
+    pub targets: Vec<StableId>,
+}
+
+/// How the last run ended, kept after the session is cleared so a client
+/// polling `pack.status` can read the report of a run that auto-applied.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PackOutcome {
+    /// The run's final report.
+    pub report: PackReport,
+    /// Whether its layout was committed (`false`: cancelled).
+    pub applied: bool,
+    /// How many bodies the commit moved.
+    pub moved: usize,
+}
 
 /// What to do with a session that is already running.
 #[derive(Message, Debug, Clone, Copy, PartialEq, Eq, Reflect)]
@@ -101,6 +124,8 @@ pub struct PackSession {
     /// Set when a finished run has been applied, so the ghost stops drawing
     /// on the frame the intent goes out.
     committed: bool,
+    /// How the previous run ended (none while a run is loaded).
+    last: Option<PackOutcome>,
 }
 
 impl std::fmt::Debug for PackSession {
@@ -134,15 +159,30 @@ impl PackSession {
         self.targets.len()
     }
 
+    /// How the previous run ended, if one ended since the last start.
+    pub fn last_outcome(&self) -> Option<PackOutcome> {
+        self.last
+    }
+
     /// Forgets the session without touching the world.
     pub fn clear(&mut self) {
         self.run = None;
         self.targets.clear();
         self.committed = false;
     }
+
+    /// Ends the session, remembering its report as the last outcome.
+    fn end(&mut self, applied: bool, moved: usize) {
+        self.last = self.report().map(|report| PackOutcome {
+            report,
+            applied,
+            moved,
+        });
+        self.clear();
+    }
 }
 
-/// Everything the packer reads off a selected body.
+/// Everything the packer reads off a target body.
 type BodyQuery<'w, 's> = Query<
     'w,
     's,
@@ -157,7 +197,7 @@ type BodyQuery<'w, 's> = Query<
     With<Body>,
 >;
 
-/// Builds a [`PackProblem`] from the selection and starts a run.
+/// Builds a [`PackProblem`] from the request's bodies and starts a run.
 ///
 /// Bodies contribute their **world-space outline**, so the solver sees what
 /// the user sees. Two kinds are skipped: ground half-planes (an infinite
@@ -167,16 +207,25 @@ pub fn start_pack(
     mut requests: MessageReader<StartPackRequest>,
     mut session: ResMut<PackSession>,
     config: Res<PackConfig>,
-    selection: Res<Selection>,
+    index: Res<IdIndex>,
     bodies: BodyQuery,
 ) {
     // Only the last request in a frame matters; a session is singular.
-    if requests.read().last().is_none() {
+    let Some(request) = requests.read().last() else {
         return;
-    }
+    };
     session.clear();
+    session.last = None;
 
-    let (problem, targets) = build_problem(&selection, &bodies, &config);
+    // Id order, whatever order the caller listed them in: the panel's
+    // selection order and a script's index order give one problem, so one
+    // layout (decision `pack-target-order`).
+    let mut ids = request.targets.clone();
+    ids.sort_unstable_by_key(|id| id.0);
+    ids.dedup();
+    let entities: Vec<Entity> = ids.iter().filter_map(|id| index.entity(*id)).collect();
+
+    let (problem, targets) = build_problem(&entities, &bodies, &config);
     if problem.len() < 2 {
         return;
     }
@@ -184,7 +233,7 @@ pub fn start_pack(
     session.run = Some(PackRun::new(problem));
 }
 
-/// One gathered selection member, before grouping.
+/// One gathered target body, before grouping.
 struct Gathered {
     id: StableId,
     outline: Vec<Vec2>,
@@ -194,15 +243,15 @@ struct Gathered {
     pinned: bool,
 }
 
-/// Gathers the selection into packing items plus the body table that maps a
-/// solved layout back onto transforms.
+/// Gathers the target bodies into packing items plus the body table that
+/// maps a solved layout back onto transforms.
 fn build_problem(
-    selection: &Selection,
+    entities: &[Entity],
     bodies: &BodyQuery<'_, '_>,
     config: &PackConfig,
 ) -> (PackProblem, Vec<PackTarget>) {
     let mut gathered: Vec<Gathered> = Vec::new();
-    for entity in selection.iter() {
+    for &entity in entities {
         let Ok((id, shape, transform, band, group, body_kind)) = bodies.get(entity) else {
             continue;
         };
@@ -340,7 +389,7 @@ pub fn finish_pack(
     }
 
     if cancel {
-        session.clear();
+        session.end(false, 0);
         return;
     }
 
@@ -353,7 +402,7 @@ pub fn finish_pack(
     }
 
     let changes = session.pending_changes();
-    session.clear();
+    session.end(true, changes.len());
     if !changes.is_empty() {
         moves.write(CommitTransformIntent { changes });
     }

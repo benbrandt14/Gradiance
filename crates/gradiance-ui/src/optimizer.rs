@@ -16,8 +16,9 @@
 //! over the whole selection — so a modeless window that can sit open next to
 //! the viewport while you watch the ghost is the honest shape for it.
 //!
-//! All three write the same two request messages — the UI never touches the
-//! session or the world, it only asks.
+//! All three invoke the same operations a script does (`pack.run` with the
+//! selection, `pack.apply`, `pack.cancel`; brief R-4) — the UI never touches
+//! the session or the world, it only asks.
 //!
 //! Every control here edits [`PackConfig`], which is a **settings resource**:
 //! editor configuration rather than authored scene state, so writing it
@@ -29,7 +30,8 @@ use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
-use gradiance_interaction::pack::{PackControl, PackSession, StartPackRequest};
+use gradiance_interaction::pack::PackSession;
+use gradiance_op::{InvokeOp, json};
 use gradiance_interaction::selection::Selection;
 use gradiance_optimize::{
     Boundary, EdgeAlignment, LayerRule, Objective, ObjectiveWeights, PackConfig, RotationMode,
@@ -45,8 +47,7 @@ pub struct OptimizerPanel<'w> {
     pub config: ResMut<'w, PackConfig>,
     /// The live run, read-only here.
     pub session: Res<'w, PackSession>,
-    start: MessageWriter<'w, StartPackRequest>,
-    control: MessageWriter<'w, PackControl>,
+    invoke: MessageWriter<'w, InvokeOp>,
     /// Whether the full rulebook is expanded in the Properties pane.
     pub expanded: ResMut<'w, OptimizerExpanded>,
 }
@@ -58,19 +59,23 @@ pub struct OptimizerExpanded(pub bool);
 crate::impl_panel_toggle!(OptimizerExpanded, 0);
 
 impl OptimizerPanel<'_> {
-    /// Asks for a run over the current selection.
+    /// Asks for a run over the current selection: `pack.run`, the
+    /// operation a script invokes with indices.
     pub fn request_pack(&mut self) {
-        self.start.write(StartPackRequest);
+        self.invoke.write(InvokeOp::with(
+            "pack.run",
+            json!({"targets": ["selection"]}),
+        ));
     }
 
     /// Applies the best layout found so far.
     pub fn apply(&mut self) {
-        self.control.write(PackControl::Apply);
+        self.invoke.write(InvokeOp::new("pack.apply"));
     }
 
     /// Throws the run away.
     pub fn cancel(&mut self) {
-        self.control.write(PackControl::Cancel);
+        self.invoke.write(InvokeOp::new("pack.cancel"));
     }
 }
 
