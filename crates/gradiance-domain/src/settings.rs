@@ -6,7 +6,7 @@
 
 use bevy::math::Vec2;
 use bevy::prelude::Resource;
-use gradiance_units::{Acceleration2, Angle, Displacement, Frequency, Length};
+use gradiance_units::{Acceleration2, Angle, Density, Displacement, Frequency, Length, Velocity2};
 use serde::{Deserialize, Serialize};
 
 /// The family of grid geometries.
@@ -327,6 +327,25 @@ pub struct SimSettings {
     /// Physics steps per second (the fixed timestep).
     #[serde(default = "default_timestep_hz")]
     pub timestep_hz: Frequency,
+    /// Air density for the drag forces (brief N-4). Areal, like every 2D
+    /// density here: kg/m³ over the world's 1 m depth, so a body of density
+    /// 1 kg/m² weighs as much as its own area of this air at 1 kg/m².
+    /// The default is air at sea level; it does nothing until a drag
+    /// coefficient is set.
+    pub air_density: Density,
+    /// Quadratic (pressure) drag coefficient `Cd`: a body moving at `v`
+    /// through the air feels `½ ρ Cd w v²` against its motion, `w` its width
+    /// across the relative air velocity. `0` = off (the default), `1` about a
+    /// flat plate face-on.
+    pub drag_coefficient: f32,
+    /// Linear (viscous) drag, in N·s/m²: a body feels `c w v` against its
+    /// motion, `w` its width across the relative air velocity. `0` = off
+    /// (the default).
+    pub linear_drag: f32,
+    /// Wind: the air's velocity (m/s). Drag acts on the velocity relative
+    /// to it, so with drag on a free body drifts until it moves with the
+    /// wind; with both drag terms at 0 the wind does nothing.
+    pub wind: Velocity2,
 }
 
 fn default_substeps() -> u32 {
@@ -345,6 +364,10 @@ impl Default for SimSettings {
             plane_friction: 0.0,
             substeps: 6,
             timestep_hz: Frequency(60.0),
+            air_density: Density(Self::SEA_LEVEL_AIR_DENSITY),
+            drag_coefficient: 0.0,
+            linear_drag: 0.0,
+            wind: Velocity2(Vec2::ZERO),
         }
     }
 }
@@ -353,6 +376,9 @@ impl SimSettings {
     /// Direction reported for zero gravity, where the angle is undefined:
     /// straight down, so raising the magnitude from zero falls the usual way.
     pub const DEFAULT_GRAVITY_ANGLE_DEG: f32 = -90.0;
+
+    /// Air at sea level, 1.2 kg/m³, over the world's 1 m depth (kg/m²).
+    pub const SEA_LEVEL_AIR_DENSITY: f32 = 1.2;
 
     /// Gravity as `(angle, magnitude)`: the angle in degrees counter-clockwise
     /// from +x (straight down is −90°), the magnitude in m/s². Zero gravity

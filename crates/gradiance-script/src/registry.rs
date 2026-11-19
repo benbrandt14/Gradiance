@@ -44,6 +44,11 @@ pub const SIM_SETTING_PATHS: &[&str] = &[
     "speed",
     "substeps",
     "plane_friction",
+    "air_density",
+    "drag_coefficient",
+    "linear_drag",
+    "wind.x",
+    "wind.y",
 ];
 
 /// The `CameraSettings` reflect paths `camera-get`/`camera-set` advertise;

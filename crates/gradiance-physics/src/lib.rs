@@ -9,6 +9,7 @@
 //! Ground planes need no special support here: the ground tool authors an
 //! ordinary `Static` body with a large box shape.
 
+pub mod air;
 pub mod body_sync;
 pub mod drive;
 pub mod fields;
@@ -111,7 +112,12 @@ impl Plugin for GradiancePhysicsPlugin {
         app.add_systems(Update, motor::drive_oscillating_motors);
         // Thrusters push once per physics step (brief N-3): `FixedUpdate`
         // runs right before avian's step in `FixedPostUpdate`.
-        app.add_systems(FixedUpdate, thrust::apply_thrusters.run_if(sim_running));
+        // Air drag too (brief N-4): one pass over the dynamic bodies per
+        // step, against the velocity the step starts from.
+        app.add_systems(
+            FixedUpdate,
+            (thrust::apply_thrusters, air::apply_air_drag).run_if(sim_running),
+        );
         app.add_systems(
             FixedPostUpdate,
             joint_sync::break_overloaded_joints

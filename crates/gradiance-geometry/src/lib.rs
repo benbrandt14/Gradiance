@@ -13,6 +13,7 @@ pub mod extrusion;
 pub mod face_field;
 pub mod hull;
 pub mod polygonize;
+pub mod profile;
 pub mod sat;
 pub mod scale;
 pub mod sdf;
