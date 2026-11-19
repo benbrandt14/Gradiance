@@ -115,6 +115,15 @@ impl Plugin for GradiancePhysicsPlugin {
     }
 }
 
+/// System set of the `Update` systems that change the transport (play,
+/// pause, owed `sim.step` steps; the interaction layer's
+/// `apply_sim_transport`). Systems that ask [`sim_running`] once per frame
+/// and must agree with each other (the signal recorders) run after it, so a
+/// step request that lands this frame is seen by all of them or by none
+/// (brief R-2: a rollout's first row holds every signal).
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TransportSet;
+
 /// System set for authored→engine body synchronization (runs in
 /// `PostUpdate`, after commands mutated authored components in `Update`).
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]

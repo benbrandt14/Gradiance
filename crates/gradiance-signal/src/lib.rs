@@ -90,13 +90,37 @@ impl BusEntry {
 /// state — rebuilt continuously, never persisted. Scripts publish into it
 /// with `signal-set` and read it with `signal-get`; the evaluator publishes
 /// every binding; the plot panel draws the histories.
-#[derive(Resource, Debug, Default)]
+#[derive(Resource, Debug)]
 pub struct SignalBus {
     entries: Vec<(String, BusEntry)>,
     now: f32,
+    cap: usize,
+}
+
+impl Default for SignalBus {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            now: 0.0,
+            cap: HISTORY_CAP,
+        }
+    }
 }
 
 impl SignalBus {
+    /// Samples kept per signal before the oldest is dropped: 600 by default
+    /// (the plot window). The headless runner (`gradiance run`, brief R-2)
+    /// lifts it to `usize::MAX` so a rollout keeps every step: its recording
+    /// is bounded by the steps it was asked for, not by a window.
+    pub fn set_history_cap(&mut self, cap: usize) {
+        self.cap = cap.max(1);
+    }
+
+    /// The samples kept per signal (see [`set_history_cap`](Self::set_history_cap)).
+    pub fn history_cap(&self) -> usize {
+        self.cap
+    }
+
     /// Stamps subsequent [`publish`](Self::publish) calls with `seconds` of
     /// simulated time. Called once at the top of each frame's signal pass, so
     /// every sample recorded that frame shares one timestamp — cheaper and
@@ -123,7 +147,7 @@ impl SignalBus {
         if record {
             entry.history.push_back(value);
             entry.times.push_back(self.now);
-            while entry.history.len() > HISTORY_CAP {
+            while entry.history.len() > self.cap {
                 entry.history.pop_front();
                 entry.times.pop_front();
             }
@@ -458,7 +482,10 @@ impl Plugin for SignalPlugin {
                 evaluate_computed,
                 evaluate_signals,
             )
-                .chain(),
+                .chain()
+                // A step request that lands this frame is seen by every
+                // recorder or by none (brief R-2).
+                .after(gradiance_physics::TransportSet),
         );
     }
 }
@@ -495,5 +522,19 @@ mod tests {
         }
         let entry = bus.entries().next().unwrap().1;
         assert_eq!(entry.history().len(), HISTORY_CAP);
+    }
+
+    #[test]
+    fn a_lifted_cap_keeps_every_sample() {
+        let mut bus = SignalBus::default();
+        bus.set_history_cap(usize::MAX);
+        for i in 0..(HISTORY_CAP * 2) {
+            bus.publish("s", i as f32, true);
+        }
+        let entry = bus.entries().next().unwrap().1;
+        assert_eq!(entry.history().len(), HISTORY_CAP * 2);
+        assert_eq!(entry.times().len(), HISTORY_CAP * 2);
+        bus.set_history_cap(0);
+        assert_eq!(bus.history_cap(), 1, "at least one sample is kept");
     }
 }

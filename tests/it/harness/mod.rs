@@ -6,13 +6,11 @@
 #![allow(dead_code)]
 
 use bevy::prelude::*;
-use bevy::state::app::StatesPlugin;
-use bevy::time::TimeUpdateStrategy;
 use gradiance::prelude::*;
 use std::time::Duration;
 
 /// The fixed frame duration used by [`step`] (60 fps).
-pub const FRAME: Duration = Duration::from_micros(16_667);
+pub const FRAME: Duration = gradiance::run::FRAME;
 
 /// Builds a headless app with the full Gradiance stack (including physics)
 /// and a deterministic, manually-advanced clock.
@@ -21,27 +19,10 @@ pub fn headless_app() -> App {
 }
 
 /// [`headless_app`] with `setup` run on the app before start-up — where the
-/// binary inserts its CLI resources (`StartupScripts`, `StartupScene`).
+/// binary inserts its CLI resources (`StartupScripts`, `StartupScene`). The
+/// same builder `gradiance run` uses (brief R-2).
 pub fn headless_app_with(setup: impl FnOnce(&mut App)) -> App {
-    let mut app = App::new();
-    app.add_plugins((
-        MinimalPlugins,
-        StatesPlugin,
-        TransformPlugin,
-        bevy::input::InputPlugin,
-    ));
-    app.add_plugins(GradiancePlugins);
-    // Advance exactly one frame of virtual time per update, regardless of
-    // wall-clock speed, so physics assertions are reproducible.
-    app.insert_resource(TimeUpdateStrategy::ManualDuration(FRAME));
-    setup(&mut app);
-    // Without a runner, plugin `finish`/`cleanup` never run — avian
-    // registers diagnostics resources there, so run them explicitly.
-    app.finish();
-    app.cleanup();
-    // Flush startup so states and resources are initialized.
-    app.update();
-    app
+    gradiance::run::headless_app_with(setup)
 }
 
 /// Advances the app by `frames` fixed 60 fps frames.

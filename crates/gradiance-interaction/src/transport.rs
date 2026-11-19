@@ -66,6 +66,7 @@ pub(crate) fn install(app: &mut App) {
     app.add_systems(
         Update,
         apply_sim_transport
+            .in_set(gradiance_physics::TransportSet)
             .after(gradiance_op::OpInvokeSet)
             .after(crate::InteractionSet),
     );

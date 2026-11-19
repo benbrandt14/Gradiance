@@ -19,6 +19,7 @@ mod csg;
 mod defaults;
 mod editor_ops;
 mod groups;
+mod headless_run;
 mod history;
 mod interaction;
 mod joint_breaking;

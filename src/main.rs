@@ -16,6 +16,11 @@ fn main() {
     // Client subcommands (`ops`, `op`, `mcp`) talk to a running app's remote
     // surface and never build an app of their own (brief U-6).
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // `gradiance run …` is the headless rollout: a host that owns the clock,
+    // with no window (brief R-2).
+    if let Some(code) = gradiance::run::main(&args) {
+        std::process::exit(code);
+    }
     if let Some(code) = gradiance::script::client::main(&args) {
         std::process::exit(code);
     }
@@ -43,7 +48,9 @@ fn main() {
     //                                   `docs/review/questions.ron`); answers
     //                                   go to `answers.ron` beside it;
     //   `gradiance ops | op | mcp …`    client doorways to a `--remote` app
-    //                                   (handled above; `gradiance op --help`).
+    //                                   (handled above; `gradiance op --help`);
+    //   `gradiance run scene.ron …`     a headless rollout to CSV (handled
+    //                                   above; `gradiance run --help`).
     let mut scripts = Vec::new();
     let mut i = 0;
     while i < args.len() {

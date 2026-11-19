@@ -146,6 +146,8 @@ gradiance-script.workspace = true
 gradiance-ui.workspace = true
 bevy.workspace = true
 mimalloc.workspace = true
+# `gradiance run` passes operation params as JSON (brief R-2).
+serde_json.workspace = true
 
 [features]
 # Dev-only inner loop: `cargo run --features dev`.
@@ -181,8 +183,6 @@ tracy = [
 
 [dev-dependencies]
 avian2d.workspace = true
-# The remote-surface integration tests build JSON-RPC params.
-serde_json.workspace = true
 # The integration suite drives the whole app, egui panels included.
 bevy_egui.workspace = true
 proptest.workspace = true

@@ -98,6 +98,7 @@ pub use gradiance_units as units;
 
 pub mod prelude;
 pub mod review;
+pub mod run;
 
 /// Optional Bevy dev-tools diagnostics overlay (`--features diagnostics`).
 #[cfg(feature = "diagnostics")]
