@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 124 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 127 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -69,7 +69,9 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `edit.adjust_last` | `(adjust-last field value)` | edit | — | — | Set one param of the last operation (field "w", "step.0") and run it again in place of its undo step: still one step. Errors when the newest step is not an operation's. | `{"field": "r", "value": 0.75}` |
+| `edit.copy` | `(copy-ron targets)` | editor | — | Edit/Copy, Ctrl+C | Copy bodies, the joints between them, their nodes and their groups to the clipboard as scene RON text (what a save writes, cut to them); returns the text ("" when nothing is named, and the clipboard is left alone). No undo step. | `{"targets": [3, 4]}` |
 | `edit.last_op` | `(last-op)` | query | — | — | The operation that made the newest undo step, as {id, params} (what Adjust Last Operation edits); null when there is none. | `{}` |
+| `edit.paste` | `(paste-ron text at)` | edit | `insert` | Edit/Paste, Ctrl+V | Add scene RON text (from edit.copy or a .ron file) to the scene with fresh ids, one undo step. `at`: [] keeps its positions, [x y] centres the bodies there (Ctrl+V: the cursor). Returns the new bodies' ids. | `{"text": "(version: 8, app_version: \"\", bodies: [(id: (\"00000000-0000-0000-0000-00000000000a\"), pose: (pos: (0.0, 1.0), rot: 0.0), shape: Box(width: 1.0, height: 1.0), appearance: (fill: (r: 0.8, g: 0.5, b: 0.2, a: 1.0)))], joints: [], environment: ())", "at": [2, 3]}` |
 | `edit.redo` | `(redo)` | edit | — | Edit/Redo, Ctrl+Shift+Z | Redo the last undone command — the same step Edit ▸ Redo takes. | `{}` |
 | `edit.undo` | `(undo)` | edit | — | Edit/Undo, Ctrl+Z | Undo the last command — the same step Edit ▸ Undo takes. | `{}` |
 
@@ -154,6 +156,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `scene.dump` | `(scene-dump)` | query | — | — | The whole scene as JSON: the record a save writes (bodies with their groups and depth, joints with their anchors, nodes, and the environment). Lisp gets the JSON text. | `{}` |
+| `scene.insert` | `(insert-scene path at)` | edit | `insert` | File/Insert… | Add a .ron file's bodies, joints, nodes and groups to the scene with fresh ids, one undo step ("" = a dialog). `at`: [] keeps the file's positions, [x y] centres the bodies there. Returns the new bodies' ids. | `{"path": "tests/fixtures/scenes/pendulum.ron", "at": [6, 2]}` |
 | `scene.load` | `(load-scene path)` | edit | `load-scene` | File/Open…, Ctrl+O | Replace the scene with a .ron file's (relative to the working directory; "" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing. | `{"path": "tests/fixtures/scenes/pendulum.ron"}` |
 | `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default environment) — one undo step, as File ▸ New scene. | `{}` |
 | `scene.save` | `(save-scene path)` | editor | — | File/Save, Ctrl+S | Write the scene to a .ron file (relative to the working directory; "" = the last path, else a dialog). Returns the path; the file is written this frame. No undo step. | `{"path": "target/scene.ron"}` |

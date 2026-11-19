@@ -264,7 +264,7 @@ impl Operation for CopyScene {
     const META: OpMeta = OpMeta {
         id: "edit.copy",
         lisp: "copy-ron",
-        doc: "Copy bodies, the joints between them, their nodes and their groups to the clipboard as scene RON text (what a save writes, cut to them); returns the text. No undo step.",
+        doc: "Copy bodies, the joints between them, their nodes and their groups to the clipboard as scene RON text (what a save writes, cut to them); returns the text (\"\" when nothing is named, and the clipboard is left alone). No undo step.",
         seam: Seam::Editor,
         menu: Some("Edit/Copy"),
         chord: Some("Ctrl+C"),
@@ -285,8 +285,11 @@ impl Operation for CopyScene {
             );
         }
         let dump = ctx.get::<SceneDump>()?;
-        let part = fragment(&dump.0, &objects)
-            .ok_or_else(|| OpError::Invalid("nothing to copy".to_owned()))?;
+        // An empty selection copies nothing and leaves the clipboard alone,
+        // as Delete with nothing selected deletes nothing.
+        let Some(part) = fragment(&dump.0, &objects) else {
+            return Ok(OpOutput::none().returning(""));
+        };
         let text = to_ron(&part)
             .map_err(|e| OpError::Invalid(format!("the copy does not encode: {e}")))?;
         Ok(OpOutput::none()
