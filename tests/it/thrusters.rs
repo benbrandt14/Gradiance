@@ -226,6 +226,13 @@ fn a_thrust_edit_is_one_undo_step() {
         "the edited thrust ({a})"
     );
 
+    // In play, the first undo rewinds the run ("simulate"); the next one
+    // takes the edit back.
+    undo(&mut app);
+    assert_eq!(
+        app.world().resource::<HistoryInfo>().redo_label,
+        Some("simulate")
+    );
     undo(&mut app);
     assert_eq!(kind_of(&app, node), before, "undo restores the thrust");
     assert!(

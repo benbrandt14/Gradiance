@@ -2427,5 +2427,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "ui::node_graph::key_fields, script::ops::DefKey",
         ),
+        (
+            question: (
+                id: "thruster-axis-frame",
+                title: "Which way does a thruster push, and what does a free one do?",
+                source: "Brief N-3 thruster node (docs/briefs/N-3-thruster-node.md)",
+                description: r#"The brief: a node that pushes its body along its local axis at its own point."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Body-frame axis, free is inert",
+                        caption: r#"The thruster stores its thrust (N, negative pushes backwards) and an axis angle in the body's frame, so it turns with the body; the point is the node's attachment offset, so off the centre of mass it also turns the body. A free thruster, one whose body is gone and one on a static or kinematic body push nothing, like a free tracer traces nothing."#,
+                    ),
+                    (
+                        label: "World-frame axis",
+                        caption: r#"The axis stays fixed in the world while the body turns (a rocket that cannot steer by turning)."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "thruster-axis-frame",
+                title: "Which way does a thruster push, and what does a free one do?",
+                choice: Picked("Body-frame axis, free is inert"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "domain::thruster::Thruster, physics::thrust::apply_thrusters",
+        ),
+        (
+            question: (
+                id: "thruster-tool",
+                title: "How is a thruster placed, and with which key?",
+                source: "Brief N-3 thruster node (docs/briefs/N-3-thruster-node.md)",
+                description: r#"The brief: a placeable node, beside the tracer. The owner ruled the editor keymap unsettled; no editor key changes."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Press and aim, no key",
+                        caption: r#"A Thruster tool in the palette's Modify group (the thruster icon), with no key and a tool.thruster operation (no chord). Press on a body where it pushes and release: a click pushes up, a drag longer than 8 px aims the push along the drag. A new thruster pushes 10 N, the weight of a 1 m square body at the default density, so one under the centre of a fresh 1 m box holds it up."#,
+                    ),
+                    (
+                        label: "Click only",
+                        caption: r#"A click places a thruster pointing up; the axis is set in the inspector."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "thruster-tool",
+                title: "How is a thruster placed, and with which key?",
+                choice: Picked("Press and aim, no key"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "interaction::tools::node_tools::ThrusterTool, interaction::tool_ops::UseThruster",
+        ),
+        (
+            question: (
+                id: "thruster-fixed-step",
+                title: "When is the thruster push applied?",
+                source: "Brief N-3 thruster node (docs/briefs/N-3-thruster-node.md)",
+                description: r#"The field forces are one-shot forces applied in Update; the brief joins the thruster to that pass."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Once per physics step",
+                        caption: r#"apply_thrusters runs in FixedUpdate, right before avian's step in FixedPostUpdate, gated by sim_running like the field forces. A one-shot force applied in Update is spent by one step, so a frame with two steps would miss it and a frame with none would double it. It is a separate system from apply_field_forces (which stays in Update), so the brief's 'joins that pass' is read as 'is a solver force like the fields', not 'the same system'."#,
+                    ),
+                    (
+                        label: "In the field pass",
+                        caption: r#"Add the push to apply_field_forces in Update."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "thruster-fixed-step",
+                title: "When is the thruster push applied?",
+                choice: Picked("Once per physics step"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "physics::thrust, physics::GradiancePhysicsPlugin",
+        ),
+        (
+            question: (
+                id: "thrust-actuator",
+                title: "How does a signal drive a thruster?",
+                source: "Brief N-3 thruster node (docs/briefs/N-3-thruster-node.md)",
+                description: r#"The brief: strength is authored; N-1 can drive it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A Thrust sink on the node",
+                        caption: r#"SignalSink::Thrust(node id) drives SignalDrive::thrust on the node entity (ActuatorTarget::Node); the push uses it in place of the authored thrust, the authored node is never written, and unbinding restores it with no command. The node graph shows a thruster block (one input pin, N) while a wire names it or its body is on the canvas, like N-1's joint block. Duplicating a body copies its thruster and the bindings that drive it (the duplicate now remaps node ids too). Additive enum variants: no format bump; the v8 golden gains a thruster node."#,
+                    ),
+                    (
+                        label: "A sink on the body",
+                        caption: r#"Key the thrust by the body, one thrust per body."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "thrust-actuator",
+                title: "How does a signal drive a thruster?",
+                choice: Picked("A Thrust sink on the node"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "domain::signal::SignalSink::Thrust, physics::drive::SignalDrive, ui::node_graph::NodeData::Thruster",
+        ),
+        (
+            question: (
+                id: "thruster-operation",
+                title: "How does a script place a thruster?",
+                source: "Brief N-3 thruster node (docs/briefs/N-3-thruster-node.md)",
+                description: r#"The brief does not name a verb. The tracer has none."#,
+                decision: true,
+                options: [
+                    (
+                        label: "node.thruster",
+                        caption: r#"(thruster body x y angle thrust): the world point and world angle a script knows, stored in the body's frame as the tool stores them; returns the node's handle; one spawn-node undo step. No binding verb (still the N-1 follow-up)."#,
+                    ),
+                    (
+                        label: "No verb",
+                        caption: r#"Thrusters only from the tool."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "thruster-operation",
+                title: "How does a script place a thruster?",
+                choice: Picked("node.thruster"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "command::ops::node::Thruster",
+        ),
+        (
+            question: (
+                id: "node-glyph-screen-size",
+                title: "How big are node glyphs?",
+                source: "Brief N-3 thruster node (docs/briefs/N-3-thruster-node.md)",
+                description: r#"The node glyph radii were pixel-era numbers (6 and 8) drawn as world metres, so a tracer ring was metres wide."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Screen pixels",
+                        caption: r#"draw_node_glyphs reads CameraScale like the joint glyphs: the rings are 6 and 8 screen pixels, the thruster flame 18 px at the default thrust, up to 4 times that."#,
+                    ),
+                    (
+                        label: "Leave as is",
+                        caption: r#"Keep the metre-sized rings."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "node-glyph-screen-size",
+                title: "How big are node glyphs?",
+                choice: Picked("Screen pixels"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "render::tracer::draw_node_glyphs",
+        ),
     ],
 )

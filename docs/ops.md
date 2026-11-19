@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 134 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 136 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -124,6 +124,12 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `look.apply` | `(look-apply name)` | config | `settings` | — | Apply a scene look by name (studio, blueprint, poster): palette tone, overlay ink, render, lighting and scenery presets — one undo step. | `{"name": "blueprint"}` |
 | `look.list` | `(looks)` | query | — | — | Every scene look's name, in menu order (the first is the default). | `{}` |
 
+## `node`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `node.thruster` | `(thruster body x y angle thrust)` | edit | `spawn-node` | — | Attach a thruster to body at world point (x, y), pushing with thrust newtons along the world angle (radians); returns its handle. | `{"body": 0, "x": 0, "y": 0, "angle": 1.5708, "thrust": 10}` |
+
 ## `pack`
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
@@ -217,6 +223,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.rod` | `(rod-tool)` | editor | — | Tools/Rod, L | Use the rod tool: drag from one end to the other. | `{}` |
 | `tool.select` | `(select-tool)` | editor | — | Tools/Select, S | Use the select tool: click to select, drag to move, right-drag to rotate. | `{}` |
 | `tool.spring` | `(spring-tool)` | editor | — | Tools/Spring, T | Use the spring tool: drag from one anchor to the other. | `{}` |
+| `tool.thruster` | `(thruster-tool)` | editor | — | Tools/Thruster | Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push. | `{}` |
 | `tool.tracer` | `(tracer-tool)` | editor | — | Tools/Tracer, N | Use the tracer tool: click a body (or empty space) to place a tracer. | `{}` |
 | `tool.weld` | `(weld-tool)` | editor | — | Tools/Weld, W | Use the weld tool: click two overlapping bodies to merge them. | `{}` |
 

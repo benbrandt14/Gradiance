@@ -64,7 +64,8 @@ same regardless of how many points were placed.
   touched** — remove the binding and the authored look returns.
 - **Actuator sinks** (brief N-1) drive physics the same way: a joint's
   **motor speed** and **motor cap**, a body's **field strength** and
-  **gravity scale**. `signal::drive_actuators` (one system, allocation-free
+  **gravity scale**, a thruster node's **thrust** (brief N-3, the
+  `Thrust` sink keyed by the node). `signal::drive_actuators` (one system, allocation-free
   in the steady state) writes the derived `physics::drive::SignalDrive` on
   the target; physics prefers it over the authored value
   (`retune_joints` for motors, `Fields` for strength, a derived
@@ -109,8 +110,8 @@ same regardless of how many points were placed.
 | `CompiledSignals` | derived | the compiled kernels behind `ComputedSignals`, rebuilt by `recompile_signals` on change — keeps the *compile* step off the frame loop |
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
 | `key@<name>` bus inputs, `GraphKeys` | derived | the held state of each key a key block reads, published by `interaction::graph_keys::publish_graph_keys` (allocation-free; the bound set is rebuilt only when `ComputedSignals` changes); never saved or undone |
-| `SignalDrive` | derived component (`physics::drive`) | written by `drive_actuators` on a joint or body; consumed by `retune_joints`, `Fields`, `drive_gravity_scale`; removed with its last actuator binding; never saved or undone |
-| `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer tool today, sensors/actuators next; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
+| `SignalDrive` | derived component (`physics::drive`) | written by `drive_actuators` on a joint, body or thruster node; consumed by `retune_joints`, `Fields`, `drive_gravity_scale`, `apply_thrusters`; removed with its last actuator binding; never saved or undone |
+| `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer and the thruster; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
 
 ## Sensors & actuators are object ports, not tools
 
@@ -144,6 +145,30 @@ probe. A [`domain::node`](../crates/gradiance-domain/src/node.rs) is an authored
 tracer attached to nothing is inert. A tracer's *trail color* is an actuator
 port on the body it rides (the `TracerColor` sink), so wiring drives it like
 any other actuator.
+
+## The placeable thruster node (brief N-3)
+
+A **thruster** is the second placeable node kind (`NodeKind::Thruster`,
+[`domain::thruster`](../crates/gradiance-domain/src/thruster.rs)): attached to
+a body, it pushes the body with its authored **thrust** (N) along its
+**axis** (an angle in the body's frame, so it turns with the body), at the
+node's own point. Off the centre of mass the push also turns the body. The
+**Thruster tool** (no key: the editor keymap is not settled) places one: press
+on a body where it pushes; a click pushes up, a drag aims the push along the
+drag. Script: `(thruster body x y angle thrust)` (`node.thruster`), the point
+and angle in world terms. Thrust and axis are edited in the inspector, the
+node's context menu and the Signals list: one undo step per gesture.
+
+The push is **derived**: `physics::thrust::apply_thrusters`, one system in
+`FixedUpdate` (once per physics step, gated like the field forces), reads
+each thruster node, its body by id, and a `SignalDrive` thrust if a binding
+sets one. It is `O(T)` over the behavior nodes with one id lookup each and
+allocates nothing. A free thruster, one whose body is gone and one on a body
+that is not dynamic push nothing. The canvas shows a **thruster block** (one
+input pin, thrust in N) while a wire names it or its body is on the canvas;
+the glyph draws a flame out of the thruster's back, scaled by the thrust it
+pushes with. Duplicating a body copies its thruster and the bindings that
+drive it.
 
 ## The node-graph canvas
 
