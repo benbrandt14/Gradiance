@@ -2265,5 +2265,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "docs/briefs/N-1-signal-actuators.md Outcome",
         ),
+        (
+            question: (
+                id: "key-input-as-block",
+                title: "Where does a key input's binding live?",
+                source: "Brief N-2 keys as node-graph inputs (docs/briefs/N-2-graph-input-keys.md)",
+                description: r#"Brief N-2 decision 1: bindings are part of the signal graph and scene content (saved, undoable)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A Key block in ComputedSignals",
+                        caption: r#"A key input is a canvas block (BlockOp::Key, Input category of the Add palette) whose expression reads the bus inputs key@<name>. ComputedSignals is already in scene_content!, so the binding is saved and one settings undo step per edit with no new resource or format change; the graph shows it like any source block, with a live value."#,
+                    ),
+                    (
+                        label: "A new SignalKeys resource",
+                        caption: r#"A separate resource to classify in scene_content!, a new EnvironmentRecord field, its own block kind on the canvas and its own bus producer."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "key-input-as-block",
+                title: "Where does a key input's binding live?",
+                choice: Picked("A Key block in ComputedSignals"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "domain::signal::BlockOp::Key, domain::keys",
+        ),
+        (
+            question: (
+                id: "key-input-gate",
+                title: "When does a held key count?",
+                source: "Brief N-2 keys as node-graph inputs (docs/briefs/N-2-graph-input-keys.md)",
+                description: r#"The brief: a held key publishes during play; keys must not fire while a text or number field has focus, and must not steal the editor's keys while paused."#,
+                decision: true,
+                options: [
+                    (
+                        label: "In play, with the keyboard free",
+                        caption: r#"A key input reads 1 only while GameState is Playing and KeyboardCaptured is false (a focused text edit, a hovered number field, the graph's key-capture button). Paused or single-stepping it reads 0 and every key is the editor's. The value is held state, not an edge: it follows the key frame by frame."#,
+                    ),
+                    (
+                        label: "Also while stepping",
+                        caption: r#"A held key would drive single steps too, but then a paused editor key and a graph key would both act on one press."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "key-input-gate",
+                title: "When does a held key count?",
+                choice: Picked("In play, with the keyboard free"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "interaction::graph_keys::keys_live",
+        ),
+        (
+            question: (
+                id: "graph-key-precedence",
+                title: "Which editor keys yield to a graph-bound key in play?",
+                source: "Brief N-2 keys as node-graph inputs (docs/briefs/N-2-graph-input-keys.md)",
+                description: r#"Brief N-2 decision 2: during play a graph-bound key wins over an editor key on the same chord; paused the editor key wins; a clash shows a warning on the input node. The owner ruled the editor keymap out of scope: no binding changes."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Bare-key uses only",
+                        caption: r#"An EditorAction bound to the key alone (W: Weld tool, Space: play/pause), the arrow-key camera pan, Home, a tool gesture's Enter/Escape and the X/Y axis lock yield (they read the keyboard through interaction::graph_keys::EditorKeys). A chord with a modifier (Ctrl+S) is not the same chord and still reaches the editor; the input itself reads its key whatever modifiers are held. The clash table is built once from the editor's input map, so it follows the keymap if that changes. Binding Space means play cannot be paused from the keyboard; the warning says so and the transport button still works."#,
+                    ),
+                    (
+                        label: "Every use of the key",
+                        caption: r#"Ctrl+S would stop saving while S drives an input."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "graph-key-precedence",
+                title: "Which editor keys yield to a graph-bound key in play?",
+                choice: Picked("Bare-key uses only"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "interaction::graph_keys::{EditorKeys, EditorKeyTable}, interaction::input::apply_shortcuts",
+        ),
+        (
+            question: (
+                id: "interaction-signal-edge",
+                title: "Which layer publishes the held keys?",
+                source: "Brief N-2 keys as node-graph inputs (docs/briefs/N-2-graph-input-keys.md)",
+                description: r#"The gate needs KeyboardCaptured (interaction) and the bus (signal). interaction did not depend on signal, though command (below it) does."#,
+                decision: true,
+                options: [
+                    (
+                        label: "interaction depends on signal",
+                        caption: r#"A new downward edge interaction to signal (row in tests/boundaries.rs; Cargo.lock gains one internal line, no new third-party crate). interaction::graph_keys publishes the key@ inputs between publish_sensor_refs and evaluate_computed."#,
+                    ),
+                    (
+                        label: "signal reads the keyboard",
+                        caption: r#"signal would need its own copy of the captured flag, written by ui; two flags for one fact."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "interaction-signal-edge",
+                title: "Which layer publishes the held keys?",
+                choice: Picked("interaction depends on signal"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "tests/boundaries.rs, crates/gradiance-interaction/Cargo.toml",
+        ),
+        (
+            question: (
+                id: "ui-key-hold",
+                title: "How does a script hold a key?",
+                source: "Brief N-2 keys as node-graph inputs (docs/briefs/N-2-graph-input-keys.md)",
+                description: r#"ui.key pressed and released in consecutive frames, so a script could not hold a key for the done-when behaviour test."#,
+                decision: true,
+                options: [
+                    (
+                        label: "An optional hold on ui.key",
+                        caption: r#"ui.key takes hold (1-600 frames, default 1). Positional calls may now leave off trailing Option fields for every operation (OpEntry::required; the signature shows them as [hold]), so (ui-key "Escape") still works and (ui-key "E" 60) holds E for a second."#,
+                    ),
+                    (
+                        label: "A separate ui.key_hold operation",
+                        caption: r#"A second verb for the same gesture."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "ui-key-hold",
+                title: "How does a script hold a key?",
+                choice: Picked("An optional hold on ui.key"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "gradiance_op::OpEntry::named, ui::ops::UiKey",
+        ),
+        (
+            question: (
+                id: "key-input-authoring",
+                title: "How does a person or a script set an input's key?",
+                source: "Brief N-2 keys as node-graph inputs (docs/briefs/N-2-graph-input-keys.md)",
+                description: r#"The brief: the person sets the key per input in the node graph."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Capture button, defkey verb",
+                        caption: r#"The Key block's footer has a + key button (click it, press the key; Escape cancels and so cannot be captured), a pair checkbox and a - key button, and an orange line per editor use of either key. A new block binds E (+) and Q (-), which no bare editor key uses. Keys are saved by name (W, Left, F5; domain::keys, shared with ui.key's parser) and read as physical key codes. Scripts use (defkey name key [negative]) (signal.key)."#,
+                    ),
+                    (
+                        label: "A combo box of key names",
+                        caption: r#"No capture, a long list."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "key-input-authoring",
+                title: "How does a person or a script set an input's key?",
+                choice: Picked("Capture button, defkey verb"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "ui::node_graph::key_fields, script::ops::DefKey",
+        ),
     ],
 )

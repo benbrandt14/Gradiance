@@ -1722,6 +1722,59 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
 mod tests {
     use super::*;
 
+    /// Runs one egui pass of a key input's `+` capture button with `events`;
+    /// returns whether the key changed.
+    fn capture_pass(ctx: &egui::Context, key: &mut String, events: Vec<egui::Event>) -> bool {
+        let mut changed = false;
+        let input = egui::RawInput {
+            events,
+            ..egui::RawInput::default()
+        };
+        let mut output = ctx.run_ui(input, |ui| {
+            changed = key_capture(ui, "in-1", "+", key);
+        });
+        output.textures_delta.clear();
+        changed
+    }
+
+    fn key_down(key: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::default(),
+        }
+    }
+
+    #[test]
+    fn a_listening_key_button_binds_the_next_key_and_claims_the_keyboard() {
+        let ctx = egui::Context::default();
+        let listening = egui::Id::new(("graph-key-capture", "in-1", "+"));
+        let mut key = "E".to_owned();
+        assert!(!capture_pass(&ctx, &mut key, vec![key_down(egui::Key::W)]));
+        assert_eq!(key, "E", "not listening: a key is the editor's");
+        assert!(!crate::unit_fields::take_key_claim(&ctx));
+
+        ctx.data_mut(|d| d.insert_temp(listening, true));
+        assert!(capture_pass(&ctx, &mut key, vec![key_down(egui::Key::W)]));
+        assert_eq!(key, "W", "the pressed key is bound");
+        assert!(
+            crate::unit_fields::take_key_claim(&ctx),
+            "listening claims the keyboard, so W does not also pick a tool"
+        );
+        assert_eq!(ctx.data(|d| d.get_temp::<bool>(listening)), None);
+
+        ctx.data_mut(|d| d.insert_temp(listening, true));
+        assert!(!capture_pass(
+            &ctx,
+            &mut key,
+            vec![key_down(egui::Key::Escape)]
+        ));
+        assert_eq!(key, "W", "Escape cancels");
+        assert_eq!(ctx.data(|d| d.get_temp::<bool>(listening)), None);
+    }
+
     fn body(graph: &mut NodeGraph, id: StableId) {
         reconcile_add(
             graph,

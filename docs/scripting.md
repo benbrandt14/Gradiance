@@ -283,6 +283,8 @@ across and ±3.5 m up and down); angles are radians.
 (defparam name value min max); a tunable slider knob, published on the bus
 (defsignal name expr)        ; a computed signal from an RPN expression over
                              ; other signals + `t`, e.g. "t sin amp *"
+(defkey name key [negative]) ; a key input: 1 while key is held in play,
+                             ; -1 for negative (brief N-2), e.g. "E" "Q"
 (label body name)            ; name a body in the workspace (viewport tag);
                              ; body is a spawn's return value (or ans)
 
@@ -527,6 +529,7 @@ and `ui-screenshot` logs that there is no window.
 (ui-click (list 32 141))                   ; a window point: the palette's Select
 (ui-drag (list 600 370) (list 700 370) 10) ; 10 frames of movement
 (ui-key "Escape")                          ; clear the selection
+(ui-key "E" 60)                            ; hold E for 60 frames (a key input)
 (ui-text "1.5\n")                          ; type into the focused field
 (ui-wheel (list 640 370) 1)                ; zoom in a notch
 ```
@@ -536,7 +539,7 @@ and `ui-screenshot` logs that there is no window.
 | `(ui-click at)` | `ui.click` | editor | Left click at `at`: a widget name (`ui-inspect` lists them; `(ui-click "tools:Box")` picks the Box tool) or a window point `(list x y)`. Plays move, press, release, one frame each. |
 | `(ui-click-button at button)` | `ui.click_button` | editor | The same click with a named button: `"left"`, `"middle"` or `"right"`. A middle click on a number field resets it to its default (brief U-8b). |
 | `(ui-drag from to steps)` | `ui.drag` | editor | Left drag: move to `from`, press, move to `to` in `steps` frames (1–200), release. A tool's gesture commits its one undo step on the release, as for a hand-made drag. |
-| `(ui-key chord)` | `ui.key` | editor | Press and release a chord written as menus show it: `"Ctrl+Z"`, `"Ctrl+Shift+G"`, `"Delete"`, `"Escape"`, `"F1"`, `"A"`. Modifiers go down a frame before the key and up a frame after. |
+| `(ui-key chord [hold])` | `ui.key` | editor | Press and release a chord written as menus show it: `"Ctrl+Z"`, `"Ctrl+Shift+G"`, `"Delete"`, `"Escape"`, `"F1"`, `"A"`. Modifiers go down a frame before the key and up a frame after. `hold` (1–600 frames, default 1) keeps the key down that long: a held key drives a node-graph key input while the sim plays (brief N-2). |
 | `(ui-text text)` | `ui.text` | editor | Types `text` into whatever has keyboard focus (click the field first), in one frame; a newline presses Enter. Typed text trips no key shortcut. |
 | `(ui-wheel at lines)` | `ui.wheel` | editor | Move to `at`, then turn the wheel by `lines` (> 0: up, away from you). |
 
@@ -899,7 +902,8 @@ line is written. An edit becomes a command in the next frame's `Update`.
 
 **The `name` form is the same operation, positionally.** `{"name":
 "spawn-box", "args": [0, 1, 1.6, 1.2]}` maps the args to the named params in
-declared order (the mapping the Lisp doorway uses) and goes through the
+declared order (the mapping the Lisp doorway uses; trailing optional params,
+shown as `[hold]` in a signature, may be left off) and goes through the
 registry exactly like the `id` form: no Scheme text, no console line. The
 surface is **registry-only**: a **VM built-in** (`ops`, `describe`, the
 invocation-context reads) exists only inside a script run, so naming one is
