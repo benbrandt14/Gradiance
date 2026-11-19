@@ -28,6 +28,7 @@
 //! [`expr`] is the one parser for typed values (`25 cm`, `90 deg`,
 //! `2*pi`): number fields read through [`DisplayUnit::parse`], which fits
 //! the result to the field's dimension and display unit ([`UnitPrefs`]).
+//! [`step`] is the Ctrl-snap increment those fields use (brief U-8).
 //!
 //! # 2D density
 //!
@@ -40,6 +41,7 @@ pub mod display;
 pub mod expr;
 pub mod mass;
 pub mod quantity;
+pub mod step;
 pub mod world;
 
 pub use dimension::Dimension;
