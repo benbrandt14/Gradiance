@@ -168,6 +168,30 @@ impl OpEntry {
         serde_json::from_str(self.meta.example).unwrap_or(Value::Null)
     }
 
+    /// The params a person's click can supply, or `None` when a field needs
+    /// typing. Every field must name objects: a [`Target`](crate::Target)
+    /// becomes `"selection"` and a list of them `["selection"]`, as the Edit
+    /// and context menus write them. An operation with no fields takes `{}`.
+    /// What F3 search can invoke (brief U-9).
+    pub fn selection_params(&self) -> Option<Value> {
+        let TypeInfo::Struct(info) = (self.info)() else {
+            return None;
+        };
+        let target = <crate::Target as bevy::reflect::TypePath>::type_path();
+        let mut object = Map::new();
+        for field in info.iter() {
+            let value = match field.type_info() {
+                _ if field.type_path() == target => Value::from("selection"),
+                Some(TypeInfo::List(list)) if list.item_ty().path() == target => {
+                    Value::Array(vec![Value::from("selection")])
+                }
+                _ => return None,
+            };
+            object.insert(field.name().to_owned(), value);
+        }
+        Some(Value::Object(object))
+    }
+
     /// The Lisp call form: `(spawn-box x y w h)`.
     pub fn signature(&self) -> String {
         let mut text = format!("({}", self.meta.lisp);
@@ -342,6 +366,42 @@ mod tests {
         assert_eq!(entry.signature(), "(move-thing x y)");
         assert_eq!(entry.schema()["required"], json!(["x", "y"]));
         assert_eq!(entry.example(), json!({"x": 1, "y": 2}));
+    }
+
+    /// Pick things.
+    #[derive(Deserialize, Reflect)]
+    #[serde(deny_unknown_fields)]
+    struct PickThings {
+        one: crate::Target,
+        many: Vec<crate::Target>,
+    }
+
+    impl Operation for PickThings {
+        const META: OpMeta = OpMeta {
+            id: "thing.pick",
+            lisp: "pick-things",
+            doc: "Pick things.",
+            seam: Seam::Edit,
+            menu: None,
+            chord: None,
+            undo: None,
+            example: r#"{"one": 0, "many": [1]}"#,
+        };
+
+        fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+            Ok(OpOutput::none())
+        }
+    }
+
+    #[test]
+    fn only_object_fields_are_filled_by_the_selection() {
+        let picks = OpEntry::of::<PickThings>().selection_params();
+        assert_eq!(
+            picks,
+            Some(json!({"one": "selection", "many": ["selection"]}))
+        );
+        // A number needs typing: not invocable by a click.
+        assert_eq!(OpEntry::of::<MoveThing>().selection_params(), None);
     }
 
     #[test]

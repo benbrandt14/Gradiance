@@ -31,6 +31,7 @@ pub mod pack;
 pub mod pointer;
 pub mod selection;
 pub mod snap;
+pub mod tool_ops;
 pub mod tools;
 
 use bevy::prelude::*;
@@ -106,6 +107,7 @@ impl Plugin for InteractionPlugin {
             .resource_mut::<gradiance_op::OpContextFillers>()
             .add(selection::fill_selection_mirror);
         ops::install(app);
+        tool_ops::install(app);
         app.configure_sets(Update, InteractionSet.before(gradiance_op::OpInvokeSet));
 
         app.add_plugins(input::EditorInputPlugin);

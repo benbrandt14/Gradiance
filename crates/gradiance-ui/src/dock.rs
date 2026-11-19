@@ -403,7 +403,8 @@ pub fn right_dock(
             "right-dock".into(),
             egui::UiBuilder::new()
                 .layer_id(egui::LayerId::background())
-                .max_rect(ctx.viewport_rect()),
+                // Above the status bar (drawn first, brief U-9).
+                .max_rect(panels.above_bottom(ctx.viewport_rect())),
         );
         egui::Panel::right("right-dock-panel")
             .resizable(true)

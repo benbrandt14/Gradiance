@@ -980,7 +980,7 @@ fn panel_reads_see_the_panels_state() {
     run(&mut app, "(length (panels))");
     let (ok, output) = last_entry(&app).expect("logged");
     assert!(ok, "{output}");
-    assert_eq!(output, "12", "one row per `Panels::named` entry");
+    assert_eq!(output, "14", "one row per `Panels::named` entry");
 }
 
 #[test]

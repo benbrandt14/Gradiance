@@ -58,6 +58,10 @@ pub struct Panels<'w> {
     pub optimizer: ResMut<'w, crate::optimizer::OptimizerExpanded>,
     /// Review-mode window (questions as scenes).
     pub review: ResMut<'w, crate::review::ReviewWindow>,
+    /// F3 operation search (brief U-9).
+    pub search: ResMut<'w, crate::search::SearchPanel>,
+    /// The status bar along the bottom edge (brief U-9).
+    pub status: ResMut<'w, crate::status_bar::StatusBar>,
     /// Debug overlays (field vectors).
     pub debug: ResMut<'w, gradiance_domain::settings::DebugSettings>,
 }
@@ -285,6 +289,8 @@ pub(crate) fn menu_label(name: &str) -> &'static str {
         "optimizer" => "Optimizer",
         "settings" => "Settings",
         "review" => "Review",
+        "search" => "Search operations",
+        "status" => "Status bar",
         _ => "Panel",
     }
 }
@@ -296,6 +302,7 @@ fn shortcut_for(name: &str) -> &'static str {
     match name {
         "console" => "`",
         "plot" => "\\",
+        "search" => "F3",
         _ => "",
     }
 }

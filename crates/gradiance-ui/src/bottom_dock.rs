@@ -220,7 +220,9 @@ pub fn bottom_dock(
         // the bottom-right corner (the right dock pushed its rect first).
         let viewport = ctx.viewport_rect();
         let right = panels.right_inset(viewport);
-        let area = egui::Rect::from_min_max(viewport.min, egui::pos2(right, viewport.max.y));
+        // …and above the status bar, which pushed its rect before both docks.
+        let floor = panels.bottom_inset(viewport);
+        let area = egui::Rect::from_min_max(viewport.min, egui::pos2(right, floor));
         let mut root = egui::Ui::new(
             ctx.clone(),
             "bottom-dock".into(),

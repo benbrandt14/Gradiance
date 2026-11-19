@@ -24,6 +24,7 @@ mod output;
 pub mod reflect_path;
 mod registry;
 mod schema;
+pub mod search;
 mod target;
 
 pub use context::{OpContext, OpContextFillers, OpIdSource};
