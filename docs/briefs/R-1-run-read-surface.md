@@ -1,6 +1,6 @@
 # Run and read a scene from any doorway
 Phase R (run & read surface) · roadmap § "Run & read surface" ·
-status: planned (after Phase 5, before U-9)
+status: in review (after Phase 5, before U-9)
 
 Written by the planning thread, 2026-11-19, from the owner's ranked
 brainstorm ("their existing order is a good priority"). Docs only: no code
@@ -92,4 +92,61 @@ reload → dump equal; export → parse CSV → row count).
 
 ## Outcome
 
-(empty)
+Worker, 2026-11-19, branch `claude/project-thread-tw1mvl-r1`.
+
+**Landed (nine operations, all in `docs/ops.md`):**
+
+- Transport, `crates/gradiance-interaction/src/transport.rs`: `sim.play`,
+  `sim.pause`, `sim.step` (editor seam, no undo) and `sim.time` (query).
+  All write one `SimTransport` request; `apply_sim_transport` (Update,
+  after `OpInvokeSet` and `InteractionSet`) is the only system that turns
+  it into a `GameState` change. The Space key writes `Toggle`, the
+  toolbar's Play/Pause button invokes `sim.play` / `sim.pause`.
+- Steps, `crates/gradiance-physics/src/lib.rs`: `SimStep` holds the owed
+  steps; `advance_owed_step` (FixedFirst) advances the **paused**
+  `Time<Physics>` by one fixed timestep times the sim speed per fixed tick,
+  and avian steps it (its `run_physics_schedule` runs any non-zero delta of
+  a paused clock). `sim_running` (Playing, or stepping) now gates field
+  forces, plane friction, joint breaking, signal recording
+  (`gradiance-signal`) and tracer trails (`gradiance-render`), so a stepped
+  span behaves as the same span played. Play and pause drop owed steps; a
+  second `sim.step` adds to them; n is 1..216000.
+- Scene files, `crates/gradiance-persist/src/ops.rs`: `scene.save`
+  (editor), `scene.load` (edit, one `load-scene` step), `scene.dump`
+  (query; `serde_json::to_value` of `SceneRecord::capture`, captured once
+  per operation context as the `SceneDump` mirror). Save and load lower to
+  the existing `SaveSceneRequest` / `LoadSceneRequest`; File ▸ Open/Save and
+  Ctrl+O/Ctrl+S now invoke the operations with an empty path (= dialog).
+  Save As (Ctrl+Shift+S) and Save snapshot keep their direct requests.
+- Signals, `crates/gradiance-script/src/ops.rs`: `signal.history`
+  (query, `[[t v] …]`) and `signal.export` (editor; CSV built while
+  lowering from the `SignalHistories` mirror, written by
+  `apply_editor_requests` as `EditorRequest::Export`).
+- Tests: `tests/it/run_read.rs` (play/pause/step → `sim.time` +1 s for 60
+  steps at 60 Hz, a pendulum swings; no undo step; dump → save → new →
+  load → dump equal, and the JSON decodes to the captured record; stepped
+  signals record and export, CSV rows = samples of `t`; the pendulum
+  fixture loads). Fixture `tests/fixtures/scenes/pendulum.ron` (the
+  `scene.load` example; regenerate with `UPDATE_FIXTURES=1`).
+- Docs: `docs/scripting.md` (verb list and a "Run and read an experiment"
+  section), `docs/ops.md` regenerated, CLAUDE.md layer line.
+
+**Decisions** (`docs/review/archive.ron`, `decision: true`):
+`sim-step-while-paused`, `persist-op-edge` (persist declares `op`
+directly; one row in `tests/boundaries.rs`), `scene-file-paths` (empty
+path = dialog; `.ron` / `.csv` required; load pre-reads the file so a
+client hears the error), `signal-read-unknown` (history: empty list;
+export: error).
+
+**Learned:**
+
+- The op-context filler now captures a full `SceneRecord` per context
+  build. That is per invocation and per script run pass, and per frame
+  only while F3 search is open. Measure before scenes get large; a cache
+  keyed on the command revision would be wrong while playing (poses move).
+- Inside one script run `(sim-step n)` then `(sim-time)` reads the old
+  time (rule 3); a client polls `sim.time` from later calls. R-2's headless
+  runner can wait on `SimStep::remaining() == 0` instead.
+- Not checked: the real-window behaviour of the transport button and of
+  stepping at frame rates above the fixed rate (headless tests run one
+  fixed tick per frame).

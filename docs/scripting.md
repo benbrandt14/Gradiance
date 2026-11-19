@@ -256,6 +256,18 @@ across and ±3.5 m up and down); angles are radians.
 ;; an unknown unit, or a conversion between dimensions (convert 90 "deg" "m"),
 ;; is a script error. See "Units" below.
 
+;; run & read — an experiment end to end (brief R-1; no undo steps but load)
+(sim-play) (sim-pause)       ; the transport's Play / Pause (the Space key's path)
+(sim-step 60)                ; pause, then advance exactly 60 fixed steps; returns
+                             ; at once, the steps run over the next fixed ticks
+(sim-time)                   ; simulated seconds on the physics clock
+(scene-dump)                 ; the whole scene as JSON text: the record a save writes
+(save-scene "run.ron")       ; write the scene (.ron; "" = the last path, else a dialog)
+(load-scene "run.ron")       ; replace the scene with a file's: one undo step
+(signal-history "t")         ; a signal's recorded samples: ((t v) ...), oldest first
+(signal-export "run.csv" (list "t" "speed"))  ; t,t,speed rows, one per sample
+                             ; of the first signal; returns the path
+
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
 (register-tool name n src)   ; add a palette tool: n clicks, then src runs once
@@ -367,6 +379,35 @@ built from the REPL stays addressable, MATLAB-workspace style:
 Labels are unique by name (re-labelling rebinds), never persisted, and show
 up in the context menu's pick list. The `StableId` underneath remains the
 durable identity.
+
+### Run and read an experiment (brief R-1)
+
+```scheme
+(load-scene "tests/fixtures/scenes/pendulum.ron")
+(sim-step 120)               ; two simulated seconds at 60 Hz
+;; a later run, once (sim-time) has moved on by 2:
+(signal-export "swing.csv" (list "t"))
+(save-scene "swing.ron")
+```
+
+| Verb | Id | Seam | What it does |
+|---|---|---|---|
+| `(sim-play)` | `sim.play` | editor | Runs the simulation, as the transport's Play. Drops steps a `sim-step` still owes. |
+| `(sim-pause)` | `sim.pause` | editor | Freezes it, as Pause. Drops owed steps. |
+| `(sim-step n)` | `sim.step` | editor | Pauses, then advances exactly `n` fixed steps (1 to 216000) of the physics clock, each the fixed timestep times the sim speed, as a playing tick. Returns at once; the steps run one per fixed tick. Field forces, joint breaking, signal recording and tracer trails run while steps are owed, as in play. A second request adds to the steps owed. |
+| `(sim-time)` | `sim.time` | query | Simulated seconds on the physics clock. Poll it to see a `sim-step` done. |
+| `(scene-dump)` | `scene.dump` | query | The scene as JSON: the `SceneRecord` a save writes (bodies, joints with their anchors, groups, nodes, environment). A remote client gets the object, Lisp its text. |
+| `(save-scene path)` | `scene.save` | editor | Writes the scene to `path` (must end in `.ron`). `""`: the last saved or opened path, else a dialog (File ▸ Save, Ctrl+S). Returns the path; the file is written in the same frame. |
+| `(load-scene path)` | `scene.load` | edit | Replaces the scene with the file's, one undo step (File ▸ Open, Ctrl+O; `""`: a dialog). A file that does not read or parse is an error and nothing is queued. |
+| `(signal-history name)` | `signal.history` | query | The signal's recorded `[t v]` samples, oldest first (the last 600). Empty for a name the bus does not hold. |
+| `(signal-export path names)` | `signal.export` | editor | Writes CSV to `path` (must end in `.csv`): a header `t,<names>`, then one row per sample of the first signal; another signal's cell is its sample at the same `t`, else empty. An unknown name is an error. |
+
+Each is one call through the registry, so a remote client or `gradiance op`
+runs the same experiment (`gradiance op sim.step --n 120`, then poll
+`gradiance op sim.time`). Paths are relative to the app's working directory
+and are not confined to it (as `ui.screenshot`). Inside one script run every
+read sees the state before the run (rule 3), so `(sim-step 60)` and
+`(sim-time)` in one run read the old time: poll from a later run.
 
 ### The window: inspect and screenshot (brief U-3)
 
