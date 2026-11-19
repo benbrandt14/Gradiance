@@ -605,6 +605,54 @@ the two interpolation modes cover the shapes in practice.
   menu-local radius field. Fillets of existing corners of one body, chamfers
   and smooth subtract/intersect remain open
 
+## Run & read surface (planned 2026-11-19, briefs R-1..R-4)
+
+Owner-ranked from a low-effort brainstorm (2026-11-19). A script, the CLI or
+an MCP client can edit a scene but cannot run an experiment: no operation
+plays, steps, saves, loads or exports. Each item reuses an existing seam and
+adds no dependency. Order is the owner's priority; it sits after Phase 5 and
+before U-9 (`docs/state.md`).
+
+1. **R-1** run & read operations (`docs/briefs/R-1-run-read-surface.md`):
+   `sim.play` / `sim.pause` / `sim.step n` / `sim.time`; `scene.dump`
+   (`SceneRecord` as JSON); `scene.save` / `scene.load` (the existing
+   persist requests); `signal.history` / `signal.export` (CSV from the
+   `SignalBus`). About 1.5–2 days.
+2. **R-2** headless rollout runner `gradiance run`
+   (`docs/briefs/R-2-headless-rollout.md`): R-1 composed with no window.
+   1–2 days. Unblocks sweeps, system identification, Phase 6 replay tests.
+3. **R-3** insert a scene file + copy/paste bodies as RON text
+   (`docs/briefs/R-3-insert-and-clipboard.md`; audit row 13). About 1 day.
+4. **R-4** packing as an operation with indexed targets
+   (`docs/briefs/R-4-pack-op.md`). 0.5–1 day.
+
+**Rejected by the owner (2026-11-19), do not re-propose without new facts:**
+- *Session macro recording to `.scm`*: tool gestures emit intents, not
+  operations, so a recorder captures only part of the edits. U-11 (Adjust
+  Last Operation) needs op-level history first.
+- *Ruler / measure tool*: script tools have no previews yet (3-5,
+  retained), so it is new native UI work, not low effort.
+
+## Nonlinear dynamics & multibody play (planned 2026-11-19, briefs N-1..N-9)
+
+Owner-approved (2026-11-19). Goal: interesting play with nonlinear dynamics
+and multibody models. Each item reuses an existing seam. Order:
+
+1. **N-1** signal-driven actuators: motor speed/cap, field strength,
+   gravity scale as signal sinks (derived override, Tier B). Today every
+   sink is visual.
+2. **N-2** keys as node-graph inputs, with settable bindings per input
+   (scene content; not the editor keymap, which is unsettled).
+3. **N-3** thruster node. 4. **N-4** air drag + wind.
+5. **N-5** chain / rope tool. 6. **N-6** sketch tool (stroke → capsule
+   union). 7. **N-7** buoyancy region. 8. **N-8** laser node (reflection,
+   hit signal). 9. **N-9** mirror H/V + joint load colour.
+
+**Rejected by the owner (2026-11-19):** scene notes/annotations and a File ▸
+Examples menu ("this isn't an educational tool"). **Not recommended by the
+planner:** gears (no avian gear constraint known; unverified), particle
+water, a time scrubber (undo already reverts a run).
+
 ## Scripting & symbolic modeling (design accepted)
 
 Direction is ratified in `docs/script-lisp-decision.md`: a Lisp/DSL over a
