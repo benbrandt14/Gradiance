@@ -3,7 +3,8 @@
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
 Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
-3f211ab; order per `docs/unified-surface-plan.md` § 10 and § 13).
+3f211ab; six review answers ingested; order per
+`docs/unified-surface-plan.md` § 10 and § 13).
 
 ## Position
 
@@ -11,13 +12,12 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **5-4** DSL units in progress. The stack #257–#264 merged
+- **Now:** **U-8b** middle-click reset in progress (stacked on 5-4, #266). The stack #257–#264 merged
   on 2026-11-19 (main 3f211ab): 4b-3 scene looks, U-7 chrome tokens, 4b-4
   scaled defaults (format v8), A-1 screenshot audit (6 fixes), A-2 audit
   follow-ups, 5-2 quantity catalog, 5-3 unit input, U-8 number fields.
-  Each brief's Outcome holds its decisions and cuts. Open review
-  questions: `look`, `toon-lighting`, `chrome`, `spring-feel`,
-  `units-display`, `number-fields`.
+  Each brief's Outcome holds its decisions and cuts. No open review
+  questions: the six answered on 2026-11-19 are in `archive.ron`.
   Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
   tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
   Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
@@ -41,7 +41,9 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
      #258), **4b-4** scaled defaults (done, #259); audit **A-1** (done,
      #260) and **A-2** (done, #261).
   9. **Phase 5:** 5-2 (done, #262), 5-3 (done, #263), **U-8** number-field
-     behaviours (done, #264), then **5-4** (in progress), 5-5.
+     behaviours (done, #264), then **5-4** (done, #266), **U-8b** middle
+     click resets every number field (in progress), **4b-5** toon bands on the bodies
+     (both from owner notes, 2026-11-19), then 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).
@@ -64,6 +66,12 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   - **Review answers, ingested 2026-11-17** (`docs/review/archive.ron`):
     the start-up scene stays **empty**; **toon** stays the default shading;
     the fillet bulge is **accepted**.
+  - **Review answers, ingested 2026-11-19:** every built default stays:
+    **Clay studio** look, the new key/fill lights, **Blender dark with the
+    scene accent** chrome, **degrees and metres**, the **settling** spring,
+    number fields **as built**. Notes became briefs U-8b (middle-click
+    reset) and 4b-5 (bands on the bodies, like specular highlights); a
+    real slider widget is retained (UI/render).
   - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
     reject older files, regenerate goldens, no migrations.
   - **Merge freely when CI is green** and no tests or checks were removed to
@@ -148,6 +156,7 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
     takes the part that fits its scope; the rest is for the next planning
     stage;
   - Joint window covers the Properties dock;
+  - a real slider widget for number fields (owner note, 2026-11-19);
   - opening a dock re-centres and rescales the view (A-1 finding 13;
     proposal in the A-2 Outcome);
   - report Bevy's SSAO-viewport bug upstream (then drop the sub-view
