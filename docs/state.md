@@ -12,7 +12,7 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-10** (editor areas + saved workspaces; no brief yet).
+- **Now:** **4b-6** toon ramp (brief `docs/briefs/4b-6-toon-ramp.md`); then **U-10** (editor areas + saved workspaces; no brief yet).
   **U-9** F3 search, status bar and tools pie is done (#272, stacked on
   5-5; tool operations `tool.*`, `ui.search`; review question
   `status-bar-and-pie` open).
@@ -55,7 +55,19 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
      click resets every number field (done, #268), **4b-5** toon bands on the bodies
      (done, #270; both from owner notes, 2026-11-19), then **5-5** (done,
      #271; `docs/frames-decision.md`, `docs/curvilinear-tools-decision.md`).
-  10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10** (now)
+  9b. **R-1..R-4** run & read surface (owner-ranked 2026-11-19; roadmap
+      § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
+      load/dump/export operations, the headless `gradiance run`,
+      insert + clipboard, packing as an operation.
+  9c. **N-1..N-9** nonlinear dynamics & multibody play (owner-approved
+      2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
+      briefs `docs/briefs/N-*`): signal actuators, graph input keys,
+      thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
+      joint load colour.
+  9d. **4b-6** toon ramp (now): themed gradient ramp + picker, matte,
+      dithered band edges, normals from the shape (owner direction with a
+      reference image, 2026-11-19; supersedes `toon-highlights`).
+  10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10**
       editor areas + saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).
   12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
