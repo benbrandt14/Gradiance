@@ -31,8 +31,8 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use gradiance_interaction::pack::PackSession;
-use gradiance_op::{InvokeOp, json};
 use gradiance_interaction::selection::Selection;
+use gradiance_op::{InvokeOp, json};
 use gradiance_optimize::{
     Boundary, EdgeAlignment, LayerRule, Objective, ObjectiveWeights, PackConfig, RotationMode,
     ShelfOrder, SolverKind,

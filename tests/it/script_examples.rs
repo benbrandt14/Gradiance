@@ -129,6 +129,34 @@ fn the_console_placeholder_lands_on_screen() {
     assert_on_screen(&bodies[0], "the placeholder");
 }
 
+/// The verbs whose first argument is a file the run writes.
+const WRITING_VERBS: [&str; 2] = ["(save-scene \"", "(signal-export \""];
+
+/// `source` with every file a writing verb names moved under `dir`.
+fn redirect_writes(source: &str, dir: &str) -> String {
+    let mut out = source.to_owned();
+    for verb in WRITING_VERBS {
+        out = out.replace(verb, &format!("{verb}{dir}/"));
+    }
+    out
+}
+
+#[test]
+fn file_writing_examples_write_into_the_scratch_directory() {
+    assert_eq!(
+        redirect_writes(
+            "(save-scene \"swing.ron\") (signal-export \"s.csv\" (list \"t\"))",
+            "/x"
+        ),
+        "(save-scene \"/x/swing.ron\") (signal-export \"/x/s.csv\" (list \"t\"))"
+    );
+    let doc = include_str!("../../docs/scripting.md");
+    assert!(
+        WRITING_VERBS.iter().all(|verb| doc.contains(verb)),
+        "the doc still has a file-writing example to redirect"
+    );
+}
+
 #[test]
 fn every_scripting_doc_example_lands_on_screen() {
     let doc = include_str!("../../docs/scripting.md");
@@ -149,13 +177,22 @@ fn every_scripting_doc_example_lands_on_screen() {
         examples.len()
     );
 
+    // Examples that write files (`save-scene`, `signal-export`) write into a
+    // scratch directory, never the working tree (brief R-4: R-1's example
+    // rewrote a tracked `swing.ron` at the repository root on every run).
+    let scratch =
+        std::env::temp_dir().join(format!("gradiance-doc-examples-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("scratch dir: {e}"));
+    let scratch_text = scratch.to_string_lossy().replace('\\', "/");
+
     let mut spawned = 0;
     for (n, example) in examples.iter().enumerate() {
         let what = format!("scripting.md example #{n}");
         let mut app = paused_app();
         run_ok(&mut app, SEED, "the seed scene");
         let seeded = bodies(&mut app).len();
-        run_ok(&mut app, example, &what);
+        let example = redirect_writes(example, &scratch_text);
+        run_ok(&mut app, &example, &what);
 
         let actions: Vec<_> = app
             .world()
@@ -188,6 +225,7 @@ fn every_scripting_doc_example_lands_on_screen() {
             assert_on_screen(body, &what);
         }
     }
+    let _ = std::fs::remove_dir_all(&scratch);
     // Most examples author bodies; a regression to "nothing spawns" (every
     // example erroring the same way, say) must not pass as "all on screen".
     assert!(spawned >= 10, "the examples spawned only {spawned} bodies");

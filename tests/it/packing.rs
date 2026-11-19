@@ -41,8 +41,7 @@ fn start_on_selection(app: &mut App) {
         .into_iter()
         .filter_map(|e| app.world().get::<StableId>(e).copied())
         .collect();
-    app.world_mut()
-        .write_message(StartPackRequest { targets });
+    app.world_mut().write_message(StartPackRequest { targets });
 }
 
 /// Overwrites the optimizer rulebook.
@@ -662,10 +661,12 @@ fn a_lisp_pack_and_a_panel_pack_commit_the_same_layout() {
         reversed.reverse();
         select(&mut panel, &reversed);
         let before = panel.world().resource::<CommandStack>().undo_len();
-        panel.world_mut().write_message(gradiance::op::InvokeOp::with(
-            "pack.run",
-            serde_json::json!({"targets": ["selection"]}),
-        ));
+        panel
+            .world_mut()
+            .write_message(gradiance::op::InvokeOp::with(
+                "pack.run",
+                serde_json::json!({"targets": ["selection"]}),
+            ));
         run_until_ended(&mut panel, 400);
         assert_eq!(
             panel.world().resource::<CommandStack>().undo_len(),
@@ -713,8 +714,16 @@ fn pack_status_reads_the_run_and_apply_commits_a_held_one() {
     configure(&mut app, quick(SolverKind::Shelf));
     assert_eq!(call(&mut app, "pack.status", json!({}))["state"], "idle");
 
-    call(&mut app, "pack.set", json!({"path": "auto_apply", "value": 0}));
-    call(&mut app, "pack.set", json!({"path": "clearance", "value": 0.05}));
+    call(
+        &mut app,
+        "pack.set",
+        json!({"path": "auto_apply", "value": 0}),
+    );
+    call(
+        &mut app,
+        "pack.set",
+        json!({"path": "clearance", "value": 0.05}),
+    );
     step(&mut app, 1);
     assert!(!app.world().resource::<PackConfig>().auto_apply);
     let clearance = call(&mut app, "pack.get", json!({"path": "clearance"}));
@@ -751,7 +760,10 @@ fn pack_status_reads_the_run_and_apply_commits_a_held_one() {
     let mid = poses(&mut app, &ids);
     call(&mut app, "pack.cancel", json!({}));
     step(&mut app, 3);
-    assert_eq!(call(&mut app, "pack.status", json!({}))["state"], "cancelled");
+    assert_eq!(
+        call(&mut app, "pack.status", json!({}))["state"],
+        "cancelled"
+    );
     assert_eq!(poses(&mut app, &ids), mid);
     assert_eq!(
         app.world().resource::<CommandStack>().undo_len(),
