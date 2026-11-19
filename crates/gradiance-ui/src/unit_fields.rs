@@ -328,8 +328,8 @@ pub fn number_field(
     }
 }
 
-/// The drag: remembers where it started; Esc puts the value back there (and
-/// keeps it there until release); Ctrl snaps. Returns whether Esc cancelled
+/// The drag: remembers where it started; Esc puts the value back there;
+/// Ctrl snaps. Returns whether Esc cancelled
 /// it this frame.
 fn scrub(
     ui: &Ui,
@@ -340,36 +340,29 @@ fn scrub(
     before: f32,
 ) -> bool {
     let start_id = id.with("scrub-start");
-    let cancel_id = id.with("scrub-cancelled");
     let mut cancelled = false;
     if response.drag_started() {
         ui.data_mut(|d| d.insert_temp(start_id, before));
     }
-    if response.dragged() {
-        let start = ui.data(|d| d.get_temp::<f32>(start_id)).unwrap_or(before);
-        if ui.data(|d| d.get_temp::<bool>(cancel_id)).unwrap_or(false) {
-            *value = start;
-        } else if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-            ui.data_mut(|d| d.insert_temp(cancel_id, true));
-            *value = start;
-            cancelled = true;
-        } else if response.changed() {
-            let modifiers = ui.input(|i| i.modifiers);
-            if modifiers.command {
-                let step = if modifiers.shift {
-                    step::fine(spec.step)
-                } else {
-                    spec.step
-                };
-                *value = spec.clamp(spec.si(step::snap(spec.shown(*value), step)));
-            }
+    // egui itself aborts a drag on Esc: the frame Esc is pressed the drag
+    // has stopped. Put the value back so the gesture commits nothing.
+    let escaped = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    if (response.dragged() || response.drag_stopped()) && escaped {
+        *value = ui.data(|d| d.get_temp::<f32>(start_id)).unwrap_or(before);
+        cancelled = true;
+    } else if response.dragged() && response.changed() {
+        let modifiers = ui.input(|i| i.modifiers);
+        if modifiers.command {
+            let step = if modifiers.shift {
+                step::fine(spec.step)
+            } else {
+                spec.step
+            };
+            *value = spec.clamp(spec.si(step::snap(spec.shown(*value), step)));
         }
     }
     if response.drag_stopped() {
-        ui.data_mut(|d| {
-            d.remove::<f32>(start_id);
-            d.remove::<bool>(cancel_id);
-        });
+        ui.data_mut(|d| d.remove::<f32>(start_id));
     }
     cancelled
 }
@@ -664,5 +657,317 @@ mod tests {
             assert!(commits.is_empty(), "{typed}: {commits:?}");
             assert!((value - 1.0).abs() < 1e-6, "{typed}: {value}");
         }
+    }
+}
+
+/// Brief U-8's behaviours, driven through `egui_kittest`: each edit-seam
+/// gesture commits once, or not at all.
+#[cfg(test)]
+mod behaviour_tests {
+    use super::*;
+    use crate::widgets::{Commit, precise_drag_unit};
+    use egui::accesskit::Role;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+
+    /// The edit seam as the inspector drives it: the field is re-seeded from
+    /// `source` every frame, and `source` changes only on a commit (as an
+    /// authored component changes only when its intent is applied).
+    struct Probe {
+        source: f32,
+        default: f32,
+        dim: Dimension,
+        commits: Vec<(f32, f32)>,
+        claimed: bool,
+    }
+
+    fn harness(source: f32, default: f32, dim: Dimension) -> Harness<'static, Probe> {
+        let probe = Probe {
+            source,
+            default,
+            dim,
+            commits: Vec::new(),
+            claimed: false,
+        };
+        let mut harness = Harness::new_ui_state(
+            |ui, p: &mut Probe| {
+                let mut value = p.source;
+                if let Commit::Done(old, new) = precise_drag_unit(
+                    ui,
+                    egui::Id::new("probe"),
+                    &mut value,
+                    p.default,
+                    0.01,
+                    p.dim,
+                ) {
+                    p.commits.push((old, new));
+                    p.source = new;
+                }
+                p.claimed = take_key_claim(ui.ctx());
+            },
+            probe,
+        );
+        harness.run();
+        harness
+    }
+
+    fn field(h: &Harness<'_, Probe>) -> egui::Rect {
+        h.get_by_role(Role::SpinButton).rect()
+    }
+
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1e-4
+    }
+
+    /// Presses at the field, moves `dx` points right in steps, and (if
+    /// `release`) lets go; `modifiers` are held throughout.
+    fn scrub(
+        h: &mut Harness<'_, Probe>,
+        dx: f32,
+        modifiers: egui::Modifiers,
+        escape_at: Option<usize>,
+    ) {
+        let at = field(h).center();
+        h.hover_at(at);
+        h.event(egui::Event::ModifiersChanged(modifiers));
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers,
+        });
+        let steps = 10;
+        for i in 1..=steps {
+            if escape_at == Some(i) {
+                h.event(egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                });
+            }
+            h.hover_at(at + egui::vec2(dx * i as f32 / steps as f32, 0.0));
+        }
+        h.drop_at(at + egui::vec2(dx, 0.0));
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+        h.run();
+    }
+
+    #[test]
+    fn a_drag_commits_once_on_release() {
+        let mut h = harness(1.0, 1.0, Dimension::Length);
+        scrub(&mut h, 50.0, egui::Modifiers::NONE, None);
+        let p = h.state();
+        assert_eq!(p.commits.len(), 1, "{:?}", p.commits);
+        let (old, new) = p.commits[0];
+        assert!(near(old, 1.0), "{:?}", p.commits);
+        assert!(new > 1.3 && new < 1.6, "50 points at 0.01 m: {new}");
+    }
+
+    #[test]
+    fn shift_scrubs_at_a_tenth() {
+        let mut h = harness(1.0, 1.0, Dimension::Length);
+        scrub(&mut h, 50.0, egui::Modifiers::SHIFT, None);
+        let p = h.state();
+        assert_eq!(p.commits.len(), 1, "{:?}", p.commits);
+        let moved = p.commits[0].1 - 1.0;
+        assert!(moved > 0.02 && moved < 0.07, "a tenth of ~0.45 m: {moved}");
+    }
+
+    #[test]
+    fn escape_during_a_drag_restores_and_commits_nothing() {
+        let mut h = harness(1.0, 1.0, Dimension::Length);
+        scrub(&mut h, 60.0, egui::Modifiers::NONE, Some(5));
+        let p = h.state();
+        assert!(p.commits.is_empty(), "{:?}", p.commits);
+        assert!(near(p.source, 1.0));
+        let shown = h.get_by_role(Role::SpinButton).value().unwrap_or_default();
+        assert!(shown.contains("1.00"), "{shown}");
+    }
+
+    #[test]
+    fn ctrl_snaps_a_length_to_whole_units() {
+        let mut h = harness(0.0, 0.0, Dimension::Length);
+        scrub(&mut h, 130.0, egui::Modifiers::COMMAND, None);
+        let p = h.state();
+        assert_eq!(p.commits.len(), 1, "{:?}", p.commits);
+        assert!(
+            near(p.commits[0].1, 1.0),
+            "1.3 m snaps to 1 m: {:?}",
+            p.commits
+        );
+    }
+
+    #[test]
+    fn ctrl_snaps_an_angle_to_ten_degrees() {
+        let mut h = harness(0.0, 0.0, Dimension::Angle);
+        // 0.01 rad per point is ~0.57° per point: 40 points is ~23°.
+        scrub(&mut h, 40.0, egui::Modifiers::COMMAND, None);
+        let p = h.state();
+        assert_eq!(p.commits.len(), 1, "{:?}", p.commits);
+        assert!(near(p.commits[0].1, 20f32.to_radians()), "{:?}", p.commits);
+    }
+
+    fn hover(h: &mut Harness<'_, Probe>) {
+        let at = field(h).center();
+        h.hover_at(at);
+        h.run();
+    }
+
+    #[test]
+    fn backspace_over_a_field_resets_it_once() {
+        let mut h = harness(2.0, 1.0, Dimension::Length);
+        hover(&mut h);
+        assert!(h.state().claimed, "a hovered field claims the keys");
+        h.key_press(egui::Key::Backspace);
+        h.run();
+        assert_eq!(h.state().commits, vec![(2.0, 1.0)]);
+    }
+
+    #[test]
+    fn minus_over_a_field_negates_it() {
+        let mut h = harness(0.5, 1.0, Dimension::Length);
+        hover(&mut h);
+        h.key_press(egui::Key::Minus);
+        h.run();
+        assert_eq!(h.state().commits, vec![(0.5, -0.5)]);
+    }
+
+    #[test]
+    fn keys_away_from_a_field_do_nothing_and_are_not_claimed() {
+        let mut h = harness(2.0, 1.0, Dimension::Length);
+        h.hover_at(egui::pos2(500.0, 500.0));
+        h.run();
+        h.key_press(egui::Key::Backspace);
+        h.key_press(egui::Key::Minus);
+        h.run();
+        assert_eq!(h.state().commits, [] as [(f32, f32); 0]);
+        assert!(!h.state().claimed);
+    }
+
+    #[test]
+    fn ctrl_wheel_steps_by_the_snap_step() {
+        let mut h = harness(0.0, 0.0, Dimension::Angle);
+        hover(&mut h);
+        let notch = |y: f32| egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, y),
+            modifiers: egui::Modifiers::COMMAND,
+            phase: egui::TouchPhase::Move,
+        };
+        h.event_modifiers(notch(1.0), egui::Modifiers::COMMAND);
+        h.run();
+        h.event_modifiers(notch(-1.0), egui::Modifiers::COMMAND);
+        h.event_modifiers(notch(-1.0), egui::Modifiers::COMMAND);
+        h.run();
+        let ten = 10f32.to_radians();
+        let commits = &h.state().commits;
+        assert_eq!(commits.len(), 3, "one undo step per notch: {commits:?}");
+        assert!(near(commits[0].1, ten), "{commits:?}");
+        assert!(near(commits[2].1, -ten), "{commits:?}");
+    }
+
+    #[test]
+    fn a_plain_wheel_does_not_step() {
+        let mut h = harness(0.0, 0.0, Dimension::Angle);
+        hover(&mut h);
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, 1.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+        });
+        h.run();
+        assert_eq!(h.state().commits, [] as [(f32, f32); 0]);
+    }
+
+    fn menu_row(h: &mut Harness<'_, Probe>, row: &str) {
+        h.get_by_role(Role::SpinButton).click_secondary();
+        h.run();
+        h.get_by_label(row).click();
+        h.run();
+    }
+
+    #[test]
+    fn the_menu_copies_pastes_and_resets() {
+        let mut h = harness(0.25, 1.0, Dimension::Length);
+        menu_row(&mut h, "Copy");
+        assert_eq!(copied(&h.ctx).as_deref(), Some("0.25 m"));
+        menu_row(&mut h, "Reset to default");
+        menu_row(&mut h, "Paste");
+        assert_eq!(h.state().commits, vec![(0.25, 1.0), (1.0, 0.25)]);
+    }
+
+    #[test]
+    fn ctrl_v_over_a_field_pastes_text_with_units() {
+        let mut h = harness(1.0, 1.0, Dimension::Length);
+        hover(&mut h);
+        // bevy_egui sends Ctrl+V as the key plus the clipboard's text.
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::COMMAND));
+        h.event(egui::Event::Key {
+            key: egui::Key::V,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        });
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+        h.run();
+        // One frame with both, as bevy_egui delivers them.
+        h.input_mut().events.extend([
+            egui::Event::Key {
+                key: egui::Key::V,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            },
+            egui::Event::Text("40 cm".into()),
+        ]);
+        h.run();
+        assert_eq!(h.state().commits.len(), 1, "{:?}", h.state().commits);
+        assert!(near(h.state().commits[0].1, 0.4));
+    }
+
+    /// Clicks into the field and types `text` over its contents.
+    fn type_over(h: &mut Harness<'_, Probe>, text: &str) {
+        h.get_by_role(Role::SpinButton).click();
+        h.run();
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        // In edit mode the field is still a spin button (egui labels the
+        // text edit as the drag value), so the text goes in as an event.
+        h.event(egui::Event::Text(text.to_owned()));
+        h.run();
+    }
+
+    #[test]
+    fn escape_while_typing_keeps_the_old_value() {
+        let mut h = harness(1.0, 1.0, Dimension::Length);
+        type_over(&mut h, "25");
+        h.key_press(egui::Key::Escape);
+        h.run();
+        assert!(h.state().commits.is_empty(), "{:?}", h.state().commits);
+        assert!(near(h.state().source, 1.0));
+    }
+
+    #[test]
+    fn a_refused_entry_says_why() {
+        let mut h = harness(1.0, 1.0, Dimension::Length);
+        type_over(&mut h, "3 furlongs");
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert!(h.state().commits.is_empty(), "{:?}", h.state().commits);
+        assert!(
+            h.query_by_label_contains("unknown unit `furlongs`")
+                .is_some(),
+            "the parser's message shows under the field"
+        );
+        // A good entry clears it.
+        type_over(&mut h, "2");
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert_eq!(h.state().commits, vec![(1.0, 2.0)]);
+        assert!(h.query_by_label_contains("furlongs").is_none());
     }
 }
