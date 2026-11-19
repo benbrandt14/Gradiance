@@ -12,7 +12,7 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-11** Adjust Last Operation (brief to be written).
+- **Now:** **U-11** Adjust Last Operation (brief `docs/briefs/U-11-adjust-last-operation.md`).
   **U-10** editor areas + saved workspaces is done (#275, stacked on 4b-6:
   presets Layout/Scripting/Signals, a workspace tab row in the top bar,
   `layout.*` operations and `panel.swap`, a right-dock editor-type menu;
