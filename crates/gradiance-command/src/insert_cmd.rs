@@ -68,7 +68,8 @@ pub fn fresh_copy(
         .joints
         .iter()
         .filter_map(|joint| {
-            let def = crate::spawn::remap_joint_def(joint.def.clone(), &id_map, |p| p + offset, 0.0)?;
+            let def =
+                crate::spawn::remap_joint_def(joint.def.clone(), &id_map, |p| p + offset, 0.0)?;
             Some(JointRecord { id: mint(), def })
         })
         .collect();
@@ -307,7 +308,11 @@ mod tests {
             [id(101), id(102)]
         );
         assert_eq!(copy.bodies[1].pose.pos, Vec2::new(3.0, 1.0));
-        assert_eq!(copy.bodies[1].groups, [7, 9], "group ids move in the command");
+        assert_eq!(
+            copy.bodies[1].groups,
+            [7, 9],
+            "group ids move in the command"
+        );
         // The pair joint and the world pin; the joint to body 99 is outside.
         assert_eq!(copy.joints.len(), 2);
         assert_eq!(copy.joints[0].def.body_a, id(101));
@@ -323,11 +328,23 @@ mod tests {
     #[test]
     fn a_fragment_takes_the_named_bodies_and_their_inside_joints() {
         let mut source = scene(
-            vec![body(1, 0.0, vec![7]), body(2, 4.0, vec![7]), body(3, 8.0, vec![])],
+            vec![
+                body(1, 0.0, vec![7]),
+                body(2, 4.0, vec![7]),
+                body(3, 8.0, vec![]),
+            ],
             vec![pin(10, 1, Some(2)), pin(11, 1, Some(3)), pin(12, 2, None)],
         );
-        source.environment.group_names.0.insert(7, "pair".to_owned());
-        source.environment.group_names.0.insert(8, "other".to_owned());
+        source
+            .environment
+            .group_names
+            .0
+            .insert(7, "pair".to_owned());
+        source
+            .environment
+            .group_names
+            .0
+            .insert(8, "other".to_owned());
         let part = fragment(&source, &[id(1), id(2)]);
         let part = part.as_ref();
         assert_eq!(part.map(|p| p.bodies.len()), Some(2));

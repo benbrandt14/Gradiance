@@ -14,9 +14,9 @@ use crate::intent::AdjustLastIntent;
 use crate::intent::name;
 use crate::intent::{
     ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
-    DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LoadSceneIntent, MergeIntent, NameGroupIntent,
-    PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
-    SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
+    DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LoadSceneIntent, MergeIntent,
+    NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent, SpawnBodyIntent,
+    SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;

@@ -122,7 +122,10 @@ impl GameCommand for DeleteCommand {
 ///
 /// Returns the `(old, new)` pairs, so a caller that carries group names
 /// (an insert, brief R-3) can move them to the new ids.
-pub(crate) fn remap_clone_groups(clones: &mut [BodyRecord], next_group: &mut u32) -> Vec<(u32, u32)> {
+pub(crate) fn remap_clone_groups(
+    clones: &mut [BodyRecord],
+    next_group: &mut u32,
+) -> Vec<(u32, u32)> {
     let mut remap: Vec<(u32, u32)> = Vec::new();
     for record in clones {
         for group in &mut record.groups {

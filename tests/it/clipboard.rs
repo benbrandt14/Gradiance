@@ -68,7 +68,12 @@ fn mechanism(app: &mut App) {
         op(app, "body.spawn_circle", json!({"x": x, "y": 1, "r": 0.3})).expect("spawns");
     }
     step(app, 2);
-    op(app, "joint.hinge", json!({"a": 0, "b": 1, "x": 0.5, "y": 1})).expect("hinges");
+    op(
+        app,
+        "joint.hinge",
+        json!({"a": 0, "b": 1, "x": 0.5, "y": 1}),
+    )
+    .expect("hinges");
     op(app, "joint.hinge", json!({"a": 2, "b": -1, "x": 2, "y": 2})).expect("pins");
     step(app, 2);
     op(app, "group.create", json!({"targets": [0, 1]})).expect("groups");
@@ -153,7 +158,12 @@ fn an_inserted_file_adds_fresh_objects_in_one_step() {
     let before = capture(&mut app);
     let (depth, _) = history(&app);
     let added = returned_ids(
-        op(&mut app, "scene.insert", json!({"path": path_text, "at": []})).expect("inserts"),
+        op(
+            &mut app,
+            "scene.insert",
+            json!({"path": path_text, "at": []}),
+        )
+        .expect("inserts"),
     );
     step(&mut app, 2);
     let after = capture(&mut app);
@@ -175,8 +185,12 @@ fn an_inserted_file_adds_fresh_objects_in_one_step() {
 
     // Insert it again, centred elsewhere: three more, around (10, 0).
     let again = returned_ids(
-        op(&mut app, "scene.insert", json!({"path": path_text, "at": [10, 0]}))
-            .expect("inserts"),
+        op(
+            &mut app,
+            "scene.insert",
+            json!({"path": path_text, "at": [10, 0]}),
+        )
+        .expect("inserts"),
     );
     step(&mut app, 2);
     let third = capture(&mut app);
@@ -194,7 +208,11 @@ fn an_inserted_file_adds_fresh_objects_in_one_step() {
 
     undo(&mut app);
     undo(&mut app);
-    assert_eq!(capture(&mut app).bodies.len(), 3, "each insert undoes whole");
+    assert_eq!(
+        capture(&mut app).bodies.len(),
+        3,
+        "each insert undoes whole"
+    );
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -202,7 +220,14 @@ fn an_inserted_file_adds_fresh_objects_in_one_step() {
 fn a_bad_insert_is_an_error_and_changes_nothing() {
     let mut app = paused_app();
     let (depth, _) = history(&app);
-    assert!(op(&mut app, "scene.insert", json!({"path": "no/such.ron", "at": []})).is_err());
+    assert!(
+        op(
+            &mut app,
+            "scene.insert",
+            json!({"path": "no/such.ron", "at": []})
+        )
+        .is_err()
+    );
     assert!(op(&mut app, "edit.paste", json!({"text": "not ron", "at": []})).is_err());
     assert!(
         op(
@@ -255,9 +280,8 @@ fn copy_then_paste_adds_the_set_at_the_place() {
     assert!(centre.distance(Vec2::new(-4.0, 3.0)) < 1e-4, "{centre}");
 
     // A second paste of the same text: new ids again.
-    let twice = returned_ids(
-        op(&mut app, "edit.paste", json!({"text": text, "at": []})).expect("pastes"),
-    );
+    let twice =
+        returned_ids(op(&mut app, "edit.paste", json!({"text": text, "at": []})).expect("pastes"));
     step(&mut app, 2);
     let ids = all_ids(&capture(&mut app));
     let distinct: BTreeSet<_> = ids.iter().map(|id| id.0).collect();
@@ -289,7 +313,12 @@ fn ctrl_c_and_ctrl_v_copy_the_selection_and_paste_it_at_the_cursor() {
     mechanism(&mut app);
     select_all(&mut app);
     press(&mut app, &[KeyCode::ControlLeft, KeyCode::KeyC]);
-    let text = app.world().resource::<LastCopy>().0.clone().expect("copied");
+    let text = app
+        .world()
+        .resource::<LastCopy>()
+        .0
+        .clone()
+        .expect("copied");
     assert_eq!(from_ron(&text).expect("scene text").bodies.len(), 3);
     assert_eq!(
         *app.world().resource::<State<ToolState>>().get(),
@@ -318,7 +347,11 @@ fn ctrl_c_and_ctrl_v_copy_the_selection_and_paste_it_at_the_cursor() {
     app.insert_resource(KeyboardCaptured(true));
     app.insert_resource(FieldKeys(true));
     press(&mut app, &[KeyCode::ControlLeft, KeyCode::KeyC]);
-    assert_eq!(app.world().resource::<LastCopy>().0, None, "the field's copy");
+    assert_eq!(
+        app.world().resource::<LastCopy>().0,
+        None,
+        "the field's copy"
+    );
     app.world_mut().resource_mut::<LastCopy>().0 = Some(text);
     press(&mut app, &[KeyCode::ControlLeft, KeyCode::KeyV]);
     step(&mut app, 1);

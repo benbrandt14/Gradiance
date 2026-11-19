@@ -268,6 +268,13 @@ across and ±3.5 m up and down); angles are radians.
 (signal-export "run.csv" (list "t" "speed"))  ; t,t,speed rows, one per sample
                              ; of the first signal; returns the path
 
+;; parts and the clipboard (brief R-3; insert and paste are one undo step)
+(insert-scene "parts/arm.ron" (list))      ; add a file's objects, fresh ids, where saved
+(insert-scene "parts/arm.ron" (list 4 2))  ; ... centred at (4, 2); returns the new ids
+(copy-ron (list 0 1))        ; bodies 0 and 1 (+ joints between them) as scene text,
+                             ; also put on the clipboard
+(paste-ron text (list 0 3))  ; add scene text, fresh ids, centred at (0, 3)
+
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
 (register-tool name n src)   ; add a palette tool: n clicks, then src runs once
@@ -434,6 +441,33 @@ fixed tick per update). Exit codes: `0` done, `1` a scene that does not
 read or parse, a script error, an unknown signal or a failed write, `2` a
 usage error (`gradiance run --help`). `run` is a host, not a client: it
 builds its own app (`gradiance::run::rollout`) and needs no `--remote` app.
+
+### Parts and the clipboard (brief R-3)
+
+A scene file is also a part: `scene.insert` adds its bodies, joints, nodes
+and groups to the current scene instead of replacing it, so a folder of
+`.ron` files is a parts library with no new format. Copy and paste use the
+same text: `edit.copy` writes the named bodies as a scene file (the joints
+whose ends are all among them, a world pin with its body, the nodes on
+them, their groups' names; every other setting at its default), and
+`edit.paste` adds such a text. The text can go through chat or an MCP
+client and come back as a paste.
+
+| Verb | Id | Seam | What it does |
+|---|---|---|---|
+| `(insert-scene path at)` | `scene.insert` | edit | Adds a `.ron` file's objects with fresh ids, one `insert` step (File ▸ Insert…; `""`: a dialog). `at`: `(list)` keeps the file's positions, `(list x y)` centres the bodies there. Returns the new bodies' ids. |
+| `(copy-ron targets)` | `edit.copy` | editor | The bodies as scene RON text, put on the clipboard too (Ctrl+C, Edit ▸ Copy on the selection). Nothing named: `""`, the clipboard is left alone. |
+| `(paste-ron text at)` | `edit.paste` | edit | Adds scene RON text, as `scene.insert` adds a file (Ctrl+V: centred at the cursor; Edit ▸ Paste: where it was copied). |
+
+Every inserted or pasted body, joint and node gets a new id from the
+operation's context; the groups get new ids too, so the nesting is kept and
+nothing joins a group already in the scene, and the names go with them.
+The place is the centre of the box around the body positions. Signal
+bindings and the other settings in the text are not applied (a paste of
+settings is out of scope). Ctrl+C and Ctrl+V on a number field under the
+pointer stay the field's (copy and paste its value), and a focused text
+field takes every key. The clipboard is egui's; where no system clipboard
+can be reached, a paste reads the app's last copy.
 
 ### The window: inspect and screenshot (brief U-3)
 
