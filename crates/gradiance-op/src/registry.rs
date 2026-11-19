@@ -248,15 +248,19 @@ impl OpRegistry {
 
 /// Lowers and applies one operation by id: the path of every doorway that
 /// invokes once per call (remote, menus). Builds a fresh context, so the call
-/// reads committed state.
+/// reads committed state. A call that records an undo step is noted in the
+/// [`OpJournal`](crate::OpJournal) (Adjust Last Operation).
 pub fn invoke(world: &mut World, id: &str, params: Value) -> Result<Option<Value>, OpError> {
     let entry = world
         .get_resource::<OpRegistry>()
         .and_then(|registry| registry.get(id).cloned())
         .ok_or_else(|| OpError::Unknown(id.to_owned()))?;
     let ctx = OpContext::build(world);
-    let output = entry.lower(params, &ctx)?;
-    Ok(apply(world, entry.meta.id, output))
+    let selection = ctx.selection().ok().cloned();
+    let output = entry.lower(params.clone(), &ctx)?;
+    let value = apply(world, entry.meta.id, output);
+    crate::last_op::journal(world, &entry, params, selection);
+    Ok(value)
 }
 
 /// A request to invoke one operation: what a menu row, a button or a key
@@ -310,6 +314,8 @@ impl Plugin for OpPlugin {
         app.init_resource::<OpRegistry>();
         app.init_resource::<OpContextFillers>();
         app.init_resource::<OpIdSource>();
+        app.init_resource::<crate::OpJournal>();
+        app.init_resource::<crate::LastOp>();
         app.add_message::<InvokeOp>();
         app.add_systems(Update, run_invocations.in_set(OpInvokeSet));
     }

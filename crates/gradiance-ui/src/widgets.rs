@@ -68,7 +68,28 @@ pub fn precise_drag_in(
     speed: f32,
     unit: DisplayUnit,
 ) -> Commit<f32> {
-    precise_field(ui, id, value, (default, speed), None, unit)
+    precise_field(
+        ui,
+        id,
+        value,
+        (default, speed),
+        None,
+        unit,
+        Format::default(),
+    )
+}
+
+/// [`precise_drag`] for a whole number (a count): shown and committed
+/// rounded.
+pub fn precise_drag_int(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut f32,
+    default: f32,
+    speed: f32,
+) -> Commit<f32> {
+    let unit = crate::unit_fields::display(ui.ctx(), Dimension::Dimensionless);
+    precise_field(ui, id, value, (default, speed), None, unit, Format::INTEGER)
 }
 
 /// [`precise_drag_unit`] held to `range` (base SI).
@@ -82,7 +103,15 @@ pub fn precise_drag_clamped(
     dim: Dimension,
 ) -> Commit<f32> {
     let unit = crate::unit_fields::display(ui.ctx(), dim);
-    precise_field(ui, id, value, (default, speed), Some(range), unit)
+    precise_field(
+        ui,
+        id,
+        value,
+        (default, speed),
+        Some(range),
+        unit,
+        Format::default(),
+    )
 }
 
 /// The edit seam's one field: `(default, speed)`, an optional range, all
@@ -94,6 +123,7 @@ fn precise_field(
     (default, speed): (f32, f32),
     range: Option<RangeInclusive<f32>>,
     unit: DisplayUnit,
+    format: Format,
 ) -> Commit<f32> {
     let start_id = id.with("gesture-start");
     let active_id = id.with("gesture-active");
@@ -109,7 +139,8 @@ fn precise_field(
     }
 
     let before = *value;
-    let field = crate::unit_fields::number_field(ui, value, speed, range, unit, Some(default));
+    let field =
+        crate::unit_fields::number_field_as(ui, value, speed, range, unit, Some(default), format);
     let response = field.response;
 
     // A one-step edit (Backspace, `-`, Ctrl+wheel, paste, Reset,

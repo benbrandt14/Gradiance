@@ -369,7 +369,7 @@ macro_rules! environment_record {
 ///   scenery, the signal-dataflow graph and the group names. These describe the scene
 ///   itself: change one and the picture or the physics changes. Undo
 ///   covers them.
-/// - *workstation config* — grid, snap and camera feel. Authoring aids
+/// - *workstation config* — grid, snap, camera feel and workspaces. Authoring aids
 ///   that belong to the person, not the document. Undo never touches
 ///   these, so reverting an edit cannot silently move your grid (or
 ///   change how your camera zooms) out from under you.
@@ -444,6 +444,9 @@ environment_record! {
     computed: gradiance_domain::signal::ComputedSignals,
     /// Group names (brief 4b-1; scene content: saved and undoable).
     group_names: gradiance_domain::group::GroupNames,
+    /// Saved dock layouts (brief U-10) — workstation config: saved with the
+    /// scene, never undone.
+    workspaces: gradiance_domain::workspace::Workspaces,
 }
 
 /// A complete scene: the save file, and the unit of whole-world undo.

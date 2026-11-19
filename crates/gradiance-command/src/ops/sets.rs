@@ -2,8 +2,9 @@
 //! groups. Each intent holds a set; `"selection"` names every selected body.
 
 use super::{bodies_of, body_set};
+use crate::array_cmd::ArrayMode;
 use crate::intent::name;
-use crate::intent::{BooleanIntent, GroupIntent, MergeIntent, UngroupIntent};
+use crate::intent::{ArrayIntent, BooleanIntent, GroupIntent, MergeIntent, UngroupIntent};
 use crate::snapshot::SceneSnapshot;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
@@ -21,6 +22,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<Xor>();
     registry.register::<Group>();
     registry.register::<Ungroup>();
+    registry.register::<Array>();
 }
 
 /// The bodies of a boolean, `a`'s first: `a` hosts the result and the rest
@@ -271,5 +273,73 @@ impl Operation for Ungroup {
             return Ok(OpOutput::none());
         }
         Ok(OpOutput::none().message(UngroupIntent { targets }))
+    }
+}
+
+/// The most copies an array makes along one axis: the array gesture's cap
+/// (`interaction::tools::array_tool::MAX_COPIES_PER_AXIS`).
+pub const MAX_ARRAY_COPIES: u32 = 512;
+
+/// Pattern copies of the listed bodies: `count` copies at `step`, `2·step`,
+/// … and, when `rows` > 0, `rows` more rows at `cross`, `2·cross`, … (a
+/// grid). One undo step, as the Ctrl-drag array gesture commits; joints
+/// inside the set are copied with it.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct Array {
+    /// The bodies to copy: a list of targets (`(list i …)` in Lisp).
+    pub targets: Vec<Target>,
+    /// Copies along `step`.
+    pub count: u32,
+    /// The offset from one copy to the next (x, y).
+    pub step: [Length; 2],
+    /// Extra rows along `cross`; 0 is a single row.
+    pub rows: u32,
+    /// The offset from one row to the next (x, y); unused when `rows` is 0.
+    pub cross: [Length; 2],
+}
+
+impl Operation for Array {
+    const META: OpMeta = OpMeta {
+        id: "body.array",
+        lisp: "array-copies",
+        doc: "Copy the listed bodies count times at step (x y, metres), plus rows more rows at cross: one undo step, as the Ctrl-drag array gesture. A count of 0 is a no-op; at most 512 per axis.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::ARRAY),
+        example: r#"{"targets": [0], "count": 2, "step": [1.2, 0], "rows": 0, "cross": [0, 0]}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        if self.count > MAX_ARRAY_COPIES || self.rows > MAX_ARRAY_COPIES {
+            return Err(OpError::Invalid(format!(
+                "at most {MAX_ARRAY_COPIES} copies along an axis"
+            )));
+        }
+        let step = Vec2::new(self.step[0].0, self.step[1].0);
+        let cross = Vec2::new(self.cross[0].0, self.cross[1].0);
+        if !step.is_finite() || !cross.is_finite() {
+            return Err(OpError::Invalid("the offsets must be finite".to_owned()));
+        }
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let sources = body_set(ctx, scene, &self.targets)?;
+        if sources.is_empty() || (self.count == 0 && self.rows == 0) {
+            return Ok(OpOutput::none());
+        }
+        let mode = if self.rows == 0 {
+            ArrayMode::Linear { step }
+        } else {
+            ArrayMode::Grid {
+                step,
+                cross,
+                cross_count: self.rows,
+            }
+        };
+        Ok(OpOutput::none().message(ArrayIntent {
+            sources,
+            count: self.count,
+            mode,
+        }))
     }
 }

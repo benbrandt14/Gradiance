@@ -11,6 +11,7 @@
 
 mod harness;
 
+mod adjust_last;
 mod array_drag;
 mod booleans;
 mod client;
@@ -50,5 +51,6 @@ mod ui_panels;
 mod ui_registry;
 mod ui_snapshots;
 mod ui_surfaces;
+mod ui_workspaces;
 mod unit_commands;
 mod units_display;

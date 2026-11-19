@@ -9,13 +9,16 @@ use crate::harness::{headless_app_with, step};
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use bevy::remote::{BrpResult, RemoteMethodSystemId, RemoteMethods};
-use gradiance::command::HistoryInfo;
+use gradiance::command::{CommandStack, HistoryInfo};
 use gradiance::core::ids::StableId;
 use gradiance::domain::Body;
 use gradiance::domain::group::SelectionGroup;
 use gradiance::interaction::input::KEY_OPS;
 use gradiance::interaction::selection::{SelectTransition, SelectedJoint, Selection};
-use gradiance::op::{InvokeOp, OpEntry, OpIdSource, OpRegistry, OpTrace, Seam, TraceEntry};
+use gradiance::op::{
+    InvokeOp, LastOp, LastOpRecord, OpCall, OpEntry, OpIdSource, OpRegistry, OpTrace, Seam,
+    TraceEntry,
+};
 use gradiance::prelude::GameState;
 use gradiance::script::bridge::{ScriptInputs, ScriptLog};
 use gradiance::script::remote::{RemoteControlPlugin, method};
@@ -134,10 +137,28 @@ fn fixture() -> App {
     run_with_ids(&mut app, 20, "(begin (hinge 3 -1 3 1) (group (list 3 4)))");
     run_with_ids(&mut app, 30, "(spawn-circle 0 6 0.5)");
     run_with_ids(&mut app, 40, "(undo)");
+    // A saved workspace, so `layout.workspace.delete`'s example has one.
+    run_with_ids(&mut app, 50, "(layout-save \"Mine\")");
     app.insert_resource(OpIdSource::Random);
     let history = app.world().resource::<HistoryInfo>();
     assert_eq!(history.redo_depth, 1, "the fixture leaves one step to redo");
     app
+}
+
+/// Makes the fixture's newest step adjustable, as if `(spawn-circle 0 6 0.5)`
+/// had made it: `edit.adjust_last`'s example edits that call's radius. The
+/// fixture cannot have both a step to redo and an operation on top, so the
+/// record is planted (U-11).
+fn seed_last_op(app: &mut App) {
+    let step = app.world().resource::<CommandStack>().revision();
+    app.insert_resource(LastOp(Some(LastOpRecord {
+        call: OpCall {
+            id: "body.spawn_circle",
+            params: json!({"x": 0, "y": 6, "r": 0.5}),
+            selection: None,
+        },
+        step,
+    })));
 }
 
 fn entries(app: &App) -> Vec<OpEntry> {
@@ -196,6 +217,7 @@ fn every_doorway_lowers_a_call_to_the_same_output() {
     for entry in entries(&app) {
         let id = entry.meta.id;
         let params = Value::Object(example(&entry));
+        seed_last_op(&mut app);
 
         // Lisp: the generated verb, positional args in declared order.
         let source = call_source(entry.meta.lisp, &positional(&entry))
@@ -552,6 +574,7 @@ fn every_invocation_changes_history_by_its_declared_step() {
     for entry in entries(&fixture()) {
         let id = entry.meta.id;
         let mut app = fixture();
+        seed_last_op(&mut app);
         let (before, redo_before) = depths(&app);
         app.world_mut().write_message(InvokeOp {
             id: Cow::Borrowed(id),
@@ -563,6 +586,12 @@ fn every_invocation_changes_history_by_its_declared_step() {
         let label = app.world().resource::<HistoryInfo>().undo_label;
         match (entry.meta.seam, entry.meta.undo) {
             (Seam::Query, _) => assert_eq!(after, before, "{id}: a query recorded a step"),
+            // Adjust Last Operation replaces the newest step with one of the
+            // adjusted operation's: the depth stays and its label shows.
+            (Seam::Edit, None) if id == "edit.adjust_last" => {
+                assert_eq!(after, before, "{id}: replaces the step in place");
+                assert_eq!(label, Some("spawn-body"), "{id}: the operation's step");
+            }
             (_, Some(expected)) => {
                 assert_eq!(after, before + 1, "{id}: not exactly one step");
                 assert_eq!(label, Some(expected), "{id}: the declared undo label");
@@ -633,11 +662,6 @@ const SIDE_DOOR_ALLOW: &[(&str, &str, &str)] = &[
     (
         "gradiance-interaction/src/tools/context.rs",
         "DuplicateIntent",
-        "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
-    ),
-    (
-        "gradiance-interaction/src/tools/context.rs",
-        "ArrayIntent",
         "gesture tools: `ToolCommitWriters::emit`, one commit per gesture",
     ),
     (

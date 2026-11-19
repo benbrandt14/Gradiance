@@ -92,6 +92,7 @@ pub fn menu_bar(
     selection: Res<Selection>,
     ids: Query<&StableId, With<Body>>,
     history: Res<gradiance_command::HistoryInfo>,
+    workspaces: Res<gradiance_domain::workspace::Workspaces>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let selected_ids: Vec<StableId> = selection
@@ -118,6 +119,11 @@ pub fn menu_bar(
                 edit_menu(ui, &mut writers, has_selection, &history);
                 view_menu(ui, &mut panels, &mut grid);
                 help_menu(ui, &mut about);
+                // The workspace tabs sit in the top bar after the menus, as
+                // Blender's do (brief U-10).
+                let mut picks = Vec::new();
+                crate::workspaces::workspace_tabs(ui, &workspaces, &mut picks);
+                writers.invoke.write_batch(picks);
             });
         });
     panel_rects.push(bar.response.rect);

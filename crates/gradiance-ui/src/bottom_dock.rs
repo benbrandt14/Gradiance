@@ -31,6 +31,18 @@ pub enum BottomPane {
 }
 
 impl BottomPane {
+    /// The pane's panel name (see [`crate::dock::Pane::name`]).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Graph => "nodes",
+        }
+    }
+
+    /// The pane a panel name shows in the bottom dock, if it docks there.
+    pub fn from_name(name: &str) -> Option<Self> {
+        (name == "nodes").then_some(Self::Graph)
+    }
+
     fn title(self) -> &'static str {
         match self {
             Self::Graph => "Node Graph",
@@ -40,11 +52,38 @@ impl BottomPane {
 
 /// The bottom dock's `egui_tiles` layout. [`sync_panes`](crate::dock_sync::sync_panes)
 /// keeps its tiles in step with the open set without rebuilding, so a user's
-/// arrangement survives. Editor view-state; never persisted.
-#[derive(Resource, Default)]
+/// arrangement survives. Editor view-state; persisted only as a saved
+/// workspace ([`crate::workspaces`]).
+#[derive(Resource)]
 pub struct BottomDock {
-    tree: Option<egui_tiles::Tree<BottomPane>>,
+    pub(crate) tree: Option<egui_tiles::Tree<BottomPane>>,
+    /// The dock's height when last drawn, in points.
+    pub(crate) size: f32,
+    /// A height a workspace asked for, applied on the next draw.
+    pub(crate) pending_size: Option<f32>,
 }
+
+impl Default for BottomDock {
+    fn default() -> Self {
+        Self {
+            tree: None,
+            size: BOTTOM_DOCK_HEIGHT,
+            pending_size: None,
+        }
+    }
+}
+
+impl BottomDock {
+    /// The panes in depth-first tile order (empty when the dock is closed).
+    pub fn pane_order(&self) -> Vec<BottomPane> {
+        self.tree
+            .as_ref()
+            .map_or_default(crate::dock_sync::pane_order)
+    }
+}
+
+/// The bottom dock's default height, in points.
+pub const BOTTOM_DOCK_HEIGHT: f32 = 260.0;
 
 /// Routes each `egui_tiles` pane to its renderer. The node-graph viewer is
 /// `Some` exactly when the Graph pane is present.
@@ -167,13 +206,9 @@ pub fn bottom_dock(
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
-    // Which panes are visible, in a stable order. `sync_panes` edits tiles in
-    // place, so a user's arrangement persists across open-set changes.
-    let desired: Vec<BottomPane> = [gp.graph.is_open().then_some(BottomPane::Graph)]
-        .into_iter()
-        .flatten()
-        .collect();
-    crate::dock_sync::sync_panes(&mut dock.tree, "bottom-dock-tiles", &desired);
+    // Which panes are present was settled in `Update` by
+    // `workspaces::sync_docks`.
+    let pending_size = dock.pending_size.take();
     let Some(tree) = dock.tree.as_mut() else {
         return Ok(());
     };
@@ -230,9 +265,14 @@ pub fn bottom_dock(
                 .layer_id(egui::LayerId::background())
                 .max_rect(area),
         );
-        egui::Panel::bottom("bottom-dock-panel")
+        let mut dock_panel = egui::Panel::bottom("bottom-dock-panel")
             .resizable(true)
-            .default_size(260.0)
+            .default_size(BOTTOM_DOCK_HEIGHT);
+        // A workspace's height holds for one frame; egui keeps it after.
+        if let Some(size) = pending_size {
+            dock_panel = dock_panel.exact_size(size);
+        }
+        dock_panel
             .show(&mut root, |ui| {
                 tree.ui(&mut behavior, ui);
             })
@@ -242,6 +282,7 @@ pub fn bottom_dock(
     // Claim the dock's rect so input over it doesn't leak to the scene.
     panels.push(panel_rect);
     crate::widget_registry::publish_rect("bottom_dock", panel_rect);
+    dock.size = panel_rect.height();
 
     // Drain the node-graph pane's edits into the config-seam resources.
     node_graph::apply_pane(viewer, &mut gp);

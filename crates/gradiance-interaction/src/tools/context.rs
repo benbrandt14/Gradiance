@@ -349,6 +349,35 @@ fn publish_reference(reference: &mut ResMut<SnapReference>, now: Option<DraftRef
     }
 }
 
+/// The `body.array` call an array gesture commits: its bodies by id, a
+/// linear pattern as one row, a grid as rows along its cross step.
+pub fn array_invocation(
+    sources: &[StableId],
+    count: u32,
+    mode: gradiance_command::array_cmd::ArrayMode,
+) -> gradiance_op::InvokeOp {
+    use gradiance_command::array_cmd::ArrayMode;
+    let (step, rows, cross) = match mode {
+        ArrayMode::Linear { step } => (step, 0, Vec2::ZERO),
+        ArrayMode::Grid {
+            step,
+            cross,
+            cross_count,
+        } => (step, cross_count, cross),
+    };
+    let targets: Vec<String> = sources.iter().map(|id| id.0.to_string()).collect();
+    gradiance_op::InvokeOp::with(
+        "body.array",
+        gradiance_op::json!({
+            "targets": targets,
+            "count": count,
+            "step": [step.x, step.y],
+            "rows": rows,
+            "cross": [cross.x, cross.y],
+        }),
+    )
+}
+
 /// Message writers a [`ToolCommit`] fans out to. Grouped so the generic
 /// drivers stay under the system-parameter limit.
 #[derive(bevy::ecs::system::SystemParam)]
@@ -360,7 +389,7 @@ pub struct ToolCommitWriters<'w> {
     moves: MessageWriter<'w, CommitTransformIntent>,
     scales: MessageWriter<'w, ScaleIntent>,
     dups: MessageWriter<'w, DuplicateIntent>,
-    arrays: MessageWriter<'w, gradiance_command::intent::ArrayIntent>,
+    invoke: MessageWriter<'w, gradiance_op::InvokeOp>,
     merges: MessageWriter<'w, MergeIntent>,
     props: MessageWriter<'w, PropertyEditIntent>,
     rods: MessageWriter<'w, gradiance_command::intent::SpawnRodIntent>,
@@ -380,11 +409,11 @@ impl ToolCommitWriters<'_> {
                 count,
                 mode,
             } => {
-                self.arrays.write(gradiance_command::intent::ArrayIntent {
-                    sources,
-                    count,
-                    mode,
-                });
+                // Through the `body.array` operation, so the gesture's
+                // result is adjustable afterwards (Adjust Last Operation,
+                // brief U-11): the commit names its bodies by id, so it
+                // reads the same bodies again on re-invocation.
+                self.invoke.write(array_invocation(&sources, count, mode));
             }
             ToolCommit::SpawnNode(record) => {
                 self.spawn_node

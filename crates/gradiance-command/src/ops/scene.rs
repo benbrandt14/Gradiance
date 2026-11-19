@@ -2,11 +2,13 @@
 //! the simulation settings write.
 
 use crate::intent::name;
-use crate::intent::{LoadSceneIntent, RedoIntent, UndoIntent};
+use crate::intent::{AdjustLastIntent, LoadSceneIntent, RedoIntent, UndoIntent};
 use crate::snapshot::SceneSnapshot;
 use bevy::prelude::*;
 use gradiance_domain::settings::SimSettings;
-use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam};
+use gradiance_op::{
+    LastOp, OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Value, json,
+};
 use gradiance_scene::{EnvironmentRecord, FORMAT_VERSION, SceneRecord};
 use serde::Deserialize;
 
@@ -17,6 +19,8 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<NewScene>();
     registry.register::<BodyCount>();
     registry.register::<SimSet>();
+    registry.register::<AdjustLast>();
+    registry.register::<LastOpQuery>();
 }
 
 /// Undo the last command.
@@ -153,5 +157,100 @@ impl Operation for SimSet {
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         let settings = ctx.get::<SimSettings>()?;
         Ok(OpOutput::none().setting(settings, &self.path, self.value)?)
+    }
+}
+
+/// A new value for one field of the last operation's params: a number, a
+/// flag or a text (an object id, a name). It takes the field's own kind
+/// ([`gradiance_op::set_param`]).
+#[derive(Debug, Clone, Deserialize, Reflect)]
+#[serde(untagged)]
+pub enum AdjustValue {
+    /// A number (a whole-number field rounds it; a flag reads non-zero).
+    Number(f64),
+    /// A flag.
+    Flag(bool),
+    /// A text.
+    Text(String),
+}
+
+impl AdjustValue {
+    fn json(&self) -> Value {
+        match self {
+            Self::Number(n) => json!(n),
+            Self::Flag(b) => json!(b),
+            Self::Text(t) => json!(t),
+        }
+    }
+}
+
+/// Adjust Last Operation (brief U-11): set one field of the last
+/// operation's params and run it again in place of its step, as one undo
+/// step. `field` is a dotted path into the params (`"w"`, `"step.0"`).
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct AdjustLast {
+    /// The field: a param name, with `.i` for an element of a list.
+    pub field: String,
+    /// Its new value.
+    pub value: AdjustValue,
+}
+
+impl Operation for AdjustLast {
+    const META: OpMeta = OpMeta {
+        id: "edit.adjust_last",
+        lisp: "adjust-last",
+        doc: "Set one param of the last operation (field \"w\", \"step.0\") and run it again in place of its undo step: still one step. Errors when the newest step is not an operation's.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        // It replaces the last operation's step with one of the same label;
+        // it records none of its own.
+        undo: None,
+        example: r#"{"field": "r", "value": 0.75}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let Some(last) = ctx.get::<LastOp>()?.0.as_ref() else {
+            return Err(OpError::Invalid(
+                "there is no operation to adjust: the newest undo step is not an operation's"
+                    .to_owned(),
+            ));
+        };
+        let mut params = last.call.params.clone();
+        gradiance_op::set_param(&mut params, &self.field, &self.value.json())?;
+        Ok(OpOutput::none().message(AdjustLastIntent {
+            id: last.call.id,
+            params,
+            step: last.step,
+        }))
+    }
+}
+
+/// The last operation (brief U-11): `{"id", "params"}` of the operation
+/// that made the newest undo step, or nothing when the newest step is not
+/// an operation's (a tool gesture, an undo, a run, a load).
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct LastOpQuery {}
+
+impl Operation for LastOpQuery {
+    const META: OpMeta = OpMeta {
+        id: "edit.last_op",
+        lisp: "last-op",
+        doc: "The operation that made the newest undo step, as {id, params} (what Adjust Last Operation edits); null when there is none.",
+        seam: Seam::Query,
+        menu: None,
+        chord: None,
+        undo: None,
+        example: "{}",
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let value = ctx.get::<LastOp>()?.0.as_ref().map_or(
+            Value::Null,
+            |last| json!({"id": last.call.id, "params": last.call.params}),
+        );
+        Ok(OpOutput::none().returning(value))
     }
 }

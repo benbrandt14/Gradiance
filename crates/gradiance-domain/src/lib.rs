@@ -22,6 +22,7 @@ pub mod signal;
 pub mod theme;
 pub mod tracer;
 pub mod tuning;
+pub mod workspace;
 
 use bevy::prelude::*;
 

@@ -111,6 +111,11 @@ across and ±3.5 m up and down); angles are radians.
 (cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
 (delete i)                   ; delete the i-th body (id order, as body-x)
 (undo) (redo)                ; walk the command stack — Edit ▸ Undo/Redo as ops
+(last-op)                    ; the operation that made the newest step: {id, params}
+(adjust-last "w" 2.5)        ; set one of its params and run it again in place of
+                             ; its step: still one undo step (field "step.0" for
+                             ; a list element); an error when the newest step is
+                             ; not one operation call's (a gesture, an undo, a run)
 
 ;; edit — relationships between bodies (b < 0 pins to the world)
 (hinge a b x y)              ; revolute joint at world point (x, y) → its handle
@@ -136,6 +141,9 @@ across and ±3.5 m up and down); angles are radians.
 ;; less than radius/2 apart, which a plain merge refuses as disconnected.
 ;; Fillets render as a curve from ~4 contour cells (shape extent / 96 each:
 ;; about 0.1 m on a 2 m body); smaller radii read as a chamfer.
+(array-copies (list i …) n (list dx dy) rows (list cx cy))
+                             ; n copies at (dx, dy) steps, plus rows more rows at
+                             ; (cx, cy): the Ctrl-drag array as one undo step
 (delete-joint i)             ; remove the i-th joint
 
 ;; edit — sets of bodies (one list argument; Ctrl+G / Ctrl+Shift+G as ops)
@@ -193,6 +201,14 @@ across and ±3.5 m up and down); angles are radians.
 ;; names: outliner groups properties depth plot nodes console probe array optimizer
 ;;        settings review search status
 ;; an unknown name is a script error that lists these
+(panel-swap "outliner" "console") ; a dock tile switches its editor in place (brief U-10)
+;; workspaces — saved dock layouts; workstation config: saved with the scene,
+;; never undone (brief U-10)
+(workspace-select "Scripting") ; presets: Layout Scripting Signals; or a saved one
+(layout-save "Mine")         ; save the docks (editors, splits, sizes) and make it active
+(layout-apply)               ; put the docks back to the active workspace's saved layout
+(workspaces)                 ; every tab: name, preset?, active?
+(workspace-delete "Mine")    ; a saved one; presets cannot be deleted
 
 ;; tools — one operation per tool (brief U-9), the same pick the palette makes
 (box-tool)                   ; also select-tool drag-tool circle-tool polygon-tool hinge-tool
@@ -706,6 +722,14 @@ into the operation context, so an unknown name is refused at the call with
 the list of known names, and the reads see the state as the run began (one
 snapshot per run). The panel resources exist headless too, so tests and a
 headless remote client see the same panels, undrawn.
+
+Workspaces and areas (`crates/gradiance-ui/src/workspaces.rs`, brief U-10)
+follow the same shape: `layout.save`, `layout.apply`,
+`layout.workspace.select`, `layout.workspace.delete` and `panel.swap` lower
+to messages the UI applies (visibility through `PanelToggle`, the dock trees
+through `dock_sync`); `layout.workspace.list` reads a `WorkspaceMirror`. The
+docks' trees are kept in `Update` by `workspaces::sync_docks`, so a headless
+run has them too and a test can read a dock's tile order.
 
 `steel` may be declared only by `crates/gradiance-script` and `egui` only by
 `crates/gradiance-ui` — the package graph enforces both, and
