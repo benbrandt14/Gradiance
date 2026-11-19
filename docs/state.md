@@ -55,6 +55,15 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
      click resets every number field (done, #268), **4b-5** toon bands on the bodies
      (done, #270; both from owner notes, 2026-11-19), then **5-5** (done,
      #271; `docs/frames-decision.md`, `docs/curvilinear-tools-decision.md`).
+  9b. **R-1..R-4** run & read surface (owner-ranked 2026-11-19; roadmap
+      § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
+      load/dump/export operations, the headless `gradiance run`,
+      insert + clipboard, packing as an operation.
+  9c. **N-1..N-9** nonlinear dynamics & multibody play (owner-approved
+      2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
+      briefs `docs/briefs/N-*`): signal actuators, graph input keys,
+      thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
+      joint load colour.
   10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10** (now)
       editor areas + saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).
