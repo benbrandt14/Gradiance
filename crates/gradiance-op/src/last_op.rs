@@ -94,7 +94,7 @@ pub fn invoke_as(
         .get_resource::<OpRegistry>()
         .and_then(|registry| registry.get(id).cloned())
         .ok_or_else(|| OpError::Unknown(id.to_owned()))?;
-    let mut ctx = OpContext::build(world);
+    let mut ctx = OpContext::build_for(world, &|op| op == entry.meta.id);
     match &selection {
         Some(mirror) => ctx.insert(mirror.clone()),
         None => ctx.remove::<SelectionMirror>(),

@@ -1744,5 +1744,36 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "script::ops::{SignalHistory, signals_csv}",
         ),
+        (
+            question: (
+                id: "gated-context-mirrors",
+                title: "When is scene.dump's whole-scene record captured?",
+                source: "Brief R-1 run & read surface, orchestrator review of #278",
+                description: r#"The first cut captured a full SceneRecord on every operation context: every call, every script run pass, and every frame while F3 search is open. The orchestrator rejected that. The registry needed a way to build a costly mirror only when the operation that reads it may run."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Gated fillers in gradiance-op",
+                        caption: r#"OpContextFillers::add_for(ops, filler) runs only for a context built by OpContext::build_for with a predicate naming one of ops. invoke and invoke_as pass their own id; a script pass passes the ids whose Lisp verb its sources name as a whole token (bridge::mentions); F3 search and the groups filter use OpContext::build, which runs no gated filler. A gated op lowered without its mirror fails with MissingMirror. General, small, unit-tested; scene.dump stays a synchronous query."#,
+                    ),
+                    (
+                        label: "Dump as a request answered later",
+                        caption: r#"scene.dump lowers to a request persist drains. Cost: the caller gets no value from the call, so a remote client would need a second read path."#,
+                    ),
+                    (
+                        label: "A cheap flag the filler checks",
+                        caption: r#"A resource flag set before lowering scene.dump. Cost: every doorway must remember to set it; nothing general."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gated-context-mirrors",
+                title: "When is scene.dump's whole-scene record captured?",
+                choice: Picked("Gated fillers in gradiance-op"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T15:00:00Z",
+            ),
+            ingested_as: "op::OpContextFillers::add_for, op::OpContext::build_for, script::bridge::mentions",
+        ),
     ],
 )

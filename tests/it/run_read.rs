@@ -264,3 +264,67 @@ fn the_pendulum_fixture_loads() {
     assert_eq!(dump["bodies"].as_array().map(Vec::len), Some(1));
     assert_eq!(dump["joints"].as_array().map(Vec::len), Some(1));
 }
+
+/// How many times a context was built with the gated `scene.dump` mirror.
+#[derive(Resource, Default)]
+struct DumpProbe(usize);
+
+/// The whole-scene record is captured only for a context that may lower
+/// `scene.dump` (a gated filler): never on a frame with F3 search open, never
+/// for another operation's call, once for a dump call or a script run that
+/// names `scene-dump`.
+#[test]
+fn the_scene_record_is_captured_only_for_a_dump() {
+    use gradiance::op::{OpContext, OpContextFillers};
+    use gradiance::persist::ops::SceneDump;
+    use gradiance::script::bridge::ScriptInputs;
+    use gradiance::ui::search::{SearchPanel, SearchRows};
+
+    let mut app = paused_app();
+    pendulum(&mut app);
+    // A probe gated like persist's filler: it counts the contexts the app's
+    // doorways build for `scene.dump`.
+    app.init_resource::<DumpProbe>();
+    app.world_mut()
+        .resource_mut::<OpContextFillers>()
+        .add_for(&["scene.dump"], |world, _| {
+            world.resource_mut::<DumpProbe>().0 += 1;
+        });
+    let probes = |app: &App| app.world().resource::<DumpProbe>().0;
+
+    // Persist's filler is gated: a plain context has no record.
+    assert!(
+        OpContext::build(app.world_mut())
+            .get::<SceneDump>()
+            .is_err()
+    );
+
+    // F3 open for several frames, typing a query that lists `scene.dump`.
+    {
+        let mut panel = app.world_mut().resource_mut::<SearchPanel>();
+        panel.open = true;
+        panel.query = "scene".to_owned();
+    }
+    step(&mut app, 5);
+    assert!(
+        !app.world().resource::<SearchRows>().0.is_empty(),
+        "the search refreshed its rows"
+    );
+    // Other calls and runs.
+    op(&mut app, "body.count", json!({})).expect("counts");
+    op(&mut app, "sim.time", json!({})).expect("reads");
+    app.world_mut()
+        .resource_mut::<ScriptInputs>()
+        .submit("(body-count)");
+    step(&mut app, 2);
+    assert_eq!(probes(&app), 0, "no dump, no capture");
+
+    // A dump call, then a run that names the verb: one capture each.
+    op(&mut app, "scene.dump", json!({})).expect("dumps");
+    assert_eq!(probes(&app), 1);
+    app.world_mut()
+        .resource_mut::<ScriptInputs>()
+        .submit("(define d (scene-dump))");
+    step(&mut app, 2);
+    assert_eq!(probes(&app), 2);
+}

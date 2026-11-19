@@ -6,8 +6,11 @@
 //!
 //! `scene.dump` returns the [`SceneRecord`] a save writes, as JSON: the serde
 //! projection of the same record, not a second format (what goes on disk
-//! stays RON). Each operation context captures the record once
-//! ([`SceneDump`]), so a script run reads one snapshot (scripting rule 3).
+//! stays RON). The record ([`SceneDump`]) is a **gated** mirror
+//! (`OpContextFillers::add_for`): captured only for a context that may lower
+//! `scene.dump` (that call, or a script run whose source names
+//! `scene-dump`), once per context, so a run still reads one snapshot
+//! (scripting rule 3) and no other call or F3 frame pays for it.
 
 use crate::{LoadSceneRequest, SaveSceneRequest};
 use bevy::prelude::*;
@@ -24,6 +27,9 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone)]
 pub struct SceneDump(pub SceneRecord);
 
+/// The operations that read the [`SceneDump`] mirror.
+const DUMP_OPS: &[&str] = &[DumpScene::META.id];
+
 /// Registers the scene-file operations and the record mirror.
 pub(crate) fn install(app: &mut App) {
     {
@@ -34,7 +40,7 @@ pub(crate) fn install(app: &mut App) {
     }
     app.world_mut()
         .resource_mut::<OpContextFillers>()
-        .add(fill_scene_dump);
+        .add_for(DUMP_OPS, fill_scene_dump);
 }
 
 /// Captures the record a save would write into a new operation context.

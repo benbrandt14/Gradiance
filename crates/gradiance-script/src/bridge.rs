@@ -668,6 +668,21 @@ fn fill_reply(reply: &RunReply, result: &Result<Option<SteelVal>, ScriptError>, 
     }
 }
 
+/// Whether `source` names the symbol `name` (a whole token: delimited by
+/// whitespace, brackets, quotes or the ends). Over-matching (a comment, a
+/// string) only builds a mirror the run does not read.
+pub fn mentions(source: &str, name: &str) -> bool {
+    let delimiter = |c: char| c.is_whitespace() || "()[]{}'`,\";".contains(c);
+    source.match_indices(name).any(|(at, _)| {
+        let before = source[..at].chars().next_back().is_none_or(delimiter);
+        let after = source[at + name.len()..]
+            .chars()
+            .next()
+            .is_none_or(delimiter);
+        before && after
+    })
+}
+
 /// Exclusive: refreshes the read snapshot, runs any pending script source, then
 /// dispatches the operation records it emitted through the intent bus. Ordered
 /// before [`CommandDispatchSet`] so a script's edits become commands in the same
@@ -693,7 +708,24 @@ pub fn run_scripts(world: &mut World) {
     // Scripting rule 2: a script names objects by index or id, never by what
     // happens to be selected, so its context has no selection mirror and
     // `"selection"` is a visible error.
-    let mut ctx = OpContext::build(world);
+    // A gated mirror (`OpContextFillers::add_for`) is built only when some
+    // run of the pass names one of its operations' Lisp verbs.
+    let invoked: Vec<&'static str> =
+        world
+            .get_resource::<OpRegistry>()
+            .map_or_default(|registry| {
+                registry
+                    .entries()
+                    .iter()
+                    .filter(|entry| {
+                        sources
+                            .iter()
+                            .any(|run| mentions(&run.source, entry.meta.lisp))
+                    })
+                    .map(|entry| entry.meta.id)
+                    .collect()
+            });
+    let mut ctx = OpContext::build_for(world, &|id| invoked.contains(&id));
     ctx.remove::<SelectionMirror>();
     if let Some(engine) = world.get_non_send::<ScriptEngine>()
         && let Ok(mut guard) = engine.shared.ctx.lock()
@@ -853,6 +885,16 @@ mod tests {
     use gradiance_domain::props::BodyPhysics;
     use gradiance_domain::settings::SimSettings;
     use gradiance_domain::shape::ShapeDef;
+
+    #[test]
+    fn mentions_matches_whole_symbols_only() {
+        assert!(mentions("(scene-dump)", "scene-dump"));
+        assert!(mentions("(define d scene-dump)", "scene-dump"));
+        assert!(mentions("scene-dump", "scene-dump"));
+        assert!(!mentions("(scene-dumper)", "scene-dump"));
+        assert!(!mentions("(my-scene-dump 1)", "scene-dump"));
+        assert!(!mentions("(body-count)", "scene-dump"));
+    }
 
     #[derive(Resource, Default)]
     struct Cuts(Vec<CutIntent>);

@@ -598,7 +598,11 @@ and signal verbs in `crates/gradiance-script/src/ops.rs`. The full list is
    whether it is an undo step (`camera.set`: workstation config, none;
    `sim.set`: scene content, one `settings` step).
 3. Register it in the layer's plugin: `registry.register::<MyOp>()`. If it
-   reads a new mirror, publish it from that layer's context filler.
+   reads a new mirror, publish it from that layer's context filler. A mirror
+   too costly to build on every call (`scene.dump`'s whole-scene record) is
+   **gated**: `OpContextFillers::add_for(&["layer.verb"], filler)` runs it
+   only for a call of that operation or a script run whose source names its
+   verb.
 4. A menu row or a key writes `InvokeOp::with("layer.verb", json!({…}))`
    (or `InvokeOp::new` without params), never the intent. A key binding is
    one row of `KEY_OPS` in `crates/gradiance-interaction/src/input.rs`; a

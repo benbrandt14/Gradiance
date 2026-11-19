@@ -136,14 +136,21 @@ Worker, 2026-11-19, branch `claude/project-thread-tw1mvl-r1`.
 directly; one row in `tests/boundaries.rs`), `scene-file-paths` (empty
 path = dialog; `.ron` / `.csv` required; load pre-reads the file so a
 client hears the error), `signal-read-unknown` (history: empty list;
-export: error).
+export: error), `gated-context-mirrors`.
 
 **Learned:**
 
-- The op-context filler now captures a full `SceneRecord` per context
-  build. That is per invocation and per script run pass, and per frame
-  only while F3 search is open. Measure before scenes get large; a cache
-  keyed on the command revision would be wrong while playing (poses move).
+- `scene.dump`'s whole-scene record is a **gated** mirror (orchestrator
+  review of #278): `OpContextFillers::add_for(ops, filler)` in
+  `gradiance-op` runs a filler only for a context built by
+  `OpContext::build_for` with a predicate that names one of `ops`. A single
+  call (`invoke`, `invoke_as`) passes its own id; a script pass passes the
+  ids whose Lisp verb its sources name (`bridge::mentions`); F3 search and
+  the groups filter use `OpContext::build`, which runs no gated filler.
+  Pinned by `run_read::the_scene_record_is_captured_only_for_a_dump` and an
+  op unit test; recorded as `gated-context-mirrors`. A script that reaches
+  `scene-dump` without naming it (built by `eval`) gets a missing-mirror
+  error, never a stale record.
 - Inside one script run `(sim-step n)` then `(sim-time)` reads the old
   time (rule 3); a client polls `sim.time` from later calls. R-2's headless
   runner can wait on `SimStep::remaining() == 0` instead.

@@ -3,7 +3,7 @@
     app_version: "0.2.0",
     bodies: [
         (
-            id: ("2caba751-37c3-4f9e-9aed-4b1f255a2d8d"),
+            id: ("1c9ead58-6703-4f1c-9f97-051123d7f19e"),
             pose: (
                 pos: (-1.0, 0.0),
                 rot: 0.0,
@@ -30,9 +30,9 @@
             ),
             appearance: (
                 fill: (
-                    r: 0.024,
-                    g: 0.558,
-                    b: 0.537,
+                    r: 0.011,
+                    g: 0.531,
+                    b: 0.702,
                     a: 1.0,
                 ),
                 border: (
@@ -52,56 +52,7 @@
             tracer: None,
         ),
         (
-            id: ("2f63fec3-db93-44ff-b8e7-1cd8bb2f3378"),
-            pose: (
-                pos: (1.0, 0.0),
-                rot: 0.0,
-            ),
-            shape: Box(
-                width: 0.5,
-                height: 0.5,
-            ),
-            physics: (
-                rigid_body: Dynamic,
-                friction: (
-                    dynamic_coefficient: 0.5,
-                    static_coefficient: 0.5,
-                    combine_rule: Average,
-                ),
-                restitution: (
-                    coefficient: 0.3,
-                    combine_rule: Average,
-                ),
-                density: (1.0),
-                gravity_scale: (1.0),
-                sensor: false,
-                rotation_locked: false,
-            ),
-            appearance: (
-                fill: (
-                    r: 0.534,
-                    g: 0.407,
-                    b: 0.74,
-                    a: 1.0,
-                ),
-                border: (
-                    r: 0.163,
-                    g: 0.135,
-                    b: 0.113,
-                    a: 1.0,
-                ),
-                emissive: 0.0,
-            ),
-            depth: (
-                near: 0.0,
-                far: 0.1,
-            ),
-            groups: [],
-            field: None,
-            tracer: None,
-        ),
-        (
-            id: ("96bcee84-fa05-4440-ad14-5ffe7e9b395e"),
+            id: ("6b56039f-c03a-4428-ae55-f88c38336f36"),
             pose: (
                 pos: (0.0, 0.0),
                 rot: 0.0,
@@ -128,9 +79,58 @@
             ),
             appearance: (
                 fill: (
-                    r: 0.211,
-                    g: 0.567,
-                    b: 0.315,
+                    r: 0.61,
+                    g: 0.459,
+                    b: 0.029,
+                    a: 1.0,
+                ),
+                border: (
+                    r: 0.163,
+                    g: 0.135,
+                    b: 0.113,
+                    a: 1.0,
+                ),
+                emissive: 0.0,
+            ),
+            depth: (
+                near: 0.0,
+                far: 0.1,
+            ),
+            groups: [],
+            field: None,
+            tracer: None,
+        ),
+        (
+            id: ("9b825177-ce00-41b9-961c-c627dd7714aa"),
+            pose: (
+                pos: (1.0, 0.0),
+                rot: 0.0,
+            ),
+            shape: Box(
+                width: 0.5,
+                height: 0.5,
+            ),
+            physics: (
+                rigid_body: Dynamic,
+                friction: (
+                    dynamic_coefficient: 0.5,
+                    static_coefficient: 0.5,
+                    combine_rule: Average,
+                ),
+                restitution: (
+                    coefficient: 0.3,
+                    combine_rule: Average,
+                ),
+                density: (1.0),
+                gravity_scale: (1.0),
+                sensor: false,
+                rotation_locked: false,
+            ),
+            appearance: (
+                fill: (
+                    r: 0.011,
+                    g: 0.531,
+                    b: 0.702,
                     a: 1.0,
                 ),
                 border: (
