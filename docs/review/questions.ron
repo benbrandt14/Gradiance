@@ -13,5 +13,41 @@
 // recorded in archive.ron as a `decision: true` entry; it is not asked.
 (
     version: 1,
-    questions: [],
+    questions: [
+        (
+            id: "toon-highlights",
+            title: "Which toon bands should a body show on its own face?",
+            source: "Review answer `toon-lighting` (2026-11-19): bands on the objects themselves, like specular highlights, not only in their shadows; brief 4b-5",
+            description: r#"A body's front face is flat, so it had one normal and one light value: one band over the whole face, and the bands showed only in the shadows. The studio specular glint (0.25) never landed on a front face in the head-on view. Measured on lavapipe: the box, the circle and the polygon each showed one band on their face.
+
+    The shader now lights a front face as a shallow dome over the face (lighting only: the outline and the physics stay flat). Two settings use it, both under Settings > Rendering: "relief" steps the diffuse bands across the face, brightest toward the key light (top left), darker toward the bottom right; "specular" puts a hard two-step highlight (a halo and a core) in the key light's hue on each face, toward the light. The options are the four combinations; the scene is the look scene with a pentagon and a triangle (top right) beside the boxes and circles.
+
+    Look at the teal box, the green circle and the blue polygons, at the long thin bodies (the chain, the ramp: the highlight stretches with the body), then press play and watch the bands follow each body as it turns. Try Settings > Rendering > relief (0 to about 1.5) if you want a stronger or weaker step."#,
+            options: [
+                (
+                    label: "Relief + glint",
+                    caption: "The new default: relief 0.8 and specular 0.25. Each face steps through two or three bands and carries a two-step highlight.",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                ),
+                (
+                    label: "Glint only",
+                    caption: "Relief 0, specular 0.25: faces stay one band; each carries the two-step highlight toward the key light.",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    settings: (render: (relief: 0.0)),
+                ),
+                (
+                    label: "Relief only",
+                    caption: "Relief 0.8, specular 0: bands step across each face, no highlight.",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    settings: (render: (specular: 0.0)),
+                ),
+                (
+                    label: "Flat (before)",
+                    caption: "Relief 0, specular 0: one band per face, as before this change (the old glint never reached a front face).",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    settings: (render: (relief: 0.0, specular: 0.0)),
+                ),
+            ],
+        ),
+    ],
 )

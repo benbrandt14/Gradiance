@@ -404,10 +404,18 @@ pub struct RenderSettings {
     /// saturates into one flat band; lower it if the scene looks dark.
     #[serde(default = "default_white_point")]
     pub white_point: f32,
-    /// Quantized specular glint strength (0 = none) — a hard toon
-    /// highlight in the key lights' hues; reads best on curved walls.
+    /// Quantized specular glint strength (0 = none): a hard, two-step toon
+    /// highlight in the strongest light's hue. The front face reads as a
+    /// shallow dome for it, so the glint lands on every body's face, toward
+    /// the light (brief 4b-5).
     #[serde(default = "default_specular")]
     pub specular: f32,
+    /// Face relief (0 = flat faces): how far a body's front face is lit as
+    /// a shallow dome, its normal tilting by this slope at the outline. The
+    /// bands then step across the face, brightest toward the key light.
+    /// Lighting only: the shape and the physics stay flat (brief 4b-5).
+    #[serde(default = "default_relief")]
+    pub relief: f32,
 }
 
 fn default_white_point() -> f32 {
@@ -416,6 +424,10 @@ fn default_white_point() -> f32 {
 
 fn default_specular() -> f32 {
     RenderSettings::default().specular
+}
+
+fn default_relief() -> f32 {
+    RenderSettings::default().relief
 }
 
 impl Default for RenderSettings {

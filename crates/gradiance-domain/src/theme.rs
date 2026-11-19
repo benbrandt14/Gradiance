@@ -25,6 +25,13 @@ use crate::settings::{KeyLightSettings, LightingSettings, RenderSettings, Scener
 use gradiance_units::Length;
 use serde::{Deserialize, Serialize};
 
+/// Studio's face relief ([`RenderSettings::relief`]): the slope a front
+/// face's normal reaches at its outline. Measured on lavapipe (brief 4b-5):
+/// with the studio lights a box and a polygon step through three bands on
+/// their own face and a circle through two (0.6 left a thin second band;
+/// 1.0 darkened the far third of each face).
+pub const STUDIO_RELIEF: f32 = 0.8;
+
 /// A named scene look. Scene content: it lives in
 /// [`RenderSettings::look`], so it is saved with the scene and a change is
 /// one undo step.
@@ -72,12 +79,16 @@ impl Look {
     }
 
     /// The render settings this look starts from.
+    ///
+    /// Only studio lights its faces as a dome ([`STUDIO_RELIEF`]): blueprint
+    /// and poster are flat-colour styles, so their faces stay one tone and
+    /// their bands stay in the shadows.
     #[must_use]
     pub fn render(self) -> RenderSettings {
-        let (bands, rim_strength, white_point, specular) = match self {
-            Self::Studio => (4, 0.2, 1.0, 0.25),
-            Self::Blueprint => (3, 0.35, 1.0, 0.0),
-            Self::Poster => (2, 0.0, 1.0, 0.0),
+        let (bands, rim_strength, white_point, specular, relief) = match self {
+            Self::Studio => (4, 0.2, 1.0, 0.25, STUDIO_RELIEF),
+            Self::Blueprint => (3, 0.35, 1.0, 0.0, 0.0),
+            Self::Poster => (2, 0.0, 1.0, 0.0, 0.0),
         };
         RenderSettings {
             look: self,
@@ -86,6 +97,7 @@ impl Look {
             rim_strength,
             white_point,
             specular,
+            relief,
         }
     }
 

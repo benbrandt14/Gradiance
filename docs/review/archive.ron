@@ -635,7 +635,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                         caption: "Navy backdrop, pale chalk pieces with ink outlines, light grid; one cool light, three bands, a stronger rim.",
                         scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
                         settings: (
-                            render: (look: Blueprint, bands: 3, rim_strength: 0.35, white_point: 1.0, specular: 0.0),
+                            render: (look: Blueprint, bands: 3, rim_strength: 0.35, white_point: 1.0, specular: 0.0, relief: 0.0),
                             lighting: (
                                 lights: [(azimuth_deg: 110.0, elevation_deg: 45.0, color: (r: 0.9, g: 0.95, b: 1.0, a: 1.0), illuminance: 3000.0, shadows: true)],
                                 ambient: 670.0,
@@ -648,7 +648,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                         caption: "Paper-white backdrop, bold saturated pieces, black outlines; one light, two bands (lit or shadow), no rim or glint.",
                         scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
                         settings: (
-                            render: (look: Poster, bands: 2, rim_strength: 0.0, white_point: 1.0, specular: 0.0),
+                            render: (look: Poster, bands: 2, rim_strength: 0.0, white_point: 1.0, specular: 0.0, relief: 0.0),
                             lighting: (
                                 lights: [(azimuth_deg: 135.0, elevation_deg: 45.0, color: (r: 1.0, g: 1.0, b: 1.0, a: 1.0), illuminance: 2450.0, shadows: true)],
                                 ambient: 750.0,
@@ -922,6 +922,91 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                 answered_at: "2026-11-19T12:00:00Z",
             ),
             ingested_as: "crates/gradiance-ui/src/ops.rs UiClickButton; docs/ops.md; docs/scripting.md.",
+        ),
+        (
+            question: (
+                id: "toon-face-coords",
+                title: "Where does the shader learn where a pixel sits on its face?",
+                source: "Phase 4b, brief 4b-5 toon bands on the bodies (docs/briefs/4b-5-toon-highlights.md)",
+                description: r#"A face can only step through bands if its lighting varies across it, so the fragment shader needs the pixel's place on the body's face and the face's size."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A face-coordinate vertex attribute",
+                        caption: r#"UV_0 on every body mesh: the outline's bounding box mapped to [-1, 1] (`geometry::extrusion::face_coords`); the tilt direction comes from screen derivatives, so it follows the body's rotation. Cost: 8 bytes per vertex; no new topology."#,
+                    ),
+                    (
+                        label: "A per-material uniform",
+                        caption: r#"The bounding box in the material and the model matrix in the shader. Cost: materials rebuild on every reshape, and the instance index is not in the fragment input by default."#,
+                    ),
+                    (
+                        label: "Interior cap vertices",
+                        caption: r#"A real distance-to-outline per vertex, which a bevel band needs. Cost: a mesh topology change, out of the brief's scope."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-face-coords",
+                title: "Where does the shader learn where a pixel sits on its face?",
+                choice: Picked("A face-coordinate vertex attribute"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates).",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-geometry/src/extrusion.rs face_coords; crates/gradiance-render/src/toon.wesl face_tilt; docs/briefs/4b-5-toon-highlights.md Outcome (the bevel variant is cut).",
+        ),
+        (
+            question: (
+                id: "toon-relief-looks",
+                title: "Which looks light their faces as a dome?",
+                source: "Phase 4b, brief 4b-5 toon bands on the bodies (docs/briefs/4b-5-toon-highlights.md)",
+                description: r#"Relief is a render setting, so each look's preset sets it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Studio only",
+                        caption: r#"Studio relief 0.8 (the default look); blueprint and poster stay flat, their bands only in the shadows. Cost: a look switch changes the face shading as well as the colours."#,
+                    ),
+                    (
+                        label: "Every look",
+                        caption: r#"All three get relief. Cost: blueprint and poster are flat-colour styles, and their one-light presets were not measured with relief."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-relief-looks",
+                title: "Which looks light their faces as a dome?",
+                choice: Picked("Studio only"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates).",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-domain/src/theme.rs STUDIO_RELIEF, Look::render.",
+        ),
+        (
+            question: (
+                id: "toon-glint-lights",
+                title: "Which lights make a specular glint?",
+                source: "Phase 4b, brief 4b-5 toon bands on the bodies (docs/briefs/4b-5-toon-highlights.md)",
+                description: r#"With the face read as a dome, every light with a glint lands a highlight on every face. Studio has a key and a fill."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The strongest light",
+                        caption: r#"One two-step highlight per face, in the key light's hue. Cost: a fill light never glints."#,
+                    ),
+                    (
+                        label: "Every light",
+                        caption: r#"As before: a warm highlight from the key and a cool one from the fill near the face centre. Cost: two spots per face, which reads as noise on small bodies."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-glint-lights",
+                title: "Which lights make a specular glint?",
+                choice: Picked("The strongest light"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates).",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-render/src/toon.wesl (the glint loop).",
         ),
     ],
 )

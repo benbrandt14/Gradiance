@@ -169,6 +169,7 @@
             rim_strength: 0.2,
             white_point: 1.0,
             specular: 0.25,
+            relief: 0.8,
         ),
         lighting: (
             lights: [

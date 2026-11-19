@@ -30,6 +30,11 @@ pub struct ToonExtension {
     /// `z` = white point, `w` = quantized-specular strength.
     #[uniform(100)]
     pub params: Vec4,
+    /// Face shading over the mesh's face coordinates (brief 4b-5):
+    /// `x` = relief (the dome slope at the outline; 0 = flat faces),
+    /// `y` = the glint dome's slope. `z`, `w` unused.
+    #[uniform(101)]
+    pub face: Vec4,
 }
 
 impl MaterialExtension for ToonExtension {
@@ -53,6 +58,16 @@ pub fn params_of(settings: &RenderSettings) -> Vec4 {
     )
 }
 
+/// The slope at the outline of the dome the glint is computed over: the
+/// strongest light's highlight then lands inside every front face, at about
+/// a third of the way from the centre toward the light (brief 4b-5).
+pub const GLINT_DOME: f32 = 1.0;
+
+/// The face-shading parameters for `settings` ([`ToonExtension::face`]).
+pub fn face_of(settings: &RenderSettings) -> Vec4 {
+    Vec4::new(settings.relief.max(0.0), GLINT_DOME, 0.0, 0.0)
+}
+
 /// Installs the toon material pipeline and its embedded shader.
 pub fn install(app: &mut App) {
     embedded_asset!(app, "toon.wesl");
@@ -68,10 +83,12 @@ pub fn apply_render_settings(
     mut planes: ResMut<Assets<crate::plane::InfinitePlaneMaterial>>,
 ) {
     let params = params_of(&settings);
+    let face = face_of(&settings);
     let handles: Vec<_> = materials.ids().collect();
     for id in handles {
         if let Some(mut material) = materials.get_mut(id) {
             material.extension.params = params;
+            material.extension.face = face;
         }
     }
     let handles: Vec<_> = planes.ids().collect();
@@ -110,6 +127,22 @@ mod tests {
             ..RenderSettings::default()
         });
         assert_eq!(params.x, 1.0, "clamped to one band, not divide-by-zero");
+    }
+
+    #[test]
+    fn studio_lights_its_faces_as_a_dome_and_flat_looks_do_not() {
+        use gradiance_domain::theme::Look;
+        let studio = face_of(&Look::Studio.render());
+        assert!(studio.x > 0.0, "studio faces show relief bands");
+        assert_eq!(studio.y, GLINT_DOME);
+        for look in [Look::Blueprint, Look::Poster] {
+            assert_eq!(face_of(&look.render()).x, 0.0, "{look:?} stays flat");
+        }
+        let negative = face_of(&RenderSettings {
+            relief: -1.0,
+            ..RenderSettings::default()
+        });
+        assert_eq!(negative.x, 0.0, "a negative relief is flat, not inverted");
     }
 
     /// The `ShaderRef` string and the `embedded_asset!` registration must
