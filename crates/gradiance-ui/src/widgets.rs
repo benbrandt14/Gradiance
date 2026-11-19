@@ -1,11 +1,12 @@
-//! Precision widgets: commit-on-release drags with scientific notation
-//! and middle-click default reset.
+//! Precision widgets: commit-on-release number fields (the behaviours are
+//! `unit_fields::number_field`'s, brief U-8) and the layout vocabulary.
 //!
 //! Curve-picker widgets (Lightroom-style response curves) and symbolic /
 //! equation input are planned extensions of this module: both slot in as
 //! new `Commit`-returning widgets without touching callers.
 
 use bevy_egui::egui::{self, Ui};
+use gradiance_units::{Dimension, DisplayUnit};
 
 /// Outcome of a committing widget interaction.
 pub enum Commit<T> {
@@ -15,11 +16,16 @@ pub enum Commit<T> {
     Done(T, T),
 }
 
-/// A drag value that:
-/// - parses scientific notation (`1.5e3`) and plain floats,
-/// - resets to `default` on **middle-click**,
-/// - commits once per gesture (drag release / focus loss), returning the
-///   pre-gesture value for the undo record.
+/// A number field on the **edit** seam ([`crate::unit_fields::number_field`]:
+/// scrub, Shift = 1/10, Ctrl snaps, Esc cancels, typed maths and units,
+/// Backspace / middle-click / Reset = `default`, `-` negates, Ctrl+wheel
+/// steps, Copy / Paste) that commits **once per gesture**, returning the
+/// pre-gesture value for the undo record:
+/// - a drag commits on release, and nothing when Esc cancelled it;
+/// - a typed entry commits on Enter or focus loss, and nothing on Esc;
+/// - a one-step edit (a key, a wheel notch, a menu row) commits at once.
+///
+/// For a pure number; [`precise_drag_unit`] is the same for a quantity.
 pub fn precise_drag(
     ui: &mut Ui,
     id: egui::Id,
@@ -27,19 +33,38 @@ pub fn precise_drag(
     default: f32,
     speed: f32,
 ) -> Commit<f32> {
-    precise_drag_unit(ui, id, value, default, speed, "")
+    precise_drag_unit(ui, id, value, default, speed, Dimension::Dimensionless)
 }
 
-/// [`precise_drag`] with a trailing SI unit shown inside the field (e.g.
-/// `0.20 m`). Pass `""` for a dimensionless value. The unit is display-only —
-/// the stored value is always the base-SI magnitude.
+/// [`precise_drag`] for a physical quantity of dimension `dim`. `value`,
+/// `default` and `speed` are base SI; the field shows them in the unit the
+/// display preference picks ([`crate::unit_fields`]: degrees or radians,
+/// metres, centimetres or millimetres) with the unit after the number.
+///
+/// Typed entry: a bare number is in the shown unit, a number with a unit
+/// converts (`25 cm` in a metre field stores `0.25`), and an entry of the
+/// wrong dimension or that does not parse leaves the value as it was.
 pub fn precise_drag_unit(
     ui: &mut Ui,
     id: egui::Id,
     value: &mut f32,
     default: f32,
     speed: f32,
-    unit: &str,
+    dim: Dimension,
+) -> Commit<f32> {
+    let unit = crate::unit_fields::display(ui.ctx(), dim);
+    precise_drag_in(ui, id, value, default, speed, unit)
+}
+
+/// [`precise_drag_unit`] in a fixed unit rather than the preferred one, for
+/// a field whose unit is its own (a hinge motor's speed in rpm).
+pub fn precise_drag_in(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut f32,
+    default: f32,
+    speed: f32,
+    unit: DisplayUnit,
 ) -> Commit<f32> {
     let start_id = id.with("gesture-start");
     let active_id = id.with("gesture-active");
@@ -54,35 +79,27 @@ pub fn precise_drag_unit(
         *value = active;
     }
 
-    let suffix = if unit.is_empty() {
-        String::new()
-    } else {
-        format!(" {unit}")
-    };
-    // Typed input tolerates the shown unit (`0.2 m`, `0.2m`, or `0.2`) — the
-    // canonical-unit contract of `units::Dimension::parse`. The value stored is
-    // always the base-SI magnitude.
-    let unit_owned = unit.to_owned();
-    let response = ui.add(
-        egui::DragValue::new(value)
-            .speed(speed)
-            .suffix(suffix)
-            .custom_parser(move |text| parse_with_unit(text, &unit_owned)),
-    );
+    let before = *value;
+    let field = crate::unit_fields::number_field(ui, value, speed, None, unit, Some(default));
+    let response = field.response;
 
-    // Middle-click: reset to default, committed immediately.
-    if response.clicked_by(egui::PointerButton::Middle) {
-        ui.data_mut(|d| d.remove::<f32>(active_id));
-        let old = *value;
-        *value = default;
-        if (old - default).abs() > f32::EPSILON {
-            return Commit::Done(old, default);
+    // A one-step edit (Backspace, `-`, Ctrl+wheel, paste, Reset,
+    // middle-click) is a whole gesture: commit it now.
+    if let Some(old) = field.instant {
+        ui.data_mut(|d| {
+            d.remove::<f32>(active_id);
+            d.remove::<f32>(start_id);
+        });
+        if (old - *value).abs() > f32::EPSILON {
+            return Commit::Done(old, *value);
         }
         return Commit::None;
     }
 
+    // The value before this frame's change: on a drag's first frame egui
+    // has already moved it.
     if response.drag_started() || response.gained_focus() {
-        ui.data_mut(|d| d.insert_temp(start_id, *value));
+        ui.data_mut(|d| d.insert_temp(start_id, before));
     }
     // Carry the working value across frames while the gesture is live; drop it
     // the moment it ends so a stale value can't shadow the source.
@@ -103,35 +120,6 @@ pub fn precise_drag_unit(
         }
     }
     Commit::None
-}
-
-/// Parses a number that may carry the field's own SI unit suffix (`"0.2 m"`,
-/// `"0.2m"`, or `"0.2"`). A wrong or partial unit makes the parse fail, so the
-/// widget keeps its previous value. Pure — unit-tested below.
-fn parse_with_unit(text: &str, unit: &str) -> Option<f64> {
-    let t = text.trim();
-    let t = t.strip_suffix(unit).unwrap_or(t).trim_end();
-    t.parse::<f64>().ok()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_with_unit;
-
-    #[test]
-    fn typed_input_tolerates_the_field_unit() {
-        // Bare number, with-space unit, and no-space unit all parse.
-        assert_eq!(parse_with_unit("0.2", "m"), Some(0.2));
-        assert_eq!(parse_with_unit("0.2 m", "m"), Some(0.2));
-        assert_eq!(parse_with_unit("0.2m", "m"), Some(0.2));
-        assert_eq!(parse_with_unit("1.5 m/s", "m/s"), Some(1.5));
-        assert_eq!(parse_with_unit("2.5 kg/m²", "kg/m²"), Some(2.5));
-        // A dimensionless field (empty unit) still parses a bare number.
-        assert_eq!(parse_with_unit("0.5", ""), Some(0.5));
-        // Garbage or a mismatched unit fails (widget keeps its value).
-        assert_eq!(parse_with_unit("abc", "m"), None);
-        assert_eq!(parse_with_unit("1.5 m/s", "m"), None);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -205,9 +193,29 @@ pub fn labelled_drag(
     hover: &str,
 ) -> bool {
     ui.label(label).on_hover_text(hover);
-    let changed = ui
-        .add(egui::DragValue::new(value).speed(speed).range(range))
-        .changed();
+    let plain = DisplayUnit::canonical(Dimension::Dimensionless);
+    let changed = crate::unit_fields::stored_drag(ui, value, Some(range), speed, plain).changed();
+    ui.end_row();
+    changed
+}
+
+/// [`labelled_drag`] for a physical quantity: `value`, `range` and `speed`
+/// are in `stored` (usually [`DisplayUnit::canonical`]; a settings field
+/// kept in degrees passes [`DisplayUnit::DEGREES`]), and the field shows and
+/// parses in the unit the display preference picks for `stored`'s
+/// dimension ([`crate::unit_fields`]). The config seam: no gesture
+/// bookkeeping, "changed" every frame it moves.
+pub fn labelled_quantity(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut f32,
+    range: std::ops::RangeInclusive<f32>,
+    speed: f32,
+    hover: &str,
+    stored: DisplayUnit,
+) -> bool {
+    ui.label(label).on_hover_text(hover);
+    let changed = crate::unit_fields::stored_drag(ui, value, Some(range), speed, stored).changed();
     ui.end_row();
     changed
 }
@@ -226,31 +234,6 @@ pub fn labelled_drag_u32(
         .changed();
     ui.end_row();
     changed
-}
-
-#[cfg(test)]
-mod layout_tests {
-    use super::*;
-
-    /// The helpers must not panic on an empty context — they are called from
-    /// every pane, including headless where there is no real UI.
-    #[test]
-    fn the_layout_helpers_render_headlessly() {
-        // egui's own test harness: builds a real `Ui` without a window, which
-        // is the path every headless panel test takes.
-        egui::__run_test_ui(|ui| {
-            let _ = section_header(ui, "Section");
-            let _ = hint(ui, "what this is for");
-            let _ = empty_state(ui, "Nothing selected");
-            let _ = close_button(ui, "remove");
-            egui::Grid::new("t").num_columns(2).show(ui, |ui| {
-                let mut v = 1.0_f32;
-                let _ = labelled_drag(ui, "value", &mut v, 0.0..=2.0, 0.01, "hover");
-                let mut n = 3_u32;
-                let _ = labelled_drag_u32(ui, "count", &mut n, 1..=9, "hover");
-            });
-        });
-    }
 }
 
 /// The behavior-node kind editor widgets.
@@ -292,4 +275,29 @@ pub fn node_kind_editor(
         }
     }
     (next != *kind).then_some(next)
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    /// The helpers must not panic on an empty context — they are called from
+    /// every pane, including headless where there is no real UI.
+    #[test]
+    fn the_layout_helpers_render_headlessly() {
+        // egui's own test harness: builds a real `Ui` without a window, which
+        // is the path every headless panel test takes.
+        egui::__run_test_ui(|ui| {
+            let _ = section_header(ui, "Section");
+            let _ = hint(ui, "what this is for");
+            let _ = empty_state(ui, "Nothing selected");
+            let _ = close_button(ui, "remove");
+            egui::Grid::new("t").num_columns(2).show(ui, |ui| {
+                let mut v = 1.0_f32;
+                let _ = labelled_drag(ui, "value", &mut v, 0.0..=2.0, 0.01, "hover");
+                let mut n = 3_u32;
+                let _ = labelled_drag_u32(ui, "count", &mut n, 1..=9, "hover");
+            });
+        });
+    }
 }

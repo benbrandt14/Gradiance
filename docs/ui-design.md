@@ -7,7 +7,9 @@ them, plus the rules that decide where a new surface goes.
 
 Scope: `crates/gradiance-ui` only — the one crate allowed to import `egui`
 (invariant 4). Interaction rules for the *scene* (tools, gestures, snapping)
-live in `docs/roadmap.md` and the tool docs; this is about chrome.
+live in `docs/roadmap.md` and the tool docs; this is about chrome (its
+colours: § 8, brief U-7), plus § 7, the scene look the chrome sits over
+(brief 4b-3).
 
 ---
 
@@ -111,6 +113,48 @@ This is the distinction that matters and it is invisible in the rendering:
   is exactly right.
 
 Converting every site to `precise_drag` would be wrong, not merely wasteful.
+
+### A quantity field names its dimension, not its unit (brief 5-3)
+
+A field on a physical quantity passes a `Dimension` (`precise_drag_unit`,
+edit seam) or a stored `DisplayUnit` (`labelled_quantity`, config seam), never
+a unit string. `ui::unit_fields` then shows the value in the unit the
+workstation preference picks (degrees or radians; m, cm or mm; the canonical
+SI unit otherwise) with the unit after the number, and parses typed entry
+through the one parser (`gradiance_units::expr`): `25 cm`, `90 deg`, `2 kN`,
+`2*pi`. A bare number is in the shown unit; an entry of another dimension, or
+one that does not parse, leaves the value as it was. Values stay SI. A field
+whose unit is its own (a hinge motor in rpm) uses `precise_drag_in`. The
+reflect grid recognises a quantity newtype by its type name, so a new
+settings field gets its unit with no table row; a plain `f32` kept in degrees
+names `DisplayUnit::DEGREES` in the grid's table.
+
+### Every number field behaves like Blender's (brief U-8)
+
+One function, `ui::unit_fields::number_field`, carries the behaviours.
+`precise_drag*` (edit seam), `labelled_drag`, `labelled_quantity` and the
+reflect grid's number rows (config seam) reach it. Panels that still build
+a raw `egui::DragValue` (optimizer, node graph, groups, signals, array,
+context menu, a few settings rows, integer fields) have only egui's own
+Shift and typed numbers until they move onto these helpers; do not add a
+new one.
+
+| Gesture | Effect |
+|---|---|
+| Drag | Scrub; **Shift** = 1/10 speed; **Ctrl** snaps (`gradiance_units::step`: 10° for angles, a tenth of a range's decade, else whole units or about one step per 10 points); Ctrl+Shift = a tenth of the snap |
+| Esc during a drag | The value goes back; nothing commits |
+| Click, type | A number or maths with units, applied on Enter / focus loss; Esc keeps the old value; a refused entry outlines red and says why for 4 s |
+| Hover + Backspace / `-` / Ctrl+wheel | Default / negate / one snap step per notch |
+| Hover + Ctrl+C / Ctrl+V | Copy the value with its unit / paste text through the parser |
+| Middle-click, right-click | Default; a menu with Copy, Paste, Reset to default |
+
+On the edit seam each of these is **one** commit: a drag on release, a typed
+entry on Enter, a key, a wheel notch or a menu row at once, and a cancelled
+drag never. A hovered or dragged field claims the keyboard
+(`unit_fields::claim_keys` → `KeyboardCaptured`), so Backspace over a field
+does not also delete the selection; keys reach a field only while the
+pointer is over it, never as global keys. Reset needs a default: config
+rows have none, so their Backspace and Reset do nothing.
 
 ### Empty states say what to do
 
@@ -283,3 +327,135 @@ restart.
 Note that egui and gizmo draw paths are structurally uncoverable headless
 (`desmell-log.md:68`), against a 50% CI line floor — which is another reason to
 keep the decisions out of the draw call.
+
+---
+
+## 7. The scene look (brief 4b-3)
+
+The scene — bodies, outlines, backdrop, grounds, lights, and every gizmo
+drawn over them — has one source of colour: `gradiance_domain::theme`. The
+chrome's tokens are § 8's; they read the scene **accent** (`Ink::accent`,
+the selection colour) from here.
+
+### Looks
+
+A `Look` names a direction; `RenderSettings::look` holds the active one
+(scene content: saved, one undo step). Applying a look (`look.apply`, or
+Settings ▸ Rendering ▸ Look) also resets the render, lighting and scenery
+settings to its preset; editing those afterwards keeps the look.
+
+| Look | Name | Backdrop | Pieces | Light | Bands |
+|---|---|---|---|---|---|
+| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 4, rim 0.2, glint 0.25 |
+| Blueprint | `blueprint` | navy | pale chalk tones (L 0.84), navy ink outlines | one cool key | 3, rim 0.35 |
+| Flat graphic | `poster` | paper white | bold tones (L 0.615), black outlines | one key | 2, no rim or glint |
+
+**Why studio is the default:** it is the only look whose two lights make
+the toon bands read in a plain 2D view (overlapping shadows step through
+all four bands), its mid-light backdrop keeps both dark outlines and
+saturated ink legible, and it is the nearest to the toon look the owner
+chose in review (`shading`). The owner's pick is open as the review question
+`look`.
+
+### The palette is semantic
+
+`appearance::PALETTE` is the studio palette. A body stores one of its ten
+fills; under another look the render layer shows that slot in the look's
+tone (`SceneTheme::display`), as it does the default outline, neutral fill,
+ground and rod. So a red body is red in every look, a custom colour is shown
+exactly as authored, and the save file never changes with the look. (The
+inspector's swatch row still shows the studio tones; see the 4b-3 Outcome.)
+
+### Ink roles
+
+Gizmos draw with a **role**, never a colour: `theme::Role` (`Accent`,
+`Snap`, `Guide`, `Preview`, `Alternate`, `Danger`, `Marquee`, `Rotate`,
+`Joint`, `JointOutline`, `Muted`, `Grid`), resolved by the active look's
+`Ink`. A tool's `ToolPreview` holds `Stroke`s (a role and an alpha) and is
+resolved at draw time. Debug overlays use `theme::debug`, which does not
+change with the look.
+
+### Rules the tests hold
+
+- **One source.** `tests/boundaries.rs` (`scene_colours_have_one_source`)
+  fails on a colour written as numbers (or a `css::` / `Color32::` name)
+  outside the two theme modules (`gradiance_domain::theme`, `ui::theme`).
+  Add a token, not a literal.
+- **Contrast** (`theme::floors`, WCAG ratio): fill and rod vs backdrop ≥ 3,
+  outline vs fill ≥ 3, ink vs backdrop ≥ 3, joint face vs outline ≥ 3,
+  ground vs backdrop ≥ 1.2 (a surface, not an object).
+- **Distinctness:** palette entries are ≥ 0.045 apart in OKLab (about two
+  just-noticeable differences).
+
+### Lighting and bands
+
+Light levels are set against the toon white point (1.0): see
+`Look::lighting`. The back plane and grounds are banded like bodies, so a
+shadow is a flat step. The camera uses a linear tone curve, so the top band
+shows a fill exactly as authored. SSAO stays off: at this scale it changes
+nothing visible (4b-3 Outcome); outlines and banded, layered shadows carry
+the contact cues instead.
+
+---
+
+## 8. Chrome tokens (brief U-7)
+
+The panels draw with **semantic tokens** from `ui::theme`, never with
+colours. `ChromeTheme` is one resolved token set; `visuals()` turns it into
+`egui::Visuals`, and `theme::tokens(ctx)` hands it to a panel that paints
+itself. `ui/src/theme.rs` is the only file in `gradiance-ui` that may write
+a colour as numbers (the one-source scanner, § 7).
+
+| Token | Use | Blender dark |
+|---|---|---|
+| `panel` | docks, side panels | `#303030` |
+| `header` | menu bar, dock tab strips | `#1d1d1d` |
+| `window` | floating windows, menus, popups | `#282828` |
+| `field` | text/number entry, plot and console backgrounds | `#1d1d1d` |
+| `widget` / `widget_hovered` | a button's inner, under the pointer | `#545454` / `#656565` |
+| `outline` / `border` | widget outlines, separators / window edges | `#3d3d3d` / `#161616` |
+| `text` / `text_strong` / `text_weak` | labels / hovered, pressed, selected / hints | `#e6e6e6` / `#ffffff` / `#9e9e9e` |
+| `accent` | the scene look's `Ink::accent`, as authored | studio `#cf5604` |
+| `selected` | selection highlight behind `text_strong` | the accent, darkened to 4.5:1 |
+| `accent_text` | the accent as text (hyperlinks) | the accent, lightened to 4.5:1 |
+| `warning` / `error` / `ok` | report text | `#f0a030` / `#ff7070` / `#78c878` |
+
+Plus the content inks panels paint themselves: `series` (plot lines, the
+curve), `handle`, `chart_grid`, console `syntax_*`, the node canvas
+(`canvas`, `canvas_dot`, `node`, `node_header`, `node_outline`, `pin_in`,
+`pin_out`), the label plates (`overlay`, `overlay_text`), the view cube
+(`cube_*`) and the dials (`dial`, `muted`).
+
+### One accent
+
+The chrome has no accent of its own: it is the active scene look's, so a
+selected tool, tab or list row and a selected body are one hue, and the
+chrome follows Settings ▸ Rendering ▸ Look. The swatch rows (inspector,
+Groups panel) show palette slots in the look's tone too.
+
+### Presets
+
+`Chrome` (`gradiance_domain::settings`) names three token sets: `blender`
+(the default), `blender-blue` (Blender's own `#4772b3` selection; the
+canvas keeps the look's accent) and `stock` (egui's own dark visuals, the
+look before U-7). Settings ▸ Interface picks one; so does
+`(chrome-apply "…")`. The preset is **workstation config**: it describes
+the person at the editor, so it is never undone; and, like `ToolDefaults`,
+it is not written into the scene file, so opening someone's scene never
+restyles your panels (a workstation file is U-10's). The owner's pick is
+the review question `chrome`.
+
+### Rules the tests hold
+
+- **Contrast** (`ui::theme` tests, WCAG): every text token — normal, strong,
+  weak, accent text, warning, error, ok, console syntax — reads at ≥ 4.5:1
+  on every surface it sits on (panel, window, field, header; strong text on
+  the hovered widget and on the selection), for both Blender presets over
+  every scene look. Text over the scene sits on the `overlay` plate and
+  reads at ≥ 4.5:1 over every look's backdrop. Plot series and the curve
+  handle are marks: ≥ 3:1 on `field`. `stock` is exempt: it is egui's, kept
+  for comparison (its weak text is 2.7:1).
+- **One accent:** the selection keeps the accent's hue (channel order) in
+  every look.
+- **Lean Blender:** the default surfaces are neutral greys, and no two
+  adjacent surfaces differ by 2:1 or more (low-contrast chrome).

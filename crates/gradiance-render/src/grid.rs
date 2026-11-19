@@ -4,7 +4,8 @@
 
 use bevy::prelude::*;
 use gradiance_core::constants::INTERACTION_PLANE_Z;
-use gradiance_domain::settings::{GridSettings, GridSystem};
+use gradiance_domain::settings::{GridSettings, GridSystem, RenderSettings};
+use gradiance_domain::theme::active;
 use gradiance_geometry::snapping::{
     CARTESIAN_LINE_DIRECTIONS, ISOMETRIC_LINE_DIRECTIONS, adaptive_step, is_major_line,
 };
@@ -21,6 +22,7 @@ pub fn draw_grid(
     grid: Res<GridSettings>,
     cam_scale: Res<CameraScale>,
     rig: Res<CameraRig>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<GridGizmos>,
 ) {
     if !grid.visible {
@@ -36,13 +38,14 @@ pub fn draw_grid(
         return;
     };
     let (origin, rotation) = (grid.origin.value(), grid.rotation.value());
-    // Mid-value tint + low alpha: visible over the light backdrop without
-    // clashing on dark bodies (the grid is an overlay, not a surface).
-    let minor = Color::srgba(0.55, 0.57, 0.62, 0.14);
+    // The look's grid ink at low alpha: visible over the backdrop without
+    // clashing on bodies (the grid is an overlay, not a surface).
+    let ink = Color::from(active(settings.as_deref()).ink.grid);
+    let minor = ink.with_alpha(0.16);
     // Majors (`geometry::snapping::is_major_line`) sit at fixed world
     // positions as the step doubles; same tint, stronger alpha.
-    let major = minor.with_alpha(0.35);
-    let axis = Color::srgba(0.55, 0.57, 0.62, 0.4);
+    let major = ink.with_alpha(0.32);
+    let axis = ink.with_alpha(0.5);
 
     let families = match grid.system {
         GridSystem::Cartesian => Some(CARTESIAN_LINE_DIRECTIONS),

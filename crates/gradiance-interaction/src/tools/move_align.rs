@@ -22,8 +22,8 @@
 //!   since the references would go stale under the drag.
 
 use crate::tools::context::{ManipContext, ToolPreview, ToolWorld};
-use bevy::color::palettes::css;
 use bevy::prelude::*;
+use gradiance_domain::theme::Role;
 use gradiance_geometry::align::{
     AlignFeatures, AlignFrame, AxisMatch, Extents, align, correction, guide_segment,
 };
@@ -144,6 +144,6 @@ pub fn preview_guides(state: &MoveAlignment, aligned: &AlignedMove, out: &mut To
             continue;
         };
         let (a, b) = guide_segment(&state.frame, k, m, &moved, reference);
-        out.line(a, b, css::HOT_PINK.with_alpha(0.45));
+        out.line(a, b, Role::Guide.alpha(0.45));
     }
 }

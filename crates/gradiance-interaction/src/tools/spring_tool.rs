@@ -15,24 +15,17 @@ use crate::snap::DraftReference;
 use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
-use gradiance_domain::joint::{DEFAULT_SPRING_DAMPING, JointCommon, JointDef, JointKind};
-use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::joint::{
+    DEFAULT_SPRING_DAMPING_RATIO, DEFAULT_SPRING_FREQUENCY, JointCommon, JointDef, JointKind,
+};
+use gradiance_domain::theme::Role;
 use gradiance_scene::JointRecord;
 
 /// Shortest spring that will commit (world metres); a near-zero drag is a no-op.
 const MIN_SPRING_LENGTH: f32 = 0.05;
-/// Spring stiffness per unit mass proxy (AABB area × unit density = kg).
-/// Tuned so a body sags ~0.1 m under the default gravity (|g| ≈ 10): from
-/// `k ≈ m·g / sag`, `k ≈ 100·m`, so heavier bodies get proportionally
-/// stiffer springs instead of drooping.
-const SPRING_STIFFNESS_PER_MASS: f32 = 100.0;
-/// Floor for the mass-based stiffness so tiny bodies still get a firm spring.
-const MIN_SPRING_STIFFNESS: f32 = 0.01;
-
 /// In-progress spring gesture (the first anchor).
 #[derive(Resource, Default, Debug)]
 pub struct SpringDraft(pub Option<Vec2>);
@@ -77,10 +70,10 @@ impl ManipTool for SpringDraft {
         };
         // Screen-sized handle dots: 4 px, scaled to world by `cam_scale`.
         let r = 4.0 * ctx.cam_scale;
-        out.circle(anchor, r, css::SPRING_GREEN);
+        out.circle(anchor, r, Role::Alternate);
         if let Some(p) = ctx.cursor {
-            out.line(anchor, p, css::SPRING_GREEN);
-            out.circle(p, r, css::SPRING_GREEN);
+            out.line(anchor, p, Role::Alternate);
+            out.circle(p, r, Role::Alternate);
         }
     }
 }
@@ -95,7 +88,7 @@ fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Too
 
     // The first anchor must land on a body (the spring's fixed end).
     let &hit_a = world.bodies_at(anchor_a).first()?;
-    let (shape_a, pose_a) = world.shape_pose(hit_a)?;
+    let (_, pose_a) = world.shape_pose(hit_a)?;
     let id_a = world.id_of(hit_a)?;
     let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
 
@@ -106,16 +99,14 @@ fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Too
         .find(|&e| e != hit_a)
         .and_then(|e| Some((world.shape_pose(e)?, world.id_of(e)?)));
 
-    // Stiffness scales with the heavier connected body's mass so the spring
-    // isn't too soft under gravity.
-    let mass = mass_proxy(&shape_a).max(far.as_ref().map_or(0.0, |((s, _), _)| mass_proxy(s)));
-    let stiffness = (SPRING_STIFFNESS_PER_MASS * mass).max(MIN_SPRING_STIFFNESS);
-
     let mut def = JointDef {
         kind: JointKind::Spring {
             rest_length: gradiance_units::Length(rest),
-            stiffness: gradiance_units::Stiffness(stiffness),
-            damping: gradiance_units::Damping(DEFAULT_SPRING_DAMPING),
+            // Mass-relative: the physics seam derives the stiffness from the
+            // connected bodies' mass, so the default bounces alike on a
+            // pebble and on a truck (brief 4b-4).
+            frequency: gradiance_units::Frequency(DEFAULT_SPRING_FREQUENCY),
+            damping_ratio: DEFAULT_SPRING_DAMPING_RATIO,
             range: None,
         },
         // Spring bodies collide by default; adjust via the collision-layer menu.
@@ -141,47 +132,4 @@ fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<Too
         id: StableId::new(),
         def,
     })))
-}
-
-/// A body's mass proxy for the default spring stiffness: its AABB area (× unit
-/// density), in kg, or 0 for a ground half-plane (statics don't sag, so they
-/// never set the stiffness). The area is *not* floored — in SI a small body is
-/// legitimately < 1 m²; the pixel-era `.max(1.0)` floor over-stiffened
-/// anything under a metre (`MIN_SPRING_STIFFNESS` guards the low end instead).
-fn mass_proxy(shape: &ShapeDef) -> f32 {
-    if shape.contains_half_plane() {
-        return 0.0;
-    }
-    let (min, max) = gradiance_geometry::sdf::aabb(shape);
-    ((max.x - min.x) * (max.y - min.y)).max(f32::EPSILON)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn mass_proxy_scales_with_area_and_ignores_ground() {
-        // SI sizes: a sub-metre body is legitimately < 1 m² (no floor).
-        let small = ShapeDef::Box {
-            width: 0.5,
-            height: 0.5,
-        };
-        let big = ShapeDef::Box {
-            width: 4.0,
-            height: 2.0,
-        };
-        assert!(
-            mass_proxy(&big) > mass_proxy(&small),
-            "bigger body = more mass"
-        );
-        // Area is the real m² now, not floored to 1 — a 0.5 m box is 0.25 kg.
-        assert!((mass_proxy(&small) - 0.25).abs() < 1e-4, "unfloored area");
-        // The stiffness itself keeps a usable floor via MIN_SPRING_STIFFNESS.
-        assert!((SPRING_STIFFNESS_PER_MASS * mass_proxy(&small)).max(MIN_SPRING_STIFFNESS) > 0.0);
-        assert!(
-            mass_proxy(&ShapeDef::HalfPlane).abs() < f32::EPSILON,
-            "ground doesn't sag"
-        );
-    }
 }

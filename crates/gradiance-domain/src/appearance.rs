@@ -3,10 +3,11 @@
 use bevy::prelude::Component;
 use serde::{Deserialize, Serialize};
 
-/// A plain linear-space RGBA color, serialization-friendly.
+/// A plain sRGB RGBA color, serialization-friendly.
 ///
 /// Deliberately not Bevy's `Color` so the save format stays decoupled from
-/// engine color-space enums; the render layer converts on sync.
+/// engine color-space enums; the render layer converts on sync (through the
+/// one `From<Rgba> for Color` below).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub struct Rgba {
     /// Red in `[0, 1]`.
@@ -19,7 +20,19 @@ pub struct Rgba {
     pub a: f32,
 }
 
+impl From<Rgba> for bevy::color::Color {
+    fn from(c: Rgba) -> Self {
+        Self::srgba(c.r, c.g, c.b, c.a)
+    }
+}
+
 impl Rgba {
+    /// This colour with alpha `a`.
+    #[must_use]
+    pub const fn with_alpha(self, a: f32) -> Self {
+        Self { a, ..self }
+    }
+
     /// Builds an opaque color.
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
         Self { r, g, b, a: 1.0 }
@@ -135,12 +148,7 @@ pub struct Appearance {
 }
 
 fn default_border() -> Rgba {
-    Rgba {
-        r: 0.13,
-        g: 0.13,
-        b: 0.15,
-        a: 1.0,
-    }
+    crate::theme::STUDIO.border
 }
 
 impl Appearance {
@@ -172,31 +180,16 @@ pub struct Swatch {
     pub color: Rgba,
 }
 
-/// The themed default palette: ten hues at one saturation and lightness
-/// (`hsl(h, 0.65, 0.55)`), so any mix of them sits together.
+/// The themed default palette: ten hues at one `OKLab` lightness, so any mix
+/// of them sits together — the default look's
+/// ([`STUDIO`](crate::theme::STUDIO)) palette. Other looks tone these
+/// slots at display time ([`SceneTheme::display`](crate::theme::SceneTheme::display)),
+/// so an authored fill is always one of these.
 ///
 /// The one table every surface reads — [`Appearance::for_id`] for new
 /// bodies, the inspector's swatch row (the quantized picker), and
 /// [`random_fills`]. Data, so a replacement UI shell reads the same colors.
-pub const PALETTE: [Swatch; 10] = [
-    swatch("red", 0.843, 0.257, 0.257),
-    swatch("orange", 0.843, 0.501, 0.257),
-    swatch("amber", 0.843, 0.696, 0.257),
-    swatch("lime", 0.550, 0.843, 0.257),
-    swatch("green", 0.257, 0.843, 0.501),
-    swatch("teal", 0.257, 0.843, 0.794),
-    swatch("sky", 0.257, 0.647, 0.843),
-    swatch("blue", 0.257, 0.404, 0.843),
-    swatch("violet", 0.501, 0.257, 0.843),
-    swatch("pink", 0.843, 0.257, 0.696),
-];
-
-const fn swatch(name: &'static str, r: f32, g: f32, b: f32) -> Swatch {
-    Swatch {
-        name,
-        color: Rgba::rgb(r, g, b),
-    }
-}
+pub const PALETTE: [Swatch; 10] = crate::theme::STUDIO.palette;
 
 /// The [`PALETTE`] slot a stable id lands on (deterministic per id, so
 /// undo/redo and reload repaint the same).
@@ -257,7 +250,7 @@ pub fn random_fills(
 impl Default for Appearance {
     fn default() -> Self {
         Self {
-            fill: Rgba::rgb(0.6, 0.6, 0.65),
+            fill: crate::theme::STUDIO.neutral,
             border: default_border(),
             emissive: 0.0,
         }

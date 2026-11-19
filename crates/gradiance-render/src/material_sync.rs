@@ -2,18 +2,21 @@
 //!
 //! A [`SignalColorOverride`] (the signal dataflow's derived tint) is
 //! preferred over the authored fill while present; removing it restores
-//! the authored appearance.
+//! the authored appearance. The authored fill shows in the active look's
+//! tone ([`SceneTheme::display`]), so a look change rebuilds every body's
+//! material.
 
 use crate::toon::{ToonExtension, ToonMaterial, params_of};
 use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::{Appearance, Rgba};
 use gradiance_domain::settings::RenderSettings;
+use gradiance_domain::theme::{Look, SceneTheme};
 use gradiance_signal::SignalColorOverride;
 
 /// Converts a domain color into a Bevy color (sRGB).
 pub fn color_of(rgba: Rgba) -> Color {
-    Color::srgba(rgba.r, rgba.g, rgba.b, rgba.a)
+    rgba.into()
 }
 
 /// The standard body material: matte base, toon banding per settings.
@@ -21,6 +24,7 @@ fn body_material(
     appearance: &Appearance,
     tint: Option<Color>,
     settings: &RenderSettings,
+    theme: &SceneTheme,
 ) -> ToonMaterial {
     let fill = match tint {
         Some(color) => {
@@ -32,7 +36,7 @@ fn body_material(
                 a: c.alpha,
             }
         }
-        None => appearance.fill,
+        None => theme.display(appearance.fill),
     };
     ToonMaterial {
         base: StandardMaterial {
@@ -46,20 +50,22 @@ fn body_material(
             perceptual_roughness: 1.0,
             reflectance: 0.0,
             metallic: 0.0,
-            // Double-sided: the extruded front cap follows lyon's fill
-            // winding, which faces away from the camera and would be
-            // back-face culled otherwise (the "front face not visible"
-            // bug). Bevy flips the normal for back faces so lighting
-            // stays correct on both sides.
+            // Double-sided: kept as a guard. The extruded caps are wound to
+            // face their normals (`geometry::extrusion`), but a cap that
+            // ever wound away would vanish under back-face culling.
             double_sided: true,
             cull_mode: None,
-            // Emissive glow in the fill's hue (0 = matte).
-            emissive: LinearRgba::new(
-                fill.r * appearance.emissive,
-                fill.g * appearance.emissive,
-                fill.b * appearance.emissive,
-                1.0,
-            ),
+            // Emissive glow in the fill's hue (0 = matte). Alpha 0 opts the
+            // glow out of camera exposure: with alpha 1 Bevy multiplies it
+            // by the exposure (about 1/1000 at the default EV), and a body
+            // at emissive 2 glowed by 0.2 % — invisible (brief 4b-3).
+            emissive: {
+                let fill = LinearRgba::from(Color::from(fill));
+                LinearRgba {
+                    alpha: 0.0,
+                    ..fill * appearance.emissive
+                }
+            },
             ..default()
         },
         extension: ToonExtension {
@@ -96,12 +102,24 @@ pub fn sync_body_materials(
         With<Body>,
     >,
     mut untinted: RemovedComponents<SignalColorOverride>,
+    mut shown_look: Local<Option<Look>>,
 ) {
     let removed: Vec<Entity> = untinted.read().collect();
-    for (entity, appearance, tint, shape) in changed
-        .iter()
-        .chain(removed.iter().filter_map(|e| bodies.get(*e).ok()))
-    {
+    // A new look re-tones every body: rebuild them all, once.
+    let relook = *shown_look != Some(settings.look);
+    *shown_look = Some(settings.look);
+    let theme = settings.look.theme();
+    let all: Vec<Entity> = if relook {
+        bodies.iter().map(|(e, ..)| e).collect()
+    } else {
+        Vec::new()
+    };
+    for (entity, appearance, tint, shape) in changed.iter().chain(
+        removed
+            .iter()
+            .chain(&all)
+            .filter_map(|e| bodies.get(*e).ok()),
+    ) {
         // Half-plane grounds render through `render::ground`'s material.
         if matches!(shape, gradiance_domain::shape::ShapeDef::HalfPlane) {
             continue;
@@ -110,6 +128,7 @@ pub fn sync_body_materials(
             appearance,
             tint.and_then(|t| t.fill),
             &settings,
+            theme,
         ));
         commands.entity(entity).insert(MeshMaterial3d(handle));
     }

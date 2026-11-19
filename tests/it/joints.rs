@@ -7,7 +7,9 @@
 
 use crate::harness::{body_count, box_record, entity_of, headless_app, paused_app, step, undo};
 use avian2d::prelude::RigidBody;
+use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
+use gradiance::core::ids::IdIndex;
 use gradiance::prelude::*;
 
 fn spawn_body(app: &mut App, record: BodyRecord) -> StableId {
@@ -626,6 +628,38 @@ fn world_pin_hinge_limit_holds_the_swing() {
     );
 }
 
+/// Asymmetric world-pin limits apply in the frame the gizmo draws them in
+/// (`rest_rot_a + [min, max]`, the body against the world): a rod pinned at
+/// its left end with limits [-0.2, 0.6] swings down to -0.2, not to -0.6
+/// (before brief A-1 the limits bound the pin against the body, mirrored).
+#[test]
+fn world_pin_hinge_limits_are_the_body_against_the_world() {
+    let mut app = headless_app();
+    let rod_id = spawn_body(&mut app, box_record(Vec2::new(0.8, 0.0), 1.6, 0.2));
+    spawn_joint(
+        &mut app,
+        JointDef {
+            kind: JointKind::Hinge {
+                limits: Some([gradiance::units::Angle(-0.2), gradiance::units::Angle(0.6)]),
+                motor: None,
+            },
+            common: JointCommon::default(),
+            body_a: rod_id,
+            body_b: None,
+            anchor_a: gradiance::units::Displacement(Vec2::new(-0.8, 0.0)),
+            anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+            rest_rot_a: gradiance::units::Angle(0.0),
+            rest_rot_b: gradiance::units::Angle(0.0),
+        },
+    );
+    step(&mut app, 120);
+    let rot = pose_of(&app, rod_id).rot;
+    assert!(
+        (rot - -0.2).abs() < 0.1,
+        "the rod rests on its lower limit -0.2 (rot {rot})"
+    );
+}
+
 // ---------- Rest-orientation frames (user snapshot regressions) ----------
 
 /// The user's snapshot gradiance-1783344618.ron distilled: a rotated body
@@ -685,12 +719,12 @@ fn rotated_world_pin_slider_stays_stable_and_rotation_locked() {
     }
 }
 
-fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, stiffness: f32) -> JointDef {
+fn strut(body_a: StableId, body_b: Option<StableId>, rest_length: f32, frequency: f32) -> JointDef {
     JointDef {
         kind: JointKind::Spring {
             rest_length: gradiance::units::Length(rest_length),
-            stiffness: gradiance::units::Stiffness(stiffness),
-            damping: gradiance::units::Damping(5.0),
+            frequency: gradiance::units::Frequency(frequency),
+            damping_ratio: 0.5,
             range: None,
         },
         common: JointCommon::default(),
@@ -709,7 +743,7 @@ fn strut_derives_a_distance_joint_and_damping() {
     let mut app = headless_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(60.0, 0.0), 20.0, 20.0));
-    let jid = spawn_joint(&mut app, strut(a, Some(b), 60.0, 500.0));
+    let jid = spawn_joint(&mut app, strut(a, Some(b), 60.0, 2.0));
     step(&mut app, 2);
 
     let je = entity_of(&app, jid).unwrap();
@@ -717,11 +751,21 @@ fn strut_derives_a_distance_joint_and_damping() {
         app.world().get::<DistanceJoint>(je).is_some(),
         "strut derives a DistanceJoint"
     );
+    // The damping rate is 2·ζ·ω (mass-free: avian applies it to the reduced
+    // mass), and the compliance comes from the reduced mass: two 400 kg
+    // boxes reduce to 200 kg, so k = 200·(2π·2)².
     let damping = app.world().get::<JointDamping>(je).unwrap();
+    let omega = std::f32::consts::TAU * 2.0;
     assert!(
-        (damping.linear - 5.0).abs() < 1e-3,
-        "damping maps onto JointDamping ({})",
+        (damping.linear - 2.0 * 0.5 * omega).abs() < 1e-3,
+        "damping ratio maps onto JointDamping ({})",
         damping.linear
+    );
+    let compliance = app.world().get::<DistanceJoint>(je).unwrap().compliance;
+    let k = 200.0 * omega * omega;
+    assert!(
+        (compliance * k - 1.0).abs() < 1e-3,
+        "stiffness from the reduced mass (compliance {compliance}, expected 1/{k})"
     );
 }
 
@@ -738,7 +782,7 @@ fn strut_pulls_a_body_toward_its_rest_length() {
     ball.physics.gravity_scale = GravityScale(0.0);
     let ball_id = spawn_body(&mut app, ball);
     // A stiff strut with a 50 px rest length between their centres.
-    spawn_joint(&mut app, strut(anchor_id, Some(ball_id), 50.0, 1000.0));
+    spawn_joint(&mut app, strut(anchor_id, Some(ball_id), 50.0, 1.0));
 
     let start = pose_of(&app, ball_id).pos.x;
     assert!(
@@ -759,7 +803,7 @@ fn a_strut_is_undoable_and_persists_its_kind() {
     let mut app = paused_app();
     let a = spawn_body(&mut app, box_record(Vec2::ZERO, 20.0, 20.0));
     let b = spawn_body(&mut app, box_record(Vec2::new(80.0, 0.0), 20.0, 20.0));
-    spawn_joint(&mut app, strut(a, Some(b), 80.0, 250.0));
+    spawn_joint(&mut app, strut(a, Some(b), 80.0, 1.5));
     assert_eq!(joint_count(&mut app), 1);
     undo(&mut app);
     assert_eq!(
@@ -866,7 +910,9 @@ fn world_pinned_tilted_motor_oscillates() {
         if delta * last_delta < -1e-6 {
             direction_changes += 1;
         }
-        if delta.abs() > 1e-6 {
+        // A turnaround frame moves ~1e-5 rad now that the motor reverses
+        // in one substep (brief 4b-4); only real motion sets the direction.
+        if delta.abs() > 1e-3 {
             last_delta = delta;
         }
         last_angle = angle;
@@ -938,11 +984,11 @@ fn angular_velocity(app: &App, id: StableId) -> f32 {
         .map_or(0.0, |w| w.0)
 }
 
-/// A strut's stiffness must be scaled for SI: a body hung from a world-pinned
-/// spring sags only ~0.1 m (`sag = m·g / k` with `k ≈ 100·m`), not the ~100 m
-/// the pre-audit `0.1 N/m` fallback gave. Undamped, it oscillates about that
-/// equilibrium, so a generous < 1 m bound distinguishes the two without needing
-/// the spring to settle.
+/// A default spring holds its body up whatever it weighs: authored as a
+/// frequency, its stiffness is derived from the mass, so the sag is
+/// `g / ω²` (about 0.1 m at 1.5 Hz), not the ~100 m the pre-audit `0.1 N/m`
+/// fallback gave. A generous < 1 m bound distinguishes the two without
+/// needing the spring to settle.
 #[test]
 fn strut_stiffness_keeps_a_hung_body_from_drooping() {
     let mut app = headless_app();
@@ -950,14 +996,15 @@ fn strut_stiffness_keeps_a_hung_body_from_drooping() {
     // world anchor at the origin; the strut spans the 50-unit gap, relaxed.
     let body = box_record(Vec2::new(0.0, -50.0), 10.0, 10.0);
     let body_id = spawn_body(&mut app, body);
-    let stiffness = 100.0 * (10.0 * 10.0); // SPRING_STIFFNESS_PER_MASS * mass
     spawn_joint(
         &mut app,
         JointDef {
             kind: JointKind::Spring {
                 rest_length: gradiance::units::Length(50.0),
-                stiffness: gradiance::units::Stiffness(stiffness),
-                damping: gradiance::units::Damping(0.0),
+                frequency: gradiance::units::Frequency(
+                    gradiance::domain::joint::DEFAULT_SPRING_FREQUENCY,
+                ),
+                damping_ratio: 0.0,
                 range: None,
             },
             common: JointCommon::default(),
@@ -1035,4 +1082,231 @@ fn motorized_slider_drives_body_along_its_axis() {
         "slider stays on its axis (y = {})",
         pose_of(&app, slider_id).pos.y
     );
+}
+
+/// A positive hinge motor speed turns the driven body **counter-clockwise**
+/// against its reference, on a body-to-body hinge (body B against body A)
+/// and on a world pin (the body against the world) alike, and the joint's
+/// angle sensor rises with it. A world pin used to drive the pin against the
+/// body, so the same speed turned the body clockwise (brief A-1).
+#[test]
+fn a_positive_hinge_motor_turns_counter_clockwise_on_both_hinge_kinds() {
+    for world in [false, true] {
+        let mut app = headless_app();
+        // The static base sits off to the side, clear of the arm: on a world
+        // pin the two are not connected and would collide.
+        let mut base = box_record(Vec2::new(0.0, 3.0), 0.5, 0.5);
+        base.physics.rigid_body = RigidBody::Static;
+        let base_id = spawn_body(&mut app, base);
+        let arm_id = spawn_body(&mut app, box_record(Vec2::ZERO, 1.6, 0.2));
+        let (a, b) = if world {
+            (arm_id, None)
+        } else {
+            (base_id, Some(arm_id))
+        };
+        // Body-to-body: the base's anchor (0, -3) is the arm's centre.
+        let anchor_a = if world {
+            Vec2::ZERO
+        } else {
+            Vec2::new(0.0, -3.0)
+        };
+        let mut def = hinge(a, b, anchor_a, Vec2::ZERO);
+        def.kind = JointKind::Hinge {
+            limits: None,
+            motor: Some(AngularMotorDef {
+                target_velocity: gradiance::units::AngularVelocity(2.0),
+                ..default()
+            }),
+        };
+        let joint_id = spawn_joint(&mut app, def);
+        step(&mut app, 30);
+        let w = angular_velocity(&app, arm_id);
+        assert!(
+            (w - 2.0).abs() < 0.2,
+            "world pin {world}: the arm turns at +2 rad/s, not {w}"
+        );
+        let joint = entity_of(&app, joint_id).unwrap();
+        let angle = app
+            .world_mut()
+            .run_system_once(
+                move |q: gradiance::physics::queries::PhysicsQueries, index: Res<IdIndex>| {
+                    q.joint_angle(joint, &index)
+                        .map(gradiance::units::Angle::value)
+                },
+            )
+            .unwrap()
+            .unwrap();
+        let rot = pose_of(&app, arm_id).rot;
+        assert!(
+            (angle - rot).abs() < 1e-3 && rot > 0.5,
+            "world pin {world}: the sensor reads the arm's turn ({angle} vs {rot})"
+        );
+    }
+}
+
+/// The motor's per-substep gain is converted with the substep length the
+/// solver really steps, which `SimSettings::speed` scales: at half speed a
+/// rate gives half the gain (brief A-1; it used to ignore the speed).
+#[test]
+fn the_motor_gain_follows_the_simulation_speed() {
+    let gain_at = |speed: f32| {
+        let mut app = headless_app();
+        app.world_mut()
+            .resource_mut::<gradiance::domain::settings::SimSettings>()
+            .speed = speed;
+        let arm_id = spawn_body(&mut app, box_record(Vec2::ZERO, 1.6, 0.2));
+        let mut def = hinge(arm_id, None, Vec2::ZERO, Vec2::ZERO);
+        def.kind = JointKind::Hinge {
+            limits: None,
+            motor: Some(AngularMotorDef {
+                damping: 120.0,
+                ..default()
+            }),
+        };
+        let joint_id = spawn_joint(&mut app, def);
+        step(&mut app, 2);
+        let joint = entity_of(&app, joint_id).unwrap();
+        match app
+            .world()
+            .get::<avian2d::prelude::RevoluteJoint>(joint)
+            .unwrap()
+            .motor
+            .motor_model
+        {
+            avian2d::prelude::MotorModel::AccelerationBased { damping, .. } => damping,
+            other => panic!("{other:?}"),
+        }
+    };
+    let (full, half) = (gain_at(1.0), gain_at(0.5));
+    assert!(
+        full < 1.0 && (half - 0.5 * full).abs() < 1e-4,
+        "gain at speed 1: {full}, at 0.5: {half}"
+    );
+}
+
+/// A slider rig for the world-pin vs body-to-body comparisons (brief A-2):
+/// a 0.4 m box at the origin, rotated `rot`, on a slider whose **world**
+/// axis is `world_axis` through the box's centre. `world` pins it to the
+/// world; otherwise a static base off to the side (clear of the box) is
+/// body A, so the box is body B. Returns `(app, box id, joint id)`.
+fn slider_rig(
+    world: bool,
+    rot: f32,
+    world_axis: Vec2,
+    limits: Option<[f32; 2]>,
+    motor: Option<LinearMotorDef>,
+) -> (App, StableId, StableId) {
+    let mut app = headless_app();
+    let mut base = box_record(Vec2::new(0.0, 3.0), 0.5, 0.5);
+    base.physics.rigid_body = RigidBody::Static;
+    let base_id = spawn_body(&mut app, base);
+    let mut cart = box_record(Vec2::ZERO, 0.4, 0.4);
+    cart.pose.rot = rot;
+    let cart_id = spawn_body(&mut app, cart);
+    // The axis is authored in body A's local frame.
+    let rot_a = if world { rot } else { 0.0 };
+    let def = JointDef {
+        kind: JointKind::Slider {
+            axis: Vec2::from_angle(-rot_a).rotate(world_axis),
+            limits: limits.map(|l| l.map(gradiance::units::Length)),
+            motor,
+        },
+        common: JointCommon::default(),
+        body_a: if world { cart_id } else { base_id },
+        body_b: (!world).then_some(cart_id),
+        anchor_a: gradiance::units::Displacement(if world {
+            Vec2::ZERO
+        } else {
+            Vec2::new(0.0, -3.0)
+        }),
+        anchor_b: gradiance::units::Displacement(Vec2::ZERO),
+        rest_rot_a: gradiance::units::Angle(rot_a),
+        rest_rot_b: gradiance::units::Angle(if world { 0.0 } else { rot }),
+    };
+    let joint_id = spawn_joint(&mut app, def);
+    (app, cart_id, joint_id)
+}
+
+/// Reads a body's avian linear velocity (m/s), or zero before the solver runs.
+fn linear_velocity(app: &App, id: StableId) -> Vec2 {
+    entity_of(app, id)
+        .and_then(|e| app.world().get::<avian2d::prelude::LinearVelocity>(e))
+        .map_or(Vec2::ZERO, |v| v.0)
+}
+
+/// A positive slider motor speed drives the slid body **along** the drawn
+/// axis, on a body-to-body slider (body B against body A) and on a world pin
+/// (the body against the world) alike — also when the body is rotated, so
+/// the axis is carried into the pin's frame. A world pin used to drive the
+/// pin against the body, so the same speed ran the body backwards (A-1
+/// finding 7, brief A-2).
+#[test]
+fn a_positive_slider_motor_drives_along_the_axis_on_both_slider_kinds() {
+    let dir = Vec2::from_angle(0.5);
+    for world in [false, true] {
+        let motor = LinearMotorDef {
+            target_velocity: gradiance::units::Velocity(1.0),
+            ..default()
+        };
+        let (mut app, cart, _) = slider_rig(world, 0.5, dir, None, Some(motor));
+        step(&mut app, 30);
+        let v = linear_velocity(&app, cart);
+        assert!(
+            (v.dot(dir) - 1.0).abs() < 0.1 && v.perp_dot(dir).abs() < 0.05,
+            "world pin {world}: the cart runs at +1 m/s along the axis, not {v}"
+        );
+    }
+}
+
+/// Asymmetric slider limits bound the slid body on the drawn side of the
+/// anchor on both slider kinds: an axis pointing down with travel [0, 1]
+/// lets gravity pull the cart 1 m **below** the anchor. A world pin used to
+/// bound the pin against the body, so the cart could not drop at all.
+#[test]
+fn world_pin_slider_limits_are_the_body_against_the_world() {
+    for world in [false, true] {
+        let (mut app, cart, _) = slider_rig(world, 0.0, Vec2::NEG_Y, Some([0.0, 1.0]), None);
+        step(&mut app, 120);
+        let y = pose_of(&app, cart).pos.y;
+        assert!(
+            (y - -1.0).abs() < 0.05,
+            "world pin {world}: the cart rests on its far limit 1 m down (y {y})"
+        );
+    }
+}
+
+/// An oscillating slider motor reverses at both ends of its travel on a
+/// world pin as on a body-to-body slider (the oscillate seam skipped world
+/// pins before brief A-2, so the motor drove into one stop and stayed).
+#[test]
+fn an_oscillating_slider_motor_reverses_on_both_slider_kinds() {
+    for world in [false, true] {
+        let motor = LinearMotorDef {
+            target_velocity: gradiance::units::Velocity(2.0),
+            oscillate: true,
+            ..default()
+        };
+        let (mut app, cart, _) = slider_rig(world, 0.0, Vec2::X, Some([-0.5, 0.5]), Some(motor));
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        let mut reversals = 0;
+        let mut last_forward: Option<bool> = None;
+        for _ in 0..180 {
+            step(&mut app, 1);
+            let x = pose_of(&app, cart).pos.x;
+            lo = lo.min(x);
+            hi = hi.max(x);
+            let v = linear_velocity(&app, cart).x;
+            if v.abs() > 0.5 {
+                let forward = v > 0.0;
+                if last_forward.is_some_and(|f| f != forward) {
+                    reversals += 1;
+                }
+                last_forward = Some(forward);
+            }
+        }
+        assert!(
+            reversals >= 2 && lo < -0.4 && hi > 0.4,
+            "world pin {world}: the cart sweeps its travel [{lo}, {hi}] with {reversals} reversals"
+        );
+    }
 }

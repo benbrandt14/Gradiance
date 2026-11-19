@@ -23,6 +23,13 @@
 //! point ([`PIXELS_PER_METER`](world::PIXELS_PER_METER)) — no other module
 //! multiplies by the pixel scale.
 //!
+//! # Typed entry
+//!
+//! [`expr`] is the one parser for typed values (`25 cm`, `90 deg`,
+//! `2*pi`): number fields read through [`DisplayUnit::parse`], which fits
+//! the result to the field's dimension and display unit ([`UnitPrefs`]).
+//! [`step`] is the Ctrl-snap increment those fields use (brief U-8).
+//!
 //! # 2D density
 //!
 //! [`Density`] is areal (kg/m²) this iteration, and mass is computed in one
@@ -30,11 +37,16 @@
 //! [`dimension`] line — see `docs/units-decision.md`.
 
 pub mod dimension;
+pub mod display;
+pub mod expr;
 pub mod mass;
 pub mod quantity;
+pub mod step;
 pub mod world;
 
 pub use dimension::Dimension;
+pub use display::{AngleUnit, DisplayUnit, LengthUnit, UnitPrefs};
+pub use expr::ExprError;
 pub use mass::mass_of;
 pub use quantity::{
     Acceleration, Acceleration2, Angle, AngularMomentum, AngularVelocity, Area, Damping, Density,

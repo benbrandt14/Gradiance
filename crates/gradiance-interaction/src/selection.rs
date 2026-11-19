@@ -123,6 +123,12 @@ pub struct SelectedJoint(pub Option<Entity>);
 pub enum SelectTransition {
     /// Replace the body selection with these hits (group-expanded).
     SetBodies(Vec<Entity>),
+    /// Replace the body selection with exactly these bodies, **not**
+    /// group-expanded: the result of a query (the Groups panel's chips and
+    /// rows), which already names every body it means. A filter on a mixed
+    /// group or a nested group's row would otherwise select the whole
+    /// outermost group (brief A-1).
+    SetExactly(Vec<Entity>),
     /// Add these hits to the body selection (group-expanded).
     AddBodies(Vec<Entity>),
     /// Toggle these hits in the body selection (group-expanded).
@@ -147,6 +153,10 @@ impl SelectTransition {
         match self {
             Self::SetBodies(mut hits) => {
                 expand_groups(&mut hits, groups);
+                bodies.entities = dedup_preserving_order(hits);
+                joint.0 = None;
+            }
+            Self::SetExactly(hits) => {
                 bodies.entities = dedup_preserving_order(hits);
                 joint.0 = None;
             }

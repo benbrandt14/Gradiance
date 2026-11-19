@@ -103,10 +103,11 @@ fn highlight_lisp(
 ) -> Arc<egui::Galley> {
     use egui::text::{LayoutJob, TextFormat};
     let font = egui::FontId::monospace(13.0);
+    let tokens = crate::theme::tokens(ui.ctx());
     let color_default = ui.visuals().text_color();
-    let color_verb = egui::Color32::from_rgb(120, 170, 240);
-    let color_num = egui::Color32::from_rgb(230, 165, 100);
-    let color_comment = egui::Color32::from_rgb(120, 150, 110);
+    let color_verb = tokens.syntax_verb;
+    let color_num = tokens.syntax_number;
+    let color_comment = tokens.syntax_comment;
     let color_paren = ui.visuals().weak_text_color();
     let mut job = LayoutJob::default();
     let fmt = |color: egui::Color32| TextFormat::simple(font.clone(), color);
@@ -261,13 +262,10 @@ pub fn console_section(
         .auto_shrink([false, false])
         .stick_to_bottom(true)
         .show(ui, |ui| {
+            let tokens = crate::theme::tokens(ui.ctx());
             for entry in &log.0 {
                 ui.monospace(format!("\u{25b8} {}", entry.input));
-                let color = if entry.ok {
-                    egui::Color32::from_rgb(120, 200, 120)
-                } else {
-                    egui::Color32::from_rgb(230, 130, 130)
-                };
+                let color = if entry.ok { tokens.ok } else { tokens.error };
                 ui.colored_label(color, &entry.output);
             }
         });

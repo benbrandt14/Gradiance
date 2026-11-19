@@ -16,12 +16,12 @@ use crate::tools::context::{
 };
 use crate::tools::handles::{HandleKind, SelectionBox, hit_handle};
 use crate::tools::move_align::{MoveAlignment, move_delta, preview_guides};
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_command::intent::TransformChange;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Role;
 use gradiance_geometry::polygonize::polygonize;
 use gradiance_geometry::scale::scale_point;
 use gradiance_physics::grab::Twist;
@@ -208,7 +208,7 @@ impl ManipTool for SelectGesture {
                 if let Some(p) = ctx.cursor {
                     let center = (*start + p) / 2.0;
                     let size = (p - *start).abs();
-                    out.rect(center, size, css::LIGHT_SKY_BLUE.with_alpha(0.8));
+                    out.rect(center, size, Role::Marquee.alpha(0.8));
                 }
             }
             SelectGesture::Lasso { points, .. } if points.len() >= 2 => {
@@ -216,7 +216,7 @@ impl ManipTool for SelectGesture {
                 if let Some(first) = pts.first().copied() {
                     pts.push(first);
                 }
-                out.polyline(pts, css::LIGHT_SKY_BLUE.with_alpha(0.8));
+                out.polyline(pts, Role::Marquee.alpha(0.8));
             }
             SelectGesture::DupDrag { start, ghosts, .. } => {
                 if let Some(p) = ctx.cursor {
@@ -229,7 +229,7 @@ impl ManipTool for SelectGesture {
                                 pos: pose.pos + offset,
                                 rot: pose.rot,
                             },
-                            css::AQUAMARINE.with_alpha(0.8),
+                            Role::Preview.alpha(0.8),
                         );
                     }
                 }
@@ -252,7 +252,7 @@ impl ManipTool for SelectGesture {
                             if let Some(first) = pts.first().copied() {
                                 pts.push(first);
                             }
-                            out.polyline(pts, css::SPRING_GREEN.with_alpha(0.85));
+                            out.polyline(pts, Role::Alternate.alpha(0.85));
                         }
                     }
                 }
@@ -279,7 +279,7 @@ impl ManipTool for SelectGesture {
                         if let Some(first) = pts.first().copied() {
                             pts.push(first);
                         }
-                        out.polyline(pts, css::GOLD.with_alpha(0.9));
+                        out.polyline(pts, Role::Snap.alpha(0.9));
                     }
                 }
             }
@@ -788,7 +788,7 @@ fn push_shape_outline(
     out: &mut ToolPreview,
     shape: &ShapeDef,
     pose: PosRot,
-    color: impl Into<Color>,
+    color: impl Into<gradiance_domain::theme::Stroke>,
 ) {
     let color = color.into();
     let rot = Vec2::from_angle(pose.rot);

@@ -22,8 +22,9 @@ use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
-use gradiance_domain::settings::ScenerySettings;
+use gradiance_domain::settings::{RenderSettings, ScenerySettings};
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Look;
 
 /// Where the `embedded_asset!` registration puts the shader (see
 /// `toon.rs::TOON_SHADER_PATH` for the derivation); asserted in tests.
@@ -52,10 +53,16 @@ pub struct PlaneExtension {
     /// spare).
     #[uniform(101)]
     pub fade: Vec4,
-    /// Linear-space backdrop color the horizon fog fades toward (matches
-    /// the camera clear color).
+    /// Linear-space backdrop color the horizon fog fades toward (the look's
+    /// backdrop, which is also the camera clear color).
     #[uniform(102)]
     pub horizon: Vec4,
+    /// The toon banding the bodies use ([`params_of`](crate::toon::params_of)):
+    /// `x` = band count (0 = smooth), `z` = white point. Kept equal to the
+    /// bodies' by `toon::apply_render_settings`, so a shadow on the back
+    /// plane or a ground steps through the same bands as a body.
+    #[uniform(103)]
+    pub toon: Vec4,
 }
 
 impl PlaneExtension {
@@ -68,6 +75,7 @@ impl PlaneExtension {
             plane: normal.extend(offset),
             fade: Vec4::new(dot_spacing, HORIZON_FADE.0, HORIZON_FADE.1, 0.0),
             horizon: Vec4::new(h.red, h.green, h.blue, 1.0),
+            toon: Vec4::ZERO,
         }
     }
 }
@@ -130,35 +138,49 @@ pub fn ground_plane_mesh() -> Mesh {
 
 /// (Re)builds a half-plane body's plane material when its appearance or
 /// pose changes (the pose defines the world plane the shader fades
-/// against). The quad mesh comes from `extrude_sync`.
+/// against), and every ground's when the look or the scenery changes (the
+/// fill shows in the look's tone, the horizon fades to the back colour). The quad mesh
+/// comes from `extrude_sync`.
 pub fn sync_ground_planes(
     mut commands: Commands,
     mut materials: ResMut<Assets<InfinitePlaneMaterial>>,
     scenery: Res<ScenerySettings>,
-    clear: Res<ClearColor>,
-    grounds: Query<
+    render: Res<RenderSettings>,
+    mut shown_look: Local<Option<Look>>,
+    changed: Query<
         (Entity, &ShapeDef, &Appearance, &Transform),
         (
             With<Body>,
             Or<(Changed<ShapeDef>, Changed<Appearance>, Changed<Transform>)>,
         ),
     >,
+    all: Query<(Entity, &ShapeDef, &Appearance, &Transform), With<Body>>,
 ) {
-    for (entity, shape, appearance, transform) in &grounds {
+    let relook = *shown_look != Some(render.look);
+    *shown_look = Some(render.look);
+    let theme = render.look.theme();
+    // The horizon fades to the back colour, so a scenery edit rebuilds too.
+    let grounds: Vec<_> = if relook || scenery.is_changed() {
+        all.iter().collect()
+    } else {
+        changed.iter().collect()
+    };
+    for (entity, shape, appearance, transform) in grounds {
         if !matches!(shape, ShapeDef::HalfPlane) {
             continue;
         }
         let pose = gradiance_core::units::PosRot::from_transform(transform);
         let normal = Vec2::from_angle(pose.rot).rotate(Vec2::Y);
-        let fill = appearance.fill;
-        let handle = materials.add(plane_material(
-            Color::srgba(fill.r, fill.g, fill.b, fill.a),
+        let mut material = plane_material(
+            theme.display(appearance.fill).into(),
             normal.extend(0.0),
             normal.dot(pose.pos),
-            clear.0,
+            scenery.back_color.into(),
             // One ground dot per metre (the world is SI).
             1.0,
-        ));
+        );
+        material.extension.toon = crate::toon::params_of(&render);
+        let handle = materials.add(material);
         // Grounds render through this material, not the body toon material.
         commands
             .entity(entity)

@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 74 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 87 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -56,6 +56,13 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `camera.get` | `(camera-get path)` | query | — | — | Read a camera-feel setting: "zoom_step", "pan_speed", "orbit_speed_deg"; NaN if the path does not resolve. | `{"path": "zoom_step"}` |
 | `camera.set` | `(camera-set path value)` | config | — | — | Set a camera-feel setting by reflect-path (workstation config, never undone). | `{"path": "pan_speed", "value": 900}` |
 
+## `chrome`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `chrome.apply` | `(chrome-apply name)` | config | — | — | Draw the editor panels with a chrome preset (blender, blender-blue, stock); workstation config, never undone. | `{"name": "blender"}` |
+| `chrome.list` | `(chromes)` | query | — | — | Every chrome preset's name, in menu order (the first is the default). | `{}` |
+
 ## `edit`
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
@@ -87,7 +94,20 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `joint.delete` | `(delete-joint i)` | edit | `delete-joint` | Context/Delete joint, Delete | Remove the i-th joint (id order, as joint-count) — undoable. | `{"i": 0}` |
 | `joint.hinge` | `(hinge a b x y)` | edit | `spawn-joint` | — | Hinge bodies a and b at world point (x, y); b < 0 pins a to the world. | `{"a": 0, "b": 1, "x": -0.2, "y": 1}` |
 | `joint.slider` | `(slider a b x y ax ay)` | edit | `spawn-joint` | — | Prismatic joint at (x, y) sliding along world axis (ax, ay); b < 0 pins to the world. | `{"a": 0, "b": 1, "x": -0.2, "y": 1, "ax": 1, "ay": 0}` |
-| `joint.spring` | `(spring a b stiffness damping)` | edit | `spawn-joint` | — | Spring-damper strut between the centres of a and b; rest length is their current distance. | `{"a": 0, "b": 2, "stiffness": 50, "damping": 1}` |
+| `joint.spring` | `(spring a b frequency damping_ratio)` | edit | `spawn-joint` | — | Spring-damper strut between the centres of a and b; rest length is their current distance. | `{"a": 0, "b": 2, "frequency": 1.5, "damping_ratio": 0.1}` |
+
+## `lighting`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `lighting.set` | `(lighting-set path value)` | config | `settings` | — | Set a lighting setting by reflect-path, e.g. "ambient", "lights[0].elevation_deg", "ssao" (a settled edit is one undo step). | `{"path": "lights[0].elevation_deg", "value": 30}` |
+
+## `look`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `look.apply` | `(look-apply name)` | config | `settings` | — | Apply a scene look by name (studio, blueprint, poster): palette tone, overlay ink, render, lighting and scenery presets — one undo step. | `{"name": "blueprint"}` |
+| `look.list` | `(looks)` | query | — | — | Every scene look's name, in menu order (the first is the default). | `{}` |
 
 ## `panel`
 
@@ -99,11 +119,32 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `panel.show` | `(panel-show name)` | editor | — | — | Open an editor panel by name, as its View-menu row does (see panel.list for the names). | `{"name": "properties"}` |
 | `panel.toggle` | `(panel-toggle name)` | editor | — | — | Flip an editor panel's visibility by name. | `{"name": "properties"}` |
 
+## `quantity`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `quantity.between` | `(quantity-between name a b)` | query | — | — | A two-body catalog quantity (distance) between bodies a and b, in SI; NaN if either is out of range. | `{"name": "distance", "a": 0, "b": 1}` |
+| `quantity.list` | `(quantities)` | query | — | — | Every quantity name in the catalog (what quantity, quantity-between and the sensor ports read). | `{}` |
+| `quantity.read` | `(quantity name i)` | query | — | — | A catalog quantity of the i-th body, or of the i-th joint for a joint-* quantity, in SI; NaN if out of range or not simulating. | `{"name": "speed", "i": 0}` |
+| `quantity.unit` | `(quantity-unit name)` | query | — | — | The SI unit symbol a quantity reads in ("" for a count). | `{"name": "speed"}` |
+
+## `render`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `render.set` | `(render-set path value)` | config | `settings` | — | Set a render (toon) setting by reflect-path, e.g. "bands", "rim_strength", "white_point" (a settled edit is one undo step). | `{"path": "bands", "value": 3}` |
+
 ## `scene`
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default environment) — one undo step, as File ▸ New scene. | `{}` |
+
+## `scenery`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `scenery.set` | `(scenery-set path value)` | config | `settings` | — | Set a scenery setting by reflect-path, e.g. "perspective_deg", "back_offset", "back_visible" (a settled edit is one undo step). | `{"path": "perspective_deg", "value": 20}` |
 
 ## `signal`
 
@@ -138,6 +179,13 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `ui.screenshot` | `(ui-screenshot path)` | editor | — | — | Save a PNG of the window (scene and panels) at path, once the view settles (150 ms and 3 frames at least); returns the path at once, the file follows. | `{"path": "screenshot.png"}` |
 | `ui.text` | `(ui-text text)` | editor | — | — | Type text into the focused field (click it first) in one frame; a newline presses Enter. Typed text trips no key shortcut. | `{"text": "1.5"}` |
 | `ui.wheel` | `(ui-wheel at lines)` | editor | — | — | Move to a widget name or point [x y], then turn the wheel by lines (> 0: up, away from you), as real input. | `{"at": [640, 370], "lines": 1}` |
+
+## `units`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `units.display` | `(display-units angle length)` | config | — | — | Show angles in deg or rad and lengths in m, cm or mm in every field (display only; workstation config, never undone). | `{"angle": "rad", "length": "cm"}` |
+| `units.shown` | `(units-shown)` | query | — | — | The units the fields show, as (angle length), e.g. ("deg" "m"). | `{}` |
 
 ## `workspace`
 

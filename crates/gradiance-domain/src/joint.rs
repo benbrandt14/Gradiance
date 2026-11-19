@@ -31,7 +31,7 @@ use bevy::math::Vec2;
 use bevy::prelude::Component;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
-use gradiance_units::{Angle, Damping, Displacement, Force, Length, Stiffness};
+use gradiance_units::{Angle, Displacement, Force, Frequency, Length};
 use serde::{Deserialize, Serialize};
 
 // --- Motors ---------------------------------------------------------------
@@ -45,14 +45,20 @@ use serde::{Deserialize, Serialize};
 // unrepresentable: the compiler now rejects a slider motor on a hinge, and the
 // units come from `gradiance-units` so a label can't drift from its value.
 
-/// The velocity-tracking gain (1/s) of the acceleration-based motor model: the
-/// acceleration applied per unit of velocity error. It sets how firmly a motor
-/// holds its target — too low and any load stalls it (the classic "weak
-/// motor"). Instability in this model comes from high *stiffness*, not this
-/// gain, so a firm value is safe.
-pub const DEFAULT_MOTOR_DAMPING: f32 = 30.0;
-/// Default hinge drive speed (rad/s ≈ 19 rpm).
-pub const DEFAULT_MOTOR_ANGULAR_VELOCITY: f32 = 2.0;
+/// The velocity-tracking rate (1/s) of the acceleration-based motor model: the
+/// fraction of the velocity error a motor removes per second. It sets how
+/// firmly a motor holds its target; too low and any load slows it (the
+/// classic "weak motor"). avian takes a per-substep gain, so the physics seam
+/// converts this with the substep length and caps it at the dead-beat gain
+/// ([`crate::tuning::motor_gain`]): any rate is stable. The default is that
+/// cap at the default 360 substeps/s (brief 4b-4 measured the old 30,
+/// passed to avian unconverted, as a gain of 30: a centre-pinned wheel did
+/// not turn).
+pub const DEFAULT_MOTOR_DAMPING: f32 = 360.0;
+/// Default hinge drive speed (rad/s): exactly 20 rpm, the unit the
+/// inspector shows, so a fresh motor reads `20 rpm` rather than the
+/// `19.099 rpm` that 2 rad/s gave (brief A-2).
+pub const DEFAULT_MOTOR_ANGULAR_VELOCITY: f32 = 20.0 * std::f32::consts::TAU / 60.0;
 /// Default slider drive speed (m/s).
 pub const DEFAULT_MOTOR_LINEAR_VELOCITY: f32 = 2.0;
 
@@ -149,9 +155,10 @@ pub struct JointCommon {
     pub broken: bool,
 }
 
-/// The break force a joint gets when "breakable" is first switched on (N) —
-/// ten times a 1 kg body's weight, so a typical light assembly holds until
-/// it is loaded on purpose.
+/// The break force (N) a joint gets when "breakable" is switched on and the
+/// weight it carries is not known: ten times a 1 kg body's weight. The
+/// inspector scales it to the connected bodies instead
+/// ([`crate::tuning::default_break_force`]).
 pub const DEFAULT_BREAK_FORCE: f32 = 100.0;
 
 /// Whether a joint's reaction-force magnitude `force` breaks a joint with
@@ -186,18 +193,22 @@ pub enum JointKind {
     /// (`compliance` = `1 / stiffness`) plus a `JointDamping` component; when
     /// unbounded the distance limit pins to `rest_length` (a pure spring), and
     /// when a [`range`](Self::Spring::range) is set the limit becomes that band.
+    ///
+    /// Authored **mass-relative** (brief 4b-4): a natural frequency and a
+    /// damping ratio. The physics seam derives the stiffness (N/m) and the
+    /// damping rate from the bodies' current reduced mass
+    /// ([`crate::tuning::spring_stiffness`]), and re-derives them when a mass
+    /// changes, so a spring keeps its period when a body is resized or made
+    /// denser. The derived values are never saved.
     Spring {
         /// The length the spring relaxes to — the creation distance.
         rest_length: Length,
-        /// Spring constant; the joint's compliance is
-        /// `1 / stiffness`, and `<= 0` is treated as rigid. Set from the
-        /// connected mass at creation so the strut isn't too soft. The scalar a
-        /// future curve editor would generalize to a nonlinear
-        /// force-vs-displacement curve.
-        stiffness: Stiffness,
-        /// Linear velocity damping applied by the joint (default 0). The scalar
-        /// a future curve editor would generalize to a nonlinear damping curve.
-        damping: Damping,
+        /// Natural frequency of the bounce (Hz); `<= 0` is treated as rigid.
+        /// See [`crate::tuning::SPRING_FREQUENCY`].
+        frequency: Frequency,
+        /// Damping ratio: 0 = undamped, 1 = critical (no overshoot). See
+        /// [`crate::tuning::SPRING_DAMPING_RATIO`].
+        damping_ratio: f32,
         /// Optional hard length clamp `[min, max]`; `None` (the
         /// default) leaves travel unbounded, so the spring is the only
         /// restoring force. When set, the strut floats freely within the band
@@ -206,16 +217,10 @@ pub enum JointKind {
     },
 }
 
-/// Fallback spring constant (N/m) for the inspector's reset (the spring tool
-/// computes a mass-based value at creation; see
-/// `interaction::tools::spring_tool`). Sized for a typical ~1 kg body: at
-/// `k = m·g / sag` with `g ≈ 10` and a ~0.1 m sag this is ~100 N/m, matching
-/// the tool's `SPRING_STIFFNESS_PER_MASS · mass`. (The earlier `0.1` was a
-/// mechanical ÷`PIXELS_PER_METER²` rescale of the pixel-era value — three
-/// orders too soft, so a reset strut drooped ~100 m.)
-pub const DEFAULT_SPRING_STIFFNESS: f32 = 100.0;
-/// Default linear damping for a freshly authored strut.
-pub const DEFAULT_SPRING_DAMPING: f32 = 0.0;
+/// Default natural frequency of a freshly authored spring (Hz).
+pub const DEFAULT_SPRING_FREQUENCY: f32 = crate::tuning::SPRING_FREQUENCY.default;
+/// Default damping ratio of a freshly authored spring.
+pub const DEFAULT_SPRING_DAMPING_RATIO: f32 = crate::tuning::SPRING_DAMPING_RATIO.default;
 
 // --- Mass-aware motor defaults -------------------------------------------
 //
@@ -251,11 +256,13 @@ pub const MIN_MOTOR_EFFORT: f32 = 1.0;
 
 /// The motor's effective torque/force ceiling. An **explicit** authored
 /// `max_force` (`> 0`) is used as-is; otherwise it is **auto** and scales with
-/// the connected body's real `inertia_or_mass` (angular inertia for a hinge,
-/// mass for a slider) via `per` (`MOTOR_TORQUE_PER_INERTIA` /
-/// `MOTOR_FORCE_PER_MASS`), floored. The physics seam calls this at apply time
-/// with the body's `Computed*` value, so every motor — authored in the UI,
-/// spawned programmatically, or loaded from a scene — lands in the stable band.
+/// the joint's **reduced** `inertia_or_mass` (angular inertia for a hinge, mass
+/// for a slider; a static side counts as immovable, so a wheel on a static
+/// ground is sized by the wheel, not the ground) via `per`
+/// (`MOTOR_TORQUE_PER_INERTIA` / `MOTOR_FORCE_PER_MASS`), floored. The physics
+/// seam (`physics::joint_sync::retune_joints`) re-applies it whenever a mass
+/// changes, so every motor — authored in the UI, spawned programmatically, or
+/// loaded from a scene — lands in the stable band.
 #[must_use]
 pub fn motor_ceiling(authored_max: f32, inertia_or_mass: f32, per: f32) -> f32 {
     if authored_max > 0.0 {
@@ -375,16 +382,91 @@ impl JointDef {
         }
     }
 
+    /// Whether the derived engine joint puts the **world** first: a hinge or
+    /// slider pinned to the world is derived as `(pin, body A)`, so that a
+    /// positive motor speed, the limits and the angle or travel all describe
+    /// the body moving against the world, as body B moves against body A on
+    /// a body-to-body joint: a hinge turns it counter-clockwise, a slider
+    /// drives it along the drawn axis (briefs A-1, A-2; before, the pin moved
+    /// against the body, so a world-pin motor ran backwards and its limits
+    /// were mirrored). A spring is symmetric and keeps its order.
+    #[must_use]
+    pub fn world_first(&self) -> bool {
+        self.body_b.is_none()
+            && matches!(
+                self.kind,
+                JointKind::Hinge { .. } | JointKind::Slider { .. }
+            )
+    }
+
+    /// A **slider**'s travel frame in world space: the origin its `[min, max]`
+    /// limits are measured from and the unit axis direction, given body A's
+    /// world anchor and live rotation; `None` for other kinds. The gizmo, the
+    /// limit handles and the oscillate seam all read it, so they agree with
+    /// the engine joint.
+    ///
+    /// Body-to-body, the travel starts at body A's anchor and turns with
+    /// body A (body B slides along it). On a world pin
+    /// ([`world_first`](Self::world_first)) the travel is fixed in the world:
+    /// it starts at the pin and points along the axis at body A's authored
+    /// rest angle, and body A's anchor slides along it.
+    #[must_use]
+    pub fn slider_frame(&self, anchor_a_world: Vec2, rot_a: f32) -> Option<(Vec2, Vec2)> {
+        let JointKind::Slider { axis, .. } = self.kind else {
+            return None;
+        };
+        Some(if self.world_first() {
+            (
+                self.anchor_b.value(),
+                Vec2::from_angle(self.rest_rot_a.value()).rotate(axis),
+            )
+        } else {
+            (anchor_a_world, Vec2::from_angle(rot_a).rotate(axis))
+        })
+    }
+
+    /// A **slider**'s live travel — the position avian's limits and motor act
+    /// on — from both bodies' poses ([`WORLD_POSE`] for a world pin's
+    /// `pose_b`): the slid anchor's offset from the
+    /// [`slider_frame`](Self::slider_frame) origin along its axis. 0 at
+    /// creation; a positive motor speed drives it up. `None` for other kinds.
+    #[must_use]
+    pub fn slider_travel(&self, pose_a: PosRot, pose_b: PosRot) -> Option<f32> {
+        let world_a = self.anchor_world(pose_a.pos, pose_a.rot);
+        let (origin, dir) = self.slider_frame(world_a, pose_a.rot)?;
+        let slid = if self.world_first() {
+            world_a
+        } else {
+            pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(self.anchor_b.value())
+        };
+        Some((slid - origin).dot(dir))
+    }
+
+    /// The hinge angle avian's limits and motor act on, from both bodies'
+    /// live rotations (`rot_b` = 0 for a world pin): the driven body against
+    /// the reference body, minus the authored rest angle — body B against A,
+    /// or for a world pin ([`world_first`](Self::world_first)) body A against
+    /// the world. 0 at creation; a positive motor speed drives it up.
+    #[must_use]
+    pub fn hinge_angle(&self, rot_a: f32, rot_b: f32) -> f32 {
+        let (rest_a, rest_b) = (self.rest_rot_a.value(), self.rest_rot_b.value());
+        if self.world_first() {
+            hinge_limit_angle(rot_b, rot_a, rest_b, rest_a)
+        } else {
+            hinge_limit_angle(rot_a, rot_b, rest_a, rest_b)
+        }
+    }
+
     /// The joint's live **sensor state** given both endpoint poses — the pure
     /// math behind the `JointLength`/`JointAngle` signal sources (read through
     /// `physics::queries`). Derived, never saved.
     ///
     /// - `length`: distance between the two **world** anchors (`anchor_a` on
     ///   body A, `anchor_b` on body B).
-    /// - `angle`: relative rotation of B against A minus the authored rest
-    ///   angle, wrapped to `(-π, π]` — exactly [`hinge_limit_angle`], the frame
-    ///   avian's hinge limits and the oscillating motor measure in, so a plotted
-    ///   angle compares directly to the authored `[min, max]`.
+    /// - `angle`: [`hinge_angle`](Self::hinge_angle), wrapped to `(-π, π]` —
+    ///   the frame avian's hinge limits and the oscillating motor measure in,
+    ///   so a plotted angle compares directly to the authored `[min, max]`.
+    ///   For a world pin it is body A against the world.
     ///
     /// A **world pin** (`body_b == None`) passes [`WORLD_POSE`] for `pose_b`:
     /// its `anchor_b` is already a world point and the derived static pin sits
@@ -395,12 +477,7 @@ impl JointDef {
         let world_b = pose_b.pos + Vec2::from_angle(pose_b.rot).rotate(self.anchor_b.value());
         JointSensors {
             length: Length(world_a.distance(world_b)),
-            angle: Angle(hinge_limit_angle(
-                pose_a.rot,
-                pose_b.rot,
-                self.rest_rot_a.value(),
-                self.rest_rot_b.value(),
-            )),
+            angle: Angle(self.hinge_angle(pose_a.rot, pose_b.rot)),
         }
     }
 }
@@ -430,10 +507,12 @@ mod tests {
         // [min, max] apply directly.
         assert!(hinge_limit_angle(0.7, 0.2, 0.7, 0.2).abs() < 1e-6);
         assert!(hinge_limit_angle(-1.3, 2.4, -1.3, 2.4).abs() < 1e-6);
-        // A world pin (body B is the static anchor at rot 0, rest 0): the
-        // angle is body A's deviation from its authored rest.
-        let rest_a = 0.5;
-        assert!((hinge_limit_angle(0.5 + 0.3, 0.0, rest_a, 0.0) - (-0.3)).abs() < 1e-6);
+        // A world pin (the static anchor at rot 0, rest 0) puts the world
+        // first: the angle is body A's deviation from its authored rest.
+        let def = hinge(None, 0.5);
+        assert!(def.world_first());
+        assert!((def.hinge_angle(0.5 + 0.3, 0.0) - 0.3).abs() < 1e-6);
+        assert!(!hinge(Some(StableId::new()), 0.5).world_first());
     }
 
     fn pose(x: f32, y: f32, rot: f32) -> PosRot {
@@ -497,9 +576,11 @@ mod tests {
         let s = def.sensor_state(pose(a.x, a.y, 0.5), WORLD_POSE);
         assert!(close(s.length.value(), 0.5), "{s:?}");
         assert!(s.angle.value().abs() < 1e-6);
-        // Body A swings +0.3: the limit-frame angle is the pin relative to A.
+        // Body A swings +0.3 (counter-clockwise): the angle is the body
+        // against the world, so it reads +0.3, the sign the gizmo's limit
+        // arc (`rest_rot_a + [min, max]`) and a positive motor use.
         let s2 = def.sensor_state(pose(a.x, a.y, 0.8), WORLD_POSE);
-        assert!(close(s2.angle.value(), -0.3), "{s2:?}");
+        assert!(close(s2.angle.value(), 0.3), "{s2:?}");
     }
 
     #[test]
@@ -577,5 +658,47 @@ mod tests {
             rest_rot_b: Angle(0.0),
         };
         assert!(close(def.limit_reference_angle(1.3), 1.3));
+    }
+
+    /// A world-pin slider's travel is fixed in the world at the pin, along
+    /// the axis at body A's rest angle, and reads body A's offset from the
+    /// pin; a body-to-body slider's starts at body A's anchor and reads body
+    /// B's offset (brief A-2).
+    #[test]
+    fn a_world_pin_slider_measures_the_body_from_the_pin() {
+        let rest = std::f32::consts::FRAC_PI_2;
+        let mut def = hinge(None, rest);
+        def.kind = JointKind::Slider {
+            axis: Vec2::X,
+            limits: None,
+            motor: None,
+        };
+        def.anchor_b = Displacement(Vec2::new(1.0, 2.0));
+        assert!(def.world_first());
+        // The body has slid 0.5 m up its (world +Y) axis.
+        let pose_a = PosRot {
+            pos: Vec2::new(1.0, 2.5),
+            rot: rest,
+        };
+        let anchor = def.anchor_world(pose_a.pos, pose_a.rot);
+        let (origin, dir) = def.slider_frame(anchor, pose_a.rot).unwrap();
+        assert!(origin.distance(Vec2::new(1.0, 2.0)) < 1e-6);
+        assert!(dir.distance(Vec2::Y) < 1e-6);
+        assert!(close(def.slider_travel(pose_a, WORLD_POSE).unwrap(), 0.5));
+
+        // Body-to-body: B sits 0.5 m along A's (rotated) axis.
+        def.body_b = Some(StableId::new());
+        def.anchor_b = Displacement(Vec2::ZERO);
+        let pose_a = PosRot {
+            pos: Vec2::ZERO,
+            rot: rest,
+        };
+        let pose_b = PosRot {
+            pos: Vec2::new(0.0, 0.5),
+            rot: 0.0,
+        };
+        assert!(!def.world_first());
+        assert!(close(def.slider_travel(pose_a, pose_b).unwrap(), 0.5));
+        assert!(hinge(None, 0.0).slider_travel(pose_a, pose_b).is_none());
     }
 }

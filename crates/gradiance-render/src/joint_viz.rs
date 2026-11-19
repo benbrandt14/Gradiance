@@ -1,15 +1,16 @@
 //! Joint indicator gizmos: a glyph per joint kind, tracking the bodies.
 //!
-//! The selected joint is ringed in yellow, and a powered motor draws a
+//! The selected joint is ringed in the look's accent, and a powered motor draws a
 //! direction arrow (curved for hinges, straight for sliders) whose
 //! length scales with target velocity — the "visualize motor state" the
 //! joint feedback asked for.
 
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{AngularMotorDef, JointDef, JointKind, LinearMotorDef};
+use gradiance_domain::settings::RenderSettings;
+use gradiance_domain::theme::{Ink, active};
 use gradiance_interaction::joint_edit::{
     HINGE_LIMIT_RADIUS_PX, HINGE_RING_PX, JointLimitDrag, slider_span,
 };
@@ -25,10 +26,15 @@ pub fn draw_joints(
     index: Res<IdIndex>,
     transforms: Query<&Transform>,
     cam_scale: Res<gradiance_interaction::camera::CameraScale>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     // Screen-constant glyph size: readable at any zoom.
     let s = cam_scale.0;
+    let ink = &active(settings.as_deref()).ink;
+    let outline = Color::from(ink.joint_outline);
+    let accent = Color::from(ink.accent);
+    let snap = Color::from(ink.snap);
     for (entity, def) in &joints {
         let Some(entity_a) = index.entity(def.body_a) else {
             continue;
@@ -43,26 +49,26 @@ pub fn draw_joints(
             // half's anchor, which drift apart as the bodies separate.
             let world_b = anchor_b_world(def, &index, &transforms);
             for end in std::iter::once(anchor).chain(world_b) {
-                draw_dashed_ring(&mut gizmos, end, HINGE_RING_PX * s, BROKEN);
+                draw_dashed_ring(&mut gizmos, end, HINGE_RING_PX * s, ink.muted.into());
             }
             if selected.0 == Some(entity) {
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 11.0 * s, css::YELLOW);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 11.0 * s, accent);
             }
             continue;
         }
-        // Grey glyphs with a dark under-stroke for contrast on any body
+        // Light glyphs with a dark under-stroke for contrast on any body
         // color (feedback 4.7); world pins keep their warning hue.
-        let color = if def.body_b.is_none() {
-            css::ORANGE_RED // world pin
+        let color = Color::from(if def.body_b.is_none() {
+            ink.danger // world pin
         } else {
-            css::LIGHT_GRAY
-        };
+            ink.joint
+        });
         match &def.kind {
             JointKind::Hinge { motor, limits } => {
                 // Under-stroke: a slightly offset dark ring reads as an
                 // outline at every zoom (gizmo lines have no width knob).
                 let r = HINGE_RING_PX * s;
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), r * 1.1, OUTLINE);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), r * 1.1, outline);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), r, color);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 3.0 * s, color);
                 // Exact allowed-rotation range (relative to body A), with
@@ -74,11 +80,7 @@ pub fn draw_joints(
                     limits.map(|[lo, hi]| [lo.value(), hi.value()]),
                 );
                 if let Some([min, max]) = limits {
-                    let arc_color = if live {
-                        css::AQUAMARINE
-                    } else {
-                        css::CORNFLOWER_BLUE
-                    };
+                    let arc_color = Color::from(if live { ink.accent } else { ink.guide });
                     draw_limit_arc(
                         &mut gizmos,
                         anchor,
@@ -86,19 +88,20 @@ pub fn draw_joints(
                         [min, max],
                         s,
                         arc_color,
-                        selected.0 == Some(entity),
+                        (selected.0 == Some(entity)).then_some(snap),
                     );
                 }
                 if let Some(m) = motor {
-                    draw_angular_motor(&mut gizmos, anchor, *m, s);
+                    draw_angular_motor(&mut gizmos, anchor, *m, s, snap);
                 }
             }
-            JointKind::Slider {
-                axis,
-                motor,
-                limits,
-            } => {
-                let dir = Vec2::from_angle(pose_a.rot).rotate(*axis);
+            JointKind::Slider { motor, limits, .. } => {
+                // The travel is measured from body A's anchor, or on a world
+                // pin from the pin (`JointDef::slider_frame`), where the
+                // engine measures it.
+                let Some((origin, dir)) = def.slider_frame(anchor, pose_a.rot) else {
+                    continue;
+                };
                 // With travel limits the axis line shows the exact allowed
                 // travel (plus end caps); unlimited prismatics keep the
                 // long reference line. A live handle drag previews its
@@ -108,8 +111,8 @@ pub fn draw_joints(
                     entity,
                     limits.map(|[lo, hi]| [lo.value(), hi.value()]),
                 );
-                let span_color = if live { css::AQUAMARINE } else { color };
-                let (from, to) = slider_span(anchor, dir, limits, s);
+                let span_color = if live { accent } else { color };
+                let (from, to) = slider_span(origin, dir, limits, s);
                 let perp = Vec2::new(-dir.y, dir.x) * 4.0 * s;
                 gizmos.line_2d(from, to, span_color);
                 if limits.is_some() {
@@ -117,34 +120,31 @@ pub fn draw_joints(
                     gizmos.line_2d(to - perp, to + perp, span_color);
                     if selected.0 == Some(entity) {
                         // Grab handles on the travel caps.
-                        gizmos.circle_2d(Isometry2d::from_translation(from), 4.0 * s, css::GOLD);
-                        gizmos.circle_2d(Isometry2d::from_translation(to), 4.0 * s, css::GOLD);
+                        gizmos.circle_2d(Isometry2d::from_translation(from), 4.0 * s, snap);
+                        gizmos.circle_2d(Isometry2d::from_translation(to), 4.0 * s, snap);
                     }
                 }
-                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.6 * s, OUTLINE);
+                gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.6 * s, outline);
                 gizmos.circle_2d(Isometry2d::from_translation(anchor), 6.0 * s, color);
                 if let Some(m) = motor {
-                    draw_linear_motor(&mut gizmos, anchor, dir, *m, s);
+                    draw_linear_motor(&mut gizmos, anchor, dir, *m, s, snap);
                 }
             }
             JointKind::Spring { .. } => {
                 // A coil between the two anchors; the connected bodies don't
                 // collide, so it reads as a free spring, not a rod.
                 if let Some(b) = anchor_b_world(def, &index, &transforms) {
-                    draw_spring(&mut gizmos, anchor, b, s);
+                    draw_spring(&mut gizmos, anchor, b, s, ink);
                 }
             }
         }
 
         // Selection highlight.
         if selected.0 == Some(entity) {
-            gizmos.circle_2d(Isometry2d::from_translation(anchor), 11.0 * s, css::YELLOW);
+            gizmos.circle_2d(Isometry2d::from_translation(anchor), 11.0 * s, accent);
         }
     }
 }
-
-/// Dark under-stroke color for glyph outlines.
-const OUTLINE: bevy::color::Srgba = css::DARK_SLATE_GRAY;
 
 /// Body B's anchor in world space (a world pin's `anchor_b` already is one);
 /// `None` while body B doesn't resolve.
@@ -159,12 +159,9 @@ fn anchor_b_world(def: &JointDef, index: &IdIndex, transforms: &Query<&Transform
     }
 }
 
-/// The greyed color a broken joint's dashed rings draw in.
-const BROKEN: bevy::color::Srgba = css::DIM_GRAY;
-
 /// A ring of `DASHES` short chords with gaps between them — the broken-joint
 /// glyph (gizmos have no dash style).
-fn draw_dashed_ring(gizmos: &mut Gizmos<OverlayGizmos>, center: Vec2, r: f32, color: Srgba) {
+fn draw_dashed_ring(gizmos: &mut Gizmos<OverlayGizmos>, center: Vec2, r: f32, color: Color) {
     const DASHES: u16 = 10;
     let step = std::f32::consts::TAU / f32::from(DASHES);
     for i in 0..DASHES {
@@ -193,15 +190,16 @@ fn tentative_or(
 }
 
 /// The hinge's allowed-rotation arc (world angles `rot_a + min..max`), with
-/// end ticks, and grab-handle dots when `with_handles`.
+/// end ticks, and grab-handle dots in the given colour when `handles` is
+/// set.
 fn draw_limit_arc(
     gizmos: &mut Gizmos<OverlayGizmos>,
     anchor: Vec2,
     rot_a: f32,
     [min, max]: [f32; 2],
     s: f32,
-    color: bevy::color::Srgba,
-    with_handles: bool,
+    color: Color,
+    handles: Option<Color>,
 ) {
     let r = HINGE_LIMIT_RADIUS_PX * s;
     let span = (max - min).max(1e-3);
@@ -221,8 +219,8 @@ fn draw_limit_arc(
             anchor + dir * (r + 3.0 * s),
             color,
         );
-        if with_handles {
-            gizmos.circle_2d(Isometry2d::from_translation(at(a)), 3.0 * s, css::GOLD);
+        if let Some(handle) = handles {
+            gizmos.circle_2d(Isometry2d::from_translation(at(a)), 3.0 * s, handle);
         }
     }
 }
@@ -233,6 +231,7 @@ fn draw_angular_motor(
     anchor: Vec2,
     motor: AngularMotorDef,
     s: f32,
+    color: Color,
 ) {
     if !motor.enabled || motor.target_velocity.value().abs() < 1e-3 {
         return;
@@ -247,7 +246,7 @@ fn draw_angular_motor(
     for i in 1..=steps {
         let a = sweep * (i as f32 / steps as f32);
         let next = anchor + Vec2::from_angle(a) * radius;
-        gizmos.line_2d(prev, next, css::GOLD);
+        gizmos.line_2d(prev, next, color);
         prev = next;
     }
     // Arrowhead at the sweep end.
@@ -256,21 +255,21 @@ fn draw_angular_motor(
     gizmos.line_2d(
         tip,
         tip - tangent * 5.0 * s + (anchor - tip).normalize() * 4.0 * s,
-        css::GOLD,
+        color,
     );
     gizmos.line_2d(
         tip,
         tip - tangent * 5.0 * s - (anchor - tip).normalize() * 4.0 * s,
-        css::GOLD,
+        color,
     );
 }
 
 /// Draws a spring coil between two world points. Straight lead-ins at each end,
 /// a zigzag body in the middle, and a dot at each anchor. Amplitude is
 /// screen-constant (scaled by `s`); the coil count is fixed.
-fn draw_spring(gizmos: &mut Gizmos<OverlayGizmos>, a: Vec2, b: Vec2, s: f32) {
+fn draw_spring(gizmos: &mut Gizmos<OverlayGizmos>, a: Vec2, b: Vec2, s: f32, ink: &Ink) {
     const COILS: usize = 8;
-    let color = css::SPRING_GREEN;
+    let color = Color::from(ink.alternate);
     let span = b - a;
     let len = span.length();
     gizmos.circle_2d(Isometry2d::from_translation(a), 3.0 * s, color);
@@ -306,6 +305,7 @@ fn draw_linear_motor(
     dir: Vec2,
     motor: LinearMotorDef,
     s: f32,
+    color: Color,
 ) {
     if !motor.enabled || motor.target_velocity.value().abs() < 1e-3 {
         return;
@@ -317,9 +317,9 @@ fn draw_linear_motor(
     // left this at the pixel-era `.min(600.0) * 0.03`, which never grew for a
     // real m/s slider, so the arrow read as a dead stub.
     let tip = anchor + d * (16.0 + motor.target_velocity.value().abs().min(6.0) * 3.0) * s;
-    gizmos.line_2d(anchor, tip, css::GOLD);
+    gizmos.line_2d(anchor, tip, color);
     let back = -d;
     let perp = Vec2::new(-d.y, d.x);
-    gizmos.line_2d(tip, tip + (back + perp) * 6.0 * s, css::GOLD);
-    gizmos.line_2d(tip, tip + (back - perp) * 6.0 * s, css::GOLD);
+    gizmos.line_2d(tip, tip + (back + perp) * 6.0 * s, color);
+    gizmos.line_2d(tip, tip + (back - perp) * 6.0 * s, color);
 }

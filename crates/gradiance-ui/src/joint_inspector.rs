@@ -8,7 +8,7 @@
 
 use crate::labels::body_label;
 use crate::widgets;
-use crate::widgets::{Commit, precise_drag_unit};
+use crate::widgets::{Commit, precise_drag, precise_drag_in, precise_drag_unit};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_command::intent::PropertyEditIntent;
@@ -16,20 +16,17 @@ use gradiance_command::property::{PropertyChange, PropertyValue};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
 use gradiance_domain::joint::{
-    AngularMotorDef, DEFAULT_BREAK_FORCE, DEFAULT_SPRING_DAMPING, DEFAULT_SPRING_STIFFNESS,
-    JointCommon, JointDef, JointKind, LinearMotorDef,
+    AngularMotorDef, DEFAULT_BREAK_FORCE, JointCommon, JointDef, JointKind, LinearMotorDef,
 };
+use gradiance_domain::settings::SimSettings;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::SignalBindings;
+use gradiance_domain::tuning;
 use gradiance_interaction::selection::SelectedJoint;
 use gradiance_op::{InvokeOp, json};
 use gradiance_physics::queries::PhysicsQueries;
 use gradiance_units::{Angle, Length};
-use gradiance_units::{Dimension, Force};
-
-/// Hinge motor speeds are authored in rad/s (SI) but shown in **rpm**, the
-/// familiar motor unit: `rpm = rad/s · 60 / 2π`.
-const RAD_PER_S_TO_RPM: f32 = 60.0 / std::f32::consts::TAU;
+use gradiance_units::{Dimension, DisplayUnit, Force};
 
 /// Renders the joint inspector for the currently selected joint.
 #[expect(clippy::too_many_arguments, reason = "one system param per read")]
@@ -42,6 +39,8 @@ pub fn joint_inspector(
     index: Res<IdIndex>,
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
+    sim: Res<SimSettings>,
+    kinds: Query<&avian2d::prelude::RigidBody>,
     mut bindings: ResMut<SignalBindings>,
     mut edits: MessageWriter<PropertyEditIntent>,
     mut invoke: MessageWriter<InvokeOp>,
@@ -101,12 +100,32 @@ pub fn joint_inspector(
                 }
             }
 
-            if let Some(common) = break_section(ui, def.common) {
+            // A fresh break force scales with the weight the joint carries:
+            // the masses of its moving bodies (brief 4b-4).
+            let moving_mass: f32 = def
+                .referenced_bodies()
+                .filter_map(|b| index.entity(b))
+                .filter(|&e| {
+                    kinds
+                        .get(e)
+                        .is_ok_and(avian2d::prelude::RigidBody::is_dynamic)
+                })
+                .filter_map(|e| physics.mass_of(e))
+                .map(gradiance_units::Mass::value)
+                .sum();
+            let fresh_break = if moving_mass > 0.0 {
+                tuning::default_break_force(moving_mass, sim.gravity.value().length())
+            } else {
+                DEFAULT_BREAK_FORCE
+            };
+            if let Some(common) = break_section(ui, def.common, fresh_break) {
                 next.common = common;
                 changed = true;
             }
 
-            changed |= configure_kind(ui, &def.kind, &mut next);
+            // An auto motor shows the ceiling the physics seam derived.
+            let ceiling = physics.motor_ceiling(entity);
+            changed |= configure_kind(ui, &def.kind, &mut next, ceiling);
 
             ui.separator();
             if ui.button("Delete joint").clicked() {
@@ -130,28 +149,32 @@ pub fn joint_inspector(
 }
 
 /// Renders the kind-specific config controls, writing any edit into `next.kind`.
-/// Returns whether something changed.
-fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> bool {
+/// `ceiling` is the live motor's derived torque/force cap (shown while the
+/// motor is auto). Returns whether something changed.
+fn configure_kind(
+    ui: &mut egui::Ui,
+    kind: &JointKind,
+    next: &mut JointDef,
+    ceiling: Option<f32>,
+) -> bool {
     let mut changed = false;
     match kind {
         JointKind::Hinge { limits, motor } => {
-            if let Some(k) =
-                limit_section(ui, raw(*limits, Angle::value), "angle limits (deg)", true)
-            {
+            if let Some(k) = limit_section(
+                ui,
+                raw(*limits, Angle::value),
+                "angle limits",
+                Dimension::Angle,
+            ) {
                 next.kind = JointKind::Hinge {
                     limits: k.map(|[lo, hi]| [Angle(lo), Angle(hi)]),
                     motor: *motor,
                 };
                 changed = true;
             }
-            if let Some(m) = motor_section(
-                ui,
-                motor.map(MotorView::from),
-                "rpm",
-                RAD_PER_S_TO_RPM,
-                "torque",
-                Dimension::Torque.symbol(),
-            ) {
+            if let Some(m) =
+                motor_section(ui, motor.map(MotorView::from), &MotorUnits::HINGE, ceiling)
+            {
                 // Re-read limits from `next` in case both changed.
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Hinge {
@@ -166,9 +189,12 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
             limits,
             motor,
         } => {
-            if let Some(k) =
-                limit_section(ui, raw(*limits, Length::value), "travel limits (m)", false)
-            {
+            if let Some(k) = limit_section(
+                ui,
+                raw(*limits, Length::value),
+                "travel limits",
+                Dimension::Length,
+            ) {
                 next.kind = JointKind::Slider {
                     axis: *axis,
                     limits: k.map(|[lo, hi]| [Length(lo), Length(hi)]),
@@ -176,14 +202,9 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
                 };
                 changed = true;
             }
-            if let Some(m) = motor_section(
-                ui,
-                motor.map(MotorView::from),
-                Dimension::Velocity.symbol(),
-                1.0,
-                "force",
-                Dimension::Force.symbol(),
-            ) {
+            if let Some(m) =
+                motor_section(ui, motor.map(MotorView::from), &MotorUnits::SLIDER, ceiling)
+            {
                 let cur_limits = current_limits(&next.kind);
                 next.kind = JointKind::Slider {
                     axis: *axis,
@@ -195,15 +216,15 @@ fn configure_kind(ui: &mut egui::Ui, kind: &JointKind, next: &mut JointDef) -> b
         }
         JointKind::Spring {
             rest_length,
-            stiffness,
-            damping,
+            frequency,
+            damping_ratio,
             range,
         } => {
             if let Some(new_kind) = spring_section(
                 ui,
                 rest_length.value(),
-                stiffness.value(),
-                damping.value(),
+                frequency.value(),
+                *damping_ratio,
                 raw(*range, Length::value),
             ) {
                 next.kind = new_kind;
@@ -237,8 +258,10 @@ fn current_limits(kind: &JointKind) -> Option<[f32; 2]> {
 fn raw<T: Copy>(pair: Option<[T; 2]>, si: fn(T) -> f32) -> Option<[f32; 2]> {
     pair.map(|[lo, hi]| [si(lo), si(hi)])
 }
-/// Limits UI: a toggle plus min/max drags. `degrees` shows/edits in
-/// degrees but stores radians.
+/// Limits UI: a toggle plus min/max drags over base-SI limits (radians for
+/// an angle, metres for travel), shown in the preferred unit
+/// ([`crate::unit_fields`]), so the limits and an angle sensor's readout
+/// follow the one preference.
 ///
 /// Returns `Some(new)` only on the frame something changed; the inner
 /// option is the new limits (`None` = limits disabled).
@@ -247,13 +270,14 @@ fn limit_section(
     ui: &mut egui::Ui,
     current: Option<[f32; 2]>,
     label: &str,
-    degrees: bool,
+    dim: Dimension,
 ) -> Option<Option<[f32; 2]>> {
+    let angle = dim == Dimension::Angle;
     let mut enabled = current.is_some();
     let mut result = None;
     if ui.checkbox(&mut enabled, label).changed() {
         result = Some(if enabled {
-            Some(if degrees {
+            Some(if angle {
                 [-90_f32.to_radians(), 90_f32.to_radians()]
             } else {
                 // Travel limits are metres now (was a ±100 px default).
@@ -263,23 +287,16 @@ fn limit_section(
             None
         });
     }
-    if let Some([min, max]) = current {
-        let scale = if degrees { 1_f32.to_degrees() } else { 1.0 };
-        // Angle limits display in degrees (fine at 1°/px); travel limits are
-        // metres and need the metre-scale sensitivity + unit.
-        let (speed, unit) = if degrees {
-            (1.0, "°")
-        } else {
-            (0.01, Dimension::Length.symbol())
-        };
-        let (mut lo, mut hi) = (min * scale, max * scale);
+    if let Some([mut lo, mut hi]) = current {
+        // A degree per point for an angle, a centimetre for travel.
+        let speed = if angle { 1_f32.to_radians() } else { 0.01 };
         ui.horizontal(|ui| {
             ui.label("min");
-            let clo = precise_drag_unit(ui, egui::Id::new("jlim-lo"), &mut lo, 0.0, speed, unit);
+            let clo = precise_drag_unit(ui, egui::Id::new("jlim-lo"), &mut lo, 0.0, speed, dim);
             ui.label("max");
-            let chi = precise_drag_unit(ui, egui::Id::new("jlim-hi"), &mut hi, 0.0, speed, unit);
+            let chi = precise_drag_unit(ui, egui::Id::new("jlim-hi"), &mut hi, 0.0, speed, dim);
             if matches!(clo, Commit::Done(..)) || matches!(chi, Commit::Done(..)) {
-                result = Some(Some([lo / scale, hi / scale]));
+                result = Some(Some([lo, hi]));
             }
         });
     }
@@ -289,12 +306,16 @@ fn limit_section(
 /// Breaking-limit UI: a "breakable" toggle plus the break-force field (edit
 /// seam: one undo step per gesture). A broken joint says so; undo is the
 /// repair. Returns the new common parameters only on the frame one changed.
-fn break_section(ui: &mut egui::Ui, current: JointCommon) -> Option<JointCommon> {
+fn break_section(ui: &mut egui::Ui, current: JointCommon, fresh: f32) -> Option<JointCommon> {
     let mut result = None;
     let mut breakable = current.break_force.is_some();
-    if ui.checkbox(&mut breakable, "breakable").changed() {
+    if ui
+        .checkbox(&mut breakable, "breakable")
+        .on_hover_text("starts at ten times the weight of the connected bodies")
+        .changed()
+    {
         result = Some(JointCommon {
-            break_force: breakable.then_some(Force(DEFAULT_BREAK_FORCE)),
+            break_force: breakable.then_some(Force(fresh)),
             ..current
         });
     }
@@ -306,9 +327,11 @@ fn break_section(ui: &mut egui::Ui, current: JointCommon) -> Option<JointCommon>
                 ui,
                 egui::Id::new("j-break"),
                 &mut value,
-                DEFAULT_BREAK_FORCE,
-                1.0,
-                Dimension::Force.symbol(),
+                fresh,
+                // A drag moves about 1% of the fresh value per point, so a
+                // pebble's and a truck's joints edit alike.
+                (fresh * 0.01).max(1e-3),
+                Dimension::Force,
             ) {
                 result = Some(JointCommon {
                     break_force: Some(Force(value.max(0.0))),
@@ -340,11 +363,43 @@ struct MotorView {
     enabled: bool,
 }
 
-impl MotorView {
-    /// The reset value for a fresh motor. Both domain motors share these
-    /// numbers (see the `DEFAULT_MOTOR_*` consts), so one default is honest.
-    const DEFAULT_VELOCITY: f32 = gradiance_domain::joint::DEFAULT_MOTOR_ANGULAR_VELOCITY;
+/// How one motor kind is shown: its units, its drag step and the motor a
+/// fresh toggle creates.
+struct MotorUnits {
+    /// The shown velocity unit (rpm for a hinge, whatever the angle
+    /// preference: a motor's speed is read in turns).
+    vel_unit: DisplayUnit,
+    /// Drag step of the velocity field, base SI.
+    vel_step: f32,
+    /// "torque" or "force".
+    effort_word: &'static str,
+    /// The effort's dimension.
+    effort_unit: Dimension,
+    /// A fresh motor of this kind.
+    fresh: fn() -> MotorView,
+}
 
+impl MotorUnits {
+    /// A hinge motor: rpm in whole-rpm steps, torque in N·m.
+    const HINGE: Self = Self {
+        vel_unit: DisplayUnit::RPM,
+        // One rpm per point.
+        vel_step: std::f32::consts::TAU / 60.0,
+        effort_word: "torque",
+        effort_unit: Dimension::Torque,
+        fresh: || MotorView::from(AngularMotorDef::default()),
+    };
+    /// A slider motor: m/s in 0.1 m/s steps, force in N.
+    const SLIDER: Self = Self {
+        vel_unit: DisplayUnit::canonical(Dimension::Velocity),
+        vel_step: 0.1,
+        effort_word: "force",
+        effort_unit: Dimension::Force,
+        fresh: || MotorView::from(LinearMotorDef::default()),
+    };
+}
+
+impl MotorView {
     fn into_angular(self) -> AngularMotorDef {
         AngularMotorDef {
             target_velocity: gradiance_units::AngularVelocity(self.target_velocity),
@@ -398,53 +453,66 @@ impl From<LinearMotorDef> for MotorView {
 fn motor_section(
     ui: &mut egui::Ui,
     current: Option<MotorView>,
-    vel_unit: &str,
-    vel_scale: f32,
-    effort_word: &str,
-    effort_unit: &str,
+    units: &MotorUnits,
+    ceiling: Option<f32>,
 ) -> Option<Option<MotorView>> {
+    let MotorUnits {
+        vel_unit,
+        vel_step,
+        effort_word,
+        effort_unit,
+        fresh,
+    } = *units;
     let mut enabled = current.is_some();
     let mut result = None;
     if ui.checkbox(&mut enabled, "motor").changed() {
         // A new motor is "auto": the physics seam sizes its ceiling to the
         // driven body's real inertia/mass (`max_effort <= 0`).
-        result = Some(enabled.then(|| MotorView::from(AngularMotorDef::default())));
+        result = Some(enabled.then(fresh));
     }
     if let Some(mut m) = current {
         ui.horizontal(|ui| {
             ui.label("target");
-            // `target_velocity` is stored in SI (rad/s or m/s); `vel_scale`
-            // converts to the shown unit (e.g. rpm for hinges) and back.
-            let mut shown = m.target_velocity * vel_scale;
-            if let Commit::Done(..) = precise_drag_unit(
+            // `target_velocity` is stored in SI (rad/s or m/s); the field
+            // shows it in `vel_unit` (rpm for a hinge).
+            let mut target = m.target_velocity;
+            if let Commit::Done(..) = precise_drag_in(
                 ui,
                 egui::Id::new("jm-vel"),
-                &mut shown,
-                MotorView::DEFAULT_VELOCITY * vel_scale,
-                0.1 * vel_scale,
+                &mut target,
+                fresh().target_velocity,
+                vel_step,
                 vel_unit,
             ) {
-                m.target_velocity = shown / vel_scale;
+                m.target_velocity = target;
                 result = Some(Some(m));
             }
         });
         ui.horizontal(|ui| {
-            // `max_effort <= 0` = auto (physics scales it to the body); drag it
-            // up to pin an explicit cap, reset to 0 for auto again.
+            // `max_effort <= 0` = auto (physics scales it to the body). An
+            // auto field shows the ceiling the physics seam derived, so a
+            // drag starts from it and pins an explicit cap; middle-click
+            // resets to 0, auto again.
             let auto = m.max_effort <= 0.0;
             ui.label(if auto {
                 format!("max {effort_word} (auto)")
             } else {
                 format!("max {effort_word}")
             });
+            let mut shown = if auto {
+                ceiling.unwrap_or(0.0)
+            } else {
+                m.max_effort
+            };
             if let Commit::Done(..) = precise_drag_unit(
                 ui,
                 egui::Id::new("jm-force"),
-                &mut m.max_effort,
+                &mut shown,
                 0.0,
                 10.0,
                 effort_unit,
             ) {
+                m.max_effort = shown;
                 result = Some(Some(m));
             }
         });
@@ -462,20 +530,22 @@ fn motor_section(
     result
 }
 
-/// Strut config: rest length, spring constant, damping, and an optional hard
-/// range clamp (off by default = unbounded). The scalars a future curve editor
-/// would let vary nonlinearly. Returns the new `Spring` kind only on the frame
-/// something committed.
+/// Strut config: rest length, natural frequency, damping ratio, and an
+/// optional hard range clamp (off by default = unbounded). Frequency and
+/// ratio are mass-relative (brief 4b-4): the physics seam derives the
+/// stiffness from the bodies' mass, so these feel the same on any body.
+/// Each commits clamped to its `tuning` range. Returns the new `Spring` kind
+/// only on the frame something committed.
 fn spring_section(
     ui: &mut egui::Ui,
     rest_length: f32,
-    stiffness: f32,
-    damping: f32,
+    frequency: f32,
+    damping_ratio: f32,
     range: Option<[f32; 2]>,
 ) -> Option<JointKind> {
     let mut rest = rest_length;
-    let mut k = stiffness;
-    let mut c = damping;
+    let mut f = frequency;
+    let mut zeta = damping_ratio;
     let mut new_range = range;
     let mut edited = false;
 
@@ -487,33 +557,34 @@ fn spring_section(
             &mut rest,
             rest_length,
             0.01,
-            Dimension::Length.symbol(),
+            Dimension::Length,
         ) {
             edited = true;
         }
     });
     ui.horizontal(|ui| {
-        ui.label("stiffness");
+        ui.label("frequency")
+            .on_hover_text("bounces per second, whatever the bodies weigh");
         if let Commit::Done(..) = precise_drag_unit(
             ui,
-            egui::Id::new("spring-k"),
-            &mut k,
-            DEFAULT_SPRING_STIFFNESS,
+            egui::Id::new("spring-f"),
+            &mut f,
+            tuning::SPRING_FREQUENCY.default,
             0.01,
-            Dimension::Stiffness.symbol(),
+            Dimension::Frequency,
         ) {
             edited = true;
         }
     });
     ui.horizontal(|ui| {
-        ui.label("damping");
-        if let Commit::Done(..) = precise_drag_unit(
+        ui.label("damping ratio")
+            .on_hover_text("0 bounces forever; 1 settles without overshoot");
+        if let Commit::Done(..) = precise_drag(
             ui,
-            egui::Id::new("spring-c"),
-            &mut c,
-            DEFAULT_SPRING_DAMPING,
-            0.01,
-            Dimension::Damping.symbol(),
+            egui::Id::new("spring-zeta"),
+            &mut zeta,
+            tuning::SPRING_DAMPING_RATIO.default,
+            0.005,
         ) {
             edited = true;
         }
@@ -526,7 +597,7 @@ fn spring_section(
         edited = true;
     }
     if let Some(bounds) = new_range.as_mut() {
-        let m = Dimension::Length.symbol();
+        let m = Dimension::Length;
         ui.horizontal(|ui| {
             ui.label("min");
             if let Commit::Done(..) =
@@ -556,8 +627,47 @@ fn spring_section(
     }
     Some(JointKind::Spring {
         rest_length: Length(rest.max(0.0)),
-        stiffness: gradiance_units::Stiffness(k.max(0.0)),
-        damping: gradiance_units::Damping(c.max(0.0)),
+        frequency: gradiance_units::Frequency(tuning::SPRING_FREQUENCY.clamp(f)),
+        damping_ratio: tuning::SPRING_DAMPING_RATIO.clamp(zeta),
         range: new_range.map(|[lo, hi]| [Length(lo), Length(hi)]),
     })
+}
+
+#[cfg(test)]
+mod motor_display_tests {
+    use super::*;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    /// The numbers the motor section's fields show, in order.
+    fn shown(current: MotorView, units: &MotorUnits, ceiling: Option<f32>) -> Vec<f64> {
+        let mut harness = egui_kittest::Harness::new_ui(|ui| {
+            motor_section(ui, Some(current), units, ceiling);
+        });
+        harness.run();
+        harness
+            .query_all_by_role(egui::accesskit::Role::SpinButton)
+            .filter_map(|n| n.accesskit_node().numeric_value())
+            .collect()
+    }
+
+    /// A fresh hinge motor reads a round `20 rpm`, and while its torque is
+    /// auto the field shows the ceiling the physics seam derived, not `0`
+    /// (A-1 finding 12, brief A-2). An explicit cap shows itself.
+    #[test]
+    fn a_fresh_hinge_motor_reads_20_rpm_and_its_derived_torque() {
+        let fresh = (MotorUnits::HINGE.fresh)();
+        let values = shown(fresh, &MotorUnits::HINGE, Some(333.0));
+        assert_eq!(values.len(), 2, "{values:?}");
+        assert!((values[0] - 20.0).abs() < 1e-3, "{values:?}");
+        assert!((values[1] - 333.0).abs() < 1e-3, "{values:?}");
+        let pinned = MotorView {
+            max_effort: 50.0,
+            ..fresh
+        };
+        let values = shown(pinned, &MotorUnits::HINGE, Some(333.0));
+        assert!((values[1] - 50.0).abs() < 1e-3, "{values:?}");
+        // A fresh slider motor keeps its own default (2 m/s), not the hinge's.
+        let slider = (MotorUnits::SLIDER.fresh)();
+        assert!((slider.target_velocity - 2.0).abs() < 1e-6);
+    }
 }

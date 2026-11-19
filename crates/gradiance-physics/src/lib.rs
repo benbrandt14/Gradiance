@@ -94,6 +94,7 @@ impl Plugin for GradiancePhysicsPlugin {
                 body_sync::sync_collision_layers,
                 joint_sync::guard_dangling_joints,
                 joint_sync::sync_joints,
+                joint_sync::retune_joints,
             )
                 .chain()
                 .in_set(BodySyncSet),

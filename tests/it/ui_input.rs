@@ -193,10 +193,9 @@ fn an_injected_drag_on_a_body_is_one_undo_step() {
         json!({"from": [640, 370], "to": [740, 370], "steps": 20}),
     )
     .unwrap_or_else(|e| panic!("{e}"));
-    // Move, press, 20 steps: the gesture is still held. Small steps keep
-    // the grabbed snap point the body's centre (the select tool grabs the
-    // snap point nearest the first moved frame's cursor and moves it onto
-    // the cursor; a 10-point first step picks the edge midpoint at 20).
+    // Move, press, 20 steps: the gesture is still held. The select tool
+    // grabs the snap point nearest the press (here the body's centre) and
+    // moves it onto the cursor.
     for _ in 0..22 {
         app.update();
         assert_eq!(undo_len(&app), before, "nothing commits mid-drag");
@@ -226,6 +225,85 @@ fn an_injected_drag_on_a_body_is_one_undo_step() {
         json!({"from": [0, 0], "to": [1, 1], "steps": 0}),
     );
     assert!(refused.is_err(), "steps 0: {refused:?}");
+}
+
+/// A fast drag (a long first step) with the box tool spans the box from the
+/// **press** point to the release point. The tools' button edges must be read
+/// after `InputSystems`, in the frame the press arrives; read before it, the
+/// press shows a frame late, when the cursor has already taken its first step
+/// (brief A-1: every drag tool started one step late, and a fast select-tool
+/// drag missed the body it was pressed on).
+#[test]
+fn a_fast_box_drag_spans_from_the_press_point() {
+    let mut app = windowed_app();
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Box);
+    app.update();
+
+    op(
+        &mut app,
+        "ui.drag",
+        json!({"from": [600, 330], "to": [700, 430], "steps": 4}),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..10 {
+        app.update();
+    }
+    let mut q = app
+        .world_mut()
+        .query_filtered::<(&ShapeDef, &Transform), With<Body>>();
+    let spawned: Vec<(ShapeDef, Vec2)> = q
+        .iter(app.world())
+        .map(|(s, t)| (s.clone(), t.translation.truncate()))
+        .collect();
+    assert_eq!(spawned.len(), 1, "{spawned:?}");
+    let (shape, centre) = &spawned[0];
+    assert_eq!(
+        *shape,
+        ShapeDef::Box {
+            width: 100.0,
+            height: 100.0
+        },
+        "press (600, 330) to release (700, 430) is 100 x 100"
+    );
+    assert!(
+        (*centre - Vec2::new(10.0, -10.0)).length() < 1e-3,
+        "{centre:?}"
+    );
+}
+
+/// A fast select-tool drag pressed on a body moves that body (it used to
+/// start a band selection at the first step's point, off the body).
+#[test]
+fn a_fast_select_drag_moves_the_pressed_body() {
+    let mut app = windowed_app();
+    let record = box_record(Vec2::ZERO, 40.0, 20.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    app.update(); // colliders
+    let before = undo_len(&app);
+
+    op(
+        &mut app,
+        "ui.drag",
+        json!({"from": [640, 370], "to": [640, 570], "steps": 2}),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..8 {
+        app.update();
+    }
+    assert_eq!(undo_len(&app), before + 1, "one move, one undo step");
+    let entity = entity_of(&app, id).unwrap_or_else(|| panic!("body gone"));
+    let pos = app
+        .world()
+        .get::<Transform>(entity)
+        .map(|t| t.translation.truncate());
+    assert!(
+        pos.is_some_and(|p| (p - Vec2::new(0.0, -200.0)).length() < 1.0),
+        "the grabbed centre follows the cursor: {pos:?}"
+    );
 }
 
 /// `ui.key` reads every chord the registry declares (the text menus show).

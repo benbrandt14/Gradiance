@@ -13,9 +13,10 @@ use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
 use gradiance_core::units::PosRot;
 use gradiance_domain::joint::{JointDef, JointSensors, WORLD_POSE};
+use gradiance_domain::quantity::{self, BodyRead, JointRead};
 use gradiance_units::{
-    Angle, AngularMomentum, AngularVelocity, Energy, Force, Impulse, Impulse2, Length, Mass,
-    Momentum, Velocity2,
+    Angle, AngularMomentum, AngularVelocity, Energy, Force, Force2, Impulse, Impulse2, Length,
+    Mass, Momentum, Velocity2,
 };
 
 /// A world-space contact sample: the point, its unit normal, and the normal
@@ -59,9 +60,41 @@ pub struct PhysicsQueries<'w, 's> {
     /// avian's post-solve reaction on each live joint (`joint_sync` inserts
     /// [`JointForces`] on every derived joint) and whether it is disabled.
     joint_forces: Query<'w, 's, (&'static JointForces, Has<JointDisabled>)>,
+    /// The live engine joints, for their derived motor ceilings.
+    engine_joints: Query<
+        'w,
+        's,
+        (
+            Option<&'static RevoluteJoint>,
+            Option<&'static PrismaticJoint>,
+        ),
+    >,
 }
 
-impl PhysicsQueries<'_, '_> {
+impl<'w, 's> PhysicsQueries<'w, 's> {
+    /// One body as the quantity catalog reads it ([`BodyRead`]). `position`
+    /// is the body's world position, read by the caller (from its
+    /// `Transform`), and `dt` the fixed timestep the contact impulse is
+    /// divided by. Nothing is read until a reader asks.
+    pub fn body(&self, entity: Entity, position: Option<Vec2>, dt: f32) -> LiveBody<'_, 'w, 's> {
+        LiveBody {
+            physics: self,
+            entity,
+            position,
+            dt,
+        }
+    }
+
+    /// One joint as the quantity catalog reads it ([`JointRead`]); `index`
+    /// resolves the bodies it connects.
+    pub fn joint<'a>(&'a self, entity: Entity, index: &'a IdIndex) -> LiveJoint<'a, 'w, 's> {
+        LiveJoint {
+            physics: self,
+            entity,
+            index,
+        }
+    }
+
     /// Every touching contact point in the world (active + sleeping). The read
     /// facade for contact overlays and for scripts/plotters introspecting
     /// contact forces — keeping this here is what makes those a *read*, not a
@@ -171,6 +204,19 @@ impl PhysicsQueries<'_, '_> {
         }))
     }
 
+    /// The torque (N·m, hinge) or force (N, slider) ceiling the physics seam
+    /// derived for a joint's motor — the authored cap, or for an **auto**
+    /// motor the one scaled to the connected bodies
+    /// (`joint_sync::retune_joints`). `None` if `joint` has no live hinge or
+    /// slider (a spring, or not derived yet).
+    pub fn motor_ceiling(&self, joint: Entity) -> Option<f32> {
+        match self.engine_joints.get(joint).ok()? {
+            (Some(revolute), _) => Some(revolute.motor.max_torque),
+            (_, Some(prismatic)) => Some(prismatic.motor.max_force),
+            _ => None,
+        }
+    }
+
     /// The entity's `(linear, angular)` velocity, if it simulates.
     pub fn velocity_of(&self, entity: Entity) -> Option<(Velocity2, AngularVelocity)> {
         self.velocities
@@ -197,35 +243,35 @@ impl PhysicsQueries<'_, '_> {
     }
 
     /// Total kinetic energy `½mv² + ½Iω²` of a simulating body — a derived read
-    /// on the query surface, so probes, plotters, and scripts share one
-    /// definition (`docs/units-decision.md`).
+    /// on the query surface; the formula is the quantity catalog's
+    /// ([`quantity::kinetic_energy`]), so probes, plotters, and scripts share
+    /// one definition (`docs/units-decision.md`).
     pub fn kinetic_energy_of(&self, entity: Entity) -> Option<Energy> {
-        let mass = self.masses.get(entity).ok()?;
-        let (lin, ang) = self.velocities.get(entity).ok()?;
-        let translational = 0.5 * mass.value() * lin.0.length_squared();
-        let rotational = self
-            .inertias
-            .get(entity)
-            .ok()
-            .map_or(0.0, |i| 0.5 * i.value() * ang.0.powi(2));
-        Some(Energy(translational + rotational))
+        let mass = self.mass_of(entity)?;
+        let (lin, ang) = self.velocity_of(entity)?;
+        Some(quantity::kinetic_energy(
+            mass,
+            self.angular_inertia_of(entity),
+            lin,
+            ang,
+        ))
     }
 
     /// Linear momentum magnitude `m·|v|` of a simulating body (the other
     /// conserved quantity beside [`kinetic_energy_of`](Self::kinetic_energy_of)).
     pub fn momentum_of(&self, entity: Entity) -> Option<Momentum> {
-        let mass = self.masses.get(entity).ok()?;
-        let (lin, _) = self.velocities.get(entity).ok()?;
-        Some(Momentum(mass.value() * lin.0.length()))
+        let mass = self.mass_of(entity)?;
+        let (lin, _) = self.velocity_of(entity)?;
+        Some(quantity::momentum(mass, lin))
     }
 
     /// Angular momentum `I·ω` of a simulating body — the rotational conserved
     /// quantity completing the trio with [`kinetic_energy_of`](Self::kinetic_energy_of)
     /// and [`momentum_of`](Self::momentum_of). Signed by `ω` (CCW positive).
     pub fn angular_momentum_of(&self, entity: Entity) -> Option<AngularMomentum> {
-        let inertia = self.inertias.get(entity).ok()?;
-        let (_, ang) = self.velocities.get(entity).ok()?;
-        Some(AngularMomentum(inertia.value() * ang.0))
+        let inertia = self.angular_inertia_of(entity)?;
+        let (_, ang) = self.velocity_of(entity)?;
+        Some(quantity::angular_momentum(inertia, ang))
     }
 
     /// How many distinct bodies `entity` is currently touching (contact
@@ -278,5 +324,59 @@ impl PhysicsQueries<'_, '_> {
             }
         }
         Impulse2::new(total / SOLVER_PASSES)
+    }
+}
+
+/// A body read through the facade: the live [`BodyRead`] the quantity
+/// catalog's readers run on in the frame loop. Built by
+/// [`PhysicsQueries::body`]; each method is one facade read.
+pub struct LiveBody<'a, 'w, 's> {
+    physics: &'a PhysicsQueries<'w, 's>,
+    entity: Entity,
+    position: Option<Vec2>,
+    dt: f32,
+}
+
+impl BodyRead for LiveBody<'_, '_, '_> {
+    fn position(&self) -> Option<Vec2> {
+        self.position
+    }
+
+    fn velocity(&self) -> Option<(Velocity2, AngularVelocity)> {
+        self.physics.velocity_of(self.entity)
+    }
+
+    fn mass(&self) -> Option<Mass> {
+        self.physics.mass_of(self.entity)
+    }
+
+    fn angular_inertia(&self) -> Option<f32> {
+        self.physics.angular_inertia_of(self.entity)
+    }
+
+    fn contact_force(&self) -> Option<Force2> {
+        let impulse = self.physics.net_contact_impulse(self.entity).value();
+        Some(Force2::new(impulse / self.dt.max(1e-6)))
+    }
+
+    fn contact_count(&self) -> Option<usize> {
+        Some(self.physics.touching_count(self.entity))
+    }
+}
+
+/// A joint read through the facade (see [`LiveBody`]).
+pub struct LiveJoint<'a, 'w, 's> {
+    physics: &'a PhysicsQueries<'w, 's>,
+    entity: Entity,
+    index: &'a IdIndex,
+}
+
+impl JointRead for LiveJoint<'_, '_, '_> {
+    fn sensors(&self) -> Option<JointSensors> {
+        self.physics.joint_state(self.entity, self.index)
+    }
+
+    fn reaction_force(&self) -> Option<Force> {
+        self.physics.joint_force(self.entity)
     }
 }

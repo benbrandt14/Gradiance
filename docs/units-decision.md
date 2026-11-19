@@ -40,7 +40,7 @@ quantity is a bare `f32`/`Vec2` whose unit lives only in a doc comment:
 | torque | implicit | N·m |
 | friction, restitution, gravity_scale, `speed` | dimensionless | dimensionless |
 | timestep (`timestep_hz`) | Hz | Hz (1/s) |
-| spring stiffness / damping (M20 struts) | avian compliance/damping | N/m, N·s/m |
+| spring frequency / damping ratio (M20 struts; mass-relative since 4b-4, the N/m stiffness is derived) | avian compliance/damping | Hz, 1 |
 
 ## The four rulings
 
@@ -183,9 +183,15 @@ dedicated path — keep the door open.* So this pass includes:
 gradiance-units  (NEW — bottom node, no gradiance deps, minimal bevy)
   ├─ quantity.rs   typed newtypes (base-SI f32/Vec2) + the arithmetic we use
   ├─ dimension.rs  Dimension enum → canonical unit + formatter/parser
+  ├─ expr.rs       the one typed-value parser (`25 cm`, `2*pi`) — 5-3
+  ├─ display.rs    UnitPrefs (deg/rad, m/cm/mm) → DisplayUnit format/parse — 5-3
   ├─ mass.rs       mass_of(Density, Area) — the ONE density×geometry seam
-  ├─ world.rs      PIXELS_PER_METER + SI⇄px conversions (the one scale seam)
-  └─ catalog.rs    PhysicalQuantity registry (name·dimension·reader) — P3
+  └─ world.rs      PIXELS_PER_METER + SI⇄px conversions (the one scale seam)
+
+gradiance-domain
+  └─ quantity.rs   PhysicalQuantity catalog (name·label·dimension·reader over
+                   BodyRead/JointRead) — P3, brief 5-2. Not in units: the
+                   rows name bodies, joints and SignalSource.
 
 gradiance-core
   └─ world.rs      WorldScale (PIXELS_PER_METER) — the ONE px↔SI seam.
@@ -197,10 +203,12 @@ gradiance-script
 domain / scene     authored components carry typed quantities;
                    records serialize base-SI scalars (bare); format v7.
 physics            touches avian world-units ONLY through core::world;
-                   queries.rs returns typed quantities; catalog readers here.
+                   queries.rs returns typed quantities and implements the
+                   catalog's read traits (LiveBody, LiveJoint).
 signal             SignalSource → catalog quantity; values carry dimension.
 render             SI→px for draw at the seam (never mid-shader).
-ui                 units::format/parse; unit-system display toggle.
+ui                 unit_fields: every quantity field shows/parses through
+                   DisplayUnit; the UnitSettings preference (5-3).
 ```
 
 `tests/boundaries.rs` gains `gradiance-units` as a new bottom DAG node (no
@@ -209,8 +217,10 @@ check that `PIXELS_PER_METER` is named only in `core::world`.
 
 ## Extensibility contract (the point of the pass)
 
-- **New measurable quantity** → one `PhysicalQuantity` catalog row. Sensors,
-  plotters, scripts pick it up with no further code.
+- **New measurable quantity** → one `PhysicalQuantity` catalog row
+  (`domain::quantity`). Scripts pick it up with no further code; to make it
+  a plottable sensor port, also add a `SignalSource` variant (the save
+  format) and its `quantity_name` arm.
 - **New authored physical field** → give it a typed quantity; formatting,
   parsing, SI persistence, and script reflection come for free.
 - **New unit dimension** → one `Dimension` variant + canonical unit +
@@ -287,21 +297,44 @@ extension, not a rewrite:
    piece of work; consumers convert with `.value()` at that boundary.
    Non-physical settings (colours, UI factors, degree-valued UI angles,
    dimensionless ratios, signal-graph values) stay `f32` by classification.
-4. **P3 — `PhysicalQuantity` catalog + signal/plotter binding** (first slice
-   landed). The `Dimension` enum is the catalog's runtime face;
-   `SignalSource::dimension()` binds each sensor variant to it (adding the
-   `domain → units` edge). Consumers read unit labels off the catalog instead
-   of hard-coded strings: the inspector sensor readouts (`ports::unit`) and
-   the live plot's series labels now show SI and can't drift. *Remaining:* a
-   fuller catalog keyed by name (readers over `physics::queries`) for
-   node-graph ports and set-aggregate readers.
+4. **P3 — `PhysicalQuantity` catalog + signal/plotter binding** (landed).
+   The `Dimension` enum is the catalog's runtime face. *First slice:*
+   `SignalSource::dimension()` bound each sensor variant to it (adding the
+   `domain → units` edge), and the inspector readouts and live plot read
+   unit labels off it. *Landed in 5-2:* one table keyed by name,
+   `gradiance_domain::quantity::QUANTITIES` — 14 rows (10 body, 1 pair,
+   3 joint), each a name, a port label, a `Dimension`, a description and a
+   reader. Readers are plain functions over two read traits (`BodyRead`,
+   `JointRead`); `physics::queries` implements them over the live world
+   (`LiveBody`, `LiveJoint`: one facade read per call, allocation-free), and
+   `BodySample`/`JointSample` capture them for tests and for the operation
+   context. A `SignalSource` variant names its row (`quantity_name`), so the
+   dimension, `read_source`, the sensor ports, the node-graph pin order, the
+   signals panel's add buttons and the plot units are projections of the
+   table. Scripts, remote, CLI and MCP read it through four `Seam::Query`
+   operations (`quantity.list`, `quantity.unit`, `quantity.read`,
+   `quantity.between`) over the `QuantitySamples` mirror. The decision's
+   set-valued readers are met by the read traits: an aggregate calls a
+   per-body reader over each member and keeps the row's dimension (not
+   built; Horizon). The catalog lives in `domain`, not `units` as first
+   sketched: its rows name bodies, joints and `SignalSource`.
 5. **P4 — UI SI display + input** (display slice landed). Inspector shape /
    depth / density, the joint inspector (travel limits, rest length,
    stiffness, damping, range), and settings (shadow reach) format SI with a
    `precise_drag_unit` suffix and use metre-scale reset/sensitivity — fixing
    pixel-era drag scales the flip missed (a width reset gave a 100 m box).
-   *Remaining:* unit-aware *input* parsing (`Dimension::parse`) and a
-   unit-system display toggle.
+   *Landed in 5-3:* unit-aware input and a display preference. One parser,
+   `gradiance_units::expr` (pure; numbers, `+ - * / ^`, brackets,
+   juxtaposition `25 cm`, `pi`/`tau`, a unit table with the prefixes the
+   tool uses, angle as its own base so `Hz` is not `rad/s`), fitted to a
+   field by `DisplayUnit::parse` (a bare number is in the shown unit).
+   `UnitPrefs` (degrees or radians; m, cm or mm) is a workstation resource
+   (`domain::settings::UnitSettings`, not saved, not undone, op
+   `units.display`), published into egui once per frame
+   (`ui::unit_fields`) so every quantity field, the reflect grid, the
+   sensor readouts and the plot follow it. The joint limits and an angle
+   sensor now read in the same unit. Hand-written; no external crate was
+   needed (ruling 1 still allows one behind this API for P6).
 6. **P6 — units in the expression DSL.** Dimensional quantities in
    parameter-linking menus; adopt an external parse crate behind the units
    API if multi-unit entry is wanted.

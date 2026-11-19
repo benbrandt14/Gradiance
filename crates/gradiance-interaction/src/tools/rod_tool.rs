@@ -16,12 +16,12 @@ use crate::snap::DraftReference;
 use crate::tools::context::{
     GesturePhase, ManipContext, ManipOutput, ManipTool, ToolCommit, ToolPreview, ToolWorld,
 };
-use bevy::color::palettes::css;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
-use gradiance_domain::appearance::{Appearance, Rgba};
+use gradiance_domain::appearance::Appearance;
 use gradiance_domain::joint::{JointCommon, JointDef, JointKind};
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::Role;
 use gradiance_scene::{BodyRecord, JointRecord};
 
 /// Shortest rod that will commit (world metres); a near-zero drag is a no-op.
@@ -81,15 +81,15 @@ impl ManipTool for RodDraft {
             return;
         };
         let dot = 4.0 * ctx.cam_scale;
-        out.circle(a, dot, css::BLACK);
+        out.circle(a, dot, Role::JointOutline);
         if let Some(b) = ctx.cursor {
             // The capsule's two long sides plus its axis read as the rod's
             // real thickness.
             let perp = (b - a).normalize_or_zero().perp() * ROD_RADIUS;
-            out.line(a, b, css::BLACK);
-            out.line(a + perp, b + perp, css::BLACK);
-            out.line(a - perp, b - perp, css::BLACK);
-            out.circle(b, dot, css::BLACK);
+            out.line(a, b, Role::JointOutline);
+            out.line(a + perp, b + perp, Role::JointOutline);
+            out.line(a - perp, b - perp, Role::JointOutline);
+            out.circle(b, dot, Role::JointOutline);
         }
     }
 }
@@ -132,12 +132,8 @@ pub fn rod_body(a: Vec2, b: Vec2) -> Option<(BodyRecord, [(Vec2, Vec2); 2])> {
     );
     body.physics.density = avian2d::prelude::ColliderDensity(ROD_DENSITY);
     body.appearance = Appearance {
-        fill: Rgba {
-            r: 0.08,
-            g: 0.08,
-            b: 0.09,
-            a: 1.0,
-        },
+        // The look's rod tone (canonical; the render layer tones it).
+        fill: gradiance_domain::theme::STUDIO.rod,
         ..Appearance::default()
     };
     Some((

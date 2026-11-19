@@ -2,8 +2,9 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-18 (U-6 in review;
-order per `docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-19 (U-8 handoff, stacked on 5-3; 5-3 handoff, stacked on 5-2; 5-2 handoff, stacked on A-2; A-2 handoff, stacked on A-1; A-1 handoff, stacked on 4b-4; 4b-4 handoff, stacked on U-7; U-7 handoff, stacked on 4b-3 #257; phase gate
+after U-6, #256, b53b019; order per `docs/unified-surface-plan.md` § 10
+and § 13).
 
 ## Position
 
@@ -11,16 +12,63 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-6** CLI + MCP server in review (brief
-  `docs/briefs/U-6-cli-mcp.md`): `gradiance ops`, `gradiance op`,
-  `gradiance mcp [--launch]` are clients of a `--remote` app and read the
-  catalog (now with a params schema and an example per operation) from
-  it. **Next: 4b-3**, then U-7. Agent containers need
-  `mesa-vulkan-drivers libvulkan1` for the snapshot tests (without them
-  the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
+- **Now:** **4b-3** art direction in review (PR #257): three scene looks
+  (`gradiance_domain::theme`, studio default), one colour source
+  (boundaries test), toon bands now visible (cap winding, light levels,
+  banded planes), review questions `look` and `toon-lighting` added.
+  **U-7** theme tokens in review, **stacked on 4b-3** (branch
+  `claude/project-thread-tw1mvl-u7`, base #257's branch; merge #257
+  first): `ui::theme` chrome tokens, Blender-dark default, the accent and
+  selection from the scene look, presets (`chrome.apply`, workstation
+  config, not saved), the colour scanner now covers `gradiance-ui`,
+  review question `chrome`. **4b-4** scaled defaults in review, **stacked
+  on U-7** (branch `claude/project-thread-tw1mvl-4b4`; merge #257, then
+  #258, then it): springs authored as frequency + damping ratio (format v8),
+  the motor gain fix (the default motor did not turn), clamped restitution
+  and friction, weight-scaled break force, behaviour tests
+  (`tests/it/defaults.rs`), review question `spring-feel`. **A-1**
+  screenshot audit in review, **stacked on 4b-4** (branch
+  `claude/project-thread-tw1mvl-a1`; merge #257, #258, #259, then it):
+  six fixes (drag tools started one step late; world-pin hinge reversed;
+  motor gain ignored the sim speed; Groups chips selected whole groups;
+  the `spring` verb anchored b at a's centre, which also bent the
+  `spring-feel` scenes; the palette covered the bottom dock), two findings
+  for new briefs (world-pin slider reversed, overlapping groups); images
+  in `/mnt/project-files/a-1/`. **A-2** audit follow-ups in review (PR
+  #261, branch `claude/project-thread-tw1mvl-a2`, **stacked on A-1** #260
+  → #259 → #258 → #257; merge those first): world-pin sliders derived
+  pin-first like hinges; grouping a grouped body brings its whole group and
+  a subset nests inside (archive `group-overlap`); the motor inspector reads
+  20 rpm and shows the derived auto torque. Recorded with proposals, not
+  fixed: dock opening re-centres the view, short arms lose motor speed
+  (not substeps, not the ceiling), field strength scaling (needs a feel
+  question). **5-2** quantity catalog in review, **stacked on A-2**
+  (branch `claude/project-thread-tw1mvl-5-2`; merge #261 → #260 → #259 →
+  #258 → #257 first): one named table (`domain::quantity`, 14 rows) that
+  the signal sources, sensor ports, node-graph pins, signals panel and plot
+  units read; `quantity.*` operations (`(quantities)`, `(quantity name i)`,
+  `(quantity-between name a b)`, `(quantity-unit name)`). **5-3** typed units in review, **stacked on 5-2**
+  (branch `claude/project-thread-tw1mvl-5-3`; merge #262 → #261 → #260 →
+  #259 → #258 → #257 first): one parser (`gradiance_units::expr`: `25 cm`,
+  `90 deg`, `2*pi`) behind every quantity field, a workstation unit display
+  (degrees/radians, m/cm/mm; `units.display`, not saved, not undone) that
+  fields, sensor readouts and the plot follow; review question
+  `units-display`. **U-8** number fields in review, **stacked on 5-3**
+  (branch `claude/project-thread-tw1mvl-u8`; merge #263 → #262 → #261 →
+  #260 → #259 → #258 → #257 first): one `unit_fields::number_field` with
+  Blender's behaviours (Esc cancels a drag, Ctrl snaps by
+  `gradiance_units::step`, a refused entry says why, hover Backspace /
+  `-` / Ctrl+wheel / Ctrl+C/V, right-click Copy/Paste/Reset), one commit
+  per gesture; a hovered field claims the keys (archive
+  `number-field-keys`); pointer wrap cut; review question `number-fields`.
+  **U-6** #256 is merged (b53b019): `gradiance ops`,
+  `gradiance op`, `gradiance mcp [--launch]` are clients of a `--remote`
+  app; the catalog carries a params schema and an example per operation.
+  Agent containers need `mesa-vulkan-drivers libvulkan1` for the snapshot
+  tests (without them the tests skip unless `GRADIANCE_REQUIRE_GPU=1`).
   Workers run on Opus while Fable lacks usage credits (owner, 2026-11-17).
-  The session permission check can refuse a merge: then the owner merges
-  (#253, #254, 2026-11-18).
+  The session permission check refuses thread merges: the owner merges
+  (#253, #254, #256, 2026-11-18).
 - **Next, in order** (owner left the order to the planner, 2026-11-17; the
   reasons are in `docs/unified-surface-plan.md` § 10):
   1. **D-1** Bevy 0.20 stack (done, #242; shaders are WESL now).
@@ -35,10 +83,11 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
      #249); **U-4** in-app input injection (done, #250); **U-5**
      snapshot tests on lavapipe (done, #251). **U-3b** `panel.*` operations (done, #253).
   6. **4b-2** groups panel (done, #254).
-  7. **U-6** CLI + MCP server (in review).
-  8. **U-7** theme tokens, Blender-leaning, together with **4b-3** art
-     direction; then **4b-4** scaled defaults.
-  9. **Phase 5:** 5-2, 5-3, then **U-8** number-field behaviours, 5-4, 5-5.
+  7. **U-6** CLI + MCP server (done, #256).
+  8. **4b-3** art direction (scene look; in review, #257), then **U-7** theme
+     tokens, Blender-leaning (chrome; in review, stacked on #257); then
+     **4b-4** scaled defaults (in review, stacked on U-7).
+  9. **Phase 5:** 5-2 (in review), 5-3 (in review), **U-8** number-field behaviours (in review), then 5-4, 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).
@@ -66,6 +115,8 @@ order per `docs/unified-surface-plan.md` § 10 and § 13).
   - **Merge freely when CI is green** and no tests or checks were removed to
     get there (2026-11-16).
   - **Orchestrator rotation at gates is skipped.**
+  - **Stacked PRs (2026-11-18):** threads keep working as stacked PRs, one
+    branch per brief on the previous; the owner merges bottom-up.
   - **UI and op-surface direction** (2026-11-17, `docs/unified-surface-plan.md`
     § 0): excellent egui polish is now wanted (overrides `orchestration.md`
     Future intent 1's "don't polish"); lean to Blender's theme; upgrade crates
@@ -98,7 +149,11 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - backlash, cams, planar contact (undefined);
   - torque-based breaking (2-2);
   - rod fixed end = merge, `spawn-rod`, rod inspector (2-3);
-  - world-pin angle sign, joint node-graph block (2-1);
+  - joint node-graph block (2-1);
+  - short gravity-loaded arms lose motor speed (0.1 m arm ~27% slowest);
+    substeps and the ceiling are not the cause (A-2 Outcome, proposal);
+  - field strength does not scale with the source size (fixed 1 m falloff,
+    500 m/s² clamp; A-2 Outcome; needs a feel question with scenes);
   - a 2 m flat drop lands 1–4 cm sideways in avian (2-5);
   - unaudited despawned-entity `insert` pattern (2-5);
   - elastica/flexure from #194 (after Phase 5).
@@ -114,14 +169,9 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - alignment during creation tools (1-5);
   - grid coverage from the frustum (1-1);
   - tangent-snap toggle and the tangent glyph bar always horizontal (1-7);
-  - faint alignment guide;
-  - the select tool grabs the snap point nearest the drag's first moved
-    frame, so a fast drag (long first step) can land a body offset by half
-    its size (found by U-4's injected drag; README notes it).
+  - faint alignment guide.
 - **Scripting:**
-  - groups panel (4b-2): selection expands to the outermost group, so a
-    nested group's row selects its parent and a colour chip on a mixed
-    group selects the whole group; dock widths below 260 points and a real
+  - groups panel (4b-2): dock widths below 260 points and a real
     double-click are unchecked;
   - `bodies-where` has no label filter: labels live in `gradiance-script`,
     above `command`, and need a mirror first (4b-1 Outcome);
@@ -144,6 +194,8 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
     takes the part that fits its scope; the rest is for the next planning
     stage;
   - Joint window covers the Properties dock;
+  - opening a dock re-centres and rescales the view (A-1 finding 13;
+    proposal in the A-2 Outcome);
   - report Bevy's SSAO-viewport bug upstream (then drop the sub-view
     workaround); `world_per_pixel` uses window height for the perspective
     FOV (4-4).
@@ -191,7 +243,6 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - world (0,0) is window (640,370) at 100 points/m; prefer widget names
     from `ui.inspect`;
   - a gesture plays over the next frames: wait before the next grab;
-  - the select tool grabs the snap point nearest the first moved frame;
   - indexed verbs in one run read the pre-run snapshot, so apply them from a
     second, hot-reloaded script.
 - Where `docs/agent-context.md` and `CLAUDE.md` disagree, `CLAUDE.md` wins.

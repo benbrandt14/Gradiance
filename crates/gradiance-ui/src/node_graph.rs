@@ -32,7 +32,9 @@ use egui_snarl::ui::{BackgroundPattern, PinInfo, SnarlStyle, SnarlViewer, WireSt
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
+use gradiance_domain::quantity::Subject;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::signal::Subjects;
 use gradiance_interaction::selection::Selection;
 use gradiance_physics::queries::PhysicsQueries;
 use gradiance_signal::{
@@ -229,50 +231,24 @@ impl NodeGraph {
     }
 }
 
-/// The index of the sensor output pin a scene [`SignalSource`] maps to — must
-/// match the order of [`body_sensors`]. `None` for sources that aren't a
-/// single body's sensor port (distance, named, joint sensors — joints have no
-/// canvas block yet).
+/// The index of the sensor output pin a scene [`SignalSource`] maps to: its
+/// position in [`body_sensors`] (the catalog's body rows). `None` for sources
+/// that aren't a single body's sensor port (distance, named, joint sensors —
+/// joints have no canvas block yet).
 fn sensor_index(source: &SignalSource) -> Option<usize> {
-    match source {
-        SignalSource::Speed(_) => Some(0),
-        SignalSource::Spin(_) => Some(1),
-        SignalSource::Height(_) => Some(2),
-        SignalSource::PosX(_) => Some(3),
-        SignalSource::ContactForce(_) => Some(4),
-        SignalSource::ContactCount(_) => Some(5),
-        SignalSource::KineticEnergy(_) => Some(6),
-        SignalSource::Momentum(_) => Some(7),
-        SignalSource::AngularMomentum(_) => Some(8),
-        SignalSource::Distance(..)
-        | SignalSource::JointLength(_)
-        | SignalSource::JointAngle(_)
-        | SignalSource::JointForce(_)
-        | SignalSource::Named(_) => None,
-    }
+    let Some(Subjects::One(id)) = source.subjects() else {
+        return None;
+    };
+    body_sensors(id).iter().position(|(_, s)| s == source)
 }
 
 /// The `(GraphKey, output index)` a binding source resolves to, if it maps to
 /// a producer block on the canvas.
 fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
-    match source {
-        SignalSource::Named(name) => Some((GraphKey::Param(name.clone()), 0)),
-        SignalSource::Distance(..) => None,
-        other => {
-            let id = *match other {
-                SignalSource::Speed(id)
-                | SignalSource::Spin(id)
-                | SignalSource::Height(id)
-                | SignalSource::PosX(id)
-                | SignalSource::ContactForce(id)
-                | SignalSource::ContactCount(id)
-                | SignalSource::KineticEnergy(id)
-                | SignalSource::Momentum(id)
-                | SignalSource::AngularMomentum(id) => id,
-                _ => return None,
-            };
-            Some((GraphKey::Body(id), sensor_index(other)?))
-        }
+    match (source, source.subjects()) {
+        (SignalSource::Named(name), _) => Some((GraphKey::Param(name.clone()), 0)),
+        (_, Some(Subjects::One(id))) => Some((GraphKey::Body(id), sensor_index(source)?)),
+        _ => None,
     }
 }
 
@@ -411,7 +387,9 @@ pub(crate) fn node_graph_section(
     }
     viewer.fit = graph.fit_requested;
     viewer.view_rect = Some(ui.max_rect());
-    let style = themed_style();
+    let tokens = crate::theme::tokens(ui.ctx());
+    viewer.selected_stroke = tokens.accent;
+    let style = themed_style(&tokens);
     graph.snarl.show(viewer, &style, "node-graph", ui);
     // Persist the pan/zoom transform (for next frame's grid) and retire a
     // fulfilled fit request.
@@ -538,14 +516,14 @@ fn fresh_param_name(params: &SignalParams) -> String {
 /// The node-canvas theme (vvvv-flavoured): sharp corners, flat fills, thin
 /// strokes, no gradients — the faint dot-grid is painted separately, so the
 /// snarl background pattern is off.
-fn themed_style() -> SnarlStyle {
+fn themed_style(tokens: &crate::theme::ChromeTheme) -> SnarlStyle {
     let node_frame = egui::Frame::new()
-        .fill(egui::Color32::from_gray(30))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(72)))
+        .fill(tokens.node)
+        .stroke(egui::Stroke::new(1.0, tokens.node_outline))
         .corner_radius(egui::CornerRadius::same(0))
         .inner_margin(egui::Margin::same(6));
     let header_frame = egui::Frame::new()
-        .fill(egui::Color32::from_gray(40))
+        .fill(tokens.node_header)
         .corner_radius(egui::CornerRadius::same(0))
         .inner_margin(egui::Margin::symmetric(6, 3));
     SnarlStyle {
@@ -554,7 +532,7 @@ fn themed_style() -> SnarlStyle {
         wire_width: Some(1.5),
         node_frame: Some(node_frame),
         header_frame: Some(header_frame),
-        bg_frame: Some(egui::Frame::new().fill(egui::Color32::from_gray(18))),
+        bg_frame: Some(egui::Frame::new().fill(tokens.canvas)),
         bg_pattern: Some(BackgroundPattern::NoPattern),
         pin_size: Some(4.0),
         ..SnarlStyle::new()
@@ -627,7 +605,7 @@ fn paint_dot_grid(painter: &egui::Painter, rect: egui::Rect, t: egui::emath::TST
     let inv = t.inverse();
     let top_left = inv.mul_pos(rect.left_top());
     let bottom_right = inv.mul_pos(rect.right_bottom());
-    let dot = egui::Color32::from_gray(128).gamma_multiply(0.18);
+    let dot = crate::theme::tokens(painter.ctx()).canvas_dot;
     let mut gx = (top_left.x / spacing).floor() * spacing;
     while gx <= bottom_right.x {
         let mut gy = (top_left.y / spacing).floor() * spacing;
@@ -732,25 +710,14 @@ fn binding_input_values(
 /// The bodies a binding references (source + sink).
 fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
     let mut ids = Vec::new();
-    match &binding.source {
-        SignalSource::Speed(id)
-        | SignalSource::Spin(id)
-        | SignalSource::Height(id)
-        | SignalSource::PosX(id)
-        | SignalSource::ContactForce(id)
-        | SignalSource::ContactCount(id)
-        | SignalSource::KineticEnergy(id)
-        | SignalSource::Momentum(id)
-        | SignalSource::AngularMomentum(id) => ids.push(*id),
-        SignalSource::Distance(a, b) => {
-            ids.push(*a);
-            ids.push(*b);
+    // A joint sensor references a joint, not a body: no body block.
+    if let Some((row, subjects)) = binding.source.reading()
+        && row.subject() != Subject::Joint
+    {
+        match subjects {
+            Subjects::One(id) => ids.push(id),
+            Subjects::Two(a, b) => ids.extend([a, b]),
         }
-        // A joint sensor references a joint, not a body: no body block.
-        SignalSource::JointLength(_)
-        | SignalSource::JointAngle(_)
-        | SignalSource::JointForce(_)
-        | SignalSource::Named(_) => {}
     }
     match &binding.sink {
         SignalSink::Fill(id) | SignalSink::TracerColor(id) => ids.push(*id),
@@ -824,6 +791,8 @@ fn reconcile(graph: &mut NodeGraph, desired: Vec<NodeData>) {
 pub(crate) struct GraphViewer {
     /// Scene-selected body ids — their blocks get a highlight frame.
     selected: HashSet<StableId>,
+    /// The highlight frame's colour: the scene accent (chrome token).
+    selected_stroke: egui::Color32,
     /// Live value of each output pin, `[key][output]` (the running readout).
     output_values: HashMap<GraphKey, Vec<Option<f32>>>,
     /// Live value driving each bound input pin, `[key][input]`.
@@ -1048,10 +1017,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         if let Some(NodeData::Body { id, .. }) = snarl.get_node(node)
             && self.selected.contains(id)
         {
-            return default.stroke(egui::Stroke::new(
-                2.0,
-                egui::Color32::from_rgb(120, 200, 255),
-            ));
+            return default.stroke(egui::Stroke::new(2.0, self.selected_stroke));
         }
         default
     }
@@ -1163,7 +1129,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
             .and_then(|k| Self::value_at(&self.input_values, k, pin.id.input));
         // Actuator inputs (fill/tracer colour channels) are dimensionless.
         ui.label(pin_label(&name, value, ""));
-        PinInfo::circle().with_fill(egui::Color32::from_rgb(210, 170, 120))
+        PinInfo::circle().with_fill(crate::theme::tokens(ui.ctx()).pin_in)
     }
 
     fn show_output(
@@ -1186,7 +1152,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
             .as_ref()
             .and_then(|k| Self::value_at(&self.output_values, k, pin.id.output));
         ui.label(pin_label(&name, value, unit));
-        PinInfo::circle().with_fill(egui::Color32::from_rgb(140, 220, 150))
+        PinInfo::circle().with_fill(crate::theme::tokens(ui.ctx()).pin_out)
     }
 
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<NodeData>) {

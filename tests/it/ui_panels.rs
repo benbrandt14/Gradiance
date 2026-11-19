@@ -134,19 +134,23 @@ fn plot_pane_renders_every_data_shape() {
         let series = [
             Series {
                 name: "flat",
-                unit: "m/s",
+                unit: gradiance::units::DisplayUnit::canonical(
+                    gradiance::units::Dimension::Velocity,
+                ),
                 values: &flat,
                 times: &flat_t,
             },
             Series {
                 name: "wave",
-                unit: "",
+                unit: gradiance::units::DisplayUnit::canonical(
+                    gradiance::units::Dimension::Dimensionless,
+                ),
                 values: &wave,
                 times: &wave_t,
             },
             Series {
                 name: "ragged",
-                unit: "N",
+                unit: gradiance::units::DisplayUnit::canonical(gradiance::units::Dimension::Force),
                 values: &ragged,
                 times: &ragged_t,
             },

@@ -14,10 +14,13 @@ pub mod joint;
 pub mod layers;
 pub mod node;
 pub mod props;
+pub mod quantity;
 pub mod settings;
 pub use gradiance_geometry::shape;
 pub mod signal;
+pub mod theme;
 pub mod tracer;
+pub mod tuning;
 
 use bevy::prelude::*;
 

@@ -22,3 +22,5 @@ glam.workspace = true
 [dev-dependencies]
 # Round-trip test: quantities serialize bare in the scene format (v7).
 ron.workspace = true
+# Property tests for the typed-value parser (`expr`, brief 5-3).
+proptest.workspace = true

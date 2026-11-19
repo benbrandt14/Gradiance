@@ -130,6 +130,55 @@ impl GroupIndex {
         self.groups.iter().position(|g| g.id == id)
     }
 
+    /// The bodies a new group made from `targets` holds so that groups keep
+    /// nesting (brief A-2, archive entry `group-overlap`): every group that
+    /// shares a body with the set, is not inside it and does not hold all of
+    /// it, joins it whole — a member drags its group in, as a viewport click
+    /// selects it — repeated until nothing overlaps. A set inside one group
+    /// stays as it is and nests inside that group
+    /// ([`insertion_depth`](Self::insertion_depth)). Targets come first, in
+    /// their order, without repeats; joined bodies follow in group order.
+    #[must_use]
+    pub fn close_over(&self, targets: &[StableId]) -> Vec<StableId> {
+        let mut set: Vec<StableId> = Vec::new();
+        for &id in targets {
+            if !set.contains(&id) {
+                set.push(id);
+            }
+        }
+        loop {
+            let overlapping = self.groups.iter().find(|g| {
+                let shared = g.members.iter().any(|m| set.contains(m));
+                let inside = g.members.iter().all(|m| set.contains(m));
+                let holds = set.iter().all(|m| g.members.contains(m));
+                shared && !inside && !holds
+            });
+            let Some(group) = overlapping else {
+                return set;
+            };
+            for &m in &group.members {
+                if !set.contains(&m) {
+                    set.push(m);
+                }
+            }
+        }
+    }
+
+    /// Where a new group of `members` goes in one member's `stack`
+    /// (innermost first): after every group the new one holds, before every
+    /// group that holds it. `members` must be closed
+    /// ([`close_over`](Self::close_over)), so the stack splits cleanly.
+    #[must_use]
+    pub fn insertion_depth(&self, stack: &[u32], members: &[StableId]) -> usize {
+        stack
+            .iter()
+            .take_while(|&&id| {
+                self.get(id)
+                    .is_some_and(|g| g.members.iter().all(|m| members.contains(m)))
+            })
+            .count()
+    }
+
     /// The id a new group gets: past every live group and every named one,
     /// so it never inherits a stale name.
     pub fn fresh_id(&self, names: &GroupNames) -> u32 {
@@ -167,6 +216,36 @@ mod tests {
         assert_eq!(index.groups[1].members, vec![id(1), id(2), id(3)]);
         assert_eq!(index.groups[1].parent, None);
         assert_eq!(index.position(2), Some(1));
+    }
+
+    /// A grouped body drags its whole group into a new group; a subset of
+    /// one group nests inside it; the closure repeats through chains.
+    #[test]
+    fn a_new_group_closes_over_the_groups_it_overlaps() {
+        // A, B in group 1; C, D in group 2; E ungrouped.
+        let ab = [1];
+        let cd = [2];
+        let none: [u32; 0] = [];
+        let index = GroupIndex::build([
+            (id(1), &ab[..]),
+            (id(2), &ab[..]),
+            (id(3), &cd[..]),
+            (id(4), &cd[..]),
+            (id(5), &none[..]),
+        ]);
+        // B with E: B drags A in.
+        assert_eq!(index.close_over(&[id(2), id(5)]), vec![id(2), id(5), id(1)]);
+        // B with C: both groups join whole.
+        let all = index.close_over(&[id(2), id(3), id(2)]);
+        assert_eq!(all, vec![id(2), id(3), id(1), id(4)]);
+        // A alone with B is group 1 itself: nothing joins; it wraps group 1.
+        assert_eq!(index.close_over(&[id(1), id(2)]), vec![id(1), id(2)]);
+        assert_eq!(index.insertion_depth(&ab, &[id(1), id(2)]), 1);
+        // Part of a group nests inside it.
+        let abc = [7];
+        let index = GroupIndex::build([(id(1), &abc[..]), (id(2), &abc[..]), (id(3), &abc[..])]);
+        assert_eq!(index.close_over(&[id(1), id(2)]), vec![id(1), id(2)]);
+        assert_eq!(index.insertion_depth(&abc, &[id(1), id(2)]), 0);
     }
 
     #[test]

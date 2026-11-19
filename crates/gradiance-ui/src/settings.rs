@@ -20,7 +20,7 @@ use gradiance_domain::settings::{
     RenderSettings, ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
 };
 use gradiance_domain::shape::ShapeDef;
-use gradiance_units::Dimension;
+use gradiance_units::{AngleUnit, Dimension, DisplayUnit, LengthUnit};
 
 /// Which settings tab is open.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +38,8 @@ pub enum SettingsTab {
     Lighting,
     /// Debug overlays and internals readouts.
     Debug,
+    /// The chrome preset (workstation config, brief U-7).
+    Interface,
 }
 
 /// Read-only internals shown by the Debug tab.
@@ -77,6 +79,8 @@ pub fn settings_window(
     mut lighting: ResMut<LightingSettings>,
     mut scenery: ResMut<ScenerySettings>,
     mut debug: ResMut<DebugSettings>,
+    mut chrome: ResMut<gradiance_domain::settings::ChromeSettings>,
+    mut units: ResMut<gradiance_domain::settings::UnitSettings>,
     readouts: DebugReadouts,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -96,6 +100,7 @@ pub fn settings_window(
                 ui.selectable_value(&mut window.tab, SettingsTab::Rendering, "Rendering");
                 ui.selectable_value(&mut window.tab, SettingsTab::Lighting, "Lighting");
                 ui.selectable_value(&mut window.tab, SettingsTab::Debug, "Debug");
+                ui.selectable_value(&mut window.tab, SettingsTab::Interface, "Interface");
             });
             ui.separator();
             match window.tab {
@@ -114,10 +119,15 @@ pub fn settings_window(
                     }
                 }
                 SettingsTab::Rendering => {
-                    reflect_grid(
+                    look_picker(ui, &mut render, &mut lighting, &mut scenery);
+                    ui.separator();
+                    // `look` is the picker above.
+                    reflect_grid_except(
                         ui,
                         egui::Id::new("render"),
                         render.bypass_change_detection(),
+                        &[],
+                        &["look"],
                     );
                     render.set_changed();
                 }
@@ -130,10 +140,122 @@ pub fn settings_window(
                     ui.separator();
                     debug_readouts(ui, &readouts);
                 }
+                SettingsTab::Interface => {
+                    interface_tab(ui, &mut chrome);
+                    ui.separator();
+                    units_section(ui, &mut units);
+                }
             }
         });
     window.open = open;
     Ok(())
+}
+
+/// The scene-look picker (brief 4b-3): choosing a look applies its whole
+/// preset (render, lighting, scenery) — the same writes `look.apply` makes,
+/// so a settled pick is one undo step through `commit_settings_edits`.
+fn look_picker(
+    ui: &mut egui::Ui,
+    render: &mut ResMut<RenderSettings>,
+    lighting: &mut ResMut<LightingSettings>,
+    scenery: &mut ResMut<ScenerySettings>,
+) {
+    use gradiance_domain::theme::Look;
+    widgets::section_header(ui, "Look");
+    let current = render.look;
+    ui.horizontal(|ui| {
+        for look in Look::ALL {
+            if ui
+                .selectable_label(current == look, look.theme().label)
+                .on_hover_text("apply this look's palette tone, ink, lighting and toon preset")
+                .clicked()
+                && current != look
+            {
+                **render = look.render();
+                **lighting = look.lighting();
+                **scenery = look.scenery();
+            }
+        }
+    });
+}
+
+/// The Interface tab: the chrome preset (brief U-7). Workstation config:
+/// written directly, never undone, not saved with the scene (the same
+/// write `chrome.apply` makes).
+fn interface_tab(
+    ui: &mut egui::Ui,
+    chrome: &mut ResMut<gradiance_domain::settings::ChromeSettings>,
+) {
+    use gradiance_domain::settings::Chrome;
+    widgets::section_header(ui, "Chrome");
+    let current = chrome.chrome;
+    for preset in Chrome::ALL {
+        if ui
+            .selectable_label(current == preset, preset.label())
+            .on_hover_text("draw the panels with this preset (yours, not the scene's)")
+            .clicked()
+            && current != preset
+        {
+            chrome.chrome = preset;
+        }
+    }
+    widgets::hint(
+        ui,
+        "The selection highlight follows the scene look's accent (Rendering > Look).",
+    );
+}
+
+/// The Interface tab's units (brief 5-3): how every field shows angles and
+/// lengths. Workstation config: written directly, never undone, not saved
+/// with the scene (the same write `units.display` makes). Display only:
+/// values stay SI, and a value typed with its unit (`25 cm`, `90 deg`)
+/// converts whatever is shown.
+fn units_section(ui: &mut egui::Ui, units: &mut ResMut<gradiance_domain::settings::UnitSettings>) {
+    widgets::section_header(ui, "Units");
+    let current = units.prefs;
+    egui::Grid::new("units-display")
+        .num_columns(2)
+        .show(ui, |ui| {
+            ui.label("angles");
+            ui.horizontal(|ui| {
+                for (angle, label) in [
+                    (AngleUnit::Degrees, "degrees"),
+                    (AngleUnit::Radians, "radians"),
+                ] {
+                    if ui
+                        .selectable_label(current.angle == angle, label)
+                        .on_hover_text(
+                            "how angle fields and readouts show (yours, not the scene's)",
+                        )
+                        .clicked()
+                        && current.angle != angle
+                    {
+                        units.prefs.angle = angle;
+                    }
+                }
+            });
+            ui.end_row();
+            ui.label("lengths");
+            ui.horizontal(|ui| {
+                for length in LengthUnit::ALL {
+                    if ui
+                        .selectable_label(current.length == length, length.name())
+                        .on_hover_text(
+                            "how length fields and readouts show (yours, not the scene's)",
+                        )
+                        .clicked()
+                        && current.length != length
+                    {
+                        units.prefs.length = length;
+                    }
+                }
+            });
+            ui.end_row();
+        });
+    widgets::hint(
+        ui,
+        "Type a value with its unit in any field (25 cm, 90 deg, 2 kN, 2*pi); a bare number is in the unit shown.",
+    );
 }
 
 /// `SimSettings` fields [`simulation_tab`] draws by hand; any field added
@@ -158,21 +280,25 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
         egui::Grid::new("sim-gravity")
             .num_columns(2)
             .show(ui, |ui| {
-                gravity_changed |= widgets::labelled_drag(
+                // The polar angle is kept in degrees; the field shows the
+                // preferred angle unit (brief 5-3).
+                gravity_changed |= widgets::labelled_quantity(
                     ui,
-                    &format!("direction ({})", glyph::DEGREE),
+                    "direction",
                     &mut angle,
                     -180.0..=180.0,
                     1.0,
-                    "counter-clockwise from +x; straight down is -90",
+                    "counter-clockwise from +x; straight down is -90 degrees",
+                    DisplayUnit::DEGREES,
                 );
-                gravity_changed |= widgets::labelled_drag(
+                gravity_changed |= widgets::labelled_quantity(
                     ui,
-                    &format!("strength ({})", Dimension::Acceleration.symbol()),
+                    "strength",
                     &mut magnitude,
                     0.0..=1000.0,
                     0.1,
                     "gravity magnitude; 0 = weightless",
+                    DisplayUnit::canonical(Dimension::Acceleration),
                 );
                 ui.label(
                     egui::RichText::new(format!(
@@ -208,13 +334,14 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
                 1..=64,
                 "solver substeps per physics step: stiffer, more accurate, slower",
             );
-            widgets::labelled_drag(
+            widgets::labelled_quantity(
                 ui,
-                &format!("timestep ({})", Dimension::Frequency.symbol()),
+                "timestep",
                 &mut sim.timestep_hz.0,
                 10.0..=480.0,
                 1.0,
                 "physics steps per second",
+                DisplayUnit::canonical(Dimension::Frequency),
             );
             widgets::labelled_drag(
                 ui,
@@ -249,14 +376,15 @@ fn gravity_dial(ui: &mut egui::Ui, angle_deg: &mut f32, magnitude: f32) -> bool 
         }
     }
     let painter = ui.painter_at(rect);
-    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, egui::Color32::GRAY));
+    let tokens = crate::theme::tokens(ui.ctx());
+    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, tokens.dial));
     let a = angle_deg.to_radians();
     let dir = egui::vec2(a.cos(), -a.sin());
     // Weightless: a dot, not an arrow — there is no direction to show.
     let color = if magnitude > f32::EPSILON {
         ui.visuals().strong_text_color()
     } else {
-        egui::Color32::from_gray(90)
+        tokens.muted
     };
     painter.arrow(center, dir * RADIUS, egui::Stroke::new(2.0, color));
     response.on_hover_text("drag to aim gravity");
@@ -345,10 +473,7 @@ fn grid_snap_tab(
         ui,
         egui::Id::new("grid"),
         grid.bypass_change_detection(),
-        &[
-            ("spacing", Dimension::Length.symbol()),
-            ("origin", Dimension::Length.symbol()),
-        ],
+        &[],
         GRID_HAND_DRAWN,
     );
     grid.set_changed();
@@ -360,7 +485,7 @@ fn grid_snap_tab(
         ui,
         egui::Id::new("snap"),
         snap.bypass_change_detection(),
-        &[("rotation_step_deg", "°")],
+        &[("rotation_step_deg", DisplayUnit::DEGREES)],
     );
     snap.set_changed();
     ui.separator();
@@ -415,8 +540,8 @@ fn lighting_tab(
         // colored shadows — cheap depth on a flat scene.
         settings.lights.push(KeyLightSettings {
             azimuth_deg: 40.0,
-            color: gradiance_domain::appearance::Rgba::rgb(0.9, 0.85, 1.0),
-            illuminance: 6_000.0,
+            color: gradiance_domain::theme::FILL_LIGHT,
+            illuminance: 900.0,
             ..KeyLightSettings::default()
         });
         changed = true;
@@ -455,14 +580,11 @@ fn lighting_tab(
     });
     ui.horizontal(|ui| {
         ui.label("shadow reach");
-        changed |= ui
-            .add(
-                egui::DragValue::new(&mut settings.shadow_distance.0)
-                    .speed(2.0)
-                    .suffix(" m"),
-            )
-            .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
-            .changed();
+        let reach = crate::unit_fields::display(ui.ctx(), Dimension::Length);
+        changed |=
+            crate::unit_fields::drag_value(ui, &mut settings.shadow_distance.0, 2.0, None, reach)
+                .on_hover_text("distance shadows stay valid; smaller = crisper, too small clips")
+                .changed();
     });
     if changed {
         lighting.set_changed();
@@ -479,10 +601,7 @@ fn lighting_tab(
         ui,
         egui::Id::new("scenery"),
         scenery.bypass_change_detection(),
-        &[
-            ("back_offset", Dimension::Length.symbol()),
-            ("perspective_deg", "°"),
-        ],
+        &[("perspective_deg", DisplayUnit::DEGREES)],
     );
     // reflect_grid edits aren't reported; conservatively mark touched.
     scenery.set_changed();
@@ -532,24 +651,14 @@ fn sun_gadget(ui: &mut egui::Ui, index: usize, light: &mut KeyLightSettings) -> 
     }
 
     let painter = ui.painter_at(rect);
-    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, egui::Color32::GRAY));
-    painter.circle_stroke(
-        center,
-        RADIUS * 0.5,
-        egui::Stroke::new(0.5, egui::Color32::from_gray(90)),
-    );
+    let tokens = crate::theme::tokens(ui.ctx());
+    painter.circle_stroke(center, RADIUS, egui::Stroke::new(1.0, tokens.dial));
+    painter.circle_stroke(center, RADIUS * 0.5, egui::Stroke::new(0.5, tokens.muted));
     let azimuth = light.azimuth_deg.to_radians();
     let r = (1.0 - (light.elevation_deg / 90.0).clamp(0.0, 1.0)) * RADIUS;
     let handle = center + egui::vec2(azimuth.cos(), -azimuth.sin()) * r;
-    painter.line_segment(
-        [center, handle],
-        egui::Stroke::new(1.0, egui::Color32::from_gray(120)),
-    );
-    let tint = egui::Color32::from_rgb(
-        (light.color.r * 255.0) as u8,
-        (light.color.g * 255.0) as u8,
-        (light.color.b * 255.0) as u8,
-    );
+    painter.line_segment([center, handle], egui::Stroke::new(1.0, tokens.dial));
+    let tint = crate::theme::color32(light.color.with_alpha(1.0));
     painter.circle_filled(handle, 6.0, tint);
     response.on_hover_text("drag the sun: angle = light direction, center = head-on");
     changed
@@ -612,18 +721,18 @@ fn debug_readouts(ui: &mut egui::Ui, r: &DebugReadouts) {
             ),
             JointKind::Spring {
                 rest_length,
-                stiffness,
-                damping,
+                frequency,
+                damping_ratio,
                 range,
             } => {
                 let clamp = range.map_or(String::new(), |[lo, hi]| {
-                    format!(" [{:.0},{:.0}]", lo.value(), hi.value())
+                    format!(" [{:.2},{:.2}]", lo.value(), hi.value())
                 });
                 format!(
-                    "Spring rest={:.0} k={:.0} c={:.1}{clamp}",
+                    "Spring rest={:.2} f={:.2}Hz zeta={:.2}{clamp}",
                     rest_length.value(),
-                    stiffness.value(),
-                    damping.value()
+                    frequency.value(),
+                    damping_ratio
                 )
             }
         };

@@ -178,3 +178,56 @@ fn a_row_then_split_by_colour_splits_a_mixed_group() {
         "one undo step"
     );
 }
+
+/// A chip on a **mixed** group selects exactly the matching bodies, and a
+/// nested group's row selects that group, not its outer one: the panel's
+/// selection is a query result, not a viewport click, so it is not expanded
+/// to outermost groups (brief A-1; the red chip used to select the whole
+/// red-and-blue group).
+#[test]
+fn a_chip_on_a_mixed_group_selects_only_the_matching_bodies() {
+    let mut app = scene();
+    let inner = invoke(app.world_mut(), "group.create", json!({"targets": [0, 1]}))
+        .unwrap_or_else(|e| panic!("group: {e}"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or_else(|| panic!("no group index"));
+    step(&mut app, 1);
+
+    let panel = RefCell::new(GroupsPanel::default());
+    let out = click(&model(&mut app), &panel, &["red"]);
+    apply(&mut app, out);
+    assert_eq!(
+        selected_fills(&mut app),
+        [0, 0],
+        "the red chip selects the two red bodies, not the blue group member"
+    );
+
+    // Nest the mixed pair in an outer group with the third circle.
+    invoke(
+        app.world_mut(),
+        "group.create",
+        json!({"targets": [0, 1, 2]}),
+    )
+    .unwrap_or_else(|e| panic!("group: {e}"));
+    step(&mut app, 1);
+    let names = invoke(app.world_mut(), "group.list", json!({}))
+        .unwrap_or_else(|e| panic!("groups: {e}"))
+        .and_then(|v| v.as_array().map(Vec::len));
+    assert_eq!(names, Some(2));
+    let members = invoke(app.world_mut(), "group.members", json!({"group": inner}))
+        .unwrap_or_else(|e| panic!("members: {e}"));
+    assert_eq!(
+        members,
+        Some(json!([0, 1])),
+        "the inner group is still [0, 1]"
+    );
+    app.world_mut().write_message(GroupsFilter {
+        clauses: vec![format!("group:{inner}")],
+    });
+    step(&mut app, 2);
+    assert_eq!(
+        selected_fills(&mut app),
+        [0, 7],
+        "the inner group's row selects the inner pair only"
+    );
+}

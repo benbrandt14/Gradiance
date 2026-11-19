@@ -27,7 +27,7 @@ pub struct BackPlane;
 pub struct KeyLight;
 
 fn color_of(c: Rgba) -> Color {
-    Color::srgba(c.r, c.g, c.b, c.a)
+    c.into()
 }
 
 /// Spawns the key light and the back plane (their parameters are applied by
@@ -36,7 +36,7 @@ pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<InfinitePlaneMaterial>>,
-    clear: Res<ClearColor>,
+    scenery: Res<ScenerySettings>,
 ) {
     // Key lights are spawned by `apply_lighting` from the settings list.
     // The back plane is what *catches cast shadows* — without it every drop
@@ -49,7 +49,13 @@ pub fn setup(
             PLANE_EXTENT * 2.0,
             PLANE_EXTENT * 2.0,
         )))),
-        MeshMaterial3d(materials.add(plane_material(Color::WHITE, Vec3::Z, 0.0, clear.0, 0.0))),
+        MeshMaterial3d(materials.add(plane_material(
+            color_of(scenery.back_color),
+            Vec3::Z,
+            0.0,
+            color_of(scenery.back_color),
+            0.0,
+        ))),
         Transform::default(),
     ));
 }
@@ -109,7 +115,7 @@ pub fn apply_lighting(
     commands.insert_resource(DirectionalLightShadowMap {
         size: (settings.shadow_map_size.max(256) as usize).next_power_of_two(),
     });
-    ambient.color = Color::WHITE;
+    ambient.color = color_of(gradiance_domain::theme::WHITE_LIGHT);
     ambient.brightness = settings.ambient.max(0.0);
     // SSAO wants Msaa off plus depth/normal prepasses; screen-space contact
     // shadows raymarch the depth buffer, so they need the depth prepass too.
@@ -157,15 +163,24 @@ pub fn match_overlay_msaa(
 }
 
 /// Applies [`ScenerySettings`] color/visibility to the back plane
-/// (change-detected).
+/// (change-detected). The back colour is also the horizon the back plane
+/// fades to, and the window's clear colour.
 pub fn apply_scenery(
     settings: Res<ScenerySettings>,
+    mut clear: ResMut<ClearColor>,
     mut materials: ResMut<Assets<InfinitePlaneMaterial>>,
     mut planes: Query<(&MeshMaterial3d<InfinitePlaneMaterial>, &mut Visibility), With<BackPlane>>,
 ) {
+    let backdrop = color_of(settings.back_color);
+    clear.0 = backdrop;
     for (material, mut visibility) in &mut planes {
         if let Some(mut mat) = materials.get_mut(&material.0) {
-            mat.base.base_color = color_of(settings.back_color);
+            mat.base.base_color = backdrop;
+            mat.extension = crate::plane::PlaneExtension {
+                plane: mat.extension.plane,
+                toon: mat.extension.toon,
+                ..crate::plane::PlaneExtension::for_plane(Vec3::Z, 0.0, backdrop, 0.0)
+            };
         }
         *visibility = if settings.back_visible {
             Visibility::Inherited

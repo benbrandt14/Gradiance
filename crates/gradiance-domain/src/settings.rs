@@ -176,6 +176,109 @@ impl CameraSettings {
     }
 }
 
+/// A chrome preset: which token set the editor's panels are drawn with
+/// (brief U-7; the tokens are `gradiance_ui::theme`). Names only: the
+/// colours live in the UI crate, the one crate that knows egui.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
+pub enum Chrome {
+    /// Blender's default dark greys; the selection highlight is the scene
+    /// look's accent, so a selected row and a selected body agree.
+    #[default]
+    Blender,
+    /// Blender's greys with Blender's own blue selection highlight (the
+    /// scene accent stays on the canvas).
+    BlenderBlue,
+    /// The UI toolkit's stock dark visuals, as the editor looked before
+    /// U-7 (kept for comparison).
+    Stock,
+}
+
+impl Chrome {
+    /// Every preset, in menu order (the first is the default).
+    pub const ALL: [Self; 3] = [Self::Blender, Self::BlenderBlue, Self::Stock];
+
+    /// The stable name operations and review scenes use.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Blender => "blender",
+            Self::BlenderBlue => "blender-blue",
+            Self::Stock => "stock",
+        }
+    }
+
+    /// The menu label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Blender => "Blender dark",
+            Self::BlenderBlue => "Blender dark, blue selection",
+            Self::Stock => "Stock (before U-7)",
+        }
+    }
+
+    /// The preset called `name`, if any.
+    #[must_use]
+    pub fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.name() == name)
+    }
+}
+
+/// The chrome preset in use (Settings > Interface, `chrome.apply`).
+///
+/// **Workstation config** (CLAUDE.md invariant 4): it describes the person
+/// at the editor, not the scene, so it is never undone. Like
+/// [`ToolDefaults`] it is not written into the scene file either: a scene
+/// opened from someone else must not change your panels. A workstation file
+/// is brief U-10's (dock layouts); the preset moves there with them.
+#[derive(
+    Resource,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bevy::reflect::Reflect,
+)]
+#[serde(default)]
+pub struct ChromeSettings {
+    /// The active preset.
+    pub chrome: Chrome,
+}
+
+/// How the editor shows physical quantities: degrees or radians, and the
+/// length scale (Settings > Interface, `units.display`; brief 5-3).
+///
+/// **Workstation config** (CLAUDE.md invariant 4), classified like
+/// [`ChromeSettings`]: it describes the person reading the fields, not the
+/// scene, so it is never undone, and it is not written into the scene file
+/// either: opening someone's scene must not switch your fields to their
+/// units. Display only: authored values, the save format, scripts and
+/// operations stay base SI. It moves to the workstation file with
+/// [`ChromeSettings`] (brief U-10).
+#[derive(
+    Resource,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bevy::reflect::Reflect,
+)]
+#[serde(default)]
+pub struct UnitSettings {
+    /// The display preference (angle unit, length scale).
+    pub prefs: gradiance_units::UnitPrefs,
+}
+
 /// Tool-creation defaults (editor configuration, the Config seam).
 ///
 /// Non-authored, non-persisted workstation preferences the tools consult at
@@ -285,6 +388,12 @@ impl SimSettings {
 // override, `scene::review::SettingsOverride`) fills the rest from `Default`.
 #[serde(default)]
 pub struct RenderSettings {
+    /// The scene look ([`Look`](crate::theme::Look)): it tones the body
+    /// palette and picks the overlay ink. Applying a look (`look.apply`)
+    /// also resets these settings, the lighting and the scenery to the
+    /// look's preset; setting only this field re-tones colours and keeps
+    /// the rest.
+    pub look: crate::theme::Look,
     /// Quantize lighting into bands (toon look). Off = smooth matte PBR.
     pub toon_enabled: bool,
     /// Number of light bands when toon shading is on.
@@ -310,14 +419,9 @@ fn default_specular() -> f32 {
 }
 
 impl Default for RenderSettings {
+    /// The default look's preset.
     fn default() -> Self {
-        Self {
-            toon_enabled: true,
-            bands: 4,
-            rim_strength: 0.25,
-            white_point: 1.3,
-            specular: 0.3,
-        }
+        crate::theme::Look::default().render()
     }
 }
 
@@ -387,10 +491,12 @@ pub struct KeyLightSettings {
 impl Default for KeyLightSettings {
     fn default() -> Self {
         Self {
-            azimuth_deg: 120.0,
-            elevation_deg: 32.0,
-            color: crate::appearance::Rgba::rgb(1.0, 1.0, 1.0),
-            illuminance: 12_000.0,
+            // The studio key's direction and strength, untinted: a light
+            // added in the Lighting tab lands at the toon white point.
+            azimuth_deg: 125.0,
+            elevation_deg: 40.0,
+            color: crate::theme::WHITE_LIGHT,
+            illuminance: 2_400.0,
             shadows: true,
         }
     }
@@ -424,17 +530,9 @@ pub struct LightingSettings {
 }
 
 impl Default for LightingSettings {
+    /// The default look's preset.
     fn default() -> Self {
-        // The single-light default matches the original hard-coded key
-        // light: from (-400, 700) in-plane, lifted toward the viewer.
-        Self {
-            lights: vec![KeyLightSettings::default()],
-            ambient: 300.0,
-            ssao: false,
-            contact_shadows: true,
-            shadow_map_size: 4096,
-            shadow_distance: Length(80.0),
-        }
+        crate::theme::Look::default().lighting()
     }
 }
 
@@ -464,14 +562,9 @@ pub struct ScenerySettings {
 }
 
 impl Default for ScenerySettings {
+    /// The default look's preset.
     fn default() -> Self {
-        Self {
-            back_offset: Length(0.2),
-            back_color: crate::appearance::Rgba::rgb(0.82, 0.83, 0.85),
-            back_visible: true,
-            ground_visible: true,
-            perspective_deg: 0.0,
-        }
+        crate::theme::Look::default().scenery()
     }
 }
 

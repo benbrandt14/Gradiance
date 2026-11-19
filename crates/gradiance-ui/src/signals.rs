@@ -23,6 +23,8 @@
 use crate::widgets;
 use bevy_egui::egui;
 use gradiance_core::ids::StableId;
+use gradiance_domain::quantity::{QUANTITIES, Subject};
+use gradiance_domain::signal::Subjects;
 use gradiance_signal::{
     Curve, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalSink,
     SignalSource,
@@ -146,7 +148,7 @@ fn computed_block(
         // `(defsignal …)` for now — the node canvas replaces this later.
         ui.monospace(egui::RichText::new(expr_rpn(&signal.expr)).weak());
         if let Some((_, err)) = compiled.errors.iter().find(|(n, _)| *n == signal.name) {
-            ui.colored_label(egui::Color32::from_rgb(220, 120, 120), err);
+            ui.colored_label(ui.visuals().error_fg_color, err);
         }
     }
     if let Some(i) = remove {
@@ -213,39 +215,29 @@ fn fresh<'a>(existing: impl Iterator<Item = &'a str>, base: &str) -> String {
     }
 }
 
-/// A short human label for a source (the row header).
-fn source_label(source: &SignalSource) -> &'static str {
-    match source {
-        SignalSource::Speed(_) => "speed",
-        SignalSource::Spin(_) => "spin",
-        SignalSource::Height(_) => "height",
-        SignalSource::PosX(_) => "pos x",
-        SignalSource::Distance(..) => "distance",
-        SignalSource::ContactForce(_) => "contact force",
-        SignalSource::ContactCount(_) => "contact count",
-        SignalSource::KineticEnergy(_) => "energy",
-        SignalSource::Momentum(_) => "momentum",
-        SignalSource::AngularMomentum(_) => "ang mom",
-        SignalSource::JointLength(_) => "joint length",
-        SignalSource::JointAngle(_) => "joint angle",
-        SignalSource::JointForce(_) => "joint force",
-        SignalSource::Named(_) => "named",
-    }
+/// A short human label for a source (the row header): its quantity catalog
+/// name, spelled with spaces.
+fn source_label(source: &SignalSource) -> String {
+    source
+        .quantity_name()
+        .map_or_else(|| "named".to_owned(), |name| name.replace('-', " "))
 }
 
-/// The "+ source" buttons — each wires the current selection into a new
-/// binding (source and sink default to the first selected body).
+/// The "+ source" buttons — one per quantity catalog row a source can bind
+/// (`gradiance_domain::quantity`), each wiring the current selection into a
+/// new binding (source and sink default to the first selected body; a
+/// two-body row takes the first two).
 fn add_buttons(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[StableId]) {
     let first = selected.first().copied();
     ui.horizontal_wrapped(|ui| {
         ui.label("add:");
-        let mut add = |label: &str, source: Option<SignalSource>| {
+        let mut add = |name: &str, label: &str, source: Option<SignalSource>| {
             if ui
                 .add_enabled(source.is_some(), egui::Button::new(label))
                 .clicked()
                 && let (Some(source), Some(target)) = (source, first)
             {
-                let name = fresh(bindings.0.iter().map(|b| b.name.as_str()), label);
+                let name = fresh(bindings.0.iter().map(|b| b.name.as_str()), name);
                 bindings.0.push(SignalBinding {
                     name,
                     source,
@@ -256,22 +248,22 @@ fn add_buttons(ui: &mut egui::Ui, bindings: &mut SignalBindings, selected: &[Sta
                 });
             }
         };
-        add("speed", first.map(SignalSource::Speed));
-        add("spin", first.map(SignalSource::Spin));
-        add("height", first.map(SignalSource::Height));
-        add("contact force", first.map(SignalSource::ContactForce));
-        add("contact count", first.map(SignalSource::ContactCount));
-        add("energy", first.map(SignalSource::KineticEnergy));
-        add("momentum", first.map(SignalSource::Momentum));
-        add("ang mom", first.map(SignalSource::AngularMomentum));
-        add(
-            "distance",
-            match selected {
-                [a, b, ..] => Some(SignalSource::Distance(*a, *b)),
+        for row in QUANTITIES {
+            let subjects = match (row.subject(), selected) {
+                (Subject::Body, [a, ..]) => Some(Subjects::One(*a)),
+                (Subject::BodyPair, [a, b, ..]) => Some(Subjects::Two(*a, *b)),
+                // A joint row binds from the joint inspector, not here.
+                (Subject::Joint, _) => continue,
                 _ => None,
-            },
-        );
-        add("named", Some(SignalSource::Named(String::new())));
+            };
+            // A row no source binds (mass) has no button.
+            if !SignalSource::binds_quantity(row.name) {
+                continue;
+            }
+            let source = subjects.and_then(|s| SignalSource::of_quantity(row.name, s));
+            add(row.name, &row.name.replace('-', " "), source);
+        }
+        add("named", "named", Some(SignalSource::Named(String::new())));
     });
 }
 
@@ -320,22 +312,14 @@ fn binding_row(
                 // (falling back to the source's body for Plot → color flips).
                 let target = match &binding.sink {
                     SignalSink::Fill(id) | SignalSink::TracerColor(id) => Some(*id),
-                    SignalSink::Plot => match &binding.source {
-                        SignalSource::Speed(id)
-                        | SignalSource::Spin(id)
-                        | SignalSource::Height(id)
-                        | SignalSource::PosX(id)
-                        | SignalSource::ContactForce(id)
-                        | SignalSource::ContactCount(id)
-                        | SignalSource::KineticEnergy(id)
-                        | SignalSource::Momentum(id)
-                        | SignalSource::AngularMomentum(id)
-                        | SignalSource::Distance(id, _) => Some(*id),
-                        // A joint has no fill/tracer to recolor.
-                        SignalSource::JointLength(_)
-                        | SignalSource::JointAngle(_)
-                        | SignalSource::JointForce(_)
-                        | SignalSource::Named(_) => None,
+                    // A joint has no fill/tracer to recolor.
+                    SignalSink::Plot => match binding.source.reading() {
+                        Some((row, Subjects::One(id) | Subjects::Two(id, _)))
+                            if row.subject() != Subject::Joint =>
+                        {
+                            Some(id)
+                        }
+                        _ => None,
                     },
                 };
                 if let Some(target) = target {

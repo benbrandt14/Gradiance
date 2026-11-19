@@ -85,6 +85,12 @@ pub fn load_tool_icons(
     icons.script = Some(user_textures.add_image(bevy_egui::EguiTextureHandle::Strong(handle)));
 }
 
+/// The tool palette's top edge, below the transport strip (logical points).
+const PALETTE_TOP: f32 = 120.0;
+/// The palette never shrinks below about two tool rows; past that it
+/// overlaps a very tall bottom dock rather than vanish.
+const MIN_PALETTE_HEIGHT: f32 = 64.0;
+
 /// Left tool palette and top transport strip.
 pub fn toolbar(
     mut contexts: EguiContexts,
@@ -173,22 +179,31 @@ pub fn toolbar(
     // A fixed docked strip on the left edge (not a collapsible/movable floating
     // window), slightly translucent so the scene reads behind it.
     let tools_frame = egui::Frame::window(&ctx.global_style()).multiply_with_opacity(0.82);
+    // The strip ends above a bottom dock (drawn before it this frame) and
+    // scrolls when the space left is shorter than the palette.
+    let room = panel_rects.bottom_inset(viewport) - viewport.top() - PALETTE_TOP - 16.0;
     let tools = egui::Window::new("Tools")
         .title_bar(false)
         .collapsible(false)
         .movable(false)
-        .resizable(false)
+        // Sized to its content (no default 420-point window height, which
+        // would clip the scrolling strip).
+        .auto_sized()
         .frame(tools_frame)
-        .anchor(egui::Align2::LEFT_TOP, [8.0, 120.0])
+        .anchor(egui::Align2::LEFT_TOP, [8.0, PALETTE_TOP])
         .show(ctx, |ui| {
             // A single column about twice the icon width (icons ~26px), so each
             // sits in a roomy cell — a compact Blender-style T-panel strip.
             ui.set_max_width(52.0);
-            if let Some(state) =
-                tools_palette_ui(ui, *tool.get(), Some(&tool_icons), &script_tools.0)
-            {
-                next_tool.set(state);
-            }
+            egui::ScrollArea::vertical()
+                .max_height(room.max(MIN_PALETTE_HEIGHT))
+                .show(ui, |ui| {
+                    if let Some(state) =
+                        tools_palette_ui(ui, *tool.get(), Some(&tool_icons), &script_tools.0)
+                    {
+                        next_tool.set(state);
+                    }
+                });
         });
     if let Some(shown) = tools {
         widget_registry::publish_rect("tools", shown.response.rect);

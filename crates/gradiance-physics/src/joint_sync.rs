@@ -19,8 +19,10 @@ use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::joint::{
-    AngularMotorDef, JointDef, JointKind, LinearMotorDef, exceeds_break_force,
+    AngularMotorDef, JointDef, JointKind, LinearMotorDef, MIN_MOTOR_EFFORT, MOTOR_FORCE_PER_MASS,
+    MOTOR_TORQUE_PER_INERTIA, exceeds_break_force, motor_ceiling,
 };
+use gradiance_domain::tuning;
 use gradiance_units::Force;
 
 /// Marker: this joint's referenced bodies were not all alive at last
@@ -33,37 +35,30 @@ pub struct JointUnresolved;
 #[derive(Component, Debug)]
 pub struct PinAnchor(pub Entity);
 
-fn angular_motor(m: &AngularMotorDef, inertia: f32) -> AngularMotor {
+fn angular_motor(m: &AngularMotorDef) -> AngularMotor {
+    // The ceiling and the gain depend on the bodies' mass and the substep
+    // length; [`retune_joints`] sets both right after this insert, before the
+    // next physics step.
     AngularMotor {
         enabled: m.enabled,
         target_velocity: m.target_velocity.value(),
-        // Auto (`max_torque <= 0`) scales with the driven body's real angular
-        // inertia; an explicit authored cap is used as-is.
-        max_torque: gradiance_domain::joint::motor_ceiling(
-            m.max_torque.value(),
-            inertia,
-            gradiance_domain::joint::MOTOR_TORQUE_PER_INERTIA,
-        ),
+        max_torque: MIN_MOTOR_EFFORT,
         motor_model: MotorModel::AccelerationBased {
             stiffness: 0.0,
-            damping: m.damping,
+            damping: 0.0,
         },
         ..default()
     }
 }
 
-fn linear_motor(m: &LinearMotorDef, mass: f32) -> LinearMotor {
+fn linear_motor(m: &LinearMotorDef) -> LinearMotor {
     LinearMotor {
         enabled: m.enabled,
         target_velocity: m.target_velocity.value(),
-        max_force: gradiance_domain::joint::motor_ceiling(
-            m.max_force.value(),
-            mass,
-            gradiance_domain::joint::MOTOR_FORCE_PER_MASS,
-        ),
+        max_force: MIN_MOTOR_EFFORT,
         motor_model: MotorModel::AccelerationBased {
             stiffness: 0.0,
-            damping: m.damping,
+            damping: 0.0,
         },
         ..default()
     }
@@ -78,8 +73,6 @@ pub fn sync_joints(
         (Entity, &JointDef, Option<&PinAnchor>),
         Or<(Changed<JointDef>, With<JointUnresolved>)>,
     >,
-    masses: Query<&ComputedMass>,
-    inertias: Query<&ComputedAngularInertia>,
 ) {
     for (entity, def, old_pin) in &changed {
         // Drop any previously derived state (kind may have changed).
@@ -114,22 +107,6 @@ pub fn sync_joints(
             commands.entity(entity).insert(PinAnchor(pin));
             (pin, Vec2::ZERO)
         };
-        // An **auto** motor (`max_force <= 0`) scales its ceiling with the
-        // driven body's computed mass properties. avian fills those in a frame
-        // or two after the body spawns, so if they aren't ready yet, retry —
-        // exactly like an unresolved endpoint — rather than bake the floor.
-        let auto_motor = match &def.kind {
-            JointKind::Hinge { motor: Some(m), .. } => m.max_torque.value() <= 0.0,
-            JointKind::Slider { motor: Some(m), .. } => m.max_force.value() <= 0.0,
-            _ => false,
-        };
-        if auto_motor && inertias.get(body_a).is_err() {
-            commands.entity(entity).insert(JointUnresolved);
-            continue;
-        }
-        let inertia = inertias.get(body_a).map_or(0.0, |i| i.value());
-        let mass = masses.get(body_a).map_or(0.0, |m| m.value());
-
         let mut entity_commands = commands.entity(entity);
         entity_commands.remove::<JointUnresolved>();
         // Broken → disabled, derived from the authored flag. Inserted *before*
@@ -150,17 +127,22 @@ pub fn sync_joints(
         // *creation-time* pose — welds hold it, sliders lock rotation to
         // it, hinge limits measure from it — instead of snapping rotated
         // bodies into alignment.
-        let basis_b = (def.rest_rot_a - def.rest_rot_b).value();
-        insert_derived_joint(
-            &mut entity_commands,
-            def,
-            body_a,
-            body_b,
-            anchor_b,
-            basis_b,
-            inertia,
-            mass,
-        );
+        //
+        // A world-pin hinge or slider is derived world first, `(pin, body
+        // A)`, so its motor, limits and angle or travel describe the body
+        // against the world (`JointDef::world_first`); the basis is then the
+        // opposite angle.
+        let ends = if def.world_first() {
+            [(body_b, anchor_b), (body_a, def.anchor_a.value())]
+        } else {
+            [(body_a, def.anchor_a.value()), (body_b, anchor_b)]
+        };
+        let basis_2 = if def.world_first() {
+            (def.rest_rot_b - def.rest_rot_a).value()
+        } else {
+            (def.rest_rot_a - def.rest_rot_b).value()
+        };
+        insert_derived_joint(&mut entity_commands, def, ends, basis_2);
 
         if def.common.collide_connected {
             entity_commands.remove::<JointCollisionDisabled>();
@@ -171,31 +153,27 @@ pub fn sync_joints(
 }
 
 /// Inserts the engine joint (and, for a strut, its damping) for `def`'s kind.
-/// `anchor_b` is body-B local (or `Vec2::ZERO` for a world pin); `basis_b`
-/// carries the authored rest orientation; `inertia`/`mass` are body A's
-/// computed mass properties, used to size an auto motor's ceiling.
-#[expect(clippy::too_many_arguments, reason = "one value per derived field")]
+/// `ends` are the engine's two bodies in order, each with its local anchor
+/// (a world pin's derived anchor entity has `Vec2::ZERO`); `basis_2` is the
+/// second body's rest orientation. The mass-derived values (a motor's
+/// ceiling and gain, a spring's stiffness) are [`retune_joints`]'s.
 fn insert_derived_joint(
     entity_commands: &mut EntityCommands,
     def: &JointDef,
-    body_a: Entity,
-    body_b: Entity,
-    anchor_b: Vec2,
-    basis_b: f32,
-    inertia: f32,
-    mass: f32,
+    [(body_1, anchor_1), (body_2, anchor_2)]: [(Entity, Vec2); 2],
+    basis_2: f32,
 ) {
     match &def.kind {
         JointKind::Hinge { limits, motor } => {
-            let mut joint = RevoluteJoint::new(body_a, body_b)
-                .with_local_anchor1(def.anchor_a.value())
-                .with_local_anchor2(anchor_b)
-                .with_local_basis2(basis_b);
+            let mut joint = RevoluteJoint::new(body_1, body_2)
+                .with_local_anchor1(anchor_1)
+                .with_local_anchor2(anchor_2)
+                .with_local_basis2(basis_2);
             if let Some([min, max]) = limits {
                 joint = joint.with_angle_limits(min.value(), max.value());
             }
             if let Some(m) = motor {
-                joint = joint.with_motor(angular_motor(m, inertia));
+                joint = joint.with_motor(angular_motor(m));
             }
             entity_commands.insert(joint);
         }
@@ -204,51 +182,158 @@ fn insert_derived_joint(
             limits,
             motor,
         } => {
-            let mut joint = PrismaticJoint::new(body_a, body_b)
-                .with_local_anchor1(def.anchor_a.value())
-                .with_local_anchor2(anchor_b)
-                .with_local_basis2(basis_b)
-                .with_slider_axis(*axis);
+            // The axis is authored in body A's frame. Derived world first,
+            // the first body is the pin (rotation 0), so the axis is carried
+            // into the world at body A's rest angle — the direction the tool
+            // drew (`JointDef::slider_frame`).
+            let axis_1 = if def.world_first() {
+                Vec2::from_angle((def.rest_rot_a - def.rest_rot_b).value()).rotate(*axis)
+            } else {
+                *axis
+            };
+            let mut joint = PrismaticJoint::new(body_1, body_2)
+                .with_local_anchor1(anchor_1)
+                .with_local_anchor2(anchor_2)
+                .with_local_basis2(basis_2)
+                .with_slider_axis(axis_1);
             if let Some([min, max]) = limits {
                 joint = joint.with_limits(min.value(), max.value());
             }
             if let Some(m) = motor {
-                joint = joint.with_motor(linear_motor(m, mass));
+                joint = joint.with_motor(linear_motor(m));
             }
             entity_commands.insert(joint);
         }
         JointKind::Spring {
             rest_length,
-            stiffness,
-            damping,
+            frequency,
+            damping_ratio,
             range,
         } => {
-            // compliance = 1 / stiffness (0 = rigid); an unbounded strut pins
-            // the distance limit to rest_length (a pure spring), a ranged one
-            // uses the [min, max] band. Damping is a separate joint component.
-            let compliance = if stiffness.value() > 0.0 {
-                1.0 / stiffness.value()
-            } else {
-                0.0
-            };
+            // An unbounded strut pins the distance limit to rest_length (a
+            // pure spring), a ranged one uses the [min, max] band. The
+            // compliance (1 / stiffness) comes from the reduced mass and is
+            // set by `retune_joints`; rigid until then. The damping rate
+            // carries no mass (avian applies it to the reduced mass).
             let (min, max) = match range {
                 Some([lo, hi]) => (lo.value(), hi.value()),
                 None => (rest_length.value(), rest_length.value()),
             };
-            let joint = DistanceJoint::new(body_a, body_b)
-                .with_local_anchor1(def.anchor_a.value())
-                .with_local_anchor2(anchor_b)
+            let joint = DistanceJoint::new(body_1, body_2)
+                .with_local_anchor1(anchor_1)
+                .with_local_anchor2(anchor_2)
                 .with_limits(min, max)
-                .with_compliance(compliance);
+                .with_compliance(0.0);
             entity_commands.insert((
                 joint,
                 JointDamping {
-                    linear: damping.value(),
+                    linear: tuning::spring_damping_rate(frequency.value(), *damping_ratio),
                     angular: 0.0,
                 },
             ));
         }
     }
+}
+
+/// The reduced mass and angular inertia of a joint's two bodies (a static,
+/// kinematic or not-yet-computed side counts as immovable).
+fn reduced_of(
+    [a, b]: [Entity; 2],
+    bodies: &Query<(&RigidBody, &ComputedMass, &ComputedAngularInertia)>,
+) -> (f32, f32) {
+    let inv = |e: Entity| {
+        bodies.get(e).map_or((0.0, 0.0), |(rb, m, i)| {
+            let moves = rb.is_dynamic();
+            (
+                tuning::inverse(m.value(), moves),
+                tuning::inverse(i.value(), moves),
+            )
+        })
+    };
+    let ((ma, ia), (mb, ib)) = (inv(a), inv(b));
+    (tuning::reduced(ma, mb), tuning::reduced(ia, ib))
+}
+
+/// Re-derives every joint's **mass-derived** engine values from the bodies'
+/// current mass and the substep length (scaled by the simulation speed): a motor's ceiling (auto: scaled to
+/// the reduced inertia or mass) and its per-substep gain, a spring's
+/// stiffness from its authored frequency. Runs every frame after
+/// [`sync_joints`]; it writes only on a difference, so a density edit or a
+/// resize retunes a joint without re-creating it (brief 4b-4).
+#[expect(clippy::type_complexity, reason = "one optional engine joint per kind")]
+pub fn retune_joints(
+    mut joints: Query<(
+        &JointDef,
+        Option<&mut RevoluteJoint>,
+        Option<&mut PrismaticJoint>,
+        Option<&mut DistanceJoint>,
+    )>,
+    bodies: Query<(&RigidBody, &ComputedMass, &ComputedAngularInertia)>,
+    fixed: Res<Time<Fixed>>,
+    physics_time: Res<Time<Physics>>,
+    substeps: Res<SubstepCount>,
+) {
+    // avian steps the fixed timestep scaled by the physics clock's relative
+    // speed (`SimSettings::speed`), split into substeps.
+    #[expect(clippy::cast_precision_loss, reason = "a small substep count")]
+    let substep_secs =
+        fixed.timestep().as_secs_f32() * physics_time.relative_speed() / substeps.0.max(1) as f32;
+    for (def, revolute, prismatic, distance) in &mut joints {
+        match &def.kind {
+            JointKind::Hinge { motor: Some(m), .. } => {
+                let Some(mut joint) = revolute else { continue };
+                let (_, inertia) = reduced_of([joint.body1, joint.body2], &bodies);
+                let ceiling =
+                    motor_ceiling(m.max_torque.value(), inertia, MOTOR_TORQUE_PER_INERTIA);
+                let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
+                if differs(joint.motor.max_torque, ceiling) {
+                    joint.motor.max_torque = ceiling;
+                }
+                if joint.motor.motor_model != model {
+                    joint.motor.motor_model = model;
+                }
+            }
+            JointKind::Slider { motor: Some(m), .. } => {
+                let Some(mut joint) = prismatic else { continue };
+                let (mass, _) = reduced_of([joint.body1, joint.body2], &bodies);
+                let ceiling = motor_ceiling(m.max_force.value(), mass, MOTOR_FORCE_PER_MASS);
+                let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
+                if differs(joint.motor.max_force, ceiling) {
+                    joint.motor.max_force = ceiling;
+                }
+                if joint.motor.motor_model != model {
+                    joint.motor.motor_model = model;
+                }
+            }
+            JointKind::Spring { frequency, .. } => {
+                let Some(mut joint) = distance else { continue };
+                let (mass, _) = reduced_of([joint.body1, joint.body2], &bodies);
+                let stiffness = tuning::spring_stiffness(frequency.value(), mass);
+                let compliance = if stiffness > 0.0 {
+                    1.0 / stiffness
+                } else {
+                    0.0
+                };
+                if differs(joint.compliance, compliance) {
+                    joint.compliance = compliance;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The velocity-tracking motor model avian takes, at per-substep `gain`.
+fn velocity_model(gain: f32) -> MotorModel {
+    MotorModel::AccelerationBased {
+        stiffness: 0.0,
+        damping: gain,
+    }
+}
+
+/// Whether `new` differs from `old` beyond rounding.
+fn differs(old: f32, new: f32) -> bool {
+    (old - new).abs() > f32::EPSILON * old.abs().max(new.abs()).max(1.0)
 }
 
 /// Breaks every intact joint whose linear reaction force exceeds its authored

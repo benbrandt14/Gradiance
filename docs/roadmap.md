@@ -928,8 +928,17 @@ and rulings live in `docs/units-decision.md`; status:
       **v7**: quantities serialize bare, v6 rejected). *Not done, by design:*
       a crate-wide `geometry` retype (shape dimensions, `PosRot`) — separate
       work if wanted.
-- [ ] **P3** `PhysicalQuantity` catalog + signal/plotter binding (unit axes).
-- [ ] **P4** inspector/settings SI display + input.
+- [x] **P3** `PhysicalQuantity` catalog + signal/plotter binding (unit axes).
+      One named table (`domain::quantity`, brief 5-2): signal sources,
+      sensor ports, node-graph pins, the signals panel and plot units read
+      it; scripts and every other doorway read it through the `quantity.*`
+      operations. *Not done:* set aggregates (Horizon, grouped nodes).
+- [x] **P4** inspector/settings SI display + input. Every quantity field
+      shows its unit and takes a typed value with one (`25 cm`, `90 deg`,
+      `2*pi`; one parser, `gradiance_units::expr`, brief 5-3); a workstation
+      preference picks degrees or radians and m / cm / mm
+      (`units.display`). *Not done:* the console and scripts do not read
+      typed units yet (P6, brief 5-4).
 - [ ] **P6** units in the parameter-linking / expression DSL.
 - [ ] *(dedicated path)* arbitrary coordinate frames — `docs/frames-decision.md`,
       door held open by the frame-agnostic catalog + `WorldScale` seam.

@@ -75,6 +75,8 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<gradiance_domain::settings::DebugSettings>();
         app.init_resource::<gradiance_domain::settings::ToolDefaults>();
         app.init_resource::<gradiance_domain::settings::CameraSettings>();
+        app.init_resource::<gradiance_domain::settings::ChromeSettings>();
+        app.init_resource::<gradiance_domain::settings::UnitSettings>();
         // Register the config-seam settings for reflection: the scripting
         // registry addresses these resources by reflected type name
         // (see `docs/script-lisp-decision.md`).
@@ -83,6 +85,8 @@ impl Plugin for InteractionPlugin {
         app.register_type::<gradiance_domain::settings::DebugSettings>();
         app.register_type::<gradiance_domain::settings::ToolDefaults>();
         app.register_type::<gradiance_domain::settings::CameraSettings>();
+        app.register_type::<gradiance_domain::settings::ChromeSettings>();
+        app.register_type::<gradiance_domain::settings::UnitSettings>();
         // The layout optimizer: its config is a settings-style resource (the
         // Config seam — UI edits it directly), its session is transient editor
         // state, and its two request messages are not command intents.
@@ -107,6 +111,10 @@ impl Plugin for InteractionPlugin {
         app.add_plugins(input::EditorInputPlugin);
         app.add_plugins(tools::ToolsPlugin);
 
+        // After `InputSystems`: the button edges and the cursor must describe
+        // the same frame. Read before it, a press shows a frame late, when
+        // the cursor has already moved on, so a fast drag started one step
+        // from where it was pressed (brief A-1).
         app.add_systems(
             PreUpdate,
             (
@@ -115,7 +123,8 @@ impl Plugin for InteractionPlugin {
                 gesture::update_gesture_constraints,
                 snap::update_snapped_cursor,
             )
-                .chain(),
+                .chain()
+                .after(bevy::input::InputSystems),
         );
         app.add_systems(
             Update,

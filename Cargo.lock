@@ -4270,6 +4270,7 @@ version = "0.2.0"
 dependencies = [
  "bevy",
  "glam 0.33.12",
+ "proptest",
  "ron",
  "serde",
  "thiserror 2.0.18",

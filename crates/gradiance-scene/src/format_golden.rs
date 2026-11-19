@@ -1,8 +1,8 @@
-//! Scene-format pins for the typed quantities (brief 5-1, format v7).
+//! Scene-format pins for the typed quantities (brief 5-1; format v8 since 4b-4).
 //!
 //! [`every_quantity_scene`] sets every authored field that carries a
 //! `gradiance-units` quantity to a distinctive non-default value. The golden
-//! test saves it and compares the bytes with the checked-in v7 fixture, then
+//! test saves it and compares the bytes with the checked-in fixture, then
 //! reloads the fixture and compares values.
 //!
 //! The structural guard walks the same scene by reflection instead: every
@@ -32,7 +32,7 @@ use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::tracer::{TracePattern, Tracer};
 
-const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/v7_every_quantity.ron");
+const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/v8_every_quantity.ron");
 
 fn id(n: u8) -> StableId {
     let text = format!("(\"00000000-0000-0000-0000-0000000000{n:02x}\")");
@@ -111,8 +111,8 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
     };
     let spring = JointKind::Spring {
         rest_length: q("1.375"),
-        stiffness: q("420.0"),
-        damping: q("3.5"),
+        frequency: q("2.5"),
+        damping_ratio: 0.375,
         range: Some([q("0.5"), q("2.25")]),
     };
 
@@ -166,7 +166,7 @@ fn every_quantity_saves_byte_identical_to_the_v7_fixture() {
 }
 
 #[test]
-fn the_v7_fixture_reloads_to_the_same_values() {
+fn the_fixture_reloads_to_the_same_values() {
     let fixture = std::fs::read_to_string(FIXTURE_PATH).expect("the fixture reads");
     let loaded = from_ron(&fixture);
     assert!(loaded.is_ok(), "{loaded:?}");

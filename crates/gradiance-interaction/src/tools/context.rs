@@ -60,8 +60,9 @@ use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::group::SelectionGroup;
-use gradiance_domain::settings::{SnapConfig, ToolDefaults};
+use gradiance_domain::settings::{RenderSettings, SnapConfig, ToolDefaults};
 use gradiance_domain::shape::ShapeDef;
+use gradiance_domain::theme::{Ink, Stroke, active};
 use gradiance_geometry::align::{AlignFrame, Extents};
 use gradiance_geometry::contours::point_in_ring;
 use gradiance_physics::grab::{Grab, MouseSpring, MouseTwist, Twist};
@@ -212,8 +213,8 @@ pub enum PreviewPrim {
         a: Vec2,
         /// End point.
         b: Vec2,
-        /// Stroke color.
-        color: Color,
+        /// Stroke ink (a role, resolved by the look at draw time).
+        color: Stroke,
     },
     /// An axis-aligned rectangle by center and full size.
     Rect {
@@ -221,8 +222,8 @@ pub enum PreviewPrim {
         center: Vec2,
         /// Full width/height.
         size: Vec2,
-        /// Stroke color.
-        color: Color,
+        /// Stroke ink (a role, resolved by the look at draw time).
+        color: Stroke,
     },
     /// A circle by center and radius.
     Circle {
@@ -230,15 +231,15 @@ pub enum PreviewPrim {
         center: Vec2,
         /// Radius.
         radius: f32,
-        /// Stroke color.
-        color: Color,
+        /// Stroke ink (a role, resolved by the look at draw time).
+        color: Stroke,
     },
     /// An open polyline through the given points.
     Polyline {
         /// Ordered points.
         points: Vec<Vec2>,
-        /// Stroke color.
-        color: Color,
+        /// Stroke ink (a role, resolved by the look at draw time).
+        color: Stroke,
     },
 }
 
@@ -251,7 +252,7 @@ pub struct ToolPreview {
 
 impl ToolPreview {
     /// Adds a segment.
-    pub fn line(&mut self, a: Vec2, b: Vec2, color: impl Into<Color>) {
+    pub fn line(&mut self, a: Vec2, b: Vec2, color: impl Into<Stroke>) {
         self.prims.push(PreviewPrim::Line {
             a,
             b,
@@ -260,7 +261,7 @@ impl ToolPreview {
     }
 
     /// Adds a center/size rectangle.
-    pub fn rect(&mut self, center: Vec2, size: Vec2, color: impl Into<Color>) {
+    pub fn rect(&mut self, center: Vec2, size: Vec2, color: impl Into<Stroke>) {
         self.prims.push(PreviewPrim::Rect {
             center,
             size,
@@ -269,7 +270,7 @@ impl ToolPreview {
     }
 
     /// Adds a circle.
-    pub fn circle(&mut self, center: Vec2, radius: f32, color: impl Into<Color>) {
+    pub fn circle(&mut self, center: Vec2, radius: f32, color: impl Into<Stroke>) {
         self.prims.push(PreviewPrim::Circle {
             center,
             radius,
@@ -278,36 +279,37 @@ impl ToolPreview {
     }
 
     /// Adds an open polyline.
-    pub fn polyline(&mut self, points: Vec<Vec2>, color: impl Into<Color>) {
+    pub fn polyline(&mut self, points: Vec<Vec2>, color: impl Into<Stroke>) {
         self.prims.push(PreviewPrim::Polyline {
             points,
             color: color.into(),
         });
     }
 
-    /// Emits every primitive to the gizmo buffer.
-    pub fn draw(&self, gizmos: &mut Gizmos<OverlayGizmos>) {
+    /// Emits every primitive to the gizmo buffer, in `ink`'s colours.
+    pub fn draw(&self, gizmos: &mut Gizmos<OverlayGizmos>, ink: &Ink) {
+        let c = |stroke: &Stroke| Color::from(ink.stroke(*stroke));
         for prim in &self.prims {
             match prim {
                 PreviewPrim::Line { a, b, color } => {
-                    gizmos.line_2d(*a, *b, *color);
+                    gizmos.line_2d(*a, *b, c(color));
                 }
                 PreviewPrim::Rect {
                     center,
                     size,
                     color,
                 } => {
-                    gizmos.rect_2d(Isometry2d::from_translation(*center), *size, *color);
+                    gizmos.rect_2d(Isometry2d::from_translation(*center), *size, c(color));
                 }
                 PreviewPrim::Circle {
                     center,
                     radius,
                     color,
                 } => {
-                    gizmos.circle_2d(Isometry2d::from_translation(*center), *radius, *color);
+                    gizmos.circle_2d(Isometry2d::from_translation(*center), *radius, c(color));
                 }
                 PreviewPrim::Polyline { points, color } => {
-                    gizmos.linestrip_2d(points.iter().copied(), *color);
+                    gizmos.linestrip_2d(points.iter().copied(), c(color));
                 }
             }
         }
@@ -512,6 +514,7 @@ pub fn draw_draft_preview<T: DraftTool>(
     snap: Res<SnapConfig>,
     defaults: Res<ToolDefaults>,
     tool: Res<T>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     if !tool.drafting() {
@@ -532,7 +535,7 @@ pub fn draw_draft_preview<T: DraftTool>(
     };
     let mut preview = ToolPreview::default();
     tool.preview(&ctx, &mut preview);
-    preview.draw(&mut gizmos);
+    preview.draw(&mut gizmos, &active(settings.as_deref()).ink);
 }
 
 // ============================================================================
@@ -986,6 +989,7 @@ pub fn run_manip_tool<T: ManipTool>(
 pub fn draw_manip_preview<T: ManipTool>(
     inputs: ManipInputs,
     tool: Res<T>,
+    settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     if !tool.drafting() {
@@ -994,5 +998,5 @@ pub fn draw_manip_preview<T: ManipTool>(
     let ctx = inputs.manip_context();
     let mut preview = ToolPreview::default();
     tool.preview(&ctx, &mut preview);
-    preview.draw(&mut gizmos);
+    preview.draw(&mut gizmos, &active(settings.as_deref()).ink);
 }

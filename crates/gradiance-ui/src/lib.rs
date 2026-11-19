@@ -38,7 +38,9 @@ pub mod reflect_grid;
 pub mod review;
 pub mod settings;
 pub mod signals;
+pub mod theme;
 pub mod toolbar;
+pub mod unit_fields;
 pub mod vendor;
 pub mod view_cube;
 pub mod widget_registry;
@@ -236,8 +238,9 @@ impl Plugin for GradianceUiPlugin {
             (
                 widget_registry::begin_frame,
                 fonts::install_fonts,
+                theme::apply_chrome,
+                unit_fields::publish_unit_prefs,
                 menu::menu_bar,
-                toolbar::toolbar,
                 dock::right_dock,
                 view_cube::view_cube,
                 labels::draw_workspace_labels,
@@ -247,6 +250,9 @@ impl Plugin for GradianceUiPlugin {
                 array_panel::array_window,
                 review::review_window,
                 bottom_dock::bottom_dock,
+                // After the docks: the palette fits the height they leave
+                // (brief A-1: it covered the bottom dock's tabs).
+                toolbar::toolbar,
                 probe::probe_panel,
                 context_menu::context_menu,
                 // Stage 2: route the scene camera into the dock-bounded pane.
@@ -358,7 +364,9 @@ fn capture_pointer_over_ui(
     // doesn't leak to the scene. Runs last in the pass; clear for next frame.
     let pointer = ctx.pointer_latest_pos();
     over_ui.0 = ctx.is_pointer_over_egui() || pointer_over_panels(&panels.0, pointer);
-    keyboard.0 = ctx.egui_wants_keyboard_input();
+    // A hovered or dragged number field owns Backspace, `-`, Esc and
+    // Ctrl+C/V (brief U-8), though egui does not report it as typing.
+    keyboard.0 = ctx.egui_wants_keyboard_input() | unit_fields::take_key_claim(ctx);
     panels.0.clear();
     Ok(())
 }

@@ -245,19 +245,12 @@ fn depth_rows(selection: &Selection, bodies: &BodyQuery) -> Vec<depth_panel::Pla
     bodies
         .iter()
         .map(|(entity, id, band, appearance, shape, transform)| {
-            let c = appearance.map_or(
-                gradiance_domain::appearance::Rgba::rgb(1.0, 1.0, 1.0),
-                |a| a.fill,
-            );
+            let c = appearance.copied().unwrap_or_default().fill;
             depth_panel::PlanRow {
                 id: *id,
                 x_extent: world_x_extent(shape, transform),
                 band: band.sanitized(),
-                color: egui::Color32::from_rgb(
-                    (c.r * 255.0) as u8,
-                    (c.g * 255.0) as u8,
-                    (c.b * 255.0) as u8,
-                ),
+                color: crate::theme::color32(c.with_alpha(1.0)),
                 selected: selection.contains(entity),
             }
         })
@@ -363,7 +356,8 @@ pub fn right_dock(
     // The depth section's plan view: the whole scene, selection highlighted.
     let rows = depth_rows(&selection, &bodies);
     // The plot pane's series list, computed from the bus.
-    let plottable = plot::plottable_series(&plot.bus, &props.bindings);
+    let plottable =
+        plot::plottable_series(&plot.bus, &props.bindings, crate::unit_fields::prefs(ctx));
     // The outliner snapshot (empty when the pane is closed).
     let outliner_model = if op.panel.is_open() {
         outliner::build_model(&op, &selection)

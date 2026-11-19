@@ -103,14 +103,19 @@ pub fn menu_bar(
             .layer_id(egui::LayerId::background())
             .max_rect(ctx.viewport_rect()),
     );
-    let bar = egui::Panel::top("menu-bar").show(&mut root, |ui| {
-        egui::MenuBar::new().ui(ui, |ui| {
-            file_menu(ui, &mut writers);
-            edit_menu(ui, &mut writers, has_selection, &history);
-            view_menu(ui, &mut panels, &mut grid);
-            help_menu(ui, &mut about);
+    // The bar is a header (Blender's top bar): darker than the panels.
+    let header =
+        egui::Frame::side_top_panel(&ctx.global_style()).fill(crate::theme::tokens(ctx).header);
+    let bar = egui::Panel::top("menu-bar")
+        .frame(header)
+        .show(&mut root, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                file_menu(ui, &mut writers);
+                edit_menu(ui, &mut writers, has_selection, &history);
+                view_menu(ui, &mut panels, &mut grid);
+                help_menu(ui, &mut about);
+            });
         });
-    });
     panel_rects.push(bar.response.rect);
     crate::widget_registry::publish_rect("menu", bar.response.rect);
 

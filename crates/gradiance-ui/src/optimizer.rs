@@ -425,7 +425,7 @@ fn run_readout(ui: &mut egui::Ui, opt: &OptimizerPanel) {
                         "{:.4} m over {} pairs",
                         report.best.overlap, report.best.violations
                     ))
-                    .color(egui::Color32::from_rgb(220, 140, 60)),
+                    .color(ui.visuals().warn_fg_color),
                 );
             }
             ui.end_row();

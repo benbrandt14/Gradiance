@@ -6,7 +6,7 @@
 
 use crate::contours::Contours;
 use crate::tessellate::tessellate;
-use bevy::math::Vec2;
+use bevy::math::{Vec2, Vec3};
 
 /// Raw mesh buffers, engine-agnostic.
 #[derive(Debug, Clone, Default)]
@@ -80,7 +80,28 @@ pub fn extrude_contours(contours: &Contours, z_front: f32, depth: f32) -> MeshBu
         }
     }
 
+    orient_to_normals(&mut mesh);
     mesh
+}
+
+/// Turns every triangle so its winding (CCW = front) agrees with its
+/// vertex normal.
+///
+/// The fill tessellator's winding is not tied to the outline's, and a cap
+/// wound away from its normal is drawn back-facing: on a double-sided
+/// material the renderer then flips the normal, so the camera-facing front
+/// cap was lit as if it faced *into* the screen — ambient light only, and
+/// one toon band whatever the key light did (brief 4b-3).
+fn orient_to_normals(mesh: &mut MeshBuffers) {
+    let p = |i: u32| Vec3::from_array(mesh.positions[i as usize]);
+    for tri in mesh.indices.as_chunks_mut::<3>().0 {
+        let [a, b, c] = *tri;
+        let face = (p(b) - p(a)).cross(p(c) - p(a));
+        let normal = Vec3::from_array(mesh.normals[a as usize]);
+        if face.dot(normal) < 0.0 {
+            tri.swap(1, 2);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -112,6 +133,31 @@ mod tests {
         assert!((zmin - -30.0).abs() < 1e-4);
         assert_eq!(mesh.positions.len(), mesh.normals.len());
         assert_eq!(mesh.indices.len() % 3, 0);
+    }
+
+    #[test]
+    fn every_triangle_winds_toward_its_normal() {
+        for shape in [
+            ShapeDef::Box {
+                width: 2.0,
+                height: 1.0,
+            },
+            ShapeDef::Circle { radius: 0.5 },
+        ] {
+            let mesh = extrude_contours(&polygonize(&shape), 0.0, 0.1);
+            let p = |i: u32| Vec3::from_array(mesh.positions[i as usize]);
+            let mut front = 0;
+            for &[a, b, c] in mesh.indices.as_chunks::<3>().0 {
+                let face = (p(b) - p(a)).cross(p(c) - p(a));
+                let normal = Vec3::from_array(mesh.normals[a as usize]);
+                assert!(face.dot(normal) > 0.0, "{shape:?}: triangle winds away");
+                if normal.z > 0.5 {
+                    front += 1;
+                    assert!(face.z > 0.0, "the front cap faces the viewer (+Z)");
+                }
+            }
+            assert!(front > 0);
+        }
     }
 
     #[test]

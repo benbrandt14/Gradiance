@@ -115,7 +115,7 @@ across and ±3.5 m up and down); angles are radians.
 ;; edit — relationships between bodies (b < 0 pins to the world)
 (hinge a b x y)              ; revolute joint at world point (x, y) → its handle
 (slider a b x y ax ay)       ; prismatic joint at (x, y) along world axis (ax, ay)
-(spring a b stiffness damping) ; spring-damper strut between the two centres
+(spring a b hz ratio)         ; spring-damper strut between the two centres
 
 ;; edit — a body's authored properties (the inspector's fields as ops)
 (place i x y angle)          ; move and rotate the i-th body
@@ -176,6 +176,13 @@ across and ±3.5 m up and down); angles are radians.
 ;; camera feel — workstation config: saved with the scene, never undone
 (camera-get "zoom_step")     ; zoom multiplier per scroll notch (0.5..0.995)
 (camera-set "pan_speed" 900) ; arrow-key pan, screen px/s; also "orbit_speed_deg"
+;; chrome preset — workstation config: never undone, not saved (brief U-7)
+(chromes)                    ; ("blender" "blender-blue" "stock")
+(chrome-apply "blender-blue") ; draw the panels with another preset
+;; unit display — workstation config: never undone, not saved (brief 5-3).
+;; Display only: every verb still reads and writes SI (metres, radians).
+(units-shown)                ; ("deg" "m") -- how fields show angles, lengths
+(display-units "rad" "cm")   ; angles: deg rad; lengths: m cm mm
 
 ;; editor — the chrome, through the EditorState seam (panel.* operations)
 (panel-show "properties")    ; open a panel — the same toggle the View menu drives
@@ -201,6 +208,19 @@ across and ±3.5 m up and down); angles are radians.
 (action-x) (action-y)        ; where the running action was invoked (NaN otherwise)
 (tool-count)                 ; points the running script tool collected (NaN otherwise)
 (tool-x i) (tool-y i)        ; its i-th point, click order (NaN outside a tool run)
+
+;; query — the physical quantity catalog (brief 5-2; SI values, live state)
+(quantities)                 ; every quantity name, catalog order
+(quantity-unit "speed")      ; its SI unit symbol: "m/s" ("" for a count)
+(quantity "speed" i)         ; a quantity of the i-th body (NaN if out of range)
+(quantity "joint-angle" j)   ; a joint-* quantity reads the j-th joint
+(quantity-between "distance" a b) ; a two-body quantity
+;; names: speed spin height pos-x contact-force contact-count kinetic-energy
+;; momentum angular-momentum mass distance joint-length joint-angle joint-force
+;; an unknown name, or a name read with the wrong verb, is a script error
+;; that says what to write. The values are the ones the sensor ports and the
+;; plot show (one table: crates/gradiance-domain/src/quantity.rs), read once
+;; before the run like every other query.
 
 ;; editor — extend the tool
 (register-action label src)  ; add a labelled action to the context menu
@@ -513,9 +533,12 @@ Two things the verbs handle for you, because getting them wrong is subtle:
   scene rather than silently dropped. A body hinged to itself becomes a world
   pin too.
 
-Unlike the strut tool, `(spring …)` takes stiffness explicitly rather than
-sizing it from the connected mass: a fixture whose stiffness depends on a mass
-heuristic stops being reproducible the moment the shape changes.
+`(spring …)` is authored like the spring tool's strut, mass-relative: a
+natural frequency in Hz (the tool's default 1.5) and a damping ratio (0 =
+undamped, 1 = critical; default 0.1). The physics seam derives the stiffness
+from the connected bodies' current mass, so `(spring a b 1.5 0.1)` bounces
+with the same period on a pebble and on a truck, and keeps it when a body's
+density changes (brief 4b-4; ranges in `gradiance_domain::tuning`).
 
 There is no `weld` verb because there is no weld *joint* — in this engine
 welding is `merge` (one CSG body) or make-static, not a constraint.

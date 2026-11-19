@@ -64,7 +64,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
                 glint += (light.color.rgb / max(peak, 1e-4)) * smoothstep(0.45, 0.55, s);
             }
         }
-        out.color = vec4(base * (banded + rim) + glint * toon.data.w, out.color.a);
+        // Emission rides on top of the bands: banding quantizes a ratio to
+        // the albedo, so a glow folded into `lit` would clamp to the top
+        // band and vanish. Added after, a glowing body reads brighter than
+        // any lit one, still flat-toned.
+        let glow = pbr_input.material.emissive.rgb;
+        out.color = vec4(base * (banded + rim) + glint * toon.data.w + glow, out.color.a);
     }
 
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
