@@ -86,6 +86,8 @@ impl crate::menu::Panels<'_> {
             ("optimizer", &mut *self.optimizer),
             ("settings", &mut *self.settings),
             ("review", &mut *self.review),
+            ("search", &mut *self.search),
+            ("status", &mut *self.status),
         ]
     }
 }
@@ -142,6 +144,8 @@ mod tests {
             "optimizer",
             "settings",
             "review",
+            "search",
+            "status",
         ] {
             assert_ne!(
                 crate::menu::menu_label(name),
@@ -170,6 +174,8 @@ mod tests {
             "optimizer",
             "settings",
             "review",
+            "search",
+            "status",
         ] {
             assert!(
                 name.chars().all(|c| c.is_ascii_lowercase()),

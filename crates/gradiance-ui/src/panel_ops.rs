@@ -54,6 +54,8 @@ pub(crate) fn install(app: &mut App) {
     app.init_resource::<crate::array_panel::ArrayWindow>();
     app.init_resource::<crate::optimizer::OptimizerExpanded>();
     app.init_resource::<crate::review::ReviewWindow>();
+    app.init_resource::<crate::search::SearchPanel>();
+    app.init_resource::<crate::status_bar::StatusBar>();
     app.init_resource::<gradiance_domain::settings::DebugSettings>();
     // After the doorways that write requests, so a request applies the frame
     // it was made.

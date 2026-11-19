@@ -31,13 +31,16 @@ pub mod optimizer;
 pub mod outliner;
 pub mod panel_ops;
 pub mod panels;
+pub mod pie;
 pub mod plot;
 pub mod ports;
 pub mod probe;
 pub mod reflect_grid;
 pub mod review;
+pub mod search;
 pub mod settings;
 pub mod signals;
+pub mod status_bar;
 pub mod theme;
 pub mod toolbar;
 pub mod unit_fields;
@@ -95,18 +98,39 @@ impl PanelRects {
             .fold(viewport.right(), f32::min)
     }
 
-    /// The top `y` of a panel docked to the bottom edge (the bottom dock), or
-    /// the viewport bottom when none. The filter requires the panel to sit in
-    /// the lower half so the full-height right dock (whose bottom also touches
-    /// the edge) doesn't count.
+    /// The top `y` of the panels docked to the bottom edge (the status bar,
+    /// and the bottom dock standing on it), or the viewport bottom when none.
+    /// Panels stack: one whose bottom meets the inset found so far raises it.
+    /// The filter requires a panel to sit in the lower half so the
+    /// full-height right dock (whose bottom also touches the edge) doesn't
+    /// count.
     pub fn bottom_inset(&self, viewport: egui::Rect) -> f32 {
-        self.0
-            .iter()
-            .filter(|r| {
-                (r.bottom() - viewport.bottom()).abs() < 2.0 && r.top() > viewport.center().y
-            })
-            .map(egui::Rect::top)
-            .fold(viewport.bottom(), f32::min)
+        let mut inset = viewport.bottom();
+        loop {
+            let next = self
+                .0
+                .iter()
+                .filter(|r| {
+                    (r.bottom() - inset).abs() < 2.0
+                        && r.top() > viewport.center().y
+                        && r.top() < inset - 0.5
+                })
+                .map(egui::Rect::top)
+                .fold(inset, f32::min);
+            if next >= inset {
+                return inset;
+            }
+            inset = next;
+        }
+    }
+
+    /// The viewport above the bottom-edge panels pushed so far: where a dock
+    /// drawn after the status bar may go.
+    pub fn above_bottom(&self, viewport: egui::Rect) -> egui::Rect {
+        egui::Rect::from_min_max(
+            viewport.min,
+            egui::pos2(viewport.max.x, self.bottom_inset(viewport)),
+        )
     }
 
     /// The central scene rect (logical): the viewport inset by the menu (top),
@@ -233,35 +257,47 @@ impl Plugin for GradianceUiPlugin {
         app.init_resource::<menu::AboutWindow>();
         app.init_resource::<dock::RightDock>();
         app.init_resource::<bottom_dock::BottomDock>();
+        app.init_resource::<pie::PieMenu>();
         app.add_systems(
             EguiPrimaryContextPass,
             (
-                widget_registry::begin_frame,
-                fonts::install_fonts,
-                theme::apply_chrome,
-                unit_fields::publish_unit_prefs,
-                menu::menu_bar,
-                dock::right_dock,
-                view_cube::view_cube,
-                labels::draw_workspace_labels,
-                joint_inspector::joint_inspector,
-                settings::settings_window,
-                optimizer::optimizer_window,
-                array_panel::array_window,
-                review::review_window,
-                bottom_dock::bottom_dock,
-                // After the docks: the palette fits the height they leave
-                // (brief A-1: it covered the bottom dock's tabs).
-                toolbar::toolbar,
-                probe::probe_panel,
-                context_menu::context_menu,
-                // Stage 2: route the scene camera into the dock-bounded pane.
-                // Safe now that egui renders on its own full-window camera
-                // (`spawn_ui_camera`), so shrinking the scene camera no longer
-                // shrinks the UI.
-                apply_scene_viewport,
-                capture_pointer_over_ui,
-                widget_registry::end_frame,
+                (
+                    widget_registry::begin_frame,
+                    fonts::install_fonts,
+                    theme::apply_chrome,
+                    unit_fields::publish_unit_prefs,
+                    menu::menu_bar,
+                    // Before the docks: they end above the bar it claims.
+                    status_bar::status_bar,
+                    dock::right_dock,
+                    view_cube::view_cube,
+                    labels::draw_workspace_labels,
+                    joint_inspector::joint_inspector,
+                    settings::settings_window,
+                    optimizer::optimizer_window,
+                    array_panel::array_window,
+                    review::review_window,
+                    bottom_dock::bottom_dock,
+                )
+                    .chain(),
+                (
+                    // After the docks: the palette fits the height they leave
+                    // (brief A-1: it covered the bottom dock's tabs).
+                    toolbar::toolbar,
+                    probe::probe_panel,
+                    context_menu::context_menu,
+                    // Over everything else (brief U-9).
+                    search::search_window,
+                    pie::tools_pie,
+                    // Stage 2: route the scene camera into the dock-bounded pane.
+                    // Safe now that egui renders on its own full-window camera
+                    // (`spawn_ui_camera`), so shrinking the scene camera no longer
+                    // shrinks the UI.
+                    apply_scene_viewport,
+                    capture_pointer_over_ui,
+                    widget_registry::end_frame,
+                )
+                    .chain(),
             )
                 .chain(),
         );
@@ -412,6 +448,31 @@ mod tests {
             Pos2::new(560.0, 400.0),
             "right inset by dock, bottom by bottom-dock"
         );
+    }
+
+    /// The status bar along the bottom edge and the bottom dock standing on
+    /// it both inset the scene (brief U-9).
+    #[test]
+    fn bottom_panels_stack_from_the_edge() {
+        let viewport = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(800.0, 600.0));
+        let mut panels = PanelRects::default();
+        panels.push(Rect::from_min_max(
+            Pos2::new(0.0, 578.0),
+            Pos2::new(800.0, 600.0),
+        ));
+        assert!((panels.bottom_inset(viewport) - 578.0).abs() < 1e-3);
+        assert!((panels.above_bottom(viewport).max.y - 578.0).abs() < 1e-3);
+        // A right dock above the bar is full height but not a bottom panel.
+        panels.push(Rect::from_min_max(
+            Pos2::new(560.0, 24.0),
+            Pos2::new(800.0, 578.0),
+        ));
+        panels.push(Rect::from_min_max(
+            Pos2::new(0.0, 400.0),
+            Pos2::new(560.0, 578.0),
+        ));
+        assert!((panels.bottom_inset(viewport) - 400.0).abs() < 1e-3);
+        assert!((panels.right_inset(viewport) - 560.0).abs() < 1e-3);
     }
 
     #[test]

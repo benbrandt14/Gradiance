@@ -42,10 +42,19 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<UiKey>();
         registry.register::<UiText>();
         registry.register::<UiWheel>();
+        registry.register::<crate::search::UiSearch>();
     }
-    app.world_mut()
-        .resource_mut::<OpContextFillers>()
-        .add(fill_widget_mirror);
+    {
+        let mut fillers = app.world_mut().resource_mut::<OpContextFillers>();
+        fillers.add(fill_widget_mirror);
+        fillers.add(crate::search::fill_search_catalog);
+    }
+    // F3 search's rows, rebuilt while the box is open (brief U-9).
+    app.init_resource::<crate::search::SearchRows>();
+    app.add_systems(
+        Update,
+        crate::search::refresh_search.after(crate::panel_ops::apply_panel_requests),
+    );
     app.init_resource::<WidgetSnapshot>();
     app.init_resource::<ShotQueue>();
     app.add_message::<ScreenshotRequest>();

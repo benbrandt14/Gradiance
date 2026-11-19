@@ -49,5 +49,25 @@
                 ),
             ],
         ),
+        (
+            id: "status-bar-and-pie",
+            title: "Should the status bar show by default, and do the tools pie and F3 feel right?",
+            source: "Brief U-9 (F3 search, status bar, pie menus; docs/unified-surface-plan.md section 7.2)",
+            description: r#"Three new surfaces read the operation registry. The status bar along the bottom edge names the active tool and its key, the tool's mouse gestures, F3 and Q, and at the right the selection count and Playing or Paused. It takes 22 points of height from the scene. F3 opens a search over every operation a click can run; greyed rows say why. Q held over the canvas opens a pie of eight tools (Select at the top, then clockwise Box, Circle, Polygon, Cut, Spring, Hinge, Drag): release over a slice to pick it, release back in the centre to cancel; a quick tap keeps the pie open for a click.
+
+    The options differ only in whether the status bar shows. In both, try a few tools from the pie (hold Q, flick, release) and from F3 (type "box", Enter), and watch the status bar's hints change with the tool. A note on the pie's size (labels about 92 points from the centre), its slices or the hints is welcome."#,
+            options: [
+                (
+                    label: "Status bar on",
+                    caption: "As built: the bar shows by default. View > Status bar hides it.",
+                    scripts: ["scenes/status-bar-and-pie/scene.scm", "scenes/status-bar-and-pie/shown.scm"],
+                ),
+                (
+                    label: "Status bar off",
+                    caption: "The bar is hidden until View > Status bar turns it on; the scene gets the 22 points back.",
+                    scripts: ["scenes/status-bar-and-pie/scene.scm", "scenes/status-bar-and-pie/hidden.scm"],
+                ),
+            ],
+        ),
     ],
 )
