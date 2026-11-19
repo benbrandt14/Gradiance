@@ -71,7 +71,7 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   9d. **4b-6** toon ramp (done, #274): themed gradient ramp + picker, matte,
       dithered band edges, normals from the shape (owner direction with a
       reference image, 2026-11-19; supersedes `toon-highlights`).
-  10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10**
+  10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10** (now)
       editor areas + saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).
   12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
