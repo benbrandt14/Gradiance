@@ -100,5 +100,5 @@ Worker, 2026-11-19, branch `claude/project-thread-tw1mvl-r2`.
 
 **Not checked:** scenes with many bodies or joints for determinism across
 machines (CI runs the test on its own machine only); run time of long
-rollouts (the whole `headless_run` module, four 700-step runs included, takes about 6 s in the opt-1
-test profile).
+rollouts (the whole `headless_run` module, two 700-step runs included,
+takes about 6 s in the opt-1 test profile).
