@@ -1582,5 +1582,59 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "ui::adjust_panel",
         ),
+        (
+            question: (
+                id: "field-ctrl-chords",
+                title: "Which keys does a hovered number field keep?",
+                source: "Brief A-3 second screenshot audit (docs/briefs/A-3-second-audit.md)",
+                description: r#"U-8 made a hovered or dragged number field claim the whole keyboard, so Ctrl+Z with the pointer resting on a field did nothing (found in U-8b, seen again in A-3)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Its own keys; Ctrl chords pass",
+                        caption: r#"The field keeps Backspace, Delete, minus, Esc and Ctrl+C/V; every other Ctrl chord (undo, redo, save, open, group, select all) reaches the editor. A field with text focus still takes every key."#,
+                    ),
+                    (
+                        label: "Keep the whole keyboard",
+                        caption: r#"As U-8 built it. Cost: undo needs the pointer moved off the panel first."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "field-ctrl-chords",
+                title: "Which keys does a hovered number field keep?",
+                choice: Picked("Its own keys; Ctrl chords pass"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "interaction::FieldKeys, interaction::input::apply_shortcuts",
+        ),
+        (
+            question: (
+                id: "click-through-commits",
+                title: "When does a tool click also select?",
+                source: "Brief A-3 second screenshot audit (docs/briefs/A-3-second-audit.md)",
+                description: r#"A plain click with any tool selects the body under it unless the tool used the click. The test looked for three intent kinds on the release frame only, so a polygon closed on the press, a weld, a make-static, a rod or a tracer click also selected the body."#,
+                decision: true,
+                options: [
+                    (
+                        label: "No commit between press and release",
+                        caption: r#"Every commit goes through one seam (ToolCommitWriters::emit), which sets a flag; a commit anywhere from the press to the release consumes the click."#,
+                    ),
+                    (
+                        label: "List more intent kinds",
+                        caption: r#"Add merge, property, rod and node intents to the release-frame check. Cost: the press-frame polygon close still selects, and every new commit kind must be added by hand."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "click-through-commits",
+                title: "When does a tool click also select?",
+                choice: Picked("No commit between press and release"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "interaction::tools::click_select::ToolCommitted",
+        ),
     ],
 )
