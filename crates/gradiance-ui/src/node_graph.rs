@@ -1569,11 +1569,9 @@ fn key_fields(
     for bound in std::iter::once(&*key).chain(negative.as_ref()) {
         for clash in editor_keys.uses(bound) {
             ui.label(
-                egui::RichText::new(format!(
-                    "{bound} also {clash}: in play this input wins"
-                ))
-                .small()
-                .color(warning),
+                egui::RichText::new(format!("{bound} also {clash}: in play this input wins"))
+                    .small()
+                    .color(warning),
             );
         }
     }

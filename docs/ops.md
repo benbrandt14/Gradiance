@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 133 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 134 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -186,6 +186,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `signal.export` | `(signal-export path names)` | editor | — | — | Write signals' recorded history to a .csv file: a header t,name1,name2,... then one row per sample of the first signal (a cell is empty where another signal has no sample at that t). Returns the path. No undo step. | `{"path": "target/signals.csv", "names": ["t"]}` |
 | `signal.get` | `(signal-get name)` | query | — | — | Current value of a named signal on the bus; NaN if unset. | `{"name": "t"}` |
 | `signal.history` | `(signal-history name)` | query | — | — | A signal's recorded samples, oldest first, as a list of [t v] (t in simulated seconds; the last 600, recorded while the sim plays or steps); empty if the bus has no such signal. | `{"name": "t"}` |
+| `signal.key` | `(defkey name key [negative])` | config | `settings` | — | Declare a key input: a signal that is 1 while key is held in play (0 paused or while a field has the keyboard); with negative, -1 while that key is held and 0 when both are. While the sim plays the key is the input's, not the editor's. | `{"name": "throttle", "key": "E", "negative": "Q"}` |
 | `signal.param` | `(defparam name value min max)` | config | `settings` | — | Declare a tunable signal parameter (an auto-slider) published on the bus. | `{"name": "amp", "value": 2, "min": 0, "max": 10}` |
 | `signal.set` | `(signal-set name value)` | editor | — | — | Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md). | `{"name": "excitement", "value": 7}` |
 
@@ -227,7 +228,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `ui.click_button` | `(ui-click-button at button)` | editor | — | — | Click with a named button (left, middle or right) at a widget name from ui.inspect or a window point [x y]: move, press, release, one frame each. A middle click on a number field resets it to its default. | `{"at": [640, 370], "button": "middle"}` |
 | `ui.drag` | `(ui-drag from to steps)` | editor | — | — | Drag (left button) from one widget name or point [x y] to another in steps frames (1-200): move, press, the steps, release, as real input; a tool commits one step on release. | `{"from": [640, 370], "to": [740, 370], "steps": 10}` |
 | `ui.inspect` | `(ui-inspect prefix)` | query | — | — | List the widgets drawn last frame whose name starts with prefix ("" for all): name, area, rect [x0 y0 x1 y1] and handle [x y] in logical points. | `{"prefix": ""}` |
-| `ui.key` | `(ui-key key)` | editor | — | — | Press and release a key chord, written as menus show it (Ctrl+Z, Ctrl+Shift+G, Delete, Escape, F1, A): modifiers down, key down, key up, modifiers up, one frame each. | `{"key": "Escape"}` |
+| `ui.key` | `(ui-key key [hold])` | editor | — | — | Press and release a key chord, written as menus show it (Ctrl+Z, Ctrl+Shift+G, Delete, Escape, F1, A): modifiers down, key down, key up, modifiers up, one frame each. hold (1-600 frames, default 1) keeps the key down that long, as a held key drives a graph key input in play. | `{"key": "Escape", "hold": 1}` |
 | `ui.screenshot` | `(ui-screenshot path)` | editor | — | — | Save a PNG of the window (scene and panels) at path, once the view settles (150 ms and 3 frames at least); returns the path at once, the file follows. | `{"path": "screenshot.png"}` |
 | `ui.search` | `(ui-search text)` | query | — | — | The ids of the operations F3 search lists for text, best first (a click-runnable operation: no params, or only objects, filled by the selection). | `{"text": "undo"}` |
 | `ui.text` | `(ui-text text)` | editor | — | — | Type text into the focused field (click it first) in one frame; a newline presses Enter. Typed text trips no key shortcut. | `{"text": "1.5"}` |

@@ -8,7 +8,7 @@
 //! `0` there each frame, just before the kernels run. Those values are
 //! **derived**: never saved, never a command, never an undo step.
 //!
-//! **The gate** ([`GraphKeys::live`]): a key counts as held only while the
+//! **The gate** ([`keys_live`]): a key counts as held only while the
 //! sim plays (`GameState::Playing`) and no UI field has the keyboard
 //! ([`KeyboardCaptured`](crate::KeyboardCaptured): a focused text edit, a
 //! hovered number field, the graph's own key-capture button). Paused, every
@@ -78,6 +78,23 @@ pub fn keys_live(game: Option<&State<GameState>>, captured: bool) -> bool {
     !captured && game.is_some_and(|g| *g.get() == GameState::Playing)
 }
 
+/// Installs the graph keys: the bound set follows the authored signals; the
+/// held states land on the bus between the frame's first publisher and the
+/// kernels that read them.
+pub(crate) fn install(app: &mut App) {
+    app.init_resource::<GraphKeys>();
+    app.add_systems(
+        Update,
+        (
+            refresh_graph_keys.run_if(resource_exists_and_changed::<ComputedSignals>),
+            publish_graph_keys.run_if(resource_exists::<SignalBus>),
+        )
+            .chain()
+            .after(gradiance_signal::publish_sensor_refs)
+            .before(gradiance_signal::evaluate_computed),
+    );
+}
+
 /// Rebuilds [`GraphKeys`] when the authored signals change.
 pub fn refresh_graph_keys(computed: Res<ComputedSignals>, mut keys: ResMut<GraphKeys>) {
     keys.rebuild(&computed);
@@ -123,7 +140,10 @@ impl EditorKeys<'_> {
         };
         !graph.bound.is_empty()
             && graph.bound.contains_code(code)
-            && keys_live(self.game.as_deref(), self.captured.as_ref().is_some_and(|c| c.0))
+            && keys_live(
+                self.game.as_deref(),
+                self.captured.as_ref().is_some_and(|c| c.0),
+            )
     }
 
     /// `ButtonInput::pressed`, false for a key the graph owns.
@@ -268,7 +288,11 @@ mod tests {
         assert!(graph.bound().contains_code(KeyCode::KeyQ));
         assert!(!graph.bound().contains_code(KeyCode::KeyW));
         let names: Vec<&str> = graph.refs.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(names, ["key@E", "key@Q"], "one reference per key; none for an unknown name");
+        assert_eq!(
+            names,
+            ["key@E", "key@Q"],
+            "one reference per key; none for an unknown name"
+        );
         graph.rebuild(&ComputedSignals::default());
         assert!(graph.bound().is_empty());
     }
@@ -276,7 +300,10 @@ mod tests {
     #[test]
     fn the_editor_table_names_bare_keys_only() {
         let mut map = InputMap::default();
-        map.insert(EditorAction::Tool(gradiance_core::states::ToolState::Weld), KeyCode::KeyW);
+        map.insert(
+            EditorAction::Tool(gradiance_core::states::ToolState::Weld),
+            KeyCode::KeyW,
+        );
         map.insert(EditorAction::Save, ModifierKey::Control.with(KeyCode::KeyS));
         let table = EditorKeyTable::from_map(&map);
         assert_eq!(table.uses("w").collect::<Vec<_>>(), ["picks the Weld tool"]);
@@ -291,7 +318,10 @@ mod tests {
         let paused = State::new(GameState::Paused);
         assert!(keys_live(Some(&playing), false));
         assert!(!keys_live(Some(&playing), true), "a field has the keyboard");
-        assert!(!keys_live(Some(&paused), false), "paused: the editor's keys");
+        assert!(
+            !keys_live(Some(&paused), false),
+            "paused: the editor's keys"
+        );
         assert!(!keys_live(None, false));
     }
 }

@@ -423,10 +423,7 @@ mod tests {
             call(vec![json!(3), json!(2)]),
             Ok(vec!["Moved(3.0, 2.0)".to_owned()])
         );
-        assert_eq!(
-            call(vec![]),
-            Err("expected 1 arguments, got 0".to_owned())
-        );
+        assert_eq!(call(vec![]), Err("expected 1 arguments, got 0".to_owned()));
         assert_eq!(
             call(vec![json!(1), json!(2), json!(3)]),
             Err("expected 2 arguments, got 3".to_owned())

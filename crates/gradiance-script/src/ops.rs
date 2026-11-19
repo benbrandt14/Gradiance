@@ -403,10 +403,12 @@ impl Operation for DefKey {
         };
         let key = canonical(&self.key)?;
         let negative = self.negative.as_deref().map(canonical).transpose()?;
-        Ok(OpOutput::none().message(EditorRequest::Computed(ComputedSignal::from_block(
-            self.name,
-            BlockOp::Key { key, negative },
-        ))))
+        Ok(
+            OpOutput::none().message(EditorRequest::Computed(ComputedSignal::from_block(
+                self.name,
+                BlockOp::Key { key, negative },
+            ))),
+        )
     }
 }
 

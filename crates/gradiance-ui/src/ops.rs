@@ -327,7 +327,7 @@ impl Operation for UiKey {
         menu: None,
         chord: None,
         undo: None,
-        example: r#"{"key": "Escape"}"#,
+        example: r#"{"key": "Escape", "hold": 1}"#,
     };
 
     fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {

@@ -170,7 +170,11 @@ fn a_script_holds_keys_that_drive_a_motor_through_a_key_input() {
     assert!((w + 4.0).abs() < 0.5, "Q turns the wheel back ({w})");
     step(&mut app, 30);
 
-    assert_eq!(authored_def(&app, joint), authored, "the authored motor never changes");
+    assert_eq!(
+        authored_def(&app, joint),
+        authored,
+        "the authored motor never changes"
+    );
     assert_eq!(undo_depth(&app), depth, "held keys record no undo step");
 }
 
@@ -238,7 +242,11 @@ fn a_field_with_the_keyboard_keeps_the_key_from_the_input() {
     assert_eq!(bus(&app, "throttle"), Some(0.0), "typing is not driving");
     app.world_mut().insert_resource(KeyboardCaptured(false));
     step(&mut app, 2);
-    assert_eq!(bus(&app, "throttle"), Some(1.0), "the key still held drives");
+    assert_eq!(
+        bus(&app, "throttle"),
+        Some(1.0),
+        "the key still held drives"
+    );
     step(&mut app, 10);
 }
 
@@ -279,10 +287,7 @@ fn a_key_input_is_scene_content_with_one_undo_step() {
     undo(&mut app);
     step(&mut app, 2);
     assert!(
-        app.world()
-            .resource::<GraphKeys>()
-            .bound()
-            .is_empty(),
+        app.world().resource::<GraphKeys>().bound().is_empty(),
         "undo removes the input and its keys"
     );
 

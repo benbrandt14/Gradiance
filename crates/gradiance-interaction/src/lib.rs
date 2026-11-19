@@ -128,23 +128,7 @@ impl Plugin for InteractionPlugin {
 
         app.add_plugins(input::EditorInputPlugin);
 
-        // Keys as graph inputs (brief N-2): the bound set follows the
-        // authored signals; the held states land on the bus between the
-        // frame's first publisher and the kernels that read them.
-        app.init_resource::<graph_keys::GraphKeys>();
-        app.add_systems(
-            Update,
-            (
-                graph_keys::refresh_graph_keys.run_if(
-                    resource_exists_and_changed::<gradiance_domain::signal::ComputedSignals>,
-                ),
-                graph_keys::publish_graph_keys
-                    .run_if(resource_exists::<gradiance_signal::SignalBus>),
-            )
-                .chain()
-                .after(gradiance_signal::publish_sensor_refs)
-                .before(gradiance_signal::evaluate_computed),
-        );
+        graph_keys::install(app);
         app.add_plugins(tools::ToolsPlugin);
 
         // After `InputSystems`: the button edges and the cursor must describe
