@@ -12,7 +12,8 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **U-8b** middle-click reset in progress (stacked on 5-4, #266). The stack #257–#264 merged
+- **Now:** **4b-5** toon bands on the bodies. **U-8b** middle-click reset
+  is done (#268, stacked on 5-4, #266). The stack #257–#264 merged
   on 2026-11-19 (main 3f211ab): 4b-3 scene looks, U-7 chrome tokens, 4b-4
   scaled defaults (format v8), A-1 screenshot audit (6 fixes), A-2 audit
   follow-ups, 5-2 quantity catalog, 5-3 unit input, U-8 number fields.
@@ -42,7 +43,7 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
      #260) and **A-2** (done, #261).
   9. **Phase 5:** 5-2 (done, #262), 5-3 (done, #263), **U-8** number-field
      behaviours (done, #264), then **5-4** (done, #266), **U-8b** middle
-     click resets every number field (in progress), **4b-5** toon bands on the bodies
+     click resets every number field (done, #268), **4b-5** toon bands on the bodies
      (both from owner notes, 2026-11-19), then 5-5.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.

@@ -57,8 +57,10 @@ Things learned the hard way:
   centre or an edge midpoint) and puts it on the cursor (brief A-1 fixed the
   one-frame-late press that made a fast drag grab from its first step).
 - `ui.click`/`ui.drag` press the **left** button only and `ui.key` releases
-  its modifiers, so the context menu, right-drag rotate, Shift-click and
-  Ctrl-drag cannot be driven from here yet.
+  its modifiers, so right-drag rotate, Shift-click and Ctrl-drag cannot be
+  driven from here yet. `ui.click_button` clicks with a named button
+  (`{"at": …, "button": "middle"}` resets a number field; `"right"` opens
+  a context menu).
 - **Physics runs slow** at software-rendering frame rates; wait longer than you
   think for motion to settle, and compare two grabs to see whether anything is
   still moving (`compare -metric AE a.png b.png diff.png`, ImageMagick).

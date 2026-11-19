@@ -379,6 +379,7 @@ and `ui-screenshot` logs that there is no window.
 | Verb | Id | Seam | What it does |
 |---|---|---|---|
 | `(ui-click at)` | `ui.click` | editor | Left click at `at`: a widget name (`ui-inspect` lists them; `(ui-click "tools:Box")` picks the Box tool) or a window point `(list x y)`. Plays move, press, release, one frame each. |
+| `(ui-click-button at button)` | `ui.click_button` | editor | The same click with a named button: `"left"`, `"middle"` or `"right"`. A middle click on a number field resets it to its default (brief U-8b). |
 | `(ui-drag from to steps)` | `ui.drag` | editor | Left drag: move to `from`, press, move to `to` in `steps` frames (1–200), release. A tool's gesture commits its one undo step on the release, as for a hand-made drag. |
 | `(ui-key chord)` | `ui.key` | editor | Press and release a chord written as menus show it: `"Ctrl+Z"`, `"Ctrl+Shift+G"`, `"Delete"`, `"Escape"`, `"F1"`, `"A"`. Modifiers go down a frame before the key and up a frame after. |
 | `(ui-text text)` | `ui.text` | editor | Types `text` into whatever has keyboard focus (click the field first), in one frame; a newline presses Enter. Typed text trips no key shortcut. |

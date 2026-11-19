@@ -869,5 +869,59 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Keep as built. Owner note: a middle click resets a field to its default, which became brief U-8b (docs/briefs/U-8b-middle-click-reset.md). A real slider widget is a retained UI item in docs/state.md.",
         ),
+        (
+            question: (
+                id: "number-field-default",
+                title: "What does a middle click reset a settings field to?",
+                source: "Phase 5, brief U-8b middle-click reset (docs/briefs/U-8b-middle-click-reset.md)",
+                description: r#"Brief U-8b gives every number field a default. Edit-seam fields had one already. Settings rows and panel inputs had none. Some settings (render, lighting, scenery) are also reset as a group when a look is applied, so two defaults exist for them: the type's start-up value and the active look's preset."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The type's Default",
+                        caption: r#"A field resets to the same field of its settings type's `Default` (the value a new scene starts with; for lighting that is the studio look). One rule, read by the reflect grid from `T::default()`. Cost: under the blueprint or poster look, a reset light or ambient goes to the studio value; Settings > Rendering > Look still resets the whole look."#,
+                    ),
+                    (
+                        label: "The active look's preset",
+                        caption: r#"Render, lighting and scenery fields reset to the active look's value. Cost: the grid needs the look threaded into it, and a field's default would change with the look."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "number-field-default",
+                title: "What does a middle click reset a settings field to?",
+                choice: Picked("The type's Default"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates).",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/U-8b-middle-click-reset.md Outcome; docs/ui-design.md sec. 2.",
+        ),
+        (
+            question: (
+                id: "click-button-op",
+                title: "How does injected input name a mouse button?",
+                source: "Phase 5, brief U-8b middle-click reset (docs/briefs/U-8b-middle-click-reset.md)",
+                description: r#"The brief asks to add the button to `ui.click`. A Lisp call maps arguments to fields by position and checks the count exactly (`OpEntry::named`), so a new field on `ui.click` would make every `(ui-click at)` call fail."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A new op, ui.click_button",
+                        caption: r#"`(ui-click-button at button)` with `"left"`, `"middle"` or `"right"`; `ui.click` stays as it is. Cost: one more operation in the catalog."#,
+                    ),
+                    (
+                        label: "A button field on ui.click",
+                        caption: r#"One op. Cost: every `(ui-click at)` call breaks, or the registry learns optional trailing arguments (a `gradiance-op` change outside this brief)."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "click-button-op",
+                title: "How does injected input name a mouse button?",
+                choice: Picked("A new op, ui.click_button"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates).",
+                answered_at: "2026-11-19T12:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-ui/src/ops.rs UiClickButton; docs/ops.md; docs/scripting.md.",
+        ),
     ],
 )
