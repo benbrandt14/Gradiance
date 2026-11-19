@@ -187,9 +187,9 @@ pub fn draw_traces(
 
 /// The flame of a thruster pushing with its default thrust, in screen
 /// pixels; it scales with the thrust.
-const FLAME_PX: f32 = 18.0;
+pub const FLAME_PX: f32 = 18.0;
 /// The longest flame, as a multiple of [`FLAME_PX`].
-const MAX_FLAME: f32 = 4.0;
+pub const MAX_FLAME: f32 = 4.0;
 
 /// A thruster flame's length as a multiple of [`FLAME_PX`]: proportional to
 /// `|thrust|` against the default, capped at [`MAX_FLAME`]. Pure.
@@ -206,7 +206,6 @@ pub fn flame_scale(thrust: f32) -> f32 {
 /// Attached nodes draw a tether to their target. A thruster draws a flame
 /// out of its back, scaled by the thrust it pushes with (a signal drive's
 /// when one is bound). Sizes are screen-constant (`CameraScale`).
-#[expect(clippy::too_many_arguments, reason = "one read per glyph input")]
 pub fn draw_node_glyphs(
     selection: Res<Selection>,
     index: Res<IdIndex>,
