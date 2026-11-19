@@ -16,7 +16,6 @@
 use avian2d::prelude::Physics;
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
-use gradiance_core::states::GameState;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
@@ -66,7 +65,8 @@ pub fn follow_node_attachments(
     }
 }
 
-/// Samples every traced entity's position while playing, and expires
+/// Samples every traced entity's position while the simulation runs
+/// (playing, or stepping through `sim.step`), and expires
 /// samples older than the tracer's fade window. Ages on the physics
 /// clock, so pausing freezes the trail. A **free** tracer node (attached to
 /// nothing) does nothing — a tracer traces an object's motion, and there is
@@ -237,7 +237,7 @@ pub fn install_sampling(app: &mut App) {
         Update,
         (
             follow_node_attachments,
-            sample_traces.run_if(in_state(GameState::Playing)),
+            sample_traces.run_if(gradiance_physics::sim_running),
             cleanup_traces,
         )
             .chain(),

@@ -11,8 +11,10 @@ workspace = true
 [dependencies]
 gradiance-core.workspace = true
 gradiance-command.workspace = true
+gradiance-op.workspace = true
 gradiance-scene.workspace = true
 bevy.workspace = true
 rfd.workspace = true
 ron.workspace = true
 serde.workspace = true
+serde_json.workspace = true

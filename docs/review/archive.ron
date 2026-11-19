@@ -1636,5 +1636,144 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "interaction::tools::click_select::ToolCommitted",
         ),
+        (
+            question: (
+                id: "sim-step-while-paused",
+                title: "How does sim.step advance the simulation?",
+                source: "Brief R-1 run & read surface (docs/briefs/R-1-run-read-surface.md)",
+                description: r#"sim.step pauses, then advances exactly n fixed steps. Several systems ran only in the Playing state: field forces, plane friction, joint breaking, signal recording and tracer trails. A step must either play for n ticks or advance a paused clock."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Advance the paused clock",
+                        caption: r#"The state stays Paused; one owed step per fixed tick advances Time<Physics> by the timestep (avian steps a hand-advanced paused clock). The Playing-only systems run while steps are owed (physics::sim_running), so a stepped span behaves as the same span played."#,
+                    ),
+                    (
+                        label: "Play for n ticks",
+                        caption: r#"Set Playing and pause after n fixed ticks. Cost: the state change lands a frame late, so a frame with several fixed ticks can overshoot n, and the transport flickers to Play."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sim-step-while-paused",
+                title: "How does sim.step advance the simulation?",
+                choice: Picked("Advance the paused clock"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T14:00:00Z",
+            ),
+            ingested_as: "physics::SimStep, physics::sim_running",
+        ),
+        (
+            question: (
+                id: "persist-op-edge",
+                title: "How does gradiance-persist reach the operation registry?",
+                source: "Brief R-1 run & read surface (docs/briefs/R-1-run-read-surface.md)",
+                description: r#"scene.save, scene.load and scene.dump register in gradiance-persist (the brief). Cargo only lets a crate use what its manifest declares, so persist needs gradiance-op either directly or through a re-export from gradiance-command."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A declared edge persist -> op",
+                        caption: r#"One row in tests/boundaries.rs and the CLAUDE.md diagram, like interaction and ui. op sits below command, so the graph stays layered."#,
+                    ),
+                    (
+                        label: "Re-export op from command",
+                        caption: r#"No manifest change, but an edge the DAG test cannot see."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "persist-op-edge",
+                title: "How does gradiance-persist reach the operation registry?",
+                choice: Picked("A declared edge persist -> op"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T14:00:00Z",
+            ),
+            ingested_as: "tests/boundaries.rs, persist::ops",
+        ),
+        (
+            question: (
+                id: "scene-file-paths",
+                title: "What does an empty path do, and which files are refused?",
+                source: "Brief R-1 run & read surface (docs/briefs/R-1-run-read-surface.md)",
+                description: r#"File > Open / Save and Ctrl+O / Ctrl+S now invoke scene.load and scene.save, so the dialog case needs a param value. Paths are not confined (brief decision 7)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Empty = dialog; .ron and .csv required",
+                        caption: r#"An empty path opens the dialog (save: the last path first). scene.save needs .ron and signal.export .csv, as ui.screenshot needs .png, so a typo cannot overwrite an unrelated file. scene.load reads and parses the file while it lowers, so a caller gets an error, not only a log line."#,
+                    ),
+                    (
+                        label: "Optional path, no checks",
+                        caption: r#"A null path for the dialog (Lisp cannot write null), any extension, errors only in the log."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "scene-file-paths",
+                title: "What does an empty path do, and which files are refused?",
+                choice: Picked("Empty = dialog; .ron and .csv required"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T14:00:00Z",
+            ),
+            ingested_as: "persist::ops::{SaveScene, LoadScene}, script::ops::SignalExport",
+        ),
+        (
+            question: (
+                id: "signal-read-unknown",
+                title: "What do signal.history and signal.export do with an unknown name?",
+                source: "Brief R-1 run & read surface (docs/briefs/R-1-run-read-surface.md)",
+                description: r#"A signal can appear on the bus later in a run (a computed signal, a script's signal-set)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "History: empty; export: error",
+                        caption: r#"signal.history answers [] (as signal-get answers NaN), so a client can poll before the signal exists. signal.export refuses an unknown name and lists the bus, because a file of empty cells is a silent failure."#,
+                    ),
+                    (
+                        label: "Error in both",
+                        caption: r#"Consistent, but a poll before the first sample fails."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "signal-read-unknown",
+                title: "What do signal.history and signal.export do with an unknown name?",
+                choice: Picked("History: empty; export: error"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T14:00:00Z",
+            ),
+            ingested_as: "script::ops::{SignalHistory, signals_csv}",
+        ),
+        (
+            question: (
+                id: "gated-context-mirrors",
+                title: "When is scene.dump's whole-scene record captured?",
+                source: "Brief R-1 run & read surface, orchestrator review of #278",
+                description: r#"The first cut captured a full SceneRecord on every operation context: every call, every script run pass, and every frame while F3 search is open. The orchestrator rejected that. The registry needed a way to build a costly mirror only when the operation that reads it may run."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Gated fillers in gradiance-op",
+                        caption: r#"OpContextFillers::add_for(ops, filler) runs only for a context built by OpContext::build_for with a predicate naming one of ops. invoke and invoke_as pass their own id; a script pass passes the ids whose Lisp verb its sources name as a whole token (bridge::mentions); F3 search and the groups filter use OpContext::build, which runs no gated filler. A gated op lowered without its mirror fails with MissingMirror. General, small, unit-tested; scene.dump stays a synchronous query."#,
+                    ),
+                    (
+                        label: "Dump as a request answered later",
+                        caption: r#"scene.dump lowers to a request persist drains. Cost: the caller gets no value from the call, so a remote client would need a second read path."#,
+                    ),
+                    (
+                        label: "A cheap flag the filler checks",
+                        caption: r#"A resource flag set before lowering scene.dump. Cost: every doorway must remember to set it; nothing general."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gated-context-mirrors",
+                title: "When is scene.dump's whole-scene record captured?",
+                choice: Picked("Gated fillers in gradiance-op"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T15:00:00Z",
+            ),
+            ingested_as: "op::OpContextFillers::add_for, op::OpContext::build_for, script::bridge::mentions",
+        ),
     ],
 )

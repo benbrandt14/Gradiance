@@ -12,7 +12,7 @@
 
 use crate::selection::{SelectTransition, Selection};
 use bevy::prelude::*;
-use gradiance_core::states::{GameState, ToolState};
+use gradiance_core::states::ToolState;
 use gradiance_domain::Body;
 use gradiance_op::{InvokeOp, Value, json};
 use leafwing_input_manager::prelude::*;
@@ -197,7 +197,7 @@ pub struct ShortcutWriters<'w> {
     /// Edits, by operation id ([`KEY_OPS`]).
     invoke: MessageWriter<'w, InvokeOp>,
     save: MessageWriter<'w, gradiance_persist::SaveSceneRequest>,
-    load: MessageWriter<'w, gradiance_persist::LoadSceneRequest>,
+    transport: MessageWriter<'w, crate::transport::SimTransport>,
     snapshot: MessageWriter<'w, gradiance_persist::SnapshotRequest>,
 }
 
@@ -213,8 +213,6 @@ pub fn apply_shortcuts(
     mut selected_joint: ResMut<crate::selection::SelectedJoint>,
     groups: Query<(Entity, &gradiance_domain::group::SelectionGroup), With<Body>>,
     bodies: Query<Entity, With<Body>>,
-    game_state: Res<State<GameState>>,
-    mut next_game: ResMut<NextState<GameState>>,
     mut next_tool: ResMut<NextState<ToolState>>,
     mut scale_frame: ResMut<crate::tools::handles::ScaleFrame>,
     mut last_path: ResMut<gradiance_persist::LastScenePath>,
@@ -243,10 +241,11 @@ pub fn apply_shortcuts(
         }
     }
     if actions.just_pressed(&EditorAction::TogglePause) {
-        next_game.set(match game_state.get() {
-            GameState::Playing => GameState::Paused,
-            GameState::Paused => GameState::Playing,
-        });
+        // The transport's one path: `sim.play` / `sim.pause` write the same
+        // request (brief R-1).
+        writers
+            .transport
+            .write(crate::transport::SimTransport::Toggle);
     }
     if actions.just_pressed(&EditorAction::SelectAll) {
         let all = bodies.iter().collect();
@@ -256,9 +255,10 @@ pub fn apply_shortcuts(
         SelectTransition::Clear.apply(&mut selection, &mut selected_joint, &groups);
     }
     if actions.just_pressed(&EditorAction::Save) {
+        // An empty path: the remembered one, else the dialog.
         writers
-            .save
-            .write(gradiance_persist::SaveSceneRequest { path: None });
+            .invoke
+            .write(InvokeOp::with("scene.save", json!({"path": ""})));
     }
     if actions.just_pressed(&EditorAction::SaveAs) {
         last_path.0 = None; // force the dialog
@@ -267,9 +267,10 @@ pub fn apply_shortcuts(
             .write(gradiance_persist::SaveSceneRequest { path: None });
     }
     if actions.just_pressed(&EditorAction::Open) {
+        // An empty path: the dialog.
         writers
-            .load
-            .write(gradiance_persist::LoadSceneRequest { path: None });
+            .invoke
+            .write(InvokeOp::with("scene.load", json!({"path": ""})));
     }
     if actions.just_pressed(&EditorAction::Snapshot) {
         writers

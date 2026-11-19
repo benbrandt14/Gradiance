@@ -255,7 +255,7 @@ pub fn invoke(world: &mut World, id: &str, params: Value) -> Result<Option<Value
         .get_resource::<OpRegistry>()
         .and_then(|registry| registry.get(id).cloned())
         .ok_or_else(|| OpError::Unknown(id.to_owned()))?;
-    let ctx = OpContext::build(world);
+    let ctx = OpContext::build_for(world, &|op| op == entry.meta.id);
     let selection = ctx.selection().ok().cloned();
     let output = entry.lower(params.clone(), &ctx)?;
     let value = apply(world, entry.meta.id, output);

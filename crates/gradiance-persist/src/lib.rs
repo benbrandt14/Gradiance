@@ -19,6 +19,7 @@ use gradiance_core::messages::drain;
 use gradiance_scene::{PersistError, SceneRecord, from_ron, to_ron};
 use std::path::{Path, PathBuf};
 
+pub mod ops;
 pub mod review;
 
 /// Request to save the scene (`path: None` → remembered path, then dialog).
@@ -75,6 +76,9 @@ impl Plugin for PersistPlugin {
         app.add_message::<SnapshotRequest>();
         app.init_resource::<LastScenePath>();
         app.init_resource::<AutosavePath>();
+        // The scene-file operations (brief R-1): the menu, the keys and every
+        // client save, open and dump through them.
+        ops::install(app);
         app.add_systems(Startup, queue_startup_scene);
         app.add_systems(
             Update,

@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 115 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 124 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -153,7 +153,10 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `scene.dump` | `(scene-dump)` | query | — | — | The whole scene as JSON: the record a save writes (bodies with their groups and depth, joints with their anchors, nodes, and the environment). Lisp gets the JSON text. | `{}` |
+| `scene.load` | `(load-scene path)` | edit | `load-scene` | File/Open…, Ctrl+O | Replace the scene with a .ron file's (relative to the working directory; "" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing. | `{"path": "tests/fixtures/scenes/pendulum.ron"}` |
 | `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default environment) — one undo step, as File ▸ New scene. | `{}` |
+| `scene.save` | `(save-scene path)` | editor | — | File/Save, Ctrl+S | Write the scene to a .ron file (relative to the working directory; "" = the last path, else a dialog). Returns the path; the file is written this frame. No undo step. | `{"path": "target/scene.ron"}` |
 
 ## `scenery`
 
@@ -166,7 +169,9 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `signal.computed` | `(defsignal name expr)` | config | `settings` | — | Declare a computed signal from an RPN expression over other signals (e.g. "t sin amp *"). | `{"name": "osc", "expr": "t sin 2 *"}` |
+| `signal.export` | `(signal-export path names)` | editor | — | — | Write signals' recorded history to a .csv file: a header t,name1,name2,... then one row per sample of the first signal (a cell is empty where another signal has no sample at that t). Returns the path. No undo step. | `{"path": "target/signals.csv", "names": ["t"]}` |
 | `signal.get` | `(signal-get name)` | query | — | — | Current value of a named signal on the bus; NaN if unset. | `{"name": "t"}` |
+| `signal.history` | `(signal-history name)` | query | — | — | A signal's recorded samples, oldest first, as a list of [t v] (t in simulated seconds; the last 600, recorded while the sim plays or steps); empty if the bus has no such signal. | `{"name": "t"}` |
 | `signal.param` | `(defparam name value min max)` | config | `settings` | — | Declare a tunable signal parameter (an auto-slider) published on the bus. | `{"name": "amp", "value": 2, "min": 0, "max": 10}` |
 | `signal.set` | `(signal-set name value)` | editor | — | — | Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md). | `{"name": "excitement", "value": 7}` |
 
@@ -175,7 +180,11 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `sim.get` | `(sim-get path)` | query | — | — | Read a simulation setting by reflect-path, e.g. "gravity.y", "speed"; NaN if the path does not resolve. | `{"path": "speed"}` |
+| `sim.pause` | `(sim-pause)` | editor | — | — | Freeze the simulation (the transport's Pause; drops steps a sim-step still owes). No undo step. | `{}` |
+| `sim.play` | `(sim-play)` | editor | — | — | Run the simulation (the transport's Play; drops steps a sim-step still owes). No undo step. | `{}` |
 | `sim.set` | `(sim-set path value)` | config | `settings` | — | Set a simulation setting by reflect-path (config seam; a settled edit is one undo step). | `{"path": "speed", "value": 0.5}` |
+| `sim.step` | `(sim-step n)` | editor | — | — | Pause, then advance exactly n fixed physics steps (n / timestep_hz seconds at speed 1). Returns at once; read sim-time to see the steps done. No undo step. | `{"n": 60}` |
+| `sim.time` | `(sim-time)` | query | — | — | Simulated seconds on the physics clock (frozen while paused; advanced by sim-step). | `{}` |
 
 ## `tool`
 

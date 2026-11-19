@@ -46,9 +46,19 @@ impl OpContext {
         }
     }
 
-    /// The one builder every doorway calls: runs each layer's filler over the
-    /// committed world.
+    /// The builder for a context that lowers no operation with a gated
+    /// mirror ([`OpContextFillers::add_for`]): runs every ungated filler over
+    /// the committed world. F3 search and the groups filter use it.
     pub fn build(world: &mut World) -> Self {
+        Self::build_for(world, &|_| false)
+    }
+
+    /// The builder every invoking doorway calls: runs every ungated filler,
+    /// plus each gated filler one of whose operations `invokes` names. A
+    /// single call passes its own id; a script run the ids its source
+    /// mentions. An operation lowered without its gated mirror fails with
+    /// [`OpError::MissingMirror`], never with a stale value.
+    pub fn build_for(world: &mut World, invokes: &dyn Fn(&str) -> bool) -> Self {
         let ids = world
             .get_resource::<OpIdSource>()
             .copied()
@@ -57,8 +67,10 @@ impl OpContext {
             .get_resource::<OpContextFillers>()
             .map_or_default(|f| f.0.clone());
         let mut ctx = Self::new(ids);
-        for fill in fillers {
-            fill(world, &mut ctx);
+        for (gate, fill) in fillers {
+            if gate.is_none_or(|ops| ops.iter().any(|id| invokes(id))) {
+                fill(world, &mut ctx);
+            }
         }
         ctx
     }
@@ -113,20 +125,52 @@ impl OpContext {
 /// One layer's contribution to a new [`OpContext`].
 pub type OpContextFiller = fn(&mut World, &mut OpContext);
 
-/// The fillers [`OpContext::build`] runs, in registration order.
+/// The fillers [`OpContext::build_for`] runs, in registration order. A
+/// gated filler names the operations that read its mirror.
 #[derive(Resource, Default)]
-pub struct OpContextFillers(pub(crate) Vec<OpContextFiller>);
+pub struct OpContextFillers(pub(crate) Vec<(Option<&'static [&'static str]>, OpContextFiller)>);
 
 impl OpContextFillers {
-    /// Adds one layer's filler.
+    /// Adds one layer's filler, run for every context.
     pub fn add(&mut self, filler: OpContextFiller) {
-        self.0.push(filler);
+        self.0.push((None, filler));
+    }
+
+    /// Adds a filler run only for a context that may lower one of `ops`
+    /// (operation ids): for a mirror too costly to build on every call
+    /// (`scene.dump`'s whole-scene record, brief R-1).
+    pub fn add_for(&mut self, ops: &'static [&'static str], filler: OpContextFiller) {
+        self.0.push((Some(ops), filler));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, PartialEq)]
+    struct Costly;
+
+    #[test]
+    fn a_gated_filler_runs_only_for_its_operations() {
+        let mut world = World::new();
+        let mut fillers = OpContextFillers::default();
+        fillers.add(|_, ctx| ctx.insert(1_u8));
+        fillers.add_for(&["scene.dump"], |_, ctx| ctx.insert(Costly));
+        world.insert_resource(fillers);
+
+        let plain = OpContext::build(&mut world);
+        assert!(plain.get::<u8>().is_ok());
+        assert!(plain.get::<Costly>().is_err());
+
+        let other = OpContext::build_for(&mut world, &|id| id == "body.count");
+        assert!(other.get::<u8>().is_ok());
+        assert!(other.get::<Costly>().is_err());
+
+        let dump = OpContext::build_for(&mut world, &|id| id == "scene.dump");
+        assert_eq!(dump.get::<Costly>().ok(), Some(&Costly));
+        assert!(dump.get::<u8>().is_ok());
+    }
 
     #[test]
     fn a_sequence_restarts_with_every_context() {

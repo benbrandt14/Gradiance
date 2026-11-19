@@ -209,13 +209,14 @@ pub fn publish_sensor_refs(
     fixed: Res<Time<Fixed>>,
     sim: Res<Time<Physics>>,
     game: Res<State<GameState>>,
+    step: Res<gradiance_physics::SimStep>,
     transforms: Query<&Transform, With<Body>>,
     mut bus: ResMut<SignalBus>,
 ) {
     // First publisher of the frame, so this is where the frame's recording
     // timestamp is set — every sample recorded below and downstream shares it.
     bus.set_time(sim.elapsed_secs());
-    let recording = *game.get() == GameState::Playing;
+    let recording = *game.get() == GameState::Playing || step.active();
     let dt = fixed.timestep().as_secs_f32().max(1e-6);
     for signal in &computed.0 {
         for input in signal.expr.inputs() {
@@ -239,9 +240,10 @@ pub fn evaluate_computed(
     computed: Res<CompiledSignals>,
     time: Res<Time<Physics>>,
     game: Res<State<GameState>>,
+    step: Res<gradiance_physics::SimStep>,
     mut bus: ResMut<SignalBus>,
 ) {
-    let recording = *game.get() == GameState::Playing;
+    let recording = *game.get() == GameState::Playing || step.active();
     for param in &params.0 {
         bus.publish(&param.name, param.value, recording);
     }
@@ -350,11 +352,12 @@ pub fn evaluate_signals(
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
     game: Res<State<GameState>>,
+    step: Res<gradiance_physics::SimStep>,
     mut bus: ResMut<SignalBus>,
     mut overrides: Query<&mut SignalColorOverride, With<Body>>,
     overridden: Query<Entity, With<SignalColorOverride>>,
 ) {
-    let recording = *game.get() == GameState::Playing;
+    let recording = *game.get() == GameState::Playing || step.active();
     let dt = fixed.timestep().as_secs_f32().max(1e-6);
 
     // Evaluate sources and gather the desired per-entity overrides.

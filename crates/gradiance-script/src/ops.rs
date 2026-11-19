@@ -21,10 +21,12 @@ use gradiance_core::ids::StableId;
 use gradiance_core::script_tools::{ScriptToolSpec, ScriptTools};
 use gradiance_domain::signal::{ComputedSignal, SignalExpr, SignalParam};
 use gradiance_op::{
-    OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam,
+    OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Value,
+    json,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Most points one script tool may collect: a tool that asks for more is a
 /// typo, not a gesture anyone will finish.
@@ -56,12 +58,25 @@ pub enum EditorRequest {
     Param(SignalParam),
     /// Declare (or update, by name) a computed signal.
     Computed(ComputedSignal),
+    /// Write recorded signal history as CSV (`signal.export`, brief R-1).
+    Export {
+        /// The file.
+        path: PathBuf,
+        /// The CSV text, built from the run's snapshot.
+        csv: String,
+    },
 }
 
 /// The signal bus's current values, as a read-only context mirror
 /// (`signal-get`). One mirror per context, so one run reads one snapshot.
 #[derive(Debug, Clone, Default)]
 pub struct SignalValues(pub HashMap<String, f64>);
+
+/// The signal bus's recorded histories, as a read-only context mirror
+/// (`signal-history`, `signal-export`): each signal's `(t, value)` samples,
+/// oldest first, `t` in simulated seconds.
+#[derive(Debug, Clone, Default)]
+pub struct SignalHistories(pub HashMap<String, Vec<(f32, f32)>>);
 
 /// Registers this layer's operations, the signal mirror, the request
 /// message and the system that applies it.
@@ -75,6 +90,8 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<SignalSet>();
         registry.register::<DefParam>();
         registry.register::<DefSignal>();
+        registry.register::<SignalHistory>();
+        registry.register::<SignalExport>();
     }
     app.world_mut()
         .resource_mut::<OpContextFillers>()
@@ -88,6 +105,19 @@ fn fill_signal_mirror(world: &mut World, ctx: &mut OpContext) {
         ctx.insert(SignalValues(
             bus.entries()
                 .map(|(name, entry)| (name.to_owned(), f64::from(entry.value())))
+                .collect(),
+        ));
+        ctx.insert(SignalHistories(
+            bus.entries()
+                .map(|(name, entry)| {
+                    let samples = entry
+                        .times()
+                        .iter()
+                        .copied()
+                        .zip(entry.history().iter().copied())
+                        .collect();
+                    (name.to_owned(), samples)
+                })
                 .collect(),
         ));
     }
@@ -338,6 +368,130 @@ impl Operation for DefSignal {
     }
 }
 
+/// A signal's recorded samples as `[t, v]` pairs.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SignalHistory {
+    /// The signal's name.
+    pub name: String,
+}
+
+impl Operation for SignalHistory {
+    const META: OpMeta = OpMeta {
+        id: "signal.history",
+        lisp: "signal-history",
+        doc: "A signal's recorded samples, oldest first, as a list of [t v] (t in simulated seconds; the last 600, recorded while the sim plays or steps); empty if the bus has no such signal.",
+        seam: Seam::Query,
+        menu: None,
+        chord: None,
+        undo: None,
+        example: r#"{"name": "t"}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let histories = ctx.get::<SignalHistories>()?;
+        let samples: Vec<Value> = histories.0.get(&self.name).map_or_default(|samples| {
+            samples
+                .iter()
+                .map(|&(t, v)| json!([f64::from(t), f64::from(v)]))
+                .collect()
+        });
+        Ok(OpOutput::none().returning(Value::Array(samples)))
+    }
+}
+
+/// Write recorded signals to a CSV file.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SignalExport {
+    /// The file (must end in `.csv`; relative to the working directory).
+    pub path: String,
+    /// The signals, in column order; the first one's samples set the rows.
+    pub names: Vec<String>,
+}
+
+impl Operation for SignalExport {
+    const META: OpMeta = editor(
+        "signal.export",
+        "signal-export",
+        "Write signals' recorded history to a .csv file: a header t,name1,name2,... then one row per sample of the first signal (a cell is empty where another signal has no sample at that t). Returns the path. No undo step.",
+        r#"{"path": "target/signals.csv", "names": ["t"]}"#,
+    );
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let path = PathBuf::from(&self.path);
+        let is_csv = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("csv"));
+        if !is_csv {
+            return Err(OpError::Invalid(format!(
+                "an export file ends in .csv: `{}`",
+                self.path
+            )));
+        }
+        let histories = ctx.get::<SignalHistories>()?;
+        let csv = signals_csv(histories, &self.names)?;
+        Ok(OpOutput::none()
+            .message(EditorRequest::Export { path, csv })
+            .returning(self.path))
+    }
+}
+
+/// The CSV text of `names`' histories: a header `t,<names>`, then one row per
+/// sample of the first signal. Another signal's cell holds its sample at the
+/// same simulated time (every signal recorded in one frame shares that
+/// frame's stamp), else is empty. A name the bus does not hold is an error:
+/// an export of a typo would be a file of empty cells.
+pub fn signals_csv(histories: &SignalHistories, names: &[String]) -> Result<String, OpError> {
+    let Some(first) = names.first() else {
+        return Err(OpError::Invalid("name at least one signal".to_owned()));
+    };
+    let mut columns = Vec::with_capacity(names.len());
+    for name in names {
+        if name.contains([',', '"', '\n', '\r']) {
+            return Err(OpError::Invalid(format!(
+                "a column name has no comma, quote or newline: `{name}`"
+            )));
+        }
+        let Some(samples) = histories.0.get(name) else {
+            let mut known: Vec<&str> = histories.0.keys().map(String::as_str).collect();
+            known.sort_unstable();
+            return Err(OpError::Invalid(format!(
+                "no signal `{name}` on the bus (signals: {})",
+                known.join(", ")
+            )));
+        };
+        columns.push(samples.as_slice());
+    }
+    let mut csv = String::from("t");
+    for name in names {
+        csv.push(',');
+        csv.push_str(name);
+    }
+    csv.push('\n');
+    let rows = histories.0.get(first).map_or(&[][..], Vec::as_slice);
+    // One cursor per column: times only grow, so each column is walked once.
+    let mut cursors = vec![0_usize; columns.len()];
+    for &(t, _) in rows {
+        csv.push_str(&t.to_string());
+        for (column, cursor) in columns.iter().zip(cursors.iter_mut()) {
+            csv.push(',');
+            while column.get(*cursor).is_some_and(|&(ct, _)| ct < t) {
+                *cursor += 1;
+            }
+            if let Some(&(ct, v)) = column.get(*cursor)
+                && ct.to_bits() == t.to_bits()
+            {
+                csv.push_str(&v.to_string());
+                *cursor += 1;
+            }
+        }
+        csv.push('\n');
+    }
+    Ok(csv)
+}
+
 /// Moves each pending [`EditorRequest`] into its table. Every table upserts
 /// by name, so re-running a definitions script (a hot reload) converges.
 pub fn apply_editor_requests(world: &mut World) {
@@ -371,6 +525,10 @@ pub fn apply_editor_requests(world: &mut World) {
                     }
                 }
             }
+            EditorRequest::Export { path, csv } => match std::fs::write(&path, csv) {
+                Ok(()) => info!(path = %path.display(), "signals exported"),
+                Err(e) => warn!(path = %path.display(), error = %e, "signal export failed"),
+            },
             EditorRequest::Computed(signal) => {
                 if let Some(mut computed) =
                     world.get_resource_mut::<gradiance_signal::ComputedSignals>()
