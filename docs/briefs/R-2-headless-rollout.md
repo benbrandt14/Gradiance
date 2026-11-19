@@ -1,5 +1,5 @@
 # Headless rollout runner
-Phase R · roadmap § "Run & read surface" · status: planned (after R-1)
+Phase R · roadmap § "Run & read surface" · status: in review
 
 Written by the planning thread, 2026-11-19. Docs only.
 
@@ -50,4 +50,55 @@ for now); MCP access to `run`.
 
 ## Outcome
 
-(empty)
+Worker, 2026-11-19, branch `claude/project-thread-tw1mvl-r2`.
+
+**Landed:**
+
+- `src/run.rs` (`gradiance::run`): `parse_args`, `rollout`, `main` (the
+  binary's doorway, called before the client doorways in `main.rs`) and
+  `headless_app_with`, the windowless builder moved out of
+  `tests/it/harness` (the harness now calls it). `rollout` composes the R-1
+  operations: `scene.load`, each script through `ScriptInputs` with a reply
+  slot (an error stops the run), the steps a script owes, then `sim.step`
+  in chunks of at most 216000, then `signals_csv` (what `signal.export`
+  writes). Each update advances virtual time by exactly the fixed timestep,
+  so one update is one step and one recorded row. The app starts paused
+  (`insert_state`), so nothing records before the steps. Exit codes: 0, 1
+  (load, script, signal, write, stall), 2 (usage); `gradiance run --help`.
+- `gradiance-signal`: `SignalBus::set_history_cap` (default 600); the run
+  sets `usize::MAX`, so a rollout keeps every row.
+- `gradiance-physics::TransportSet`: `apply_sim_transport` is in it and the
+  signal recorders run after it. Before, the frame a `sim.step` landed
+  recorded `t` but not body sensors (the sensor publisher ran before the
+  transport): a fix for the app too, at no per-frame cost.
+- Tests: `tests/it/headless_run.rs` (two 700-step runs of a falling-box
+  scene with two boxes on a ground give the same CSV byte for byte, 701
+  rows at `t = i/60`, the box rests at 0.5 m; stdout and default columns;
+  a missing or unparsable scene, a script error, a missing script and an
+  unknown signal give exit code 1; usage errors give 2); a signal unit test
+  for the lifted cap.
+- Docs: `docs/scripting.md` § "Headless rollout", CLAUDE.md build line.
+  No operation changed, so `docs/ops.md` is unchanged.
+
+**Decisions** (`docs/review/archive.ron`, `decision: true`): `run-csv-rows`
+(the start state, then one row per step: N+1 rows), `run-history-cap`,
+`run-defaults` (no `--csv`: stdout; no `--signals`: every signal but `t`),
+`run-one-thread` (compute pools pinned to one thread).
+
+**Checked (the brief's unverified items):**
+
+- No window: `MinimalPlugins` + states, transform and input, with the full
+  `GradiancePlugins`, as the test harness ran. The real binary ran
+  `gradiance run tests/fixtures/scenes/pendulum.ron --steps 3` with
+  `DISPLAY` and `WAYLAND_DISPLAY` unset: exit 0, 4 rows. The CI need is met
+  by the `it` test, which calls the same `rollout`/`main`; no workflow
+  change.
+- Determinism: `avian2d`'s default features include `parallel`. The
+  falling-box CSV was bit-identical between runs with the run's one thread
+  and also, in a one-off check, with the default pools on 4 threads. The
+  test compares bytes, no tolerance.
+
+**Not checked:** scenes with many bodies or joints for determinism across
+machines (CI runs the test on its own machine only); run time of long
+rollouts (the whole `headless_run` module, two 700-step runs included,
+takes about 6 s in the opt-1 test profile).
