@@ -12,7 +12,11 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **5-5**. **4b-5** toon bands on the bodies is done (#270, stacked
+- **Now:** **U-9** (F3 search, status bar, pie menus; no brief yet).
+  **5-5** frames and tool coordinates decision is done (#271, docs only,
+  stacked on 4b-5: a `PlaneFrame` value type at the 2D↔3D lift, phases
+  F1–F5 for the next planning stage; recorded as `frames-option` and
+  `curvilinear-edges` in `archive.ron`). **4b-5** toon bands on the bodies is done (#270, stacked
   on U-8b; review question `toon-highlights` open). **U-8b** middle-click reset
   is done (#268, stacked on 5-4, #266). The stack #257–#264 merged
   on 2026-11-19 (main 3f211ab): 4b-3 scene looks, U-7 chrome tokens, 4b-4
@@ -46,8 +50,9 @@ Last updated: 2026-11-19 (phase gate after the stack #257–#264, main
   9. **Phase 5:** 5-2 (done, #262), 5-3 (done, #263), **U-8** number-field
      behaviours (done, #264), then **5-4** (done, #266), **U-8b** middle
      click resets every number field (done, #268), **4b-5** toon bands on the bodies
-     (done, #270; both from owner notes, 2026-11-19), then **5-5** (now).
-  10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
+     (done, #270; both from owner notes, 2026-11-19), then **5-5** (done,
+     #271; `docs/frames-decision.md`, `docs/curvilinear-tools-decision.md`).
+  10. **U-9** (now) F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).
   12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
