@@ -157,7 +157,7 @@ fn snapshot_tool_palette() {
 #[test]
 fn snapshot_settings_grid() {
     let mut settings = gradiance::domain::settings::SimSettings::default();
-    snapshot("settings_grid", egui::vec2(260.0, 140.0), move |ui| {
+    snapshot("settings_grid", egui::vec2(260.0, 230.0), move |ui| {
         reflect_grid(ui, egui::Id::new("sim"), &mut settings);
     });
 }
