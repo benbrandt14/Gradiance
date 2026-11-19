@@ -19,7 +19,7 @@ use crate::bridge::WorkspaceLabels;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::script_tools::{ScriptToolSpec, ScriptTools};
-use gradiance_domain::signal::{ComputedSignal, SignalExpr, SignalParam};
+use gradiance_domain::signal::{BlockOp, ComputedSignal, SignalExpr, SignalParam};
 use gradiance_op::{
     OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Value,
     json,
@@ -90,6 +90,7 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<SignalSet>();
         registry.register::<DefParam>();
         registry.register::<DefSignal>();
+        registry.register::<DefKey>();
         registry.register::<SignalHistory>();
         registry.register::<SignalExport>();
     }
@@ -365,6 +366,47 @@ impl Operation for DefSignal {
                 block: None,
             })),
         )
+    }
+}
+
+/// Declare a key input (brief N-2): the node graph's Key block, as a
+/// computed signal. Scene content with one settled `settings` undo step,
+/// like [`DefSignal`].
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct DefKey {
+    /// The input's name (unique: re-declaring updates it).
+    pub name: String,
+    /// The key that gives `+1` while held in play (`E`, `Left`, `Space`).
+    pub key: String,
+    /// The key that gives `-1` (absent: a single key, `0`/`1`).
+    pub negative: Option<String>,
+}
+
+impl Operation for DefKey {
+    const META: OpMeta = OpMeta {
+        id: "signal.key",
+        lisp: "defkey",
+        doc: "Declare a key input: a signal that is 1 while key is held in play (0 paused or while a field has the keyboard); with negative, -1 while that key is held and 0 when both are. While the sim plays the key is the input's, not the editor's.",
+        seam: Seam::Config,
+        menu: None,
+        chord: None,
+        undo: Some(gradiance_command::intent::name::SETTINGS),
+        example: r#"{"name": "throttle", "key": "E", "negative": "Q"}"#,
+    };
+
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let canonical = |name: &str| {
+            gradiance_domain::keys::named_key(name)
+                .map(|k| k.name.to_owned())
+                .ok_or_else(|| OpError::Invalid(format!("`{name}` is not a key name")))
+        };
+        let key = canonical(&self.key)?;
+        let negative = self.negative.as_deref().map(canonical).transpose()?;
+        Ok(OpOutput::none().message(EditorRequest::Computed(ComputedSignal::from_block(
+            self.name,
+            BlockOp::Key { key, negative },
+        ))))
     }
 }
 

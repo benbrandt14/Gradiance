@@ -107,19 +107,31 @@ pub struct OpEntry {
     pub meta: OpMeta,
     /// The params' field names in declared order (from reflection).
     pub fields: Vec<&'static str>,
+    /// How many leading fields a positional call must give: the trailing
+    /// `Option` fields may be left off (brief N-2: `(ui-key "Escape")` and
+    /// `(ui-key "E" 60)` are both calls).
+    pub required: usize,
     info: fn() -> &'static TypeInfo,
     lower: fn(Value, &OpContext) -> Result<OpOutput, OpError>,
 }
 
 impl OpEntry {
     fn of<O: Operation>() -> Self {
-        let fields = match O::type_info() {
-            TypeInfo::Struct(info) => info.field_names().to_vec(),
-            _ => Vec::new(),
+        let (fields, required) = match O::type_info() {
+            TypeInfo::Struct(info) => {
+                let optional = info
+                    .iter()
+                    .rev()
+                    .take_while(|f| f.type_path().starts_with("core::option::Option<"))
+                    .count();
+                (info.field_names().to_vec(), info.field_len() - optional)
+            }
+            _ => (Vec::new(), 0),
         };
         Self {
             meta: O::META,
             fields,
+            required,
             info: O::type_info,
             lower: |params, ctx| {
                 let op: O = serde_json::from_value(params).map_err(|err| OpError::Decode {
@@ -137,12 +149,17 @@ impl OpEntry {
     }
 
     /// Maps positional arguments to the named object, by declared field
-    /// order. The Lisp doorway and the remote `args` form share it.
+    /// order. The Lisp doorway and the remote `args` form share it. Trailing
+    /// `Option` fields may be left off (they decode as absent).
     pub fn named(&self, args: Vec<Value>) -> Result<Value, OpError> {
-        if args.len() != self.fields.len() {
+        if args.len() < self.required || args.len() > self.fields.len() {
             return Err(OpError::Arity {
                 op: self.meta.id,
-                expected: self.fields.len(),
+                expected: if args.len() < self.required {
+                    self.required
+                } else {
+                    self.fields.len()
+                },
                 got: args.len(),
             });
         }
@@ -195,9 +212,16 @@ impl OpEntry {
     /// The Lisp call form: `(spawn-box x y w h)`.
     pub fn signature(&self) -> String {
         let mut text = format!("({}", self.meta.lisp);
-        for field in &self.fields {
+        for (i, field) in self.fields.iter().enumerate() {
             text.push(' ');
-            text.push_str(field);
+            // A trailing optional field may be left off: `[hold]`.
+            if i < self.required {
+                text.push_str(field);
+            } else {
+                text.push('[');
+                text.push_str(field);
+                text.push(']');
+            }
         }
         text.push(')');
         text
@@ -353,6 +377,60 @@ mod tests {
         fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
             Ok(OpOutput::none().message(Moved(self.x, self.y)))
         }
+    }
+
+    /// Nudge a thing, by a default step unless `by` is given.
+    #[derive(Deserialize, Reflect)]
+    #[serde(deny_unknown_fields)]
+    struct NudgeThing {
+        x: f32,
+        by: Option<f32>,
+    }
+
+    impl Operation for NudgeThing {
+        const META: OpMeta = OpMeta {
+            id: "thing.nudge",
+            lisp: "nudge-thing",
+            doc: "Nudge a thing.",
+            seam: Seam::Edit,
+            menu: None,
+            chord: None,
+            undo: Some("Nudge"),
+            example: r#"{"x": 1}"#,
+        };
+
+        fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+            Ok(OpOutput::none().message(Moved(self.x, self.by.unwrap_or(1.0))))
+        }
+    }
+
+    #[test]
+    fn a_positional_call_may_leave_off_trailing_optional_fields() {
+        let entry = OpEntry::of::<NudgeThing>();
+        assert_eq!(entry.required, 1);
+        assert_eq!(entry.signature(), "(nudge-thing x [by])");
+        assert_eq!(OpEntry::of::<MoveThing>().required, 2);
+        let ctx = OpContext::new(OpIdSource::Random);
+        let call = |args: Vec<Value>| {
+            entry
+                .named(args)
+                .and_then(|params| entry.lower(params, &ctx))
+                .map(|o| o.describe())
+                .map_err(|e| e.to_string())
+        };
+        assert_eq!(call(vec![json!(3)]), Ok(vec!["Moved(3.0, 1.0)".to_owned()]));
+        assert_eq!(
+            call(vec![json!(3), json!(2)]),
+            Ok(vec!["Moved(3.0, 2.0)".to_owned()])
+        );
+        assert_eq!(
+            call(vec![]),
+            Err("expected 1 arguments, got 0".to_owned())
+        );
+        assert_eq!(
+            call(vec![json!(1), json!(2), json!(3)]),
+            Err("expected 2 arguments, got 3".to_owned())
+        );
     }
 
     fn app() -> App {

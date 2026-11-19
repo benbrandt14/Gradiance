@@ -20,6 +20,7 @@ mod clipboard;
 mod csg;
 mod defaults;
 mod editor_ops;
+mod graph_keys;
 mod groups;
 mod headless_run;
 mod history;

@@ -36,6 +36,7 @@ use gradiance_domain::quantity::Subject;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::Subjects;
 use gradiance_domain::{Body, Joint};
+use gradiance_interaction::graph_keys::EditorKeyTable;
 use gradiance_interaction::selection::Selection;
 use gradiance_physics::queries::PhysicsQueries;
 use gradiance_signal::{
@@ -307,6 +308,8 @@ pub struct GraphParams<'w, 's> {
     pub(crate) body_transforms: Query<'w, 's, &'static Transform, With<Body>>,
     pub(crate) index: Res<'w, IdIndex>,
     pub(crate) fixed: Res<'w, Time<Fixed>>,
+    /// The editor's bare-key uses, for a key input's clash warning.
+    pub(crate) editor_keys: Res<'w, EditorKeyTable>,
 }
 
 /// Reconciles the canvas blocks + wires from the live dataflow and builds the
@@ -352,6 +355,7 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
         input_values,
         bindings: gp.bindings.0.clone(),
         params: gp.params.0.clone(),
+        editor_keys: gp.editor_keys.clone(),
         ..GraphViewer::default()
     }
 }
@@ -888,6 +892,8 @@ pub(crate) struct GraphViewer {
     params: Vec<SignalParam>,
     /// Param value edits `(name, new value)` from a param block's footer.
     param_edits: Vec<(String, f32)>,
+    /// The editor's bare-key uses, so a key input warns of a clash.
+    editor_keys: EditorKeyTable,
     new_bindings: Vec<SignalBinding>,
     removed: Vec<(SignalSource, SignalSink)>,
     /// Transfer edits `(source, sink, map, gradient)` from a body footer.
@@ -1023,6 +1029,17 @@ impl GraphViewer {
                 self.add_blocks.push(BlockOp::Oscillator {
                     amp: 1.0,
                     freq: 1.0,
+                });
+                ui.close();
+            }
+            if ui
+                .button("Key")
+                .on_hover_text("a held key in play: E gives +1, Q gives -1 (set them in the block)")
+                .clicked()
+            {
+                self.add_blocks.push(BlockOp::Key {
+                    key: "E".to_owned(),
+                    negative: Some("Q".to_owned()),
                 });
                 ui.close();
             }
@@ -1408,7 +1425,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         {
             let name = name.clone();
             let mut op = op.clone();
-            if block_constants(ui, &mut op) {
+            if block_constants(ui, &name, &mut op, &self.editor_keys) {
                 self.block_edits.push((name, op));
             }
             return;
@@ -1473,9 +1490,14 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 }
 
-/// Edits a modulation block's scalar constants in its footer; returns whether
-/// anything changed.
-fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
+/// Edits a modulation block's scalar constants in its footer (a key input's
+/// keys); returns whether anything changed.
+fn block_constants(
+    ui: &mut egui::Ui,
+    name: &str,
+    op: &mut BlockOp,
+    editor_keys: &EditorKeyTable,
+) -> bool {
     let mut changed = false;
     match op {
         BlockOp::Gain { k, .. } => {
@@ -1503,6 +1525,9 @@ fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
         BlockOp::Curve { curve, .. } => {
             changed |= crate::curve::curve_editor(ui, "block-curve", curve);
         }
+        BlockOp::Key { key, negative } => {
+            changed |= key_fields(ui, name, key, negative, editor_keys);
+        }
         // Ops without editable constants (their behavior is fully wired).
         BlockOp::Time
         | BlockOp::Sum { .. }
@@ -1512,6 +1537,96 @@ fn block_constants(ui: &mut egui::Ui, op: &mut BlockOp) -> bool {
         | BlockOp::Min { .. }
         | BlockOp::Max { .. } => {}
     }
+    changed
+}
+
+/// A key input's footer (brief N-2): the `+` key, an optional `-` key, and a
+/// warning for each editor use of either (in play the input wins; paused,
+/// the editor does).
+fn key_fields(
+    ui: &mut egui::Ui,
+    name: &str,
+    key: &mut String,
+    negative: &mut Option<String>,
+    editor_keys: &EditorKeyTable,
+) -> bool {
+    let mut changed = key_capture(ui, name, "+", key);
+    let mut pair = negative.is_some();
+    ui.horizontal(|ui| {
+        if ui
+            .checkbox(&mut pair, "pair")
+            .on_hover_text("a second key gives -1; both held give 0")
+            .changed()
+        {
+            *negative = pair.then(|| "Q".to_owned());
+            changed = true;
+        }
+    });
+    if let Some(negative) = negative.as_mut() {
+        changed |= key_capture(ui, name, "-", negative);
+    }
+    let warning = crate::theme::tokens(ui.ctx()).warning;
+    for bound in std::iter::once(&*key).chain(negative.as_ref()) {
+        for clash in editor_keys.uses(bound) {
+            ui.label(
+                egui::RichText::new(format!(
+                    "{bound} also {clash}: in play this input wins"
+                ))
+                .small()
+                .color(warning),
+            );
+        }
+    }
+    changed
+}
+
+/// One key of a key input: a button that shows the key; click it, then press
+/// a key to bind it (Escape cancels). While it listens it claims the
+/// keyboard, so the key pressed does not also reach the editor.
+fn key_capture(ui: &mut egui::Ui, block: &str, slot: &str, key: &mut String) -> bool {
+    let id = egui::Id::new(("graph-key-capture", block, slot));
+    let listening = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+    let mut changed = false;
+    let mut answered = false;
+    if listening {
+        crate::unit_fields::claim_keys(ui.ctx());
+        let pressed = ui.input(|i| {
+            i.events.iter().find_map(|event| match event {
+                egui::Event::Key {
+                    key,
+                    pressed: true,
+                    repeat: false,
+                    ..
+                } => Some(*key),
+                _ => None,
+            })
+        });
+        if let Some(pressed) = pressed {
+            answered = true;
+            ui.data_mut(|d| d.remove_temp::<bool>(id));
+            if pressed != egui::Key::Escape
+                && let Some(named) = gradiance_domain::keys::named_key(pressed.name())
+                && named.name != key.as_str()
+            {
+                named.name.clone_into(key);
+                changed = true;
+            }
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.small(slot);
+        let text = if listening && !answered {
+            format!("press a key{}", crate::fonts::glyph::ELLIPSIS)
+        } else {
+            key.clone()
+        };
+        let response = ui
+            .button(text)
+            .on_hover_text("click, then press the key to bind (Escape cancels)");
+        if response.clicked() && !answered {
+            ui.data_mut(|d| d.insert_temp(id, !listening));
+        }
+    });
     changed
 }
 
