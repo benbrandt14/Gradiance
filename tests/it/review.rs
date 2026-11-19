@@ -93,13 +93,8 @@ fn expected_bodies(question: &str) -> &'static [usize] {
         // floor + the merged flush pair + the merged T
         "fillet-bulge" => &[3, 3],
         "shading" => &[8, 8, 8],
-        // ground + 12 bodies (docs/review/scenes/look/scene.scm)
-        "look" | "toon-lighting" | "chrome" => &[13, 13, 13],
-        // three static hooks + a pebble, a box and a dense box
-        "spring-feel" => &[6, 6, 6, 6],
-        // a ground and a pinned arm (units-display), a ground and a hinged
-        // box (number-fields)
-        "units-display" | "number-fields" => &[2, 2, 2],
+        // the look scene (ground + 12) + the cut box's pentagon and triangle
+        "toon-highlights" => &[15, 15, 15, 15],
         _ => &[],
     }
 }
@@ -306,19 +301,21 @@ fn an_answer_writes_one_entry_and_keeps_earlier_ones() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The `look` question shows the presets as coded: each option's settings
-/// override, applied over the defaults, is exactly its look's preset
-/// (`gradiance_domain::theme::Look`), so the question cannot drift from
-/// what `look-apply` sets.
+/// The `look` question (answered and archived 2026-11-19) showed the
+/// presets as coded: each option's settings override, applied over the
+/// defaults, is exactly its look's preset (`gradiance_domain::theme::Look`),
+/// so the archived answer still names what `look-apply` sets.
 #[test]
 fn the_look_question_shows_the_coded_presets() {
     use gradiance::domain::theme::Look;
     use gradiance::scene::EnvironmentRecord;
-    let text = std::fs::read_to_string(live_questions()).expect("questions.ron");
-    let set = gradiance::scene::review::questions_from_ron(&text).expect("parses");
-    let question = set
-        .questions
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/review/archive.ron");
+    let text = std::fs::read_to_string(path).expect("archive.ron");
+    let archive = gradiance::scene::review::archive_from_ron(&text).expect("parses");
+    let question = archive
+        .entries
         .iter()
+        .map(|entry| &entry.question)
         .find(|q| q.id == "look")
         .expect("the look question");
     for (option, look) in question.options.iter().zip(Look::ALL) {

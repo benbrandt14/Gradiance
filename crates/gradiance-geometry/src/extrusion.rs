@@ -17,6 +17,39 @@ pub struct MeshBuffers {
     pub normals: Vec<[f32; 3]>,
     /// Triangle indices (CCW = outward).
     pub indices: Vec<u32>,
+    /// Per-vertex face coordinates ([`face_coords`]): the vertex's outline
+    /// point mapped so the outline's bounding box spans `[-1, 1]` on both
+    /// axes. Affine in position, so it interpolates exactly across any
+    /// triangulation; the toon shader reads a front cap as a shallow dome
+    /// over it (brief 4b-5).
+    pub uvs: Vec<[f32; 2]>,
+}
+
+/// The bounding box of `contours` as `(centre, half extents)`, the frame
+/// [`MeshBuffers::uvs`] is measured in. Half extents are never zero, so a
+/// degenerate outline maps to finite coordinates.
+#[must_use]
+pub fn face_frame(contours: &Contours) -> (Vec2, Vec2) {
+    let mut min = Vec2::splat(f32::MAX);
+    let mut max = Vec2::splat(f32::MIN);
+    for p in contours.rings().flatten() {
+        min = min.min(*p);
+        max = max.max(*p);
+    }
+    if min.x > max.x {
+        return (Vec2::ZERO, Vec2::ONE);
+    }
+    (
+        (min + max) * 0.5,
+        ((max - min) * 0.5).max(Vec2::splat(1e-6)),
+    )
+}
+
+/// `p` in the face frame `(centre, half)`: the outline's bounding box maps
+/// to `[-1, 1]` on both axes (a circle to the unit disc).
+#[must_use]
+pub fn face_coords(p: Vec2, (centre, half): (Vec2, Vec2)) -> [f32; 2] {
+    ((p - centre) / half).to_array()
 }
 
 /// Extrudes `contours` into a closed prism spanning
@@ -27,6 +60,7 @@ pub struct MeshBuffers {
 pub fn extrude_contours(contours: &Contours, z_front: f32, depth: f32) -> MeshBuffers {
     let z_back = z_front - depth;
     let cap = tessellate(contours);
+    let frame = face_frame(contours);
     let mut mesh = MeshBuffers::default();
 
     // Front cap (+Z normal), original winding.
@@ -34,6 +68,7 @@ pub fn extrude_contours(contours: &Contours, z_front: f32, depth: f32) -> MeshBu
     for v in &cap.vertices {
         mesh.positions.push([v.x, v.y, z_front]);
         mesh.normals.push([0.0, 0.0, 1.0]);
+        mesh.uvs.push(face_coords(*v, frame));
     }
     mesh.indices.extend(cap.indices.iter().copied());
 
@@ -42,6 +77,7 @@ pub fn extrude_contours(contours: &Contours, z_front: f32, depth: f32) -> MeshBu
     for v in &cap.vertices {
         mesh.positions.push([v.x, v.y, z_back]);
         mesh.normals.push([0.0, 0.0, -1.0]);
+        mesh.uvs.push(face_coords(*v, frame));
     }
     for &[a, b, c] in cap.indices.as_chunks::<3>().0 {
         mesh.indices
@@ -74,6 +110,8 @@ pub fn extrude_contours(contours: &Contours, z_front: f32, depth: f32) -> MeshBu
                 [a.x, a.y, z_back],
             ]);
             mesh.normals.extend([nrm; 4]);
+            let (ua, ub) = (face_coords(a, frame), face_coords(b, frame));
+            mesh.uvs.extend([ua, ub, ub, ua]);
             // Two CCW triangles facing `normal`.
             mesh.indices
                 .extend([base, base + 3, base + 1, base + 1, base + 3, base + 2]);
@@ -132,7 +170,34 @@ mod tests {
         assert!((zmax - -10.0).abs() < 1e-4);
         assert!((zmin - -30.0).abs() < 1e-4);
         assert_eq!(mesh.positions.len(), mesh.normals.len());
+        assert_eq!(mesh.positions.len(), mesh.uvs.len());
         assert_eq!(mesh.indices.len() % 3, 0);
+    }
+
+    /// The face coordinates span the outline's bounding box as `[-1, 1]`:
+    /// a box's corners land on `(±1, ±1)`, a circle's rim on the unit
+    /// circle, whatever the size, so the toon dome looks alike on a pebble
+    /// and on a plank.
+    #[test]
+    fn face_coords_span_the_outline_box() {
+        let mesh = extrude_contours(
+            &polygonize(&ShapeDef::Box {
+                width: 3.0,
+                height: 0.5,
+            }),
+            0.0,
+            0.1,
+        );
+        for (p, uv) in mesh.positions.iter().zip(&mesh.uvs) {
+            assert!((uv[0].abs() - 1.0).abs() < 1e-4, "{p:?} -> {uv:?}");
+            assert!((uv[1].abs() - 1.0).abs() < 1e-4, "{p:?} -> {uv:?}");
+            assert!((uv[0] * 1.5 - p[0]).abs() < 1e-4 && (uv[1] * 0.25 - p[1]).abs() < 1e-4);
+        }
+        let mesh = extrude_contours(&polygonize(&ShapeDef::Circle { radius: 0.3 }), 0.0, 0.1);
+        for uv in &mesh.uvs {
+            let r = Vec2::from_array(*uv).length();
+            assert!((r - 1.0).abs() < 0.02, "rim at r = {r}");
+        }
     }
 
     #[test]

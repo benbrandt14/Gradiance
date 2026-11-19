@@ -15,6 +15,20 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_interaction::tools::array_tool::{ArrayConfig, ArraySpacing, MAX_COPIES_PER_AXIS};
 
+/// The gap a "Contact + gap" spacing starts at (in [`ArraySpacing::ALL`])
+/// and resets to, metres.
+fn default_gap() -> f32 {
+    ArraySpacing::ALL
+        .iter()
+        .find_map(|s| match s {
+            ArraySpacing::Gap(g) => Some(*g),
+            ArraySpacing::Contact => None,
+        })
+        .unwrap_or(0.0)
+}
+/// The count a fixed axis starts at and resets to.
+const DEFAULT_COUNT: u32 = 4;
+
 /// Whether the floating Array window is showing.
 #[derive(Resource, Default, Debug)]
 pub struct ArrayWindow {
@@ -101,17 +115,15 @@ fn spacing_controls(ui: &mut egui::Ui, config: &mut ArrayConfig) {
             );
         }
         ArraySpacing::Gap(gap) => {
-            ui.add(
-                egui::DragValue::new(gap)
-                    .speed(0.005)
-                    .range(0.0..=100.0)
-                    .suffix(" m")
-                    .prefix("gap "),
-            )
-            .on_hover_text(
-                "added to the flush pitch. It cannot go negative: a pattern \
+            widgets::config_field(default_gap(), 0.005)
+                .range(0.0..=100.0)
+                .unit(gradiance_units::Dimension::Length)
+                .prefix("gap ")
+                .show(ui, gap)
+                .on_hover_text(
+                    "added to the flush pitch. It cannot go negative: a pattern \
                  that overlaps itself is never what was wanted",
-            );
+                );
         }
     }
 }
@@ -137,14 +149,12 @@ fn axis_count(ui: &mut egui::Ui, label: &str, slot: &mut Option<u32>) {
     ui.horizontal(|ui| {
         let mut fixed = slot.is_some();
         if ui.checkbox(&mut fixed, label).changed() {
-            *slot = fixed.then_some(slot.unwrap_or(4));
+            *slot = fixed.then_some(slot.unwrap_or(DEFAULT_COUNT));
         }
         if let Some(count) = slot {
-            ui.add(
-                egui::DragValue::new(count)
-                    .speed(0.2)
-                    .range(1..=MAX_COPIES_PER_AXIS),
-            );
+            widgets::config_field(DEFAULT_COUNT as f32, 0.2)
+                .range(1.0..=MAX_COPIES_PER_AXIS as f32)
+                .show_int(ui, count);
         }
     });
 }

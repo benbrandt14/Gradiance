@@ -6,7 +6,7 @@
 //! tone ([`SceneTheme::display`]), so a look change rebuilds every body's
 //! material.
 
-use crate::toon::{ToonExtension, ToonMaterial, params_of};
+use crate::toon::{ToonExtension, ToonMaterial, face_of, params_of};
 use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::{Appearance, Rgba};
@@ -70,6 +70,7 @@ fn body_material(
         },
         extension: ToonExtension {
             params: params_of(settings),
+            face: face_of(settings),
         },
     }
 }

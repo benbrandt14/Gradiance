@@ -91,8 +91,9 @@ green suite is not evidence a variant is *used* — only that its file is on dis
 | `hint` | Secondary explanatory text (weak, small). |
 | `empty_state` | "Nothing here yet", with what to do about it. |
 | `close_button` | The one ✕, one size, one meaning. |
-| `labelled_drag` / `labelled_drag_u32` | A labelled numeric row on the **config** seam. |
-| `precise_drag` / `precise_drag_unit` | A numeric row on the **edit** seam. |
+| `config_field(default, speed)` → `ConfigField` | A number field on the **config** seam: `.range`, `.unit` / `.stored`, `.prefix`, `.suffix`, `.scientific`, then `.show` (f32) or `.show_int` (any integer). |
+| `labelled_drag` / `labelled_drag_int` | A `ConfigField` as a labelled grid row. |
+| `precise_drag` / `precise_drag_unit` / `precise_drag_clamped` | A numeric row on the **edit** seam. |
 | `node_kind_editor` | Behavior-node fields, shared by three hosts. |
 
 Each returns an `egui::Response` so `.on_hover_text(…)` chains — a helper that
@@ -132,12 +133,12 @@ names `DisplayUnit::DEGREES` in the grid's table.
 ### Every number field behaves like Blender's (brief U-8)
 
 One function, `ui::unit_fields::number_field`, carries the behaviours.
-`precise_drag*` (edit seam), `labelled_drag`, `labelled_quantity` and the
-reflect grid's number rows (config seam) reach it. Panels that still build
-a raw `egui::DragValue` (optimizer, node graph, groups, signals, array,
-context menu, a few settings rows, integer fields) have only egui's own
-Shift and typed numbers until they move onto these helpers; do not add a
-new one.
+`precise_drag*` (edit seam), `ConfigField` / `labelled_drag*` and the
+reflect grid's number rows (config seam) reach it. Since brief U-8b no
+panel builds a raw `egui::DragValue` (`unit_fields` holds the one); do
+not add one. Every field has a default: a config field names it (the
+settings type's `Default`, or the value a picker starts the field at),
+and the reflect grid reads the same field of `T::default()`.
 
 | Gesture | Effect |
 |---|---|
@@ -146,15 +147,18 @@ new one.
 | Click, type | A number or maths with units, applied on Enter / focus loss; Esc keeps the old value; a refused entry outlines red and says why for 4 s |
 | Hover + Backspace / `-` / Ctrl+wheel | Default / negate / one snap step per notch |
 | Hover + Ctrl+C / Ctrl+V | Copy the value with its unit / paste text through the parser |
-| Middle-click, right-click | Default; a menu with Copy, Paste, Reset to default |
+| Middle click | Reset to the default (`ui.click_button` with `"middle"` injects one) |
+| Right-click | A menu with Copy, Paste, Reset to default |
 
 On the edit seam each of these is **one** commit: a drag on release, a typed
 entry on Enter, a key, a wheel notch or a menu row at once, and a cancelled
 drag never. A hovered or dragged field claims the keyboard
 (`unit_fields::claim_keys` → `KeyboardCaptured`), so Backspace over a field
 does not also delete the selection; keys reach a field only while the
-pointer is over it, never as global keys. Reset needs a default: config
-rows have none, so their Backspace and Reset do nothing.
+pointer is over it, never as global keys. A middle click over a panel
+never orbits the view (the camera orbits only off the UI). On the config
+seam a reset is a settings write like any other: a scene-content setting
+records it as one undo step (`commit_settings_edits`).
 
 ### Empty states say what to do
 

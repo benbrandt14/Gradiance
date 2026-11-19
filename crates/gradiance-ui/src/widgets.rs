@@ -5,8 +5,10 @@
 //! equation input are planned extensions of this module: both slot in as
 //! new `Commit`-returning widgets without touching callers.
 
+use crate::unit_fields::Format;
 use bevy_egui::egui::{self, Ui};
 use gradiance_units::{Dimension, DisplayUnit};
+use std::ops::RangeInclusive;
 
 /// Outcome of a committing widget interaction.
 pub enum Commit<T> {
@@ -66,6 +68,33 @@ pub fn precise_drag_in(
     speed: f32,
     unit: DisplayUnit,
 ) -> Commit<f32> {
+    precise_field(ui, id, value, (default, speed), None, unit)
+}
+
+/// [`precise_drag_unit`] held to `range` (base SI).
+pub fn precise_drag_clamped(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut f32,
+    default: f32,
+    speed: f32,
+    range: RangeInclusive<f32>,
+    dim: Dimension,
+) -> Commit<f32> {
+    let unit = crate::unit_fields::display(ui.ctx(), dim);
+    precise_field(ui, id, value, (default, speed), Some(range), unit)
+}
+
+/// The edit seam's one field: `(default, speed)`, an optional range, all
+/// base SI.
+fn precise_field(
+    ui: &mut Ui,
+    id: egui::Id,
+    value: &mut f32,
+    (default, speed): (f32, f32),
+    range: Option<RangeInclusive<f32>>,
+    unit: DisplayUnit,
+) -> Commit<f32> {
     let start_id = id.with("gesture-start");
     let active_id = id.with("gesture-active");
 
@@ -80,7 +109,7 @@ pub fn precise_drag_in(
     }
 
     let before = *value;
-    let field = crate::unit_fields::number_field(ui, value, speed, None, unit, Some(default));
+    let field = crate::unit_fields::number_field(ui, value, speed, range, unit, Some(default));
     let response = field.response;
 
     // A one-step edit (Backspace, `-`, Ctrl+wheel, paste, Reset,
@@ -174,7 +203,119 @@ pub fn close_button(ui: &mut Ui, hover: &str) -> bool {
         .clicked()
 }
 
-/// A labelled numeric row inside an [`egui::Grid`]: label, drag, `end_row`.
+/// A number field on the **config** seam: the caller writes the value to a
+/// settings resource (or a panel's own state) every frame it changes, so
+/// there is no gesture bookkeeping. Built from its default and speed
+/// ([`config_field`]); `show` draws it over an `f32`, `show_int` over any
+/// integer. Every behaviour of [`crate::unit_fields::number_field`] reaches
+/// it, including Backspace, a middle click and the menu's Reset to the
+/// default (brief U-8b).
+#[derive(Clone, Debug)]
+pub struct ConfigField {
+    default: Option<f32>,
+    speed: f32,
+    range: Option<RangeInclusive<f32>>,
+    stored: DisplayUnit,
+    format: Format,
+}
+
+/// A [`ConfigField`] whose reset value is `default`, scrubbing `speed` per
+/// point: dimensionless, unbounded, until the builder says otherwise.
+#[must_use]
+pub fn config_field(default: f32, speed: f32) -> ConfigField {
+    ConfigField {
+        default: Some(default),
+        speed,
+        range: None,
+        stored: DisplayUnit::canonical(Dimension::Dimensionless),
+        format: Format::default(),
+    }
+}
+
+impl ConfigField {
+    /// No default after all (a struct the reflect grid cannot build a
+    /// default of): Backspace, a middle click and Reset do nothing.
+    #[must_use]
+    pub fn no_default(mut self) -> Self {
+        self.default = None;
+        self
+    }
+
+    /// Held to `range` (in the stored unit).
+    #[must_use]
+    pub fn range(mut self, range: RangeInclusive<f32>) -> Self {
+        self.range = Some(range);
+        self
+    }
+
+    /// A quantity kept in `stored` (usually [`DisplayUnit::canonical`]; a
+    /// settings angle kept in degrees passes [`DisplayUnit::DEGREES`]): the
+    /// field shows and parses in the unit the display preference picks.
+    /// `default`, `speed` and `range` are in `stored`.
+    #[must_use]
+    pub fn stored(mut self, stored: DisplayUnit) -> Self {
+        self.stored = stored;
+        self
+    }
+
+    /// A quantity of dimension `dim`, kept in its canonical SI unit.
+    #[must_use]
+    pub fn unit(self, dim: Dimension) -> Self {
+        self.stored(DisplayUnit::canonical(dim))
+    }
+
+    /// Text before the number.
+    #[must_use]
+    pub fn prefix(mut self, prefix: &'static str) -> Self {
+        self.format.prefix = prefix;
+        self
+    }
+
+    /// Text after the number and its unit.
+    #[must_use]
+    pub fn suffix(mut self, suffix: &'static str) -> Self {
+        self.format.suffix = suffix;
+        self
+    }
+
+    /// Shown as `1.0e-4` (a tolerance).
+    #[must_use]
+    pub fn scientific(mut self) -> Self {
+        self.format.scientific = true;
+        self
+    }
+
+    /// Draws the field over `value`.
+    pub fn show(self, ui: &mut Ui, value: &mut f32) -> egui::Response {
+        crate::unit_fields::stored_drag(
+            ui,
+            value,
+            self.range,
+            self.speed,
+            self.stored,
+            self.default,
+            self.format,
+        )
+    }
+
+    /// Draws the field over a whole number: it shows no decimals and
+    /// writes the rounded value.
+    pub fn show_int<T: egui::emath::Numeric>(
+        mut self,
+        ui: &mut Ui,
+        value: &mut T,
+    ) -> egui::Response {
+        self.format.decimals = Some(0);
+        let mut v = value.to_f64() as f32;
+        let response = self.show(ui, &mut v);
+        if response.changed() {
+            *value = T::from_f64(f64::from(v).round());
+        }
+        response
+    }
+}
+
+/// A labelled numeric row inside an [`egui::Grid`]: label, field, `end_row`.
 ///
 /// Generalised from the optimizer's private helper, which was already the
 /// right shape and the only place in the crate where labels lined up into a
@@ -183,55 +324,31 @@ pub fn close_button(ui: &mut Ui, hover: &str) -> bool {
 ///
 /// For **authored** values prefer [`precise_drag_unit`], which commits once
 /// per gesture for the undo record; this is for config-seam edits, which are
-/// not undoable.
+/// not undoable gestures. `field` carries the default, the range and (for a
+/// quantity) the stored unit.
 pub fn labelled_drag(
     ui: &mut Ui,
     label: &str,
-    value: &mut f32,
-    range: std::ops::RangeInclusive<f32>,
-    speed: f32,
     hover: &str,
+    value: &mut f32,
+    field: ConfigField,
 ) -> bool {
     ui.label(label).on_hover_text(hover);
-    let plain = DisplayUnit::canonical(Dimension::Dimensionless);
-    let changed = crate::unit_fields::stored_drag(ui, value, Some(range), speed, plain).changed();
+    let changed = field.show(ui, value).changed();
     ui.end_row();
     changed
 }
 
-/// [`labelled_drag`] for a physical quantity: `value`, `range` and `speed`
-/// are in `stored` (usually [`DisplayUnit::canonical`]; a settings field
-/// kept in degrees passes [`DisplayUnit::DEGREES`]), and the field shows and
-/// parses in the unit the display preference picks for `stored`'s
-/// dimension ([`crate::unit_fields`]). The config seam: no gesture
-/// bookkeeping, "changed" every frame it moves.
-pub fn labelled_quantity(
+/// [`labelled_drag`] for a whole number.
+pub fn labelled_drag_int<T: egui::emath::Numeric>(
     ui: &mut Ui,
     label: &str,
-    value: &mut f32,
-    range: std::ops::RangeInclusive<f32>,
-    speed: f32,
     hover: &str,
-    stored: DisplayUnit,
+    value: &mut T,
+    field: ConfigField,
 ) -> bool {
     ui.label(label).on_hover_text(hover);
-    let changed = crate::unit_fields::stored_drag(ui, value, Some(range), speed, stored).changed();
-    ui.end_row();
-    changed
-}
-
-/// The same, for an integer.
-pub fn labelled_drag_u32(
-    ui: &mut Ui,
-    label: &str,
-    value: &mut u32,
-    range: std::ops::RangeInclusive<u32>,
-    hover: &str,
-) -> bool {
-    ui.label(label).on_hover_text(hover);
-    let changed = ui
-        .add(egui::DragValue::new(value).speed(0.2).range(range))
-        .changed();
+    let changed = field.show_int(ui, value).changed();
     ui.end_row();
     changed
 }
@@ -252,14 +369,36 @@ pub fn node_kind_editor(
     let mut next = kind.clone();
     match &mut next {
         NodeKind::Tracer(tracer) => {
+            // The edit seam: each field reports once, on release (or at
+            // once for a reset), so a drag is one undo step.
+            let defaults = gradiance_domain::tracer::Tracer::default();
+            let mut committed = false;
             ui.horizontal(|ui| {
-                ui.label("fade (s)");
-                ui.add(egui::DragValue::new(&mut tracer.fade_secs.0).speed(0.05));
+                ui.label("fade");
+                committed |= matches!(
+                    precise_drag_clamped(
+                        ui,
+                        ui.id().with((salt, "tracer-fade")),
+                        &mut tracer.fade_secs.0,
+                        defaults.fade_secs.0,
+                        0.05,
+                        0.0..=f32::MAX,
+                        Dimension::Time,
+                    ),
+                    Commit::Done(..)
+                );
                 ui.label("size");
-                ui.add(
-                    egui::DragValue::new(&mut tracer.size.0)
-                        .speed(0.1)
-                        .range(0.5..=20.0),
+                committed |= matches!(
+                    precise_drag_clamped(
+                        ui,
+                        ui.id().with((salt, "tracer-size")),
+                        &mut tracer.size.0,
+                        defaults.size.0,
+                        0.1,
+                        0.5..=20.0,
+                        Dimension::Length,
+                    ),
+                    Commit::Done(..)
                 );
             });
             ui.horizontal(|ui| {
@@ -268,10 +407,17 @@ pub fn node_kind_editor(
                     .selected_text(format!("{:?}", tracer.pattern))
                     .show_ui(ui, |ui| {
                         for p in gradiance_domain::tracer::TracePattern::ALL {
-                            ui.selectable_value(&mut tracer.pattern, p, format!("{p:?}"));
+                            committed |= ui
+                                .selectable_value(&mut tracer.pattern, p, format!("{p:?}"))
+                                .changed();
                         }
                     });
             });
+            // Mid-drag the working value is in `next` too: report only a
+            // finished edit.
+            if !committed {
+                return None;
+            }
         }
     }
     (next != *kind).then_some(next)
@@ -280,6 +426,96 @@ pub fn node_kind_editor(
 #[cfg(test)]
 mod layout_tests {
     use super::*;
+    use egui::accesskit::Role;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+
+    /// Presses and releases the middle button on every number field, one
+    /// frame each.
+    fn middle_click_every_field<S>(h: &mut Harness<'_, S>) {
+        let centres: Vec<egui::Pos2> = h
+            .get_all_by_role(Role::SpinButton)
+            .map(|n| n.rect().center())
+            .collect();
+        assert!(!centres.is_empty(), "no number field drawn");
+        for at in centres {
+            h.hover_at(at);
+            h.run();
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton {
+                    pos: at,
+                    button: egui::PointerButton::Middle,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                });
+                h.run();
+            }
+        }
+    }
+
+    /// Brief U-8b: a config field (a float and a whole number) goes back
+    /// to its default on a middle click.
+    #[test]
+    fn a_middle_click_resets_config_fields() {
+        let mut h = Harness::new_ui_state(
+            |ui, (v, n): &mut (f32, u32)| {
+                ui.horizontal(|ui| {
+                    config_field(0.25, 0.01).range(0.0..=1.0).show(ui, v);
+                    config_field(4.0, 0.2).range(1.0..=9.0).show_int(ui, n);
+                });
+            },
+            (0.75_f32, 7_u32),
+        );
+        h.run();
+        middle_click_every_field(&mut h);
+        assert_eq!(*h.state(), (0.25, 4));
+    }
+
+    /// The tracer node's fields are on the edit seam: a middle click is one
+    /// finished edit, reported once.
+    #[test]
+    fn a_middle_click_resets_a_tracer_field_once() {
+        use gradiance_domain::node::NodeKind;
+        use gradiance_domain::tracer::Tracer;
+        let start = Tracer {
+            fade_secs: gradiance_units::Time(9.0),
+            ..Tracer::default()
+        };
+        let mut h = Harness::new_ui_state(
+            |ui, (kind, edits): &mut (NodeKind, Vec<NodeKind>)| {
+                if let Some(next) = node_kind_editor(ui, "test", kind) {
+                    edits.push(next.clone());
+                    *kind = next;
+                }
+            },
+            (NodeKind::Tracer(start), Vec::new()),
+        );
+        h.run();
+        let at = h
+            .get_all_by_role(Role::SpinButton)
+            .next()
+            .map_or_else(egui::Pos2::default, |n| n.rect().center());
+        h.hover_at(at);
+        h.run();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Middle,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+        }
+        let edits = &h.state().1;
+        assert_eq!(edits.len(), 1, "{edits:?}");
+        // Only the fade moved; the size (below its field's range) was shown,
+        // never written.
+        let reset = Tracer {
+            fade_secs: Tracer::default().fade_secs,
+            ..start
+        };
+        assert_eq!(edits[0], NodeKind::Tracer(reset));
+    }
 
     /// The helpers must not panic on an empty context — they are called from
     /// every pane, including headless where there is no real UI.
@@ -294,9 +530,21 @@ mod layout_tests {
             let _ = close_button(ui, "remove");
             egui::Grid::new("t").num_columns(2).show(ui, |ui| {
                 let mut v = 1.0_f32;
-                let _ = labelled_drag(ui, "value", &mut v, 0.0..=2.0, 0.01, "hover");
+                let _ = labelled_drag(
+                    ui,
+                    "value",
+                    "hover",
+                    &mut v,
+                    config_field(1.0, 0.01).range(0.0..=2.0),
+                );
                 let mut n = 3_u32;
-                let _ = labelled_drag_u32(ui, "count", &mut n, 1..=9, "hover");
+                let _ = labelled_drag_int(
+                    ui,
+                    "count",
+                    "hover",
+                    &mut n,
+                    config_field(3.0, 0.2).range(1.0..=9.0),
+                );
             });
         });
     }

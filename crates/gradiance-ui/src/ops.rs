@@ -37,6 +37,7 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<UiInspect>();
         registry.register::<UiScreenshot>();
         registry.register::<UiClick>();
+        registry.register::<UiClickButton>();
         registry.register::<UiDrag>();
         registry.register::<UiKey>();
         registry.register::<UiText>();
@@ -212,6 +213,47 @@ impl Operation for UiClick {
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         Ok(inject(UiInput::Click {
             at: self.at.resolve(ctx)?,
+            button: MouseButton::Left,
+        }))
+    }
+}
+
+/// Click a widget or a window point with a named mouse button.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct UiClickButton {
+    /// A widget name or `[x, y]`.
+    pub at: Target,
+    /// `left`, `middle` or `right`.
+    pub button: String,
+}
+
+impl Operation for UiClickButton {
+    const META: OpMeta = OpMeta {
+        id: "ui.click_button",
+        lisp: "ui-click-button",
+        doc: "Click with a named button (left, middle or right) at a widget name from ui.inspect or a window point [x y]: move, press, release, one frame each. A middle click on a number field resets it to its default.",
+        seam: Seam::Editor,
+        menu: None,
+        chord: None,
+        undo: None,
+        example: r#"{"at": [640, 370], "button": "middle"}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let button = match self.button.to_ascii_lowercase().as_str() {
+            "left" => MouseButton::Left,
+            "middle" => MouseButton::Middle,
+            "right" => MouseButton::Right,
+            other => {
+                return Err(OpError::Invalid(format!(
+                    "button `{other}` is not left, middle or right"
+                )));
+            }
+        };
+        Ok(inject(UiInput::Click {
+            at: self.at.resolve(ctx)?,
+            button,
         }))
     }
 }

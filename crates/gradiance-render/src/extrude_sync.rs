@@ -28,6 +28,9 @@ pub fn build_body_mesh(shape: &ShapeDef, band: &DepthBand) -> Mesh {
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, buffers.positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, buffers.normals);
+    // Face coordinates, not a texture mapping: `toon.wesl` bends the front
+    // cap's normal over them (relief and glint, brief 4b-5).
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, buffers.uvs);
     mesh.insert_indices(Indices::U32(buffers.indices));
     mesh
 }

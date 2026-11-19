@@ -41,10 +41,12 @@ pub const MAX_QUEUED_FRAMES: usize = 2_000;
 /// operations.
 #[derive(Message, Debug, Clone, PartialEq)]
 pub enum UiInput {
-    /// Move there, press, release (the left button).
+    /// Move there, press, release `button`.
     Click {
         /// Where.
         at: Vec2,
+        /// Which button (`ui.click` is the left one).
+        button: MouseButton,
     },
     /// Move to `from`, press, move to `to` in `steps` frames, release.
     Drag {
@@ -104,10 +106,10 @@ impl UiInput {
     pub fn frames(&self) -> Vec<Vec<Event>> {
         let left = MouseButton::Left;
         match self {
-            Self::Click { at } => vec![
+            Self::Click { at, button } => vec![
                 vec![Event::Move(*at)],
-                vec![Event::Button(left, true)],
-                vec![Event::Button(left, false)],
+                vec![Event::Button(*button, true)],
+                vec![Event::Button(*button, false)],
             ],
             Self::Drag { from, to, steps } => {
                 let steps = (*steps).clamp(1, MAX_STEPS);
@@ -470,6 +472,7 @@ mod tests {
     fn a_click_moves_then_presses_then_releases_one_frame_each() {
         let frames = UiInput::Click {
             at: Vec2::new(32.0, 141.0),
+            button: MouseButton::Left,
         }
         .frames();
         assert_eq!(
@@ -589,7 +592,10 @@ mod tests {
     #[test]
     fn the_queue_plays_gestures_in_order_and_refuses_past_its_budget() {
         let mut queue = InputQueue::default();
-        assert!(queue.push(&UiInput::Click { at: Vec2::ZERO }));
+        assert!(queue.push(&UiInput::Click {
+            at: Vec2::ZERO,
+            button: MouseButton::Left,
+        }));
         assert!(queue.push(&UiInput::Text("x".into())));
         assert_eq!(queue.len(), 4);
         assert_eq!(queue.next_frame(), [Event::Move(Vec2::ZERO)]);
