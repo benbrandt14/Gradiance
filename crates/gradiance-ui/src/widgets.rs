@@ -1,5 +1,5 @@
-//! Precision widgets: commit-on-release drags with scientific notation
-//! and middle-click default reset.
+//! Precision widgets: commit-on-release number fields (the behaviours are
+//! `unit_fields::number_field`'s, brief U-8) and the layout vocabulary.
 //!
 //! Curve-picker widgets (Lightroom-style response curves) and symbolic /
 //! equation input are planned extensions of this module: both slot in as
@@ -16,12 +16,14 @@ pub enum Commit<T> {
     Done(T, T),
 }
 
-/// A drag value that:
-/// - accepts typed maths and units (`1.5e3`, `2*pi`, `90/4`, `25 cm`;
-///   [`gradiance_units::expr`]),
-/// - resets to `default` on **middle-click**,
-/// - commits once per gesture (drag release / focus loss), returning the
-///   pre-gesture value for the undo record.
+/// A number field on the **edit** seam ([`crate::unit_fields::number_field`]:
+/// scrub, Shift = 1/10, Ctrl snaps, Esc cancels, typed maths and units,
+/// Backspace / middle-click / Reset = `default`, `-` negates, Ctrl+wheel
+/// steps, Copy / Paste) that commits **once per gesture**, returning the
+/// pre-gesture value for the undo record:
+/// - a drag commits on release, and nothing when Esc cancelled it;
+/// - a typed entry commits on Enter or focus loss, and nothing on Esc;
+/// - a one-step edit (a key, a wheel notch, a menu row) commits at once.
 ///
 /// For a pure number; [`precise_drag_unit`] is the same for a quantity.
 pub fn precise_drag(
@@ -77,21 +79,27 @@ pub fn precise_drag_in(
         *value = active;
     }
 
-    let response = crate::unit_fields::drag_value(ui, value, speed, None, unit);
+    let before = *value;
+    let field = crate::unit_fields::number_field(ui, value, speed, None, unit, Some(default));
+    let response = field.response;
 
-    // Middle-click: reset to default, committed immediately.
-    if response.clicked_by(egui::PointerButton::Middle) {
-        ui.data_mut(|d| d.remove::<f32>(active_id));
-        let old = *value;
-        *value = default;
-        if (old - default).abs() > f32::EPSILON {
-            return Commit::Done(old, default);
+    // A one-step edit (Backspace, `-`, Ctrl+wheel, paste, Reset,
+    // middle-click) is a whole gesture: commit it now.
+    if let Some(old) = field.instant {
+        ui.data_mut(|d| {
+            d.remove::<f32>(active_id);
+            d.remove::<f32>(start_id);
+        });
+        if (old - *value).abs() > f32::EPSILON {
+            return Commit::Done(old, *value);
         }
         return Commit::None;
     }
 
+    // The value before this frame's change: on a drag's first frame egui
+    // has already moved it.
     if response.drag_started() || response.gained_focus() {
-        ui.data_mut(|d| d.insert_temp(start_id, *value));
+        ui.data_mut(|d| d.insert_temp(start_id, before));
     }
     // Carry the working value across frames while the gesture is live; drop it
     // the moment it ends so a stale value can't shadow the source.
@@ -185,9 +193,8 @@ pub fn labelled_drag(
     hover: &str,
 ) -> bool {
     ui.label(label).on_hover_text(hover);
-    let changed = ui
-        .add(egui::DragValue::new(value).speed(speed).range(range))
-        .changed();
+    let plain = DisplayUnit::canonical(Dimension::Dimensionless);
+    let changed = crate::unit_fields::stored_drag(ui, value, Some(range), speed, plain).changed();
     ui.end_row();
     changed
 }

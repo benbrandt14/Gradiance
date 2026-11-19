@@ -364,7 +364,9 @@ fn capture_pointer_over_ui(
     // doesn't leak to the scene. Runs last in the pass; clear for next frame.
     let pointer = ctx.pointer_latest_pos();
     over_ui.0 = ctx.is_pointer_over_egui() || pointer_over_panels(&panels.0, pointer);
-    keyboard.0 = ctx.egui_wants_keyboard_input();
+    // A hovered or dragged number field owns Backspace, `-`, Esc and
+    // Ctrl+C/V (brief U-8), though egui does not report it as typing.
+    keyboard.0 = ctx.egui_wants_keyboard_input() | unit_fields::take_key_claim(ctx);
     panels.0.clear();
     Ok(())
 }

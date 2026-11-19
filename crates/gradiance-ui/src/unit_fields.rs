@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 use bevy_egui::egui::{self, Ui};
 use gradiance_domain::settings::UnitSettings;
-use gradiance_units::{Dimension, DisplayUnit, UnitPrefs};
+use gradiance_units::{Dimension, DisplayUnit, UnitPrefs, step};
 use std::ops::RangeInclusive;
 
 /// Where [`install`] keeps the preference in the context's memory.
@@ -52,9 +52,9 @@ pub fn publish_unit_prefs(
 }
 
 /// A drag over a base-SI `value` shown in `unit`: `speed` and `range` are
-/// base SI too. A typed entry parses through [`DisplayUnit::parse`]; one that
-/// fails leaves the value as it was. `value` is written only when the field
-/// changed, so showing a value never rounds it.
+/// base SI too. The plain form of [`number_field`] (no default, so no
+/// Backspace or Reset); `value` is written only when the field changed, so
+/// showing a value never rounds it.
 pub fn drag_value(
     ui: &mut Ui,
     value: &mut f32,
@@ -62,20 +62,421 @@ pub fn drag_value(
     range: Option<RangeInclusive<f32>>,
     unit: DisplayUnit,
 ) -> egui::Response {
-    let shown_of = |si: f32| unit.from_si(f64::from(si));
-    let mut shown = shown_of(*value);
+    number_field(ui, value, speed, range, unit, None).response
+}
+
+/// What one frame of a [`number_field`] did.
+pub struct Field {
+    /// The field's response (`changed` when the value moved this frame).
+    pub response: egui::Response,
+    /// An edit made in one step this frame (Ctrl+wheel, Backspace, `-`, a
+    /// paste, the menu's Reset, a middle-click): the value before it. The
+    /// edit seam commits it at once, as one undo step.
+    pub instant: Option<f32>,
+    /// Esc cancelled the drag this frame: the value is back where the drag
+    /// started, and the gesture must commit nothing.
+    pub cancelled: bool,
+}
+
+/// How long a refused entry's message stays under its field, in seconds.
+pub const BAD_ENTRY_SECS: f64 = 4.0;
+
+/// A typed entry the parser refused, kept so the field can say why.
+#[derive(Clone)]
+struct BadEntry {
+    text: String,
+    message: String,
+    at: f64,
+}
+
+/// Where a field records that it wants this frame's keys.
+fn claim_key() -> egui::Id {
+    egui::Id::new("gradiance-field-claims-keys")
+}
+
+/// Where Copy keeps the last copied field text (the menu's Paste reads it:
+/// egui gives a widget no way to read the system clipboard).
+fn clipboard_key() -> egui::Id {
+    egui::Id::new("gradiance-field-clipboard")
+}
+
+/// A field that is hovered or dragged takes the keyboard: Backspace, `-`,
+/// Esc, Ctrl+C and Ctrl+V are its, not the scene's (delete, deselect,
+/// copy and paste bodies). Folded into `KeyboardCaptured` at the end of the
+/// pass ([`take_key_claim`]).
+pub fn claim_keys(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.insert_temp(claim_key(), true));
+}
+
+/// Whether a field claimed the keyboard this pass; clears the claim.
+pub fn take_key_claim(ctx: &egui::Context) -> bool {
+    ctx.data_mut(|d| d.remove_temp::<bool>(claim_key()))
+        .unwrap_or(false)
+}
+
+/// The last text a field's Copy put on the clipboard, if any.
+#[must_use]
+pub fn copied(ctx: &egui::Context) -> Option<String> {
+    ctx.data(|d| d.get_temp::<String>(clipboard_key()))
+}
+
+/// Keys and wheel turns a hovered field acts on, read in one pass.
+#[derive(Default)]
+struct HoverInput {
+    wheel: i32,
+    reset: bool,
+    negate: bool,
+    copy: bool,
+    paste: Option<String>,
+}
+
+fn hover_input(ui: &Ui) -> HoverInput {
+    ui.input_mut(|i| {
+        let mut out = HoverInput::default();
+        for event in &i.events {
+            match event {
+                egui::Event::MouseWheel {
+                    delta, modifiers, ..
+                } if modifiers.command && delta.y != 0.0 => {
+                    out.wheel += if delta.y > 0.0 { 1 } else { -1 };
+                }
+                egui::Event::Copy => out.copy = true,
+                egui::Event::Paste(text) => out.paste = Some(text.clone()),
+                _ => {}
+            }
+        }
+        out.reset = i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace);
+        out.negate = i.consume_key(egui::Modifiers::NONE, egui::Key::Minus);
+        out.copy |= i.consume_key(egui::Modifiers::COMMAND, egui::Key::C);
+        // bevy_egui sends Ctrl+V as the clipboard's text (manage_clipboard).
+        if i.consume_key(egui::Modifiers::COMMAND, egui::Key::V) && out.paste.is_none() {
+            out.paste = i.events.iter().find_map(|e| match e {
+                egui::Event::Text(text) => Some(text.clone()),
+                _ => None,
+            });
+        }
+        out
+    })
+}
+
+/// A field's fixed facts for one frame, shared by its behaviours.
+struct Spec {
+    unit: DisplayUnit,
+    range: Option<RangeInclusive<f32>>,
+    default: Option<f32>,
+    /// The Ctrl-snap step, in the shown unit.
+    step: f64,
+    bad_id: egui::Id,
+}
+
+impl Spec {
+    fn shown(&self, si: f32) -> f64 {
+        self.unit.from_si(f64::from(si))
+    }
+
+    fn si(&self, shown: f64) -> f32 {
+        self.unit.to_si(shown) as f32
+    }
+
+    fn clamp(&self, si: f32) -> f32 {
+        match &self.range {
+            Some(r) => si.clamp(*r.start(), *r.end()),
+            None => si,
+        }
+    }
+
+    /// Copies `value` with its unit, to the system clipboard and to the
+    /// one the menu's Paste reads.
+    fn copy(&self, ctx: &egui::Context, value: f32) {
+        let text = self.unit.format(value, 6);
+        ctx.copy_text(text.clone());
+        ctx.data_mut(|d| d.insert_temp(clipboard_key(), text));
+    }
+}
+
+/// Parses `text` for a field showing `unit`, in base SI. A refusal is filed
+/// under `bad_id` so the field can say why; a success clears it.
+fn parse_entry(
+    ctx: &egui::Context,
+    unit: DisplayUnit,
+    bad_id: egui::Id,
+    text: &str,
+) -> Option<f32> {
+    match unit.parse(text) {
+        Ok(si) => {
+            ctx.data_mut(|d| d.remove::<BadEntry>(bad_id));
+            Some(si)
+        }
+        Err(err) => {
+            let bad = BadEntry {
+                text: text.trim().to_owned(),
+                message: err.to_string(),
+                at: ctx.input(|i| i.time),
+            };
+            ctx.data_mut(|d| d.insert_temp(bad_id, bad));
+            None
+        }
+    }
+}
+
+/// The value under one-step edits: remembers the value before the first.
+struct Instant<'a> {
+    value: &'a mut f32,
+    before: Option<f32>,
+}
+
+impl Instant<'_> {
+    fn set(&mut self, spec: &Spec, new: f32) {
+        let new = spec.clamp(new);
+        if new.is_finite() {
+            self.before.get_or_insert(*self.value);
+            *self.value = new;
+        }
+    }
+
+    fn paste(&mut self, ui: &Ui, spec: &Spec, text: &str) {
+        if let Some(si) = parse_entry(ui.ctx(), spec.unit, spec.bad_id, text) {
+            self.set(spec, si);
+        }
+    }
+}
+
+/// The number field (brief U-8; `docs/unified-surface-plan.md` § 7.2).
+/// `value`, `speed`, `range` and `default` are base SI; the field shows
+/// them in `unit`.
+///
+/// - **Drag** to scrub; **Shift** scrubs at 1/10 speed (egui's own);
+///   **Ctrl** snaps to [`gradiance_units::step::snap_step`] (Ctrl+Shift to a
+///   tenth of it); **Esc** during a drag puts the value back where the drag
+///   started ([`Field::cancelled`]).
+/// - **Click** to type: a number or maths with units through
+///   [`DisplayUnit::parse`], applied on Enter or focus loss; Esc while
+///   typing keeps the old value. A refused entry outlines the field in the
+///   theme's error colour and says why for [`BAD_ENTRY_SECS`].
+/// - Over a **hovered** field: Backspace = `default`, `-` = negate,
+///   Ctrl+wheel = one snap step per notch, Ctrl+C / Ctrl+V copy and paste
+///   the value with its unit; middle-click = `default`. These are
+///   [`Field::instant`] edits. Right-click: Copy, Paste, Reset.
+pub fn number_field(
+    ui: &mut Ui,
+    value: &mut f32,
+    speed: f32,
+    range: Option<RangeInclusive<f32>>,
+    unit: DisplayUnit,
+    default: Option<f32>,
+) -> Field {
+    // The DragValue's own id (it takes the next auto id), so the parser can
+    // file a refusal under it before the response exists.
+    let id = ui.next_auto_id();
+    let shown_range = range.as_ref().map(|r| {
+        (
+            unit.from_si(f64::from(*r.start())),
+            unit.from_si(f64::from(*r.end())),
+        )
+    });
+    let spec = Spec {
+        unit,
+        step: step::snap_step(unit, unit.from_si(f64::from(speed)), shown_range),
+        range,
+        default,
+        bad_id: id.with("bad-entry"),
+    };
+    let before = *value;
+
+    let ctx = ui.ctx().clone();
+    let bad_id = spec.bad_id;
+    let mut shown = spec.shown(*value);
     let mut drag = egui::DragValue::new(&mut shown)
-        .speed(shown_of(speed))
+        .speed(spec.shown(speed))
         .suffix(unit.suffix())
-        .custom_parser(move |text| unit.parse(text).ok().map(shown_of));
-    if let Some(range) = range {
-        drag = drag.range(shown_of(*range.start())..=shown_of(*range.end()));
+        // Apply a typed entry on Enter or focus loss only: with egui's
+        // default every keystroke that parses is written, so Esc after
+        // typing would keep the half-typed value.
+        .update_while_editing(false)
+        .custom_parser(move |text| {
+            parse_entry(&ctx, unit, bad_id, text).map(|si| unit.from_si(f64::from(si)))
+        });
+    if let Some((lo, hi)) = shown_range {
+        drag = drag.range(lo..=hi);
     }
-    let response = ui.add(drag);
+    let mut response = ui.add(drag);
     if response.changed() {
-        *value = unit.to_si(shown) as f32;
+        *value = spec.si(shown);
     }
-    response
+
+    let cancelled = scrub(ui, &response, &spec, id, value, before);
+    if response.hovered() || response.dragged() || response.has_focus() {
+        claim_keys(ui.ctx());
+    }
+    let mut instant = Instant {
+        value,
+        before: None,
+    };
+    if response.hovered() && !response.dragged() && !response.has_focus() {
+        hover_edits(ui, &response, &spec, &mut instant);
+    }
+    menu(ui, &response, &spec, &mut instant);
+    show_bad_entry(ui, &response, spec.bad_id);
+
+    if (*instant.value - before).abs() > 0.0 {
+        response.mark_changed();
+    }
+    Field {
+        response,
+        instant: instant.before,
+        cancelled,
+    }
+}
+
+/// The drag: remembers where it started; Esc puts the value back there (and
+/// keeps it there until release); Ctrl snaps. Returns whether Esc cancelled
+/// it this frame.
+fn scrub(
+    ui: &Ui,
+    response: &egui::Response,
+    spec: &Spec,
+    id: egui::Id,
+    value: &mut f32,
+    before: f32,
+) -> bool {
+    let start_id = id.with("scrub-start");
+    let cancel_id = id.with("scrub-cancelled");
+    let mut cancelled = false;
+    if response.drag_started() {
+        ui.data_mut(|d| d.insert_temp(start_id, before));
+    }
+    if response.dragged() {
+        let start = ui.data(|d| d.get_temp::<f32>(start_id)).unwrap_or(before);
+        if ui.data(|d| d.get_temp::<bool>(cancel_id)).unwrap_or(false) {
+            *value = start;
+        } else if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            ui.data_mut(|d| d.insert_temp(cancel_id, true));
+            *value = start;
+            cancelled = true;
+        } else if response.changed() {
+            let modifiers = ui.input(|i| i.modifiers);
+            if modifiers.command {
+                let step = if modifiers.shift {
+                    step::fine(spec.step)
+                } else {
+                    spec.step
+                };
+                *value = spec.clamp(spec.si(step::snap(spec.shown(*value), step)));
+            }
+        }
+    }
+    if response.drag_stopped() {
+        ui.data_mut(|d| {
+            d.remove::<f32>(start_id);
+            d.remove::<bool>(cancel_id);
+        });
+    }
+    cancelled
+}
+
+/// Keys, wheel and middle-click over a hovered field.
+fn hover_edits(ui: &Ui, response: &egui::Response, spec: &Spec, instant: &mut Instant<'_>) {
+    let input = hover_input(ui);
+    if input.wheel != 0 {
+        let shown = spec.shown(*instant.value) + f64::from(input.wheel) * spec.step;
+        instant.set(spec, spec.si(shown));
+    }
+    let reset = input.reset || response.clicked_by(egui::PointerButton::Middle);
+    if reset && let Some(default) = spec.default {
+        instant.set(spec, default);
+    }
+    if input.negate {
+        instant.set(spec, -*instant.value);
+    }
+    if input.copy {
+        spec.copy(ui.ctx(), *instant.value);
+    }
+    if let Some(text) = input.paste {
+        instant.paste(ui, spec, &text);
+    }
+}
+
+/// What the right-click menu asked for.
+enum MenuPick {
+    Copy,
+    Paste(String),
+    Reset,
+}
+
+/// The right-click menu: Copy, Paste (the last copied field text), Reset.
+fn menu(ui: &Ui, response: &egui::Response, spec: &Spec, instant: &mut Instant<'_>) {
+    let mut pick = None;
+    let clipboard = copied(ui.ctx());
+    response.context_menu(|ui| {
+        if ui.button("Copy").clicked() {
+            pick = Some(MenuPick::Copy);
+            ui.close();
+        }
+        let paste = ui.add_enabled(clipboard.is_some(), egui::Button::new("Paste"));
+        let paste = match &clipboard {
+            Some(text) => paste.on_hover_text(format!("Paste {text}")),
+            None => paste.on_disabled_hover_text("Copy a number field first"),
+        };
+        if paste.clicked()
+            && let Some(text) = &clipboard
+        {
+            pick = Some(MenuPick::Paste(text.clone()));
+            ui.close();
+        }
+        let reset = ui.add_enabled(
+            spec.default.is_some(),
+            egui::Button::new("Reset to default"),
+        );
+        let reset = match spec.default {
+            Some(d) => reset.on_hover_text(format!("Set {} (Backspace)", spec.unit.format(d, 6))),
+            None => reset.on_disabled_hover_text("This field has no default"),
+        };
+        if reset.clicked() {
+            pick = Some(MenuPick::Reset);
+            ui.close();
+        }
+    });
+    match pick {
+        Some(MenuPick::Copy) => spec.copy(ui.ctx(), *instant.value),
+        Some(MenuPick::Paste(text)) => instant.paste(ui, spec, &text),
+        Some(MenuPick::Reset) => {
+            if let Some(default) = spec.default {
+                instant.set(spec, default);
+            }
+        }
+        None => {}
+    }
+}
+
+/// Outlines a field whose last entry was refused and says why, for
+/// [`BAD_ENTRY_SECS`] after it.
+fn show_bad_entry(ui: &Ui, response: &egui::Response, bad_id: egui::Id) {
+    let Some(bad) = ui.data(|d| d.get_temp::<BadEntry>(bad_id)) else {
+        return;
+    };
+    let left = BAD_ENTRY_SECS - (ui.input(|i| i.time) - bad.at);
+    if left <= 0.0 {
+        ui.data_mut(|d| d.remove::<BadEntry>(bad_id));
+        return;
+    }
+    let error = ui.visuals().error_fg_color;
+    ui.painter().rect_stroke(
+        response.rect,
+        ui.visuals().widgets.inactive.corner_radius,
+        egui::Stroke::new(1.0, error),
+        egui::StrokeKind::Inside,
+    );
+    egui::Tooltip::always_open(
+        ui.ctx().clone(),
+        response.layer_id,
+        response.id.with("bad-entry-tip"),
+        response,
+    )
+    .show(|ui| {
+        ui.colored_label(error, format!("{}: {}", bad.text, bad.message));
+    });
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_secs_f64(left));
 }
 
 /// A drag over a value kept in `stored` (a settings field in degrees, or a
