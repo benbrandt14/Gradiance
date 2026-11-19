@@ -108,7 +108,6 @@ impl DragLaw {
 ///
 /// Cost: `O(B)` for `B` bodies with a profile — per dynamic body one
 /// `atan2`, one table lerp and a few multiplies; no allocation, no contour.
-#[expect(clippy::type_complexity, reason = "one filtered query")]
 pub fn apply_air_drag(
     settings: Res<SimSettings>,
     fixed: Res<Time<Fixed>>,
