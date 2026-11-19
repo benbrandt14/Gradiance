@@ -562,5 +562,258 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "Brief U-8 Decisions; gradiance_ui::unit_fields::claim_keys.",
         ),
+        (
+            question: (
+                id: "look",
+                title: "Which scene look should be the default?",
+                source: "Phase 4b, brief 4b-3 art direction (docs/briefs/4b-3-art-direction.md)",
+                description: r#"Three looks for the scene (not the panels: their theme is U-7). A look sets the body palette's tone, the outlines, the backdrop, the overlay ink (selection, snap glyphs, guides, grid), the lights and the toon bands. Clay studio is the default today; the other two are presets in Settings > Rendering > Look and the `look-apply` verb.
+
+    Bodies keep their palette slot across looks: a red body stays red, in the look's red. A custom colour is shown as authored. Flip between the options, select a body, draw with a tool to see the ink, press play to see the shadows move."#,
+                options: [
+                    (
+                        label: "Clay studio",
+                        caption: "Warm grey backdrop, clay-toned pieces, dark outlines; a warm key and a cool fill light, so shadows step through four bands.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                    ),
+                    (
+                        label: "Blueprint",
+                        caption: "Navy backdrop, pale chalk pieces with ink outlines, light grid; one cool light, three bands, a stronger rim.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                        settings: (
+                            render: (look: Blueprint, bands: 3, rim_strength: 0.35, white_point: 1.0, specular: 0.0),
+                            lighting: (
+                                lights: [(azimuth_deg: 110.0, elevation_deg: 45.0, color: (r: 0.9, g: 0.95, b: 1.0, a: 1.0), illuminance: 3000.0, shadows: true)],
+                                ambient: 670.0,
+                            ),
+                            scenery: (back_color: (r: 0.074, g: 0.181, b: 0.314, a: 1.0)),
+                        ),
+                    ),
+                    (
+                        label: "Flat graphic",
+                        caption: "Paper-white backdrop, bold saturated pieces, black outlines; one light, two bands (lit or shadow), no rim or glint.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                        settings: (
+                            render: (look: Poster, bands: 2, rim_strength: 0.0, white_point: 1.0, specular: 0.0),
+                            lighting: (
+                                lights: [(azimuth_deg: 135.0, elevation_deg: 45.0, color: (r: 1.0, g: 1.0, b: 1.0, a: 1.0), illuminance: 2450.0, shadows: true)],
+                                ambient: 750.0,
+                            ),
+                            scenery: (back_color: (r: 0.97, g: 0.954, b: 0.911, a: 1.0)),
+                        ),
+                    ),
+                ],
+            ),
+            answer: (
+                question: "look",
+                title: "Which scene look should be the default?",
+                choice: Picked("Clay studio"),
+                note: "",
+                answered_at: "2026-11-19T01:58:43Z",
+                revision: "3f211ab28cee",
+            ),
+            ingested_as: "No change: Clay studio stays the default look (gradiance_domain::theme::Look::Studio). docs/state.md ruling.",
+        ),
+        (
+            question: (
+                id: "toon-lighting",
+                title: "Do the new default lights show the toon bands?",
+                source: "Review answer `shading` (2026-11-17): the toon banding was never seen because of the flat lighting; brief 4b-3",
+                description: r#"You picked toon shading and noted that its bands were never visible. Three causes were found and fixed: the old key light (12 000 lux) put every lit face far past the band white point, so everything lit was one band; the front faces of bodies were wound backwards and lit as if they faced away (ambient only); and the back plane and ground were not banded at all, so shadows on them were smooth.
+
+    "Before" puts the old light values back on today's build (the winding and plane fixes stay). "After" is the new default: a warm key and a cool fill, set so that a face lit by both is in the top band, in the fill's shadow one band down, in the key's shadow two, in both three. Look at the stepped shadows behind the stack and the chain, then press play."#,
+                options: [
+                    (
+                        label: "Before (old lights)",
+                        caption: "One 12 000 lux key light, ambient 300, white point 1.3: lit faces saturate into the top band and shadows are one dark step.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                        settings: (
+                            render: (bands: 4, rim_strength: 0.25, white_point: 1.3, specular: 0.3),
+                            lighting: (
+                                lights: [(azimuth_deg: 120.0, elevation_deg: 32.0, color: (r: 1.0, g: 1.0, b: 1.0, a: 1.0), illuminance: 12000.0, shadows: true)],
+                                ambient: 300.0,
+                            ),
+                        ),
+                    ),
+                    (
+                        label: "After (new default)",
+                        caption: "Warm key + cool fill at the white point: overlapping shadows step through four bands, bodies show their palette tone.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                    ),
+                    (
+                        label: "After, tilted",
+                        caption: "The new default with a 30 degree perspective, so the side walls show: each wall facing a different way sits in its own band.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/look/glow.scm"],
+                        settings: (scenery: (perspective_deg: 30.0)),
+                    ),
+                ],
+            ),
+            answer: (
+                question: "toon-lighting",
+                title: "Do the new default lights show the toon bands?",
+                choice: Picked("After (new default)"),
+                note: "Ideally there would still be bands ( for like, specular highlighs basically ) on the objects themselves not just their shadows.",
+                answered_at: "2026-11-19T01:54:54Z",
+                revision: "3f211ab28cee",
+            ),
+            ingested_as: "The new key and fill lights stay the default. Owner note (bands on the bodies themselves, like specular highlights, not only in the shadows) became brief 4b-5 (docs/briefs/4b-5-toon-highlights.md).",
+        ),
+        (
+            question: (
+                id: "chrome",
+                title: "Which panel chrome should be the default?",
+                source: "Phase U, brief U-7 theme tokens (docs/briefs/U-7-theme-tokens.md); plan section 7.1",
+                description: r#"The panels (not the scene) now draw with theme tokens. Three presets of the same tokens; the default leans to Blender's default dark theme: neutral greys (#303030 panels, #1d1d1d tab strips and fields, #545454 buttons), bright text, and one accent.
+
+    The accent is the scene look's accent (the colour a selected body is outlined in), so a selected tool, tab or row and a selected body are one hue; it changes with Settings > Rendering > Look. "Blue selection" keeps Blender's own blue (#4772b3) for the panels instead, so panels and canvas use two highlight colours. "Stock" is how the panels looked before (egui's dark theme: darker panels, grey 140 text, weak text at 2.7:1).
+
+    Try: click tools in the palette, open Settings and switch tabs, open the View menu, select a body and read the Properties panel, apply another look (Settings > Rendering > Look, or (look-apply "blueprint") in the console) and see the accent follow. The preset is yours, not the scene's: it is not saved and not undone (Settings > Interface)."#,
+                options: [
+                    (
+                        label: "Blender dark, scene accent",
+                        caption: "Blender's greys; selection in the look's accent (studio: orange). The new default.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/chrome/blender.scm"],
+                    ),
+                    (
+                        label: "Blender dark, blue selection",
+                        caption: "Blender's greys and Blender's blue selection; the canvas keeps the look's accent.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/chrome/blender-blue.scm"],
+                    ),
+                    (
+                        label: "Stock (before)",
+                        caption: "egui's stock dark theme, as before U-7: darker, dimmer text, teal selection.",
+                        scripts: ["scenes/look/scene.scm", "scenes/look/colour.scm", "scenes/chrome/stock.scm"],
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chrome",
+                title: "Which panel chrome should be the default?",
+                choice: Picked("Blender dark, scene accent"),
+                note: "",
+                answered_at: "2026-11-19T01:57:00Z",
+                revision: "3f211ab28cee",
+            ),
+            ingested_as: "No change: Blender dark with the scene accent stays the default chrome preset (brief U-7). docs/state.md ruling.",
+        ),
+        (
+            question: (
+                id: "spring-feel",
+                title: "How springy should a new spring be?",
+                source: "Phase 4b, brief 4b-4 scaled defaults (docs/briefs/4b-4-scaled-defaults.md)",
+                description: r#"A spring is now authored as a natural frequency (bounces per second) and a damping ratio (0 = bounces forever, 1 = settles without overshoot). The stiffness in N/m is derived from the bodies' mass while the scene runs, so one setting bounces the same way on a pebble and on a truck, and keeps its period when you change a body's density. These options are only the default a new spring gets (the spring tool and the inspector's reset); every spring stays editable.
+
+    The scene hangs three bodies from hooks: a 0.15 m pebble, a 1 m box and a dense 2 m box (40 kg), each pulled 0.4 m down. Press play and watch how long they bounce and whether the three move alike. "Before" is the old default: stiffness from the body's area (density ignored) and no damping, so the dense box swings three times slower and nothing ever settles."#,
+                options: [
+                    (
+                        label: "Settling (new default)",
+                        caption: "1.5 Hz, damping ratio 0.1: four or five visible bounces, still within about 3 s; the same on all three bodies.",
+                        scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/default.scm", "scenes/spring-feel/pull.scm"],
+                    ),
+                    (
+                        label: "Lively",
+                        caption: "1.5 Hz, damping ratio 0.05: bounces for about 6 s before it settles. More toy-like.",
+                        scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/lively.scm", "scenes/spring-feel/pull.scm"],
+                    ),
+                    (
+                        label: "Calm",
+                        caption: "1 Hz, damping ratio 0.3: a soft, slower spring that overshoots once or twice and rests. Sags about 0.25 m.",
+                        scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/calm.scm", "scenes/spring-feel/pull.scm"],
+                    ),
+                    (
+                        label: "Before (old default)",
+                        caption: "k = 100 N/m per square metre of body, no damping: the dense box swings at 0.5 Hz, the others at 1.6 Hz, and none settles.",
+                        scripts: ["scenes/spring-feel/scene.scm", "scenes/spring-feel/before.scm", "scenes/spring-feel/pull.scm"],
+                    ),
+                ],
+            ),
+            answer: (
+                question: "spring-feel",
+                title: "How springy should a new spring be?",
+                choice: Picked("Settling (new default)"),
+                note: "",
+                answered_at: "2026-11-19T01:58:37Z",
+                revision: "3f211ab28cee",
+            ),
+            ingested_as: "No change: the settling spring stays the default (brief 4b-4). docs/state.md ruling.",
+        ),
+        (
+            question: (
+                id: "units-display",
+                title: "Which units should the fields show by default?",
+                source: "Phase 5, brief 5-3 type a value with its unit (docs/briefs/5-3-units-input.md)",
+                description: r#"Every number field on a physical quantity now shows its unit and accepts a typed value with a unit: 25 cm, 90 deg, 2 kN, 1 m/s^2, or maths such as 2*pi and 90/4. A bare number means the unit the field shows. Values are always stored in SI (metres, radians); this only changes what you read and what a bare number means. Settings > Interface > Units switches it at any time, and it is yours, not the scene's (not saved, not undone).
+
+    The scene is a 1 m arm pinned to the world. Look at Settings > Simulation (gravity direction), Settings > Grid & Snap (spacing, rotation step), then click the arm and read its size in Properties, and click the pin (or the arm, then its joint) to see the hinge's angle sensor; tick angle limits to see them in the same unit. Type 45 deg or 0.5 rad into a limit and see both convert."#,
+                options: [
+                    (
+                        label: "Degrees and metres (default)",
+                        caption: "Angles in degrees (gravity direction -90; a hinge's limits start at -90 to 90), lengths in metres (the arm is 1 m).",
+                        scripts: ["scenes/units-display/scene.scm", "scenes/units-display/pin.scm", "scenes/units-display/deg-m.scm"],
+                    ),
+                    (
+                        label: "Radians and metres",
+                        caption: "Pure SI: angles in radians (gravity direction -1.57; limits start at -1.57 to 1.57), as scripts and saved files use.",
+                        scripts: ["scenes/units-display/scene.scm", "scenes/units-display/pin.scm", "scenes/units-display/rad-m.scm"],
+                    ),
+                    (
+                        label: "Degrees and centimetres",
+                        caption: "Desk-scale lengths: the arm is 100 cm wide, 25 cm tall; angles in degrees.",
+                        scripts: ["scenes/units-display/scene.scm", "scenes/units-display/pin.scm", "scenes/units-display/deg-cm.scm"],
+                    ),
+                ],
+            ),
+            answer: (
+                question: "units-display",
+                title: "Which units should the fields show by default?",
+                choice: Picked("Degrees and metres (default)"),
+                note: "",
+                answered_at: "2026-11-19T01:58:32Z",
+                revision: "3f211ab28cee",
+            ),
+            ingested_as: "No change: degrees and metres stay the default display units (brief 5-3, UnitSettings). docs/state.md ruling.",
+        ),
+        (
+            question: (
+                id: "number-fields",
+                title: "Do the number fields feel right to drag, snap and step?",
+                source: "Phase 5, brief U-8 number-field behaviours (docs/briefs/U-8-number-fields.md)",
+                description: r#"Every number field now behaves like Blender's. Click the box (or the pin) and try the fields in Properties, and the rows in Settings:
+
+    - Drag to scrub. Hold Shift for 1/10 speed. Press Esc while dragging: the value goes back and nothing is recorded (Ctrl+Z has nothing new).
+    - Hold Ctrl while dragging to snap: angles to 10 degrees; a length or force to whole units, or coarser when the field drags fast (about one step per 10 points of movement); a plain ratio such as friction to 0.1; a settings row with a range to a tenth of its range's decade. Ctrl+Shift snaps to a tenth of that.
+    - Over a field without clicking: Backspace resets it to its default, minus negates it, Ctrl+wheel steps it by the snap step (one undo step per notch), Ctrl+C / Ctrl+V copy and paste the value with its unit.
+    - Right-click a field: Copy, Paste, Reset to default.
+    - Type a bad entry (3 furlongs, 2 * * 3, 25 cm into an angle): the field outlines red and says why for a few seconds.
+
+    All three options load the same scene: pick the verdict that matches how it felt, and say which field felt wrong in the note."#,
+                options: [
+                    (
+                        label: "Keep as built",
+                        caption: "Shift is 1/10, Ctrl snaps as described, the wheel steps by the snap step.",
+                        scripts: ["scenes/number-fields/scene.scm"],
+                    ),
+                    (
+                        label: "Snap finer",
+                        caption: "Ctrl should snap to whole units of the shown unit only (never coarser), and ratios to 0.01.",
+                        scripts: ["scenes/number-fields/scene.scm"],
+                    ),
+                    (
+                        label: "Scrub slower",
+                        caption: "The plain drag moves too fast for comfort; halve every field's drag speed.",
+                        scripts: ["scenes/number-fields/scene.scm"],
+                    ),
+                ],
+            ),
+            answer: (
+                question: "number-fields",
+                title: "Do the number fields feel right to drag, snap and step?",
+                choice: Picked("Keep as built"),
+                note: "Should reset to default on middle click. Would eventually like a real slider.",
+                answered_at: "2026-11-19T02:00:21Z",
+                revision: "3f211ab28cee",
+            ),
+            ingested_as: "Keep as built. Owner note: a middle click resets a field to its default, which became brief U-8b (docs/briefs/U-8b-middle-click-reset.md). A real slider widget is a retained UI item in docs/state.md.",
+        ),
     ],
 )
