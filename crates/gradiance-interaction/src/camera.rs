@@ -165,7 +165,7 @@ pub fn pan_and_zoom_camera(
     mut cameras: Query<(&mut Projection, &Camera, &GlobalTransform), With<Camera3d>>,
     settings: Res<CameraSettings>,
     buttons: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
+    keys: crate::graph_keys::EditorKeys,
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,

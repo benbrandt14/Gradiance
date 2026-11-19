@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-19 (N-1 handoff; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-19 (N-2 handoff; before that N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,13 +12,23 @@ Last updated: 2026-11-19 (N-1 handoff; before that R-4, Phase R complete; before
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **N-1** signal actuators is done (in review; branch
+- **Now:** **N-2** graph input keys is done (in review; branch
+  `claude/project-thread-tw1mvl-n2`): a node-graph **Key** block
+  (`BlockOp::Key`, scene content via `ComputedSignals`) reads 1 (or
+  -1/0/1 for a pair) while its key is held in play, published as derived
+  `key@<name>` bus inputs by `interaction::graph_keys`; paused or with a
+  field focused it reads 0 and the editor keeps every key; in play the
+  editor's bare-key uses of a bound key yield (no editor binding changed);
+  a capture button and clash warnings in the block footer; `(defkey …)`
+  and `(ui-key key [hold])`; new edge interaction → signal; six decisions
+  in `archive.ron`. **Next: N-3** thruster.
+  **N-1** signal actuators is done (in review; branch
   `claude/project-thread-tw1mvl-n1`): bindings drive a hinge/slider motor's
   speed and cap, a body's field strength and gravity scale through the
   derived `physics::drive::SignalDrive` (never saved, never undone;
   unbinding restores the authored value); one allocation-free actuator
   system; actuator pins and a minimal joint block on the node canvas; six
-  decisions in `archive.ron`. **Next: N-2** graph input keys.
+  decisions in `archive.ron`.
   **Phase R is complete.**
   **R-4** packing as an operation is done (#281 merged): `pack.run` (`(pack targets)`; the
   Optimizer panel invokes the same operation with the selection),
@@ -99,7 +109,7 @@ Last updated: 2026-11-19 (N-1 handoff; before that R-4, Phase R complete; before
       § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
-  9c. **N-1** (done, in review), **N-2..N-9** nonlinear dynamics & multibody play (owner-approved
+  9c. **N-1** (done, in review), **N-2** (done, in review), **N-3..N-9** nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +

@@ -44,7 +44,7 @@ use std::collections::VecDeque;
 pub use gradiance_domain::signal::{
     ActuatorTarget, BlockOp, ComputedSignal, ComputedSignals, Curve, CurveInterp, GradientSpec,
     SignalBinding, SignalBindings, SignalExpr, SignalMap, SignalParam, SignalParams, SignalSink,
-    SignalSource, remap_binding,
+    SignalSource, key_input_name, key_of_input, remap_binding,
 };
 
 /// The reserved input name for elapsed simulated seconds (the "clock" every

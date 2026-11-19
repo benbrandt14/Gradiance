@@ -121,7 +121,11 @@ pub struct EditorInputPlugin;
 impl Plugin for EditorInputPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(InputManagerPlugin::<EditorAction>::default());
-        app.world_mut().spawn((EditorControls, default_input_map()));
+        let map = default_input_map();
+        // The bare keys the editor reads, for the graph inputs' clash
+        // warning and their precedence in play (brief N-2).
+        app.insert_resource(crate::graph_keys::EditorKeyTable::from_map(&map));
+        app.world_mut().spawn((EditorControls, map));
     }
 }
 
@@ -237,7 +241,8 @@ pub struct ShortcutWriters<'w> {
 /// changes.
 pub fn apply_shortcuts(
     actions: Query<&ActionState<EditorAction>, With<EditorControls>>,
-    keys: Res<ButtonInput<KeyCode>>,
+    keys: crate::graph_keys::EditorKeys,
+    key_table: Res<crate::graph_keys::EditorKeyTable>,
     keyboard_captured: Res<crate::KeyboardCaptured>,
     field_keys: Res<crate::FieldKeys>,
     mut writers: ShortcutWriters,
@@ -262,59 +267,64 @@ pub fn apply_shortcuts(
     let Ok(actions) = actions.single() else {
         return;
     };
+    // While the sim plays, an action bound to a key a graph input owns
+    // yields to it (brief N-2); paused, every key is the editor's.
+    let fires = |action: &EditorAction| {
+        actions.just_pressed(action) && !keys.action_yields(&key_table, *action)
+    };
 
     // The edits: one table, rows in order. Ungroup's chord (Ctrl+Shift+G)
     // also satisfies Group's, so Group yields to it. Delete and Backspace
     // and Ctrl+C stay the field's.
-    let ungrouping = actions.just_pressed(&EditorAction::Ungroup);
+    let ungrouping = fires(&EditorAction::Ungroup);
     for row in KEY_OPS {
         let shadowed = (row.action == EditorAction::Group && ungrouping)
             || (on_field && FIELD_ACTIONS.contains(&row.action));
-        if actions.just_pressed(&row.action) && !shadowed {
+        if fires(&row.action) && !shadowed {
             writers.invoke.write(row.invoke());
         }
     }
-    if actions.just_pressed(&EditorAction::Paste) && !on_field {
+    if fires(&EditorAction::Paste) && !on_field {
         writers.paste.write(PasteRequest { at: cursor.0 });
     }
-    if actions.just_pressed(&EditorAction::TogglePause) {
+    if fires(&EditorAction::TogglePause) {
         // The transport's one path: `sim.play` / `sim.pause` write the same
         // request (brief R-1).
         writers
             .transport
             .write(crate::transport::SimTransport::Toggle);
     }
-    if actions.just_pressed(&EditorAction::SelectAll) {
+    if fires(&EditorAction::SelectAll) {
         let all = bodies.iter().collect();
         SelectTransition::SetBodies(all).apply(&mut selection, &mut selected_joint, &groups);
     }
-    if actions.just_pressed(&EditorAction::Deselect) {
+    if fires(&EditorAction::Deselect) {
         SelectTransition::Clear.apply(&mut selection, &mut selected_joint, &groups);
     }
-    if actions.just_pressed(&EditorAction::Save) {
+    if fires(&EditorAction::Save) {
         // An empty path: the remembered one, else the dialog.
         writers
             .invoke
             .write(InvokeOp::with("scene.save", json!({"path": ""})));
     }
-    if actions.just_pressed(&EditorAction::SaveAs) {
+    if fires(&EditorAction::SaveAs) {
         last_path.0 = None; // force the dialog
         writers
             .save
             .write(gradiance_persist::SaveSceneRequest { path: None });
     }
-    if actions.just_pressed(&EditorAction::Open) {
+    if fires(&EditorAction::Open) {
         // An empty path: the dialog.
         writers
             .invoke
             .write(InvokeOp::with("scene.load", json!({"path": ""})));
     }
-    if actions.just_pressed(&EditorAction::Snapshot) {
+    if fires(&EditorAction::Snapshot) {
         writers
             .snapshot
             .write(gradiance_persist::SnapshotRequest::default());
     }
-    if actions.just_pressed(&EditorAction::ToggleScaleFrame) {
+    if fires(&EditorAction::ToggleScaleFrame) {
         use crate::tools::handles::ScaleFrame;
         *scale_frame = match *scale_frame {
             ScaleFrame::Global => ScaleFrame::Local,
@@ -327,7 +337,9 @@ pub fn apply_shortcuts(
         return;
     }
     for action in actions.get_just_pressed() {
-        if let EditorAction::Tool(tool) = action {
+        if let EditorAction::Tool(tool) = action
+            && !keys.action_yields(&key_table, action)
+        {
             next_tool.set(tool);
         }
     }

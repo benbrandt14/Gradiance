@@ -16,7 +16,7 @@
 //! logical points. The gesture plays over the next frames
 //! ([`crate::host::input`]); the operation returns at once.
 
-use crate::host::input::{MAX_STEPS, UiInput, parse_chord};
+use crate::host::input::{MAX_HOLD, MAX_STEPS, UiInput, parse_chord};
 use crate::host::{ScreenshotRequest, ShotQueue};
 use crate::widget_registry::WidgetSnapshot;
 use bevy::prelude::*;
@@ -313,23 +313,32 @@ impl Operation for UiDrag {
 pub struct UiKey {
     /// The chord, as the registry writes one: `Ctrl+Z`, `Delete`, `F1`.
     pub key: String,
+    /// Frames the key stays down (1-600; absent: 1). A held key drives a
+    /// node-graph key input while the sim plays (brief N-2).
+    pub hold: Option<u32>,
 }
 
 impl Operation for UiKey {
     const META: OpMeta = OpMeta {
         id: "ui.key",
         lisp: "ui-key",
-        doc: "Press and release a key chord, written as menus show it (Ctrl+Z, Ctrl+Shift+G, Delete, Escape, F1, A): modifiers down, key down, key up, modifiers up, one frame each.",
+        doc: "Press and release a key chord, written as menus show it (Ctrl+Z, Ctrl+Shift+G, Delete, Escape, F1, A): modifiers down, key down, key up, modifiers up, one frame each. hold (1-600 frames, default 1) keeps the key down that long, as a held key drives a graph key input in play.",
         seam: Seam::Editor,
         menu: None,
         chord: None,
         undo: None,
-        example: r#"{"key": "Escape"}"#,
+        example: r#"{"key": "Escape", "hold": 1}"#,
     };
 
     fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
         let chord = parse_chord(&self.key).map_err(OpError::Invalid)?;
-        Ok(inject(UiInput::Key(chord)))
+        let hold = self.hold.unwrap_or(1);
+        if !(1..=MAX_HOLD).contains(&hold) {
+            return Err(OpError::Invalid(format!(
+                "hold {hold} is not in 1..={MAX_HOLD}"
+            )));
+        }
+        Ok(inject(UiInput::Key { chord, hold }))
     }
 }
 

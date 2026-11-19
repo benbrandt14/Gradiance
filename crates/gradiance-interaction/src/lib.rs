@@ -21,6 +21,7 @@ pub mod align;
 pub mod camera;
 pub mod cursor;
 pub mod gesture;
+pub mod graph_keys;
 pub mod indicators;
 pub mod input;
 pub mod joint_edit;
@@ -126,6 +127,8 @@ impl Plugin for InteractionPlugin {
         app.configure_sets(Update, InteractionSet.before(gradiance_op::OpInvokeSet));
 
         app.add_plugins(input::EditorInputPlugin);
+
+        graph_keys::install(app);
         app.add_plugins(tools::ToolsPlugin);
 
         // After `InputSystems`: the button edges and the cursor must describe

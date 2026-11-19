@@ -503,7 +503,7 @@ fn phase_of(buttons: PointerButtons, over_ui: bool) -> GesturePhase {
 /// per creation-tool state (gated by `run_if(in_state(..))`).
 pub fn run_draft_tool<T: DraftTool>(
     buttons: Res<PointerButtons>,
-    keys: Res<ButtonInput<KeyCode>>,
+    keys: crate::graph_keys::EditorKeys,
     snapped: Res<SnappedCursor>,
     over_ui: Res<PointerOverUi>,
     constraints: Res<GestureConstraints>,

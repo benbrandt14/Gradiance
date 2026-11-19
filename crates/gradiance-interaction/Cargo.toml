@@ -18,6 +18,7 @@ gradiance-optimize.workspace = true
 gradiance-persist.workspace = true
 gradiance-physics.workspace = true
 gradiance-scene.workspace = true
+gradiance-signal.workspace = true
 gradiance-units.workspace = true
 avian2d.workspace = true
 bevy.workspace = true

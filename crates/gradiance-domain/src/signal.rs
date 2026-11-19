@@ -884,6 +884,36 @@ pub enum BlockOp {
         /// The authored transfer.
         curve: Curve,
     },
+    /// A **key input** (brief N-2): `1` while `key` is held during play,
+    /// `0` otherwise; with a `negative` key, `+1` / `-1` / `0` (both held
+    /// cancel). Keys are saved by name ([`keys`](crate::keys)); an unknown
+    /// name is never held. The held state reaches the kernel as the bus
+    /// inputs [`key_input_name`] names, published each frame by the
+    /// interaction layer (derived, never saved, never undone).
+    Key {
+        /// The key that drives the output to `+1`.
+        key: String,
+        /// The key that drives it to `-1` (`None`: a single key, `0`/`1`).
+        negative: Option<String>,
+    },
+}
+
+/// The bus-input prefix of a key's held state (`key@E`): the same
+/// `tag@subject` form as a sensor's canonical name.
+pub const KEY_INPUT_TAG: &str = "key@";
+
+/// The bus input a key block reads for the key written `name`: `key@` and
+/// the key's canonical name, so `"e"` and `"E"` share one input. An unknown
+/// name keeps its spelling (it is never held).
+pub fn key_input_name(name: &str) -> String {
+    let canonical = crate::keys::named_key(name).map_or(name.trim(), |k| k.name);
+    format!("{KEY_INPUT_TAG}{canonical}")
+}
+
+/// The key a bus input reads the held state of, if it is a key input
+/// (`"key@E"` → `"E"`).
+pub fn key_of_input(input: &str) -> Option<&str> {
+    input.strip_prefix(KEY_INPUT_TAG)
 }
 
 impl BlockOp {
@@ -917,6 +947,15 @@ impl BlockOp {
             Self::Curve { input, curve } => {
                 SignalExpr::Curve(Box::new(operand(input)), curve.clone())
             }
+            Self::Key { key, negative } => {
+                let held = |name: &str| SignalExpr::Input(key_input_name(name));
+                match negative {
+                    Some(negative) => {
+                        SignalExpr::Sub(Box::new(held(key)), Box::new(held(negative)))
+                    }
+                    None => held(key),
+                }
+            }
         }
     }
 
@@ -924,7 +963,9 @@ impl BlockOp {
     /// input pins — empty for source blocks.
     pub fn input_slots(&self) -> Vec<(&'static str, Option<String>)> {
         match self {
-            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } => Vec::new(),
+            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } | Self::Key { .. } => {
+                Vec::new()
+            }
             Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
                 vec![("in", input.clone())]
             }
@@ -941,7 +982,7 @@ impl BlockOp {
     /// Sets input slot `i` to `name` (`None` = disconnect).
     pub fn set_input(&mut self, i: usize, name: Option<String>) {
         match self {
-            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } => {}
+            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } | Self::Key { .. } => {}
             Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
                 if i == 0 {
                     *input = name;
@@ -973,6 +1014,7 @@ impl BlockOp {
             Self::Min { .. } => "min",
             Self::Max { .. } => "max",
             Self::Curve { .. } => "curve",
+            Self::Key { .. } => "key",
         }
     }
 }
@@ -989,6 +1031,28 @@ pub struct ComputedSignals(pub Vec<ComputedSignal>);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_key_block_reads_its_keys_held_state() {
+        let single = BlockOp::Key {
+            key: "e".into(),
+            negative: None,
+        };
+        assert_eq!(single.to_expr(), SignalExpr::Input("key@E".into()));
+        assert!(single.input_slots().is_empty(), "a source block");
+        let pair = BlockOp::Key {
+            key: "Right".into(),
+            negative: Some("arrowleft".into()),
+        };
+        assert_eq!(pair.to_expr().inputs(), ["key@Right", "key@Left"]);
+        assert_eq!(key_of_input("key@Left"), Some("Left"));
+        assert_eq!(key_of_input("speed@x"), None);
+        assert_eq!(
+            SignalSource::from_bus_name("key@E"),
+            None,
+            "a key input is not a sensor name"
+        );
+    }
 
     #[test]
     fn signal_map_normalizes_and_clamps() {

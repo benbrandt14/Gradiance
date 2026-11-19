@@ -74,6 +74,18 @@ same regardless of how many points were placed.
   authored value returns with no command. A drive never enables a disabled
   motor or adds a motor or field; a driven cap of 0 or less switches the
   motor off.
+- **Key inputs** (brief N-2) are a source block: `BlockOp::Key { key,
+  negative }` reads `1` while `key` is held **in play** (`-1` for
+  `negative`, `0` when both are), lowered to the kernel over the bus inputs
+  `key@<name>`. `interaction::graph_keys` publishes those each frame between
+  `publish_sensor_refs` and `evaluate_computed` (derived: never saved,
+  never undone). Paused, or while a field has the keyboard, they read `0`
+  and the editor keeps every key; in play a graph-bound key is the graph's,
+  and the editor's bare-key uses of it (a tool letter, `Space`, the arrow
+  pan, a gesture's `Enter`/`Escape`) yield; a chord with a modifier does
+  not. The block's footer captures its keys (click, press) and warns of
+  each clash; `(defkey name key [negative])` declares one from a script.
+  The key binding is the block, so it is scene content like any block.
 - **The bus** (`SignalBus`) is the wire protocol: every binding publishes
   its value under its name (with a rolling history the plot panel draws;
   recording pauses with the simulation). Scripts publish with
@@ -96,6 +108,7 @@ same regardless of how many points were placed.
 | `SignalBus`, `ScriptSignals` | derived | rebuilt continuously; never persisted; bus hygiene drops entries whose binding/param/computed/script producer is gone |
 | `CompiledSignals` | derived | the compiled kernels behind `ComputedSignals`, rebuilt by `recompile_signals` on change — keeps the *compile* step off the frame loop |
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
+| `key@<name>` bus inputs, `GraphKeys` | derived | the held state of each key a key block reads, published by `interaction::graph_keys::publish_graph_keys` (allocation-free; the bound set is rebuilt only when `ComputedSignals` changes); never saved or undone |
 | `SignalDrive` | derived component (`physics::drive`) | written by `drive_actuators` on a joint or body; consumed by `retune_joints`, `Fields`, `drive_gravity_scale`; removed with its last actuator binding; never saved or undone |
 | `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer tool today, sensors/actuators next; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
 
@@ -161,7 +174,7 @@ fills, thin wires, and a faint **dot-grid that pans and zooms with the canvas**.
 Every pin shows its **live value** next to the port name (the Simulink "watch
 the signal flow" readout), computed through `read_source` + the bus. Authoring
 is in-canvas too: **right-click the background** for a categorized **Add block**
-palette — **Input** (Parameter, Constant, Time, Oscillator), **Modulation**
+palette — **Input** (Parameter, Constant, Time, Oscillator, Key), **Modulation**
 (Gain, Sum, Sub, Product, Min, Max, Abs), **Output** (the Scope). Modulation blocks are `ComputedSignal`s
 carrying a structured `BlockOp` that lowers to the existing `SignalExpr`/kernel;
 wiring a named producer (param / computed / block) into an operand pin sets that

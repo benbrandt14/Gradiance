@@ -204,6 +204,9 @@ fn the_crate_dag_matches_the_architecture() {
                 // op: keys invoke registry operations by id, and this layer
                 // publishes the selection mirror (U-2a).
                 "op", "optimize", "persist", "physics", "scene",
+                // signal: held graph-input keys are published on the bus
+                // here, where the keyboard gate lives (brief N-2).
+                "signal",
                 // Typed joint limits / spring parameters (units P2·types,
                 // brief 5-1): units is a bottom node any layer may use.
                 "units",

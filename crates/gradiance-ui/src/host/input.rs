@@ -31,6 +31,8 @@ use std::collections::VecDeque;
 
 /// The most drag steps (frames of movement) one gesture may take (Craft's).
 pub const MAX_STEPS: u32 = 200;
+/// The most frames `ui.key` may hold a key down (about 10 s at 60 fps).
+pub const MAX_HOLD: u32 = 600;
 /// The most frames the queue holds (about 33 s at 60 fps). A gesture that
 /// would pass it is dropped with a warning: input that far behind is no
 /// longer what its caller meant.
@@ -57,8 +59,14 @@ pub enum UiInput {
         /// Frames of movement between them (1–[`MAX_STEPS`]).
         steps: u32,
     },
-    /// Press and release a key with its modifiers held.
-    Key(Chord),
+    /// Press a key with its modifiers held, hold it, release it.
+    Key {
+        /// The chord.
+        chord: Chord,
+        /// Frames the key stays down (1 to [`MAX_HOLD`]): a held key drives
+        /// a graph input for that many frames (brief N-2).
+        hold: u32,
+    },
     /// Type the text (as the keyboard's text, so a focused field takes it).
     Text(String),
     /// Move there, then turn the wheel by `lines` (> 0: up, away from you).
@@ -124,7 +132,7 @@ impl UiInput {
                 frames.push(vec![Event::Button(left, false)]);
                 frames
             }
-            Self::Key(chord) => {
+            Self::Key { chord, hold } => {
                 let key = |pressed| Event::Key {
                     code: chord.key,
                     logical: chord.logical.clone(),
@@ -146,6 +154,10 @@ impl UiInput {
                     frames.push(modifiers(true));
                 }
                 frames.push(vec![key(true)]);
+                // A held key: frames with no event while it stays down.
+                for _ in 1..(*hold).clamp(1, MAX_HOLD) {
+                    frames.push(Vec::new());
+                }
                 frames.push(vec![key(false)]);
                 if !chord.modifiers.is_empty() {
                     let mut up = modifiers(false);
@@ -228,103 +240,53 @@ pub fn parse_chord(text: &str) -> Result<Chord, String> {
     })
 }
 
-/// A key by name: a letter, a digit, `F1`–`F12`, or a named key.
+/// A key by name, through the one key-name table
+/// (`gradiance_domain::keys`, which graph inputs save by): a letter, a digit,
+/// `F1`-`F12`, or a named key. The logical key is what the key types (its
+/// character, shifted for a letter) or its named meaning.
 fn named_key(name: &str, shift: bool) -> Option<(KeyCode, Key)> {
-    const LETTERS: [KeyCode; 26] = [
-        KeyCode::KeyA,
-        KeyCode::KeyB,
-        KeyCode::KeyC,
-        KeyCode::KeyD,
-        KeyCode::KeyE,
-        KeyCode::KeyF,
-        KeyCode::KeyG,
-        KeyCode::KeyH,
-        KeyCode::KeyI,
-        KeyCode::KeyJ,
-        KeyCode::KeyK,
-        KeyCode::KeyL,
-        KeyCode::KeyM,
-        KeyCode::KeyN,
-        KeyCode::KeyO,
-        KeyCode::KeyP,
-        KeyCode::KeyQ,
-        KeyCode::KeyR,
-        KeyCode::KeyS,
-        KeyCode::KeyT,
-        KeyCode::KeyU,
-        KeyCode::KeyV,
-        KeyCode::KeyW,
-        KeyCode::KeyX,
-        KeyCode::KeyY,
-        KeyCode::KeyZ,
-    ];
-    const DIGITS: [KeyCode; 10] = [
-        KeyCode::Digit0,
-        KeyCode::Digit1,
-        KeyCode::Digit2,
-        KeyCode::Digit3,
-        KeyCode::Digit4,
-        KeyCode::Digit5,
-        KeyCode::Digit6,
-        KeyCode::Digit7,
-        KeyCode::Digit8,
-        KeyCode::Digit9,
-    ];
-    const FUNCTION: [(KeyCode, Key); 12] = [
-        (KeyCode::F1, Key::F1),
-        (KeyCode::F2, Key::F2),
-        (KeyCode::F3, Key::F3),
-        (KeyCode::F4, Key::F4),
-        (KeyCode::F5, Key::F5),
-        (KeyCode::F6, Key::F6),
-        (KeyCode::F7, Key::F7),
-        (KeyCode::F8, Key::F8),
-        (KeyCode::F9, Key::F9),
-        (KeyCode::F10, Key::F10),
-        (KeyCode::F11, Key::F11),
-        (KeyCode::F12, Key::F12),
-    ];
-    let mut chars = name.chars();
+    let named = gradiance_domain::keys::named_key(name)?;
+    let character = |c: char| Key::Character(c.to_string().as_str().into());
+    let mut chars = named.name.chars();
     if let (Some(c), None) = (chars.next(), chars.next()) {
-        let character = |c: char| Key::Character(c.to_string().as_str().into());
-        if c.is_ascii_alphabetic() {
-            let i = usize::from(c.to_ascii_lowercase() as u8 - b'a');
-            let shown = if shift {
-                c.to_ascii_uppercase()
-            } else {
-                c.to_ascii_lowercase()
-            };
-            return Some((LETTERS[i], character(shown)));
-        }
-        if let Some(d) = c.to_digit(10) {
-            return Some((DIGITS[d as usize], character(c)));
-        }
+        let shown = if shift {
+            c.to_ascii_uppercase()
+        } else {
+            c.to_ascii_lowercase()
+        };
+        return Some((named.code, character(shown)));
     }
-    let lower = name.to_ascii_lowercase();
-    if let Some(n) = lower
-        .strip_prefix('f')
-        .and_then(|n| n.parse::<usize>().ok())
-    {
-        return FUNCTION.get(n.checked_sub(1)?).cloned();
-    }
-    Some(match lower.as_str() {
-        "enter" | "return" => (KeyCode::Enter, Key::Enter),
-        "escape" | "esc" => (KeyCode::Escape, Key::Escape),
-        "tab" => (KeyCode::Tab, Key::Tab),
-        "space" => (KeyCode::Space, Key::Space),
-        "backspace" => (KeyCode::Backspace, Key::Backspace),
-        "delete" | "del" => (KeyCode::Delete, Key::Delete),
-        "insert" => (KeyCode::Insert, Key::Insert),
-        "home" => (KeyCode::Home, Key::Home),
-        "end" => (KeyCode::End, Key::End),
-        "pageup" => (KeyCode::PageUp, Key::PageUp),
-        "pagedown" => (KeyCode::PageDown, Key::PageDown),
-        "up" | "arrowup" => (KeyCode::ArrowUp, Key::ArrowUp),
-        "down" | "arrowdown" => (KeyCode::ArrowDown, Key::ArrowDown),
-        "left" | "arrowleft" => (KeyCode::ArrowLeft, Key::ArrowLeft),
-        "right" | "arrowright" => (KeyCode::ArrowRight, Key::ArrowRight),
+    let logical = match named.code {
+        KeyCode::F1 => Key::F1,
+        KeyCode::F2 => Key::F2,
+        KeyCode::F3 => Key::F3,
+        KeyCode::F4 => Key::F4,
+        KeyCode::F5 => Key::F5,
+        KeyCode::F6 => Key::F6,
+        KeyCode::F7 => Key::F7,
+        KeyCode::F8 => Key::F8,
+        KeyCode::F9 => Key::F9,
+        KeyCode::F10 => Key::F10,
+        KeyCode::F11 => Key::F11,
+        KeyCode::F12 => Key::F12,
+        KeyCode::Enter => Key::Enter,
+        KeyCode::Escape => Key::Escape,
+        KeyCode::Tab => Key::Tab,
+        KeyCode::Space => Key::Space,
+        KeyCode::Backspace => Key::Backspace,
+        KeyCode::Delete => Key::Delete,
+        KeyCode::Insert => Key::Insert,
+        KeyCode::Home => Key::Home,
+        KeyCode::End => Key::End,
+        KeyCode::PageUp => Key::PageUp,
+        KeyCode::PageDown => Key::PageDown,
+        KeyCode::ArrowUp => Key::ArrowUp,
+        KeyCode::ArrowDown => Key::ArrowDown,
+        KeyCode::ArrowLeft => Key::ArrowLeft,
+        KeyCode::ArrowRight => Key::ArrowRight,
         _ => return None,
-    })
+    };
+    Some((named.code, logical))
 }
 
 /// The frames waiting to play, one per update.
@@ -525,7 +487,7 @@ mod tests {
         assert_eq!(chord.modifiers, [KeyCode::ControlLeft, KeyCode::ShiftLeft]);
         assert_eq!(chord.key, KeyCode::KeyZ);
         assert_eq!(chord.logical, Key::Character("Z".into()));
-        let frames = UiInput::Key(chord).frames();
+        let frames = UiInput::Key { chord, hold: 1 }.frames();
         assert_eq!(frames.len(), 4);
         let down = |e: &Event| matches!(e, Event::Key { pressed: true, .. });
         assert!(frames[0].iter().all(down) && frames[0].len() == 2);
@@ -553,8 +515,36 @@ mod tests {
             ]
         ));
 
-        let plain = UiInput::Key(parse_chord("delete").unwrap_or_else(|e| panic!("{e}")));
+        let plain = UiInput::Key {
+            chord: parse_chord("delete").unwrap_or_else(|e| panic!("{e}")),
+            hold: 1,
+        };
         assert_eq!(plain.frames().len(), 2, "no modifier frames");
+    }
+
+    #[test]
+    fn a_held_key_stays_down_for_its_frames() {
+        let chord = parse_chord("E").unwrap_or_else(|e| panic!("{e}"));
+        let frames = UiInput::Key {
+            chord: chord.clone(),
+            hold: 30,
+        }
+        .frames();
+        assert_eq!(frames.len(), 31, "down, 29 quiet frames, up");
+        assert!(matches!(
+            frames[0].as_slice(),
+            [Event::Key { pressed: true, .. }]
+        ));
+        assert!(frames[1..30].iter().all(Vec::is_empty));
+        assert!(matches!(
+            frames[30].as_slice(),
+            [Event::Key { pressed: false, .. }]
+        ));
+        let capped = UiInput::Key {
+            chord,
+            hold: u32::MAX,
+        };
+        assert_eq!(capped.frames().len(), MAX_HOLD as usize + 1);
     }
 
     #[test]
