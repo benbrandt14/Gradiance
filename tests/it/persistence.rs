@@ -254,6 +254,10 @@ fn scene_strategy() -> impl Strategy<Value = SceneRecord> {
                     sim: SimSettings {
                         gravity: gradiance::units::Acceleration2(Vec2::new(gravity.0, gravity.1)),
                         speed,
+                        // Air drag and wind (brief N-4) ride along.
+                        drag_coefficient: speed,
+                        linear_drag: gravity.0.abs(),
+                        wind: gradiance::units::Velocity2(Vec2::new(gravity.1, speed)),
                         ..SimSettings::default()
                     },
                     grid: GridSettings {

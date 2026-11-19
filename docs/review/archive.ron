@@ -2589,5 +2589,140 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "render::tracer::draw_node_glyphs",
         ),
+        (
+            question: (
+                id: "air-drag-law",
+                title: "What drag law and defaults?",
+                source: "Brief N-4 air drag and wind (docs/briefs/N-4-air-drag-wind.md)",
+                description: r#"The brief asks for global linear and quadratic drag with a wind vector in SimSettings; it does not fix the linear law, the units or the defaults. Existing scenes must behave as before."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Width-scaled, off by default",
+                        caption: r#"F = -(c w + 1/2 rho Cd w |r|) r with r = v - wind and w the projected width across r. New SimSettings fields: air_density (areal kg/m2 over the 1 m world depth, default 1.2 = sea-level air), drag_coefficient Cd (default 0 = off), linear_drag c in N s/m2 (default 0 = off), wind (m/s, default 0). With both terms 0 the pass returns at once, so every existing scene behaves exactly as before. Note the world's default body density is 1 kg/m2, about that of the air: at Cd 1 a 1 m box falls at about 4 m/s, a light, Algodoo-like feel; denser bodies fall faster. Fields are additive with serde defaults: old files load, no format bump; the v8 golden gains the four fields."#,
+                    ),
+                    (
+                        label: "Mass-proportional linear drag",
+                        caption: r#"Linear drag as a damping rate (F = -k m r), independent of the shape, and quadratic drag as above. Simpler to tune, but a plate would not fall slower face-on in the linear regime."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-drag-law",
+                title: "What drag law and defaults?",
+                choice: Picked("Width-scaled, off by default"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "domain::settings::SimSettings, physics::air::DragLaw",
+        ),
+        (
+            question: (
+                id: "air-drag-width",
+                title: "How is the projected width found each step?",
+                source: "Brief N-4 air drag and wind (docs/briefs/N-4-air-drag-wind.md)",
+                description: r#"The brief: projected width from the polygonize contour, cached per shape change, not per frame. The worker brief: the drag path must not re-contour per step."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A 64-sample width table",
+                        caption: r#"geometry::profile::WidthProfile samples the width (the extent across the flow, i.e. the convex hull's width) at 64 directions over a half turn, from the polygonized outline (every component's outline for a CSG tree). It is the derived AirProfile component, inserted by body_sync::sync_colliders beside the collider on every shape change; never saved or undone. A lookup is one atan2 and one lerp, fixed size, no allocation. Exact at the axes and diagonals; within 0.5 % elsewhere for a box (tested). Concavities and holes do not change the width."#,
+                    ),
+                    (
+                        label: "Project the hull each step",
+                        caption: r#"Cache the convex hull and project its vertices every step: exact, but O(hull vertices) per body per step and a heap-held cache."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-drag-width",
+                title: "How is the projected width found each step?",
+                choice: Picked("A 64-sample width table"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "geometry::profile, physics::air::AirProfile, physics::body_sync::sync_colliders",
+        ),
+        (
+            question: (
+                id: "air-drag-step",
+                title: "When and how is drag applied?",
+                source: "Brief N-4 air drag and wind (docs/briefs/N-4-air-drag-wind.md)",
+                description: r#"The brief says the force joins the physics::fields pass. That pass runs in Update, where a one-shot force is spent by one step and missed or doubled by the others."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Once per physics step, its own system",
+                        caption: r#"physics::air::apply_air_drag runs in FixedUpdate next to apply_thrusters (gated by sim_running), one query over the dynamic bodies, against the velocity the step starts from. The force is capped so one step cannot more than stop a body relative to the air (|F| dt <= m |r|), which keeps explicit drag stable for any coefficient; the cap binds only when the drag time constant is under one step. 'Joins the fields pass' is read as 'is a derived solver force like the fields'."#,
+                    ),
+                    (
+                        label: "Inside apply_field_forces",
+                        caption: r#"Add drag to the Update field pass: frame-rate dependent, and unbounded drag would blow up a light body."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-drag-step",
+                title: "When and how is drag applied?",
+                choice: Picked("Once per physics step, its own system"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "physics::air::apply_air_drag, physics::GradiancePhysicsPlugin",
+        ),
+        (
+            question: (
+                id: "air-drag-torque",
+                title: "Does drag turn bodies?",
+                source: "Brief N-4 air drag and wind (docs/briefs/N-4-air-drag-wind.md)",
+                description: r#"A real falling plate flutters because the centre of pressure moves. The brief asks only for the force."#,
+                decision: true,
+                options: [
+                    (
+                        label: "No: the force acts at the centre of mass",
+                        caption: r#"No aerodynamic torque and no angular drag, so a plate keeps its attitude and the terminal speed is the textbook one. Spin is still damped by contacts and plane friction only. A centre-of-pressure torque and an angular drag term are follow-ups."#,
+                    ),
+                    (
+                        label: "Centre-of-pressure torque",
+                        caption: r#"Apply drag at the projected centre of the facing side, so plates flutter and tumble. Richer, harder to test, and changes the terminal-velocity behaviour the brief measures."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-drag-torque",
+                title: "Does drag turn bodies?",
+                choice: Picked("No: the force acts at the centre of mass"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "physics::air",
+        ),
+        (
+            question: (
+                id: "air-drag-surface",
+                title: "Where are drag and wind edited?",
+                source: "Brief N-4 air drag and wind (docs/briefs/N-4-air-drag-wind.md)",
+                description: r#"The settings are scene content (saved, one undo step per settled edit through commit_settings_edits)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Settings > Simulation > Air, and sim-set",
+                        caption: r#"An Air section in the Simulation tab with five config rows (labelled_drag): drag, linear drag, air density, wind x, wind y; the reflect grid snapshot shows the new fields. Scripts use the existing sim.set / sim.get with the paths air_density, drag_coefficient, linear_drag, wind.x, wind.y (advertised in SIM_SETTING_PATHS). No new operation, so docs/ops.md is unchanged."#,
+                    ),
+                    (
+                        label: "A wind dial and a new operation",
+                        caption: r#"A direction dial like gravity's and an air.set operation. More surface for the same state."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-drag-surface",
+                title: "Where are drag and wind edited?",
+                choice: Picked("Settings > Simulation > Air, and sim-set"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T23:59:00Z",
+            ),
+            ingested_as: "ui::settings::air_section, script::registry::SIM_SETTING_PATHS",
+        ),
     ],
 )

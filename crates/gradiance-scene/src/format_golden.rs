@@ -120,6 +120,10 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
     let mut environment = EnvironmentRecord::default();
     environment.sim.gravity = q("(1.5, -9.75)");
     environment.sim.timestep_hz = q("120.0");
+    environment.sim.air_density = q("1.25");
+    environment.sim.drag_coefficient = 0.75;
+    environment.sim.linear_drag = 0.5;
+    environment.sim.wind = q("(2.5, -0.5)");
     environment.grid.spacing = q("0.25");
     environment.grid.origin = q("(0.5, -1.5)");
     environment.grid.rotation = q("0.125");

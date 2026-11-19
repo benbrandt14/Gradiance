@@ -250,6 +250,10 @@
             substeps: 6,
             plane_friction: 0.0,
             timestep_hz: 120.0,
+            air_density: 1.25,
+            drag_coefficient: 0.75,
+            linear_drag: 0.5,
+            wind: (2.5, -0.5),
         ),
         grid: (
             visible: true,

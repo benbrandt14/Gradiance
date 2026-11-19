@@ -5,6 +5,9 @@ use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::shape::ShapeDef;
+use gradiance_geometry::profile::WidthProfile;
+
+use crate::air::AirProfile;
 
 /// Builds the engine collider for a validated shape.
 ///
@@ -83,7 +86,29 @@ fn decomposition_collider<'a>(rings: impl Iterator<Item = &'a Vec<Vec2>>) -> Opt
 /// circle keeps some 50 vertices rather than hundreds.
 const DECIMATE_FRACTION: f32 = 1e-3;
 
-/// Regenerates colliders for bodies whose shape changed.
+/// The projected-width profile air drag reads ([`AirProfile`], brief N-4),
+/// from the same discretization the collider uses: a leaf's polygonized
+/// outline, every component's outline for a CSG tree (as its collider
+/// covers every component). A half-plane is infinite and gets no width.
+fn air_profile_for(shape: &ShapeDef) -> WidthProfile {
+    if shape.contains_half_plane() {
+        return WidthProfile::ZERO;
+    }
+    match shape {
+        ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => {
+            let components = gradiance_geometry::polygonize::polygonize_components(shape);
+            let points: Vec<Vec2> = components
+                .iter()
+                .flat_map(|c| c.outline.iter().copied())
+                .collect();
+            WidthProfile::from_points(&points)
+        }
+        _ => WidthProfile::from_contours(&gradiance_geometry::polygonize::polygonize(shape)),
+    }
+}
+
+/// Regenerates colliders — and the air-drag width profile, the other
+/// shape-derived physics datum — for bodies whose shape changed.
 pub fn sync_colliders(
     mut commands: Commands,
     changed: Query<(Entity, &ShapeDef), (With<Body>, Changed<ShapeDef>)>,
@@ -91,7 +116,9 @@ pub fn sync_colliders(
     for (entity, shape) in &changed {
         match collider_for(shape) {
             Some(collider) => {
-                commands.entity(entity).insert(collider);
+                commands
+                    .entity(entity)
+                    .insert((collider, AirProfile(air_profile_for(shape))));
             }
             None => {
                 warn!(?entity, "invalid ShapeDef reached body_sync; collider kept");

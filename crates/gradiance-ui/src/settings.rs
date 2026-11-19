@@ -280,6 +280,10 @@ pub(crate) const SIM_HAND_DRAWN: &[&str] = &[
     "substeps",
     "plane_friction",
     "timestep_hz",
+    "air_density",
+    "drag_coefficient",
+    "linear_drag",
+    "wind",
 ];
 
 /// The Simulation tab: the gravity-direction dial plus scrub-drag rows
@@ -367,7 +371,58 @@ fn simulation_tab(ui: &mut egui::Ui, sim: &mut SimSettings) {
                 widgets::config_field(defaults.plane_friction, 0.01).range(0.0..=5.0),
             );
         });
+    ui.separator();
+    air_section(ui, sim, &defaults);
     reflect_grid_except(ui, egui::Id::new("sim"), sim, &[], SIM_HAND_DRAWN);
+}
+
+/// The Air section (brief N-4): drag and wind, config-seam rows like the
+/// solver's. Wind acts only through drag, so its rows say so.
+fn air_section(ui: &mut egui::Ui, sim: &mut SimSettings, defaults: &SimSettings) {
+    widgets::section_header(ui, "Air");
+    egui::Grid::new("sim-air").num_columns(2).show(ui, |ui| {
+        widgets::labelled_drag(
+            ui,
+            "drag",
+            "quadratic drag coefficient Cd: 1/2 rho Cd w v^2 against the motion, w the width across it; 0 = off",
+            &mut sim.drag_coefficient,
+            widgets::config_field(defaults.drag_coefficient, 0.01).range(0.0..=5.0),
+        );
+        widgets::labelled_drag(
+            ui,
+            "linear drag",
+            "viscous drag in N s/m^2: c w v against the motion; 0 = off",
+            &mut sim.linear_drag,
+            widgets::config_field(defaults.linear_drag, 0.01).range(0.0..=100.0),
+        );
+        widgets::labelled_drag(
+            ui,
+            "air density",
+            "the air's density over the world's 1 m depth; 1.2 is air at sea level",
+            &mut sim.air_density.0,
+            widgets::config_field(defaults.air_density.0, 0.01)
+                .range(0.0..=1000.0)
+                .unit(Dimension::Density),
+        );
+        widgets::labelled_drag(
+            ui,
+            "wind x",
+            "the air's velocity; it pushes only through drag",
+            &mut sim.wind.0.x,
+            widgets::config_field(defaults.wind.0.x, 0.1)
+                .range(-100.0..=100.0)
+                .unit(Dimension::Velocity),
+        );
+        widgets::labelled_drag(
+            ui,
+            "wind y",
+            "the air's velocity; it pushes only through drag",
+            &mut sim.wind.0.y,
+            widgets::config_field(defaults.wind.0.y, 0.1)
+                .range(-100.0..=100.0)
+                .unit(Dimension::Velocity),
+        );
+    });
 }
 
 /// A gravity-direction dial: the handle's angle is the gravity direction.
