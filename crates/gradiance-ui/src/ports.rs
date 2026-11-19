@@ -204,7 +204,14 @@ mod tests {
         for (_, source) in body_sensors(id) {
             let _ = unit(&source);
         }
-        assert_eq!(body_actuators(id).len(), 2, "fill + tracer actuator ports");
+        let actuators: Vec<&str> = body_actuators(id).iter().map(|(l, _)| *l).collect();
+        assert_eq!(
+            actuators,
+            ["fill", "tracer", "field", "gravity"],
+            "colour, then physical actuator ports (brief N-1)"
+        );
+        let motor: Vec<&str> = joint_actuators(id).iter().map(|(l, _)| *l).collect();
+        assert_eq!(motor, ["motor speed", "motor cap"]);
         let joint_units: Vec<&str> = joint_sensors(id).iter().map(|(_, s)| unit(s)).collect();
         assert_eq!(joint_units, ["m", "rad", "N"], "joint ports carry SI units");
     }

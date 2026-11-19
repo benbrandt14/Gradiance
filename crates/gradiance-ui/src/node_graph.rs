@@ -1658,16 +1658,94 @@ mod tests {
     #[test]
     fn source_and_sink_pins_match_the_port_order() {
         let id = StableId::new();
-        // Sensor index must line up with body_sensors order.
-        assert_eq!(sensor_index(&SignalSource::Speed(id)), Some(0));
-        assert_eq!(sensor_index(&SignalSource::ContactCount(id)), Some(5));
-        assert_eq!(sensor_index(&SignalSource::Named("x".into())), None);
+        // Sensor pins line up with body_sensors / joint_sensors order.
+        assert_eq!(
+            source_pin(&SignalSource::Speed(id)),
+            Some((GraphKey::Body(id), 0))
+        );
+        assert_eq!(
+            source_pin(&SignalSource::ContactCount(id)),
+            Some((GraphKey::Body(id), 5))
+        );
+        assert_eq!(
+            source_pin(&SignalSource::Named("x".into())),
+            Some((GraphKey::Param("x".into()), 0))
+        );
+        assert_eq!(
+            source_pin(&SignalSource::Distance(id, StableId::new())),
+            None
+        );
+        let angle = joint_sensors(id)
+            .iter()
+            .position(|(_, s)| *s == SignalSource::JointAngle(id));
+        assert_eq!(
+            source_pin(&SignalSource::JointAngle(id)),
+            angle.map(|i| (GraphKey::Joint(id), i)),
+            "a joint sensor is a joint block's output (brief N-1)"
+        );
         assert_eq!(sink_pin(&SignalSink::Fill(id)), (GraphKey::Body(id), 0));
         assert_eq!(
             sink_pin(&SignalSink::TracerColor(id)),
             (GraphKey::Body(id), 1)
         );
+        assert_eq!(
+            sink_pin(&SignalSink::FieldStrength(id)),
+            (GraphKey::Body(id), 2)
+        );
+        assert_eq!(
+            sink_pin(&SignalSink::GravityScale(id)),
+            (GraphKey::Body(id), 3)
+        );
+        assert_eq!(
+            sink_pin(&SignalSink::MotorSpeed(id)),
+            (GraphKey::Joint(id), 0)
+        );
+        assert_eq!(
+            sink_pin(&SignalSink::MotorCap(id)),
+            (GraphKey::Joint(id), 1)
+        );
         assert_eq!(sink_pin(&SignalSink::Plot), (GraphKey::Scope, 0));
+    }
+
+    #[test]
+    fn a_motor_binding_wires_a_sensor_into_a_joint_block() {
+        let (wheel, hinge) = (StableId::new(), StableId::new());
+        let mut graph = NodeGraph::default();
+        body(&mut graph, wheel);
+        reconcile_add(
+            &mut graph,
+            NodeData::Joint {
+                id: hinge,
+                kind: "hinge",
+                motor: true,
+                linear: false,
+            },
+        );
+        let bindings = SignalBindings(vec![SignalBinding {
+            name: "w".into(),
+            source: SignalSource::Height(wheel),
+            map: SignalMap::default(),
+            curve: None,
+            gradient: GradientSpec::default(),
+            sink: SignalSink::MotorSpeed(hinge),
+        }]);
+        rebuild_wires(&mut graph, &bindings);
+        let wires: Vec<_> = graph.snarl.wires().collect();
+        assert_eq!(wires.len(), 1, "one wire");
+        let (out, into) = wires[0];
+        assert_eq!(graph.keys.get(&GraphKey::Body(wheel)), Some(&out.node));
+        assert_eq!(graph.keys.get(&GraphKey::Joint(hinge)), Some(&into.node));
+        assert_eq!(into.input, 0, "the motor speed pin");
+        let joint = graph.snarl.get_node(into.node).unwrap();
+        assert_eq!(joint.input_sink(1), Some(SignalSink::MotorCap(hinge)));
+        // A joint without a motor offers no actuator pins.
+        let bare = NodeData::Joint {
+            id: hinge,
+            kind: "spring",
+            motor: false,
+            linear: false,
+        };
+        assert_eq!(bare.input_sink(0), None);
     }
 
     #[test]
