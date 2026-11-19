@@ -67,14 +67,14 @@ fn pendulum(app: &mut App) {
     step(app, 2);
 }
 
-fn ball_y(app: &mut App) -> f32 {
+fn ball_pos(app: &mut App) -> Vec2 {
     let mut query = app
         .world_mut()
         .query_filtered::<&Transform, With<gradiance::domain::Body>>();
     query
         .iter(app.world())
         .next()
-        .map(|t| t.translation.y)
+        .map(|t| t.translation.truncate())
         .expect("a body")
 }
 
@@ -97,7 +97,7 @@ fn play_pause_and_step_drive_the_clock() {
     assert!((sim_time(&mut app) - t0).abs() < 1e-9, "paused is frozen");
 
     // Step 60 at 60 Hz: exactly one simulated second, and it stays paused.
-    let y0 = ball_y(&mut app);
+    let p0 = ball_pos(&mut app);
     op(&mut app, "sim.step", json!({"n": 60})).expect("steps");
     run_owed_steps(&mut app, 200);
     let t1 = sim_time(&mut app);
@@ -106,7 +106,8 @@ fn play_pause_and_step_drive_the_clock() {
         "60 steps at 60 Hz are 1 s: {t0} -> {t1}"
     );
     assert_eq!(state(&app), GameState::Paused);
-    assert!(ball_y(&mut app) < y0 - 0.05, "the pendulum swung down");
+    let p1 = ball_pos(&mut app);
+    assert!(p0.distance(p1) > 0.5, "the pendulum swung: {p0} -> {p1}");
     step(&mut app, 10);
     assert!((sim_time(&mut app) - t1).abs() < 1e-9, "no step past n");
 
