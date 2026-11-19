@@ -12,6 +12,7 @@
 pub mod adjust_panel;
 pub mod array_panel;
 pub mod bottom_dock;
+pub mod clipboard;
 pub mod console;
 pub mod context_menu;
 pub mod curve;
@@ -239,6 +240,9 @@ impl Plugin for GradianceUiPlugin {
     fn build(&self, app: &mut App) {
         // The operations register headless too, so every doorway lists them.
         ops::install(app);
+        // Copy and paste of bodies (brief R-3): headless too, where a paste
+        // reads the app's last copy.
+        clipboard::install(app);
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }

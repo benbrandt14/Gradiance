@@ -53,7 +53,8 @@ impl SelectionGroup {
 ///
 /// Scene content (`gradiance_scene::records`' `scene_content!` list): saved
 /// with the scene and restored by undo. Written only by the group-naming
-/// command; an unnamed group has no entry. An entry whose group has no
+/// command and by an insert or paste (brief R-3), which carries a copied
+/// group's name to its new id; an unnamed group has no entry. An entry whose group has no
 /// members any more is inert, and fresh group ids skip it
 /// ([`GroupIndex::fresh_id`]) so a new group never inherits an old name.
 #[derive(Resource, Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Reflect)]

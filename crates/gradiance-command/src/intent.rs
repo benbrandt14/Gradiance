@@ -64,6 +64,9 @@ pub mod name {
     pub const FILLET_MERGE: &str = "fillet-merge";
     /// [`LoadSceneIntent`](super::LoadSceneIntent) → `LoadSceneCommand`.
     pub const LOAD_SCENE: &str = "load-scene";
+    /// [`InsertIntent`](super::InsertIntent) → `InsertCommand` → operations
+    /// `scene.insert` and `edit.paste` (brief R-3).
+    pub const INSERT: &str = "insert";
     /// [`UndoIntent`](super::UndoIntent) → `CommandStack::undo`.
     pub const UNDO: &str = "undo";
     /// [`RedoIntent`](super::RedoIntent) → `CommandStack::redo`.
@@ -227,6 +230,17 @@ pub struct RegroupIntent {
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct LoadSceneIntent {
     /// The parsed scene to load.
+    pub scene: gradiance_scene::SceneRecord,
+}
+
+/// Request to add a scene fragment to the scene (one undo step): the
+/// records of a `.ron` file or of pasted text, already given fresh ids and
+/// moved into place (`insert_cmd::fresh_copy`). Only the group names of
+/// its environment are read.
+// Trace: dispatch.rs → InsertCommand (insert_cmd.rs) → sync_colliders, sync_collision_layers, sync_body_meshes, sync_body_materials, joint sync.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct InsertIntent {
+    /// The fragment to add, with fresh ids.
     pub scene: gradiance_scene::SceneRecord,
 }
 

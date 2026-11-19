@@ -119,7 +119,13 @@ impl GameCommand for DeleteCommand {
 /// per distinct source group), so duplicates form their *own* groups
 /// instead of joining the originals' — the "group selection deteriorates
 /// after repeated operations" bug.
-pub(crate) fn remap_clone_groups(clones: &mut [BodyRecord], next_group: &mut u32) {
+///
+/// Returns the `(old, new)` pairs, so a caller that carries group names
+/// (an insert, brief R-3) can move them to the new ids.
+pub(crate) fn remap_clone_groups(
+    clones: &mut [BodyRecord],
+    next_group: &mut u32,
+) -> Vec<(u32, u32)> {
     let mut remap: Vec<(u32, u32)> = Vec::new();
     for record in clones {
         for group in &mut record.groups {
@@ -134,6 +140,7 @@ pub(crate) fn remap_clone_groups(clones: &mut [BodyRecord], next_group: &mut u32
             *group = new;
         }
     }
+    remap
 }
 
 /// Clones the joints internal to a cloned body set: every joint whose
@@ -148,37 +155,69 @@ pub(crate) fn clone_internal_joints(
     rot_offset: f32,
 ) -> Vec<gradiance_scene::JointRecord> {
     let sources: Vec<StableId> = id_map.iter().map(|(old, _)| *old).collect();
-    let remap = |id: StableId| {
-        id_map
-            .iter()
-            .find(|(old, _)| *old == id)
-            .map(|(_, new)| *new)
-    };
     crate::joint_cmd::joints_referencing(world, &sources)
         .into_iter()
         .filter_map(|(_, record)| {
-            let mut def = record.def;
-            // Every endpoint must be inside the cloned set.
-            def.body_a = remap(def.body_a)?;
-            def.rest_rot_a = def.rest_rot_a + gradiance_units::Angle(rot_offset);
-            match def.body_b {
-                Some(b) => {
-                    def.body_b = Some(remap(b)?);
-                    def.rest_rot_b = def.rest_rot_b + gradiance_units::Angle(rot_offset);
-                }
-                // World pin: the anchor is a world point — transform it
-                // like the cloned bodies. The pin itself never rotates,
-                // so only `rest_rot_a` advanced.
-                None => {
-                    def.anchor_b = gradiance_units::Displacement(map_world(def.anchor_b.value()));
-                }
-            }
             Some(gradiance_scene::JointRecord {
                 id: StableId::new(),
-                def,
+                def: remap_joint_def(record.def, id_map, &map_world, rot_offset)?,
             })
         })
         .collect()
+}
+
+/// The new id `id_map` gives `id`, if it holds one.
+pub(crate) fn remapped(id_map: &[(StableId, StableId)], id: StableId) -> Option<StableId> {
+    id_map
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map(|(_, new)| *new)
+}
+
+/// One joint moved onto a cloned body set: endpoints through `id_map`
+/// (`None` when one lies outside it), a world pin's anchor through
+/// `map_world`, rest rotations advanced by `rot_offset`. The one rule that
+/// duplicate, array and insert (brief R-3) share.
+pub(crate) fn remap_joint_def(
+    mut def: gradiance_domain::joint::JointDef,
+    id_map: &[(StableId, StableId)],
+    map_world: impl Fn(Vec2) -> Vec2,
+    rot_offset: f32,
+) -> Option<gradiance_domain::joint::JointDef> {
+    // Every endpoint must be inside the cloned set.
+    def.body_a = remapped(id_map, def.body_a)?;
+    def.rest_rot_a = def.rest_rot_a + gradiance_units::Angle(rot_offset);
+    match def.body_b {
+        Some(b) => {
+            def.body_b = Some(remapped(id_map, b)?);
+            def.rest_rot_b = def.rest_rot_b + gradiance_units::Angle(rot_offset);
+        }
+        // World pin: the anchor is a world point — transform it
+        // like the cloned bodies. The pin itself never rotates,
+        // so only `rest_rot_a` advanced.
+        None => {
+            def.anchor_b = gradiance_units::Displacement(map_world(def.anchor_b.value()));
+        }
+    }
+    Some(def)
+}
+
+/// One behavior node moved onto a cloned body set: an attached node follows
+/// its body's clone (`None` when the body lies outside `id_map`); a free
+/// node keeps no attachment. Its pose moves by `offset`, its id becomes
+/// `id`. Shared by duplicate and insert (brief R-3).
+pub(crate) fn remap_node(
+    mut record: NodeRecord,
+    id_map: &[(StableId, StableId)],
+    offset: Vec2,
+    id: StableId,
+) -> Option<NodeRecord> {
+    if let Some(target) = record.attachment.target {
+        record.attachment.target = Some(remapped(id_map, target)?);
+    }
+    record.id = id;
+    record.pose.pos += offset;
+    Some(record)
 }
 
 /// Duplicates a set of bodies at an offset, including the joints internal
@@ -250,26 +289,20 @@ fn clone_attached_nodes(
     id_map: &[(StableId, StableId)],
     offset: Vec2,
 ) -> Vec<NodeRecord> {
-    let remap = |id: StableId| id_map.iter().find(|(s, _)| *s == id).map(|(_, c)| *c);
     let node_entities: Vec<Entity> = world
         .query_filtered::<Entity, With<gradiance_domain::node::BehaviorNode>>()
         .iter(world)
         .collect();
     let mut clones = Vec::new();
     for entity in node_entities {
-        let Some(mut record) = NodeRecord::capture(world, entity) else {
+        let Some(record) = NodeRecord::capture(world, entity) else {
             continue;
         };
-        let Some(target) = record.attachment.target else {
+        if record.attachment.target.is_none() {
             continue; // free nodes don't belong to any duplicated body
-        };
-        let Some(clone_target) = remap(target) else {
-            continue; // attached to a body outside the duplicated set
-        };
-        record.id = StableId::new();
-        record.attachment.target = Some(clone_target);
-        record.pose.pos += offset;
-        clones.push(record);
+        }
+        // `None`: attached to a body outside the duplicated set.
+        clones.extend(remap_node(record, id_map, offset, StableId::new()));
     }
     clones
 }

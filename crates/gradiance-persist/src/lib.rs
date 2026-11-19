@@ -73,6 +73,8 @@ impl Plugin for PersistPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<SaveSceneRequest>();
         app.add_message::<LoadSceneRequest>();
+        app.add_message::<ops::InsertSceneRequest>();
+        app.add_message::<ops::ClipboardWrite>();
         app.add_message::<SnapshotRequest>();
         app.init_resource::<LastScenePath>();
         app.init_resource::<AutosavePath>();
@@ -118,6 +120,7 @@ pub fn handle_persist_requests(world: &mut World) {
     let saves: Vec<SaveSceneRequest> = drain(world);
     let loads: Vec<LoadSceneRequest> = drain(world);
     let snapshots: Vec<SnapshotRequest> = drain(world);
+    let inserts: Vec<ops::InsertSceneRequest> = drain(world);
 
     for request in saves {
         let path = request
@@ -148,6 +151,18 @@ pub fn handle_persist_requests(world: &mut World) {
             }
             Err(e) => warn!(path = %path.display(), error = %e, "scene load failed"),
         }
+    }
+
+    // File ▸ Insert…: the dialog's answer goes back through `scene.insert`,
+    // so it reads, re-ids and places the file as any other call does.
+    for request in inserts {
+        let Some(path) = ask_load_path() else {
+            continue;
+        };
+        world.write_message(gradiance_op::InvokeOp::with(
+            "scene.insert",
+            gradiance_op::json!({"path": path.to_string_lossy(), "at": request.at}),
+        ));
     }
 
     for request in snapshots {

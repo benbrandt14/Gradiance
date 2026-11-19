@@ -15,6 +15,7 @@ mod adjust_last;
 mod array_drag;
 mod booleans;
 mod client;
+mod clipboard;
 mod csg;
 mod defaults;
 mod editor_ops;

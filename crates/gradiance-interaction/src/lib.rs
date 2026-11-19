@@ -71,6 +71,7 @@ impl Plugin for InteractionPlugin {
         app.init_resource::<PointerOverUi>();
         app.init_resource::<KeyboardCaptured>();
         app.init_resource::<FieldKeys>();
+        app.add_message::<input::PasteRequest>();
         app.init_resource::<pointer::PointerButtons>();
         app.init_resource::<cursor::CursorWorldPos>();
         app.init_resource::<selection::Selection>();

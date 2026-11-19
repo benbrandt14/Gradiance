@@ -1883,5 +1883,117 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "run::rollout",
         ),
+        (
+            question: (
+                id: "insert-placement",
+                title: "Where do an insert and a paste put the objects?",
+                source: "Brief R-3 insert and clipboard (docs/briefs/R-3-insert-and-clipboard.md)",
+                description: r#"The brief says a paste goes at the cursor and leaves the insert's placement open. Each verb needs one rule a script can predict."#,
+                decision: true,
+                options: [
+                    (
+                        label: "at: [] keeps, [x, y] centres",
+                        caption: r#"Both verbs take at. [] keeps the positions the file or the copy has; [x, y] moves the centre of the box around the body positions there. Ctrl+V passes the cursor; Edit > Paste (the pointer is on the menu) and File > Insert pass []. Cost: Edit > Paste lands on the original when it is still there."#,
+                    ),
+                    (
+                        label: "Always at the cursor",
+                        caption: r#"Cost: a script or a remote client has no cursor, and a parts library saved at its own coordinates cannot be inserted there."#,
+                    ),
+                    (
+                        label: "Always at the saved position",
+                        caption: r#"Cost: Ctrl+V on the canvas ignores where the pointer is, against the brief."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "insert-placement",
+                title: "Where do an insert and a paste put the objects?",
+                choice: Picked("at: [] keeps, [x, y] centres"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "persist::ops::InsertScene, persist::ops::PasteScene, command::insert_cmd::fragment_anchor",
+        ),
+        (
+            question: (
+                id: "clipboard-text",
+                title: "What does a copy put on the clipboard?",
+                source: "Brief R-3 insert and clipboard (docs/briefs/R-3-insert-and-clipboard.md)",
+                description: r#"The brief asks for the same RON text a scene file holds. A whole scene's environment (gravity, look, lighting, signals) would ride along with every copy."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A scene file cut to the set",
+                        caption: r#"A SceneRecord with the copied bodies, the joints whose ends are all among them (a world pin goes with its body), the nodes on them and their groups' names; every other setting at its default. It loads with scene.load and inserts with scene.insert. An insert or a paste applies only the group names, never the settings or signal bindings (out of scope)."#,
+                    ),
+                    (
+                        label: "A bare list of records",
+                        caption: r#"Shorter. Cost: a second format, and the text is no longer a scene file."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "clipboard-text",
+                title: "What does a copy put on the clipboard?",
+                choice: Picked("A scene file cut to the set"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "command::insert_cmd::fragment, persist::ops::CopyScene",
+        ),
+        (
+            question: (
+                id: "clipboard-path",
+                title: "Which clipboard does copy and paste use?",
+                source: "Brief R-3 insert and clipboard (docs/briefs/R-3-insert-and-clipboard.md)",
+                description: r#"No body clipboard existed. The brief rules out a new dependency."#,
+                decision: true,
+                options: [
+                    (
+                        label: "bevy_egui's EguiClipboard, with the last copy as fallback",
+                        caption: r#"bevy_egui's default manage_clipboard feature already links arboard (in the lockfile). A copy goes to EguiClipboard::set_text and to the app's LastCopy; a paste reads EguiClipboard::get_text, else LastCopy (no display, headless tests). Both systems run only on a frame with a copy or a paste message. No new crate."#,
+                    ),
+                    (
+                        label: "egui's Event::Text on Ctrl+V",
+                        caption: r#"Cost: works only for the key, not for Edit > Paste, and not headless."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "clipboard-path",
+                title: "Which clipboard does copy and paste use?",
+                choice: Picked("bevy_egui's EguiClipboard, with the last copy as fallback"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "ui::clipboard",
+        ),
+        (
+            question: (
+                id: "insert-ids",
+                title: "Where are an insert's new ids minted?",
+                source: "Brief R-3 insert and clipboard (docs/briefs/R-3-insert-and-clipboard.md)",
+                description: r#"Duplicate and array mint ids inside the command. An operation is to take new ids from its context (OpContext::new_id) so two doorways lower one call alike."#,
+                decision: true,
+                options: [
+                    (
+                        label: "In the operation, from its context",
+                        caption: r#"scene.insert and edit.paste give every body, joint and node a new id while lowering (insert_cmd::fresh_copy, with the shared joint and node remap), return the new body ids, and the command refuses any id the scene already holds. Group ids need the live scene, so the command makes those fresh."#,
+                    ),
+                    (
+                        label: "In the command",
+                        caption: r#"As duplicate does. Cost: the caller cannot learn the new ids, and the conformance test's id sequence does not reach them."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "insert-ids",
+                title: "Where are an insert's new ids minted?",
+                choice: Picked("In the operation, from its context"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-19T22:00:00Z",
+            ),
+            ingested_as: "command::insert_cmd::InsertCommand, persist::ops::insert_output",
+        ),
     ],
 )

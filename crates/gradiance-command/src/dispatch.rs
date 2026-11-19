@@ -9,13 +9,14 @@
 use crate::array_cmd::ArrayCommand;
 use crate::cut_cmd::CutCommand;
 use crate::group_cmd::{GroupCommand, NameGroupCommand, RegroupCommand, UngroupCommand};
+use crate::insert_cmd::InsertCommand;
 use crate::intent::AdjustLastIntent;
 use crate::intent::name;
 use crate::intent::{
     ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
-    DeleteJointIntent, DuplicateIntent, GroupIntent, LoadSceneIntent, MergeIntent, NameGroupIntent,
-    PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent, SpawnBodyIntent, SpawnJointIntent,
-    SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
+    DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LoadSceneIntent, MergeIntent,
+    NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent, SpawnBodyIntent,
+    SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
@@ -89,6 +90,7 @@ command_intents! {
     }),
     SpawnRodIntent => |i| Box::new(SpawnRodCommand::new(i.body, i.joints)),
     LoadSceneIntent => |i| Box::new(LoadSceneCommand::new(i.scene)),
+    InsertIntent => |i| Box::new(InsertCommand::new(i.scene)),
     PropertyEditIntent => |i| Box::new(PropertyEditCommand { changes: i.changes }),
     GroupIntent => |i| Box::new(GroupCommand::new(i.targets)),
     UngroupIntent => |i| Box::new(UngroupCommand::new(i.targets)),
