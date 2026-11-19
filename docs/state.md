@@ -92,6 +92,11 @@ and § 13).
       § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
+  9c. **N-1..N-9** nonlinear dynamics & multibody play (owner-approved
+      2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
+      briefs `docs/briefs/N-*`): signal actuators, graph input keys,
+      thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
+      joint load colour.
   10. **U-9** F3 search, status bar, pie menus; **U-10** editor areas +
       saved workspaces; **U-11** Adjust Last Operation.
   11. **Phase 6** (testing & diagnostics).

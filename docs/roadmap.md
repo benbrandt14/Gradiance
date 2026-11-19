@@ -633,6 +633,26 @@ before U-9 (`docs/state.md`).
 - *Ruler / measure tool*: script tools have no previews yet (3-5,
   retained), so it is new native UI work, not low effort.
 
+## Nonlinear dynamics & multibody play (planned 2026-11-19, briefs N-1..N-9)
+
+Owner-approved (2026-11-19). Goal: interesting play with nonlinear dynamics
+and multibody models. Each item reuses an existing seam. Order:
+
+1. **N-1** signal-driven actuators: motor speed/cap, field strength,
+   gravity scale as signal sinks (derived override, Tier B). Today every
+   sink is visual.
+2. **N-2** keys as node-graph inputs, with settable bindings per input
+   (scene content; not the editor keymap, which is unsettled).
+3. **N-3** thruster node. 4. **N-4** air drag + wind.
+5. **N-5** chain / rope tool. 6. **N-6** sketch tool (stroke → capsule
+   union). 7. **N-7** buoyancy region. 8. **N-8** laser node (reflection,
+   hit signal). 9. **N-9** mirror H/V + joint load colour.
+
+**Rejected by the owner (2026-11-19):** scene notes/annotations and a File ▸
+Examples menu ("this isn't an educational tool"). **Not recommended by the
+planner:** gears (no avian gear constraint known; unverified), particle
+water, a time scrubber (undo already reverts a run).
+
 ## Scripting & symbolic modeling (design accepted)
 
 Direction is ratified in `docs/script-lisp-decision.md`: a Lisp/DSL over a
