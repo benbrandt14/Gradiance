@@ -17,6 +17,7 @@ pub mod hold;
 pub mod joint_sync;
 pub mod motor;
 pub mod queries;
+pub mod thrust;
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -108,6 +109,9 @@ impl Plugin for GradiancePhysicsPlugin {
                 .in_set(BodySyncSet),
         );
         app.add_systems(Update, motor::drive_oscillating_motors);
+        // Thrusters push once per physics step (brief N-3): `FixedUpdate`
+        // runs right before avian's step in `FixedPostUpdate`.
+        app.add_systems(FixedUpdate, thrust::apply_thrusters.run_if(sim_running));
         app.add_systems(
             FixedPostUpdate,
             joint_sync::break_overloaded_joints

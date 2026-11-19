@@ -14,7 +14,8 @@ use gradiance_op::InvokeOp;
 /// Tool-palette entries grouped into sections (Blender-style), in workflow
 /// order — pick/move, create a shape, connect with a constraint, then modify.
 /// Each entry is `(state, name, key, icon)`, where `icon` is the stem of a PNG
-/// under `assets/icons/` (`tool_<icon>.png`). The palette renders the image with
+/// under `assets/icons/` (`tool_<icon>.png`); `key` is `""` for a tool with
+/// no key. The palette renders the image with
 /// the name+key as hover text; the headless test falls back to a text label.
 /// Kept as data so `tools_palette_ui` stays a pure projection.
 const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
@@ -49,6 +50,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
         &[
             (ToolState::Cut, "Cut", "K", "tool_cut"),
             (ToolState::Tracer, "Tracer", "N", "tool_tracer"),
+            // No key: the editor keymap is not settled (brief N-3).
+            (ToolState::Thruster, "Thruster", "", "thruster"),
         ],
     ),
 ];
@@ -245,10 +248,10 @@ pub fn tools_palette_ui(
                         ));
                         ui.add(egui::Button::image(img).selected(selected))
                     }
-                    None => ui.selectable_label(selected, format!("{name} ({key})")),
+                    None => ui.selectable_label(selected, tool_label(name, key)),
                 };
                 widget_registry::publish_target(&format!("tools:{name}"), resp.rect);
-                if resp.on_hover_text(format!("{name} ({key})")).clicked() {
+                if resp.on_hover_text(tool_label(name, key)).clicked() {
                     clicked = Some(*state);
                 }
             }
@@ -259,6 +262,16 @@ pub fn tools_palette_ui(
         clicked = Some(state);
     }
     clicked
+}
+
+/// A palette entry's label and hover text: the name, and the key when the
+/// tool has one ("Box (B)", "Thruster").
+fn tool_label(name: &str, key: &str) -> String {
+    if key.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{name} ({key})")
+    }
 }
 
 /// The palette's "Scripts" section (nothing when no tool is registered).

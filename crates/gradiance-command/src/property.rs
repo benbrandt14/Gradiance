@@ -41,8 +41,8 @@ pub enum PropertyValue {
     Depth(DepthBand),
     /// Full joint definition (limits, motors, collide flags, anchors).
     Joint(JointDef),
-    /// A behavior node's kind (sensor quantity/signal, actuator wiring,
-    /// tracer fade). Editing wires the dataflow — undoable like any prop.
+    /// A behavior node's kind (tracer fade, thruster thrust and axis).
+    /// Undoable like any prop.
     NodeKind(gradiance_domain::node::NodeKind),
 }
 
@@ -113,9 +113,16 @@ impl PropertyValue {
             Self::NodeKind(kind) => {
                 entity_mut.insert(kind.clone());
                 // A tracer node also carries the `Tracer` component the trail
-                // sampler reads; keep it in sync.
-                let gradiance_domain::node::NodeKind::Tracer(tracer) = kind;
-                entity_mut.insert(*tracer);
+                // sampler reads; keep it in sync (and drop it from a node that
+                // is no longer a tracer).
+                match kind.tracer() {
+                    Some(tracer) => {
+                        entity_mut.insert(tracer);
+                    }
+                    None => {
+                        entity_mut.remove::<gradiance_domain::tracer::Tracer>();
+                    }
+                }
             }
         }
         Ok(())

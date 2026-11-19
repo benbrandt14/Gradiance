@@ -91,6 +91,7 @@ fn joint_label(kind: &JointKind) -> &'static str {
 fn node_label(kind: &NodeKind) -> &'static str {
     match kind {
         NodeKind::Tracer(_) => "tracer",
+        NodeKind::Thruster(_) => "thruster",
     }
 }
 

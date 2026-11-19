@@ -23,7 +23,9 @@
 //! [`egui-snarl`]: https://crates.io/crates/egui-snarl
 //! [`SignalBinding`]: gradiance_domain::signal::SignalBinding
 
-use crate::ports::{body_actuators, body_sensors, joint_actuators, joint_sensors};
+use crate::ports::{
+    body_actuators, body_sensors, joint_actuators, joint_sensors, thruster_actuators,
+};
 use crate::widgets;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -32,6 +34,7 @@ use egui_snarl::ui::{BackgroundPattern, PinInfo, SnarlStyle, SnarlViewer, WireSt
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::joint::{JointDef, JointKind};
+use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
 use gradiance_domain::quantity::Subject;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::signal::Subjects;
@@ -54,6 +57,8 @@ enum GraphKey {
     /// A scene joint (its sensor ports, and its motor's actuator ports), by
     /// id (brief N-1).
     Joint(StableId),
+    /// A behavior node (a thruster's thrust pin), by id (brief N-3).
+    Node(StableId),
     /// A `defparam` knob, by name.
     Param(String),
     /// A `defsignal` modulator, by name.
@@ -87,6 +92,9 @@ enum NodeData {
         motor: bool,
         linear: bool,
     },
+    /// A thruster block (brief N-3): one input, its thrust (N), and no
+    /// outputs. Shown while a wire names it or its body is on the canvas.
+    Thruster { id: StableId },
     /// A param block: one output (its published bus name).
     Param(String),
     /// A computed/modulation block. `block` is the structured op (canvas
@@ -120,6 +128,7 @@ impl NodeData {
         match self {
             Self::Body { id, .. } => GraphKey::Body(*id),
             Self::Joint { id, .. } => GraphKey::Joint(*id),
+            Self::Thruster { id } => GraphKey::Node(*id),
             Self::Param(name) => GraphKey::Param(name.clone()),
             Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
             Self::Scope => GraphKey::Scope,
@@ -129,7 +138,7 @@ impl NodeData {
 
     fn role(&self) -> Role {
         match self {
-            Self::Body { .. } | Self::Joint { .. } => Role::Body,
+            Self::Body { .. } | Self::Joint { .. } | Self::Thruster { .. } => Role::Body,
             Self::Param(_) => Role::Producer,
             Self::Computed { .. } => Role::Modulator,
             Self::Scope => Role::Scope,
@@ -142,6 +151,7 @@ impl NodeData {
         match self {
             Self::Body { name, kind, .. } => name.clone().unwrap_or_else(|| (*kind).to_owned()),
             Self::Joint { kind, .. } => (*kind).to_owned(),
+            Self::Thruster { .. } => "thruster".to_owned(),
             Self::Param(name) => format!("⊙ {name}"),
             Self::Computed { name, .. } => format!("ƒ {name}"),
             Self::Scope => "▭ Scope".to_owned(),
@@ -156,7 +166,7 @@ impl NodeData {
             Self::Joint { id, .. } => joint_sensors(*id).get(index).map(|(_, s)| s.clone()),
             Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
             Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
-            Self::Scope | Self::Comment { .. } => None,
+            Self::Thruster { .. } | Self::Scope | Self::Comment { .. } => None,
         }
     }
 
@@ -167,6 +177,7 @@ impl NodeData {
             Self::Joint {
                 id, motor: true, ..
             } => joint_actuators(*id).get(index).map(|(_, s)| s.clone()),
+            Self::Thruster { id } => thruster_actuators(*id).get(index).map(|(_, s)| s.clone()),
             Self::Scope => (index == 0).then_some(SignalSink::Plot),
             _ => None,
         }
@@ -273,7 +284,8 @@ fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
 
 /// The `(GraphKey, input index)` a binding sink resolves to — body actuator
 /// pins in [`body_actuators`] order, a joint's motor pins in
-/// [`joint_actuators`] order, or the Scope block's input for `Plot`.
+/// [`joint_actuators`] order, a thruster's thrust pin, or the Scope block's
+/// input for `Plot`.
 fn sink_pin(sink: &SignalSink) -> (GraphKey, usize) {
     let at = |pins: &[(&str, SignalSink)]| pins.iter().position(|(_, s)| s == sink).unwrap_or(0);
     match sink {
@@ -284,6 +296,7 @@ fn sink_pin(sink: &SignalSink) -> (GraphKey, usize) {
         SignalSink::MotorSpeed(id) | SignalSink::MotorCap(id) => {
             (GraphKey::Joint(*id), at(&joint_actuators(*id)))
         }
+        SignalSink::Thrust(id) => (GraphKey::Node(*id), 0),
         SignalSink::Plot => (GraphKey::Scope, 0),
     }
 }
@@ -302,6 +315,17 @@ pub struct GraphParams<'w, 's> {
     pub(crate) computed: ResMut<'w, ComputedSignals>,
     pub(crate) bodies: Query<'w, 's, (&'static StableId, &'static ShapeDef), With<Body>>,
     pub(crate) joints: Query<'w, 's, (&'static StableId, &'static JointDef), With<Joint>>,
+    /// The behavior nodes, for thruster blocks (brief N-3).
+    pub(crate) nodes: Query<
+        'w,
+        's,
+        (
+            &'static StableId,
+            &'static NodeKind,
+            &'static NodeAttachment,
+        ),
+        With<BehaviorNode>,
+    >,
     pub(crate) selection: ResMut<'w, Selection>,
     pub(crate) ids: Query<'w, 's, &'static StableId>,
     pub(crate) physics: PhysicsQueries<'w, 's>,
@@ -326,6 +350,7 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
         &gp.computed,
         &gp.bodies,
         &gp.joints,
+        &gp.nodes,
     );
     reconcile(&mut gp.graph, desired);
     rebuild_wires(&mut gp.graph, &gp.bindings);
@@ -592,7 +617,7 @@ fn output_pin_values(
                 .map(|(_, s)| read_source(s, index, physics, body_transforms, dt))
                 .collect(),
             NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
-            NodeData::Scope | NodeData::Comment { .. } => Vec::new(),
+            NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. } => Vec::new(),
         };
         values.insert(data.key(), vals);
     }
@@ -664,6 +689,7 @@ fn collect_desired(
     computed: &ComputedSignals,
     bodies: &Query<(&StableId, &ShapeDef), With<Body>>,
     joints: &Query<(&StableId, &JointDef), With<Joint>>,
+    nodes: &Query<(&StableId, &NodeKind, &NodeAttachment), With<BehaviorNode>>,
 ) -> Vec<NodeData> {
     let kinds: HashMap<StableId, &'static str> = bodies
         .iter()
@@ -733,6 +759,22 @@ fn collect_desired(
                 motor: motor.is_some(),
                 linear: motor.unwrap_or(false),
             });
+        }
+    }
+    // A thruster block for every thruster a wire names, and for every
+    // thruster on a body already on the canvas: its thrust pin is where a
+    // drive is wired (brief N-3).
+    for (id, kind, attachment) in nodes {
+        if !matches!(kind, NodeKind::Thruster(_)) {
+            continue;
+        }
+        let named = bindings
+            .0
+            .iter()
+            .any(|b| sink_pin(&b.sink).0 == GraphKey::Node(*id));
+        let on_canvas = attachment.target.is_some_and(|b| shown.contains(&b));
+        if named || on_canvas {
+            items.push(NodeData::Thruster { id: *id });
         }
     }
     for id in shown {
@@ -808,7 +850,10 @@ fn binding_bodies(binding: &SignalBinding) -> Vec<StableId> {
         | SignalSink::TracerColor(id)
         | SignalSink::FieldStrength(id)
         | SignalSink::GravityScale(id) => ids.push(*id),
-        SignalSink::Plot | SignalSink::MotorSpeed(_) | SignalSink::MotorCap(_) => {}
+        SignalSink::Plot
+        | SignalSink::MotorSpeed(_)
+        | SignalSink::MotorCap(_)
+        | SignalSink::Thrust(_) => {}
     }
     ids
 }
@@ -1190,6 +1235,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
                     0
                 }
             }
+            NodeData::Thruster { id } => thruster_actuators(*id).len(),
             NodeData::Param(_) | NodeData::Comment { .. } => 0,
             NodeData::Computed { inputs, block, .. } => block
                 .as_ref()
@@ -1203,7 +1249,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
             NodeData::Body { id, .. } => body_sensors(*id).len(),
             NodeData::Joint { id, .. } => joint_sensors(*id).len(),
             NodeData::Param(_) | NodeData::Computed { .. } => 1,
-            NodeData::Scope | NodeData::Comment { .. } => 0,
+            NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. } => 0,
         }
     }
 
@@ -1224,6 +1270,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         let (name, unit) = match snarl.get_node(pin.id.node) {
             Some(NodeData::Body { id, .. }) => actuator(&body_actuators(*id), false),
             Some(NodeData::Joint { id, linear, .. }) => actuator(&joint_actuators(*id), *linear),
+            Some(NodeData::Thruster { id }) => actuator(&thruster_actuators(*id), false),
             Some(NodeData::Computed {
                 inputs,
                 block: None,
@@ -1265,7 +1312,9 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 |(l, s)| ((*l).to_owned(), s.dimension().symbol()),
             ),
             Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => (name.clone(), ""),
-            Some(NodeData::Scope | NodeData::Comment { .. }) | None => (String::new(), ""),
+            Some(NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. }) | None => {
+                (String::new(), "")
+            }
         };
         let key = snarl.get_node(pin.id.node).map(NodeData::key);
         let value = key
@@ -1390,7 +1439,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
                     ui.close();
                 }
             }
-            Some(NodeData::Joint { .. }) => {
+            Some(NodeData::Joint { .. } | NodeData::Thruster { .. }) => {
                 widgets::empty_state(ui, "shown while a wire or a body on the canvas names it");
             }
             Some(NodeData::Scope) | None => {

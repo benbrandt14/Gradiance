@@ -258,9 +258,11 @@ impl GameCommand for DuplicateCommand {
         }
         let offset = self.offset;
         let joint_clones = clone_internal_joints(world, &id_map, |p| p + offset, 0.0);
-        let node_clones = clone_attached_nodes(world, &id_map, offset);
+        let node_clones = clone_attached_nodes(world, &mut id_map, offset);
         // Installs the cloned bindings into `SignalBindings` (the returned
-        // names were only ever needed to undo them).
+        // names were only ever needed to undo them). `id_map` now holds the
+        // cloned nodes too, so a binding that drives a thruster on a
+        // duplicated body is copied onto the clone's thruster (brief N-3).
         clone_bindings(world, &id_map);
         let mut next_group = crate::group_cmd::fresh_group_id(world);
         remap_clone_groups(&mut clones, &mut next_group);
@@ -283,10 +285,12 @@ impl GameCommand for DuplicateCommand {
 
 /// Clones every behavior node attached to a duplicated body, remapping its
 /// attachment to the clone and offsetting a free node's pose. Nodes not
-/// attached to any duplicated body are left alone.
+/// attached to any duplicated body are left alone. Each clone's
+/// `(old, new)` id pair is appended to `id_map`, so the bindings that name a
+/// node are remapped with it.
 fn clone_attached_nodes(
     world: &mut World,
-    id_map: &[(StableId, StableId)],
+    id_map: &mut Vec<(StableId, StableId)>,
     offset: Vec2,
 ) -> Vec<NodeRecord> {
     let node_entities: Vec<Entity> = world
@@ -302,7 +306,11 @@ fn clone_attached_nodes(
             continue; // free nodes don't belong to any duplicated body
         }
         // `None`: attached to a body outside the duplicated set.
-        clones.extend(remap_node(record, id_map, offset, StableId::new()));
+        let old = record.id;
+        if let Some(clone) = remap_node(record, id_map, offset, StableId::new()) {
+            id_map.push((old, clone.id));
+            clones.push(clone);
+        }
     }
     clones
 }

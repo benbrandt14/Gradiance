@@ -52,6 +52,9 @@ pub enum ToolState {
     /// Place tracer nodes (a placeable trajectory probe; attaches to a body
     /// under the cursor, else free).
     Tracer,
+    /// Place thruster nodes (a push at a point of a body; brief N-3). Press
+    /// where it pushes; a drag aims it.
+    Thruster,
     /// A tool a script registered (`register-tool`): the index of its entry in
     /// [`ScriptTools`](crate::script_tools::ScriptTools). It collects clicks
     /// like the polygon tool and, on the last one, runs the script's body once.

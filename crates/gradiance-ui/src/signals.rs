@@ -326,12 +326,17 @@ fn binding_row(
 /// colour and physical channels, a motorised joint's motor channels, and the
 /// plot. A plot binding offers the channels of the object its source reads.
 fn sink_choices(binding: &SignalBinding) -> Vec<SignalSink> {
+    // A thruster has one channel: its thrust, or the plot.
+    if let SignalSink::Thrust(id) = binding.sink {
+        return vec![SignalSink::Thrust(id), SignalSink::Plot];
+    }
     let target = match &binding.sink {
         SignalSink::Fill(id)
         | SignalSink::TracerColor(id)
         | SignalSink::FieldStrength(id)
         | SignalSink::GravityScale(id) => Some((Subject::Body, *id)),
         SignalSink::MotorSpeed(id) | SignalSink::MotorCap(id) => Some((Subject::Joint, *id)),
+        SignalSink::Thrust(_) => None,
         SignalSink::Plot => binding
             .source
             .reading()

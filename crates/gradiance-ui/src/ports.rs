@@ -73,6 +73,12 @@ pub fn joint_actuators(id: StableId) -> [(&'static str, SignalSink); 2] {
     [SignalSink::MotorSpeed(id), SignalSink::MotorCap(id)].map(|sink| (sink.label(), sink))
 }
 
+/// A thruster node's **actuator port** as `(label, sink)`: its thrust (N;
+/// brief N-3). The input pin of a thruster block.
+pub fn thruster_actuators(id: StableId) -> [(&'static str, SignalSink); 1] {
+    [SignalSink::Thrust(id)].map(|sink| (sink.label(), sink))
+}
+
 /// A short unit label for a sensor source's readout — the catalog dimension's
 /// SI symbol, so the label can never drift from the value (this used to be a
 /// hard-coded table and still said "px/s"/"px" after the SI flip).
