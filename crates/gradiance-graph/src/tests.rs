@@ -722,3 +722,208 @@ proptest! {
         prop_assert!(graph.validate().is_ok());
     }
 }
+
+mod edits {
+    use super::*;
+    use crate::{EditError, GraphEdit, NodeRef, PortRef, nodes_markdown};
+
+    fn param_edit(n: u128, name: &str, value: f32) -> GraphEdit {
+        GraphEdit::Param {
+            id: id(n),
+            name: name.to_owned(),
+            value,
+            min: 0.0,
+            max: 10.0,
+        }
+    }
+
+    fn expr_edit(n: u128, name: &str, source: &str) -> GraphEdit {
+        GraphEdit::Expr {
+            id: id(n),
+            name: name.to_owned(),
+            expr: SignalExpr::parse_rpn(source).unwrap(),
+        }
+    }
+
+    fn label(text: &str) -> NodeRef {
+        NodeRef::Label(text.to_owned())
+    }
+
+    #[test]
+    fn a_reader_declared_first_wires_to_the_param_declared_after_it() {
+        let mut graph = Graph::default();
+        graph.edit(&expr_edit(2, "osc", "t sin amp *")).unwrap();
+        assert_eq!(
+            graph.by_label("osc").unwrap().inputs,
+            [Input::External("t".into()), Input::External("amp".into())]
+        );
+        graph.edit(&param_edit(1, "amp", 2.0)).unwrap();
+        let osc = graph.by_label("osc").unwrap();
+        assert_eq!(osc.inputs[1], Input::wire(id(1)), "adopted by label");
+        assert_eq!(osc.inputs[0], Input::External("t".into()), "the clock stays");
+    }
+
+    #[test]
+    fn renaming_a_param_keeps_its_wires_and_the_lowering_follows() {
+        let mut graph = Graph::default();
+        graph.edit(&param_edit(1, "amp", 2.0)).unwrap();
+        graph.edit(&expr_edit(2, "osc", "t sin amp *")).unwrap();
+        graph
+            .edit(&GraphEdit::SetLabel {
+                node: label("amp"),
+                label: Some("gain".into()),
+            })
+            .unwrap();
+        assert_eq!(graph.by_label("osc").unwrap().inputs[1], Input::wire(id(1)));
+        let lowered = lower_signal(&graph, id(2)).unwrap();
+        assert_eq!(lowered, SignalExpr::parse_rpn("t sin gain *").unwrap());
+    }
+
+    #[test]
+    fn redeclaring_updates_the_node_in_place() {
+        let mut graph = Graph::default();
+        graph.edit(&param_edit(1, "amp", 2.0)).unwrap();
+        graph
+            .edit(&GraphEdit::SetPos {
+                node: label("amp"),
+                pos: Vec2::new(5.0, 6.0),
+            })
+            .unwrap();
+        let touched = graph.edit(&param_edit(9, "amp", 3.0)).unwrap();
+        assert_eq!(touched, id(1), "the existing node, not the new id");
+        assert_eq!(graph.nodes.len(), 1);
+        let amp = graph.node(id(1)).unwrap();
+        assert_eq!(amp.pos, Vec2::new(5.0, 6.0), "the position is kept");
+        assert!(matches!(amp.kind, NodeKind::Param { value, .. } if value == 3.0));
+    }
+
+    #[test]
+    fn connect_set_and_remove_address_by_label_or_id() {
+        let mut graph = Graph::default();
+        graph.edit(&param_edit(1, "amp", 2.0)).unwrap();
+        graph
+            .edit(&GraphEdit::Add {
+                id: id(2),
+                kind: NodeKind::Gain,
+                label: Some("boost".into()),
+                inputs: Vec::new(),
+            })
+            .unwrap();
+        graph
+            .edit(&GraphEdit::Connect {
+                from: NodeRef::parse(&id(1).to_string()),
+                to: label("boost"),
+                port: PortRef::Name("in".into()),
+            })
+            .unwrap();
+        graph
+            .edit(&GraphEdit::SetInput {
+                node: label("boost"),
+                port: PortRef::Name("k".into()),
+                input: Input::scalar(4.0),
+            })
+            .unwrap();
+        assert_eq!(
+            lower_signal(&graph, id(2)).unwrap(),
+            SignalExpr::parse_rpn("amp 4 *").unwrap()
+        );
+        graph.edit(&GraphEdit::Remove { node: label("amp") }).unwrap();
+        assert_eq!(
+            graph.node(id(2)).unwrap().inputs[0],
+            Input::External("amp".into()),
+            "a wire from a removed node reads its label from the bus"
+        );
+    }
+
+    #[test]
+    fn a_refused_edit_leaves_the_graph_unchanged() {
+        let mut graph = Graph::default();
+        graph.edit(&param_edit(1, "amp", 2.0)).unwrap();
+        graph
+            .edit(&GraphEdit::Add {
+                id: id(2),
+                kind: NodeKind::Box,
+                label: None,
+                inputs: Vec::new(),
+            })
+            .unwrap();
+        graph.edit(&expr_edit(3, "osc", "t sin")).unwrap();
+        let before = graph.clone();
+        let refused = [
+            GraphEdit::Connect {
+                from: label("osc"),
+                to: NodeRef::Id(id(2)),
+                port: PortRef::Name("width".into()),
+            },
+            GraphEdit::SetLabel {
+                node: label("osc"),
+                label: Some("amp".into()),
+            },
+            GraphEdit::SetLabel {
+                node: label("osc"),
+                label: Some("t".into()),
+            },
+            GraphEdit::Remove {
+                node: label("nothing"),
+            },
+            GraphEdit::SetInput {
+                node: label("osc"),
+                port: PortRef::Name("nope".into()),
+                input: Input::scalar(1.0),
+            },
+            GraphEdit::Add {
+                id: id(1),
+                kind: NodeKind::Time,
+                label: None,
+                inputs: Vec::new(),
+            },
+        ];
+        for edit in &refused {
+            assert!(graph.edit(edit).is_err(), "{edit:?}");
+            assert_eq!(graph, before, "{edit:?}");
+        }
+        assert!(matches!(
+            graph.edit(&refused[0]),
+            Err(EditError::Invalid(GraphError::RateMismatch { .. }))
+        ));
+    }
+
+    #[test]
+    fn new_nodes_stack_down_their_column() {
+        let mut graph = Graph::default();
+        graph.edit(&param_edit(1, "a", 1.0)).unwrap();
+        graph.edit(&param_edit(2, "b", 1.0)).unwrap();
+        graph.edit(&expr_edit(3, "c", "a b +")).unwrap();
+        let pos = |n| graph.node(id(n)).unwrap().pos;
+        assert_eq!(pos(1), Vec2::new(20.0, 16.0));
+        assert_eq!(pos(2), Vec2::new(20.0, 128.0));
+        assert_eq!(pos(3), Vec2::new(220.0, 16.0));
+    }
+
+    #[test]
+    fn every_catalog_id_but_the_expression_has_a_default_kind() {
+        for row in CATALOG {
+            match NodeKind::from_catalog_id(row.id) {
+                Some(kind) => assert_eq!(meta(&kind).id, row.id),
+                None => assert_eq!(row.id, "signal::expr"),
+            }
+        }
+    }
+
+    /// `docs/nodes.md` equals the generator's output.
+    #[test]
+    fn docs_nodes_md_is_current() {
+        let generated = nodes_markdown();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/nodes.md");
+        if std::env::var_os("UPDATE_NODES_DOC").is_some() {
+            std::fs::write(&path, &generated).unwrap();
+            return;
+        }
+        let on_disk = std::fs::read_to_string(&path).unwrap_or_default();
+        assert!(
+            on_disk == generated,
+            "docs/nodes.md is stale: run \
+             `UPDATE_NODES_DOC=1 cargo test -p gradiance-graph docs_nodes_md_is_current`"
+        );
+    }
+}

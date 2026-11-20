@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 gradiance-core.workspace = true
 gradiance-domain.workspace = true
+gradiance-graph.workspace = true
 bevy.workspace = true
 ron.workspace = true
 serde.workspace = true

@@ -376,8 +376,8 @@ fn close_sim_run(world: &mut World) {
 /// Only *scene-content* settings count — the `scene_content!` list in
 /// `gradiance_scene::records`, read through
 /// [`EnvironmentRecord::scene_content_matches`]: sim, render, lighting,
-/// scenery and the signal graph (`SignalBindings`, `SignalParams`,
-/// `ComputedSignals`) and `GroupNames`. Grid, snap and camera are workstation config and
+/// scenery, the signal bindings (`SignalBindings`), the signal graph
+/// (`gradiance_graph::Graph`, node positions included) and `GroupNames`. Grid, snap and camera are workstation config and
 /// never enter history.
 ///
 /// The resources are tracked **by value**. Bevy's change flags are not

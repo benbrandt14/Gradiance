@@ -77,6 +77,7 @@ gradiance-kernel = { path = "crates/gradiance-kernel" }
 gradiance-units = { path = "crates/gradiance-units" }
 gradiance-geometry = { path = "crates/gradiance-geometry" }
 gradiance-optimize = { path = "crates/gradiance-optimize" }
+gradiance-graph = { path = "crates/gradiance-graph" }
 gradiance-domain = { path = "crates/gradiance-domain" }
 gradiance-scene = { path = "crates/gradiance-scene" }
 gradiance-physics = { path = "crates/gradiance-physics" }
@@ -135,6 +136,7 @@ gradiance-optimize.workspace = true
 gradiance-units.workspace = true
 gradiance-geometry.workspace = true
 gradiance-domain.workspace = true
+gradiance-graph.workspace = true
 gradiance-scene.workspace = true
 gradiance-physics.workspace = true
 gradiance-signal.workspace = true

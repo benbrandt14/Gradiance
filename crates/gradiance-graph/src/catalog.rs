@@ -360,3 +360,135 @@ pub fn meta(kind: &NodeKind) -> &'static NodeMeta {
     };
     &CATALOG[i]
 }
+
+impl NodeKind {
+    /// A node of the catalog row `id` with its fields at their defaults (a
+    /// `[0, 1]` param at 0.5, the `E` key, a union), or `None` for an
+    /// unknown id or for `signal::expr`, whose expression has no default
+    /// (declare one with `defsignal`).
+    pub fn from_catalog_id(id: &str) -> Option<Self> {
+        Some(match id {
+            "signal::time" => Self::Time,
+            "signal::constant" => Self::Constant,
+            "signal::oscillator" => Self::Oscillator,
+            "signal::key" => Self::Key {
+                key: "E".to_owned(),
+                negative: None,
+            },
+            "signal::param" => Self::Param {
+                value: 0.5,
+                min: 0.0,
+                max: 1.0,
+            },
+            "signal::gain" => Self::Gain,
+            "signal::sum" => Self::Sum,
+            "signal::product" => Self::Product,
+            "signal::sub" => Self::Sub,
+            "signal::abs" => Self::Abs,
+            "signal::min" => Self::Min,
+            "signal::max" => Self::Max,
+            "signal::curve" => Self::Curve,
+            "shape::box" => Self::Box,
+            "shape::circle" => Self::Circle,
+            "shape::polygon" => Self::Polygon,
+            "shape::capsule" => Self::Capsule,
+            "shape::half_plane" => Self::HalfPlane,
+            "shape::csg" => Self::Csg(gradiance_domain::shape::CsgOp::Union),
+            "shape::placed" => Self::Placed,
+            _ => return None,
+        })
+    }
+}
+
+/// The text of `docs/nodes.md`: the catalog as one table per category, in
+/// palette order. Generated; a test in this crate fails when the file is
+/// stale and rewrites it with `UPDATE_NODES_DOC=1`.
+pub fn nodes_markdown() -> String {
+    use std::fmt::Write as _;
+    let cell = |text: &str| text.replace('|', "\\|");
+    let ports = |ports: &[PortMeta]| {
+        if ports.is_empty() {
+            return "—".to_owned();
+        }
+        ports
+            .iter()
+            .map(|p| {
+                let hard = p.hard.map_or_else(String::new, |(lo, hi)| {
+                    if hi == f32::MAX {
+                        format!(", at least {lo}")
+                    } else {
+                        format!(", {lo} to {hi}")
+                    }
+                });
+                format!("`{}`: {:?} = {}{hard}", p.name, p.ty, default_text(&p.default))
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    let mut out = String::new();
+    let _ = write!(
+        out,
+        "# Nodes\n\n\
+         <!-- Generated from `gradiance_graph::CATALOG` by \
+         `crates/gradiance-graph/src/tests.rs` (`docs_nodes_md_is_current`). Do not \
+         edit by hand: run `UPDATE_NODES_DOC=1 cargo test -p gradiance-graph \
+         docs_nodes_md_is_current`. -->\n\n\
+         Every node kind of the one graph (`docs/graph-model-decision.md`): {} \
+         rows. A node is not an operation; the `graph.*` operations \
+         (`docs/ops.md`) edit the graph. **Rate**: a frame-rate node runs every \
+         frame through the signal kernel; an edit-rate node changes only on a \
+         settled edit, and an edit-rate input never takes a frame-rate output. \
+         An input port reads its default while nothing is bound to it; a \
+         constant must lie in its hard range.\n",
+        CATALOG.len()
+    );
+    let mut category = "";
+    for row in CATALOG {
+        if row.category != category {
+            category = row.category;
+            let _ = write!(
+                out,
+                "\n## {category}\n\n\
+                 | Id | Name | Rate | Inputs | Outputs | Doc |\n\
+                 |---|---|---|---|---|---|\n"
+            );
+        }
+        let rate = match row.rate {
+            Rate::Frame => "frame",
+            Rate::Edit => "edit",
+        };
+        let inputs = if matches!(row.id, "signal::expr") {
+            "one scalar per name the expression reads".to_owned()
+        } else {
+            ports(row.inputs)
+        };
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {rate} | {} | {} | {} |",
+            row.id,
+            cell(row.name),
+            cell(&inputs),
+            cell(
+                &row.outputs
+                    .iter()
+                    .map(|p| format!("`{}`: {:?}", p.name, p.ty))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
+            cell(row.doc),
+        );
+    }
+    out
+}
+
+/// A port default as `docs/nodes.md` spells it.
+fn default_text(default: &PortDefault) -> String {
+    match default {
+        PortDefault::Scalar(v) => format!("{v}"),
+        PortDefault::Vec2(v) => format!("({}, {})", v.x, v.y),
+        PortDefault::Points(points) => format!("{} points", points.len()),
+        PortDefault::NoContours => "none".to_owned(),
+        PortDefault::UnitBox => "1 m box".to_owned(),
+        PortDefault::IdentityCurve => "identity".to_owned(),
+    }
+}

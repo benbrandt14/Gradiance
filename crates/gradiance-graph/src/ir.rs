@@ -13,8 +13,8 @@ use crate::catalog::{PortMeta, meta};
 /// One graph: every node, sorted by id (the order [`Graph::node`] searches
 /// and the tie-break of every deterministic walk).
 ///
-/// A `Resource` so G-2 can insert it as scene content; nothing inserts or
-/// registers it yet.
+/// Scene content (brief G-2): one resource, saved with the scene and undone
+/// as one `settings` step per settled edit.
 #[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct Graph {
     /// The nodes, sorted by id ([`Graph::validate`] refuses another order).
@@ -73,7 +73,7 @@ pub struct Node {
     /// wire to it inlines its expression).
     #[serde(default)]
     pub label: Option<String>,
-    /// Canvas position (saved from G-2 on).
+    /// Canvas position: saved, and undone with the graph.
     #[serde(default)]
     pub pos: Vec2,
 }

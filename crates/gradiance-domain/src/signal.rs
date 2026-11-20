@@ -1031,13 +1031,15 @@ impl BlockOp {
     }
 }
 
-/// Every tunable parameter. Config-seam resource (UI slider edits directly,
-/// persisted with the scene; a settled edit is one `settings` undo step).
-#[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
+/// A list of tunable parameters: the by-name form the signal graph replaced
+/// (brief G-2). No longer a resource or saved; `gradiance_graph::from_signals`
+/// converts it, so tests can build a graph from the old fixtures.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct SignalParams(pub Vec<SignalParam>);
 
-/// Every computed signal. Config-seam resource, persisted with the scene.
-#[derive(Resource, Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
+/// A list of computed signals: the by-name form the signal graph replaced
+/// (brief G-2), kept as converter input like [`SignalParams`].
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub struct ComputedSignals(pub Vec<ComputedSignal>);
 
 #[cfg(test)]

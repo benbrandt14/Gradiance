@@ -1,7 +1,8 @@
 //! The operations this layer owns (`gradiance-op`): the **editor** verbs
 //! that extend the tool (`register-action`, `register-tool`, `label`), and
 //! the script side of the signal bus (`signal-get`, `signal-set`,
-//! `defparam`, `defsignal`).
+//! `defparam`, `defsignal`), and the signal graph's edit surface
+//! (`graph-add`, `graph-connect`, `graph-set`, `graph-remove`; brief G-2).
 //!
 //! They live here because the tables they fill do: the action table and the
 //! workspace labels are this crate's, and this is the lowest layer that sees
@@ -19,7 +20,8 @@ use crate::bridge::WorkspaceLabels;
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::script_tools::{ScriptToolSpec, ScriptTools};
-use gradiance_domain::signal::{BlockOp, ComputedSignal, SignalExpr, SignalParam};
+use gradiance_domain::signal::SignalExpr;
+use gradiance_graph::{Family, GraphEdit, Input, NodeKind, NodeRef, PortRef};
 use gradiance_op::{
     OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Value,
     json,
@@ -54,10 +56,10 @@ pub enum EditorRequest {
         /// Its value.
         value: f64,
     },
-    /// Declare (or update, by name) a tunable parameter.
-    Param(SignalParam),
-    /// Declare (or update, by name) a computed signal.
-    Computed(ComputedSignal),
+    /// Edit the signal graph (`defparam`, `defsignal`, `defkey` and the
+    /// `graph.*` operations). Names resolve when the edit is applied, so a
+    /// node declared earlier in the same run is found.
+    Graph(GraphEdit),
     /// Write recorded signal history as CSV (`signal.export`, brief R-1).
     Export {
         /// The file.
@@ -91,6 +93,10 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<DefParam>();
         registry.register::<DefSignal>();
         registry.register::<DefKey>();
+        registry.register::<GraphAdd>();
+        registry.register::<GraphConnect>();
+        registry.register::<GraphSet>();
+        registry.register::<GraphRemove>();
         registry.register::<SignalHistory>();
         registry.register::<SignalExport>();
     }
@@ -295,9 +301,10 @@ impl Operation for SignalSet {
     }
 }
 
-/// Declare a tunable parameter. The parameters are scene content (saved with
-/// the scene), so a declaration records one settled `settings` undo step
-/// through `commit_settings_edits` (brief U-2c).
+/// Declare a tunable parameter: a param node of the signal graph. The graph
+/// is scene content (saved with the scene), so a declaration records one
+/// settled `settings` undo step through `commit_settings_edits` (brief
+/// U-2c). Re-declaring a name updates that node, so its wires hold.
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
 pub struct DefParam {
@@ -323,17 +330,22 @@ impl Operation for DefParam {
         example: r#"{"name": "amp", "value": 2, "min": 0, "max": 10}"#,
     };
 
-    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
-        Ok(OpOutput::none().message(EditorRequest::Param(SignalParam {
-            name: self.name,
-            value: self.value as f32,
-            min: self.min as f32,
-            max: self.max as f32,
-        })))
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        Ok(
+            OpOutput::none().message(EditorRequest::Graph(GraphEdit::Param {
+                id: ctx.new_id(),
+                name: self.name,
+                value: self.value as f32,
+                min: self.min as f32,
+                max: self.max as f32,
+            })),
+        )
     }
 }
 
-/// Declare a computed signal from an RPN expression. Scene content with one
+/// Declare a computed signal from an RPN expression: an expression node of
+/// the signal graph whose names are wired, by id, to the nodes labelled
+/// with them (a name no node has stays a bus read). Scene content with one
 /// settled `settings` undo step, like [`DefParam`].
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
@@ -356,22 +368,21 @@ impl Operation for DefSignal {
         example: r#"{"name": "osc", "expr": "t sin 2 *"}"#,
     };
 
-    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         let expr = SignalExpr::parse_rpn(&self.expr)
             .map_err(|err| OpError::Invalid(format!("`{}`: {err}", self.expr)))?;
         Ok(
-            OpOutput::none().message(EditorRequest::Computed(ComputedSignal {
+            OpOutput::none().message(EditorRequest::Graph(GraphEdit::Expr {
+                id: ctx.new_id(),
                 name: self.name,
                 expr,
-                block: None,
             })),
         )
     }
 }
 
-/// Declare a key input (brief N-2): the node graph's Key block, as a
-/// computed signal. Scene content with one settled `settings` undo step,
-/// like [`DefSignal`].
+/// Declare a key input (brief N-2): a key node of the signal graph. Scene
+/// content with one settled `settings` undo step, like [`DefSignal`].
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
 pub struct DefKey {
@@ -395,7 +406,7 @@ impl Operation for DefKey {
         example: r#"{"name": "throttle", "key": "E", "negative": "Q"}"#,
     };
 
-    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         let canonical = |name: &str| {
             gradiance_domain::keys::named_key(name)
                 .map(|k| k.name.to_owned())
@@ -404,10 +415,218 @@ impl Operation for DefKey {
         let key = canonical(&self.key)?;
         let negative = self.negative.as_deref().map(canonical).transpose()?;
         Ok(
-            OpOutput::none().message(EditorRequest::Computed(ComputedSignal::from_block(
-                self.name,
-                BlockOp::Key { key, negative },
-            ))),
+            OpOutput::none().message(EditorRequest::Graph(GraphEdit::Key {
+                id: ctx.new_id(),
+                name: self.name,
+                key,
+                negative,
+            })),
+        )
+    }
+}
+
+/// The metadata of a `graph.*` operation: config seam, one settled
+/// `settings` undo step (the graph is scene content), no menu, no chord.
+const fn graph_op(
+    id: &'static str,
+    lisp: &'static str,
+    doc: &'static str,
+    example: &'static str,
+) -> OpMeta {
+    OpMeta {
+        id,
+        lisp,
+        doc,
+        seam: Seam::Config,
+        menu: None,
+        chord: None,
+        undo: Some(gradiance_command::intent::name::SETTINGS),
+        example,
+    }
+}
+
+/// Add a node to the signal graph.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct GraphAdd {
+    /// The catalog id of its kind (`signal::gain`; `docs/nodes.md`).
+    pub kind: String,
+    /// The bus name it publishes under (absent: it publishes nothing and
+    /// a wire from it inlines its value).
+    pub label: Option<String>,
+}
+
+impl Operation for GraphAdd {
+    const META: OpMeta = graph_op(
+        "graph.add",
+        "graph-add",
+        "Add a signal node of a catalog kind (docs/nodes.md), optionally labelled; returns its id. Its ports read their defaults until set or wired. Placed below the last node of its canvas column.",
+        r#"{"kind": "signal::gain", "label": "boost"}"#,
+    );
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let kind = NodeKind::from_catalog_id(self.kind.trim()).ok_or_else(|| {
+            OpError::Invalid(format!(
+                "`{}` is not a node kind a call can add (docs/nodes.md; an expression is a defsignal)",
+                self.kind
+            ))
+        })?;
+        // Shape nodes have no consumer until a body can name one (G-4).
+        if kind.family() != Family::Signal {
+            return Err(OpError::Invalid(format!(
+                "`{}` is a shape node: shapes join the graph with brief G-4",
+                self.kind
+            )));
+        }
+        let id = ctx.new_id();
+        Ok(OpOutput::none()
+            .message(EditorRequest::Graph(GraphEdit::Add {
+                id,
+                kind,
+                label: self.label,
+                inputs: Vec::new(),
+            }))
+            .returning(id.to_string()))
+    }
+}
+
+/// Wire one node's output into another's input.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct GraphConnect {
+    /// The source node: its id or its label.
+    pub from: String,
+    /// The node whose input is wired: its id or its label.
+    pub to: String,
+    /// The input port's name (`in`, `k`; an expression's port is the bus
+    /// name it reads).
+    pub port: String,
+}
+
+impl Operation for GraphConnect {
+    const META: OpMeta = graph_op(
+        "graph.connect",
+        "graph-connect",
+        "Wire node from's output into input port of node to (nodes by id or label). The wire is by id: renaming either node keeps it.",
+        r#"{"from": "level", "to": "wave", "port": "t"}"#,
+    );
+
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        Ok(
+            OpOutput::none().message(EditorRequest::Graph(GraphEdit::Connect {
+                from: NodeRef::parse(&self.from),
+                to: NodeRef::parse(&self.to),
+                port: PortRef::Name(self.port),
+            })),
+        )
+    }
+}
+
+/// What `graph-set` writes: a number, a point or a name.
+#[derive(Debug, Clone, PartialEq, Deserialize, Reflect)]
+#[serde(try_from = "GraphValueRepr")]
+pub enum GraphValue {
+    /// A scalar.
+    Number(f64),
+    /// A point `[x, y]`.
+    Point(Vec2),
+    /// A name.
+    Text(String),
+}
+
+/// The JSON shapes a [`GraphValue`] decodes from.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum GraphValueRepr {
+    Number(f64),
+    Point([f32; 2]),
+    Text(String),
+}
+
+impl TryFrom<GraphValueRepr> for GraphValue {
+    type Error = String;
+
+    fn try_from(repr: GraphValueRepr) -> Result<Self, String> {
+        Ok(match repr {
+            GraphValueRepr::Number(n) if n.is_finite() => Self::Number(n),
+            GraphValueRepr::Number(n) => return Err(format!("{n} is not a finite number")),
+            GraphValueRepr::Point([x, y]) => Self::Point(Vec2::new(x, y)),
+            GraphValueRepr::Text(text) => Self::Text(text),
+        })
+    }
+}
+
+/// Set a port constant, a label or a canvas position.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct GraphSet {
+    /// The node: its id or its label.
+    pub node: String,
+    /// `"label"`, `"position"`, or an input port's name.
+    pub key: String,
+    /// A label is a name (`""` clears it); a position is `[x, y]`; a port
+    /// takes a number or a point (a constant, which disconnects it) or a
+    /// name (a bus read).
+    pub value: GraphValue,
+}
+
+impl Operation for GraphSet {
+    const META: OpMeta = graph_op(
+        "graph.set",
+        "graph-set",
+        "Set a node's \"label\" (a name; \"\" stops it publishing), its \"position\" on the canvas ([x y]), or an input port: a number or point is a constant (it disconnects the port), a name reads that bus signal.",
+        r#"{"node": "wave", "key": "position", "value": [300, 40]}"#,
+    );
+
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let node = NodeRef::parse(&self.node);
+        let edit = match (self.key.as_str(), self.value) {
+            ("label", GraphValue::Text(text)) => GraphEdit::SetLabel {
+                node,
+                label: (!text.trim().is_empty()).then_some(text),
+            },
+            ("position", GraphValue::Point(pos)) => GraphEdit::SetPos { node, pos },
+            (key @ ("label" | "position"), value) => {
+                return Err(OpError::Invalid(format!(
+                    "a {key} takes {}, not {value:?}",
+                    if key == "label" { "a name" } else { "[x y]" }
+                )));
+            }
+            (port, value) => GraphEdit::SetInput {
+                node,
+                port: PortRef::Name(port.to_owned()),
+                input: match value {
+                    GraphValue::Number(n) => Input::scalar(n as f32),
+                    GraphValue::Point(p) => Input::Const(gradiance_graph::Value::Vec2(p)),
+                    GraphValue::Text(name) => Input::External(name),
+                },
+            },
+        };
+        Ok(OpOutput::none().message(EditorRequest::Graph(edit)))
+    }
+}
+
+/// Remove a node from the signal graph.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct GraphRemove {
+    /// The node: its id or its label.
+    pub node: String,
+}
+
+impl Operation for GraphRemove {
+    const META: OpMeta = graph_op(
+        "graph.remove",
+        "graph-remove",
+        "Remove a node (by id or label). A wire from it becomes a bus read of its label (or its port's default if it had none).",
+        r#"{"node": "wave"}"#,
+    );
+
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        Ok(
+            OpOutput::none().message(EditorRequest::Graph(GraphEdit::Remove {
+                node: NodeRef::parse(&self.node),
+            })),
         )
     }
 }
@@ -560,30 +779,27 @@ pub fn apply_editor_requests(world: &mut World) {
                 }
             }
             EditorRequest::Publish { name, value } => publish(world, name, value),
-            EditorRequest::Param(param) => {
-                if let Some(mut params) = world.get_resource_mut::<gradiance_signal::SignalParams>()
-                {
-                    match params.0.iter_mut().find(|p| p.name == param.name) {
-                        Some(existing) => *existing = param,
-                        None => params.0.push(param),
-                    }
-                }
-            }
+            EditorRequest::Graph(edit) => edit_graph(world, &edit),
             EditorRequest::Export { path, csv } => match std::fs::write(&path, csv) {
                 Ok(()) => info!(path = %path.display(), "signals exported"),
                 Err(e) => warn!(path = %path.display(), error = %e, "signal export failed"),
             },
-            EditorRequest::Computed(signal) => {
-                if let Some(mut computed) =
-                    world.get_resource_mut::<gradiance_signal::ComputedSignals>()
-                {
-                    match computed.0.iter_mut().find(|c| c.name == signal.name) {
-                        Some(existing) => *existing = signal,
-                        None => computed.0.push(signal),
-                    }
-                }
-            }
         }
+    }
+}
+
+/// Applies one graph edit: validated as a whole, kept only when it changes
+/// the graph (so a no-op re-declaration records no undo step). A refused
+/// edit is logged and leaves the graph as it was.
+fn edit_graph(world: &mut World, edit: &GraphEdit) {
+    let Some(mut graph) = world.get_resource_mut::<gradiance_signal::Graph>() else {
+        return;
+    };
+    let mut next = graph.clone();
+    match next.edit(edit) {
+        Ok(_) if next != *graph => *graph = next,
+        Ok(_) => {}
+        Err(error) => warn!(%error, "graph edit refused"),
     }
 }
 

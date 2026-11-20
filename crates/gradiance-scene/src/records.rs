@@ -461,8 +461,7 @@ scene_content!(
     lighting,
     scenery,
     signals,
-    params,
-    computed,
+    graph,
     group_names
 );
 
@@ -484,10 +483,10 @@ environment_record! {
     scenery: gradiance_domain::settings::ScenerySettings,
     /// Signal-dataflow bindings (defaulted when absent — pre-signal files).
     signals: gradiance_domain::signal::SignalBindings,
-    /// Signal parameters (`defparam` knobs; defaulted for pre-P2 files).
-    params: gradiance_domain::signal::SignalParams,
-    /// Computed signals (`defsignal` modulators; defaulted for pre-P2 files).
-    computed: gradiance_domain::signal::ComputedSignals,
+    /// The signal graph (brief G-2): params, blocks, keys and `defsignal`
+    /// expressions as nodes by id, wired by id, with their canvas
+    /// positions (v9; replaces the by-name `params` and `computed` lists).
+    graph: gradiance_graph::Graph,
     /// Group names (brief 4b-1; scene content: saved and undoable).
     group_names: gradiance_domain::group::GroupNames,
     /// Saved dock layouts (brief U-10) — workstation config: saved with the

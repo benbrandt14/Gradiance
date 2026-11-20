@@ -37,12 +37,15 @@
 //!
 //! Pure, in the sense of `gradiance-geometry`: no systems, no queries, no
 //! `World`, no intents. The Bevy surface is `Reflect` on the IR and
-//! `Resource` on [`Graph`]; nothing is registered here. Nothing in the app
-//! uses the crate yet (G-2 wires it in). [`from_signals`] converts today's
-//! by-name signal resources into a graph.
+//! `Resource` on [`Graph`]; nothing is registered here. Since G-2 the graph
+//! is scene content: the signal layer registers the resource and compiles
+//! it, and every change goes through [`Graph::edit`] (one [`GraphEdit`],
+//! validated before it is kept). [`from_signals`] converts the old by-name
+//! signal lists into a graph (tests build fixtures with it).
 
 mod catalog;
 mod convert;
+mod edit;
 mod ir;
 mod lower;
 mod validate;
@@ -50,7 +53,8 @@ mod validate;
 #[cfg(test)]
 mod tests;
 
-pub use catalog::{CATALOG, NodeMeta, PortDefault, PortMeta, meta};
+pub use catalog::{CATALOG, NodeMeta, PortDefault, PortMeta, meta, nodes_markdown};
+pub use edit::{EditError, GraphEdit, NodeRef, PortRef, port_index};
 pub use convert::from_signals;
 pub use ir::{Family, Graph, Input, Node, NodeKind, PortType, Rate, Value};
 pub use lower::{lower_shape, lower_signal, lower_signals};

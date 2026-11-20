@@ -52,6 +52,16 @@ impl std::fmt::Display for StableId {
     }
 }
 
+/// Parses the hyphenated UUID text [`Display`](std::fmt::Display) writes,
+/// so a layer without a `uuid` dependency can read an id a doorway wrote.
+impl std::str::FromStr for StableId {
+    type Err = uuid::Error;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        Uuid::parse_str(text.trim()).map(Self)
+    }
+}
+
 /// Live lookup table from [`StableId`] to [`Entity`].
 ///
 /// Maintained by `StableId`'s component hooks; never mutate it manually.

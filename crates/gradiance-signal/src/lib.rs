@@ -43,10 +43,11 @@ use gradiance_physics::queries::PhysicsQueries;
 use std::collections::VecDeque;
 
 pub use gradiance_domain::signal::{
-    ActuatorTarget, BlockOp, ComputedSignal, ComputedSignals, Curve, CurveInterp, GradientSpec,
-    SignalBinding, SignalBindings, SignalExpr, SignalMap, SignalParam, SignalParams, SignalSink,
-    SignalSource, key_input_name, key_of_input, remap_binding,
+    ActuatorTarget, BlockOp, Curve, CurveInterp, GradientSpec, SignalBinding, SignalBindings,
+    SignalExpr, SignalMap, SignalSink, SignalSource, key_input_name, key_of_input, remap_binding,
 };
+pub use gradiance_graph::Graph;
+use gradiance_graph::NodeKind;
 
 /// The reserved input name for elapsed simulated seconds (the "clock" every
 /// oscillator reads). Frozen while paused (it rides the physics clock).
@@ -193,34 +194,66 @@ pub struct SignalColorOverride {
 #[derive(Resource, Debug, Default)]
 pub struct ScriptSignals(pub Vec<String>);
 
-/// The compiled kernels behind [`ComputedSignals`], rebuilt by
-/// [`recompile_signals`] whenever the authored set changes. Derived
-/// (never persisted): a `(name → compiled)` cache plus the names that
-/// failed to compile, surfaced to the UI. Keeps the scripting/kernel
-/// **compile** step off the per-frame path — only [`Kernel::eval`] runs
-/// each frame (`docs/signal-dataflow.md`).
+/// The compiled kernels behind the signal [`Graph`], rebuilt by
+/// [`recompile_signals`] whenever the graph changes. Derived (never
+/// persisted): a `(label → compiled)` cache in evaluation order plus the
+/// labels that failed to compile, surfaced to the UI. Keeps the
+/// scripting/kernel **compile** step off the per-frame path — only
+/// [`Kernel::eval`] runs each frame (`docs/signal-dataflow.md`).
 ///
 /// [`Kernel::eval`]: gradiance_kernel::Kernel::eval
 #[derive(Resource, Debug, Default)]
 pub struct CompiledSignals {
-    /// One compiled tape per computed signal, in authored order.
+    /// One compiled tape per published signal node, in evaluation order.
     compiled: Vec<(String, compile::CompiledSignal)>,
-    /// Names whose expression failed to compile (with the reason).
+    /// Labels whose expression failed to compile (with the reason); a graph
+    /// that fails validation lists one entry under [`GRAPH_ERROR`].
     pub errors: Vec<(String, String)>,
 }
 
-/// Recompiles [`ComputedSignals`] into [`CompiledSignals`] on change (and
-/// once at startup). Cold path: compilation is the VM/allocation step the
-/// two-tier rule keeps out of the frame loop.
-pub fn recompile_signals(computed: Res<ComputedSignals>, mut cache: ResMut<CompiledSignals>) {
+impl CompiledSignals {
+    /// Every bus input some compiled signal reads (a name may repeat).
+    pub fn inputs(&self) -> impl Iterator<Item = &str> {
+        self.compiled
+            .iter()
+            .flat_map(|(_, signal)| signal.inputs.iter().map(String::as_str))
+    }
+}
+
+/// The [`CompiledSignals::errors`] key of a graph that fails validation.
+pub const GRAPH_ERROR: &str = "graph";
+
+/// Recompiles the [`Graph`]'s signal nodes into [`CompiledSignals`] on
+/// change (and once at startup): `gradiance_graph::lower_signals` gives one
+/// `(label, expression)` per published node, in evaluation order, and each
+/// compiles as before. A graph that fails validation lowers nothing; the
+/// error is listed under [`GRAPH_ERROR`] (params still publish). Cold path:
+/// compilation is the VM/allocation step the two-tier rule keeps out of the
+/// frame loop.
+pub fn recompile_signals(graph: Res<Graph>, mut cache: ResMut<CompiledSignals>) {
     cache.compiled.clear();
     cache.errors.clear();
-    for signal in &computed.0 {
-        match compile::compile(&signal.expr) {
-            Ok(compiled) => cache.compiled.push((signal.name.clone(), compiled)),
-            Err(err) => cache.errors.push((signal.name.clone(), err.to_string())),
+    let lowered = match gradiance_graph::lower_signals(&graph) {
+        Ok(lowered) => lowered,
+        Err(err) => {
+            cache.errors.push((GRAPH_ERROR.to_owned(), err.to_string()));
+            return;
+        }
+    };
+    for (label, expr) in lowered {
+        match compile::compile(&expr) {
+            Ok(compiled) => cache.compiled.push((label, compiled)),
+            Err(err) => cache.errors.push((label, err.to_string())),
         }
     }
+}
+
+/// Every param of `graph` that publishes: `(label, value)`.
+pub fn graph_params(graph: &Graph) -> impl Iterator<Item = (&str, f32)> {
+    graph.nodes.iter().filter_map(|node| match (&node.kind, &node.label) {
+        (NodeKind::Param { value, .. }, Some(label)) => Some((label.as_str(), *value)),
+        _ => None,
+    })
 }
 
 /// Publishes each **body-sensor** bus name a computed signal references
@@ -279,11 +312,11 @@ pub fn publish_lasers(
 /// Publishes every parameter's value, then evaluates each computed signal
 /// through its compiled kernel — the modulator layer — before the bindings
 /// read the bus. Params first, so a computed signal reading a param sees
-/// this frame's value; computed signals in authored order, so a chain
-/// resolves within one frame (a cycle reads last frame's value, the usual
-/// dataflow rule).
+/// this frame's value; computed signals in the graph's evaluation order, so
+/// a chain resolves within one frame (a cycle reads last frame's value, the
+/// usual dataflow rule).
 pub fn evaluate_computed(
-    params: Res<SignalParams>,
+    graph: Res<Graph>,
     computed: Res<CompiledSignals>,
     time: Res<Time<Physics>>,
     game: Res<State<GameState>>,
@@ -291,8 +324,8 @@ pub fn evaluate_computed(
     mut bus: ResMut<SignalBus>,
 ) {
     let recording = *game.get() == GameState::Playing || step.active();
-    for param in &params.0 {
-        bus.publish(&param.name, param.value, recording);
+    for (label, value) in graph_params(&graph) {
+        bus.publish(label, value, recording);
     }
     bus.publish(TIME_INPUT, time.elapsed_secs(), recording);
     // A stack array, not a `Vec`: a compiled signal has at most `MAX_VARS`
@@ -393,8 +426,7 @@ pub fn sample_quantities(world: &mut World) -> QuantitySamples {
 pub fn evaluate_signals(
     mut commands: Commands,
     bindings: Res<SignalBindings>,
-    params: Res<SignalParams>,
-    computed: Res<ComputedSignals>,
+    graph: Res<Graph>,
     compiled: Res<CompiledSignals>,
     script_names: Res<ScriptSignals>,
     index: Res<IdIndex>,
@@ -454,8 +486,7 @@ pub fn evaluate_signals(
     bus.retain(|name| {
         name == TIME_INPUT
             || bindings.0.iter().any(|b| b.name == name)
-            || params.0.iter().any(|p| p.name == name)
-            || computed.0.iter().any(|c| c.name == name)
+            || graph.by_label(name).is_some()
             || compiled
                 .compiled
                 .iter()
@@ -576,21 +607,19 @@ pub struct SignalPlugin;
 impl Plugin for SignalPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SignalBindings>();
-        app.init_resource::<SignalParams>();
-        app.init_resource::<ComputedSignals>();
+        app.init_resource::<Graph>();
         app.init_resource::<CompiledSignals>();
         app.init_resource::<SignalBus>();
         app.init_resource::<ScriptSignals>();
         app.register_type::<SignalBindings>();
-        app.register_type::<SignalParams>();
-        app.register_type::<ComputedSignals>();
-        // Recompile when the authored computed set changes (and once at
+        app.register_type::<Graph>();
+        // Recompile when the authored graph changes (and once at
         // startup via the initial change tick); evaluate every frame,
         // computed modulators before the bindings that read them.
         app.add_systems(
             Update,
             (
-                recompile_signals.run_if(resource_changed::<ComputedSignals>),
+                recompile_signals.run_if(resource_changed::<Graph>),
                 publish_sensor_refs,
                 publish_lasers,
                 evaluate_computed,

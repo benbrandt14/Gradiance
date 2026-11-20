@@ -56,7 +56,12 @@ pub use records::{
 /// v8: a **spring is authored mass-relative** (brief 4b-4): `frequency` (Hz)
 /// and `damping_ratio` replace `stiffness` (N/m) and `damping`; the physics
 /// seam derives the stiffness from the bodies' mass. v7 files are rejected.
-pub const FORMAT_VERSION: u32 = 8;
+///
+/// v9: **the signal graph is scene content** (brief G-2): one
+/// `environment.graph` (`gradiance_graph::Graph`: nodes by `StableId`, wires
+/// by id, canvas positions) replaces the by-name `params` and `computed`
+/// lists. A graph that fails validation is refused. v8 files are rejected.
+pub const FORMAT_VERSION: u32 = 9;
 
 /// What went wrong while serializing, parsing, or migrating a scene.
 #[derive(Debug, thiserror::Error)]
@@ -78,6 +83,10 @@ pub enum PersistError {
     /// guessed at (brief 6-1, decision `duplicate-id-load`).
     #[error("two objects share the id {0}")]
     DuplicateId(gradiance_core::ids::StableId),
+    /// The signal graph does not validate (a wire to a missing node, a
+    /// type or rate mismatch, a shared label; brief G-2).
+    #[error("signal graph: {0}")]
+    Graph(#[from] gradiance_graph::GraphError),
     /// A number in the file is NaN or infinite (the path names it). Undo,
     /// the settings watcher and the physics all compare or integrate by
     /// value, and NaN equals nothing, so the file is refused (brief 6-1,
@@ -112,6 +121,7 @@ pub fn from_ron(text: &str) -> Result<SceneRecord, PersistError> {
     if let Some(path) = non_finite(&scene, "scene") {
         return Err(PersistError::NonFinite(path));
     }
+    scene.environment.graph.validate()?;
     Ok(scene)
 }
 

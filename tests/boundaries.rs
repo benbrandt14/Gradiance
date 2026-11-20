@@ -240,16 +240,20 @@ fn the_crate_dag_matches_the_architecture() {
                 "units",
             ],
         ),
-        ("scene", &["core", "domain"]),
+        // graph: the signal graph is scene content (brief G-2).
+        ("scene", &["core", "domain", "graph"]),
         (
             "script",
             // units: the spring verb builds typed spring parameters (5-1).
             // op: verbs are generated from the operation registry (U-1).
+            // graph: `signal.*` and `graph.*` lower to graph edits (G-2).
             &[
-                "command", "core", "domain", "geometry", "op", "scene", "signal", "units",
+                "command", "core", "domain", "geometry", "graph", "op", "scene", "signal",
+                "units",
             ],
         ),
-        ("signal", &["core", "domain", "kernel", "physics"]),
+        // graph: the runtime compiles the graph's signal nodes (G-2).
+        ("signal", &["core", "domain", "graph", "kernel", "physics"]),
         (
             "ui",
             &[
@@ -257,6 +261,8 @@ fn the_crate_dag_matches_the_architecture() {
                 "core",
                 "domain",
                 "geometry",
+                // graph: the canvas reads and edits the graph (G-2).
+                "graph",
                 "interaction",
                 // op: menu rows invoke registry operations by id (U-1).
                 "op",

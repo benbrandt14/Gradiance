@@ -83,6 +83,7 @@ pub use gradiance_command as command;
 pub use gradiance_core as core;
 pub use gradiance_domain as domain;
 pub use gradiance_geometry as geometry;
+pub use gradiance_graph as graph;
 pub use gradiance_interaction as interaction;
 pub use gradiance_kernel as kernel;
 pub use gradiance_op as op;
