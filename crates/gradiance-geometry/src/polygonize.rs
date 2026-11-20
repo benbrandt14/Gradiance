@@ -2,7 +2,7 @@
 //! discretization point** between SDF trees and every polygon consumer
 //! (colliders, meshes, snapping, scaling).
 
-use crate::contour::{FIELD_CELLS, contour_components};
+use crate::contour::{FIELD_CELLS, contour_components, contour_components_on_axes};
 use crate::contours::Contours;
 use crate::sdf;
 use crate::shape::ShapeDef;
@@ -78,6 +78,20 @@ pub fn polygonize_components(shape: &ShapeDef) -> Vec<Contours> {
             }
         }
         leaf => vec![polygonize(leaf)],
+    }
+}
+
+/// [`polygonize_components`] for a tree with a thin gap along its local
+/// `x` axis: always field-contoured, on a lattice whose centre row lies on
+/// that axis, so the gap separates the two sides however thin it is
+/// (`contour::contour_components_on_axes`). The cut command's
+/// discretization: it poses the body in the stroke's frame.
+pub fn polygonize_components_on_axes(shape: &ShapeDef) -> Vec<Contours> {
+    let (min, max) = sdf::aabb(shape);
+    let cell = field_cell(max - min, sdf::thinnest_solid(shape));
+    match sdf::UnionField::of(shape) {
+        Some(field) => contour_components_on_axes(|p| field.eval(p), min, max, cell),
+        None => contour_components_on_axes(|p| sdf::eval(shape, p), min, max, cell),
     }
 }
 
