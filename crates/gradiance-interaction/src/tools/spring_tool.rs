@@ -5,7 +5,8 @@
 //! point), a spring spans a *distance*: press on the first anchor, drag to the
 //! second, release. The drag length becomes the rest length, so the spring
 //! starts relaxed. Endpoints resolve to the topmost body under each anchor —
-//! or a world pin when the far end sits on empty space.
+//! or a world pin when one end sits on empty space, whichever end that is
+//! (Algodoo's spring joins the background at either end).
 //!
 //! World reads go through the read-total [`ToolWorld`] facade; the created
 //! joint leaves as a [`ToolCommit::SpawnJoint`] through the shared commit seam.
@@ -26,6 +27,10 @@ use gradiance_scene::JointRecord;
 
 /// Shortest spring that will commit (world metres); a near-zero drag is a no-op.
 const MIN_SPRING_LENGTH: f32 = 0.05;
+/// How far (screen pixels, scaled to world by the camera) a body's surface
+/// may sit from an end and still count as under it: a snapped end lies
+/// exactly on an edge or a vertex (see the connector tools).
+const ANCHOR_TOLERANCE_PX: f32 = 1.0;
 /// In-progress spring gesture (the first anchor).
 #[derive(Resource, Default, Debug)]
 pub struct SpringDraft(pub Option<Vec2>);
@@ -48,7 +53,12 @@ impl ManipTool for SpringDraft {
         if ctx.left == GesturePhase::Released
             && let Some(anchor_a) = self.0.take()
             && let Some(anchor_b) = ctx.cursor
-            && let Some(commit) = build_spring(anchor_a, anchor_b, world)
+            && let Some(commit) = build_spring(
+                anchor_a,
+                anchor_b,
+                ANCHOR_TOLERANCE_PX * ctx.cam_scale,
+                world,
+            )
         {
             return ManipOutput::commit(commit);
         }
@@ -78,23 +88,33 @@ impl ManipTool for SpringDraft {
     }
 }
 
-/// Builds the spring record for a completed gesture, or `None` if no body sits
-/// at the first anchor or the drag is too short.
-fn build_spring(anchor_a: Vec2, anchor_b: Vec2, world: &ToolWorld) -> Option<ToolCommit> {
+/// Builds the spring record for a completed gesture, or `None` if neither
+/// end lands on a body or the drag is too short. When only the far end
+/// lands on a body, that body is the spring's body and the first anchor
+/// its world pin (the joint is symmetric, so the order is free).
+fn build_spring(anchor_a: Vec2, anchor_b: Vec2, tol: f32, world: &ToolWorld) -> Option<ToolCommit> {
     let rest = anchor_a.distance(anchor_b);
     if rest < MIN_SPRING_LENGTH {
         return None;
     }
 
-    // The first anchor must land on a body (the spring's fixed end).
-    let &hit_a = world.bodies_at(anchor_a).first()?;
+    // One end must land on a body (the spring's body A); started on empty
+    // space, the ends swap so the far end's body is body A.
+    let (anchor_a, anchor_b, hit_a) = match world.joint_bodies_at(anchor_a, tol).first() {
+        Some(&hit) => (anchor_a, anchor_b, hit),
+        None => (
+            anchor_b,
+            anchor_a,
+            *world.joint_bodies_at(anchor_b, tol).first()?,
+        ),
+    };
     let (_, pose_a) = world.shape_pose(hit_a)?;
     let id_a = world.id_of(hit_a)?;
     let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);
 
     // The far end: the first *different* body under it, else a world pin.
     let far = world
-        .bodies_at(anchor_b)
+        .joint_bodies_at(anchor_b, tol)
         .into_iter()
         .find(|&e| e != hit_a)
         .and_then(|e| Some((world.shape_pose(e)?, world.id_of(e)?)));

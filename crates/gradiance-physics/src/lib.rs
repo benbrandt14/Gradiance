@@ -101,6 +101,7 @@ impl Plugin for GradiancePhysicsPlugin {
             (
                 body_sync::sync_colliders,
                 body_sync::sync_collision_layers,
+                body_sync::stop_locked_spin,
                 joint_sync::guard_dangling_joints,
                 joint_sync::sync_joints,
                 joint_sync::retune_joints,
@@ -116,7 +117,10 @@ impl Plugin for GradiancePhysicsPlugin {
         // step, against the velocity the step starts from.
         app.add_systems(
             FixedUpdate,
-            (thrust::apply_thrusters, air::apply_air_drag).run_if(sim_running),
+            (
+                (thrust::apply_thrusters, air::apply_air_drag).run_if(sim_running),
+                joint_sync::track_slider_anchors,
+            ),
         );
         app.add_systems(
             FixedPostUpdate,

@@ -12,7 +12,14 @@ Last updated: 2026-11-20 (N-6 handoff; before that N-5, N-4, N-3, N-2, N-1; befo
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **N-6** sketch tool is done (in review; branch
+- **Now:** **J-1** joint stress test is done (in review; branch
+  `claude/project-thread-fmsek9`; brief `docs/briefs/J-1-joint-stress.md`):
+  19 scenes in `tests/it/joint_stress.rs`; five fixes: a body-to-body
+  slider no longer explodes at long travel (`track_slider_anchors`), a
+  rotation lock stops the spin (`stop_locked_spin`), a hinge on a snapped
+  edge joins both bodies, a spring from empty space pins its start, a
+  hinge on a bare ground makes nothing; six decisions in `archive.ron`.
+  **N-6** sketch tool is done (in review; branch
   `claude/project-thread-tw1mvl-n6`): drag freehand; release makes one
   body: the stroke simplified (RDP) into at most 24 capsules joined as one
   balanced SDF union (a straight stroke is one capsule), or a filled

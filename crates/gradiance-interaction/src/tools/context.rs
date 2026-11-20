@@ -687,6 +687,22 @@ impl ToolWorld<'_, '_> {
         hits
     }
 
+    /// The bodies a joint anchored at `p` connects, topmost first: the
+    /// attachment candidates of [`attachment_bodies_at`](Self::attachment_bodies_at)
+    /// with every ground half-plane moved last, so a click on a body's
+    /// edge where it meets the ground joins the body (first) to the ground.
+    /// An object-snapped anchor sits *exactly on* an edge or a vertex, so
+    /// `tol` (about a pixel) keeps the body it snapped to in the list.
+    pub fn joint_bodies_at(&self, p: Vec2, tol: f32) -> Vec<Entity> {
+        let mut hits = self.attachment_bodies_at(p, tol);
+        hits.sort_by_key(|&e| {
+            self.shapes
+                .get(e)
+                .is_ok_and(|(shape, _)| shape.contains_half_plane())
+        });
+        hits
+    }
+
     /// A body entity's authored pose.
     pub fn pose_of(&self, entity: Entity) -> Option<PosRot> {
         self.shapes

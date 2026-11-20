@@ -150,3 +150,20 @@ pub fn sync_collision_layers(
             .insert(CollisionLayers::from_bits(bits, bits));
     }
 }
+
+/// Stops a body's spin when its rotation gets locked. avian's
+/// [`LockedAxes`] only stops *new* angular impulses: a body that was turning
+/// when it got locked (a world-pin slider spawned on a body knocked by a
+/// contact, or the inspector's lock pressed during a run) kept that spin
+/// forever, its slider unable to hold it (joint stress test, 2026-11-20).
+/// The angular velocity is simulation state, not authored, so the physics
+/// seam owns it.
+pub fn stop_locked_spin(
+    mut bodies: Query<(&LockedAxes, &mut AngularVelocity), Changed<LockedAxes>>,
+) {
+    for (axes, mut spin) in &mut bodies {
+        if axes.is_rotation_locked() && spin.0 != 0.0 {
+            spin.0 = 0.0;
+        }
+    }
+}
