@@ -247,6 +247,39 @@
                 emissive: 0.0,
             ),
         ),
+        (
+            id: ("00000000-0000-0000-0000-000000000022"),
+            pose: (
+                pos: (-1.5, 2.0),
+                rot: 0.0,
+            ),
+            attachment: (
+                target: None,
+                offset: (0.0, 0.0),
+            ),
+            kind: Laser((
+                name: "gate",
+                target: Some(("00000000-0000-0000-0000-000000000001")),
+                angle: -0.75,
+                range: 12.5,
+                bounces: 3,
+            )),
+            appearance: (
+                fill: (
+                    r: 0.5,
+                    g: 0.483,
+                    b: 0.455,
+                    a: 1.0,
+                ),
+                border: (
+                    r: 0.163,
+                    g: 0.135,
+                    b: 0.113,
+                    a: 1.0,
+                ),
+                emissive: 0.0,
+            ),
+        ),
     ],
     environment: (
         sim: (

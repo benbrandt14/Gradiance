@@ -111,7 +111,8 @@ same regardless of how many points were placed.
 | `SignalColorOverride` | derived component | written change-detected by `evaluate_signals`; consumed by `material_sync`/`tracer`; removed with its binding |
 | `key@<name>` bus inputs, `GraphKeys` | derived | the held state of each key a key block reads, published by `interaction::graph_keys::publish_graph_keys` (allocation-free; the bound set is rebuilt only when `ComputedSignals` changes); never saved or undone |
 | `SignalDrive` | derived component (`physics::drive`) | written by `drive_actuators` on a joint, body or thruster node; consumed by `retune_joints`, `Fields`, `drive_gravity_scale`, `apply_thrusters`; removed with its last actuator binding; never saved or undone |
-| `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer and the thruster; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
+| `LaserBeam` | derived component (`physics::laser`) | a laser node's traced path, hit, distance and bus names; written by `trace_lasers` after each step, published by `publish_lasers`; never saved or undone |
+| `BehaviorNode` / `NodeAttachment` / `NodeKind` | **authored** (like a body) | placeable dataflow nodes — the tracer, the thruster and the laser; `StableId` + pose + optional body attachment, saved in `SceneRecord.nodes`, undoable via `SpawnNode`/`Delete` |
 
 ## Sensors & actuators are object ports, not tools
 
@@ -169,6 +170,40 @@ input pin, thrust in N) while a wire names it or its body is on the canvas;
 the glyph draws a flame out of the thruster's back, scaled by the thrust it
 pushes with. Duplicating a body copies its thruster and the bindings that
 drive it.
+
+## The placeable laser node (brief N-8)
+
+A **laser** is the third placeable node kind (`NodeKind::Laser`,
+[`domain::laser`](../crates/gradiance-domain/src/laser.rs)): it casts a ray
+from its point along its axis (in the body's frame when it rides a body, a
+world angle when free), reflects off every solid body it hits (angle in =
+angle out; the pure reflection is `geometry::beam`), and ends on its
+**target** body, after its last **bounce** (default 8, cap 32) or at its
+**range** (default 50 m). Sensors (fluid regions) and the laser's own body
+do not stop it; a laser on a body hits only bodies that share its collision
+layer. It is a **sensor that publishes on the bus** under its authored
+**name**: `<name>` reads `1` while the beam ends on the target and `0`
+otherwise; `<name>.distance` is the beam's path length to where it ends
+(m). A binding reads them as a `Named` source and a computed block as
+inputs, so a light gate or a reflection puzzle drives any actuator sink.
+
+The **Laser tool** (no key) places one: press where it sits, drag to aim,
+release; releasing over another body makes it the target. Script:
+`(laser body x y angle target name)` (`node.laser`; `-1` for a free laser
+or no target). Name, axis, range and bounces are edited in the inspector,
+the node menu and the Signals list (one undo step per gesture); the target
+can be cleared there.
+
+The beam is **derived**: `physics::laser::trace_lasers`, one system in
+`FixedPostUpdate` after avian's step (every fixed tick, paused too), casts
+one ray per segment through avian's `SpatialQuery`
+(`physics::queries::cast_beam`) and writes the `LaserBeam` component (the
+path, hit, distance and the two bus names); `signal::publish_lasers` puts
+the values on the bus before the computed signals run; the overlay draws
+the path and an accent ring on a hit. Cost: `O(L × (B + 1))` ray casts per
+step for `L` lasers with at most `B` bounces; the path buffer is reused, so
+nothing allocates in the steady state. While paused the casts see the
+colliders as the last step left them.
 
 ## The node-graph canvas
 

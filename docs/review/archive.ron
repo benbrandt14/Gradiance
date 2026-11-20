@@ -3264,5 +3264,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "render::material_sync::FLUID_OPACITY",
         ),
+        (
+            question: (
+                id: "laser-reflects-everything",
+                title: "What does a laser beam reflect off?",
+                source: "Brief N-8 laser node (docs/briefs/N-8-laser-node.md)",
+                description: r#"The brief: a beam that reflects off bodies up to N times. Mirrors as a material do not exist (N-9's mirror is a flip of the selection)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Every solid body, by depth",
+                        caption: r#"Every collider reflects the beam except sensors (fluid regions) and the body the laser rides. A laser on a body hits only the bodies that share a collision layer with it (collision layer is visual depth); a free laser hits every depth. The beam ends on its target body, after its last bounce or at its range."#,
+                    ),
+                    (
+                        label: "Only marked mirror bodies",
+                        caption: r#"A new authored mirror flag on bodies; every other body absorbs the beam."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "laser-reflects-everything",
+                title: "What does a laser beam reflect off?",
+                choice: Picked("Every solid body, by depth"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "physics::laser::trace_lasers, physics::queries::cast_beam",
+        ),
+        (
+            question: (
+                id: "laser-signals",
+                title: "What does a laser publish, and under which names?",
+                source: "Brief N-8 laser node (docs/briefs/N-8-laser-node.md)",
+                description: r#"The brief: a bus value, 1 while the beam reaches a named target body, else 0, and the hit distance."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Two bus values under the laser's name",
+                        caption: r#"The laser has an authored bus name (default laser). The name reads 1 while the beam ends on the target body and 0 otherwise (also with no target); name.distance reads the beam's path length from the laser to where it ends (on the target, at the last bounce or surface, or at the range), in metres. A binding reads them as a named source and a computed block as inputs, so a light gate drives an N-1 actuator with no new port. No laser block on the node canvas yet."#,
+                    ),
+                    (
+                        label: "Sensor ports keyed by the node id",
+                        caption: r#"SignalSource variants for the laser hit and distance, read through the quantity catalog, with a laser block on the canvas; needs a node subject in the catalog."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "laser-signals",
+                title: "What does a laser publish, and under which names?",
+                choice: Picked("Two bus values under the laser's name"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "physics::laser::LaserBeam, signal::publish_lasers",
+        ),
+        (
+            question: (
+                id: "laser-step",
+                title: "When is the beam traced, and how far can it go?",
+                source: "Brief N-8 laser node (docs/briefs/N-8-laser-node.md)",
+                description: r#"Performance rule: one system, O(lasers x bounces) ray casts per step, a hard bounce cap, no allocation in the steady state."#,
+                decision: true,
+                options: [
+                    (
+                        label: "After each physics step, also paused",
+                        caption: r#"trace_lasers runs in FixedPostUpdate after avian's step, every fixed tick, so the beam is there while paused. It casts against avian's collider trees, which only a step updates: while paused, a body moved or added shows in the beam after the next step. A new laser traces 8 bounces and 50 m; the bounce cap is 32 and the range cap 10 km. The path buffer is sized once for the cap."#,
+                    ),
+                    (
+                        label: "Every frame in Update",
+                        caption: r#"The beam is traced per frame, so its cost follows the frame rate rather than the step rate."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "laser-step",
+                title: "When is the beam traced, and how far can it go?",
+                choice: Picked("After each physics step, also paused"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "physics::laser::trace_lasers, domain::laser::{MAX_BOUNCES, DEFAULT_BOUNCES, DEFAULT_RANGE}",
+        ),
+        (
+            question: (
+                id: "laser-tool",
+                title: "How is a laser placed and targeted, and with which key?",
+                source: "Brief N-8 laser node (docs/briefs/N-8-laser-node.md)",
+                description: r#"The owner ruled the editor keymap unsettled; a new tool gets no key."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Press, aim, release on the target; no key",
+                        caption: r#"A Laser tool in the palette's Modify group (the laserpen icon), no key, a tool.laser operation with no chord. Press where the laser sits (on a body it rides, else free), drag to aim, release: releasing over another body makes it the target; a click aims along +x with no target. The inspector, the node menu and the Signals list edit the bus name, axis, range and bounces, and can clear the target; a new target comes from the tool or the operation."#,
+                    ),
+                    (
+                        label: "A body picker in the inspector",
+                        caption: r#"A target list of every body in the node editor; more UI, and the tool gesture covers the light-gate case."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "laser-tool",
+                title: "How is a laser placed and targeted, and with which key?",
+                choice: Picked("Press, aim, release on the target; no key"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "interaction::tools::node_tools::LaserTool, ui::widgets::node_kind_editor",
+        ),
+        (
+            question: (
+                id: "laser-operation",
+                title: "How does a script place a laser and read its beam?",
+                source: "Brief N-8 laser node (docs/briefs/N-8-laser-node.md)",
+                description: r#"Facts: the ray-cast read goes into physics::queries so scripts get it too."#,
+                decision: true,
+                options: [
+                    (
+                        label: "node.laser, and the bus for reads",
+                        caption: r#"(laser body x y angle target name) places a laser at a world point, on body or free when body is -1, aimed along a world angle stored in the body's frame, targeting target or none when it is -1; one spawn-node undo step. The traced read is physics::queries::cast_beam; scripts read a laser through its bus values with signal-get. No ray-cast verb: an operation lowers against a snapshot and cannot cast rays."#,
+                    ),
+                    (
+                        label: "A ray-cast query verb",
+                        caption: r#"A query operation that casts a ray; needs a spatial-query mirror in the operation context first."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "laser-operation",
+                title: "How does a script place a laser and read its beam?",
+                choice: Picked("node.laser, and the bus for reads"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "command::ops::node::Laser",
+        ),
+        (
+            question: (
+                id: "laser-duplicate",
+                title: "What happens to a laser's target when bodies are copied?",
+                source: "Brief N-8 laser node (docs/briefs/N-8-laser-node.md)",
+                description: r#"Duplicate and insert remap the bodies a node rides."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The copy aims at the copied target",
+                        caption: r#"A laser whose target is copied with it aims at the copy; a target outside the copied set stays the original body. The copy keeps the bus name, so two lasers with one name share one bus value (the last one traced wins); rename one to tell them apart."#,
+                    ),
+                    (
+                        label: "Copies always keep the original target",
+                        caption: r#"A copied gate reports on the original target."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "laser-duplicate",
+                title: "What happens to a laser's target when bodies are copied?",
+                choice: Picked("The copy aims at the copied target"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "command::spawn::remap_node",
+        ),
     ],
 )

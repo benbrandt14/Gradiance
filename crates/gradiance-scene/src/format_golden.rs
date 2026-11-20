@@ -28,6 +28,7 @@ use gradiance_domain::depth::DepthBand;
 use gradiance_domain::field::{FieldFalloff, FieldSource};
 use gradiance_domain::fluid::Fluid;
 use gradiance_domain::joint::{AngularMotorDef, JointCommon, JointDef, JointKind, LinearMotorDef};
+use gradiance_domain::laser::Laser;
 use gradiance_domain::node::{NodeAttachment, NodeKind};
 use gradiance_domain::props::BodyPhysics;
 use gradiance_domain::shape::ShapeDef;
@@ -174,6 +175,24 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
                 kind: NodeKind::Thruster(Thruster {
                     thrust: q("12.5"),
                     angle: q("0.625"),
+                }),
+                appearance: Appearance::default(),
+            },
+            // A free laser aimed at the field body (brief N-8): its axis and
+            // range are quantities.
+            NodeRecord {
+                id: id(34),
+                pose: PosRot {
+                    pos: Vec2::new(-1.5, 2.0),
+                    rot: 0.0,
+                },
+                attachment: NodeAttachment::free(),
+                kind: NodeKind::Laser(Laser {
+                    name: "gate".into(),
+                    target: Some(id(1)),
+                    angle: q("-0.75"),
+                    range: q("12.5"),
+                    bounces: 3,
                 }),
                 appearance: Appearance::default(),
             },

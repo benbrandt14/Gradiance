@@ -26,6 +26,7 @@ use gradiance_interaction::camera::CameraScale;
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_interaction::selection::Selection;
 use gradiance_physics::drive::SignalDrive;
+use gradiance_physics::laser::LaserBeam;
 use std::collections::VecDeque;
 
 /// Hard cap on samples per trail (a slow-fading fast body can't grow
@@ -205,7 +206,7 @@ pub fn flame_scale(thrust: f32) -> f32 {
 /// by kind), so a placed node is visible and shows its selection state.
 /// Attached nodes draw a tether to their target. A thruster draws a flame
 /// out of its back, scaled by the thrust it pushes with (a signal drive's
-/// when one is bound). Sizes are screen-constant (`CameraScale`).
+/// when one is bound); a laser draws a barrel along its axis and its beam. Sizes are screen-constant (`CameraScale`).
 pub fn draw_node_glyphs(
     selection: Res<Selection>,
     index: Res<IdIndex>,
@@ -216,6 +217,7 @@ pub fn draw_node_glyphs(
         &NodeAttachment,
         &Appearance,
         Option<&SignalDrive>,
+        Option<&LaserBeam>,
     )>,
     bodies: Query<&Transform, With<Body>>,
     cam_scale: Res<CameraScale>,
@@ -224,7 +226,7 @@ pub fn draw_node_glyphs(
 ) {
     let theme = active(settings.as_deref());
     let s = cam_scale.0;
-    for (entity, transform, kind, attachment, appearance, drive) in &nodes {
+    for (entity, transform, kind, attachment, appearance, drive, beam) in &nodes {
         let p = transform.translation.truncate();
         let selected = selection.contains(entity);
         let base = Color::from(theme.display(appearance.fill).with_alpha(1.0));
@@ -269,6 +271,26 @@ pub fn draw_node_glyphs(
                 }
                 // The nozzle: a short bar across the back.
                 gizmos.line_2d(root + side, root - side, base);
+            }
+            // A barrel along the axis marks the laser; its beam is the
+            // derived path the last step traced (brief N-8). A beam that
+            // reaches its target ends in an accent ring.
+            NodeKind::Laser(laser) => {
+                let axis = Vec2::from_angle(body.map_or(0.0, |b| b.rot) + laser.angle.0);
+                gizmos.line_2d(p + axis * r, p + axis * (r + 6.0 * s), base);
+                if let Some(beam) = beam {
+                    let ray = Color::from(theme.ink.danger.with_alpha(0.85));
+                    gizmos.linestrip_2d(beam.path.iter().copied(), ray);
+                    if beam.hit
+                        && let Some(end) = beam.path.last()
+                    {
+                        gizmos.circle_2d(
+                            Isometry2d::from_translation(*end),
+                            4.0 * s,
+                            Color::from(theme.ink.accent),
+                        );
+                    }
+                }
             }
         }
         // Tether to the attached body.

@@ -48,6 +48,7 @@ fn toolbar_palette_lists_all_tools_and_reports_clicks() {
         "Cut (K)",
         "Tracer (N)",
         "Thruster",
+        "Laser",
         "Chain",
         "Sketch",
     ] {

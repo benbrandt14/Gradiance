@@ -489,8 +489,111 @@ pub fn node_kind_editor(
                 return None;
             }
         }
+        NodeKind::Laser(laser) => {
+            if !laser_editor(ui, salt, laser) {
+                return None;
+            }
+        }
     }
     (next != *kind).then_some(next)
+}
+
+/// The laser's fields (brief N-8): its bus name, axis, range, bounce limit
+/// and target. Each reports once per gesture (the edit seam); the name
+/// commits on Enter or focus loss, Esc cancels. The target is set by the
+/// laser tool or the `laser` operation; here it can only be cleared.
+/// Returns whether a field finished an edit.
+fn laser_editor(ui: &mut egui::Ui, salt: &str, laser: &mut gradiance_domain::laser::Laser) -> bool {
+    use gradiance_domain::laser::{Laser, MAX_BOUNCES, MAX_RANGE};
+    let defaults = Laser::default();
+    let mut committed = false;
+    ui.horizontal(|ui| {
+        ui.label("signal");
+        // The text being typed lives in egui's memory until it commits, so a
+        // name is one edit, not one per keystroke.
+        let id = ui.id().with((salt, "laser-name"));
+        let mut text = ui
+            .data_mut(|d| d.get_temp::<String>(id))
+            .unwrap_or_else(|| laser.name.clone());
+        let edit = ui.add(egui::TextEdit::singleline(&mut text).desired_width(90.0));
+        if edit.lost_focus() {
+            ui.data_mut(|d| d.remove::<String>(id));
+            let name = text.trim();
+            let cancelled = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            if !cancelled && !name.is_empty() && name != laser.name {
+                laser.name = name.to_owned();
+                committed = true;
+            }
+        } else if edit.has_focus() {
+            ui.data_mut(|d| d.insert_temp(id, text));
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("axis");
+        committed |= matches!(
+            precise_drag_clamped(
+                ui,
+                ui.id().with((salt, "laser-angle")),
+                &mut laser.angle.0,
+                defaults.angle.0,
+                0.01,
+                -core::f32::consts::TAU..=core::f32::consts::TAU,
+                Dimension::Angle,
+            ),
+            Commit::Done(..)
+        );
+        ui.label("range");
+        committed |= matches!(
+            precise_drag_clamped(
+                ui,
+                ui.id().with((salt, "laser-range")),
+                &mut laser.range.0,
+                defaults.range.0,
+                0.1,
+                0.0..=MAX_RANGE,
+                Dimension::Length,
+            ),
+            Commit::Done(..)
+        );
+    });
+    ui.horizontal(|ui| {
+        ui.label("bounces");
+        #[expect(clippy::cast_precision_loss, reason = "a small count")]
+        let mut bounces = laser.bounces as f32;
+        #[expect(clippy::cast_precision_loss, reason = "a small count")]
+        let default = defaults.bounces as f32;
+        if let Commit::Done(..) = precise_drag_int(
+            ui,
+            ui.id().with((salt, "laser-bounces")),
+            &mut bounces,
+            default,
+            0.1,
+        ) {
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "clamped to the bounce cap first"
+            )]
+            let next = bounces.round().clamp(0.0, MAX_BOUNCES as f32) as u32;
+            laser.bounces = next;
+            committed = true;
+        }
+        ui.label("target");
+        if laser.target.is_some() {
+            ui.label("a body");
+            if ui
+                .small_button("clear")
+                .on_hover_text("the hit signal reads 0 with no target")
+                .clicked()
+            {
+                laser.target = None;
+                committed = true;
+            }
+        } else {
+            ui.weak("none");
+        }
+    });
+    committed
 }
 
 #[cfg(test)]

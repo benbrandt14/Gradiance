@@ -139,10 +139,17 @@ across and ±3.5 m up and down); angles are radians.
                              ; ends near its start and encloses an area fills as
                              ; a polygon instead → its handle; one spawn-body step
 
-;; edit — behavior nodes on a body (brief N-3)
+;; edit — behavior nodes on a body (briefs N-3, N-8)
 (thruster i x y angle thrust) ; push body i at world point (x, y) with thrust N
                              ; along the world angle (radians) → its handle;
                              ; the point and axis ride and turn with the body
+(laser i x y angle target name)
+                             ; a laser at world point (x, y) riding body i (-1:
+                             ; free), aimed along the world angle; its beam
+                             ; reflects off bodies; the bus value name reads 1
+                             ; while the beam reaches body target (-1: none),
+                             ; name.distance its path length (m) → its handle;
+                             ; read them with (signal-get "name")
 
 ;; edit — a body's authored properties (the inspector's fields as ops)
 (place i x y angle)          ; move and rotate the i-th body
