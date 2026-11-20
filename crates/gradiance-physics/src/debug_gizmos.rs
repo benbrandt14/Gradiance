@@ -20,13 +20,27 @@ use gradiance_domain::settings::DebugSettings;
 use gradiance_domain::theme::debug;
 
 /// Adds avian's debug plugin and applies the default (all off) at once.
+///
+/// Headless (no `RenderPlugin`) the plugin is left out: a gizmo group
+/// schedules mesh-update systems that need render-world assets. The config
+/// is still put in the store and kept in step, so a headless app (the
+/// tests, a remote client) sees the same switches reach it.
 pub(crate) fn install(app: &mut App) {
-    app.add_plugins(PhysicsDebugPlugin);
-    {
-        let mut store = app.world_mut().resource_mut::<GizmoConfigStore>();
-        let (config, gizmos) = store.config_mut::<PhysicsGizmos>();
-        configure(config, gizmos, &DebugSettings::default());
+    if app.is_plugin_added::<bevy::render::RenderPlugin>() {
+        app.add_plugins(PhysicsDebugPlugin);
     }
+    let mut config = GizmoConfig::default();
+    let mut gizmos = PhysicsGizmos::default();
+    if let Some(store) = app.world().get_resource::<GizmoConfigStore>()
+        && let Some((live, _)) = store.get_config::<PhysicsGizmos>()
+    {
+        // Keep what avian's plugin set (its line width).
+        config = live.clone();
+    }
+    configure(&mut config, &mut gizmos, &DebugSettings::default());
+    app.world_mut()
+        .get_resource_or_init::<GizmoConfigStore>()
+        .insert(config, gizmos);
     // Before transform propagation: avian's draw systems run after it and
     // read the config in their run condition, so a switch shows the frame it
     // is flipped.

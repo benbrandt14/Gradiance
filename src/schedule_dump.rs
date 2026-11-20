@@ -75,7 +75,8 @@ pub fn main(args: &[String]) -> Option<i32> {
 }
 
 /// The schedules of `world` in frame order: `Main`'s labels, the fixed
-/// loop's after `RunFixedMainLoop`, then the rest by name.
+/// loop's after `RunFixedMainLoop`, then the rest by name. Labels with no
+/// schedule (nothing added to them) are left out.
 pub fn schedule_order(world: &World) -> Vec<InternedScheduleLabel> {
     let mut order: Vec<InternedScheduleLabel> = Vec::new();
     let fixed: Vec<InternedScheduleLabel> = world
@@ -102,6 +103,12 @@ pub fn schedule_order(world: &World) -> Vec<InternedScheduleLabel> {
         .unwrap_or_default();
     rest.sort_by(|a, b| a.0.cmp(&b.0));
     order.extend(rest.into_iter().map(|(_, label)| label));
+    // A label with no system has no schedule (`FixedPreUpdate` here).
+    order.retain(|label| {
+        world
+            .get_resource::<Schedules>()
+            .is_some_and(|s| s.contains(*label))
+    });
     order
 }
 

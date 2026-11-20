@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 145 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 150 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -68,6 +68,16 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 |---|---|---|---|---|---|---|
 | `chrome.apply` | `(chrome-apply name)` | config | — | — | Draw the editor panels with a chrome preset (blender, blender-blue, stock); workstation config, never undone. | `{"name": "blender"}` |
 | `chrome.list` | `(chromes)` | query | — | — | Every chrome preset's name, in menu order (the first is the default). | `{}` |
+
+## `debug`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `debug.aabbs` | `(debug-aabbs on)` | config | — | View/Debug/AABBs | Show or hide each collider's broad-phase bounding box (AABB), as the physics engine holds it. Workstation config: never saved, never undone. | `{"on": true}` |
+| `debug.colliders` | `(debug-colliders on)` | config | — | View/Debug/Colliders | Show or hide the colliders the physics engine built (its convex pieces), drawn over the bodies. Workstation config: never saved, never undone. | `{"on": true}` |
+| `debug.contacts` | `(debug-contacts on)` | config | — | View/Debug/Contacts | Show or hide the contact points the physics engine is solving, with their normals. Workstation config: never saved, never undone. | `{"on": true}` |
+| `debug.joints` | `(debug-joints on)` | config | — | View/Debug/Joints | Show or hide the physics engine's joints: each anchor, and a line where a joint's two anchors have drifted apart. Workstation config: never saved, never undone. | `{"on": true}` |
+| `debug.velocities` | `(debug-velocities on)` | config | — | View/Debug/Velocities | Show or hide each body's velocity arrow (and a ring on a sleeping body), read from the physics engine. Workstation config: never saved, never undone. | `{"on": true}` |
 
 ## `edit`
 

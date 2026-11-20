@@ -146,8 +146,11 @@ fn the_lisp_verb_flips_the_switch() {
 #[test]
 fn toggling_leaves_a_hidden_body_hidden() {
     // avian resets every rigid body's `Visibility` when the gizmo store's
-    // change flag is set; the toggles write around it, so a ground the
-    // Scenery settings hid stays hidden.
+    // change flag is set; the toggles write the store around it, so a ground
+    // the Scenery settings hid stays hidden. Headless, avian's plugin (and
+    // its visibility system) is absent: this pins only that the toggles
+    // themselves never touch a body's visibility; the windowed half is the
+    // `bypass_change_detection` in `debug_gizmos::apply_debug_settings`.
     let mut app = headless_app();
     jointed_scene(&mut app);
     let ground = {
