@@ -131,6 +131,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                 groups,
                 field: None,
                 tracer: None,
+                fluid: None,
             },
         )
 }

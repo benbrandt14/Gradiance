@@ -22,6 +22,7 @@ pub mod shape;
 pub mod sketch;
 pub mod snap_features;
 pub mod snapping;
+pub mod submerge;
 pub mod tessellate;
 
 /// Wraps an angle difference into `(-π, π]` — the short way around. Used by

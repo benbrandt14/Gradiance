@@ -291,6 +291,7 @@ mod tests {
             appearance: Appearance::default(),
             depth: gradiance_domain::depth::DepthBand::default(),
             groups: Vec::new(),
+            fluid: None,
         };
         let (bodies, joints) = chain_records(
             &points,

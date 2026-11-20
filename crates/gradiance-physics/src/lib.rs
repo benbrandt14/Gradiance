@@ -11,6 +11,7 @@
 
 pub mod air;
 pub mod body_sync;
+pub mod buoyancy;
 pub mod drive;
 pub mod fields;
 pub mod grab;
@@ -100,6 +101,7 @@ impl Plugin for GradiancePhysicsPlugin {
             PostUpdate,
             (
                 body_sync::sync_colliders,
+                buoyancy::sync_fluid_regions,
                 body_sync::sync_collision_layers,
                 joint_sync::guard_dangling_joints,
                 joint_sync::sync_joints,
@@ -114,9 +116,16 @@ impl Plugin for GradiancePhysicsPlugin {
         // runs right before avian's step in `FixedPostUpdate`.
         // Air drag too (brief N-4): one pass over the dynamic bodies per
         // step, against the velocity the step starts from.
+        // Buoyancy too (brief N-7): one pass over the fluids and the bodies
+        // that may overlap them, per step.
         app.add_systems(
             FixedUpdate,
-            (thrust::apply_thrusters, air::apply_air_drag).run_if(sim_running),
+            (
+                thrust::apply_thrusters,
+                air::apply_air_drag,
+                buoyancy::apply_buoyancy,
+            )
+                .run_if(sim_running),
         );
         app.add_systems(
             FixedPostUpdate,

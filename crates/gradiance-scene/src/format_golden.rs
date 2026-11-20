@@ -63,6 +63,7 @@ fn body(n: u8, depth: DepthBand) -> BodyRecord {
         groups: Vec::new(),
         field: None,
         tracer: None,
+        fluid: None,
     }
 }
 
