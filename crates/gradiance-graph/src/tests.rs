@@ -581,7 +581,7 @@ fn every_kind_has_one_catalog_row() {
     assert_eq!(CATALOG.len(), kinds.len(), "no row without a kind");
     for kind in &kinds {
         let row = meta(kind);
-        let family = if row.id.starts_with("signal.") {
+        let family = if row.id.starts_with("signal::") {
             Family::Signal
         } else {
             Family::Shape

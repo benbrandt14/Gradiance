@@ -89,7 +89,10 @@ impl PortMeta {
 /// One catalog row: everything a view needs to show a node kind.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeMeta {
-    /// Stable id (`family.kind`), the key a view and `docs/nodes.md` use.
+    /// Stable id (`family::kind`), the key a view and `docs/nodes.md` use.
+    /// `::`, not `.`, so a node id never reads as an operation id
+    /// (`signal.param` is the operation that edits a param;
+    /// `signal::param` is the node).
     pub id: &'static str,
     /// Palette category.
     pub category: &'static str,
@@ -174,28 +177,28 @@ const COMBINE: &str = "Shape: Combine";
 /// to its row; a test asserts the two agree.
 pub static CATALOG: &[NodeMeta] = &[
     signal(
-        "signal.time",
+        "signal::time",
         SOURCES,
         "Time",
         "The elapsed-seconds clock t (the external bus input \"t\").",
         &[],
     ),
     signal(
-        "signal.constant",
+        "signal::constant",
         SOURCES,
         "Constant",
         "A fixed value.",
         &[PortMeta::scalar("value", 0.0)],
     ),
     signal(
-        "signal.oscillator",
+        "signal::oscillator",
         SOURCES,
         "Oscillator",
         "amp * sin(freq * t), freq in radians per second.",
         &[PortMeta::scalar("amp", 1.0), PortMeta::scalar("freq", 1.0)],
     ),
     signal(
-        "signal.key",
+        "signal::key",
         SOURCES,
         "Key",
         "1 while the key is held in play; with a negative key, +1, -1 or 0. \
@@ -203,7 +206,7 @@ pub static CATALOG: &[NodeMeta] = &[
         &[],
     ),
     NodeMeta {
-        id: "signal.param",
+        id: "signal::param",
         category: SOURCES,
         name: "Param",
         doc: "A tunable parameter (defparam): an edit-rate scalar that also \
@@ -215,32 +218,32 @@ pub static CATALOG: &[NodeMeta] = &[
         outputs: SCALAR_OUT,
     },
     signal(
-        "signal.gain",
+        "signal::gain",
         MATH,
         "Gain",
         "in * k.",
         &[PortMeta::scalar("in", 0.0), PortMeta::scalar("k", 1.0)],
     ),
-    signal("signal.sum", MATH, "Sum", "a + b.", OPERANDS),
-    signal("signal.product", MATH, "Product", "a * b.", OPERANDS),
-    signal("signal.sub", MATH, "Sub", "a - b.", OPERANDS),
-    signal("signal.abs", MATH, "Abs", "|in|.", OPERAND),
+    signal("signal::sum", MATH, "Sum", "a + b.", OPERANDS),
+    signal("signal::product", MATH, "Product", "a * b.", OPERANDS),
+    signal("signal::sub", MATH, "Sub", "a - b.", OPERANDS),
+    signal("signal::abs", MATH, "Abs", "|in|.", OPERAND),
     signal(
-        "signal.min",
+        "signal::min",
         MATH,
         "Min",
         "The lesser of a and b.",
         OPERANDS,
     ),
     signal(
-        "signal.max",
+        "signal::max",
         MATH,
         "Max",
         "The greater of a and b.",
         OPERANDS,
     ),
     signal(
-        "signal.curve",
+        "signal::curve",
         MATH,
         "Curve",
         "Reshapes in through a response curve over [0, 1].",
@@ -250,7 +253,7 @@ pub static CATALOG: &[NodeMeta] = &[
         ],
     ),
     signal(
-        "signal.expr",
+        "signal::expr",
         MATH,
         "Expression",
         "A console defsignal expression; one scalar port per name it reads, \
@@ -258,7 +261,7 @@ pub static CATALOG: &[NodeMeta] = &[
         &[],
     ),
     shape(
-        "shape.box",
+        "shape::box",
         PRIMITIVES,
         "Box",
         "An axis-aligned rectangle, full width and height in metres.",
@@ -268,14 +271,14 @@ pub static CATALOG: &[NodeMeta] = &[
         ],
     ),
     shape(
-        "shape.circle",
+        "shape::circle",
         PRIMITIVES,
         "Circle",
         "A circle of radius metres.",
         &[PortMeta::length("radius", 0.5)],
     ),
     shape(
-        "shape.polygon",
+        "shape::polygon",
         PRIMITIVES,
         "Polygon",
         "A simple polygon: a counter-clockwise outline and clockwise holes.",
@@ -289,7 +292,7 @@ pub static CATALOG: &[NodeMeta] = &[
         ],
     ),
     shape(
-        "shape.capsule",
+        "shape::capsule",
         PRIMITIVES,
         "Capsule",
         "The segment from -half_length to +half_length on x, inflated by \
@@ -300,14 +303,14 @@ pub static CATALOG: &[NodeMeta] = &[
         ],
     ),
     shape(
-        "shape.half_plane",
+        "shape::half_plane",
         PRIMITIVES,
         "Half-plane",
         "The infinite ground: solid below local y = 0.",
         &[],
     ),
     shape(
-        "shape.csg",
+        "shape::csg",
         COMBINE,
         "Boolean",
         "A CSG boolean (union, subtract, intersect, xor, smooth union) of \
@@ -318,7 +321,7 @@ pub static CATALOG: &[NodeMeta] = &[
         ],
     ),
     shape(
-        "shape.placed",
+        "shape::placed",
         COMBINE,
         "Place",
         "A subtree moved to pos and rotated by rot radians (an isometry).",

@@ -126,9 +126,9 @@ fn signal_expr(graph: &Graph, node: &Node) -> Result<SignalExpr, GraphError> {
                 boxed(clock()),
             )))),
         ),
-        NodeKind::Gain => SignalExpr::Mul(boxed(x(0)?), boxed(x(1)?)),
+        // `in · k` and `a · b` are one product.
+        NodeKind::Gain | NodeKind::Product => SignalExpr::Mul(boxed(x(0)?), boxed(x(1)?)),
         NodeKind::Sum => SignalExpr::Add(boxed(x(0)?), boxed(x(1)?)),
-        NodeKind::Product => SignalExpr::Mul(boxed(x(0)?), boxed(x(1)?)),
         NodeKind::Sub => SignalExpr::Sub(boxed(x(0)?), boxed(x(1)?)),
         NodeKind::Abs => SignalExpr::Abs(boxed(x(0)?)),
         NodeKind::Min => SignalExpr::Min(boxed(x(0)?), boxed(x(1)?)),
