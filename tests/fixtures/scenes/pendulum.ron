@@ -1,9 +1,9 @@
 (
-    version: 8,
+    version: 9,
     app_version: "fixture",
     bodies: [
         (
-            id: ("59438d97-b953-4a67-bdc7-26ef35c91f15"),
+            id: ("226e242e-7009-4697-8f13-93b362e80012"),
             pose: (
                 pos: (1.0, 2.0),
                 rot: 0.0,
@@ -29,9 +29,9 @@
             ),
             appearance: (
                 fill: (
-                    r: 0.692,
-                    g: 0.349,
-                    b: 0.554,
+                    r: 0.211,
+                    g: 0.567,
+                    b: 0.315,
                     a: 1.0,
                 ),
                 border: (
@@ -49,11 +49,12 @@
             groups: [],
             field: None,
             tracer: None,
+            fluid: None,
         ),
     ],
     joints: [
         (
-            id: ("99d2616c-fe31-44be-9877-c683b4d1c408"),
+            id: ("a40f4f16-2432-4e93-87c0-2d7df82abce8"),
             def: (
                 kind: Hinge(
                     limits: None,
@@ -62,7 +63,7 @@
                 common: (
                     collide_connected: false,
                 ),
-                body_a: ("59438d97-b953-4a67-bdc7-26ef35c91f15"),
+                body_a: ("226e242e-7009-4697-8f13-93b362e80012"),
                 body_b: None,
                 anchor_a: (-1.0, 0.0),
                 anchor_b: (0.0, 2.0),
@@ -79,6 +80,10 @@
             substeps: 6,
             plane_friction: 0.0,
             timestep_hz: 60.0,
+            air_density: 1.2,
+            drag_coefficient: 0.0,
+            linear_drag: 0.0,
+            wind: (0.0, 0.0),
         ),
         grid: (
             visible: true,
@@ -213,8 +218,9 @@
             perspective_deg: 0.0,
         ),
         signals: ([]),
-        params: ([]),
-        computed: ([]),
+        graph: (
+            nodes: [],
+        ),
         group_names: ({}),
         workspaces: (
             saved: [],

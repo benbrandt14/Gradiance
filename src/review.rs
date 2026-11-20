@@ -214,8 +214,7 @@ fn start_job(world: &mut World, request: ReviewShowRequest) {
     empty_env.lighting = defaults.lighting;
     empty_env.scenery = defaults.scenery;
     empty_env.signals = defaults.signals;
-    empty_env.params = defaults.params;
-    empty_env.computed = defaults.computed;
+    empty_env.graph = defaults.graph;
 
     let mut problems = Vec::new();
     let mut steps = VecDeque::new();

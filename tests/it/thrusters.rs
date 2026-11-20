@@ -20,8 +20,7 @@ use gradiance::physics::drive::SignalDrive;
 use gradiance::prelude::*;
 use gradiance::scene::NodeRecord;
 use gradiance::signal::{
-    GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalParam, SignalParams, SignalSink,
-    SignalSource,
+    GradientSpec, SignalBinding, SignalBindings, SignalMap, SignalSink, SignalSource,
 };
 use gradiance::units::{Acceleration2, Angle, Force};
 use serde_json::json;
@@ -254,14 +253,15 @@ fn a_signal_drives_the_thrust_until_unbound() {
     let node = spawn_thruster(&mut app, body, Vec2::ZERO, 0.0, 1.0);
     let authored = kind_of(&app, node);
     app.world_mut()
-        .resource_mut::<SignalParams>()
-        .0
-        .push(SignalParam {
+        .resource_mut::<gradiance::signal::Graph>()
+        .edit(&gradiance::graph::GraphEdit::Param {
+            id: StableId::new(),
             name: "burn".into(),
             value: -5.0,
             min: -10.0,
             max: 10.0,
-        });
+        })
+        .unwrap();
     bind_thrust(&mut app, "throttle", "burn", node);
     step(&mut app, 3);
     assert_eq!(

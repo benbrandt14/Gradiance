@@ -119,6 +119,8 @@ fn run_with_ids(app: &mut App, ids: u64, source: &str) {
 ///   overlapping pairwise, so every boolean has an effect;
 /// - bodies 3, 4: apart at x = 3 and 5, grouped together; body 3 is pinned
 ///   to the world by joint 0;
+/// - a signal graph: a param `level` (1 in [0, 5]) and a signal `wave`
+///   (`t sin`);
 /// - one undone spawn on the redo stack, so `redo` has a step to take.
 pub(crate) fn fixture() -> App {
     let mut app = headless_app_with(|app| {
@@ -135,6 +137,15 @@ pub(crate) fn fixture() -> App {
          (spawn-circle 3 1 0.5) (spawn-circle 5 1 0.5))",
     );
     run_with_ids(&mut app, 20, "(begin (hinge 3 -1 3 1) (group (list 3 4)))");
+    // A signal graph, so the `graph.*` examples have nodes to name: a param
+    // `level` and a signal `wave` reading the clock.
+    run_with_ids(
+        &mut app,
+        60,
+        "(begin (defparam \"level\" 1 0 5) (defsignal \"wave\" \"t sin\"))",
+    );
+    // The graph's `settings` step records on the frame after the change.
+    step(&mut app, 2);
     run_with_ids(&mut app, 30, "(spawn-circle 0 6 0.5)");
     run_with_ids(&mut app, 40, "(undo)");
     // A saved workspace, so `layout.workspace.delete`'s example has one.

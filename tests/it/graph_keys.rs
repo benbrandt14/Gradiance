@@ -18,8 +18,7 @@ use gradiance::op::invoke;
 use gradiance::prelude::*;
 use gradiance::script::bridge::{ScriptInputs, ScriptLog};
 use gradiance::signal::{
-    BlockOp, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
-    SignalSink, SignalSource,
+    GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalSink, SignalSource,
 };
 use gradiance::units::{Angle, AngularVelocity as Omega, Displacement};
 use serde_json::json;
@@ -268,16 +267,14 @@ fn a_key_input_is_scene_content_with_one_undo_step() {
     )
     .unwrap();
     step(&mut app, 3);
-    let block = app
+    let kind = app
         .world()
-        .resource::<ComputedSignals>()
-        .0
-        .iter()
-        .find(|c| c.name == "steer")
-        .and_then(|c| c.block.clone());
+        .resource::<gradiance::signal::Graph>()
+        .by_label("steer")
+        .map(|n| n.kind.clone());
     assert_eq!(
-        block,
-        Some(BlockOp::Key {
+        kind,
+        Some(gradiance::graph::NodeKind::Key {
             key: "Right".into(),
             negative: Some("Left".into()),
         }),

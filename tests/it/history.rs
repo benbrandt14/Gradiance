@@ -7,9 +7,10 @@ use crate::harness::*;
 use bevy::prelude::*;
 use gradiance::command::HistoryInfo;
 use gradiance::prelude::*;
+use gradiance::graph::GraphEdit;
 use gradiance::signal::{
-    ComputedSignal, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalExpr,
-    SignalMap, SignalParam, SignalParams, SignalSink, SignalSource,
+    GradientSpec, Graph, SignalBinding, SignalBindings, SignalExpr, SignalMap, SignalSink,
+    SignalSource,
 };
 use gradiance_domain::settings::{CameraSettings, LightingSettings, SimSettings};
 
@@ -397,20 +398,60 @@ fn a_signal_binding_edit_is_one_undo_step() {
 
 #[test]
 fn a_signal_param_edit_is_one_undo_step() {
-    assert_one_settled_step::<SignalParams>(|params| {
-        params.0.push(SignalParam::unit("amp"));
+    assert_one_settled_step::<Graph>(|graph| {
+        graph
+            .edit(&GraphEdit::Param {
+                id: StableId::new(),
+                name: "amp".into(),
+                value: 0.5,
+                min: 0.0,
+                max: 1.0,
+            })
+            .unwrap();
     });
 }
 
 #[test]
 fn a_computed_signal_edit_is_one_undo_step() {
-    assert_one_settled_step::<ComputedSignals>(|computed| {
-        computed.0.push(ComputedSignal {
+    assert_one_settled_step::<Graph>(|graph| {
+        graph
+            .edit(&GraphEdit::Expr {
+                id: StableId::new(),
+                name: "osc".into(),
+                expr: SignalExpr::parse_rpn("t sin").unwrap(),
+            })
+            .unwrap();
+    });
+}
+
+/// A settled canvas drag of a block is one undo step, like a slider drag.
+#[test]
+fn a_block_move_is_one_undo_step() {
+    let mut app = paused_app();
+    app.world_mut()
+        .resource_mut::<Graph>()
+        .edit(&GraphEdit::Expr {
+            id: StableId::new(),
             name: "osc".into(),
             expr: SignalExpr::parse_rpn("t sin").unwrap(),
-            block: None,
-        });
-    });
+        })
+        .unwrap();
+    spawn_settled(&mut app);
+    app.update();
+    let before = app.world().resource::<HistoryInfo>().undo_depth;
+    let start = app.world().resource::<Graph>().nodes[0].pos;
+    for i in 1..=10 {
+        app.world_mut().resource_mut::<Graph>().nodes[0].pos = start + Vec2::splat(i as f32 * 4.0);
+        app.update();
+    }
+    app.update(); // settles
+    assert_eq!(
+        app.world().resource::<HistoryInfo>().undo_depth,
+        before + 1,
+        "the whole drag is a single undo step"
+    );
+    undo(&mut app);
+    assert_eq!(app.world().resource::<Graph>().nodes[0].pos, start);
 }
 
 /// A param slider drag (a value written every frame) settles into one step.
@@ -418,15 +459,21 @@ fn a_computed_signal_edit_is_one_undo_step() {
 fn a_param_slider_drag_is_one_undo_step() {
     let mut app = paused_app();
     app.world_mut()
-        .resource_mut::<SignalParams>()
-        .0
-        .push(SignalParam::unit("amp"));
+        .resource_mut::<Graph>()
+        .edit(&GraphEdit::Param {
+            id: StableId::new(),
+            name: "amp".into(),
+            value: 0.5,
+            min: 0.0,
+            max: 1.0,
+        })
+        .unwrap();
     spawn_settled(&mut app); // the spawn's snapshot holds the param
     app.update();
     let before = app.world().resource::<HistoryInfo>().undo_depth;
 
     for i in 1..=10 {
-        app.world_mut().resource_mut::<SignalParams>().0[0].value = 0.5 + i as f32 * 0.04;
+        crate::harness::set_param(&mut app, "amp", 0.5 + i as f32 * 0.04);
         app.update();
     }
     app.update(); // settles
@@ -437,7 +484,7 @@ fn a_param_slider_drag_is_one_undo_step() {
     );
 
     undo(&mut app);
-    let value = app.world().resource::<SignalParams>().0[0].value;
+    let value = crate::harness::param_value(&app, "amp").unwrap_or(f32::NAN);
     assert!(
         (value - 0.5).abs() < 1e-6,
         "undo restores the pre-drag value"

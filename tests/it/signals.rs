@@ -4,7 +4,7 @@
 // Test-only file: unwraps are the failure mechanism.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use crate::harness::{box_record, entity_of, headless_app, paused_app, step};
+use crate::harness::{box_record, entity_of, headless_app, paused_app, set_param, set_signals, step};
 use avian2d::prelude::{LinearVelocity, RigidBody};
 use bevy::prelude::*;
 use gradiance::prelude::*;
@@ -229,42 +229,37 @@ fn bindings_persist_with_the_scene_and_old_files_parse() {
 
 #[test]
 fn a_param_publishes_and_a_computed_signal_modulates_it() {
-    use gradiance::signal::{
-        ComputedSignal, ComputedSignals, SignalExpr, SignalParam, SignalParams,
-    };
+    use gradiance::domain::signal::{ComputedSignal, SignalExpr, SignalParam};
     let mut app = paused_app();
     // A param "amp" = 3, and a computed "scaled" = amp * 2.
-    app.world_mut()
-        .resource_mut::<SignalParams>()
-        .0
-        .push(SignalParam {
+    set_signals(
+        &mut app,
+        vec![SignalParam {
             name: "amp".into(),
             value: 3.0,
             min: 0.0,
             max: 10.0,
-        });
-    app.world_mut()
-        .resource_mut::<ComputedSignals>()
-        .0
-        .push(ComputedSignal {
+        }],
+        vec![ComputedSignal {
             name: "scaled".into(),
             expr: SignalExpr::parse_rpn("amp 2 *").unwrap(),
             block: None,
-        });
+        }],
+    );
     step(&mut app, 2);
 
     assert_eq!(bus_value(&app, "amp"), Some(3.0), "param published");
     assert_eq!(bus_value(&app, "scaled"), Some(6.0), "computed = amp * 2");
 
     // Turning the knob re-modulates next frame.
-    app.world_mut().resource_mut::<SignalParams>().0[0].value = 5.0;
+    set_param(&mut app, "amp", 5.0);
     step(&mut app, 2);
     assert_eq!(bus_value(&app, "scaled"), Some(10.0), "tracks the param");
 }
 
 #[test]
 fn a_body_sensor_feeds_a_modulation_block_over_the_canonical_bus_name() {
-    use gradiance::signal::{ComputedSignal, ComputedSignals, SignalExpr};
+    use gradiance::domain::signal::{ComputedSignal, SignalExpr};
     // The node canvas wires a body's speed output into a modulation block by
     // referencing the body's canonical sensor bus name ("speed@<uuid>"). Only
     // `publish_sensor_refs` puts that name on the bus — no binding sinks it —
@@ -287,17 +282,18 @@ fn a_body_sensor_feeds_a_modulation_block_over_the_canonical_bus_name() {
 
     // "twice-speed" = speed@<id> * 2, referencing the sensor by its bus name.
     let sensor = SignalSource::Speed(id).bus_name().unwrap();
-    app.world_mut()
-        .resource_mut::<ComputedSignals>()
-        .0
-        .push(ComputedSignal {
+    set_signals(
+        &mut app,
+        vec![],
+        vec![ComputedSignal {
             name: "twice-speed".into(),
             expr: SignalExpr::Mul(
                 Box::new(SignalExpr::Input(sensor.clone())),
                 Box::new(SignalExpr::Const(2.0)),
             ),
             block: None,
-        });
+        }],
+    );
     step(&mut app, 2);
 
     // publish_sensor_refs surfaced the sensor, and the computed read it.
@@ -315,34 +311,29 @@ fn a_body_sensor_feeds_a_modulation_block_over_the_canonical_bus_name() {
 
 #[test]
 fn a_computed_signal_drives_a_body_color_through_a_named_binding() {
-    use gradiance::signal::{
-        ComputedSignal, ComputedSignals, SignalBinding, SignalExpr, SignalMap, SignalParam,
-        SignalParams, SignalSink, SignalSource,
-    };
+    use gradiance::domain::signal::{ComputedSignal, SignalExpr, SignalParam};
+    use gradiance::signal::{SignalBinding, SignalMap, SignalSink, SignalSource};
     let mut app = paused_app();
     let record = box_record(Vec2::ZERO, 20.0, 20.0);
     let id = record.id;
     app.world_mut().write_message(SpawnBodyIntent { record });
     app.update();
 
-    app.world_mut()
-        .resource_mut::<SignalParams>()
-        .0
-        .push(SignalParam {
+    // computed "warm" = heat (identity modulator, exercising the kernel).
+    set_signals(
+        &mut app,
+        vec![SignalParam {
             name: "heat".into(),
             value: 0.8,
             min: 0.0,
             max: 1.0,
-        });
-    // computed "warm" = heat (identity modulator, exercising the kernel).
-    app.world_mut()
-        .resource_mut::<ComputedSignals>()
-        .0
-        .push(ComputedSignal {
+        }],
+        vec![ComputedSignal {
             name: "warm".into(),
             expr: SignalExpr::parse_rpn("heat").unwrap(),
             block: None,
-        });
+        }],
+    );
     bind(
         &mut app,
         SignalBinding {
@@ -370,9 +361,9 @@ fn a_computed_signal_drives_a_body_color_through_a_named_binding() {
 }
 
 #[test]
-fn params_and_computed_persist_and_old_files_parse() {
-    use gradiance::scene::{from_ron, to_ron};
-    use gradiance::signal::{ComputedSignal, SignalExpr, SignalParam};
+fn the_graph_persists_with_positions_and_an_older_file_is_refused() {
+    use gradiance::graph::{GraphEdit, NodeRef};
+    use gradiance::scene::{PersistError, from_ron, to_ron};
     let mut record = gradiance::scene::SceneRecord {
         version: gradiance::scene::FORMAT_VERSION,
         app_version: String::new(),
@@ -381,30 +372,51 @@ fn params_and_computed_persist_and_old_files_parse() {
         nodes: vec![],
         environment: gradiance::scene::EnvironmentRecord::default(),
     };
-    record.environment.params.0.push(SignalParam::unit("amp"));
-    record.environment.computed.0.push(ComputedSignal {
-        name: "osc".into(),
-        expr: SignalExpr::parse_rpn("t sin amp *").unwrap(),
-        block: None,
-    });
+    let graph = &mut record.environment.graph;
+    graph
+        .edit(&GraphEdit::Param {
+            id: StableId::new(),
+            name: "amp".into(),
+            value: 0.5,
+            min: 0.0,
+            max: 1.0,
+        })
+        .unwrap();
+    graph
+        .edit(&GraphEdit::Expr {
+            id: StableId::new(),
+            name: "osc".into(),
+            expr: gradiance::signal::SignalExpr::parse_rpn("t sin amp *").unwrap(),
+        })
+        .unwrap();
+    graph
+        .edit(&GraphEdit::SetPos {
+            node: NodeRef::Label("osc".into()),
+            pos: Vec2::new(310.0, -42.5),
+        })
+        .unwrap();
 
     let text = to_ron(&record).unwrap();
     let parsed = from_ron(&text).expect("round-trips");
-    assert_eq!(parsed.environment.params, record.environment.params);
-    assert_eq!(parsed.environment.computed, record.environment.computed);
+    assert_eq!(parsed.environment.graph, record.environment.graph);
+    assert_eq!(
+        parsed.environment.graph.by_label("osc").map(|n| n.pos),
+        Some(Vec2::new(310.0, -42.5)),
+        "positions are saved"
+    );
 
-    // A pre-P2 file (no params/computed fields) still parses. Serialize an
-    // empty-environment record and strip the two default fields out.
-    let plain = gradiance::scene::SceneRecord {
-        environment: gradiance::scene::EnvironmentRecord::default(),
-        ..record
-    };
-    let text = to_ron(&plain).unwrap();
-    let cut = text
-        .replace("params: ([]),", "")
-        .replace("computed: ([]),", "");
-    assert_ne!(text, cut, "fixture removed the fields");
-    let parsed = from_ron(&cut).expect("pre-P2 file parses");
-    assert_eq!(parsed.environment.params.0, [] as [SignalParam; 0]);
-    assert_eq!(parsed.environment.computed.0, [] as [ComputedSignal; 0]);
+    // A v8 file (by-name params and computed lists) is refused, not migrated.
+    let old = text.replace(
+        &format!("version: {}", gradiance::scene::FORMAT_VERSION),
+        "version: 8",
+    );
+    assert!(matches!(from_ron(&old), Err(PersistError::Version(8))));
+
+    // A graph that does not validate is refused on load.
+    let amp = record.environment.graph.by_label("amp").map(|n| n.id).unwrap();
+    let broken = text.replacen(&amp.to_string(), &StableId::new().to_string(), 1);
+    assert!(
+        matches!(from_ron(&broken), Err(PersistError::Graph(_))),
+        "a wire to a missing node"
+    );
 }

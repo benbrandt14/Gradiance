@@ -92,3 +92,42 @@ pub fn redo(app: &mut App) {
     app.world_mut().write_message(RedoIntent);
     app.update();
 }
+
+/// Replaces the signal graph with the one the old by-name lists convert to
+/// (`gradiance_graph::from_signals`): each name a param or computed signal
+/// publishes is wired by id, any other name read from the bus. A test fixture
+/// written as params and RPN signals stays readable this way (brief G-2).
+pub fn set_signals(
+    app: &mut App,
+    params: Vec<gradiance::domain::signal::SignalParam>,
+    computed: Vec<gradiance::domain::signal::ComputedSignal>,
+) {
+    use gradiance::domain::signal::{ComputedSignals, SignalParams};
+    let graph = gradiance::graph::from_signals(
+        &SignalParams(params),
+        &ComputedSignals(computed),
+        StableId::new,
+    );
+    app.world_mut().insert_resource(graph);
+}
+
+/// Sets the value of the param labelled `name` (as a slider drag would).
+pub fn set_param(app: &mut App, name: &str, value: f32) {
+    let mut graph = app.world_mut().resource_mut::<gradiance::signal::Graph>();
+    let id = graph.by_label(name).map(|n| n.id);
+    let Some(node) = id.and_then(|id| graph.node_mut(id)) else {
+        panic!("no param `{name}`");
+    };
+    if let gradiance::graph::NodeKind::Param { value: v, .. } = &mut node.kind {
+        *v = value;
+    }
+}
+
+/// The value of the param labelled `name`.
+pub fn param_value(app: &App, name: &str) -> Option<f32> {
+    let graph = app.world().resource::<gradiance::signal::Graph>();
+    match graph.by_label(name)?.kind {
+        gradiance::graph::NodeKind::Param { value, .. } => Some(value),
+        _ => None,
+    }
+}

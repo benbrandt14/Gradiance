@@ -1,4 +1,4 @@
-//! Scene-format pins for the typed quantities (brief 5-1; format v8 since 4b-4).
+//! Scene-format pins for the typed quantities (brief 5-1; format v9 since G-2).
 //!
 //! [`every_quantity_scene`] sets every authored field that carries a
 //! `gradiance-units` quantity to a distinctive non-default value. The golden
@@ -35,7 +35,7 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::thruster::Thruster;
 use gradiance_domain::tracer::{TracePattern, Tracer};
 
-const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/v8_every_quantity.ron");
+const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/v9_every_quantity.ron");
 
 fn id(n: u8) -> StableId {
     let text = format!("(\"00000000-0000-0000-0000-0000000000{n:02x}\")");
@@ -137,6 +137,26 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
     environment.grid.rotation = q("0.125");
     environment.lighting.shadow_distance = q("42.5");
     environment.scenery.back_offset = q("0.375");
+    // The signal graph (brief G-2): a param wired by id into a gain, each at
+    // its saved canvas position.
+    environment.graph = {
+        use gradiance_graph::{Graph, Input, Node, NodeKind as G};
+        let mut amp = Node::new(
+            id(48),
+            G::Param {
+                value: 2.5,
+                min: 0.0,
+                max: 10.0,
+            },
+        )
+        .labelled("amp");
+        amp.pos = Vec2::new(20.0, 16.0);
+        let mut gain = Node::new(id(49), G::Gain)
+            .labelled("boost")
+            .with_inputs(vec![Input::wire(id(48)), Input::scalar(1.5)]);
+        gain.pos = Vec2::new(220.0, 128.0);
+        Graph::from_nodes(vec![amp, gain])
+    };
 
     SceneRecord {
         version: FORMAT_VERSION,

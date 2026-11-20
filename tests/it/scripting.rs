@@ -1180,17 +1180,18 @@ fn ans_carries_the_last_value_between_runs() {
 
 #[test]
 fn defparam_and_defsignal_build_the_dataflow() {
-    use gradiance::signal::{ComputedSignals, SignalBus, SignalParams};
+    use gradiance::graph::Input;
+    use gradiance::signal::{Graph, SignalBus};
     let mut app = paused_app();
     run(&mut app, "(defparam \"amp\" 2 0 10)");
     run(&mut app, "(defsignal \"osc\" \"amp 3 *\")");
 
-    // The declarations landed on the config resources.
-    let params = app.world().resource::<SignalParams>();
-    assert_eq!(params.0.len(), 1);
-    assert_eq!(params.0[0].name, "amp");
-    assert!((params.0[0].value - 2.0).abs() < 1e-6);
-    assert_eq!(app.world().resource::<ComputedSignals>().0.len(), 1);
+    // The declarations landed in the signal graph, wired by id.
+    let graph = app.world().resource::<Graph>();
+    assert_eq!(graph.nodes.len(), 2);
+    let amp = graph.by_label("amp").expect("a param node").id;
+    assert_eq!(graph.by_label("osc").unwrap().inputs, [Input::wire(amp)]);
+    assert_eq!(crate::harness::param_value(&app, "amp"), Some(2.0));
 
     // And the evaluator computes them: amp=2 → osc = 2*3 = 6.
     crate::harness::step(&mut app, 2);
@@ -1200,7 +1201,7 @@ fn defparam_and_defsignal_build_the_dataflow() {
 
     // Re-running defparam upserts (updates in place, no duplicate).
     run(&mut app, "(defparam \"amp\" 5 0 10)");
-    assert_eq!(app.world().resource::<SignalParams>().0.len(), 1);
+    assert_eq!(app.world().resource::<Graph>().nodes.len(), 2);
     crate::harness::step(&mut app, 2);
     assert_eq!(app.world().resource::<SignalBus>().get("osc"), Some(15.0));
 }
@@ -1262,7 +1263,7 @@ fn a_script_that_spawns_then_loops_forever_spawns_nothing() {
 /// signal publish, a parameter, an action and a panel request.
 #[test]
 fn a_failed_run_commits_none_of_its_queued_effects() {
-    use gradiance::signal::{SignalBus, SignalParams};
+    use gradiance::signal::{Graph, SignalBus};
     let mut app = paused_app();
     let gravity = app.world().resource::<SimSettings>().gravity.value().y;
     let plot = panel_open::<gradiance::ui::plot::PlotPanel>(&app);
@@ -1281,10 +1282,7 @@ fn a_failed_run_commits_none_of_its_queued_effects() {
     let world = app.world();
     assert!((world.resource::<SimSettings>().gravity.value().y - gravity).abs() < 1e-6);
     assert_eq!(world.resource::<SignalBus>().get("half-run"), None);
-    assert_eq!(
-        world.resource::<SignalParams>().0,
-        [] as [gradiance::signal::SignalParam; 0]
-    );
+    assert_eq!(*world.resource::<Graph>(), Graph::default());
     assert_eq!(world.resource::<ScriptActions>().user().count(), 0);
     assert_eq!(panel_open::<gradiance::ui::plot::PlotPanel>(&app), plot);
 }

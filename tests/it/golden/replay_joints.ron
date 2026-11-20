@@ -1,5 +1,5 @@
 (
-    version: 8,
+    version: 9,
     app_version: "golden",
     bodies: [
         (
@@ -275,8 +275,9 @@
             perspective_deg: 0.0,
         ),
         signals: ([]),
-        params: ([]),
-        computed: ([]),
+        graph: (
+            nodes: [],
+        ),
         group_names: ({}),
         workspaces: (
             saved: [],

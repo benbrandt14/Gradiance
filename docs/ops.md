@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 150 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 154 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -89,6 +89,15 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `edit.paste` | `(paste-ron text at)` | edit | `insert` | Edit/Paste, Ctrl+V | Add scene RON text (from edit.copy or a .ron file) to the scene with fresh ids, one undo step. `at`: [] keeps its positions, [x y] centres the bodies there (Ctrl+V: the cursor). Returns the new bodies' ids. | `{"text": "(version: 8, app_version: \"\", bodies: [(id: (\"00000000-0000-0000-0000-00000000000a\"), pose: (pos: (0.0, 1.0), rot: 0.0), shape: Box(width: 1.0, height: 1.0))], joints: [], environment: ())", "at": [2, 3]}` |
 | `edit.redo` | `(redo)` | edit | — | Edit/Redo, Ctrl+Shift+Z | Redo the last undone command — the same step Edit ▸ Redo takes. | `{}` |
 | `edit.undo` | `(undo)` | edit | — | Edit/Undo, Ctrl+Z | Undo the last command — the same step Edit ▸ Undo takes. | `{}` |
+
+## `graph`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `graph.add` | `(graph-add kind [label])` | config | `settings` | — | Add a signal node of a catalog kind (docs/nodes.md), optionally labelled; returns its id. Its ports read their defaults until set or wired. Placed below the last node of its canvas column. | `{"kind": "signal::gain", "label": "boost"}` |
+| `graph.connect` | `(graph-connect from to port)` | config | `settings` | — | Wire node from's output into input port of node to (nodes by id or label). The wire is by id: renaming either node keeps it. | `{"from": "level", "to": "wave", "port": "t"}` |
+| `graph.remove` | `(graph-remove node)` | config | `settings` | — | Remove a node (by id or label). A wire from it becomes a bus read of its label (or its port's default if it had none). | `{"node": "wave"}` |
+| `graph.set` | `(graph-set node key value)` | config | `settings` | — | Set a node's "label" (a name; "" stops it publishing), its "position" on the canvas ([x y]), or an input port: a number or point is a constant (it disconnects the port), a name reads that bus signal. | `{"node": "wave", "key": "position", "value": [300, 40]}` |
 
 ## `group`
 

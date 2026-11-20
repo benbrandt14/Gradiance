@@ -16,8 +16,7 @@ use gradiance::op::invoke;
 use gradiance::physics::drive::SignalDrive;
 use gradiance::prelude::*;
 use gradiance::signal::{
-    GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalParam, SignalParams,
-    SignalSink, SignalSource,
+    GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalSink, SignalSource,
 };
 use gradiance::units::{Acceleration2, Angle, AngularVelocity as Omega, Displacement};
 use serde_json::json;
@@ -95,14 +94,15 @@ fn unbind(app: &mut App, name: &str) {
 /// A constant knob on the bus (a `defparam`).
 fn param(app: &mut App, name: &str, value: f32) {
     app.world_mut()
-        .resource_mut::<SignalParams>()
-        .0
-        .push(SignalParam {
+        .resource_mut::<gradiance::signal::Graph>()
+        .edit(&gradiance::graph::GraphEdit::Param {
+            id: StableId::new(),
             name: name.into(),
             value,
             min: -10.0,
             max: 10.0,
-        });
+        })
+        .unwrap();
 }
 
 fn spin(app: &App, id: StableId) -> f32 {

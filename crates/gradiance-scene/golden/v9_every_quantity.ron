@@ -1,5 +1,5 @@
 (
-    version: 8,
+    version: 9,
     app_version: "golden",
     bodies: [
         (
@@ -426,8 +426,34 @@
             perspective_deg: 0.0,
         ),
         signals: ([]),
-        params: ([]),
-        computed: ([]),
+        graph: (
+            nodes: [
+                (
+                    id: ("00000000-0000-0000-0000-000000000030"),
+                    kind: Param(
+                        value: 2.5,
+                        min: 0.0,
+                        max: 10.0,
+                    ),
+                    inputs: [],
+                    label: Some("amp"),
+                    pos: (20.0, 16.0),
+                ),
+                (
+                    id: ("00000000-0000-0000-0000-000000000031"),
+                    kind: Gain,
+                    inputs: [
+                        Wire(
+                            node: ("00000000-0000-0000-0000-000000000030"),
+                            port: 0,
+                        ),
+                        Const(Scalar(1.5)),
+                    ],
+                    label: Some("boost"),
+                    pos: (220.0, 128.0),
+                ),
+            ],
+        ),
         group_names: ({}),
         workspaces: (
             saved: [],
