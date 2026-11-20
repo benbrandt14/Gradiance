@@ -55,6 +55,7 @@ mod script_examples;
 mod script_tools;
 mod script_units;
 mod scripting;
+mod signal_graph;
 mod signals;
 mod sketch;
 mod thrusters;
