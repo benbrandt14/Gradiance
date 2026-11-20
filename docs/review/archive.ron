@@ -3889,5 +3889,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "tests/it/loader_fuzz.rs SCENE_DIRS",
         ),
+        (
+            question: (
+                id: "geometry-proptest-dependency",
+                title: "Which property-test crate do the geometry tests use?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"proptest 1.11.0 is already in Cargo.lock (the workspace pins 1.9; kernel, units and the root package use it). Adding it to gradiance-geometry's dev-dependencies adds one dependency-edge line to Cargo.lock and no new package."#,
+                decision: true,
+                options: [
+                    (
+                        label: "proptest, the workspace version",
+                        caption: r#"One lockfile line (the edge); shrinking finds minimal cases, which is how both bugs below were minimised."#,
+                    ),
+                    (
+                        label: "A hand-written seeded generator",
+                        caption: r#"No lockfile change, but no shrinking: a failure would be a 60-point stroke instead of a two-leaf case."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "geometry-proptest-dependency",
+                title: "Which property-test crate do the geometry tests use?",
+                choice: Picked("proptest, the workspace version"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-geometry/Cargo.toml [dev-dependencies]",
+        ),
+        (
+            question: (
+                id: "geometry-proptest-cases",
+                title: "How many cases do the geometry properties run, and from which seed?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"The brief asks for under 30 s for cargo test -p gradiance-geometry (the coordinator asked for under 10 s). Proptest's default seed is random per run."#,
+                decision: true,
+                options: [
+                    (
+                        label: "512 for bare leaves, 256 for the rest, fixed seed",
+                        caption: r#"3584 cases in about 2 s of test time; a fixed seed makes CI deterministic, and no failure-persistence file is written into the repository. PROPTEST_RNG_SEED and PROPTEST_CASES still override both for a longer local search (six seeds at 2000 cases each passed, about 17 s each)."#,
+                    ),
+                    (
+                        label: "Proptest defaults (256 cases, random seed)",
+                        caption: r#"Finds new cases on every CI run, but a failure is a flake on someone else's PR, and the default writes regression files next to the source."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "geometry-proptest-cases",
+                title: "How many cases do the geometry properties run, and from which seed?",
+                choice: Picked("512 for bare leaves, 256 for the rest, fixed seed"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::proptests::config, SEED",
+        ),
+        (
+            question: (
+                id: "geometry-proptest-tolerances",
+                title: "Which tolerances do the contour area and CSG properties use?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"polygonize bisects every contour vertex onto the zero set, so the errors come from three places only: simplify_ring drops vertices within 0.05 cell of their chord, a curve keeps one-cell chords (sag cell^2/8R), and the grid chamfers a corner. CSG makes corners anywhere along a boundary and drops slivers under 4 cell^2 on purpose."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Derived from the cell size",
+                        caption: r#"Bare leaves: exact, or the inscribed 48-gon loss (0.29 % of the disc) for circles and caps. Contoured leaf: 0.05 cell x perimeter + (corners + 2) cell^2. CSG areas: 0.25 cell x perimeter + 4 cell^2 per component, summed over the areas a relation uses. Field classification: points within 1.5 cells of the boundary are not judged. Submerged clip: 1e-4 relative plus the f32 shoelace rounding bound. Mirror field: 1e-4 (1 + |p|)."#,
+                    ),
+                    (
+                        label: "A flat percentage",
+                        caption: r#"Simpler to read, but too loose for large shapes and too tight for thin rods (a 10 cm rod at a 2.8 cm cell is off by 1.3 % within the contour's design)."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "geometry-proptest-tolerances",
+                title: "Which tolerances do the contour area and CSG properties use?",
+                choice: Picked("Derived from the cell size"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::proptests (each property's doc comment)",
+        ),
+        (
+            question: (
+                id: "contour-simplify-drift",
+                title: "What do we do about contour edges that drift past the simplification tolerance?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"A property found that simplify_ring tested each dropped vertex only against the chord from the last kept vertex to its next neighbour. A run of dropped vertices could drift: on a capsule, the straight side's edge ran 0.48 m into both caps, 7.5e-4 m inside the curve (tolerance 3.2e-4), and the area came out 0.63 % short."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Fix it: test the whole dropped run",
+                        caption: r#"A vertex is dropped only while every vertex dropped since the last kept one stays within the tolerance of the new chord. Cost O(run length) per vertex, small at the contour's sample budget. Contours may keep a few more vertices on long gentle curves."#,
+                    ),
+                    (
+                        label: "Record a known limit and widen the tolerance",
+                        caption: r#"No change to contours, but the error is unbounded along long runs."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "contour-simplify-drift",
+                title: "What do we do about contour edges that drift past the simplification tolerance?",
+                choice: Picked("Fix it: test the whole dropped run"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::contour::simplify_ring; regression_contour_simplification_stays_within_its_tolerance",
+        ),
+        (
+            question: (
+                id: "union-field-cull-inside",
+                title: "What do we do about UnionField skipping a leaf whose box holds the point?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"UnionField culled a leaf when the distance to its box was at least the best field so far plus a margin. Inside the box that distance is 0, so once the best was negative the leaf was skipped although its field could be lower. The sign was always right, so contours did not change; the value was not the tree's field, which its docs promise bit for bit."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Fix it: cull only outside the box",
+                        caption: r#"Skip a leaf only when the point is outside its box and that distance beats the best. The evaluation is exact again; the cull still skips every far leaf."#,
+                    ),
+                    (
+                        label: "Document it as a sign-only field",
+                        caption: r#"Keeps a little speed inside overlapping leaves, but the field would no longer be usable for distances."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "union-field-cull-inside",
+                title: "What do we do about UnionField skipping a leaf whose box holds the point?",
+                choice: Picked("Fix it: cull only outside the box"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::sdf::UnionField::eval; regression_union_field_never_culls_a_leaf_whose_box_holds_the_point",
+        ),
+        (
+            question: (
+                id: "mirror-twice-half-plane",
+                title: "What does mirroring twice give for a tree with a half-plane?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"mirror_shape gives a bare half-plane mirrored across x back as a half-plane placed at a half turn, by design, and the angle pi - (pi - r) is not always r in f32. So mirroring twice is bit-exact for trees without a half-plane, and gives the same field (not the same tree) for trees with one. Bodies that are a bare half-plane go through BodyScale, which handles it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Test the field for half-plane trees",
+                        caption: r#"Structural identity for every tree without a half-plane; the field to 1e-4 (1 + |p|) where there is one."#,
+                    ),
+                    (
+                        label: "Change mirror_shape to be structurally exact",
+                        caption: r#"More special cases in mirror_shape for no visible difference."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-twice-half-plane",
+                title: "What does mirroring twice give for a tree with a half-plane?",
+                choice: Picked("Test the field for half-plane trees"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::proptests::mirroring_twice_is_the_identity",
+        ),
     ],
 )
