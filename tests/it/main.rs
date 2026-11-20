@@ -35,6 +35,7 @@ mod joint_stress;
 mod joints;
 mod lasers;
 mod look;
+mod mirror;
 mod nodes;
 mod op_conformance;
 mod packing;

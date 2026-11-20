@@ -3428,6 +3428,141 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
         ),
         (
             question: (
+                id: "mirror-operation",
+                title: "What is the mirror operation, and about which line?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"The brief asks for Mirror H / V over the existing negative scale, with an Edit-menu row and no key."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Two operations about the bounds centre",
+                        caption: r#"body.mirror_h (mirror-h) and body.mirror_v (mirror-v), each taking only targets, so F3 search and the Edit menu list them and the menu rows invoke them on the selection; world axes through the middle of the bodies' world bounds (half-planes left out); one ScaleIntent with a -1 factor, one undo step labelled mirror. Adjust Last records the call but has nothing to adjust."#,
+                    ),
+                    (
+                        label: "One operation with an axis param",
+                        caption: r#"body.mirror with axis "h" or "v": one id, but F3 search lists only click-runnable operations (no params besides targets), so it would be missing there, and the axis would be a read-only text row in Adjust Last."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-operation",
+                title: "What is the mirror operation, and about which line?",
+                choice: Picked("Two operations about the bounds centre"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "command::ops::body::MirrorH, command::ops::body::MirrorV",
+        ),
+        (
+            question: (
+                id: "mirror-rotated-bodies",
+                title: "How does a negative scale treat a rotated body?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"Before, a negative factor mapped the shape through R(-rot)·S·R(rot), which shears a rotated box into a polygon and keeps the body's rotation."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Reflect the rotation, flip one local axis",
+                        caption: r#"With one negative factor the body turns to 2·frame - rot and its shape reflects across one local axis, structurally (geometry::scale::mirror_shape): a box stays a box at any angle, a CSG body stays a tree, and mirroring twice gives the scene back. The scale handle dragged past its pivot takes the same path and its undo step reads Mirror."#,
+                    ),
+                    (
+                        label: "Keep the plain matrix",
+                        caption: r#"Mirrors polygonize rotated boxes and every CSG tree; mirroring twice does not give the original shapes back."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-rotated-bodies",
+                title: "How does a negative scale treat a rotated body?",
+                choice: Picked("Reflect the rotation, flip one local axis"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "geometry::scale::BodyScale, command::scale_cmd",
+        ),
+        (
+            question: (
+                id: "mirror-joints",
+                title: "What happens to joints and nodes on scaled or mirrored bodies?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"Before, a scale left joint anchors and node offsets at their old body-local points, so a scaled hinged body pulled its joint off the material."#,
+                decision: true,
+                options: [
+                    (
+                        label: "They go through the body's map",
+                        caption: r#"Every scale, mirror or not, maps anchors, slider axes and node offsets and axes (thruster, laser) through the body-local map, and a world pin of a scaled body moves with it. When every body of a joint is mirrored (a world pin counts as its body), the joint's relative angles change sign: hinge limits become [-max, -min] and the motor turns the other way. A joint with only one mirrored end keeps its limits and motor."#,
+                    ),
+                    (
+                        label: "Only on a mirror",
+                        caption: r#"Leave positive scales as they were (anchors stale) and map only on a mirror."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-joints",
+                title: "What happens to joints and nodes on scaled or mirrored bodies?",
+                choice: Picked("They go through the body's map"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "command::scale_cmd::joint_edits, command::scale_cmd::node_edits",
+        ),
+        (
+            question: (
+                id: "joint-load-rating",
+                title: "What does the joint load colour measure against?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"The brief: joint-force / break_force, or force relative to body weight when the joint cannot break."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Break force, else the default rating",
+                        caption: r#"Load = linear reaction force / break force; for an unbreakable joint / the break force breakable would give it (ten times the weight of its moving bodies, tuning::default_break_force), so a hanging pendulum reads 0.1. The face blends straight from calm to hot and is fully hot from 90 % (HOT_LOAD). A broken joint reads 0. Paused, the last solve's load stays."#,
+                    ),
+                    (
+                        label: "Force over the plain weight",
+                        caption: r#"Any joint holding a still body reads 1 and is fully hot."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "joint-load-rating",
+                title: "What does the joint load colour measure against?",
+                choice: Picked("Break force, else the default rating"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "domain::joint::load_fraction, render::joint_viz::JointLoad",
+        ),
+        (
+            question: (
+                id: "joint-load-colours",
+                title: "Which colours does the load use, and what marks a world pin?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"World pins were drawn in the danger hue; the load's hot colour must come from the scene look."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Face calm to danger, pins get a ring",
+                        caption: r#"The glyph face (hinge ring and hub, slider marker) blends from the look's joint ink to its danger ink; a spring's coil from its alternate ink to danger. A world pin keeps its warning hue as an outer danger ring, so its face can show load like any joint."#,
+                    ),
+                    (
+                        label: "Pins keep a red face",
+                        caption: r#"Pins stay red and show no load, though they are the commonest breakable joints."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "joint-load-colours",
+                title: "Which colours does the load use, and what marks a world pin?",
+                choice: Picked("Face calm to danger, pins get a ring"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "render::joint_viz::draw_joints",
+        ),
+        (
+            question: (
                 id: "joint-anchor-on-edge",
                 title: "Does a joint anchor on a body's edge count as on that body?",
                 source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
