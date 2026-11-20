@@ -2927,7 +2927,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                     ),
                     (
                         label: "Fill to the stroke's outer edge",
-                        caption: r#"Offset the ring outward by half the width. Needs an offset of a concave ring; more code for a few millimetres."#,
+                        caption: r#"Offset the ring outward by half the width. Needs an offset of a concave ring; more code for 1 cm per step."#,
                     ),
                 ],
             ),
@@ -3660,7 +3660,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                 options: [
                     (
                         label: "Newest on top, for drawing and for clicks",
-                        caption: r#"As Algodoo. Ids are minted in creation order (UUID v7); the hit-test breaks a band tie by the newest id; render::stack sinks older bodies a few millimetres. Scenes saved before keep their v4 ids, in a fixed arbitrary order."#,
+                        caption: r#"As Algodoo. Ids are minted in creation order (UUID v7); the hit-test breaks a band tie by the newest id; render::stack sinks older bodies 1 cm per step. Scenes saved before keep their v4 ids, in a fixed arbitrary order."#,
                     ),
                     (
                         label: "An authored stacking order with Bring to front / Send to back",

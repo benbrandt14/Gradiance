@@ -6,7 +6,7 @@
 //! clickable there (brief J-2). The hit-test now picks the newest body of
 //! a band first (`interaction::tools::bodies_at_sorted`; ids are minted in
 //! creation order), and this system draws the same order: it sinks each
-//! older body of a band a few millimetres along `z`, so the newest sits at
+//! older body of a band one centimetre per step along `z`, so the newest sits at
 //! the band's front face and depth testing does the rest.
 //!
 //! Derived and render-only: the offset lives in `Transform::translation.z`,
@@ -20,9 +20,11 @@ use gradiance_domain::depth::DepthBand;
 use gradiance_domain::shape::ShapeDef;
 
 /// The `z` step between two bodies of one band: above the depth buffer's
-/// resolution over the camera's depth slab (about 1 mm), small against a
-/// band (a layer is 10 m deep).
-pub const STACK_STEP: f32 = 0.004;
+/// resolution over the camera's depth slab (about 1 mm) and above the
+/// outline lift (5 mm, `decorations`), so an older body's outline stays
+/// behind a newer body's face; small against a band (a layer is 10 m
+/// deep, the deepest step is 0.32 m).
+pub const STACK_STEP: f32 = 0.01;
 
 /// How many of a band's newest bodies get their own step. Older bodies
 /// share the deepest step (an overlap among them falls back to the GPU's
