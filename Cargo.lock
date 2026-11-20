@@ -4096,6 +4096,7 @@ dependencies = [
  "glam 0.33.12",
  "gradiance-core",
  "lyon",
+ "proptest",
  "serde",
  "thiserror 2.0.18",
 ]
