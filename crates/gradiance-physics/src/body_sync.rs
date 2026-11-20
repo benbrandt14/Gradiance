@@ -108,14 +108,25 @@ fn submerge_outline_for(shape: &ShapeDef, components: &[Contours]) -> SolidOutli
     SolidOutline::from_components(components)
 }
 
+/// Wakes `entity`'s island so the engine notices an authored change made
+/// while the body was asleep — avian's own wake triggers cover pose,
+/// velocity, force and gravity edits, but not a collider or layer regen
+/// ([`sync_colliders`], [`sync_collision_layers`]). Only dynamic and
+/// kinematic bodies belong to an island; static ones never sleep.
+fn wake_if_movable(commands: &mut Commands, entity: Entity, kind: RigidBody) {
+    if kind.is_dynamic() || kind.is_kinematic() {
+        commands.queue(WakeBody(entity));
+    }
+}
+
 /// Regenerates colliders — and the other shape-derived physics data, the
 /// air-drag width profile and the buoyancy outline — for bodies whose shape
 /// changed. The shape is polygonized once for all three.
 pub fn sync_colliders(
     mut commands: Commands,
-    changed: Query<(Entity, &ShapeDef), (With<Body>, Changed<ShapeDef>)>,
+    changed: Query<(Entity, &ShapeDef, &RigidBody), (With<Body>, Changed<ShapeDef>)>,
 ) {
-    for (entity, shape) in &changed {
+    for (entity, shape, kind) in &changed {
         let components = gradiance_geometry::polygonize::polygonize_components(shape);
         match collider_for(shape, &components) {
             Some(collider) => {
@@ -124,6 +135,9 @@ pub fn sync_colliders(
                     AirProfile(air_profile_for(shape, &components)),
                     SubmergeOutline(submerge_outline_for(shape, &components)),
                 ));
+                // A resized or reshaped body must re-settle against its
+                // neighbours even if it (they) had gone to sleep.
+                wake_if_movable(&mut commands, entity, *kind);
             }
             None => {
                 warn!(?entity, "invalid ShapeDef reached body_sync; collider kept");
@@ -140,11 +154,11 @@ pub fn sync_colliders(
 pub fn sync_collision_layers(
     mut commands: Commands,
     changed: Query<
-        (Entity, &DepthBand, &ShapeDef),
+        (Entity, &DepthBand, &ShapeDef, &RigidBody),
         (With<Body>, Or<(Changed<DepthBand>, Changed<ShapeDef>)>),
     >,
 ) {
-    for (entity, band, shape) in &changed {
+    for (entity, band, shape, kind) in &changed {
         let bits = if shape.contains_half_plane() {
             u32::MAX
         } else {
@@ -153,6 +167,9 @@ pub fn sync_collision_layers(
         commands
             .entity(entity)
             .insert(CollisionLayers::from_bits(bits, bits));
+        // A depth edit can make a sleeping body start or stop colliding with
+        // its neighbours; the change must be solved, not frozen.
+        wake_if_movable(&mut commands, entity, *kind);
     }
 }
 

@@ -122,6 +122,12 @@ pub fn drive_gravity_scale(
                 commands
                     .entity(entity)
                     .try_remove::<ConstantLinearAcceleration>();
+                // avian wakes a body when the component is *inserted or
+                // changed* (its wake filters use `Changed`), not when it is
+                // removed — so unbinding a gravity drive must wake the body
+                // itself, or a body that slept while floated stays frozen
+                // in mid-air with its gravity restored.
+                commands.queue(WakeBody(entity));
             }
             (None, None) => {}
         }
