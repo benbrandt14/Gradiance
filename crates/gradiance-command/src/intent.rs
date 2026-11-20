@@ -36,6 +36,9 @@ pub mod name {
     pub const SPAWN_JOINT: &str = "spawn-joint";
     /// [`SpawnRodIntent`](super::SpawnRodIntent) → `SpawnRodCommand`.
     pub const SPAWN_ROD: &str = "spawn-rod";
+    /// [`SpawnChainIntent`](super::SpawnChainIntent) → `SpawnRodCommand::chain`
+    /// → operation `body.chain` (brief N-5).
+    pub const SPAWN_CHAIN: &str = "spawn-chain";
     /// [`PropertyEditIntent`](super::PropertyEditIntent) → `PropertyEditCommand`.
     pub const PROPERTY_EDIT: &str = "property-edit";
     /// [`GroupIntent`](super::GroupIntent) → `GroupCommand`.
@@ -175,6 +178,17 @@ pub struct SpawnRodIntent {
     /// The rod body (a `ShapeDef::Capsule`; id minted by the tool).
     pub body: BodyRecord,
     /// End joints referencing the rod body (zero, one, or two).
+    pub joints: Vec<gradiance_scene::JointRecord>,
+}
+
+/// Request to author a chain: its capsule links, the hinges between them
+/// and the hinges at its pinned ends, as one undo step (brief N-5).
+// Trace: dispatch.rs → SpawnRodCommand::chain (rod_cmd.rs) → sync_colliders, sync_body_meshes, sync_joints.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SpawnChainIntent {
+    /// The links, in order along the chain (ids minted by the operation).
+    pub bodies: Vec<BodyRecord>,
+    /// The hinges between consecutive links, then the end pins.
     pub joints: Vec<gradiance_scene::JointRecord>,
 }
 

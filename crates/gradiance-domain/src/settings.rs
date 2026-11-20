@@ -279,11 +279,58 @@ pub struct UnitSettings {
     pub prefs: gradiance_units::UnitPrefs,
 }
 
+/// Where a chain's two ends are pinned (the chain tool and `body.chain`;
+/// brief N-5).
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
+pub enum ChainPins {
+    /// Both ends hang free.
+    Free,
+    /// An end over a body is hinged to it; an end over empty space is free.
+    #[default]
+    Bodies,
+    /// An end over a body is hinged to it; an end over empty space is pinned
+    /// to the world where it lies.
+    World,
+}
+
+impl ChainPins {
+    /// Every option, in menu order.
+    pub const ALL: [Self; 3] = [Self::Free, Self::Bodies, Self::World];
+
+    /// The stable name the operation takes.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Free => "free",
+            Self::Bodies => "bodies",
+            Self::World => "world",
+        }
+    }
+
+    /// The menu label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Free => "free ends",
+            Self::Bodies => "to bodies",
+            Self::World => "to bodies or the world",
+        }
+    }
+
+    /// The option called `name`, if any.
+    #[must_use]
+    pub fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.name() == name)
+    }
+}
+
 /// Tool-creation defaults (editor configuration, the Config seam).
 ///
 /// Non-authored, non-persisted workstation preferences the tools consult at
 /// commit time — like [`DebugSettings`], these are not scene state.
-#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, bevy::reflect::Reflect)]
+#[derive(Resource, Debug, Clone, Copy, PartialEq, bevy::reflect::Reflect)]
 pub struct ToolDefaults {
     /// New sliders get travel limits `[0, drag length]` — the drag *draws*
     /// the allowed travel. Off = unlimited sliders (the old behavior).
@@ -292,6 +339,13 @@ pub struct ToolDefaults {
     /// rotation), the third sets the height to either side — instead of a
     /// two-corner drag.
     pub box_three_point: bool,
+    /// The chain tool's link length, hinge to hinge (brief N-5). The drawn
+    /// path is split into the whole number of links nearest to it.
+    pub chain_link: Length,
+    /// The chain tool's link width (the capsule's diameter).
+    pub chain_width: Length,
+    /// Where the chain tool pins the chain's ends.
+    pub chain_pins: ChainPins,
 }
 
 impl Default for ToolDefaults {
@@ -299,6 +353,9 @@ impl Default for ToolDefaults {
         Self {
             slider_limits: true,
             box_three_point: false,
+            chain_link: Length(0.25),
+            chain_width: Length(0.06),
+            chain_pins: ChainPins::Bodies,
         }
     }
 }

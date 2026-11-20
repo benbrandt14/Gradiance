@@ -16,8 +16,8 @@ use gradiance_core::states::ToolState;
 use gradiance_domain::Body;
 use gradiance_domain::joint::{JointDef, JointKind};
 use gradiance_domain::settings::{
-    CameraSettings, DebugSettings, GridSettings, GridSystem, KeyLightSettings, LightingSettings,
-    RenderSettings, ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
+    CameraSettings, ChainPins, DebugSettings, GridSettings, GridSystem, KeyLightSettings,
+    LightingSettings, RenderSettings, ScenerySettings, SimSettings, SnapConfig, ToolDefaults,
 };
 use gradiance_domain::shape::ShapeDef;
 use gradiance_units::{AngleUnit, Dimension, DisplayUnit, LengthUnit};
@@ -558,13 +558,30 @@ fn grid_snap_tab(
     snap.set_changed();
     ui.separator();
     widgets::section_header(ui, "Tools");
-    reflect_grid(
+    reflect_grid_except(
         ui,
         egui::Id::new("tool-defaults"),
         tool_defaults.bypass_change_detection(),
+        &[],
+        TOOL_DEFAULTS_HAND_DRAWN,
     );
+    // Enum escape hatch: the chain tool's end pins (brief N-5).
+    ui.horizontal(|ui| {
+        ui.label("chain pins");
+        let defaults = tool_defaults.bypass_change_detection();
+        egui::ComboBox::from_id_salt("chain-pins")
+            .selected_text(defaults.chain_pins.label())
+            .show_ui(ui, |ui| {
+                for pins in ChainPins::ALL {
+                    ui.selectable_value(&mut defaults.chain_pins, pins, pins.label());
+                }
+            });
+    });
     tool_defaults.set_changed();
 }
+
+/// `ToolDefaults` fields [`grid_snap_tab`] draws by hand.
+pub(crate) const TOOL_DEFAULTS_HAND_DRAWN: &[&str] = &["chain_pins"];
 
 /// The Lighting tab: per-light rows (sun gadget, color, strength,
 /// shadows), scene scalars, and the backdrop settings. Hand-written —

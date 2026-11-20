@@ -9,7 +9,8 @@
 //! No existing command spawned a body *and* joints referencing it from
 //! fresh records ([`SpawnCommand`](crate::spawn::SpawnCommand) is one
 //! record; [`DuplicateCommand`](crate::spawn::DuplicateCommand) clones
-//! existing bodies), hence this one.
+//! existing bodies), hence this one. A chain (brief N-5) is the same thing
+//! with many bodies: its links and hinges go through this command too.
 //!
 //! [`ShapeDef::Capsule`]: gradiance_domain::shape::ShapeDef::Capsule
 
@@ -17,20 +18,38 @@ use crate::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
 use gradiance_scene::{BodyRecord, JointRecord};
 
-/// Spawns a rod's body and end joints atomically.
+/// Spawns a rod's body (or a chain's links) and their joints atomically.
 #[derive(Debug)]
 pub struct SpawnRodCommand {
-    /// The rod body (a capsule; id minted by the tool, stable across redo).
-    pub body: BodyRecord,
-    /// End joints, each referencing [`body`](Self::body) and/or an existing
-    /// body.
+    /// The new bodies: one capsule for a rod, the links for a chain (ids
+    /// minted by the tool or the operation, stable across redo).
+    pub bodies: Vec<BodyRecord>,
+    /// Joints, each referencing new bodies and/or existing ones (or the
+    /// world).
     pub joints: Vec<JointRecord>,
+    /// The undo label: [`SPAWN_ROD`](crate::intent::name::SPAWN_ROD) or
+    /// [`SPAWN_CHAIN`](crate::intent::name::SPAWN_CHAIN).
+    name: &'static str,
 }
 
 impl SpawnRodCommand {
-    /// Builds the command from the tool's records.
+    /// Builds the command from the rod tool's records.
     pub fn new(body: BodyRecord, joints: Vec<JointRecord>) -> Self {
-        Self { body, joints }
+        Self {
+            bodies: vec![body],
+            joints,
+            name: crate::intent::name::SPAWN_ROD,
+        }
+    }
+
+    /// A chain (brief N-5): its links and the hinges between them and at
+    /// its pinned ends, one undo step, the same seam as the rod.
+    pub fn chain(bodies: Vec<BodyRecord>, joints: Vec<JointRecord>) -> Self {
+        Self {
+            bodies,
+            joints,
+            name: crate::intent::name::SPAWN_CHAIN,
+        }
     }
 }
 
@@ -38,15 +57,19 @@ impl GameCommand for SpawnRodCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         // Validate everything before touching the world, so a failure
         // leaves it unchanged.
-        self.body.shape.validate()?;
+        for body in &self.bodies {
+            body.shape.validate()?;
+        }
         for joint in &self.joints {
             for id in joint.def.referenced_bodies() {
-                if id != self.body.id {
+                if !self.bodies.iter().any(|b| b.id == id) {
                     resolve(world, id)?;
                 }
             }
         }
-        self.body.spawn(world);
+        for body in &self.bodies {
+            body.spawn(world);
+        }
         for joint in &self.joints {
             joint.spawn(world);
         }
@@ -54,6 +77,6 @@ impl GameCommand for SpawnRodCommand {
     }
 
     fn name(&self) -> &'static str {
-        crate::intent::name::SPAWN_ROD
+        self.name
     }
 }

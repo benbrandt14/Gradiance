@@ -122,6 +122,15 @@ across and ±3.5 m up and down); angles are radians.
 (slider a b x y ax ay)       ; prismatic joint at (x, y) along world axis (ax, ay)
 (spring a b hz ratio)         ; spring-damper strut between the two centres
 
+;; edit — a chain of hinged capsule links (brief N-5; the chain tool's verb)
+(chain (list x0 y0 x1 y1 …) link width a b pins)
+                             ; lay links about link m long, width m wide, along
+                             ; the path (the nearest whole count, ends exactly on
+                             ; the path's ends); pins "free", "bodies" (start to
+                             ; body a, end to body b; -1 names none) or "world"
+                             ; (an end with no body is pinned to the world)
+                             ; → the links' ids; one spawn-chain step
+
 ;; edit — behavior nodes on a body (brief N-3)
 (thruster i x y angle thrust) ; push body i at world point (x, y) with thrust N
                              ; along the world angle (radians) → its handle;

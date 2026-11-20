@@ -8,8 +8,8 @@
 //! that [`apply_tool_requests`] turns into the `NextState<ToolState>` a
 //! palette click sets. The declared chord is the tool's existing letter
 //! (`interaction::input`'s map is unchanged; the chord is metadata the
-//! status bar and the menus show). The thruster has no letter: the editor
-//! keymap is not settled, and a new tool adds no key.
+//! status bar and the menus show). The thruster and the chain have no
+//! letter: the editor keymap is not settled, and a new tool adds no key.
 //!
 //! Also here: each tool's **hint table** ([`hints`]), the mouse and key
 //! gestures the status bar shows for the active tool. A tool's gestures are
@@ -85,6 +85,8 @@ tool_ops! {
         "Use the spring tool: drag from one anchor to the other.";
     UseRod => ToolState::Rod, "tool.rod", "rod-tool", "Tools/Rod", "L",
         "Use the rod tool: drag from one end to the other.";
+    UseChain => ToolState::Chain, "tool.chain", "chain-tool", "Tools/Chain", "",
+        "Use the chain tool: drag a path; release lays hinged links along it.";
     UseWeld => ToolState::Weld, "tool.weld", "weld-tool", "Tools/Weld", "W",
         "Use the weld tool: click two overlapping bodies to merge them.";
     UseGround => ToolState::Ground, "tool.ground", "ground-tool", "Tools/Ground", "G",
@@ -163,6 +165,7 @@ pub fn hints(tool: ToolState) -> &'static [Hint] {
         ToolState::Cut => &[("Drag", "cut along the stroke")],
         ToolState::Tracer => &[("Click a body", "attach"), ("Click empty", "free tracer")],
         ToolState::Thruster => &[("Click a body", "push up"), ("Drag", "aim the push")],
+        ToolState::Chain => &[("Drag", "draw the path; release lays the links")],
         ToolState::Script(_) => &[("Click", "add a point"), ("Esc or right-click", "cancel")],
     }
 }
@@ -188,6 +191,7 @@ mod tests {
             ToolState::Cut,
             ToolState::Tracer,
             ToolState::Thruster,
+            ToolState::Chain,
         ];
         assert_eq!(TOOL_OPS.len(), built_in.len());
         for tool in built_in {

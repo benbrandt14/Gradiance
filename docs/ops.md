@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 136 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 138 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -17,6 +17,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `body.array` | `(array-copies targets count step rows cross)` | edit | `array` | — | Copy the listed bodies count times at step (x y, metres), plus rows more rows at cross: one undo step, as the Ctrl-drag array gesture. A count of 0 is a no-op; at most 512 per axis. | `{"targets": [0], "count": 2, "step": [1.2, 0], "rows": 0, "cross": [0, 0]}` |
+| `body.chain` | `(chain path link width a b pins)` | edit | `spawn-chain` | — | Lay a chain of capsule links (about link long, width wide) hinged end to end along path [x0 y0 x1 y1 …]; pins "free", "bodies" (start to body a, end to body b, when they name one) or "world" (else to the world). Returns the links' ids. | `{"path": [-1, 1, 0, 0, 1, 1], "link": 0.25, "width": 0.06, "a": -1, "b": -1, "pins": "world"}` |
 | `body.count` | `(body-count)` | query | — | — | Number of authored bodies in the committed scene. | `{}` |
 | `body.count_at` | `(count-at x y)` | query | — | — | Number of bodies whose shape contains the world point (x, y). | `{"x": 0, "y": 1}` |
 | `body.cut` | `(cut ax ay bx by width)` | edit | `cut` | — | Sever every body crossed by the stroke a→b of the given width (metres). | `{"ax": -2, "ay": 1, "bx": 2, "by": 1, "width": 0.05}` |
@@ -212,6 +213,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `tool.box` | `(box-tool)` | editor | — | Tools/Box, B | Use the box tool: drag out a rectangle. | `{}` |
+| `tool.chain` | `(chain-tool)` | editor | — | Tools/Chain | Use the chain tool: drag a path; release lays hinged links along it. | `{}` |
 | `tool.circle` | `(circle-tool)` | editor | — | Tools/Circle, C | Use the circle tool: press at the centre, drag out the radius. | `{}` |
 | `tool.cut` | `(cut-tool)` | editor | — | Tools/Cut, K | Use the cut tool: drag a stroke across the bodies to cut. | `{}` |
 | `tool.drag` | `(drag-tool)` | editor | — | Tools/Drag, D | Use the drag tool: pull bodies with a mouse spring while playing, move them while paused. | `{}` |
