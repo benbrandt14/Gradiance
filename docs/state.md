@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (N-5 handoff; before that N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (N-6 handoff; before that N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,7 +12,19 @@ Last updated: 2026-11-20 (N-5 handoff; before that N-4, N-3, N-2, N-1; before th
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **N-5** chain tool is done (in review; branch
+- **Now:** **N-6** sketch tool is done (in review; branch
+  `claude/project-thread-tw1mvl-n6`): drag freehand; release makes one
+  body: the stroke simplified (RDP) into at most 24 capsules joined as one
+  balanced SDF union (a straight stroke is one capsule), or a filled
+  polygon when it ends near its start and encloses an area; one
+  `spawn-body` step through the new `body.sketch` operation
+  (`(sketch path width)`; Adjust Last changes the width); stroke width in
+  Settings > Grid & Snap > Tools (10 cm); the drag keeps at most 512
+  points; Sketch palette entry in Create, no key. `polygonize` samples a
+  tree with a thin capsule finer, within the existing sample count
+  (`field_cell`), and evaluates unions faster (`sdf::UnionField`, exact);
+  six decisions in `archive.ron`. **Next: N-7** buoyancy.
+  **N-5** chain tool is done (in review; branch
   `claude/project-thread-tw1mvl-n5`): drag a path, release lays capsule
   links (link length, width and end pins in Settings > Grid & Snap >
   Tools; pins free / to bodies / to bodies or the world) hinged end to end,
@@ -20,8 +32,7 @@ Last updated: 2026-11-20 (N-5 handoff; before that N-4, N-3, N-2, N-1; before th
   (`(chain path link width a b pins)`; Adjust Last works on a drawn chain);
   `SpawnRodCommand` generalised to many bodies; Chain palette entry in
   Connect, no key; a chain pinned at both ends hangs within 2.5 % of the
-  catenary sag (test); six decisions in `archive.ron`. **Next: N-6**
-  sketch tool.
+  catenary sag (test); six decisions in `archive.ron`.
   **N-4** air drag and wind is done (in review; branch
   `claude/project-thread-tw1mvl-n4`): `SimSettings` gains `air_density`,
   `drag_coefficient`, `linear_drag` and `wind` (scene content; drag off by
@@ -138,7 +149,7 @@ Last updated: 2026-11-20 (N-5 handoff; before that N-4, N-3, N-2, N-1; before th
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
   9c. **N-1** (done, in review), **N-2** (done, in review), **N-3** (done,
-      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6..N-9** nonlinear dynamics & multibody play (owner-approved
+      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7..N-9** nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +

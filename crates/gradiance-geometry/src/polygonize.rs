@@ -70,11 +70,42 @@ pub fn polygonize_components(shape: &ShapeDef) -> Vec<Contours> {
     match shape {
         ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => {
             let (min, max) = sdf::aabb(shape);
-            let cell = (max - min).max_element() / FIELD_CELLS;
-            contour_components(|p| sdf::eval(shape, p), min, max, cell)
+            let cell = field_cell(max - min, sdf::thinnest_solid(shape));
+            match sdf::UnionField::of(shape) {
+                // The same field, evaluated faster (exact; see its docs).
+                Some(field) => contour_components(|p| field.eval(p), min, max, cell),
+                None => contour_components(|p| sdf::eval(shape, p), min, max, cell),
+            }
         }
         leaf => vec![polygonize(leaf)],
     }
+}
+
+/// The most field samples a contoured tree with a thin feature takes: as
+/// many as a square tree takes at the coarse resolution
+/// ([`FIELD_CELLS`] across each side), so a fine contour costs no more
+/// than the existing worst case (brief N-6).
+pub const SAMPLE_BUDGET: f32 = FIELD_CELLS * FIELD_CELLS;
+
+/// Cells across the thinnest solid feature when the budget allows.
+pub const CELLS_ACROSS_THIN: f32 = 3.0;
+
+/// The contour cell for a tree whose bounding box is `extent` and whose
+/// thinnest solid feature ([`sdf::thinnest_solid`]) is `thinnest`.
+///
+/// The coarse cell is `extent / FIELD_CELLS` along the larger side. A
+/// thin feature (a capsule: a rod, a chain link, a sketch stroke) asks for
+/// [`CELLS_ACROSS_THIN`] cells across it, but never more samples than
+/// [`SAMPLE_BUDGET`] over the box: an elongated tree gets fine cells at the
+/// sample count a square one already takes. Never coarser than before.
+#[must_use]
+pub fn field_cell(extent: Vec2, thinnest: Option<f32>) -> f32 {
+    let coarse = extent.max_element() / FIELD_CELLS;
+    let Some(thin) = thinnest.filter(|t| t.is_finite() && *t > 0.0) else {
+        return coarse;
+    };
+    let floor = (extent.x.max(0.0) * extent.y.max(0.0) / SAMPLE_BUDGET).sqrt();
+    (thin / CELLS_ACROSS_THIN).max(floor).min(coarse)
 }
 
 /// The stadium outline of a capsule: a semicircle fan around each segment
@@ -255,5 +286,50 @@ mod tests {
         };
         assert_eq!(polygonize_components(&pair(0.45)).len(), 1);
         assert_eq!(polygonize_components(&pair(0.55)).len(), 2);
+    }
+
+    #[test]
+    fn a_thin_feature_gets_finer_cells_within_the_sample_budget() {
+        let extent = Vec2::new(4.0, 1.0);
+        let coarse = extent.max_element() / FIELD_CELLS;
+        assert!((field_cell(extent, None) - coarse).abs() < 1e-7);
+        // A 6 cm stroke asks for 2 cm cells: finer than coarse, and the
+        // samples over the box stay within the budget.
+        let cell = field_cell(extent, Some(0.06));
+        assert!(cell < coarse);
+        assert!((extent.x / cell) * (extent.y / cell) <= SAMPLE_BUDGET * 1.001);
+        // A thick feature never coarsens the cell.
+        assert!((field_cell(extent, Some(10.0)) - coarse).abs() < 1e-7);
+        // A square box is already at the budget: no finer.
+        let square = Vec2::splat(4.0);
+        assert!((field_cell(square, Some(0.01)) - 4.0 / FIELD_CELLS).abs() < 1e-6);
+    }
+
+    #[test]
+    fn two_thin_rods_in_a_union_contour_as_one_piece() {
+        // Two 5 m rods 4 cm thick meeting at a corner: at the coarse cell
+        // (about 5 cm) the rods would break apart.
+        let rod = |pos: Vec2, rot: f32| ShapeDef::Placed {
+            pos,
+            rot,
+            shape: Box::new(ShapeDef::Capsule {
+                half_length: 2.5,
+                radius: 0.02,
+            }),
+        };
+        let l = ShapeDef::Csg {
+            op: crate::shape::CsgOp::Union,
+            lhs: Box::new(rod(Vec2::new(2.5, 0.0), 0.0)),
+            rhs: Box::new(rod(Vec2::new(5.0, 0.25), 0.1)),
+        };
+        assert_eq!(sdf::thinnest_solid(&l), Some(0.04));
+        let parts = polygonize_components(&l);
+        assert_eq!(parts.len(), 1);
+        let ideal = 2.0 * (5.0 * 0.04) + std::f32::consts::PI * 0.0004;
+        assert!(
+            (parts[0].area() - ideal).abs() / ideal < 0.25,
+            "{}",
+            parts[0].area()
+        );
     }
 }

@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 138 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 140 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -40,6 +40,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.set_friction` | `(set-friction i v)` | edit | `property-edit` | — | Set the i-th body's Coulomb friction (static and dynamic) — undoable. | `{"i": 0, "v": 0.9}` |
 | `body.set_restitution` | `(set-restitution i v)` | edit | `property-edit` | — | Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable. | `{"i": 0, "v": 0.8}` |
 | `body.set_static` | `(set-static i on)` | edit | `property-edit` | — | Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable. | `{"i": 0, "on": 1}` |
+| `body.sketch` | `(sketch path width)` | edit | `spawn-body` | — | Author one body from a freehand stroke width wide along path [x0 y0 x1 y1 …]: simplified into capsule segments joined as one union, or filled as a polygon when the stroke closes on itself. Returns its handle. | `{"path": [-1, 1, -0.5, 1.4, 0, 1, 0.5, 1.4, 1, 1], "width": 0.1}` |
 | `body.spawn_box` | `(spawn-box x y w h)` | edit | `spawn-body` | — | Author a box body of size w×h centred at (x, y), in metres; returns its handle. | `{"x": 0.5, "y": 2, "w": 1.6, "h": 1.2}` |
 | `body.spawn_box_rot` | `(spawn-box-rot x y w h angle)` | edit | `spawn-body` | — | Author a w×h box centred at (x, y), in metres, rotated by angle radians; returns its handle. | `{"x": 2, "y": 3, "w": 1, "h": 0.5, "angle": 0.3}` |
 | `body.spawn_circle` | `(spawn-circle x y r)` | edit | `spawn-body` | — | Author a circle body of radius r centred at (x, y), in metres; returns its handle. | `{"x": 0, "y": 3, "r": 0.5}` |
@@ -224,6 +225,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.register` | `(register-tool name points src)` | editor | — | — | Add a palette tool that collects `points` clicks, then runs src once (read them with tool-x/tool-y). | `{"name": "peg", "points": 1, "src": "(spawn-circle (tool-x 0) (tool-y 0) 0.2)"}` |
 | `tool.rod` | `(rod-tool)` | editor | — | Tools/Rod, L | Use the rod tool: drag from one end to the other. | `{}` |
 | `tool.select` | `(select-tool)` | editor | — | Tools/Select, S | Use the select tool: click to select, drag to move, right-drag to rotate. | `{}` |
+| `tool.sketch` | `(sketch-tool)` | editor | — | Tools/Sketch | Use the sketch tool: draw freehand; release makes one body of the stroke. | `{}` |
 | `tool.spring` | `(spring-tool)` | editor | — | Tools/Spring, T | Use the spring tool: drag from one anchor to the other. | `{}` |
 | `tool.thruster` | `(thruster-tool)` | editor | — | Tools/Thruster | Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push. | `{}` |
 | `tool.tracer` | `(tracer-tool)` | editor | — | Tools/Tracer, N | Use the tracer tool: click a body (or empty space) to place a tracer. | `{}` |

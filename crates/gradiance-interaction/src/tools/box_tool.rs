@@ -186,6 +186,7 @@ mod tests {
     const CORNERS: &ToolDefaults = &ToolDefaults {
         slider_limits: true,
         box_three_point: false,
+        sketch_width: gradiance_units::Length(0.1),
         chain_link: gradiance_units::Length(0.25),
         chain_width: gradiance_units::Length(0.06),
         chain_pins: gradiance_domain::settings::ChainPins::Bodies,
@@ -195,6 +196,7 @@ mod tests {
     const THREE_POINT: &ToolDefaults = &ToolDefaults {
         slider_limits: true,
         box_three_point: true,
+        sketch_width: gradiance_units::Length(0.1),
         chain_link: gradiance_units::Length(0.25),
         chain_width: gradiance_units::Length(0.06),
         chain_pins: gradiance_domain::settings::ChainPins::Bodies,

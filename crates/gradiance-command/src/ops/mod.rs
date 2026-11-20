@@ -6,7 +6,8 @@
 //! the [`OpRegistry`]; none names these types.
 //!
 //! The files split by family: [`spawn`] authors new geometry, [`body`] edits
-//! one existing body, [`chain`] lays a hinged chain of links, [`sets`] edits several at once (booleans, groups),
+//! one existing body, [`chain`] lays a hinged chain of links, [`sketch`]
+//! makes one body from a freehand stroke, [`sets`] edits several at once (booleans, groups),
 //! [`joint`] makes and removes relationships, [`node`] places behavior
 //! nodes (a thruster), [`scene`] holds the history,
 //! the new scene, a count and the settings write, [`look`] the scene look
@@ -34,6 +35,7 @@ pub mod quantity;
 pub mod query;
 pub mod scene;
 pub mod sets;
+pub mod sketch;
 pub mod spawn;
 pub mod units;
 
@@ -188,6 +190,7 @@ impl Plugin for SceneOpsPlugin {
             spawn::register(&mut registry);
             body::register(&mut registry);
             chain::register(&mut registry);
+            sketch::register(&mut registry);
             group::register(&mut registry);
             sets::register(&mut registry);
             joint::register(&mut registry);

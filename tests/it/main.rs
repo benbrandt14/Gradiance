@@ -50,6 +50,7 @@ mod script_tools;
 mod script_units;
 mod scripting;
 mod signals;
+mod sketch;
 mod thrusters;
 mod tools;
 mod ui_conflicts;

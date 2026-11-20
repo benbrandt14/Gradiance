@@ -8,8 +8,8 @@
 //! that [`apply_tool_requests`] turns into the `NextState<ToolState>` a
 //! palette click sets. The declared chord is the tool's existing letter
 //! (`interaction::input`'s map is unchanged; the chord is metadata the
-//! status bar and the menus show). The thruster and the chain have no
-//! letter: the editor keymap is not settled, and a new tool adds no key.
+//! status bar and the menus show). The thruster, the chain and the sketch
+//! have no letter: the editor keymap is not settled, and a new tool adds no key.
 //!
 //! Also here: each tool's **hint table** ([`hints`]), the mouse and key
 //! gestures the status bar shows for the active tool. A tool's gestures are
@@ -77,6 +77,8 @@ tool_ops! {
         "Use the circle tool: press at the centre, drag out the radius.";
     UsePolygon => ToolState::Polygon, "tool.polygon", "polygon-tool", "Tools/Polygon", "P",
         "Use the polygon tool: click the vertices, close at the start.";
+    UseSketch => ToolState::Sketch, "tool.sketch", "sketch-tool", "Tools/Sketch", "",
+        "Use the sketch tool: draw freehand; release makes one body of the stroke.";
     UseHinge => ToolState::Hinge, "tool.hinge", "hinge-tool", "Tools/Hinge", "H",
         "Use the hinge tool: click where two bodies overlap to hinge them, or on one body to pin it.";
     UsePrismatic => ToolState::Slider, "tool.prismatic", "prismatic-tool", "Tools/Prismatic", "R",
@@ -166,6 +168,7 @@ pub fn hints(tool: ToolState) -> &'static [Hint] {
         ToolState::Tracer => &[("Click a body", "attach"), ("Click empty", "free tracer")],
         ToolState::Thruster => &[("Click a body", "push up"), ("Drag", "aim the push")],
         ToolState::Chain => &[("Drag", "draw the path; release lays the links")],
+        ToolState::Sketch => &[("Drag", "draw; end at the start to fill")],
         ToolState::Script(_) => &[("Click", "add a point"), ("Esc or right-click", "cancel")],
     }
 }
@@ -192,6 +195,7 @@ mod tests {
             ToolState::Tracer,
             ToolState::Thruster,
             ToolState::Chain,
+            ToolState::Sketch,
         ];
         assert_eq!(TOOL_OPS.len(), built_in.len());
         for tool in built_in {

@@ -131,6 +131,14 @@ across and ±3.5 m up and down); angles are radians.
                              ; (an end with no body is pinned to the world)
                              ; → the links' ids; one spawn-chain step
 
+;; edit — a freehand stroke as one body (brief N-6; the sketch tool's verb)
+(sketch (list x0 y0 x1 y1 …) width)
+                             ; simplify the stroke (RDP) into at most 24 capsule
+                             ; segments width m wide, joined as one SDF union
+                             ; (a straight stroke is one capsule); a stroke that
+                             ; ends near its start and encloses an area fills as
+                             ; a polygon instead → its handle; one spawn-body step
+
 ;; edit — behavior nodes on a body (brief N-3)
 (thruster i x y angle thrust) ; push body i at world point (x, y) with thrust N
                              ; along the world angle (radians) → its handle;
