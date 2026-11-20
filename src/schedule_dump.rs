@@ -81,8 +81,7 @@ pub fn schedule_order(world: &World) -> Vec<InternedScheduleLabel> {
     let mut order: Vec<InternedScheduleLabel> = Vec::new();
     let fixed: Vec<InternedScheduleLabel> = world
         .get_resource::<FixedMainScheduleOrder>()
-        .map(|o| o.labels.clone())
-        .unwrap_or_default();
+        .map_or_else(Vec::new, |o| o.labels.clone());
     if let Some(main) = world.get_resource::<MainScheduleOrder>() {
         for label in &main.labels {
             order.push(*label);
@@ -93,14 +92,13 @@ pub fn schedule_order(world: &World) -> Vec<InternedScheduleLabel> {
     }
     let mut rest: Vec<(String, InternedScheduleLabel)> = world
         .get_resource::<Schedules>()
-        .map(|s| {
+        .map_or_else(Vec::new, |s| {
             s.iter()
                 .map(|(_, schedule)| schedule.label())
                 .filter(|label| !order.contains(label))
                 .map(|label| (format!("{label:?}"), label))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     rest.sort_by(|a, b| a.0.cmp(&b.0));
     order.extend(rest.into_iter().map(|(_, label)| label));
     // A label with no system has no schedule (`FixedPreUpdate` here).
