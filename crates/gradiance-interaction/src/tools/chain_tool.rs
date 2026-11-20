@@ -2,7 +2,7 @@
 //!
 //! The drag records the stroke. On release the tool commits one
 //! [`ToolCommit::Chain`]: the stroke, the link length, width and pin rule
-//! from [`ToolDefaults`](gradiance_domain::settings::ToolDefaults), and the
+//! from [`ToolDefaults`], and the
 //! bodies under the two ends (found with the rod tool's end hit-test, so a
 //! snapped end on an edge still attaches). The commit invokes the
 //! `body.chain` operation, which lays the links and hinges and spawns them
