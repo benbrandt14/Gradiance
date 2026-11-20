@@ -15,7 +15,8 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
-use gradiance_domain::settings::GridSettings;
+use gradiance_domain::settings::{DebugSettings, GridSettings};
+use gradiance_interaction::debug_ops::DEBUG_TOGGLES;
 use gradiance_interaction::input::{EditorAction, key_invocations};
 use gradiance_interaction::selection::Selection;
 use gradiance_op::{InvokeOp, json};
@@ -62,7 +63,8 @@ pub struct Panels<'w> {
     pub search: ResMut<'w, crate::search::SearchPanel>,
     /// The status bar along the bottom edge (brief U-9).
     pub status: ResMut<'w, crate::status_bar::StatusBar>,
-    /// Debug overlays (field vectors).
+    /// Debug overlays (field vectors; View > Debug reads the physics
+    /// toggles here and invokes their operations).
     pub debug: ResMut<'w, gradiance_domain::settings::DebugSettings>,
 }
 
@@ -117,7 +119,7 @@ pub fn menu_bar(
             egui::MenuBar::new().ui(ui, |ui| {
                 file_menu(ui, &mut writers);
                 edit_menu(ui, &mut writers, has_selection, &history);
-                view_menu(ui, &mut panels, &mut grid);
+                view_menu(ui, &mut panels, &mut grid, &mut writers.invoke);
                 help_menu(ui, &mut about);
                 // The workspace tabs sit in the top bar after the menus, as
                 // Blender's do (brief U-10).
@@ -315,7 +317,12 @@ const MIRROR_ROWS: [(&str, &str); 2] = [
 ///
 /// The groups are presentation only: right-dock sections, then the bottom dock
 /// and floating windows, then scene overlays.
-fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
+fn view_menu(
+    ui: &mut egui::Ui,
+    panels: &mut Panels,
+    grid: &mut GridSettings,
+    invoke: &mut MessageWriter<InvokeOp>,
+) {
     // Where a horizontal rule goes, by row index. Presentation, not structure.
     const GROUPS: [usize; 2] = [5, 10];
     ui.menu_button("View", |ui| {
@@ -329,7 +336,21 @@ fn view_menu(ui: &mut egui::Ui, panels: &mut Panels, grid: &mut GridSettings) {
         ui.separator();
         ui.checkbox(&mut grid.visible, "Grid");
         ui.checkbox(&mut panels.debug.show_fields, "Field overlay");
+        ui.menu_button("Debug", |ui| debug_menu(ui, &panels.debug, invoke));
     });
+}
+
+/// View > Debug: one checkbox per physics debug toggle (brief 6-3), a loop
+/// over [`DEBUG_TOGGLES`]. A click invokes the toggle's operation, so the
+/// menu and the `debug.*` verbs are one path. No key: the keymap is not
+/// settled.
+fn debug_menu(ui: &mut egui::Ui, debug: &DebugSettings, invoke: &mut MessageWriter<InvokeOp>) {
+    for row in DEBUG_TOGGLES {
+        let mut on = (row.get)(debug);
+        if ui.checkbox(&mut on, row.label).changed() {
+            invoke.write(InvokeOp::with(row.id, json!({ "on": on })));
+        }
+    }
 }
 
 /// The menu label for a registry name. Names are an API and stay stable; labels

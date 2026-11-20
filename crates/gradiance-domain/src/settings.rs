@@ -556,19 +556,29 @@ impl Default for RenderSettings {
 }
 
 /// Editor debugging overlays and internals readouts (the "Debug"
-/// settings tab). Never persisted — this is workstation state, not scene
-/// state.
+/// settings tab, and View > Debug). Never persisted and never undone — this
+/// is workstation state, not scene state.
+///
+/// Four of the switches show the **engine's** view through avian's
+/// `PhysicsDebugPlugin` (brief 6-3): `show_colliders`, `show_aabbs`,
+/// `show_contacts` and `show_joints` are applied to its `PhysicsGizmos`
+/// config in `GizmoConfigStore` by `gradiance_physics::debug_gizmos`. The
+/// rest are Gradiance's own overlays (`gradiance_render::debug_viz`).
 #[derive(Resource, Debug, Clone, PartialEq, bevy::reflect::Reflect)]
 pub struct DebugSettings {
-    /// Outline every collider's polygon (the *physics* view of shapes).
+    /// Outline every collider the engine built (avian's convex pieces: the
+    /// *physics* view of shapes).
     pub show_colliders: bool,
-    /// Draw each body's world-space AABB.
+    /// Draw each collider's broad-phase AABB, as the engine holds it.
     pub show_aabbs: bool,
     /// Mark body origins (crosshair) — distinct from shape centroids
     /// after CSG reshapes.
     pub show_origins: bool,
-    /// Mark joint anchors and their body links.
+    /// Mark joint anchors and their body links, from the authored joints.
     pub show_joint_anchors: bool,
+    /// Draw the engine's joints: each anchor, and a line where the two
+    /// anchors have drifted apart (joint error).
+    pub show_joints: bool,
     /// Draw velocity vectors (and mark sleeping bodies).
     pub show_velocities: bool,
     /// Color every body's outline by its front-most collision-layer bit
@@ -580,7 +590,7 @@ pub struct DebugSettings {
     /// Vector-plot overlay of the superposed force field (arrows sampled
     /// on a screen-space grid through `physics::fields::Fields`).
     pub show_fields: bool,
-    /// Draw contact points and their impulse-scaled normals.
+    /// Draw the engine's penetrating contact points and their normals.
     pub show_contacts: bool,
 }
 
@@ -591,6 +601,7 @@ impl Default for DebugSettings {
             show_aabbs: false,
             show_origins: false,
             show_joint_anchors: true,
+            show_joints: false,
             show_velocities: false,
             show_layers: false,
             show_substeps: false,

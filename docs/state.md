@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (6-2 handoff; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -15,19 +15,24 @@ Last updated: 2026-11-20 (6-2 handoff; before that 6-1, N-9, Phase N complete; b
 - **Now:** **Phase 6** (orchestrator, 2026-11-20): briefs
   **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
   geometry property tests, **6-3** physics debug toggles + schedule dump,
-  in that order. **6-2** is done (in review; branch
-  `claude/project-thread-tw1mvl-6-2`): `gradiance-geometry`'s
-  `proptests` module (proptest, workspace version, dev-dependency only)
-  checks `polygonize` of random leaves and CSG trees (well-formed rings,
-  winding, no touching edges, analytic area, field sign), the CSG
-  identities, and the Phase N shape math (sketch, chain split, width
-  profile, submerged clip, mirror twice); fixed seed, 3584 cases, 2 s,
-  each tolerance stated with its reason. Two fixes, each with a
-  regression test: `UnionField` no longer culls a leaf whose box holds
-  the point (the value was wrong, never the sign); contour simplification
-  no longer lets a run of dropped vertices drift past its tolerance (a
-  rod lost 0.63 % of its area). Six decisions in `archive.ron`.
-  **Next:** **6-3**. **6-1** is merged (#292; `tests/it/undo_matrix.rs` runs
+  in that order. **Phase 6 is complete.** **6-3** is done (in review;
+  branch `claude/project-thread-tw1mvl-6-3`): avian's `PhysicsDebugPlugin`
+  behind four `DebugSettings` switches (colliders, contacts, joints, AABBs;
+  workstation state, never saved or undone) copied onto `PhysicsGizmos` in
+  `GizmoConfigStore` by `physics::debug_gizmos` (plugin only with a
+  renderer); velocities stay Gradiance's overlay; the hand-rolled collider,
+  AABB and contact overlays are gone; `debug.*` operations
+  (`(debug-colliders #t)`) and View > Debug over one table
+  (`interaction::debug_ops::DEBUG_TOGGLES`), no keys; `gradiance
+  schedule-dump [schedule]` prints each schedule's system order as text
+  (Bevy's own introspection, no new crate); four decisions in
+  `archive.ron`. Overlay checked on lavapipe (screenshot on the PR thread, not committed).
+  **Next:** the orchestrator's phase gate: G-0 one graph model, 3D-0 the
+  3D plan, D-2 egui 0.37 once bevy_egui ships it.
+  **6-2** is merged (#294): geometry property tests (proptest,
+  dev-dependency), two fixes (`UnionField` cull, contour drift), six
+  decisions.
+  **6-1** is merged (#292; `tests/it/undo_matrix.rs` runs
   every history operation (55) from its example: dump, call, undo, redo,
   each dump exact (workstation config left out), 17 s;
   `tests/it/loader_fuzz.rs` loads every committed scene file and 256

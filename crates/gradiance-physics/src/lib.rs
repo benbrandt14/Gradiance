@@ -12,6 +12,7 @@
 pub mod air;
 pub mod body_sync;
 pub mod buoyancy;
+pub mod debug_gizmos;
 pub mod drive;
 pub mod fields;
 pub mod grab;
@@ -53,6 +54,9 @@ impl Plugin for GradiancePhysicsPlugin {
         if app.is_plugin_added::<bevy::picking::PickingPlugin>() {
             app.add_plugins(PhysicsPickingPlugin);
         }
+        // The engine's debug overlay (brief 6-3), off until a switch of
+        // `DebugSettings` turns it on.
+        debug_gizmos::install(app);
         app.insert_resource(Gravity(GRAVITY));
         app.init_resource::<gradiance_domain::settings::SimSettings>();
         // Reflected config seam for scripting (see script-lisp-decision.md).

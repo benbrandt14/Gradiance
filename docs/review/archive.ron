@@ -4051,5 +4051,125 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "gradiance_geometry::proptests::mirroring_twice_is_the_identity",
         ),
+        (
+            question: (
+                id: "debug-toggles-which",
+                title: "Which physics debug toggles ship, and how?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"The brief lists colliders, contacts, joints, AABBs and velocities as toggles on avian's PhysicsGizmos config. Gradiance already had hand-rolled overlays for most of them (render::debug_viz), drawing the authored model. avian 0.8 has no velocity gizmo."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Engine view from avian, velocities ours",
+                        caption: r#"Colliders, contacts, joints and AABBs are avian's PhysicsDebugPlugin (what the engine built and solves); the hand-rolled collider, AABB and contact overlays are removed; velocities stay Gradiance's overlay (read from the engine). Joints are a new switch beside the authored joint anchors. All five off by default."#,
+                    ),
+                    (
+                        label: "Keep both views",
+                        caption: r#"Every overlay twice, one authored and one engine; two switches per item in the menu."#,
+                    ),
+                    (
+                        label: "Only avian",
+                        caption: r#"Drop velocities: avian has no gizmo for them."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "debug-toggles-which",
+                title: "Which physics debug toggles ship, and how?",
+                choice: Picked("Engine view from avian, velocities ours"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_physics::debug_gizmos; gradiance_interaction::debug_ops::DEBUG_TOGGLES",
+        ),
+        (
+            question: (
+                id: "debug-toggles-state",
+                title: "Where do the physics debug switches live?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"Grid visibility is saved with the scene as workstation config; the existing debug overlays (DebugSettings, the Settings Debug tab and View > Field overlay) are never saved."#,
+                decision: true,
+                options: [
+                    (
+                        label: "DebugSettings, never saved",
+                        caption: r#"The switches are fields of DebugSettings with the other debug overlays: workstation state, never saved, never undone (not in the environment record, so not in scene_content!). A sync copies them onto GizmoConfigStore."#,
+                    ),
+                    (
+                        label: "Saved with the scene as workstation config",
+                        caption: r#"A new environment-record field: opening a shared scene would turn on someone's debug overlay, and the golden file changes."#,
+                    ),
+                    (
+                        label: "GizmoConfigStore only",
+                        caption: r#"No Gradiance resource: an operation cannot write it through the config seam, and the Settings window could not show it."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "debug-toggles-state",
+                title: "Where do the physics debug switches live?",
+                choice: Picked("DebugSettings, never saved"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_domain::settings::DebugSettings",
+        ),
+        (
+            question: (
+                id: "debug-toggle-op-shape",
+                title: "Does a debug operation flip or set its switch?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"A menu checkbox knows the new value; a script run reads one snapshot (scripting rule 3)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Set: (debug-colliders on)",
+                        caption: r#"Each operation takes on (true/false); the same call twice gives the same result, and the menu passes the checkbox's new value."#,
+                    ),
+                    (
+                        label: "Flip: (debug-colliders)",
+                        caption: r#"No argument; two calls in one run would not compose."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "debug-toggle-op-shape",
+                title: "Does a debug operation flip or set its switch?",
+                choice: Picked("Set: (debug-colliders on)"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_interaction::debug_ops",
+        ),
+        (
+            question: (
+                id: "schedule-dump-format",
+                title: "Is the schedule dump text or DOT, and how is it built?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"Bevy 0.20 exposes each schedule's executable order (Schedule::initialize, Schedule::systems). bevy_mod_debugdump would add crates to the lockfile and draws graphs."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Text from Bevy's own introspection",
+                        caption: r#"gradiance schedule-dump [schedule]: one section per schedule in frame order, one system per line in executor (topological) order, sync points included. No new crate; diffs and greps."#,
+                    ),
+                    (
+                        label: "DOT via bevy_mod_debugdump",
+                        caption: r#"Graphs with sets and edges; a lockfile change and a viewer needed."#,
+                    ),
+                    (
+                        label: "Both",
+                        caption: r#"Text now plus a hand-written DOT from the dependency graph: more code for a view nobody asked for yet."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "schedule-dump-format",
+                title: "Is the schedule dump text or DOT, and how is it built?",
+                choice: Picked("Text from Bevy's own introspection"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance::schedule_dump",
+        ),
     ],
 )
