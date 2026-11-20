@@ -199,6 +199,7 @@ mod tests {
             ToolState::Thruster,
             ToolState::Chain,
             ToolState::Sketch,
+            ToolState::Laser,
         ];
         assert_eq!(TOOL_OPS.len(), built_in.len());
         for tool in built_in {
