@@ -206,9 +206,14 @@ impl<'s> UnionField<'s> {
         let mut best = f32::INFINITY;
         for (pos, rot, leaf, min, max) in &self.leaves {
             let outside = (*min - p).max(p - *max).max(Vec2::ZERO).length();
-            // A margin far above rounding: a leaf whose field could tie
-            // the best within float error is still evaluated.
-            if outside >= best + CULL_MARGIN {
+            // Only a point outside the leaf's box bounds the leaf's field
+            // from below (by the distance to the box); inside the box the
+            // field may be anything down to minus its half extent, so the
+            // leaf is always evaluated there (brief 6-2: a negative best
+            // once culled a leaf whose box held the point). A margin far
+            // above rounding: a leaf whose field could tie the best within
+            // float error is still evaluated.
+            if outside > 0.0 && outside >= best + CULL_MARGIN {
                 continue;
             }
             let q = if pos.is_nan() {

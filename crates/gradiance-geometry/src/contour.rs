@@ -212,7 +212,10 @@ pub fn contour_components(
 /// (one that is kept anyway). Starting instead at an arbitrary vertex
 /// with nothing kept yet compared each vertex only to its immediate
 /// neighbours, which dropped a whole curved run at the start of a ring —
-/// an intersect's lower arc came out as one straight chord.
+/// an intersect's lower arc came out as one straight chord. A vertex is
+/// dropped only while every vertex dropped since the last kept one stays
+/// within `tol` of the new chord, so no edge drifts further than `tol`
+/// from the vertices it replaces (brief 6-2).
 fn simplify_ring(ring: &mut Vec<Vec2>, tol: f32) {
     let n = ring.len();
     if n < 4 {
@@ -236,11 +239,17 @@ fn simplify_ring(ring: &mut Vec<Vec2>, tol: f32) {
     // Kept vertices with their original indices.
     let mut out: Vec<(usize, Vec2)> = Vec::with_capacity(n);
     out.push((sharpest, at(0)));
+    // `run..=i` are the vertices dropped since the last kept one plus the
+    // candidate: all of them must lie within `tol` of the chord that would
+    // replace them, not only the candidate (brief 6-2: testing the
+    // candidate alone let a run drift off the chord finally drawn).
+    let mut run = 1;
     for i in 1..n {
         let prev = out[out.len() - 1].1;
-        let (cur, nxt) = (at(i), at(i + 1));
-        if deviation(prev, cur, nxt) > tol {
-            out.push(((sharpest + i) % n, cur));
+        let nxt = at(i + 1);
+        if (run..=i).any(|j| deviation(prev, at(j), nxt) > tol) {
+            out.push(((sharpest + i) % n, at(i)));
+            run = i + 1;
         }
     }
     if out.len() >= 3 {

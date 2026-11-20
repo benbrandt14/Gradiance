@@ -16,6 +16,8 @@ pub mod face_field;
 pub mod hull;
 pub mod polygonize;
 pub mod profile;
+#[cfg(test)]
+mod proptests;
 pub mod sat;
 pub mod scale;
 pub mod sdf;
