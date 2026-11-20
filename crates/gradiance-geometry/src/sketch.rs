@@ -514,7 +514,7 @@ mod tests {
         let ShapeDef::Polygon { outline, holes } = &sketch.shape else {
             panic!("a polygon");
         };
-        assert!(holes.is_empty());
+        assert_eq!(holes.as_slice(), &[] as &[Vec<Vec2>]);
         assert!(outline.len() >= 8 && outline.len() <= MAX_SKETCH_OUTLINE);
         assert!(ring_signed_area(outline) > 0.0, "counter-clockwise");
         assert!(ring_centroid(outline).length() < 1e-3, "centroid-relative");

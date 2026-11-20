@@ -4,7 +4,7 @@
 //! follows the hand, not the grid). Memory is bounded: past
 //! [`MAX_STROKE_POINTS`] the draft keeps every other point and records half
 //! as often. On release the tool commits one [`ToolCommit::Sketch`]: the
-//! stroke (thinned to within a pixel) and the width from [`ToolDefaults`].
+//! stroke (thinned to within a pixel) and the width from [`ToolDefaults`](gradiance_domain::settings::ToolDefaults).
 //! The commit invokes the `body.sketch` operation, which builds the shape
 //! (`geometry::sketch`) and spawns it as **one** undo step; during the drag
 //! only the gizmo preview exists.

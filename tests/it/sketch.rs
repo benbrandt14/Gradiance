@@ -164,7 +164,7 @@ fn a_closed_stroke_fills_as_a_polygon() {
     let ShapeDef::Polygon { outline, holes } = &shape else {
         panic!("a polygon: {shape:?}");
     };
-    assert!(holes.is_empty());
+    assert_eq!(holes.as_slice(), &[] as &[Vec<Vec2>]);
     assert!(outline.len() >= 8);
     assert!((pose.translation.truncate() - centre).length() < 0.03);
     let area = gradiance::geometry::contours::ring_signed_area(outline);
