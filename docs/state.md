@@ -12,6 +12,8 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
+- **Queued:** **Phase S** sandbox parity (audit 2026-11-20,
+  `docs/parity-audit.md`; briefs S-1..S-9, after Phase Q).
 - **Now:** **Phase 6** (orchestrator, 2026-11-20): briefs
   **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
   geometry property tests, **6-3** physics debug toggles + schedule dump,

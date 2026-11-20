@@ -269,6 +269,11 @@ keys and docs with conformance tests (U-1, U-2), in-app test and control
 (U-3..U-6), then Blender-leaning polish (U-7..U-11). Its briefs interleave
 with 4b and 5; the order is in `docs/state.md`.
 
+**Phase S — sandbox parity (audit 2026-11-20).** Gaps from
+`docs/parity-audit.md`, briefs S-1..S-9 in number order (roadmap §
+"Sandbox parity"). Runs after Phase Q; independent of G-0 and 3D-0. S-8
+starts with an API check and may return.
+
 **Deferred to the next planning stage** (not part of "roadmap complete"):
 `bevy_picking` interaction rework (audit D); node-canvas layout persistence
 (becomes document content if the graph becomes the document: G-0);
