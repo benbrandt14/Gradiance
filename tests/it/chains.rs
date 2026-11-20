@@ -293,14 +293,14 @@ fn catenary_sag(l: f32, span: f32) -> f32 {
     // 2a sinh(half / a) falls from infinity toward `span` as `a` grows.
     let (mut lo, mut hi) = (1e-3_f64, 1e3_f64);
     for _ in 0..200 {
-        let a = (lo + hi) / 2.0;
+        let a = f64::midpoint(lo, hi);
         if 2.0 * a * (half / a).sinh() > l {
             lo = a;
         } else {
             hi = a;
         }
     }
-    let a = (lo + hi) / 2.0;
+    let a = f64::midpoint(lo, hi);
     (a * ((half / a).cosh() - 1.0)) as f32
 }
 

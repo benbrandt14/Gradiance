@@ -80,7 +80,7 @@ impl Operation for Chain {
                 self.pins
             ))
         })?;
-        if self.path.len() % 2 != 0 {
+        if !self.path.len().is_multiple_of(2) {
             return Err(OpError::Invalid(
                 "path: an even count of numbers, x y pairs".to_owned(),
             ));
@@ -93,8 +93,10 @@ impl Operation for Chain {
         }
         let path: Vec<Vec2> = self
             .path
-            .chunks_exact(2)
-            .map(|xy| Vec2::new(xy[0], xy[1]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|[x, y]| Vec2::new(*x, *y))
             .collect();
         let points = gradiance_geometry::chain::chain_points(&path, self.link.0).ok_or_else(|| {
             OpError::Invalid(format!(

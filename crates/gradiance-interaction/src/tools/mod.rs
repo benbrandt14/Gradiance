@@ -141,35 +141,36 @@ impl Plugin for ToolsPlugin {
                 .before(gradiance_command::CommandDispatchSet),
         );
 
-        if app.is_plugin_added::<bevy::render::RenderPlugin>() {
-            app.add_systems(
-                Update,
-                (
-                    draw_manip_preview::<select::SelectGesture>.run_if(in_state(ToolState::Select)),
-                    handles::draw_handles.run_if(in_state(ToolState::Select)),
-                    draw_draft_preview::<box_tool::BoxTool>.run_if(in_state(ToolState::Box)),
-                    draw_draft_preview::<cut_tool::CutTool>.run_if(in_state(ToolState::Cut)),
-                    draw_draft_preview::<circle_tool::CircleTool>
-                        .run_if(in_state(ToolState::Circle)),
-                    draw_draft_preview::<ground_tool::GroundTool>
-                        .run_if(in_state(ToolState::Ground)),
-                    draw_draft_preview::<polygon_tool::PolygonTool>
-                        .run_if(in_state(ToolState::Polygon)),
-                    draw_manip_preview::<connector_tool::ConnectorDraft>
-                        .run_if(connector_tool::connector_active),
-                    draw_manip_preview::<spring_tool::SpringDraft>
-                        .run_if(in_state(ToolState::Spring)),
-                    draw_manip_preview::<rod_tool::RodDraft>.run_if(in_state(ToolState::Rod)),
-                    draw_manip_preview::<chain_tool::ChainDraft>.run_if(in_state(ToolState::Chain)),
-                    draw_manip_preview::<node_tools::TracerTool>
-                        .run_if(in_state(ToolState::Tracer)),
-                    draw_manip_preview::<node_tools::ThrusterTool>
-                        .run_if(in_state(ToolState::Thruster)),
-                    draw_draft_preview::<script_tool::ScriptTool>
-                        .run_if(script_tool::script_tool_active),
-                ),
-            );
-        }
+        add_tool_previews(app);
+    }
+}
+
+/// The tools' gizmo previews (only with the render plugin present).
+fn add_tool_previews(app: &mut App) {
+    if app.is_plugin_added::<bevy::render::RenderPlugin>() {
+        app.add_systems(
+            Update,
+            (
+                draw_manip_preview::<select::SelectGesture>.run_if(in_state(ToolState::Select)),
+                handles::draw_handles.run_if(in_state(ToolState::Select)),
+                draw_draft_preview::<box_tool::BoxTool>.run_if(in_state(ToolState::Box)),
+                draw_draft_preview::<cut_tool::CutTool>.run_if(in_state(ToolState::Cut)),
+                draw_draft_preview::<circle_tool::CircleTool>.run_if(in_state(ToolState::Circle)),
+                draw_draft_preview::<ground_tool::GroundTool>.run_if(in_state(ToolState::Ground)),
+                draw_draft_preview::<polygon_tool::PolygonTool>
+                    .run_if(in_state(ToolState::Polygon)),
+                draw_manip_preview::<connector_tool::ConnectorDraft>
+                    .run_if(connector_tool::connector_active),
+                draw_manip_preview::<spring_tool::SpringDraft>.run_if(in_state(ToolState::Spring)),
+                draw_manip_preview::<rod_tool::RodDraft>.run_if(in_state(ToolState::Rod)),
+                draw_manip_preview::<chain_tool::ChainDraft>.run_if(in_state(ToolState::Chain)),
+                draw_manip_preview::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
+                draw_manip_preview::<node_tools::ThrusterTool>
+                    .run_if(in_state(ToolState::Thruster)),
+                draw_draft_preview::<script_tool::ScriptTool>
+                    .run_if(script_tool::script_tool_active),
+            ),
+        );
     }
 }
 
