@@ -206,7 +206,8 @@ pub fn flame_scale(thrust: f32) -> f32 {
 /// by kind), so a placed node is visible and shows its selection state.
 /// Attached nodes draw a tether to their target. A thruster draws a flame
 /// out of its back, scaled by the thrust it pushes with (a signal drive's
-/// when one is bound); a laser draws a barrel along its axis and its beam. Sizes are screen-constant (`CameraScale`).
+/// when one is bound); a laser draws a barrel along its axis and its beam.
+/// Sizes are screen-constant (`CameraScale`).
 pub fn draw_node_glyphs(
     selection: Res<Selection>,
     index: Res<IdIndex>,

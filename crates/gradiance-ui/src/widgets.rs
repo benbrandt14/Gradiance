@@ -521,7 +521,7 @@ fn laser_editor(ui: &mut egui::Ui, salt: &str, laser: &mut gradiance_domain::las
             let name = text.trim();
             let cancelled = ui.input(|i| i.key_pressed(egui::Key::Escape));
             if !cancelled && !name.is_empty() && name != laser.name {
-                laser.name = name.to_owned();
+                name.clone_into(&mut laser.name);
                 committed = true;
             }
         } else if edit.has_focus() {
