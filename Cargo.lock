@@ -4102,6 +4102,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gradiance-graph"
+version = "0.2.0"
+dependencies = [
+ "bevy",
+ "glam 0.33.12",
+ "gradiance-core",
+ "gradiance-domain",
+ "proptest",
+ "ron",
+ "serde",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "gradiance-interaction"
 version = "0.2.0"
 dependencies = [
