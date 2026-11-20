@@ -112,26 +112,33 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
         2.5f32..100.0,
         (0.0f32..1.0, 0.0f32..1.0, 0.0f32..1.0, 0.1f32..1.0),
         proptest::collection::vec(1u32..6, 0..3),
+        // A fluid region (brief N-7): density and drag.
+        proptest::option::of((0.0f32..10.0, 0.0f32..20.0)),
     )
         .prop_map(
-            |(shape, physics, (x, y), rot, near, thickness, (r, g, b, a), groups)| BodyRecord {
-                id: StableId::new(),
-                pose: PosRot {
-                    pos: Vec2::new(x, y),
-                    rot,
-                },
-                shape,
-                physics,
-                appearance: Appearance {
-                    fill: Rgba { r, g, b, a },
-                    ..Appearance::default()
-                },
-                depth: DepthBand::metres(near, near + thickness),
-                layers: None,
-                groups,
-                field: None,
-                tracer: None,
-                fluid: None,
+            |(shape, physics, (x, y), rot, near, thickness, (r, g, b, a), groups, fluid)| {
+                BodyRecord {
+                    id: StableId::new(),
+                    pose: PosRot {
+                        pos: Vec2::new(x, y),
+                        rot,
+                    },
+                    shape,
+                    physics,
+                    appearance: Appearance {
+                        fill: Rgba { r, g, b, a },
+                        ..Appearance::default()
+                    },
+                    depth: DepthBand::metres(near, near + thickness),
+                    layers: None,
+                    groups,
+                    field: None,
+                    tracer: None,
+                    fluid: fluid.map(|(density, drag)| gradiance::domain::fluid::Fluid {
+                        density: gradiance::units::Density(density),
+                        drag,
+                    }),
+                }
             },
         )
 }
