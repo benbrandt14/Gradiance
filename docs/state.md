@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (6-1 handoff; before that N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (6-2 handoff; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -15,8 +15,19 @@ Last updated: 2026-11-20 (6-1 handoff; before that N-9, Phase N complete; before
 - **Now:** **Phase 6** (orchestrator, 2026-11-20): briefs
   **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
   geometry property tests, **6-3** physics debug toggles + schedule dump,
-  in that order. **6-1** is done (in review; branch
-  `claude/project-thread-tw1mvl-6-1`): `tests/it/undo_matrix.rs` runs
+  in that order. **6-2** is done (in review; branch
+  `claude/project-thread-tw1mvl-6-2`): `gradiance-geometry`'s
+  `proptests` module (proptest, workspace version, dev-dependency only)
+  checks `polygonize` of random leaves and CSG trees (well-formed rings,
+  winding, no touching edges, analytic area, field sign), the CSG
+  identities, and the Phase N shape math (sketch, chain split, width
+  profile, submerged clip, mirror twice); fixed seed, 3584 cases, 2 s,
+  each tolerance stated with its reason. Two fixes, each with a
+  regression test: `UnionField` no longer culls a leaf whose box holds
+  the point (the value was wrong, never the sign); contour simplification
+  no longer lets a run of dropped vertices drift past its tolerance (a
+  rod lost 0.63 % of its area). Six decisions in `archive.ron`.
+  **Next:** **6-3**. **6-1** is merged (#292; `tests/it/undo_matrix.rs` runs
   every history operation (55) from its example: dump, call, undo, redo,
   each dump exact (workstation config left out), 17 s;
   `tests/it/loader_fuzz.rs` loads every committed scene file and 256
@@ -25,7 +36,7 @@ Last updated: 2026-11-20 (6-1 handoff; before that N-9, Phase N complete; before
   longer takes one more step after the run is recorded; a snapshot
   captures an attached node where it follows its target; `from_ron`
   refuses a shared `StableId` and a NaN/inf number (typed errors); six
-  decisions in `archive.ron`. **Next:** **6-2**. Phase N merged (#282–#289, #291); J-1 merged (#290).
+  decisions in `archive.ron`). Phase N merged (#282–#289, #291); J-1 merged (#290).
   **N-9** mirror and joint load colour is done (in review;
   branch `claude/project-thread-tw1mvl-n9`): `body.mirror_h` /
   `body.mirror_v` (`(mirror-h targets)`, `(mirror-v targets)`, Edit ▸
