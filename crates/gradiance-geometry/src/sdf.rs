@@ -211,7 +211,11 @@ impl<'s> UnionField<'s> {
             if outside >= best + CULL_MARGIN {
                 continue;
             }
-            let q = if pos.is_nan() { p } else { rot.rotate(p - *pos) };
+            let q = if pos.is_nan() {
+                p
+            } else {
+                rot.rotate(p - *pos)
+            };
             best = best.min(eval(leaf, q));
         }
         best

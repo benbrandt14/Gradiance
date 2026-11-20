@@ -84,6 +84,11 @@ available later without touching geometry, physics, or tools.
 - Old scene files parse unchanged (new enum variants are additive for RON).
   `Capsule { half_length, radius }` (the rod, brief 2-3) was added this way:
   exact field, exact stadium contour, exact avian capsule collider.
+- Contour resolution follows thin leaves (brief N-6): a tree with a capsule
+  on its solid side (a merged rod, a sketch stroke) is sampled at about a
+  third of the capsule's width, within the sample count a square tree
+  already takes (`polygonize::field_cell`); a union of placed leaves is
+  evaluated through `sdf::UnionField` (the same values, cheaper).
 
 ## Build vs. reuse (ecosystem survey, 2026-07-06)
 

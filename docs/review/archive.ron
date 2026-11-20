@@ -2886,5 +2886,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "ui::toolbar::TOOL_GROUPS, interaction::tool_ops::UseChain",
         ),
+        (
+            question: (
+                id: "sketch-shape",
+                title: "What shape does an open stroke become?",
+                source: "Brief N-6 sketch tool (docs/briefs/N-6-sketch-tool.md)",
+                description: r#"The brief asks for the stroke simplified (RDP) into segments, each a capsule, joined as one SDF union, with fewer than 30 leaves for a stroke of 200 samples."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Balanced capsule union, at most 24 leaves",
+                        caption: r#"RDP at half the stroke radius, the tolerance grown by half until at most 24 segments remain; each segment a capsule under a Placed node, the leaves joined as a balanced Union tree (depth 2 + ceil(log2 n), at most 7, under MAX_CSG_DEPTH 8). A stroke that simplifies to one segment is a plain Capsule leaf with the body rotated along it (an exact capsule collider). No new SDF leaf, so FORMAT_VERSION stays."#,
+                    ),
+                    (
+                        label: "A new Stroke leaf",
+                        caption: r#"A polyline-inflated leaf with an exact field. Its exact outline needs a polygon union where the stroke crosses itself, which the codebase does not have; rejected."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sketch-shape",
+                title: "What shape does an open stroke become?",
+                choice: Picked("Balanced capsule union, at most 24 leaves"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "geometry::sketch::sketch_shape, MAX_SKETCH_SEGMENTS",
+        ),
+        (
+            question: (
+                id: "sketch-closed",
+                title: "When does a stroke close, and what does a closed stroke fill?",
+                source: "Brief N-6 sketch tool (docs/briefs/N-6-sketch-tool.md)",
+                description: r#"The brief: a closed stroke fills as a polygon instead."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Ends near, a round enough simple ring, filled to the centre line",
+                        caption: r#"A stroke closes when its ends are at most max(2 widths, 8 % of its length) apart and at most a quarter of its length, the simplified ring (at most 64 vertices) does not cross itself, and its roundness 4 pi area / perimeter^2 is at least 0.15 (an out-and-back stroke encloses nothing). It fills as a centroid-relative CCW Polygon whose outline is the stroke's centre line. A loop that crosses itself (a figure eight) stays an open stroke."#,
+                    ),
+                    (
+                        label: "Fill to the stroke's outer edge",
+                        caption: r#"Offset the ring outward by half the width. Needs an offset of a concave ring; more code for a few millimetres."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sketch-closed",
+                title: "When does a stroke close, and what does a closed stroke fill?",
+                choice: Picked("Ends near, a round enough simple ring, filled to the centre line"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "geometry::sketch::closed_sketch",
+        ),
+        (
+            question: (
+                id: "sketch-resolution",
+                title: "How does the field contour keep a thin stroke whole within the polygonize budget?",
+                source: "Brief N-6 sketch tool (docs/briefs/N-6-sketch-tool.md)",
+                description: r#"polygonize samples a CSG tree at extent / 96 along its larger side; a 10 cm stroke across a 6 m drawing is thinner than one cell and would break apart."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Finer cells for capsule trees, same sample budget",
+                        caption: r#"sdf::thinnest_solid finds the narrowest capsule on the solid side of a tree (a subtracted cut stroke does not count); polygonize::field_cell then asks for 3 cells across it, but never more samples over the box than a square tree takes today (96 x 96) and never a coarser cell than before. Trees without a capsule are contoured exactly as before. A stroke too thin for its drawing's size (a 12 m scribble at 2 cm) is widened by the sketch until it is 2 cells across (resolvable_radius). A union of placed exact leaves is evaluated by sdf::UnionField: the same values bit for bit, rotations precomputed and far leaves skipped by their boxes (a 24-leaf sketch contours in about 3 ms at dev opt-level 1, against 0.7 ms for a box minus a circle)."#,
+                    ),
+                    (
+                        label: "A fixed finer grid",
+                        caption: r#"A finer global FIELD_CELLS: every CSG body pays, every frame (borders re-contour each frame)."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sketch-resolution",
+                title: "How does the field contour keep a thin stroke whole within the polygonize budget?",
+                choice: Picked("Finer cells for capsule trees, same sample budget"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "geometry::polygonize::field_cell, geometry::sdf::{thinnest_solid, UnionField}",
+        ),
+        (
+            question: (
+                id: "sketch-sampling",
+                title: "How does the tool sample the stroke, and what does it commit?",
+                source: "Brief N-6 sketch tool (docs/briefs/N-6-sketch-tool.md)",
+                description: r#"Stroke sampling during the drag must not allocate unbounded memory."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Unsnapped, every 3 px, capped at 512 points, through body.sketch",
+                        caption: r#"The tool records the unsnapped pointer (a freehand line follows the hand, not the grid) each 3 screen px. At 512 points it drops every other point (keeping both ends) and samples half as often, so memory is bounded however long the drag. On release the stroke is thinned to within 1 px (RDP) and committed as an InvokeOp of body.sketch with the width, so one gesture is one spawn-body step and Adjust Last Operation can change a drawn stroke's width."#,
+                    ),
+                    (
+                        label: "Snap the stroke",
+                        caption: r#"Grid snapping would make a freehand stroke a staircase."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sketch-sampling",
+                title: "How does the tool sample the stroke, and what does it commit?",
+                choice: Picked("Unsnapped, every 3 px, capped at 512 points, through body.sketch"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "interaction::tools::sketch_tool, geometry::sketch::MAX_STROKE_POINTS",
+        ),
+        (
+            question: (
+                id: "sketch-defaults",
+                title: "What width and physics does a sketched body get?",
+                source: "Brief N-6 sketch tool (docs/briefs/N-6-sketch-tool.md)",
+                description: r#"The brief names no width; pressure-sensitive width is out of scope."#,
+                decision: true,
+                options: [
+                    (
+                        label: "10 cm wide, a plain dynamic body",
+                        caption: r#"ToolDefaults gains sketch_width (10 cm; workstation config, shown in Settings > Grid & Snap > Tools as a unit field, not saved, never undone). The body is styled and simulated like any spawned body: the id-derived colour, dynamic, default density. The undo label is spawn-body (one SpawnBodyIntent)."#,
+                    ),
+                    (
+                        label: "Rod-like",
+                        caption: r#"The rod's tone and density 5; reads as a wire rather than a drawn object."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sketch-defaults",
+                title: "What width and physics does a sketched body get?",
+                choice: Picked("10 cm wide, a plain dynamic body"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "domain::settings::ToolDefaults::sketch_width, command::ops::sketch",
+        ),
+        (
+            question: (
+                id: "sketch-tool-key",
+                title: "Where is the sketch tool, and with which key?",
+                source: "Brief N-6 sketch tool (docs/briefs/N-6-sketch-tool.md)",
+                description: r#"The owner ruled the editor keymap unsettled; a new tool gets no key."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Create group after Polygon, no key",
+                        caption: r#"A Sketch entry in the palette's Create group after Polygon, with the existing sketch icon (assets/icons/sketch.png), no key, and a tool.sketch operation with no chord. The status bar hint: Drag, draw; end at the start to fill."#,
+                    ),
+                    (
+                        label: "Modify group",
+                        caption: r#"Beside the cut tool."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sketch-tool-key",
+                title: "Where is the sketch tool, and with which key?",
+                choice: Picked("Create group after Polygon, no key"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "ui::toolbar::TOOL_GROUPS, interaction::tool_ops::UseSketch",
+        ),
     ],
 )

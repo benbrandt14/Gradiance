@@ -166,8 +166,8 @@ pub fn resolvable_radius(extent: Vec2, radius: f32) -> f32 {
     // few rounds; each widens by at most a few percent after the first.
     for _ in 0..4 {
         let size = extent + Vec2::splat(2.0 * r);
-        let cell = field_cell(size, Some(2.0 * r))
-            .max(size.max_element() / (MAX_SAMPLES as f32 - 8.0));
+        let cell =
+            field_cell(size, Some(2.0 * r)).max(size.max_element() / (MAX_SAMPLES as f32 - 8.0));
         let needed = MIN_CELLS_ACROSS * cell / 2.0;
         if r >= needed {
             break;
@@ -191,7 +191,10 @@ pub fn sketch_shape(stroke: &[Vec2], radius: f32) -> Option<Sketch> {
     }
     let mut points: Vec<Vec2> = Vec::with_capacity(stroke.len());
     for p in stroke {
-        if points.last().is_none_or(|last| last.distance(*p) > MIN_SHAPE_SIZE) {
+        if points
+            .last()
+            .is_none_or(|last| last.distance(*p) > MIN_SHAPE_SIZE)
+        {
             points.push(*p);
         }
     }
@@ -254,11 +257,7 @@ fn open_sketch(points: &[Vec2], radius: f32) -> Option<Sketch> {
         |(lo, hi), p| (lo.min(*p), hi.max(*p)),
     );
     let radius = resolvable_radius(max - min, radius);
-    let line = simplify(
-        points,
-        SIMPLIFY_FRACTION * radius,
-        MAX_SKETCH_SEGMENTS + 1,
-    );
+    let line = simplify(points, SIMPLIFY_FRACTION * radius, MAX_SKETCH_SEGMENTS + 1);
     let segments: Vec<(Vec2, Vec2)> = line
         .windows(2)
         .map(|w| (w[0], w[1]))
@@ -488,7 +487,11 @@ mod tests {
 
     #[test]
     fn a_straight_stroke_is_one_capsule_leaf_along_it() {
-        let stroke = [Vec2::new(1.0, 1.0), Vec2::new(1.5, 1.5), Vec2::new(2.0, 2.0)];
+        let stroke = [
+            Vec2::new(1.0, 1.0),
+            Vec2::new(1.5, 1.5),
+            Vec2::new(2.0, 2.0),
+        ];
         let sketch = sketch_shape(&stroke, 0.05).unwrap();
         let ShapeDef::Capsule {
             half_length,

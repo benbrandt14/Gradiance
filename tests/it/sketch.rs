@@ -175,9 +175,7 @@ fn a_closed_stroke_fills_as_a_polygon() {
 #[test]
 fn a_straight_stroke_is_one_capsule() {
     let mut app = paused_app();
-    let stroke: Vec<Vec2> = (0..=20)
-        .map(|k| Vec2::new(0.1 * k as f32, 1.0))
-        .collect();
+    let stroke: Vec<Vec2> = (0..=20).map(|k| Vec2::new(0.1 * k as f32, 1.0)).collect();
     draw(&mut app, &stroke);
     let (shape, pose) = shapes(&mut app).pop().unwrap();
     let ShapeDef::Capsule {
@@ -237,8 +235,9 @@ fn a_click_makes_no_body() {
 #[test]
 fn the_operation_refuses_a_bad_path_or_width() {
     let mut app = paused_app();
-    let call =
-        |app: &mut App, params: Value| gradiance::op::invoke(app.world_mut(), "body.sketch", params);
+    let call = |app: &mut App, params: Value| {
+        gradiance::op::invoke(app.world_mut(), "body.sketch", params)
+    };
     let ok = json!({"path": [0, 0, 0.5, 0.3, 1, 0], "width": 0.1});
     assert!(call(&mut app, ok.clone()).is_ok());
     for (key, bad) in [
@@ -280,8 +279,7 @@ fn a_sketched_body_falls_and_rests_on_the_ground() {
     assert_eq!(body_count(&mut app), 2);
     step(&mut app, 240);
     let world = app.world_mut();
-    let mut query =
-        world.query_filtered::<(&ShapeDef, &Transform, &LinearVelocity), With<Body>>();
+    let mut query = world.query_filtered::<(&ShapeDef, &Transform, &LinearVelocity), With<Body>>();
     let (shape, pose, velocity) = query
         .iter(world)
         .find(|(s, _, _)| !s.contains_half_plane())

@@ -326,6 +326,10 @@ mod tests {
         let parts = polygonize_components(&l);
         assert_eq!(parts.len(), 1);
         let ideal = 2.0 * (5.0 * 0.04) + std::f32::consts::PI * 0.0004;
-        assert!((parts[0].area() - ideal).abs() / ideal < 0.25, "{}", parts[0].area());
+        assert!(
+            (parts[0].area() - ideal).abs() / ideal < 0.25,
+            "{}",
+            parts[0].area()
+        );
     }
 }
