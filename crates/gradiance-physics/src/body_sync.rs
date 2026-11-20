@@ -8,12 +8,15 @@ use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::profile::WidthProfile;
 
 use crate::air::AirProfile;
+use crate::buoyancy::SubmergeOutline;
+use gradiance_geometry::contours::Contours;
+use gradiance_geometry::submerge::SolidOutline;
 
 /// Builds the engine collider for a validated shape.
 ///
 /// Returns `None` (and the caller keeps the previous collider) when the
 /// shape fails validation — commands should have refused it upstream.
-fn collider_for(shape: &ShapeDef) -> Option<Collider> {
+fn collider_for(shape: &ShapeDef, components: &[Contours]) -> Option<Collider> {
     shape.validate().ok()?;
     match shape {
         ShapeDef::Box { width, height } => Some(Collider::rectangle(*width, *height)),
@@ -37,12 +40,7 @@ fn collider_for(shape: &ShapeDef) -> Option<Collider> {
         // component's rings, so merged-but-barely-touching unions keep
         // full collision coverage.
         ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => {
-            let components = gradiance_geometry::polygonize::polygonize_components(shape);
-            decomposition_collider(
-                components
-                    .iter()
-                    .flat_map(gradiance_geometry::contours::Contours::rings),
-            )
+            decomposition_collider(components.iter().flat_map(Contours::rings))
         }
     }
 }
@@ -90,35 +88,42 @@ const DECIMATE_FRACTION: f32 = 1e-3;
 /// from the same discretization the collider uses: a leaf's polygonized
 /// outline, every component's outline for a CSG tree (as its collider
 /// covers every component). A half-plane is infinite and gets no width.
-fn air_profile_for(shape: &ShapeDef) -> WidthProfile {
+fn air_profile_for(shape: &ShapeDef, components: &[Contours]) -> WidthProfile {
     if shape.contains_half_plane() {
         return WidthProfile::ZERO;
     }
-    match shape {
-        ShapeDef::Csg { .. } | ShapeDef::Placed { .. } => {
-            let components = gradiance_geometry::polygonize::polygonize_components(shape);
-            let points: Vec<Vec2> = components
-                .iter()
-                .flat_map(|c| c.outline.iter().copied())
-                .collect();
-            WidthProfile::from_points(&points)
-        }
-        _ => WidthProfile::from_contours(&gradiance_geometry::polygonize::polygonize(shape)),
-    }
+    let points: Vec<Vec2> = components
+        .iter()
+        .flat_map(|c| c.outline.iter().copied())
+        .collect();
+    WidthProfile::from_points(&points)
 }
 
-/// Regenerates colliders — and the air-drag width profile, the other
-/// shape-derived physics datum — for bodies whose shape changed.
+/// The outline buoyancy clips ([`SubmergeOutline`], brief N-7), from the
+/// same components. A shape holding a half-plane is infinite: it gets none.
+fn submerge_outline_for(shape: &ShapeDef, components: &[Contours]) -> SolidOutline {
+    if shape.contains_half_plane() {
+        return SolidOutline::default();
+    }
+    SolidOutline::from_components(components)
+}
+
+/// Regenerates colliders — and the other shape-derived physics data, the
+/// air-drag width profile and the buoyancy outline — for bodies whose shape
+/// changed. The shape is polygonized once for all three.
 pub fn sync_colliders(
     mut commands: Commands,
     changed: Query<(Entity, &ShapeDef), (With<Body>, Changed<ShapeDef>)>,
 ) {
     for (entity, shape) in &changed {
-        match collider_for(shape) {
+        let components = gradiance_geometry::polygonize::polygonize_components(shape);
+        match collider_for(shape, &components) {
             Some(collider) => {
-                commands
-                    .entity(entity)
-                    .insert((collider, AirProfile(air_profile_for(shape))));
+                commands.entity(entity).insert((
+                    collider,
+                    AirProfile(air_profile_for(shape, &components)),
+                    SubmergeOutline(submerge_outline_for(shape, &components)),
+                ));
             }
             None => {
                 warn!(?entity, "invalid ShapeDef reached body_sync; collider kept");

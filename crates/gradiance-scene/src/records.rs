@@ -69,6 +69,9 @@ pub struct BodyRecord {
     /// Trajectory-trail marker, if the body carries one.
     #[serde(default)]
     pub tracer: Option<gradiance_domain::tracer::Tracer>,
+    /// Fluid region (buoyancy, brief N-7), if the body holds a fluid.
+    #[serde(default)]
+    pub fluid: Option<gradiance_domain::fluid::Fluid>,
 }
 
 impl BodyRecord {
@@ -93,6 +96,7 @@ impl BodyRecord {
             tracer: entity_ref
                 .get::<gradiance_domain::tracer::Tracer>()
                 .copied(),
+            fluid: entity_ref.get::<gradiance_domain::fluid::Fluid>().copied(),
         })
     }
 
@@ -117,6 +121,9 @@ impl BodyRecord {
         }
         if let Some(tracer) = self.tracer {
             entity.insert(tracer);
+        }
+        if let Some(fluid) = self.fluid {
+            entity.insert(fluid);
         }
         entity.id()
     }
@@ -174,6 +181,16 @@ impl BodyRecord {
                 }
                 None => {
                     entity.remove::<gradiance_domain::tracer::Tracer>();
+                }
+            }
+        }
+        if self.fluid != prev.fluid {
+            match self.fluid {
+                Some(fluid) => {
+                    entity.insert(fluid);
+                }
+                None => {
+                    entity.remove::<gradiance_domain::fluid::Fluid>();
                 }
             }
         }

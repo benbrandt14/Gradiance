@@ -52,6 +52,7 @@
                 falloff: Quadratic,
             )),
             tracer: None,
+            fluid: None,
         ),
         (
             id: ("00000000-0000-0000-0000-000000000002"),
@@ -103,6 +104,10 @@
                 fade_secs: 2.75,
                 size: 0.0625,
                 pattern: Dots,
+            )),
+            fluid: Some((
+                density: 1.75,
+                drag: 2.5,
             )),
         ),
     ],

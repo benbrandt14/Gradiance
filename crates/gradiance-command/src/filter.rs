@@ -244,6 +244,7 @@ mod tests {
             },
             depth: DepthBand::default(),
             groups,
+            fluid: None,
         }
     }
 
