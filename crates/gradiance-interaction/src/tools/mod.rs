@@ -75,6 +75,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<sketch_tool::SketchDraft>();
         app.init_resource::<node_tools::TracerTool>();
         app.init_resource::<node_tools::ThrusterTool>();
+        app.init_resource::<node_tools::LaserTool>();
         app.init_resource::<script_tool::ScriptTool>();
         app.init_resource::<gradiance_core::script_tools::ScriptTools>();
         app.add_message::<gradiance_core::script_tools::ScriptToolFired>();
@@ -121,6 +122,7 @@ impl Plugin for ToolsPlugin {
                 run_manip_tool::<sketch_tool::SketchDraft>.run_if(in_state(ToolState::Sketch)),
                 run_manip_tool::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
                 run_manip_tool::<node_tools::ThrusterTool>.run_if(in_state(ToolState::Thruster)),
+                run_manip_tool::<node_tools::LaserTool>.run_if(in_state(ToolState::Laser)),
                 // Script tools: a generic draft over the table the script
                 // layer publishes. The VM runs once, after the last point.
                 (

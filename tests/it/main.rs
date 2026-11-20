@@ -32,6 +32,7 @@ mod joint_breaking;
 mod joint_edit;
 mod joint_sensors;
 mod joints;
+mod lasers;
 mod look;
 mod nodes;
 mod op_conformance;

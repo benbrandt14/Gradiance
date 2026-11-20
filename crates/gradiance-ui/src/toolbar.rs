@@ -54,8 +54,9 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
         &[
             (ToolState::Cut, "Cut", "K", "tool_cut"),
             (ToolState::Tracer, "Tracer", "N", "tool_tracer"),
-            // No key: the editor keymap is not settled (brief N-3).
+            // No key: the editor keymap is not settled (briefs N-3, N-8).
             (ToolState::Thruster, "Thruster", "", "thruster"),
+            (ToolState::Laser, "Laser", "", "laserpen"),
         ],
     ),
 ];

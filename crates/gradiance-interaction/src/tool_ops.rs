@@ -99,6 +99,8 @@ tool_ops! {
         "Use the tracer tool: click a body (or empty space) to place a tracer.";
     UseThruster => ToolState::Thruster, "tool.thruster", "thruster-tool", "Tools/Thruster", "",
         "Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push.";
+    UseLaser => ToolState::Laser, "tool.laser", "laser-tool", "Tools/Laser", "",
+        "Use the laser tool: press where the laser sits, drag to aim; release over a body to make it the target.";
 }
 
 /// The operation that picks `tool`, if it is a built-in.
@@ -167,6 +169,7 @@ pub fn hints(tool: ToolState) -> &'static [Hint] {
         ToolState::Cut => &[("Drag", "cut along the stroke")],
         ToolState::Tracer => &[("Click a body", "attach"), ("Click empty", "free tracer")],
         ToolState::Thruster => &[("Click a body", "push up"), ("Drag", "aim the push")],
+        ToolState::Laser => &[("Drag", "aim the beam"), ("Release on a body", "target it")],
         ToolState::Chain => &[("Drag", "draw the path; release lays the links")],
         ToolState::Sketch => &[("Drag", "draw; end at the start to fill")],
         ToolState::Script(_) => &[("Click", "add a point"), ("Esc or right-click", "cancel")],
@@ -196,6 +199,7 @@ mod tests {
             ToolState::Thruster,
             ToolState::Chain,
             ToolState::Sketch,
+            ToolState::Laser,
         ];
         assert_eq!(TOOL_OPS.len(), built_in.len());
         for tool in built_in {
