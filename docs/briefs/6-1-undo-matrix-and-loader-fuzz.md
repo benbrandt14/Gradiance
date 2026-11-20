@@ -65,7 +65,7 @@ Worker, 2026-11-20, branch `claude/project-thread-tw1mvl-6-1`.
 
 - `tests/it/undo_matrix.rs`: every operation that records or moves a
   history step (every `edit` operation, plus every `config` operation with
-  an undo label, i.e. the scene-content settings writes; 56 today), from its
+  an undo label, i.e. the scene-content settings writes; 55 today), from its
   example on the `op_conformance` fixture (helpers now `pub(crate)` there):
   `scene.dump`, invoke, dump, undo, dump, redo, dump. Undo gives the first
   dump back exactly, redo the second, and the depths move by the declared

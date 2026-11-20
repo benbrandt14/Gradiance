@@ -17,7 +17,7 @@ Last updated: 2026-11-20 (6-1 handoff; before that N-9, Phase N complete; before
   geometry property tests, **6-3** physics debug toggles + schedule dump,
   in that order. **6-1** is done (in review; branch
   `claude/project-thread-tw1mvl-6-1`): `tests/it/undo_matrix.rs` runs
-  every history operation (56) from its example: dump, call, undo, redo,
+  every history operation (55) from its example: dump, call, undo, redo,
   each dump exact (workstation config left out), 17 s;
   `tests/it/loader_fuzz.rs` loads every committed scene file and 256
   seeded mutations through `scene.load`: typed error and nothing changed,
