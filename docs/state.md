@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (N-6 handoff; before that N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (N-7 handoff; before that N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -19,6 +19,18 @@ Last updated: 2026-11-20 (N-6 handoff; before that N-5, N-4, N-3, N-2, N-1; befo
   rotation lock stops the spin (`stop_locked_spin`), a hinge on a snapped
   edge joins both bodies, a spring from empty space pins its start, a
   hinge on a bare ground makes nothing; six decisions in `archive.ron`.
+  **N-7** buoyancy is done (in review; branch
+  `claude/project-thread-tw1mvl-n7`): an authored `domain::fluid::Fluid`
+  (areal density, default 2 kg/m², and drag rate, default 2/s) on any
+  body; every dynamic body overlapping it is pushed up by `ρgA` at the
+  submerged centroid and damped (`physics::buoyancy::apply_buoyancy`, one
+  allocation-free `FixedUpdate` system); the submerged area is an exact
+  clip of the body's derived outline against the fluid's derived convex
+  pieces (`geometry::submerge`); a half-plane fluid is an open sea; the
+  inspector toggle and `(set-fluid i density [drag])` (`body.set_fluid`)
+  also make the body a static sensor in the same undo step; fluids draw
+  translucent; a half-density box floats half submerged (measured within
+  0.1 %); eight decisions in `archive.ron`. **Next: N-8** laser node.
   **N-6** sketch tool is done (in review; branch
   `claude/project-thread-tw1mvl-n6`): drag freehand; release makes one
   body: the stroke simplified (RDP) into at most 24 capsules joined as one
@@ -30,7 +42,7 @@ Last updated: 2026-11-20 (N-6 handoff; before that N-5, N-4, N-3, N-2, N-1; befo
   points; Sketch palette entry in Create, no key. `polygonize` samples a
   tree with a thin capsule finer, within the existing sample count
   (`field_cell`), and evaluates unions faster (`sdf::UnionField`, exact);
-  six decisions in `archive.ron`. **Next: N-7** buoyancy.
+  six decisions in `archive.ron`.
   **N-5** chain tool is done (in review; branch
   `claude/project-thread-tw1mvl-n5`): drag a path, release lays capsule
   links (link length, width and end pins in Settings > Grid & Snap >
@@ -156,7 +168,7 @@ Last updated: 2026-11-20 (N-6 handoff; before that N-5, N-4, N-3, N-2, N-1; befo
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
   9c. **N-1** (done, in review), **N-2** (done, in review), **N-3** (done,
-      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7..N-9** nonlinear dynamics & multibody play (owner-approved
+      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8..N-9** nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +

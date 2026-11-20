@@ -16,6 +16,7 @@ mod adjust_last;
 mod air_drag;
 mod array_drag;
 mod booleans;
+mod buoyancy;
 mod chains;
 mod client;
 mod clipboard;

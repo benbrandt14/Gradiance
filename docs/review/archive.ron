@@ -3050,6 +3050,222 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
         ),
         (
             question: (
+                id: "fluid-authoring",
+                title: "Where does a body's fluid live, and how is it edited?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"The brief marks a body as fluid; it does not say how that is authored, saved or edited."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A Fluid component on the body",
+                        caption: r#"An optional domain::fluid::Fluid {density, drag} on any body, like the field source: a BodyRecord field (serde default, so old scenes load unchanged, no format bump; the golden fixtures gain fluid: None), a PropertyValue::Fluid edit (one undo step), an inspector block and (set-fluid i density [drag])."#,
+                    ),
+                    (
+                        label: "A body kind",
+                        caption: r#"A new RigidBody-like role. Rejected: fluids are static or kinematic bodies with an extra property, not a new kind of motion."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-authoring",
+                title: "Where does a body's fluid live, and how is it edited?",
+                choice: Picked("A Fluid component on the body"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "domain::fluid::Fluid, scene::records::BodyRecord::fluid, command::property::PropertyValue::Fluid, command::ops::body::SetFluid",
+        ),
+        (
+            question: (
+                id: "fluid-defaults",
+                title: "What density and drag does a new fluid get?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"Default bodies have density 1 kg/m2."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Density 2 kg/m2, drag 2 per second",
+                        caption: r#"A default body floats half submerged; a floating 1 m box bobs a few times and settles (damping ratio about 0.2 to 0.3)."#,
+                    ),
+                    (
+                        label: "Density 1, like water at 1000 kg/m3 scaled",
+                        caption: r#"A default body would be neutrally buoyant and drift."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-defaults",
+                title: "What density and drag does a new fluid get?",
+                choice: Picked("Density 2 kg/m2, drag 2 per second"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "domain::fluid::DEFAULT_FLUID_DENSITY, DEFAULT_FLUID_DRAG",
+        ),
+        (
+            question: (
+                id: "fluid-toggle",
+                title: "What else changes when a body becomes a fluid?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"A fluid must let bodies in (a sensor) and should not fall (a dynamic sensor falls through the floor)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "It also becomes a static sensor, one undo step",
+                        caption: r#"Turning the fluid on also sets sensor and, if the body was dynamic, static, in the same property edit; a kinematic body stays kinematic (a moving tank carries its water). Turning the fluid off keeps the sensor and the role. Shared by the inspector and set-fluid (command::property::fluid_changes)."#,
+                    ),
+                    (
+                        label: "Only the fluid",
+                        caption: r#"The author sets sensor and static by hand; a forgotten flag gives a solid block or a falling pool."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-toggle",
+                title: "What else changes when a body becomes a fluid?",
+                choice: Picked("It also becomes a static sensor, one undo step"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "command::property::fluid_changes",
+        ),
+        (
+            question: (
+                id: "fluid-force-law",
+                title: "How does the fluid push and damp?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"The brief gives the push (rho g A at the submerged centroid) and says the fluid damps."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Linear drag rho k A v at the centroid, and spin drag",
+                        caption: r#"F = -rho A g - rho k A (v_c - v_fluid) at the submerged centroid c (v_c includes the spin), plus a torque -rho k A (I/m) w. A body as dense as the fluid, wholly in it, loses speed and spin at the rate k. The drag is capped so one step cannot reverse the motion; the push never is. World gravity is used, not the body's gravity scale (the displaced fluid's weight does not depend on the body)."#,
+                    ),
+                    (
+                        label: "Quadratic drag",
+                        caption: r#"Closer to water at speed, but stiffer to integrate and with no clean settle; linear drag damps the bobbing the brief asks for."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-force-law",
+                title: "How does the fluid push and damp?",
+                choice: Picked("Linear drag rho k A v at the centroid, and spin drag"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "physics::buoyancy::Immersion",
+        ),
+        (
+            question: (
+                id: "fluid-step",
+                title: "Where does the buoyancy force run?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"The brief says the force joins the physics::fields pass, which runs in Update."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Its own FixedUpdate system, beside air drag",
+                        caption: r#"physics::buoyancy::apply_buoyancy runs once per physics step with the thrusters and air drag, so the impulse does not depend on how frames fall on steps (the reason N-3 and N-4 moved there). It shares no code with the field sampler: a fluid is a region, not a field."#,
+                    ),
+                    (
+                        label: "In the Update fields pass",
+                        caption: r#"As the brief says; a one-shot force in Update is spent by one step and missed or doubled by others."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-step",
+                title: "Where does the buoyancy force run?",
+                choice: Picked("Its own FixedUpdate system, beside air drag"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "physics::buoyancy::apply_buoyancy",
+        ),
+        (
+            question: (
+                id: "fluid-scope",
+                title: "Which bodies does a fluid act on?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"Depth bands decide collisions; a fluid is a sensor."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Every dynamic body that is not a fluid, in any depth band",
+                        caption: r#"The fluid feels no reaction (it is the medium); overlapping fluids add up; static and kinematic bodies and other fluids are skipped; a shape with a half-plane is not buoyed. A half-plane fluid is an open sea below its surface."#,
+                    ),
+                    (
+                        label: "Only bodies whose depth band overlaps the fluid's",
+                        caption: r#"Consistent with collisions, but a pool would then have to be placed in the floater's band by hand."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-scope",
+                title: "Which bodies does a fluid act on?",
+                choice: Picked("Every dynamic body that is not a fluid, in any depth band"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "physics::buoyancy::apply_buoyancy",
+        ),
+        (
+            question: (
+                id: "fluid-region-pieces",
+                title: "How is the submerged area computed for any fluid shape?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"The brief asks for a polygon clip of two polygonize contours."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Clip the body's rings to the fluid's convex pieces",
+                        caption: r#"A convex fluid outline is one piece, any other fluid (concave, holes, CSG) is split once into its fill triangles; each body ring is clipped to each piece (Sutherland-Hodgman, exact for any ring against a convex piece) and the signed moments add. Both sides are derived when the shape changes (FluidRegion, SubmergeOutline), never per step."#,
+                    ),
+                    (
+                        label: "A general polygon boolean per step",
+                        caption: r#"Exact for any pair but allocates and costs far more per step."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-region-pieces",
+                title: "How is the submerged area computed for any fluid shape?",
+                choice: Picked("Clip the body's rings to the fluid's convex pieces"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "geometry::submerge, physics::buoyancy::{FluidRegion, SubmergeOutline}",
+        ),
+        (
+            question: (
+                id: "fluid-look",
+                title: "How does a fluid region draw?",
+                source: "Brief N-7 buoyancy region (docs/briefs/N-7-buoyancy-region.md)",
+                description: r#"An opaque pool would hide what floats in it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Its own fill, translucent at 45 %",
+                        caption: r#"render::material_sync blends a fluid body's material at FLUID_OPACITY 0.45, so floaters and sinkers stay visible. A half-plane sea draws as the ground does."#,
+                    ),
+                    (
+                        label: "Unchanged",
+                        caption: r#"The pool hides its contents."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-look",
+                title: "How does a fluid region draw?",
+                choice: Picked("Its own fill, translucent at 45 %"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "render::material_sync::FLUID_OPACITY",
+        ),
+        (
+            question: (
                 id: "joint-anchor-on-edge",
                 title: "Does a joint anchor on a body's edge count as on that body?",
                 source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",

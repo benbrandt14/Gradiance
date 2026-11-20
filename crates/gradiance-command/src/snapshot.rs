@@ -49,6 +49,9 @@ pub struct BodySnapshot {
     pub depth: DepthBand,
     /// The group stack, innermost first (empty when ungrouped).
     pub groups: Vec<u32>,
+    /// The fluid region the body holds, if any: the old half of a
+    /// `set-fluid` edit (brief N-7).
+    pub fluid: Option<gradiance_domain::fluid::Fluid>,
 }
 
 impl BodySnapshot {
@@ -193,6 +196,7 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
                 groups: entity
                     .get::<SelectionGroup>()
                     .map_or_else(Vec::new, |g| g.0.clone()),
+                fluid: entity.get::<gradiance_domain::fluid::Fluid>().copied(),
             }
         })
         .collect();

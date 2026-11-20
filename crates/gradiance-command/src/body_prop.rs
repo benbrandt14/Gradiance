@@ -278,6 +278,7 @@ mod tests {
             appearance: Appearance::default(),
             depth: DepthBand::default(),
             groups: Vec::new(),
+            fluid: None,
         }
     }
 

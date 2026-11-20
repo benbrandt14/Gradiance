@@ -148,7 +148,7 @@ impl CutCommand {
 /// Fresh polygon-leaf bodies for the connected `components` of a shape
 /// in `original`'s local frame: each recentred on its centroid, posed at
 /// that centroid in the world, and inheriting `original`'s properties,
-/// appearance, depth, groups, field source and tracer under a new id.
+/// appearance, depth, groups, field source, tracer and fluid under a new id.
 /// Shared by cuts and by booleans that split a body.
 pub(crate) fn piece_records(original: &BodyRecord, components: Vec<Contours>) -> Vec<BodyRecord> {
     components
@@ -173,6 +173,7 @@ pub(crate) fn piece_records(original: &BodyRecord, components: Vec<Contours>) ->
                 // Pieces inherit the parent's field source and tracer.
                 field: original.field,
                 tracer: original.tracer,
+                fluid: original.fluid,
             }
         })
         .collect()

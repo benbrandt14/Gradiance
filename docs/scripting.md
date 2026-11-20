@@ -150,6 +150,9 @@ across and ±3.5 m up and down); angles are radians.
 (set-restitution i v)        ; bounciness, 0 = dead, 1 = perfectly elastic
 (set-density i v)            ; mass density (area x density = mass)
 (set-static i on)            ; non-zero = static, 0 = dynamic
+(set-fluid i 2 [2])          ; a fluid of density 2 kg/m² (drag 2 /s): bodies
+                             ; inside float or sink by density (brief N-7);
+                             ; also makes it a static sensor; density 0 = off
 (scale i fx fy)              ; resize about the body's own centre, own axes
 (merge a b)                  ; fuse into one CSG union; a survives
 (subtract a b)               ; cut b's shape out of a; b is consumed

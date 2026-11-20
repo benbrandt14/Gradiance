@@ -26,6 +26,7 @@ use gradiance_core::units::PosRot;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::field::{FieldFalloff, FieldSource};
+use gradiance_domain::fluid::Fluid;
 use gradiance_domain::joint::{AngularMotorDef, JointCommon, JointDef, JointKind, LinearMotorDef};
 use gradiance_domain::node::{NodeAttachment, NodeKind};
 use gradiance_domain::props::BodyPhysics;
@@ -63,6 +64,7 @@ fn body(n: u8, depth: DepthBand) -> BodyRecord {
         groups: Vec::new(),
         field: None,
         tracer: None,
+        fluid: None,
     }
 }
 
@@ -99,6 +101,11 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
         fade_secs: q("2.75"),
         size: q("0.0625"),
         pattern: TracePattern::Dots,
+    });
+    // A fluid region (brief N-7) on the tracer body: its density is a quantity.
+    tracer_body.fluid = Some(Fluid {
+        density: q("1.75"),
+        drag: 2.5,
     });
 
     let hinge = JointKind::Hinge {

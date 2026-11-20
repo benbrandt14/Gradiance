@@ -448,6 +448,7 @@ impl Plugin for CommandPlugin {
         // Marker components that only appear inside `Option`al record
         // fields; registered explicitly so reflection sees them.
         app.register_type::<gradiance_domain::field::FieldSource>();
+        app.register_type::<gradiance_domain::fluid::Fluid>();
         app.register_type::<gradiance_domain::tracer::Tracer>();
         app.add_systems(
             Update,

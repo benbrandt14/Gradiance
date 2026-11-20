@@ -522,6 +522,7 @@ mod tests {
             groups: vec![0],
             field: None,
             tracer: None,
+            fluid: None,
         }
     }
 

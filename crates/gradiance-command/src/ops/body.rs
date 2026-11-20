@@ -7,13 +7,14 @@ use super::{bodies_of, body_of};
 use crate::intent::TransformChange;
 use crate::intent::name;
 use crate::intent::{CommitTransformIntent, DeleteIntent, PropertyEditIntent, ScaleIntent};
-use crate::property::{PropertyChange, PropertyValue};
+use crate::property::{PropertyChange, PropertyValue, fluid_changes};
 use crate::snapshot::SceneSnapshot;
 use avian2d::prelude::{ColliderDensity, Friction, Restitution, RigidBody};
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::appearance::{Appearance, Rgba};
+use gradiance_domain::fluid::Fluid;
 use gradiance_domain::props::BodyPhysics;
 use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target};
 use gradiance_units::{Angle, Length};
@@ -29,6 +30,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetDensity>();
     registry.register::<SetStatic>();
     registry.register::<SetColor>();
+    registry.register::<SetFluid>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -377,6 +379,60 @@ impl Operation for SetColor {
                     old: PropertyValue::Appearance(old),
                     new: PropertyValue::Appearance(new),
                 })
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// Make the body a fluid region (brief N-7): every dynamic body inside it is
+/// pushed up by the weight of the fluid it displaces and damped. A density
+/// of 0 or less turns the fluid off.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetFluid {
+    /// The body.
+    pub i: Target,
+    /// The fluid's areal density (kg/m²); 0 or less: not a fluid.
+    pub density: f32,
+    /// The drag rate (1/s); absent: the body's current drag, or the default.
+    pub drag: Option<f32>,
+}
+
+impl Operation for SetFluid {
+    const META: OpMeta = OpMeta {
+        id: "body.set_fluid",
+        lisp: "set-fluid",
+        doc: "Make the i-th body a fluid of density (kg/m2) and drag (1/s): bodies inside float or sink by their density and are damped; making a fluid also makes it a static sensor. Density 0 turns the fluid off — undoable.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "density": 2, "drag": 2}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .flat_map(|body| {
+                let new = (self.density > 0.0).then(|| Fluid {
+                    density: gradiance_units::Density(self.density),
+                    drag: self
+                        .drag
+                        .unwrap_or_else(|| body.fluid.unwrap_or_default().drag),
+                });
+                fluid_changes(
+                    body.id,
+                    body.fluid,
+                    body.physics.sensor,
+                    body.physics.rigid_body,
+                    new,
+                )
             })
             .collect();
         if changes.is_empty() {
