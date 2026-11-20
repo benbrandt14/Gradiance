@@ -4171,5 +4171,36 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "gradiance::schedule_dump",
         ),
+        (
+            question: (
+                id: "graph-model",
+                title: "Do the signal graph and the shape tree become one graph model?",
+                source: "Planning stage G-0 (docs/state.md roadmap item 12; docs/unified-surface-plan.md section 5)",
+                description: r#"Today the signal graph is a graph wired by bus names (three scene-content resources, 12 block kinds, edited by the canvas through ResMut), and geometry is a materialized SDF tree per body (destructive booleans, no parameters). Graphite is the capability goal; persistence stays RON of materialized authored state; Steel never runs in the frame loop. Detail: docs/graph-model-decision.md."#,
+                decision: true,
+                options: [
+                    (
+                        label: "(a) Keep two graphs",
+                        caption: r#"Signals stay name-wired resources, shapes stay per-body trees; share node metadata only. Cost: smallest, no format change; but the canvas side door and name wires stay, and parametric shapes later need a second graph (and 3D a third)."#,
+                    ),
+                    (
+                        label: "(b) One IR, two node families",
+                        caption: r#"A pure gradiance-graph crate: nodes by StableId, typed ports, edges by id; a signal family (frame rate, lowers to the kernel) and a shape family (edit rate, lowers to ShapeDef); bodies and joints are reference nodes; the graph is scene content edited through graph.* operations; positions saved. Cost: a new crate, two format bumps, the canvas adapter rewritten in two briefs."#,
+                    ),
+                    (
+                        label: "(c) The graph is the document",
+                        caption: r#"Graphite's model: every body, joint and setting is a node output and the save is the graph. Cost: large; the save stops being materialized state, simulated poses need a rest/live split, every command and the undo path are rebuilt, and 3D changes how the whole document evaluates."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "graph-model",
+                title: "Do the signal graph and the shape tree become one graph model?",
+                choice: Picked("(b) One IR, two node families"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it. Rate rule: an edit-rate input never takes a frame-rate output. Nodes are not operations (the OpMeta node flag of plan section 5 is dropped); graph edits are operations. A body that names a shape node has a derived ShapeDef; a destructive edit bakes it first. Node-canvas positions become saved, undoable node fields (G-2). Phases G-1 to G-6.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/graph-model-decision.md (decision and phases G-0 to G-6); docs/briefs/G-1-graph-ir.md.",
+        ),
     ],
 )
