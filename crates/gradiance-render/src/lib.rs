@@ -13,6 +13,7 @@ pub mod joint_viz;
 pub mod material_sync;
 pub mod plane;
 pub mod scenery;
+pub mod stack;
 pub mod toon;
 pub mod tracer;
 
@@ -70,6 +71,7 @@ impl Plugin for GradianceRenderPlugin {
             (
                 extrude_sync::sync_body_meshes,
                 material_sync::sync_body_materials,
+                stack::stack_bodies.before(bevy::transform::TransformSystems::Propagate),
                 plane::sync_ground_planes,
                 toon::attach_face_fields,
             ),

@@ -14,8 +14,11 @@ use gradiance_interaction::overlay::OverlayGizmos;
 /// clear the fill face's depth without the outline visibly floating in
 /// front (the world is SI metres — a larger lift parallaxes off the body
 /// when the view tilts).
-fn front_z(band: DepthBand) -> f32 {
-    band.z_front() + 0.005
+/// `transform` carries the body's stacking offset within its band
+/// (`stack`), so an older body's outline sinks with its face and never
+/// shows through a newer body on top of it.
+fn front_z(band: DepthBand, transform: &Transform) -> f32 {
+    band.z_front() + transform.translation.z + 0.005
 }
 
 /// Draws each body's authored border outline (alpha 0 hides it).
@@ -31,7 +34,7 @@ pub fn draw_body_borders(
             continue;
         }
         let color = Color::from(border);
-        let z = front_z(*layers);
+        let z = front_z(*layers, transform);
         let affine = transform.compute_affine();
         for ring in polygonize(shape).rings() {
             let mut points: Vec<Vec3> = ring
@@ -63,7 +66,7 @@ pub fn draw_circle_radius_lines(
         };
         let center = transform.translation.truncate();
         let dir = Vec2::from_angle(transform.rotation.to_euler(EulerRot::ZYX).0);
-        let z = front_z(*layers);
+        let z = front_z(*layers, transform);
         gizmos.line(center.extend(z), (center + dir * *radius).extend(z), tint);
     }
 }

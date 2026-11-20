@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (N-8 handoff; before that N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (J-2 handoff; before that N-8; before that N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,7 +12,18 @@ Last updated: 2026-11-20 (N-8 handoff; before that N-7, N-6, N-5, N-4, N-3, N-2,
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **J-1** joint stress test is done (in review; branch
+- **Now:** **J-2** cut / selection / boolean stress test is done (in
+  review; branch `claude/project-thread-rtg6i7`; brief
+  `docs/briefs/J-2-cut-select-stress.md`): 7 scenes in
+  `tests/it/cut_select_stress.rs`; four fixes: a 3 cm cut no longer
+  falls between the contour rows of a long body (the cut contours in
+  the stroke frame, `polygonize_components_on_axes`), a stroke through
+  one side of a ring opens it, a move no longer records the hold's
+  `Kinematic` in its undo step (`HeldKind`), and the newest body of a
+  depth band is on top for both drawing and clicks (`StableId::new` is
+  UUID v7, `tools::bodies_at_sorted`, `render::stack`); three decisions
+  in `archive.ron`.
+  **J-1** joint stress test is done (in review; branch
   `claude/project-thread-fmsek9`; brief `docs/briefs/J-1-joint-stress.md`):
   19 scenes in `tests/it/joint_stress.rs`; five fixes: a body-to-body
   slider no longer explodes at long travel (`track_slider_anchors`), a
