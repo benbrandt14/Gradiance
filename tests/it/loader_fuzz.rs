@@ -55,7 +55,7 @@ const MUTATIONS: [Mutation; 8] = [
     Mutation::ByteFlips,
 ];
 
-/// SplitMix64: a seeded generator with no dependency.
+/// `SplitMix64`: a seeded generator with no dependency.
 struct Rng(u64);
 
 impl Rng {
@@ -220,22 +220,19 @@ fn duplicate_id(scene: &mut SceneRecord, rng: &mut Rng) {
     }
     let from = ids[rng.below(ids.len())];
     let to = rng.below(ids.len());
-    let mut slot = 0;
-    for id in scene
+    let slot = scene
         .bodies
         .iter_mut()
         .map(|b| &mut b.id)
         .chain(scene.joints.iter_mut().map(|j| &mut j.id))
         .chain(scene.nodes.iter_mut().map(|n| &mut n.id))
-    {
-        if slot == to {
-            *id = if *id == from {
-                ids[(to + 1) % ids.len()]
-            } else {
-                from
-            };
-        }
-        slot += 1;
+        .nth(to);
+    if let Some(id) = slot {
+        *id = if *id == from {
+            ids[(to + 1) % ids.len()]
+        } else {
+            from
+        };
     }
 }
 
@@ -275,7 +272,7 @@ fn mutate(bytes: &[u8], mutation: Mutation, rng: &mut Rng, pendulum: &SceneRecor
             while !text.is_char_boundary(cut) {
                 cut -= 1;
             }
-            text[..cut].as_bytes().to_vec()
+            text.as_bytes()[..cut].to_vec()
         }
         Mutation::DropField => drop_field(&text, rng).into_bytes(),
         Mutation::NonFinite => non_finite(&text, rng).into_bytes(),
@@ -384,10 +381,10 @@ fn content(app: &mut App) -> String {
     let mut scene = SceneRecord::capture(app.world_mut());
     scene.app_version.clear();
     let env = &mut scene.environment;
-    env.grid = Default::default();
-    env.snap = Default::default();
-    env.camera = Default::default();
-    env.workspaces = Default::default();
+    env.grid = gradiance::domain::settings::GridSettings::default();
+    env.snap = gradiance::domain::settings::SnapConfig::default();
+    env.camera = gradiance::domain::settings::CameraSettings::default();
+    env.workspaces = gradiance::domain::workspace::Workspaces::default();
     to_ron(&scene).unwrap_or_else(|e| panic!("{e}"))
 }
 
@@ -507,8 +504,7 @@ fn mutated_scene_files_load_or_fail_cleanly() {
     set_state(&mut app, GameState::Paused);
     let file_name = |p: &Path| {
         p.file_name()
-            .map(|f| f.to_string_lossy().into_owned())
-            .unwrap_or_default()
+            .map_or_else(String::new, |f| f.to_string_lossy().into_owned())
     };
     // Every current-version file loads exactly as it is.
     for (source, bytes) in &files {

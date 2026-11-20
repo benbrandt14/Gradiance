@@ -445,7 +445,7 @@ durable identity.
 | `(sim-time)` | `sim.time` | query | Simulated seconds on the physics clock. Poll it to see a `sim-step` done. |
 | `(scene-dump)` | `scene.dump` | query | The scene as JSON: the `SceneRecord` a save writes (bodies, joints with their anchors, groups, nodes, environment). A remote client gets the object, Lisp its text. |
 | `(save-scene path)` | `scene.save` | editor | Writes the scene to `path` (must end in `.ron`). `""`: the last saved or opened path, else a dialog (File ▸ Save, Ctrl+S). Returns the path; the file is written in the same frame. |
-| `(load-scene path)` | `scene.load` | edit | Replaces the scene with the file's, one undo step (File ▸ Open, Ctrl+O; `""`: a dialog). A file that does not read or parse is an error and nothing is queued. |
+| `(load-scene path)` | `scene.load` | edit | Replaces the scene with the file's, one undo step (File ▸ Open, Ctrl+O; `""`: a dialog). A file that does not read or parse is an error and nothing is queued; so is a file in which two objects share an id, or a number is NaN or infinite (brief 6-1). |
 | `(signal-history name)` | `signal.history` | query | The signal's recorded `[t v]` samples, oldest first (the last 600). Empty for a name the bus does not hold. |
 | `(signal-export path names)` | `signal.export` | editor | Writes CSV to `path` (must end in `.csv`): a header `t,<names>`, then one row per sample of the first signal; another signal's cell is its sample at the same `t`, else empty. An unknown name is an error. |
 
@@ -746,6 +746,11 @@ and signal verbs in `crates/gradiance-script/src/ops.rs`. The full list is
    against a fixture selection, and that `gradiance-ui` and
    `gradiance-interaction` declare no intent writer outside an allow list
    of gesture tools and inspector fields (each row with its reason).
+   The undo matrix (`tests/it/undo_matrix.rs`, brief 6-1) runs every
+   operation that records or moves a history step from its example too:
+   dump, call, dump, undo, dump, redo, dump. Undo must give the first dump
+   back exactly and redo the second. An example that changes nothing on the
+   fixture fails it unless `IDENTITY_ON_FIXTURE` lists it with a reason.
 
 ### VM built-ins (not operations)
 

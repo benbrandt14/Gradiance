@@ -260,7 +260,7 @@ impl NodeRecord {
                     .entity(id)
             })
             .and_then(|e| world.get_entity(e).ok())
-            .filter(|e| e.contains::<Body>())
+            .filter(EntityRef::contains::<Body>)
             .and_then(|e| e.get::<Transform>())
         {
             pose.pos = attachment.follow(PosRot::from_transform(target));

@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (N-9 handoff, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (6-1 handoff; before that N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,10 +12,20 @@ Last updated: 2026-11-20 (N-9 handoff, Phase N complete; before that N-8, N-7, N
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **Phase 6** is planned (orchestrator, 2026-11-20): briefs
+- **Now:** **Phase 6** (orchestrator, 2026-11-20): briefs
   **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
   geometry property tests, **6-3** physics debug toggles + schedule dump,
-  in that order. Phase N merged (#282–#289, #291); J-1 merged (#290).
+  in that order. **6-1** is done (in review; branch
+  `claude/project-thread-tw1mvl-6-1`): `tests/it/undo_matrix.rs` runs
+  every history operation (56) from its example: dump, call, undo, redo,
+  each dump exact (workstation config left out), 17 s;
+  `tests/it/loader_fuzz.rs` loads every committed scene file and 256
+  seeded mutations through `scene.load`: typed error and nothing changed,
+  or one stable, undoable `load-scene` step, 3 s. Four fixes: pausing no
+  longer takes one more step after the run is recorded; a snapshot
+  captures an attached node where it follows its target; `from_ron`
+  refuses a shared `StableId` and a NaN/inf number (typed errors); six
+  decisions in `archive.ron`. **Next:** **6-2**. Phase N merged (#282–#289, #291); J-1 merged (#290).
   **N-9** mirror and joint load colour is done (in review;
   branch `claude/project-thread-tw1mvl-n9`): `body.mirror_h` /
   `body.mirror_v` (`(mirror-h targets)`, `(mirror-v targets)`, Edit ▸
