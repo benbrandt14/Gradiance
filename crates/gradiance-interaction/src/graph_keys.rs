@@ -2,7 +2,7 @@
 //! during play, and a graph-bound key takes its key from the editor while
 //! the sim plays.
 //!
-//! A key input is a `BlockOp::Key` block in the authored `ComputedSignals`
+//! A key input is a key node of the authored signal graph
 //! (scene content: saved, one `settings` undo step per edit). Its expression
 //! reads the bus inputs `key@<name>`; [`publish_graph_keys`] writes `1` or
 //! `0` there each frame, just before the kernels run. Those values are
@@ -33,12 +33,12 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use gradiance_core::states::GameState;
 use gradiance_domain::keys::{KEYS, KeySet, index_of_code, key_index};
-use gradiance_domain::signal::{ComputedSignals, key_of_input};
-use gradiance_signal::SignalBus;
+use gradiance_domain::signal::key_of_input;
+use gradiance_signal::{CompiledSignals, SignalBus};
 use leafwing_input_manager::prelude::*;
 
 /// The keys the node graph binds, and the bus inputs that carry them.
-/// Derived from `ComputedSignals` on change; never saved.
+/// Derived from the compiled signal graph on change; never saved.
 #[derive(Resource, Debug, Default)]
 pub struct GraphKeys {
     /// Every key some key block binds.
@@ -48,20 +48,20 @@ pub struct GraphKeys {
 }
 
 impl GraphKeys {
-    /// Rebuilds the bound set and the reference list from the authored
-    /// signals (cold: runs when they change).
-    pub fn rebuild(&mut self, computed: &ComputedSignals) {
+    /// Rebuilds the bound set and the reference list from the bus inputs
+    /// the compiled signals read (cold: runs when they are recompiled). A
+    /// key node lowers to reads of `key@<name>`, so every key it binds is
+    /// among them, wherever it sits in the graph.
+    pub fn rebuild<'a>(&mut self, inputs: impl IntoIterator<Item = &'a str>) {
         self.bound = KeySet::default();
         self.refs.clear();
-        for signal in &computed.0 {
-            for input in signal.expr.inputs() {
-                let Some(index) = key_of_input(&input).and_then(key_index) else {
-                    continue;
-                };
-                self.bound.insert(index);
-                if !self.refs.iter().any(|(name, _)| *name == input) {
-                    self.refs.push((input, index));
-                }
+        for input in inputs {
+            let Some(index) = key_of_input(input).and_then(key_index) else {
+                continue;
+            };
+            self.bound.insert(index);
+            if !self.refs.iter().any(|(name, _)| name == input) {
+                self.refs.push((input.to_owned(), index));
             }
         }
     }
@@ -86,7 +86,7 @@ pub(crate) fn install(app: &mut App) {
     app.add_systems(
         Update,
         (
-            refresh_graph_keys.run_if(resource_exists_and_changed::<ComputedSignals>),
+            refresh_graph_keys.run_if(resource_exists_and_changed::<CompiledSignals>),
             publish_graph_keys.run_if(resource_exists::<SignalBus>),
         )
             .chain()
@@ -95,9 +95,9 @@ pub(crate) fn install(app: &mut App) {
     );
 }
 
-/// Rebuilds [`GraphKeys`] when the authored signals change.
-pub fn refresh_graph_keys(computed: Res<ComputedSignals>, mut keys: ResMut<GraphKeys>) {
-    keys.rebuild(&computed);
+/// Rebuilds [`GraphKeys`] when the signal graph is recompiled.
+pub fn refresh_graph_keys(compiled: Res<CompiledSignals>, mut keys: ResMut<GraphKeys>) {
+    keys.rebuild(compiled.inputs());
 }
 
 /// Publishes each key reference's held state on the bus (`1` held, `0` not)
@@ -263,27 +263,29 @@ fn action_label(action: EditorAction) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gradiance_domain::signal::{BlockOp, ComputedSignal};
+    use gradiance_domain::signal::{BlockOp, SignalExpr};
 
-    fn key_block(key: &str, negative: Option<&str>) -> ComputedSignal {
-        ComputedSignal::from_block(
-            format!("in-{key}"),
-            BlockOp::Key {
-                key: key.into(),
-                negative: negative.map(Into::into),
-            },
-        )
+    /// The bus inputs a key block's lowered expression reads.
+    fn key_block(key: &str, negative: Option<&str>) -> Vec<String> {
+        BlockOp::Key {
+            key: key.into(),
+            negative: negative.map(Into::into),
+        }
+        .to_expr()
+        .inputs()
     }
 
     #[test]
     fn the_bound_set_and_references_follow_the_key_blocks() {
-        let computed = ComputedSignals(vec![
+        let inputs: Vec<String> = [
             key_block("e", Some("Q")),
             key_block("E", None),
             key_block("Hyper", None),
-        ]);
+            SignalExpr::parse_rpn("t sin").unwrap().inputs(),
+        ]
+        .concat();
         let mut graph = GraphKeys::default();
-        graph.rebuild(&computed);
+        graph.rebuild(inputs.iter().map(String::as_str));
         assert!(graph.bound().contains_code(KeyCode::KeyE));
         assert!(graph.bound().contains_code(KeyCode::KeyQ));
         assert!(!graph.bound().contains_code(KeyCode::KeyW));
@@ -293,7 +295,7 @@ mod tests {
             ["key@E", "key@Q"],
             "one reference per key; none for an unknown name"
         );
-        graph.rebuild(&ComputedSignals::default());
+        graph.rebuild([]);
         assert!(graph.bound().is_empty());
     }
 

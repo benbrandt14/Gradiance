@@ -16,9 +16,17 @@
 //!
 //! The graph is *derived from the scene* every frame by `reconcile`: a node per
 //! body **explicitly added** ("Add to node editor") or referenced by a binding
-//! — never merely selected, so the canvas stays uncluttered — plus every param
-//! and computed signal, keyed by `GraphKey` so dragged positions persist; the
-//! wires are rebuilt from the bindings. It docks to the screen bottom.
+//! — never merely selected, so the canvas stays uncluttered — plus every signal
+//! node of the authored [`Graph`] (params, blocks, keys, `defsignal`
+//! expressions), keyed by `GraphKey`; the wires are rebuilt from the bindings
+//! and the graph's wires. It docks to the screen bottom.
+//!
+//! **The signal graph is the source** (brief G-2): a param or block is keyed
+//! by its node id, sits at its saved [`Node::pos`](gradiance_graph::Node), and
+//! a settled drag writes the new position back (one `settings` undo step, like
+//! a slider drag). Every canvas edit of it is a [`GraphEdit`], applied through
+//! [`Graph::edit`] (validated, so a wire the graph refuses never lands). The
+//! canvas still writes the resource directly; G-3 moves it onto operations.
 //!
 //! [`egui-snarl`]: https://crates.io/crates/egui-snarl
 //! [`SignalBinding`]: gradiance_domain::signal::SignalBinding
@@ -42,9 +50,12 @@ use gradiance_domain::{Body, Joint};
 use gradiance_interaction::graph_keys::EditorKeyTable;
 use gradiance_interaction::selection::Selection;
 use gradiance_physics::queries::PhysicsQueries;
+use gradiance_graph::{
+    Family, GraphEdit, Input, Node as GraphNode, NodeKind as SignalKind, NodeRef, PortRef,
+};
 use gradiance_signal::{
-    BlockOp, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
-    SignalParam, SignalParams, SignalSink, SignalSource, read_source,
+    GradientSpec, Graph, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalSink,
+    SignalSource, read_source,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -59,10 +70,10 @@ enum GraphKey {
     Joint(StableId),
     /// A behavior node (a thruster's thrust pin), by id (brief N-3).
     Node(StableId),
-    /// A `defparam` knob, by name.
-    Param(String),
-    /// A `defsignal` modulator, by name.
-    Computed(String),
+    /// A param node of the signal graph, by node id.
+    Param(StableId),
+    /// Any other signal node (a block, a key, a `defsignal`), by node id.
+    Computed(StableId),
     /// The singleton **Scope** sink — the Live Plot as a block. Any signal
     /// wired into it becomes a plot-sink binding.
     Scope,
@@ -95,16 +106,12 @@ enum NodeData {
     /// A thruster block (brief N-3): one input, its thrust (N), and no
     /// outputs. Shown while a wire names it or its body is on the canvas.
     Thruster { id: StableId },
-    /// A param block: one output (its published bus name).
-    Param(String),
-    /// A computed/modulation block. `block` is the structured op (canvas
-    /// blocks) whose operand pins are wireable; `inputs` is the read-only pin
-    /// list for a console-authored RPN signal (`block` = `None`).
-    Computed {
-        name: String,
-        inputs: Vec<String>,
-        block: Option<BlockOp>,
-    },
+    /// A param node: one output (its published bus name), its value in the
+    /// footer.
+    Param(GraphNode),
+    /// Any other signal node: its operand ports ([`operand_ports`]) are
+    /// wireable pins, its other ports (`k`, `amp`, a curve) footer fields.
+    Computed(GraphNode),
     /// The singleton **Scope** block: one input, no output — wiring a signal
     /// into it makes a `SignalSink::Plot` binding (the Live Plot as a block).
     Scope,
@@ -129,8 +136,8 @@ impl NodeData {
             Self::Body { id, .. } => GraphKey::Body(*id),
             Self::Joint { id, .. } => GraphKey::Joint(*id),
             Self::Thruster { id } => GraphKey::Node(*id),
-            Self::Param(name) => GraphKey::Param(name.clone()),
-            Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
+            Self::Param(node) => GraphKey::Param(node.id),
+            Self::Computed(node) => GraphKey::Computed(node.id),
             Self::Scope => GraphKey::Scope,
             Self::Comment { id, .. } => GraphKey::Comment(*id),
         }
@@ -140,7 +147,7 @@ impl NodeData {
         match self {
             Self::Body { .. } | Self::Joint { .. } | Self::Thruster { .. } => Role::Body,
             Self::Param(_) => Role::Producer,
-            Self::Computed { .. } => Role::Modulator,
+            Self::Computed(_) => Role::Modulator,
             Self::Scope => Role::Scope,
             Self::Comment { .. } => Role::Comment,
         }
@@ -152,8 +159,8 @@ impl NodeData {
             Self::Body { name, kind, .. } => name.clone().unwrap_or_else(|| (*kind).to_owned()),
             Self::Joint { kind, .. } => (*kind).to_owned(),
             Self::Thruster { .. } => "thruster".to_owned(),
-            Self::Param(name) => format!("⊙ {name}"),
-            Self::Computed { name, .. } => format!("ƒ {name}"),
+            Self::Param(node) => format!("⊙ {}", node_title(node)),
+            Self::Computed(node) => format!("ƒ {}", node_title(node)),
             Self::Scope => "▭ Scope".to_owned(),
             Self::Comment { .. } => "note".to_owned(),
         }
@@ -164,8 +171,11 @@ impl NodeData {
         match self {
             Self::Body { id, .. } => body_sensors(*id).get(index).map(|(_, s)| s.clone()),
             Self::Joint { id, .. } => joint_sensors(*id).get(index).map(|(_, s)| s.clone()),
-            Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
-            Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
+            // A binding reads a node by its label; an unlabelled node
+            // publishes nothing a binding could read.
+            Self::Param(node) | Self::Computed(node) => (index == 0)
+                .then(|| node.label.clone().map(SignalSource::Named))
+                .flatten(),
             Self::Thruster { .. } | Self::Scope | Self::Comment { .. } => None,
         }
     }
@@ -181,6 +191,45 @@ impl NodeData {
             Self::Scope => (index == 0).then_some(SignalSink::Plot),
             _ => None,
         }
+    }
+}
+
+impl NodeData {
+    /// The signal-graph node behind a param or block.
+    fn signal_node(&self) -> Option<&GraphNode> {
+        match self {
+            Self::Param(node) | Self::Computed(node) => Some(node),
+            _ => None,
+        }
+    }
+
+    /// Where the graph saves this block, for a signal node.
+    fn saved_pos(&self) -> Option<egui::Pos2> {
+        self.signal_node().map(|n| egui::pos2(n.pos.x, n.pos.y))
+    }
+}
+
+/// A signal node's title: its label, or its kind's catalog name.
+fn node_title(node: &GraphNode) -> String {
+    node.label
+        .clone()
+        .unwrap_or_else(|| gradiance_graph::meta(&node.kind).name.to_owned())
+}
+
+/// The input ports of a signal kind the canvas shows as wireable pins (pin
+/// `i` is port `operand_ports(kind)[i]`): the operands, as before G-2. The
+/// other ports (a gain's `k`, an oscillator's `amp` and `freq`, a constant's
+/// `value`, a curve) are edited as constants in the block's footer.
+fn operand_ports(kind: &SignalKind) -> Vec<usize> {
+    match kind {
+        SignalKind::Gain | SignalKind::Abs | SignalKind::Curve => vec![0],
+        SignalKind::Sum
+        | SignalKind::Product
+        | SignalKind::Sub
+        | SignalKind::Min
+        | SignalKind::Max => vec![0, 1],
+        SignalKind::Expr(_) => (0..kind.input_ports().len()).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -234,6 +283,10 @@ pub struct NodeGraph {
     /// Last frame's pan/zoom transform (captured via `current_transform`), used
     /// to paint the canvas-following dot-grid a frame later.
     last_transform: Option<egui::emath::TSTransform>,
+    /// The saved position each signal block was last placed at. A block moves
+    /// to its saved position only when that changes (an undo, a
+    /// `graph-set`), so a drag in progress is never snapped back.
+    placed: HashMap<GraphKey, egui::Pos2>,
 }
 
 impl Default for NodeGraph {
@@ -248,6 +301,7 @@ impl Default for NodeGraph {
             next_comment: 0,
             fit_requested: false,
             last_transform: None,
+            placed: HashMap::new(),
         }
     }
 }
@@ -263,13 +317,24 @@ impl NodeGraph {
     }
 }
 
+/// The block key of signal node `id`: a param or any other signal node.
+fn signal_key(graph: &Graph, id: StableId) -> Option<GraphKey> {
+    let node = graph.node(id)?;
+    match node.kind {
+        SignalKind::Param { .. } => Some(GraphKey::Param(id)),
+        _ if node.kind.family() == Family::Signal => Some(GraphKey::Computed(id)),
+        _ => None,
+    }
+}
+
 /// The `(GraphKey, output index)` a binding source resolves to, if it maps to
-/// a producer block on the canvas: a param or computed block by name, a body
-/// sensor in [`body_sensors`] order, a joint sensor in [`joint_sensors`]
-/// order. `None` for a two-body source (distance), which has no block.
-fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
+/// a producer block on the canvas: the signal node labelled with a named
+/// source, a body sensor in [`body_sensors`] order, a joint sensor in
+/// [`joint_sensors`] order. `None` for a two-body source (distance), which
+/// has no block, or a name no node publishes.
+fn source_pin(source: &SignalSource, graph: &Graph) -> Option<(GraphKey, usize)> {
     match (source, source.reading()) {
-        (SignalSource::Named(name), _) => Some((GraphKey::Param(name.clone()), 0)),
+        (SignalSource::Named(name), _) => Some((signal_key(graph, graph.by_label(name)?.id)?, 0)),
         (_, Some((row, Subjects::One(id)))) if row.subject() == Subject::Joint => Some((
             GraphKey::Joint(id),
             joint_sensors(id).iter().position(|(_, s)| s == source)?,
@@ -311,8 +376,8 @@ fn sink_pin(sink: &SignalSink) -> (GraphKey, usize) {
 pub struct GraphParams<'w, 's> {
     pub(crate) graph: ResMut<'w, NodeGraph>,
     pub(crate) bindings: ResMut<'w, SignalBindings>,
-    pub(crate) params: ResMut<'w, SignalParams>,
-    pub(crate) computed: ResMut<'w, ComputedSignals>,
+    /// The authored signal graph (params, blocks, their positions).
+    pub(crate) signal_graph: ResMut<'w, Graph>,
     pub(crate) bodies: Query<'w, 's, (&'static StableId, &'static ShapeDef), With<Body>>,
     pub(crate) joints: Query<'w, 's, (&'static StableId, &'static JointDef), With<Joint>>,
     /// The behavior nodes, for thruster blocks (brief N-3).
@@ -346,14 +411,13 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
         &gp.graph.names,
         &gp.graph.comments,
         &gp.bindings,
-        &gp.params,
-        &gp.computed,
+        &gp.signal_graph,
         &gp.bodies,
         &gp.joints,
         &gp.nodes,
     );
     reconcile(&mut gp.graph, desired);
-    rebuild_wires(&mut gp.graph, &gp.bindings);
+    rebuild_wires(&mut gp.graph, &gp.bindings, &gp.signal_graph);
 
     // Precompute the live value of every output/input pin (the Simulink
     // "watch the signal flow" readout).
@@ -379,7 +443,12 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
         output_values,
         input_values,
         bindings: gp.bindings.0.clone(),
-        params: gp.params.0.clone(),
+        labels: gp
+            .signal_graph
+            .nodes
+            .iter()
+            .filter_map(|n| n.label.clone())
+            .collect(),
         editor_keys: gp.editor_keys.clone(),
         ..GraphViewer::default()
     }
@@ -447,6 +516,20 @@ pub(crate) fn node_graph_section(
     viewer.selected_stroke = tokens.accent;
     let style = themed_style(&tokens);
     graph.snarl.show(viewer, &style, "node-graph", ui);
+    // A settled drag (no button held) writes each moved block's position back
+    // to the graph: one `settings` step, like a slider drag.
+    if !ui.ctx().input(|i| i.pointer.any_down()) {
+        for (_, pos, data) in graph.snarl.nodes_pos_ids() {
+            if let (Some(node), Some(saved)) = (data.signal_node(), data.saved_pos())
+                && pos != saved
+            {
+                viewer.graph_edits.push(GraphEdit::SetPos {
+                    node: NodeRef::Id(node.id),
+                    pos: Vec2::new(pos.x, pos.y),
+                });
+            }
+        }
+    }
     // Persist the pan/zoom transform (for next frame's grid) and retire a
     // fulfilled fit request.
     if let Some(t) = viewer.captured_transform {
@@ -468,24 +551,36 @@ pub(crate) fn apply_pane(viewer: GraphViewer, gp: &mut GraphParams) {
     {
         gp.selection.set(entity);
     }
-    apply_viewer_edits(
-        viewer,
-        &mut gp.graph,
-        &mut gp.bindings,
-        &mut gp.params,
-        &mut gp.computed,
-    );
+    apply_viewer_edits(viewer, &mut gp.graph, &mut gp.bindings, &mut gp.signal_graph);
+}
+
+/// Applies a frame's graph edits in order, each validated
+/// ([`Graph::edit`]); a refused edit is logged and skipped. The resource is
+/// written only when the graph changed, so an idle canvas never marks it
+/// changed (which would recompile the signals every frame).
+pub(crate) fn apply_graph_edits(edits: Vec<GraphEdit>, graph: &mut ResMut<Graph>) {
+    if edits.is_empty() {
+        return;
+    }
+    let mut next = (**graph).clone();
+    for edit in &edits {
+        if let Err(error) = next.edit(edit) {
+            warn!(%error, "canvas graph edit refused");
+        }
+    }
+    if next != **graph {
+        **graph = next;
+    }
 }
 
 /// Drains a frame's [`GraphViewer`] edits into the config-seam resources:
-/// binding create/remove/transfer, custom names, and in-canvas authoring
-/// (add param, remove body, delete param/computed).
+/// binding create/remove/transfer, custom names and comments (view state),
+/// and every signal-graph edit (add, wire, constants, positions, delete).
 fn apply_viewer_edits(
     viewer: GraphViewer,
     graph: &mut NodeGraph,
     bindings: &mut SignalBindings,
-    params: &mut SignalParams,
-    computed: &mut ComputedSignals,
+    signal_graph: &mut ResMut<Graph>,
 ) {
     for binding in viewer.new_bindings {
         bindings.0.push(binding);
@@ -528,45 +623,18 @@ fn apply_viewer_edits(
             graph.names.insert(id, name);
         }
     }
-    for (name, value) in viewer.param_edits {
-        if let Some(param) = params.0.iter_mut().find(|p| p.name == name) {
-            param.value = value;
-        }
-    }
-    if viewer.add_param {
-        let name = fresh_param_name(params);
-        params.0.push(gradiance_signal::SignalParam::unit(name));
-    }
-    for op in viewer.add_blocks {
-        let name = fresh_block_name(&op, computed);
-        computed
-            .0
-            .push(gradiance_signal::ComputedSignal::from_block(name, op));
-    }
-    // Operand wiring + constant edits: replace the block's op and re-lower.
-    for (name, op) in viewer.block_edits {
-        if let Some(signal) = computed.0.iter_mut().find(|c| c.name == name) {
-            signal.block = Some(op);
-            signal.relower();
-        }
-    }
     for id in viewer.remove_bodies {
         graph.added.remove(&id);
     }
-    for name in viewer.delete_params {
-        params.0.retain(|p| p.name != name);
-    }
-    for name in viewer.delete_computed {
-        computed.0.retain(|c| c.name != name);
-    }
+    apply_graph_edits(viewer.graph_edits, signal_graph);
 }
 
-/// A fresh unique `param-N` name over the existing params.
-fn fresh_param_name(params: &SignalParams) -> String {
-    (1..=u32::try_from(params.0.len()).unwrap_or(0) + 1)
-        .map(|n| format!("param-{n}"))
-        .find(|name| !params.0.iter().any(|p| &p.name == name))
-        .unwrap_or_else(|| "param".to_owned())
+/// A fresh unique `<base>-N` label over `taken` (`param-1`, `gain-2`).
+fn fresh_label(taken: &[String], base: &str) -> String {
+    (1..=taken.len() + 1)
+        .map(|n| format!("{base}-{n}"))
+        .find(|name| !taken.contains(name))
+        .unwrap_or_else(|| base.to_owned())
 }
 
 /// The node-canvas theme (vvvv-flavoured): sharp corners, flat fills, thin
@@ -616,7 +684,9 @@ fn output_pin_values(
                 .iter()
                 .map(|(_, s)| read_source(s, index, physics, body_transforms, dt))
                 .collect(),
-            NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
+            NodeData::Param(node) | NodeData::Computed(node) => {
+                vec![node.label.as_deref().and_then(|label| bus.get(label))]
+            }
             NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. } => Vec::new(),
         };
         values.insert(data.key(), vals);
@@ -685,8 +755,7 @@ fn collect_desired(
     names: &HashMap<StableId, String>,
     comments: &[(u32, String)],
     bindings: &SignalBindings,
-    params: &SignalParams,
-    computed: &ComputedSignals,
+    signal_graph: &Graph,
     bodies: &Query<(&StableId, &ShapeDef), With<Body>>,
     joints: &Query<(&StableId, &JointDef), With<Joint>>,
     nodes: &Query<(&StableId, &NodeKind, &NodeAttachment), With<BehaviorNode>>,
@@ -712,18 +781,21 @@ fn collect_desired(
     // Joints a binding names (a joint sensor source or a motor sink).
     let mut shown_joints: HashSet<StableId> = HashSet::new();
     for binding in &bindings.0 {
-        if let Some((GraphKey::Joint(id), _)) = source_pin(&binding.source) {
+        if let Some((GraphKey::Joint(id), _)) = source_pin(&binding.source, signal_graph) {
             shown_joints.insert(id);
         }
         if let (GraphKey::Joint(id), _) = sink_pin(&binding.sink) {
             shown_joints.insert(id);
         }
     }
-    // Bodies and joints feeding a modulation block (a canonical sensor name
-    // in its expr).
-    for signal in &computed.0 {
-        for input in signal.expr.inputs() {
-            match SignalSource::from_bus_name(&input).and_then(|s| source_pin(&s)) {
+    // Bodies and joints feeding a signal node (a canonical sensor name it
+    // reads from the bus).
+    for node in &signal_graph.nodes {
+        for input in &node.inputs {
+            let Input::External(name) = input else {
+                continue;
+            };
+            match SignalSource::from_bus_name(name).and_then(|s| source_pin(&s, signal_graph)) {
                 Some((GraphKey::Body(id), _)) if live.contains(&id) => {
                     shown.insert(id);
                 }
@@ -735,17 +807,25 @@ fn collect_desired(
         }
     }
 
+    // Every signal node of the graph, params first. (Shape nodes join the
+    // canvas with brief G-4.)
     let mut items: Vec<NodeData> = Vec::new();
-    for param in &params.0 {
-        items.push(NodeData::Param(param.name.clone()));
-    }
-    for signal in &computed.0 {
-        items.push(NodeData::Computed {
-            name: signal.name.clone(),
-            inputs: signal.expr.inputs(),
-            block: signal.block.clone(),
-        });
-    }
+    let signal_nodes = || {
+        signal_graph
+            .nodes
+            .iter()
+            .filter(|n| n.kind.family() == Family::Signal)
+    };
+    items.extend(
+        signal_nodes()
+            .filter(|n| matches!(n.kind, SignalKind::Param { .. }))
+            .map(|n| NodeData::Param(n.clone())),
+    );
+    items.extend(
+        signal_nodes()
+            .filter(|n| !matches!(n.kind, SignalKind::Param { .. }))
+            .map(|n| NodeData::Computed(n.clone())),
+    );
     // A joint block for every joint a wire names, and for every motorised
     // hinge or slider on a body already on the canvas: its motor pins are
     // where a drive is wired (brief N-1).
@@ -884,21 +964,33 @@ impl ColumnCursor {
     }
 }
 
-/// Rebuilds the snarl graph to mirror `desired`, preserving dragged positions,
-/// then re-draws the wires from the bindings + computed-input name matches.
+/// Rebuilds the snarl graph to mirror `desired`, preserving dragged positions.
+/// A signal block sits at its saved position: placed there when it appears,
+/// and moved there when the saved position changes (undo, `graph-set`); a
+/// view-only block (body, joint, scope, note) stacks down its column.
 fn reconcile(graph: &mut NodeGraph, desired: Vec<NodeData>) {
     let mut cursor = ColumnCursor::default();
     let mut seen: HashSet<GraphKey> = HashSet::with_capacity(desired.len());
     for node in desired {
         let key = node.key();
         seen.insert(key.clone());
+        let saved = node.saved_pos();
         if let Some(&id) = graph.keys.get(&key)
-            && let Some(slot) = graph.snarl.get_node_mut(id)
+            && let Some(slot) = graph.snarl.get_node_info_mut(id)
         {
-            *slot = node;
+            slot.value = node;
+            if let Some(saved) = saved
+                && graph.placed.get(&key) != Some(&saved)
+            {
+                slot.pos = saved;
+                graph.placed.insert(key, saved);
+            }
             continue;
         }
-        let pos = cursor.next(node.role());
+        let pos = saved.unwrap_or_else(|| cursor.next(node.role()));
+        if let Some(saved) = saved {
+            graph.placed.insert(key.clone(), saved);
+        }
         let id = graph.snarl.insert_node(pos, node);
         graph.keys.insert(key, id);
     }
@@ -912,6 +1004,7 @@ fn reconcile(graph: &mut NodeGraph, desired: Vec<NodeData>) {
         if graph.snarl.get_node(id).is_some() {
             graph.snarl.remove_node(id);
         }
+        graph.placed.remove(&key);
         graph.keys.remove(&key);
     }
 }
@@ -932,11 +1025,10 @@ pub(crate) struct GraphViewer {
     /// A snapshot of the bindings, so a body footer can render + edit the
     /// transfer (domain + gradient) of the wires driving it.
     bindings: Vec<SignalBinding>,
-    /// A snapshot of the params, so a param block's footer can tune its value
-    /// in place (the same knob the Signals dock exposes).
-    params: Vec<SignalParam>,
-    /// Param value edits `(name, new value)` from a param block's footer.
-    param_edits: Vec<(String, f32)>,
+    /// Every label in the signal graph, for fresh block names.
+    labels: Vec<String>,
+    /// The frame's signal-graph edits, applied in order after the pane draws.
+    graph_edits: Vec<GraphEdit>,
     /// The editor's bare-key uses, so a key input warns of a clash.
     editor_keys: EditorKeyTable,
     new_bindings: Vec<SignalBinding>,
@@ -963,15 +1055,8 @@ pub(crate) struct GraphViewer {
     captured_transform: Option<egui::emath::TSTransform>,
     /// Whether the fit actually ran (so the request flag can be cleared).
     fit_done: bool,
-    /// In-canvas authoring requests (applied by the system).
-    add_param: bool,
-    /// Add a computed/modulation block from a template op.
-    add_blocks: Vec<BlockOp>,
-    /// Replace a computed block's op (operand wiring + footer constants).
-    block_edits: Vec<(String, BlockOp)>,
+    /// Bodies taken off the canvas (view state).
     remove_bodies: Vec<StableId>,
-    delete_params: Vec<String>,
-    delete_computed: Vec<String>,
 }
 
 impl GraphViewer {
@@ -1003,26 +1088,51 @@ impl GraphViewer {
             .unwrap_or_else(|| "wire".to_owned())
     }
 
-    /// The bus name an output pin publishes under, so it can feed a modulation
-    /// operand: a named producer's name, or a body sensor's canonical name.
-    fn out_source_name(snarl: &Snarl<NodeData>, pin: OutPinId) -> Option<String> {
-        match Self::out_source(snarl, pin)? {
-            SignalSource::Named(name) => Some(name),
-            other => other.bus_name(),
+    /// What an output pin feeds into a signal node's port: a wire from a
+    /// signal node (by id, so renaming it keeps the wire), or a bus read of
+    /// a body or joint sensor's canonical name.
+    fn out_input(snarl: &Snarl<NodeData>, pin: OutPinId) -> Option<Input> {
+        let data = snarl.get_node(pin.node)?;
+        if let Some(node) = data.signal_node() {
+            return Some(Input::wire(node.id));
+        }
+        data.output_source(pin.output)?
+            .bus_name()
+            .map(Input::External)
+    }
+
+    /// If `pin` is a signal block's operand pin, its node and the graph port
+    /// the pin stands for.
+    fn port_at(snarl: &Snarl<NodeData>, pin: InPinId) -> Option<(&GraphNode, usize)> {
+        match snarl.get_node(pin.node)? {
+            NodeData::Computed(node) => operand_ports(&node.kind)
+                .get(pin.input)
+                .map(|&port| (node, port)),
+            _ => None,
         }
     }
 
-    /// If `pin` is a modulation block's operand input, returns `(name, op)` so
-    /// the caller can rewrite its operand and re-lower.
-    fn block_at(snarl: &Snarl<NodeData>, pin: InPinId) -> Option<(String, BlockOp)> {
-        match snarl.get_node(pin.node) {
-            Some(NodeData::Computed {
-                name,
-                block: Some(op),
-                ..
-            }) => Some((name.clone(), op.clone())),
-            _ => None,
-        }
+    /// The edit that unbinds port `port` of `node`: its default constant.
+    fn unbind(node: &GraphNode, port: usize) -> Option<GraphEdit> {
+        let default = node.kind.input_ports().get(port)?.default.value();
+        Some(GraphEdit::SetInput {
+            node: NodeRef::Id(node.id),
+            port: PortRef::Index(port),
+            input: Input::Const(default),
+        })
+    }
+
+    /// Adds a block of `kind` with `inputs`, labelled `<kind>-N`.
+    fn add_block(&mut self, kind: SignalKind, inputs: Vec<Input>) {
+        let base = gradiance_graph::meta(&kind).name.to_lowercase();
+        let label = fresh_label(&self.labels, &base);
+        self.labels.push(label.clone());
+        self.graph_edits.push(GraphEdit::Add {
+            id: StableId::new(),
+            kind,
+            label: Some(label),
+            inputs,
+        });
     }
 
     /// The precomputed live value at `(key, pin)` from `values`.
@@ -1059,22 +1169,27 @@ impl GraphViewer {
         }
         ui.menu_button("Input", |ui| {
             if ui.button("⊙ Parameter (slider)").clicked() {
-                self.add_param = true;
+                let name = fresh_label(&self.labels, "param");
+                self.labels.push(name.clone());
+                self.graph_edits.push(GraphEdit::Param {
+                    id: StableId::new(),
+                    name,
+                    value: 0.5,
+                    min: 0.0,
+                    max: 1.0,
+                });
                 ui.close();
             }
             if ui.button("# Constant").clicked() {
-                self.add_blocks.push(BlockOp::Constant { value: 1.0 });
+                self.add_block(SignalKind::Constant, vec![Input::scalar(1.0)]);
                 ui.close();
             }
             if ui.button("ƒ Time").clicked() {
-                self.add_blocks.push(BlockOp::Time);
+                self.add_block(SignalKind::Time, Vec::new());
                 ui.close();
             }
             if ui.button("ƒ Oscillator").clicked() {
-                self.add_blocks.push(BlockOp::Oscillator {
-                    amp: 1.0,
-                    freq: 1.0,
-                });
+                self.add_block(SignalKind::Oscillator, Vec::new());
                 ui.close();
             }
             if ui
@@ -1082,46 +1197,31 @@ impl GraphViewer {
                 .on_hover_text("a held key in play: E gives +1, Q gives -1 (set them in the block)")
                 .clicked()
             {
-                self.add_blocks.push(BlockOp::Key {
-                    key: "E".to_owned(),
-                    negative: Some("Q".to_owned()),
-                });
+                self.add_block(
+                    SignalKind::Key {
+                        key: "E".to_owned(),
+                        negative: Some("Q".to_owned()),
+                    },
+                    Vec::new(),
+                );
                 ui.close();
             }
         });
         ui.menu_button("Modulation", |ui| {
-            let mut add = |ui: &mut egui::Ui, label: &str, op: BlockOp| {
+            let mut add = |ui: &mut egui::Ui, label: &str, kind: SignalKind| {
                 if ui.button(label).clicked() {
-                    self.add_blocks.push(op);
+                    self.add_block(kind, Vec::new());
                     ui.close();
                 }
             };
-            add(
-                ui,
-                "ƒ Gain (× k)",
-                BlockOp::Gain {
-                    input: None,
-                    k: 1.0,
-                },
-            );
-            add(ui, "ƒ Sum (a + b)", BlockOp::Sum { a: None, b: None });
-            add(ui, "ƒ Sub (a − b)", BlockOp::Sub { a: None, b: None });
-            add(
-                ui,
-                "ƒ Product (a · b)",
-                BlockOp::Product { a: None, b: None },
-            );
-            add(ui, "ƒ Min (a, b)", BlockOp::Min { a: None, b: None });
-            add(ui, "ƒ Max (a, b)", BlockOp::Max { a: None, b: None });
-            add(ui, "ƒ Abs |in|", BlockOp::Abs { input: None });
-            add(
-                ui,
-                "ƒ Curve (shape in)",
-                BlockOp::Curve {
-                    input: None,
-                    curve: gradiance_signal::Curve::default(),
-                },
-            );
+            add(ui, "ƒ Gain (× k)", SignalKind::Gain);
+            add(ui, "ƒ Sum (a + b)", SignalKind::Sum);
+            add(ui, "ƒ Sub (a − b)", SignalKind::Sub);
+            add(ui, "ƒ Product (a · b)", SignalKind::Product);
+            add(ui, "ƒ Min (a, b)", SignalKind::Min);
+            add(ui, "ƒ Max (a, b)", SignalKind::Max);
+            add(ui, "ƒ Abs |in|", SignalKind::Abs);
+            add(ui, "ƒ Curve (shape in)", SignalKind::Curve);
         });
         widgets::empty_state(ui, "Output: the ▭ Scope block is always present.");
     }
@@ -1237,9 +1337,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
             }
             NodeData::Thruster { id } => thruster_actuators(*id).len(),
             NodeData::Param(_) | NodeData::Comment { .. } => 0,
-            NodeData::Computed { inputs, block, .. } => block
-                .as_ref()
-                .map_or(inputs.len(), |op| op.input_slots().len()),
+            NodeData::Computed(node) => operand_ports(&node.kind).len(),
             NodeData::Scope => 1,
         }
     }
@@ -1248,7 +1346,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
         match node {
             NodeData::Body { id, .. } => body_sensors(*id).len(),
             NodeData::Joint { id, .. } => joint_sensors(*id).len(),
-            NodeData::Param(_) | NodeData::Computed { .. } => 1,
+            NodeData::Param(_) | NodeData::Computed(_) => 1,
             NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. } => 0,
         }
     }
@@ -1271,17 +1369,11 @@ impl SnarlViewer<NodeData> for GraphViewer {
             Some(NodeData::Body { id, .. }) => actuator(&body_actuators(*id), false),
             Some(NodeData::Joint { id, linear, .. }) => actuator(&joint_actuators(*id), *linear),
             Some(NodeData::Thruster { id }) => actuator(&thruster_actuators(*id), false),
-            Some(NodeData::Computed {
-                inputs,
-                block: None,
-                ..
-            }) => (inputs.get(pin.id.input).cloned().unwrap_or_default(), ""),
-            Some(NodeData::Computed {
-                block: Some(op), ..
-            }) => (
-                op.input_slots()
+            Some(NodeData::Computed(node)) => (
+                operand_ports(&node.kind)
                     .get(pin.id.input)
-                    .map_or_else(String::new, |(l, _)| (*l).to_owned()),
+                    .and_then(|&port| node.kind.input_name(port))
+                    .map_or_else(String::new, |name| name.into_owned()),
                 "",
             ),
             Some(NodeData::Scope) => ("signals".to_owned(), ""),
@@ -1311,7 +1403,10 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 || (String::new(), ""),
                 |(l, s)| ((*l).to_owned(), s.dimension().symbol()),
             ),
-            Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => (name.clone(), ""),
+            Some(NodeData::Param(node) | NodeData::Computed(node)) => (
+                node.label.clone().unwrap_or_else(|| "out".to_owned()),
+                "",
+            ),
             Some(NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. }) | None => {
                 (String::new(), "")
             }
@@ -1325,12 +1420,15 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<NodeData>) {
-        // A wire into a modulation block operand: rewrite that operand to the
-        // producer's bus name (a named producer only) and re-lower.
-        if let Some((name, mut op)) = Self::block_at(snarl, to.id) {
-            if let Some(src) = Self::out_source_name(snarl, from.id) {
-                op.set_input(to.id.input, Some(src));
-                self.block_edits.push((name, op));
+        // A wire into a signal block's operand: a graph wire by id from a
+        // signal node, or a bus read of a sensor's canonical name.
+        if let Some((node, port)) = Self::port_at(snarl, to.id) {
+            if let Some(input) = Self::out_input(snarl, from.id) {
+                self.graph_edits.push(GraphEdit::SetInput {
+                    node: NodeRef::Id(node.id),
+                    port: PortRef::Index(port),
+                    input,
+                });
             }
             return;
         }
@@ -1360,9 +1458,8 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 
     fn disconnect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<NodeData>) {
-        if let Some((name, mut op)) = Self::block_at(snarl, to.id) {
-            op.set_input(to.id.input, None);
-            self.block_edits.push((name, op));
+        if let Some((node, port)) = Self::port_at(snarl, to.id) {
+            self.graph_edits.extend(Self::unbind(node, port));
             return;
         }
         if let (Some(source), Some(sink)) = (
@@ -1374,6 +1471,10 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 
     fn drop_inputs(&mut self, pin: &InPin, snarl: &mut Snarl<NodeData>) {
+        if let Some((node, port)) = Self::port_at(snarl, pin.id) {
+            self.graph_edits.extend(Self::unbind(node, port));
+            return;
+        }
         if let Some(sink) = Self::in_sink(snarl, pin.id) {
             for remote in &pin.remotes {
                 if let Some(source) = Self::out_source(snarl, *remote) {
@@ -1418,17 +1519,21 @@ impl SnarlViewer<NodeData> for GraphViewer {
                     ui.close();
                 }
             }
-            Some(NodeData::Param(name)) => {
-                let name = name.clone();
+            Some(NodeData::Param(node)) => {
+                let id = node.id;
                 if ui.button("Delete parameter").clicked() {
-                    self.delete_params.push(name);
+                    self.graph_edits.push(GraphEdit::Remove {
+                        node: NodeRef::Id(id),
+                    });
                     ui.close();
                 }
             }
-            Some(NodeData::Computed { name, .. }) => {
-                let name = name.clone();
+            Some(NodeData::Computed(node)) => {
+                let id = node.id;
                 if ui.button("Delete computed").clicked() {
-                    self.delete_computed.push(name);
+                    self.graph_edits.push(GraphEdit::Remove {
+                        node: NodeRef::Id(id),
+                    });
                     ui.close();
                 }
             }
@@ -1451,10 +1556,18 @@ impl SnarlViewer<NodeData> for GraphViewer {
     // A footer configures a block in place: a body edits the transfer of each
     // wire driving it; a modulation block edits its constants (k / amp / freq).
     fn has_footer(&mut self, node: &NodeData) -> bool {
-        matches!(
-            node,
-            NodeData::Body { .. } | NodeData::Param(_) | NodeData::Computed { block: Some(_), .. }
-        )
+        match node {
+            NodeData::Body { .. } | NodeData::Param(_) => true,
+            NodeData::Computed(node) => matches!(
+                node.kind,
+                SignalKind::Gain
+                    | SignalKind::Oscillator
+                    | SignalKind::Constant
+                    | SignalKind::Curve
+                    | SignalKind::Key { .. }
+            ),
+            _ => false,
+        }
     }
 
     fn show_footer(
@@ -1465,30 +1578,26 @@ impl SnarlViewer<NodeData> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<NodeData>,
     ) {
-        // A modulation block's constants.
-        if let Some(NodeData::Computed {
-            name,
-            block: Some(op),
-            ..
-        }) = snarl.get_node(node)
-        {
-            let name = name.clone();
-            let mut op = op.clone();
-            if block_constants(ui, &name, &mut op, &self.editor_keys) {
-                self.block_edits.push((name, op));
-            }
+        // A block's constants (its non-pin ports, a key's keys).
+        if let Some(NodeData::Computed(block)) = snarl.get_node(node) {
+            self.graph_edits
+                .extend(block_constants(ui, block, &self.editor_keys));
             return;
         }
         // A param block's value — the same tunable knob as the Signals dock,
         // edited in place (Simulink source-block-style).
-        if let Some(NodeData::Param(name)) = snarl.get_node(node) {
-            if let Some(param) = self.params.iter().find(|p| &p.name == name) {
-                let mut value = param.value;
-                if ui
-                    .add(egui::Slider::new(&mut value, param.min..=param.max))
-                    .changed()
-                {
-                    self.param_edits.push((param.name.clone(), value));
+        if let Some(NodeData::Param(param)) = snarl.get_node(node) {
+            if let SignalKind::Param { value, min, max } = param.kind {
+                let mut next = value;
+                if ui.add(egui::Slider::new(&mut next, min..=max)).changed() {
+                    self.graph_edits.push(GraphEdit::SetKind {
+                        node: NodeRef::Id(param.id),
+                        kind: SignalKind::Param {
+                            value: next,
+                            min,
+                            max,
+                        },
+                    });
                 }
             }
             return;
@@ -1539,54 +1648,67 @@ impl SnarlViewer<NodeData> for GraphViewer {
     }
 }
 
-/// Edits a modulation block's scalar constants in its footer (a key input's
-/// keys); returns whether anything changed.
+/// A block's footer: its constant ports (a gain's `k`, an oscillator's `amp`
+/// and `freq`, a constant's `value`, a curve) and a key's keys. Returns the
+/// edits a change makes. A port a script wired shows as wired, not a field.
 fn block_constants(
     ui: &mut egui::Ui,
-    name: &str,
-    op: &mut BlockOp,
+    node: &GraphNode,
     editor_keys: &EditorKeyTable,
-) -> bool {
-    let mut changed = false;
-    match op {
-        BlockOp::Gain { k, .. } => {
-            ui.horizontal(|ui| {
-                ui.small("k");
-                changed |= widgets::config_field(1.0, 0.05).show(ui, k).changed();
-            });
-        }
-        BlockOp::Oscillator { amp, freq } => {
-            ui.horizontal(|ui| {
-                ui.small("amp");
-                changed |= widgets::config_field(1.0, 0.05).show(ui, amp).changed();
-                ui.small("freq");
-                changed |= widgets::config_field(1.0, 0.05).show(ui, freq).changed();
-            });
-        }
-        BlockOp::Constant { value } => {
-            ui.horizontal(|ui| {
-                ui.small("value");
-                changed |= widgets::config_field(1.0, 0.05).show(ui, value).changed();
-            });
-        }
+) -> Vec<GraphEdit> {
+    let mut edits = Vec::new();
+    let set = |port: usize, value: gradiance_graph::Value| GraphEdit::SetInput {
+        node: NodeRef::Id(node.id),
+        port: PortRef::Index(port),
+        input: Input::Const(value),
+    };
+    let scalars: &[usize] = match node.kind {
+        SignalKind::Gain => &[1],
+        SignalKind::Oscillator => &[0, 1],
+        SignalKind::Constant => &[0],
+        _ => &[],
+    };
+    if !scalars.is_empty() {
+        ui.horizontal(|ui| {
+            for &port in scalars {
+                let name = node.kind.input_name(port).unwrap_or_default();
+                ui.small(name.as_ref());
+                match node.input(port) {
+                    Some(Input::Const(gradiance_graph::Value::Scalar(mut v))) => {
+                        if widgets::config_field(1.0, 0.05).show(ui, &mut v).changed() {
+                            edits.push(set(port, gradiance_graph::Value::Scalar(v)));
+                        }
+                    }
+                    _ => {
+                        ui.weak("wired");
+                    }
+                }
+            }
+        });
+    }
+    match &node.kind {
         // The only block whose parameter is a shape: the curve editor sits in
         // the block footer, the same place a `k` drag value would.
-        BlockOp::Curve { curve, .. } => {
-            changed |= crate::curve::curve_editor(ui, "block-curve", curve);
+        SignalKind::Curve => {
+            if let Some(Input::Const(gradiance_graph::Value::Curve(mut curve))) = node.input(1)
+                && crate::curve::curve_editor(ui, "block-curve", &mut curve)
+            {
+                edits.push(set(1, gradiance_graph::Value::Curve(curve)));
+            }
         }
-        BlockOp::Key { key, negative } => {
-            changed |= key_fields(ui, name, key, negative, editor_keys);
+        SignalKind::Key { key, negative } => {
+            let (mut key, mut negative) = (key.clone(), negative.clone());
+            let name = node_title(node);
+            if key_fields(ui, &name, &mut key, &mut negative, editor_keys) {
+                edits.push(GraphEdit::SetKind {
+                    node: NodeRef::Id(node.id),
+                    kind: SignalKind::Key { key, negative },
+                });
+            }
         }
-        // Ops without editable constants (their behavior is fully wired).
-        BlockOp::Time
-        | BlockOp::Sum { .. }
-        | BlockOp::Product { .. }
-        | BlockOp::Sub { .. }
-        | BlockOp::Abs { .. }
-        | BlockOp::Min { .. }
-        | BlockOp::Max { .. } => {}
+        _ => {}
     }
-    changed
+    edits
 }
 
 /// A key input's footer (brief N-2): the `+` key, an optional `-` key, and a
@@ -1677,36 +1799,22 @@ fn key_capture(ui: &mut egui::Ui, block: &str, slot: &str, key: &mut String) -> 
     changed
 }
 
-/// A fresh unique block name over the existing computed signals, seeded from
-/// the op's type label (e.g. `gain-1`).
-fn fresh_block_name(op: &BlockOp, computed: &ComputedSignals) -> String {
-    let base = op.label();
-    (1..=u32::try_from(computed.0.len()).unwrap_or(0) + 1)
-        .map(|n| format!("{base}-{n}"))
-        .find(|name| !computed.0.iter().any(|c| &c.name == name))
-        .unwrap_or_else(|| base.to_owned())
-}
-
-/// Rebuilds the snarl wires to mirror the bindings + computed-input name
-/// matches. Called each frame after reconcile so the visible wires always
-/// equal the dataflow. Kept separate for unit testing.
-fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
+/// Rebuilds the snarl wires to mirror the bindings and the signal graph's
+/// wires and sensor reads. Called each frame after reconcile so the visible
+/// wires always equal the dataflow. Kept separate for unit testing.
+fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings, signal_graph: &Graph) {
     let existing: Vec<(OutPinId, InPinId)> = graph.snarl.wires().collect();
     for (out, in_) in existing {
         graph.snarl.disconnect(out, in_);
     }
     // Binding wires: source output pin → sink input pin.
     for binding in &bindings.0 {
-        let Some((src_key, out)) = source_pin(&binding.source) else {
+        let Some((src_key, out)) = source_pin(&binding.source, signal_graph) else {
             continue;
         };
         let (sink_key, in_) = sink_pin(&binding.sink);
-        // A named source may be a param or a computed block.
-        let src = graph.keys.get(&src_key).or_else(|| match &binding.source {
-            SignalSource::Named(name) => graph.keys.get(&GraphKey::Computed(name.clone())),
-            _ => None,
-        });
-        if let (Some(&src_id), Some(&sink_id)) = (src, graph.keys.get(&sink_key)) {
+        if let (Some(&src_id), Some(&sink_id)) = (graph.keys.get(&src_key), graph.keys.get(&sink_key))
+        {
             graph.snarl.connect(
                 OutPinId {
                     node: src_id,
@@ -1719,39 +1827,33 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
             );
         }
     }
-    // Modulation-block operand wires: a producer output → the block input each
-    // operand names. Read from each block's structured op.
-    let operands: Vec<(NodeId, usize, String)> = graph
+    // Operand wires: each block pin's binding — a graph wire from another
+    // signal node, or a sensor's canonical name read from the bus.
+    let operands: Vec<(NodeId, usize, Input)> = graph
         .snarl
         .node_ids()
         .filter_map(|(id, data)| match data {
-            NodeData::Computed {
-                block: Some(op), ..
-            } => Some((id, op.clone())),
+            NodeData::Computed(node) => Some((id, node)),
             _ => None,
         })
-        .flat_map(|(id, op)| {
-            op.input_slots()
+        .flat_map(|(id, node)| {
+            operand_ports(&node.kind)
                 .into_iter()
                 .enumerate()
-                .filter_map(move |(slot, (_, name))| name.map(|n| (id, slot, n)))
+                .filter_map(move |(pin, port)| node.input(port).map(|input| (id, pin, input)))
                 .collect::<Vec<_>>()
         })
         .collect();
-    for (block_id, slot, name) in operands {
-        // A named producer is a param or another computed/modulation block; a
-        // canonical sensor name resolves to a body's sensor output pin.
-        let src = graph
-            .keys
-            .get(&GraphKey::Param(name.clone()))
-            .or_else(|| graph.keys.get(&GraphKey::Computed(name.clone())))
-            .copied()
-            .map(|id| (id, 0usize))
-            .or_else(|| {
-                let source = SignalSource::from_bus_name(&name)?;
-                let (key, out) = source_pin(&source)?;
-                graph.keys.get(&key).copied().map(|id| (id, out))
-            });
+    for (block_id, pin, input) in operands {
+        let src = match input {
+            Input::Wire { node, port } => signal_key(signal_graph, node)
+                .and_then(|key| graph.keys.get(&key).copied())
+                .map(|id| (id, usize::from(port))),
+            Input::External(name) => SignalSource::from_bus_name(&name)
+                .and_then(|source| source_pin(&source, signal_graph))
+                .and_then(|(key, out)| graph.keys.get(&key).copied().map(|id| (id, out))),
+            Input::Const(_) => None,
+        };
         if let Some((src_id, out)) = src {
             graph.snarl.connect(
                 OutPinId {
@@ -1760,7 +1862,7 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
                 },
                 InPinId {
                     node: block_id,
-                    input: slot,
+                    input: pin,
                 },
             );
         }
@@ -1859,7 +1961,7 @@ mod tests {
             gradient: GradientSpec::default(),
             sink: SignalSink::Fill(b),
         });
-        rebuild_wires(&mut graph, &bindings);
+        rebuild_wires(&mut graph, &bindings, &Graph::default());
         assert_eq!(graph.snarl.wires().count(), 1, "one wire for the binding");
 
         // The wire runs A's speed output (index 0) → B's fill input (index 0).
@@ -1870,31 +1972,52 @@ mod tests {
         assert_eq!(graph.keys[&GraphKey::Body(b)], in_.node);
     }
 
+    fn source_pin_of(source: &SignalSource) -> Option<(GraphKey, usize)> {
+        source_pin(source, &Graph::default())
+    }
+
     #[test]
     fn source_and_sink_pins_match_the_port_order() {
         let id = StableId::new();
         // Sensor pins line up with body_sensors / joint_sensors order.
         assert_eq!(
-            source_pin(&SignalSource::Speed(id)),
+            source_pin_of(&SignalSource::Speed(id)),
             Some((GraphKey::Body(id), 0))
         );
         assert_eq!(
-            source_pin(&SignalSource::ContactCount(id)),
+            source_pin_of(&SignalSource::ContactCount(id)),
             Some((GraphKey::Body(id), 5))
         );
         assert_eq!(
-            source_pin(&SignalSource::Named("x".into())),
-            Some((GraphKey::Param("x".into()), 0))
+            source_pin_of(&SignalSource::Named("x".into())),
+            None,
+            "a name no node publishes has no block"
+        );
+        let x = StableId::new();
+        let labelled = Graph::from_nodes(vec![
+            gradiance_graph::Node::new(
+                x,
+                SignalKind::Param {
+                    value: 0.0,
+                    min: 0.0,
+                    max: 1.0,
+                },
+            )
+            .labelled("x"),
+        ]);
+        assert_eq!(
+            source_pin(&SignalSource::Named("x".into()), &labelled),
+            Some((GraphKey::Param(x), 0))
         );
         assert_eq!(
-            source_pin(&SignalSource::Distance(id, StableId::new())),
+            source_pin_of(&SignalSource::Distance(id, StableId::new())),
             None
         );
         let angle = joint_sensors(id)
             .iter()
             .position(|(_, s)| *s == SignalSource::JointAngle(id));
         assert_eq!(
-            source_pin(&SignalSource::JointAngle(id)),
+            source_pin_of(&SignalSource::JointAngle(id)),
             angle.map(|i| (GraphKey::Joint(id), i)),
             "a joint sensor is a joint block's output (brief N-1)"
         );
@@ -1944,7 +2067,7 @@ mod tests {
             gradient: GradientSpec::default(),
             sink: SignalSink::MotorSpeed(hinge),
         }]);
-        rebuild_wires(&mut graph, &bindings);
+        rebuild_wires(&mut graph, &bindings, &Graph::default());
         let wires: Vec<_> = graph.snarl.wires().collect();
         assert_eq!(wires.len(), 1, "one wire");
         let (out, into) = wires[0];
@@ -1978,7 +2101,7 @@ mod tests {
             gradient: GradientSpec::default(),
             sink: SignalSink::Plot,
         });
-        rebuild_wires(&mut graph, &bindings);
+        rebuild_wires(&mut graph, &bindings, &Graph::default());
         assert_eq!(graph.snarl.wires().count(), 1, "plot binding → scope wire");
         let (_, in_) = graph.snarl.wires().next().unwrap();
         assert_eq!(
@@ -2009,13 +2132,9 @@ mod tests {
     }
 
     #[test]
-    fn fresh_param_name_avoids_collisions() {
-        let mut params = SignalParams::default();
-        assert_eq!(fresh_param_name(&params), "param-1");
-        params
-            .0
-            .push(gradiance_signal::SignalParam::unit("param-1"));
-        assert_eq!(fresh_param_name(&params), "param-2");
+    fn fresh_labels_avoid_collisions() {
+        assert_eq!(fresh_label(&[], "param"), "param-1");
+        assert_eq!(fresh_label(&["param-1".to_owned()], "param"), "param-2");
     }
 
     #[test]
@@ -2083,26 +2202,59 @@ mod tests {
     }
 
     #[test]
-    fn a_modulation_block_operand_wires_to_its_named_producer() {
+    fn a_modulation_block_operand_wires_to_its_producer_by_id() {
+        use gradiance_graph::Node as N;
+        let (amp, gain) = (StableId::new(), StableId::new());
+        let signal_graph = Graph::from_nodes(vec![
+            N::new(
+                amp,
+                SignalKind::Param {
+                    value: 1.0,
+                    min: 0.0,
+                    max: 2.0,
+                },
+            )
+            .labelled("amp"),
+            N::new(gain, SignalKind::Gain)
+                .labelled("gain-1")
+                .with_inputs(vec![Input::wire(amp), Input::scalar(2.0)]),
+        ]);
         let mut graph = NodeGraph::default();
-        // A param "amp" and a Gain block reading it.
-        reconcile_add(&mut graph, NodeData::Param("amp".into()));
-        reconcile_add(
-            &mut graph,
-            NodeData::Computed {
-                name: "gain-1".into(),
-                inputs: vec![],
-                block: Some(BlockOp::Gain {
-                    input: Some("amp".into()),
-                    k: 2.0,
-                }),
-            },
-        );
-        rebuild_wires(&mut graph, &SignalBindings::default());
+        for node in &signal_graph.nodes {
+            let data = match node.kind {
+                SignalKind::Param { .. } => NodeData::Param(node.clone()),
+                _ => NodeData::Computed(node.clone()),
+            };
+            reconcile_add(&mut graph, data);
+        }
+        rebuild_wires(&mut graph, &SignalBindings::default(), &signal_graph);
         assert_eq!(graph.snarl.wires().count(), 1, "operand wire drawn");
         let (out, in_) = graph.snarl.wires().next().unwrap();
-        assert_eq!(graph.keys[&GraphKey::Param("amp".into())], out.node);
-        assert_eq!(graph.keys[&GraphKey::Computed("gain-1".into())], in_.node);
-        assert_eq!(in_.input, 0, "the gain's single input slot");
+        assert_eq!(graph.keys[&GraphKey::Param(amp)], out.node);
+        assert_eq!(graph.keys[&GraphKey::Computed(gain)], in_.node);
+        assert_eq!(in_.input, 0, "the gain's single operand pin");
+    }
+
+    #[test]
+    fn a_block_sits_at_its_saved_position_and_follows_a_new_one() {
+        use gradiance_graph::Node as N;
+        let id = StableId::new();
+        let mut node = N::new(id, SignalKind::Time).labelled("clock");
+        node.pos = Vec2::new(40.0, 50.0);
+        let mut graph = NodeGraph::default();
+        reconcile(&mut graph, vec![NodeData::Computed(node.clone())]);
+        let snarl_id = graph.keys[&GraphKey::Computed(id)];
+        let pos = |g: &NodeGraph| g.snarl.get_node_info(snarl_id).map(|n| n.pos);
+        assert_eq!(pos(&graph), Some(egui::pos2(40.0, 50.0)));
+        // A drag in progress (the snarl moved, the graph did not) holds.
+        if let Some(info) = graph.snarl.get_node_info_mut(snarl_id) {
+            info.pos = egui::pos2(90.0, 90.0);
+        }
+        reconcile(&mut graph, vec![NodeData::Computed(node.clone())]);
+        assert_eq!(pos(&graph), Some(egui::pos2(90.0, 90.0)), "not snapped back");
+        // A new saved position (an undo, a graph-set) moves the block.
+        node.pos = Vec2::new(7.0, 8.0);
+        reconcile(&mut graph, vec![NodeData::Computed(node)]);
+        assert_eq!(pos(&graph), Some(egui::pos2(7.0, 8.0)));
     }
 }

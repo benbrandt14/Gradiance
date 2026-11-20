@@ -13,10 +13,12 @@
 //! edits a canvas has no gesture for (rename a binding, retarget a sink, delete
 //! a param, type a script-published bus name). The plotter kept the pane.
 //!
-//! The signal resources (`SignalBindings`, `SignalParams`, `ComputedSignals`)
-//! are config-seam (invariant-#4 class), so this edits them directly: no
-//! intents, exactly like the sim settings. They are scene content, so
-//! `commit_settings_edits` records a settled edit as one undo step. The one exception
+//! The signal resources (`SignalBindings` and the signal `Graph`) are
+//! config-seam (invariant-#4 class), so this edits them directly: no
+//! intents, exactly like the sim settings (the graph through
+//! `Graph::edit`, validated, collected and applied by the host). They are
+//! scene content, so `commit_settings_edits` records a settled edit as one
+//! undo step. The one exception
 //! is the behavior-node editor, which edits *authored* state and therefore
 //! emits a `PropertyEditIntent` like everything else.
 
@@ -25,8 +27,9 @@ use bevy_egui::egui;
 use gradiance_core::ids::StableId;
 use gradiance_domain::quantity::{QUANTITIES, Subject};
 use gradiance_domain::signal::Subjects;
+use gradiance_graph::{Family, GraphEdit, NodeKind as SignalKind, NodeRef};
 use gradiance_signal::{
-    Curve, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalSink,
+    Curve, GradientSpec, Graph, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalSink,
     SignalSource,
 };
 
@@ -34,17 +37,20 @@ use gradiance_signal::{
 /// `SystemParam` bundle.
 ///
 /// It used to be a bundle, and that was a mistake the ECS caught: the list now
-/// lives inside the node-graph pane, whose host already holds `SignalParams`,
-/// `ComputedSignals` and `SignalBindings` for the canvas. A second bundle
+/// lives inside the node-graph pane, whose host already holds the signal
+/// `Graph` and `SignalBindings` for the canvas. A second bundle
 /// requesting the same resources is a system-parameter conflict — Bevy panics
 /// at schedule build, and `tests/it/ui_conflicts.rs` fails. A leaf renderer
 /// should not be deciding what the world lends it; the host does that once and
 /// passes the pieces down.
 pub struct SignalListView<'a> {
-    /// Tunable slider params.
-    pub params: &'a mut Vec<gradiance_signal::SignalParam>,
-    /// Computed modulator signals.
-    pub computed: &'a mut Vec<gradiance_signal::ComputedSignal>,
+    /// The signal graph (params and computed signals are its nodes). Read
+    /// only: a change is a [`GraphEdit`] pushed to `graph_edits`, which the
+    /// host applies after the frame, so an idle list never marks the graph
+    /// changed.
+    pub graph: &'a Graph,
+    /// The frame's graph edits.
+    pub graph_edits: &'a mut Vec<GraphEdit>,
     /// The live bus (current values for readouts).
     pub bus: &'a SignalBus,
     /// Compile errors to surface.
@@ -66,9 +72,9 @@ pub fn signals_section(
         .id_salt("signals-section")
         .show(ui, |ui| {
             node_block(ui, view.node.clone(), edits);
-            params_block(ui, view.params);
+            params_block(ui, view.graph, view.graph_edits);
             ui.separator();
-            computed_block(ui, view.computed, view.compiled, view.bus);
+            computed_block(ui, view.graph, view.graph_edits, view.compiled, view.bus);
             ui.separator();
             bindings_block(ui, bindings, selected);
         });
@@ -100,61 +106,98 @@ fn node_block(
 }
 
 /// The param sliders (`defparam` knobs) — the P2 driver inputs.
-fn params_block(ui: &mut egui::Ui, params: &mut Vec<gradiance_signal::SignalParam>) {
+fn params_block(ui: &mut egui::Ui, graph: &Graph, edits: &mut Vec<GraphEdit>) {
     widgets::section_header(ui, "Parameters");
-    let mut remove = None;
-    for (i, param) in params.iter_mut().enumerate() {
+    for node in &graph.nodes {
+        let SignalKind::Param { value, min, max } = node.kind else {
+            continue;
+        };
+        let mut next = value;
         ui.horizontal(|ui| {
-            ui.add(
-                egui::Slider::new(&mut param.value, param.min..=param.max)
-                    .text(&param.name)
-                    .clamping(egui::SliderClamping::Never),
-            );
+            if ui
+                .add(
+                    egui::Slider::new(&mut next, min..=max)
+                        .text(node.label.as_deref().unwrap_or_default())
+                        .clamping(egui::SliderClamping::Never),
+                )
+                .changed()
+            {
+                edits.push(GraphEdit::SetKind {
+                    node: NodeRef::Id(node.id),
+                    kind: SignalKind::Param {
+                        value: next,
+                        min,
+                        max,
+                    },
+                });
+            }
             if widgets::close_button(ui, "delete this parameter") {
-                remove = Some(i);
+                edits.push(GraphEdit::Remove {
+                    node: NodeRef::Id(node.id),
+                });
             }
         });
     }
-    if let Some(i) = remove {
-        params.remove(i);
-    }
     if ui.button("+ param").clicked() {
-        let name = fresh(params.iter().map(|p| p.name.as_str()), "param");
-        params.push(gradiance_signal::SignalParam::unit(name));
+        let name = fresh(graph.nodes.iter().filter_map(|n| n.label.as_deref()), "param");
+        edits.push(GraphEdit::Param {
+            id: StableId::new(),
+            name,
+            value: 0.5,
+            min: 0.0,
+            max: 1.0,
+        });
     }
 }
 
-/// The computed-signal list (`defsignal` modulators): name, RPN expression,
-/// current bus value, and any compile error.
+/// The computed-signal list (every published signal node but the params):
+/// name, its expression as RPN (lowered, so a wire shows its source's
+/// current label), current bus value, and any compile error.
 fn computed_block(
     ui: &mut egui::Ui,
-    computed: &mut Vec<gradiance_signal::ComputedSignal>,
+    graph: &Graph,
+    edits: &mut Vec<GraphEdit>,
     compiled: &gradiance_signal::CompiledSignals,
     bus: &SignalBus,
 ) {
     widgets::section_header(ui, "Computed");
-    let mut remove = None;
-    for (i, signal) in computed.iter_mut().enumerate() {
+    let error_color = ui.visuals().error_fg_color;
+    if let Some((_, err)) = compiled
+        .errors
+        .iter()
+        .find(|(n, _)| n == gradiance_signal::GRAPH_ERROR)
+    {
+        ui.colored_label(error_color, err);
+    }
+    let lowered = gradiance_graph::lower_signals(graph).unwrap_or_default();
+    let mut any = false;
+    for node in &graph.nodes {
+        let Some(label) = &node.label else { continue };
+        if node.kind.family() != Family::Signal || matches!(node.kind, SignalKind::Param { .. }) {
+            continue;
+        }
+        any = true;
         ui.horizontal(|ui| {
-            ui.monospace(&signal.name);
-            if let Some(v) = bus.get(&signal.name) {
+            ui.monospace(label);
+            if let Some(v) = bus.get(label) {
                 ui.weak(format!("= {v:.3}"));
             }
             if widgets::close_button(ui, "delete this computed signal") {
-                remove = Some(i);
+                edits.push(GraphEdit::Remove {
+                    node: NodeRef::Id(node.id),
+                });
             }
         });
         // The expression, rendered back to RPN; editing is via the console
-        // `(defsignal …)` for now — the node canvas replaces this later.
-        ui.monospace(egui::RichText::new(expr_rpn(&signal.expr)).weak());
-        if let Some((_, err)) = compiled.errors.iter().find(|(n, _)| *n == signal.name) {
-            ui.colored_label(ui.visuals().error_fg_color, err);
+        // `(defsignal …)` and the canvas.
+        if let Some((_, expr)) = lowered.iter().find(|(l, _)| l == label) {
+            ui.monospace(egui::RichText::new(expr_rpn(expr)).weak());
+        }
+        if let Some((_, err)) = compiled.errors.iter().find(|(n, _)| n == label) {
+            ui.colored_label(error_color, err);
         }
     }
-    if let Some(i) = remove {
-        computed.remove(i);
-    }
-    if computed.is_empty() {
+    if !any {
         ui.weak("Add via console: (defsignal \"osc\" \"t sin amp *\")");
     }
 }

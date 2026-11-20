@@ -165,8 +165,8 @@ impl egui_tiles::Behavior<BottomPane> for BottomBehavior<'_, '_> {
 
 /// What the signal list needs beyond what [`GraphParams`] already holds.
 ///
-/// The canvas host owns `SignalParams`, `ComputedSignals` and `SignalBindings`
-/// for its own reconcile, so the list borrows those from it rather than
+/// The canvas host owns the signal `Graph` and `SignalBindings` for its own
+/// reconcile, so the list borrows those from it rather than
 /// requesting them again — two `ResMut`s of one resource in one system is a
 /// panic at schedule build, which `tests/it/ui_conflicts.rs` guards.
 #[derive(bevy::ecs::system::SystemParam)]
@@ -230,11 +230,14 @@ pub fn bottom_dock(
         .selection
         .iter()
         .find_map(|e| list.nodes.get(e).ok().map(|(_, id, k)| (*id, k.clone())));
+    // The list reads the graph and returns its edits; they apply after the
+    // pane draws, so an idle list never marks the graph changed.
+    let mut list_edits = Vec::new();
     let panel_rect = {
         let mut signal_list = SignalList {
             view: SignalListView {
-                params: &mut gp.params.0,
-                computed: &mut gp.computed.0,
+                graph: &gp.signal_graph,
+                graph_edits: &mut list_edits,
                 bus: &bus,
                 compiled: &list.compiled,
                 node,
@@ -286,6 +289,7 @@ pub fn bottom_dock(
 
     // Drain the node-graph pane's edits into the config-seam resources.
     node_graph::apply_pane(viewer, &mut gp);
+    node_graph::apply_graph_edits(list_edits, &mut gp.signal_graph);
     // A closed tab turns the pane's toggle off, so it agrees with the View menu.
     if closed == Some(BottomPane::Graph) {
         gp.graph.set_open(false);
