@@ -380,3 +380,45 @@ impl JointRead for LiveJoint<'_, '_, '_> {
         self.physics.joint_force(self.entity)
     }
 }
+
+/// Traces a reflecting beam through avian's spatial query (brief N-8): from
+/// `origin` along `dir`, at most `range` metres and `bounces` reflections,
+/// over the colliders `filter` admits and `admit` accepts, ending on
+/// `target`. Writes the beam's corners into `path` (reused; see
+/// [`gradiance_geometry::beam::trace_beam`], which does the reflection).
+/// One ray cast per segment; no allocation once `path` has room. The laser
+/// pass uses it, and so can any reader with a [`SpatialQuery`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one ray, its limits and its filters"
+)]
+pub fn cast_beam(
+    spatial: &SpatialQuery,
+    origin: Vec2,
+    dir: Vec2,
+    range: f32,
+    bounces: u32,
+    filter: &SpatialQueryFilter,
+    admit: &dyn Fn(Entity) -> bool,
+    target: Option<Entity>,
+    path: &mut Vec<Vec2>,
+) -> gradiance_geometry::beam::BeamEnd<Entity> {
+    gradiance_geometry::beam::trace_beam(
+        origin,
+        dir,
+        range,
+        bounces,
+        path,
+        |o, d, max| {
+            let d = Dir2::new(d).ok()?;
+            spatial
+                .cast_ray_predicate(o, d, max, true, filter, admit)
+                .map(|h| gradiance_geometry::beam::RayHit {
+                    distance: h.distance,
+                    normal: h.normal,
+                    key: h.entity,
+                })
+        },
+        |e| Some(e) == target,
+    )
+}

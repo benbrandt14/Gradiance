@@ -13,6 +13,7 @@ pub mod fluid;
 pub mod group;
 pub mod joint;
 pub mod keys;
+pub mod laser;
 pub mod layers;
 pub mod node;
 pub mod props;
