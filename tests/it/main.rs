@@ -34,6 +34,7 @@ mod joint_sensors;
 mod joint_stress;
 mod joints;
 mod lasers;
+mod loader_fuzz;
 mod look;
 mod mirror;
 mod nodes;

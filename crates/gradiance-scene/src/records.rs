@@ -548,6 +548,19 @@ impl SceneRecord {
         }
     }
 
+    /// The first [`StableId`] two of the scene's objects (bodies, joints and
+    /// nodes together) share, if any. A live world never holds one (the id
+    /// index maps an id to one entity), so a file that does is refused.
+    pub fn duplicate_id(&self) -> Option<StableId> {
+        let mut seen = std::collections::HashSet::new();
+        self.bodies
+            .iter()
+            .map(|b| b.id)
+            .chain(self.joints.iter().map(|j| j.id))
+            .chain(self.nodes.iter().map(|n| n.id))
+            .find(|id| !seen.insert(*id))
+    }
+
     /// Despawns every authored entity, then spawns this scene and applies
     /// its environment. Derived state (colliders, meshes, engine joints)
     /// rebuilds through the ordinary sync systems — loading has no

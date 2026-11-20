@@ -73,6 +73,11 @@ pub enum PersistError {
     /// The file's format version is not supported.
     #[error("unsupported scene version {0} (this build reads {FORMAT_VERSION})")]
     Version(u32),
+    /// Two objects in the file share one identity. Identity is what undo,
+    /// joints and nodes resolve through, so the file is refused rather than
+    /// guessed at (brief 6-1, decision `duplicate-id-load`).
+    #[error("two objects share the id {0}")]
+    DuplicateId(gradiance_core::ids::StableId),
 }
 
 /// Serializes a scene to pretty RON (deterministic for identical scenes).
@@ -85,12 +90,18 @@ pub fn to_ron(scene: &SceneRecord) -> Result<String, PersistError> {
 
 /// Parses and version-checks a scene. Only the current [`FORMAT_VERSION`] is
 /// accepted; older files are rejected (a units-only v5→v6 migration is a
-/// planned follow-up — see the version history above).
+/// planned follow-up — see the version history above). A file in which two
+/// objects (bodies, joints, nodes) share a [`StableId`] is refused
+/// ([`PersistError::DuplicateId`]).
+///
+/// [`StableId`]: gradiance_core::ids::StableId
 pub fn from_ron(text: &str) -> Result<SceneRecord, PersistError> {
     let scene: SceneRecord = ron::from_str(text)?;
-    if scene.version == FORMAT_VERSION {
-        Ok(scene)
-    } else {
-        Err(PersistError::Version(scene.version))
+    if scene.version != FORMAT_VERSION {
+        return Err(PersistError::Version(scene.version));
     }
+    if let Some(id) = scene.duplicate_id() {
+        return Err(PersistError::DuplicateId(id));
+    }
+    Ok(scene)
 }

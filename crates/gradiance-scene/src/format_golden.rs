@@ -355,3 +355,27 @@ fn every_quantity_field_in_the_save_format_is_spelled_bare() {
         "quantity fields saved wrapped `(x)` -- is the type #[serde(transparent)]? {wrapped:?}"
     );
 }
+
+/// Brief 6-1 (the loader mutation test found it): a file in which two
+/// objects share an id loaded, and the id index then mapped the id to one of
+/// them, so a node followed the wrong body and the next frame changed the
+/// open scene with no command. Such a file is refused with a typed error.
+#[test]
+fn a_file_with_a_shared_id_is_refused() {
+    let scene = every_quantity_scene();
+    assert!(scene.duplicate_id().is_none());
+    assert!(from_ron(&to_ron(&scene).expect("saves")).is_ok());
+    for share in [
+        |s: &mut SceneRecord| s.bodies[1].id = s.bodies[0].id,
+        |s: &mut SceneRecord| s.joints[0].id = s.bodies[0].id,
+        |s: &mut SceneRecord| s.nodes[0].id = s.bodies[0].id,
+    ] {
+        let mut bad = scene.clone();
+        share(&mut bad);
+        let text = to_ron(&bad).expect("saves");
+        assert!(
+            matches!(from_ron(&text), Err(crate::PersistError::DuplicateId(id)) if id == scene.bodies[0].id),
+            "a shared id must be refused"
+        );
+    }
+}
