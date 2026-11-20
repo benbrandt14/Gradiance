@@ -81,8 +81,12 @@ fn anchors(app: &App, def: &JointDef) -> (Vec2, Vec2) {
 fn hinged_pair(app: &mut App, rot: f32) -> (StableId, StableId, StableId) {
     let mut left = box_record(Vec2::new(-0.5, 1.0), 1.0, 0.5);
     left.pose.rot = rot;
-    let mut right = box_record(Vec2::new(0.25, 1.25), 0.5, 0.25);
+    let mut right = box_record(Vec2::new(-0.125, 1.25), 0.5, 0.25);
     right.pose.rot = rot;
+    // Both anchors on one world point, in each body's frame.
+    let point = Vec2::new(-0.25, 1.125);
+    let local = |p: &PosRot| Vec2::from_angle(-p.rot).rotate(point - p.pos);
+    let (anchor_a, anchor_b) = (local(&left.pose), local(&right.pose));
     let a = spawn(app, left);
     let b = spawn(app, right);
     let hinge = spawn_joint(
@@ -98,8 +102,8 @@ fn hinged_pair(app: &mut App, rot: f32) -> (StableId, StableId, StableId) {
             common: JointCommon::default(),
             body_a: a,
             body_b: Some(b),
-            anchor_a: Displacement(Vec2::new(0.25, 0.125)),
-            anchor_b: Displacement(Vec2::new(-0.125, 0.0)),
+            anchor_a: Displacement(anchor_a),
+            anchor_b: Displacement(anchor_b),
             rest_rot_a: Angle(rot),
             rest_rot_b: Angle(rot),
         },
@@ -115,7 +119,7 @@ fn mirroring_a_hinged_pair_twice_gives_the_scene_back() {
         invoke(
             &mut app,
             "node.thruster",
-            json!({"body": 0, "x": -0.75, "y": 1.0, "angle": 0.5, "thrust": 10}),
+            json!({"body": a.0.to_string(), "x": -0.75, "y": 1.0, "angle": 0.5, "thrust": 10}),
         );
         let before = record(&mut app);
         let depth = app.world().resource::<HistoryInfo>().undo_depth;
@@ -155,9 +159,9 @@ fn mirroring_a_hinged_pair_twice_gives_the_scene_back() {
         };
         assert!((world_dir - want_dir).length() < 1e-5, "{op}: thrust axis");
         let node_world = pa.pos + Vec2::from_angle(pa.rot).rotate(offset);
-        // The pair's bounds are x in [-1, 0.5], y in [0.75, 1.375].
+        // The pair's bounds are x in [-1, 0.125], y in [0.75, 1.375].
         let want = if op == "body.mirror_h" {
-            Vec2::new(0.25, 1.0)
+            Vec2::new(-0.125, 1.0)
         } else {
             Vec2::new(-0.75, 1.125)
         };
@@ -258,7 +262,7 @@ fn mirror_is_the_last_operation_but_has_nothing_to_adjust() {
 }
 
 /// A box hanging still from a world pin: the reaction force is its weight.
-fn hanging(break_force: Option<f32>) -> (App, StableId) {
+fn hanging(break_force: Option<f32>) -> (App, StableId, StableId) {
     let mut app = paused_app();
     let body = spawn(&mut app, box_record(Vec2::new(0.0, 1.0), 0.4, 0.4));
     let pin = spawn_joint(
@@ -280,7 +284,7 @@ fn hanging(break_force: Option<f32>) -> (App, StableId) {
             rest_rot_b: Angle(0.0),
         },
     );
-    (app, pin)
+    (app, body, pin)
 }
 
 fn run(app: &mut App, frames: usize) {
@@ -300,26 +304,26 @@ fn load(app: &App, joint: StableId) -> f32 {
 #[test]
 fn a_joint_at_ninety_percent_of_its_break_force_draws_hot() {
     // Measure the hanging weight on an unbreakable pin first.
-    let (mut app, pin) = hanging(None);
+    let (mut app, body, pin) = hanging(None);
     run(&mut app, 30);
-    let weight = {
-        let world = app.world_mut();
-        let mut q = world.query::<&avian2d::prelude::ComputedMass>();
-        q.iter(world).next().unwrap().value()
-            * app.world().resource::<SimSettings>().gravity.value().length()
-    };
+    let weight = app
+        .world()
+        .get::<avian2d::prelude::ComputedMass>(entity_of(&app, body).unwrap())
+        .unwrap()
+        .value()
+        * app.world().resource::<SimSettings>().gravity.value().length();
     // Unbreakable: against ten times the weight it carries.
     let calm = load(&app, pin);
     assert!((calm - 0.1).abs() < 0.01, "a hanging pendulum reads a tenth ({calm})");
     let ink = &gradiance::domain::theme::active(None).ink;
     assert_ne!(load_colour(ink.joint, ink.danger, calm), ink.danger);
 
-    // Rated at the weight / 0.9: the pin carries 90 % of what breaks it.
-    let (mut app, pin) = hanging(Some(weight / 0.9));
+    // Rated at its weight / 0.9: the pin carries 90 % of what breaks it.
+    let (mut app, _, pin) = hanging(Some(weight / 0.9));
     run(&mut app, 30);
     let hot = load(&app, pin);
-    assert!((hot - 0.9).abs() < 0.02, "about 90 % ({hot})");
     assert!(!joint(&app, pin).common.broken, "still holding");
+    assert!((hot - 0.9).abs() < 1e-3, "90 % ({hot})");
     let drawn = load_colour(ink.joint, ink.danger, hot);
     let off = (drawn.r - ink.danger.r)
         .abs()
@@ -333,3 +337,4 @@ fn a_joint_at_ninety_percent_of_its_break_force_draws_hot() {
     let saved = gradiance::scene::to_ron(&SceneRecord::capture(app.world_mut())).unwrap();
     assert!(!saved.contains("JointLoad"), "the load is not saved");
 }
+
