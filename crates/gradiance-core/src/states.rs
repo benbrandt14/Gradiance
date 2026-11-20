@@ -45,6 +45,9 @@ pub enum ToolState {
     /// Draw a rigid rod (a capsule body) between two points; each end that
     /// lands on a body is hinged to it.
     Rod,
+    /// Draw a chain (brief N-5): drag a path; release lays capsule links
+    /// along it, hinged end to end, its ends pinned per the tool defaults.
+    Chain,
     /// Draw static ground planes.
     Ground,
     /// Cut bodies along a dragged segment (CSG difference).

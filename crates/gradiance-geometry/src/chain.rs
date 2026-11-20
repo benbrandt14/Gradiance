@@ -107,14 +107,22 @@ mod tests {
         let path = [Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0)];
         let points = chain_points(&path, 0.25).unwrap();
         assert_eq!(points.len(), 9);
-        assert!((points[4] - Vec2::new(1.0, 0.0)).length() < 1e-5, "the corner");
+        assert!(
+            (points[4] - Vec2::new(1.0, 0.0)).length() < 1e-5,
+            "the corner"
+        );
         assert!((points[6] - Vec2::new(1.0, 0.5)).length() < 1e-5);
         assert_eq!(points[8], Vec2::new(1.0, 1.0));
     }
 
     #[test]
     fn repeated_points_in_the_path_are_skipped() {
-        let path = [Vec2::ZERO, Vec2::ZERO, Vec2::new(0.5, 0.0), Vec2::new(0.5, 0.0)];
+        let path = [
+            Vec2::ZERO,
+            Vec2::ZERO,
+            Vec2::new(0.5, 0.0),
+            Vec2::new(0.5, 0.0),
+        ];
         let points = chain_points(&path, 0.25).unwrap();
         assert_eq!(points.len(), 3);
         assert!((points[1] - Vec2::new(0.25, 0.0)).length() < 1e-6);

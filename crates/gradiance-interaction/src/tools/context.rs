@@ -193,6 +193,20 @@ pub enum ToolCommit {
         /// End hinges referencing `body` (zero, one, or two).
         joints: Vec<JointRecord>,
     },
+    /// Lay a chain along a stroke (the chain tool, brief N-5): invokes the
+    /// `body.chain` operation, one undo step for every link and hinge.
+    Chain {
+        /// The stroke, world space, in drawing order.
+        path: Vec<Vec2>,
+        /// Link length (metres).
+        link: f32,
+        /// Link width (metres).
+        width: f32,
+        /// The bodies under the start and the end, when the pins use them.
+        ends: [Option<StableId>; 2],
+        /// Where the ends are pinned.
+        pins: gradiance_domain::settings::ChainPins,
+    },
     /// A script tool's gesture completed: run its body once with these
     /// points (the script tool). Not an authoring intent itself — the script
     /// run emits intents through the ordinary verbs.
@@ -428,6 +442,21 @@ impl ToolCommitWriters<'_> {
                     body: *body,
                     joints,
                 });
+            }
+            ToolCommit::Chain {
+                path,
+                link,
+                width,
+                ends,
+                pins,
+            } => {
+                // Through the operation, like the array gesture: one
+                // lowering for the tool and the verb, and the chain is
+                // adjustable afterwards (Adjust Last Operation).
+                self.invoke
+                    .write(crate::tools::chain_tool::chain_invocation(
+                        &path, link, width, ends, pins,
+                    ));
             }
             ToolCommit::Script { tool, points } => {
                 self.script_tools

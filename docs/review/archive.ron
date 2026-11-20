@@ -2724,5 +2724,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "ui::settings::air_section, script::registry::SIM_SETTING_PATHS",
         ),
+        (
+            question: (
+                id: "chain-path-split",
+                title: "How is a drawn path split into links?",
+                source: "Brief N-5 chain and rope tool (docs/briefs/N-5-chain-tool.md)",
+                description: r#"The brief: drag a path; release makes N capsule links joined by hinges. Option: link length."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Nearest whole count, equal arc",
+                        caption: r#"The stroke is split by arc length into the whole number of links nearest to length / link (at least 1, at most 200; past 200 the links grow longer). Hinge points sit at equal arc length, so the chain starts and ends exactly where the stroke does and the end pins land where the pointer pressed and released. On a curve a link is the chord of its arc, a little shorter than its share. Pure math in geometry::chain::chain_points."#,
+                    ),
+                    (
+                        label: "Exact link length",
+                        caption: r#"Every link exactly the set length; the last one shorter or the chain stopping short of the release point."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chain-path-split",
+                title: "How is a drawn path split into links?",
+                choice: Picked("Nearest whole count, equal arc"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "geometry::chain::chain_points, MAX_CHAIN_LINKS",
+        ),
+        (
+            question: (
+                id: "chain-options",
+                title: "Where are the chain's link length, width and end pins set?",
+                source: "Brief N-5 chain and rope tool (docs/briefs/N-5-chain-tool.md)",
+                description: r#"The brief lists the options; no panel is named. Tool options are workstation config (the Config seam), not scene content."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Tool defaults in Settings > Grid & Snap > Tools",
+                        caption: r#"Three ToolDefaults fields: chain link (0.25 m), chain width (0.06 m; the capsule's diameter) as unit-aware reflect-grid rows, and chain pins as a drop-down (free ends; to bodies, the default, like the rod; to bodies or the world). Not saved, never undone, like the slider-limits and three-point-box defaults. No new panel."#,
+                    ),
+                    (
+                        label: "A Chain window",
+                        caption: r#"A floating window like Array's, with its own View-menu row and panel operations."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chain-options",
+                title: "Where are the chain's link length, width and end pins set?",
+                choice: Picked("Tool defaults in Settings > Grid & Snap > Tools"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "domain::settings::ToolDefaults::{chain_link, chain_width, chain_pins}, domain::settings::ChainPins, ui::settings::grid_snap_tab",
+        ),
+        (
+            question: (
+                id: "chain-commit-path",
+                title: "How does the chain gesture commit?",
+                source: "Brief N-5 chain and rope tool (docs/briefs/N-5-chain-tool.md)",
+                description: r#"Invariant 2: one gesture commits one command; the chain is many bodies and joints. The rod's SpawnRodCommand already spawns a body and its joints atomically."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Through the body.chain operation",
+                        caption: r#"Release writes an InvokeOp for body.chain (like the array gesture's body.array) with the stroke, the defaults and the ids of the bodies under the ends (the rod tool's end hit-test, 8 px tolerance). The operation lays the links and lowers to one SpawnChainIntent, which the dispatch table turns into SpawnRodCommand::chain: the rod command generalised to many bodies, one spawn-chain undo step. A drawn and a scripted chain are the same records, and Adjust Last Operation can re-lay a drawn chain with another link length or width."#,
+                    ),
+                    (
+                        label: "A direct intent from the tool",
+                        caption: r#"The tool builds the records and writes the intent itself, like the rod tool; the operation duplicates the building and the gesture is not adjustable."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chain-commit-path",
+                title: "How does the chain gesture commit?",
+                choice: Picked("Through the body.chain operation"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "interaction::tools::chain_tool, command::ops::chain::Chain, command::intent::SpawnChainIntent, command::rod_cmd::SpawnRodCommand::chain",
+        ),
+        (
+            question: (
+                id: "chain-links",
+                title: "What is a chain link?",
+                source: "Brief N-5 chain and rope tool (docs/briefs/N-5-chain-tool.md)",
+                description: r#"The brief: N capsule links joined by hinges."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A rod-like capsule, hinged at its segment ends",
+                        caption: r#"Link i is a capsule from hinge point i to i + 1 (half length = half the chord, radius = width / 2), density 5 kg/m2 and the rod's tone, so a chain behaves and looks like a run of rods. Consecutive links share a hinge at their common point; their rounded caps overlap there, and a hinge's two bodies do not collide (the default), so the chain bends freely. Links two apart still collide. The links are not grouped: each is its own body, as a rod is."#,
+                    ),
+                    (
+                        label: "Grouped links",
+                        caption: r#"Put the links in one selection group so a click selects the whole chain. Needs group ids minted in the command; left for later."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chain-links",
+                title: "What is a chain link?",
+                choice: Picked("A rod-like capsule, hinged at its segment ends"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "command::ops::chain::{chain_records, CHAIN_DENSITY}",
+        ),
+        (
+            question: (
+                id: "chain-operation",
+                title: "How do scripts make a chain?",
+                source: "Brief N-5 chain and rope tool (docs/briefs/N-5-chain-tool.md)",
+                description: r#"Every tool gesture should have its verb (one model, two control surfaces)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "(chain path link width a b pins)",
+                        caption: r#"body.chain: path is a flat list of world x y pairs; link and width in metres; a and b name the bodies the start and the end are pinned to (a negative index names none); pins is "free", "bodies" or "world" (world pins an end that names no body to the world where it lies). Returns the links' ids, one spawn-chain step. A bad path, a non-positive link or width, or an unknown pin rule is an error."#,
+                    ),
+                    (
+                        label: "Find the end bodies by position",
+                        caption: r#"The operation hit-tests the ends itself; scripts could not choose, and exact containment differs from the tool's tolerant end test."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chain-operation",
+                title: "How do scripts make a chain?",
+                choice: Picked("(chain path link width a b pins)"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "command::ops::chain::Chain, docs/ops.md",
+        ),
+        (
+            question: (
+                id: "chain-tool-key",
+                title: "Where is the chain tool, and with which key?",
+                source: "Brief N-5 chain and rope tool (docs/briefs/N-5-chain-tool.md)",
+                description: r#"The owner ruled the editor keymap unsettled; a new tool gets no key."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Connect group after Rod, no key",
+                        caption: r#"A Chain entry in the palette's Connect group right after Rod, with the existing chain icon (assets/icons/chain (2).png), no key, and a tool.chain operation with no chord. The status bar hint: Drag, draw the path; release lays the links."#,
+                    ),
+                    (
+                        label: "Modify group",
+                        caption: r#"Beside the tracer and the thruster."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "chain-tool-key",
+                title: "Where is the chain tool, and with which key?",
+                choice: Picked("Connect group after Rod, no key"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "ui::toolbar::TOOL_GROUPS, interaction::tool_ops::UseChain",
+        ),
     ],
 )

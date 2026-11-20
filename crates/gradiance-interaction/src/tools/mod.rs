@@ -13,6 +13,7 @@
 
 pub mod array_tool;
 pub mod box_tool;
+pub mod chain_tool;
 pub mod circle_tool;
 pub mod click_select;
 pub mod connector_tool;
@@ -69,6 +70,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<polygon_tool::PolygonTool>();
         app.init_resource::<spring_tool::SpringDraft>();
         app.init_resource::<rod_tool::RodDraft>();
+        app.init_resource::<chain_tool::ChainDraft>();
         app.init_resource::<node_tools::TracerTool>();
         app.init_resource::<node_tools::ThrusterTool>();
         app.init_resource::<script_tool::ScriptTool>();
@@ -113,6 +115,7 @@ impl Plugin for ToolsPlugin {
                     .run_if(connector_tool::connector_active),
                 run_manip_tool::<spring_tool::SpringDraft>.run_if(in_state(ToolState::Spring)),
                 run_manip_tool::<rod_tool::RodDraft>.run_if(in_state(ToolState::Rod)),
+                run_manip_tool::<chain_tool::ChainDraft>.run_if(in_state(ToolState::Chain)),
                 run_manip_tool::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
                 run_manip_tool::<node_tools::ThrusterTool>.run_if(in_state(ToolState::Thruster)),
                 // Script tools: a generic draft over the table the script
@@ -157,6 +160,7 @@ impl Plugin for ToolsPlugin {
                     draw_manip_preview::<spring_tool::SpringDraft>
                         .run_if(in_state(ToolState::Spring)),
                     draw_manip_preview::<rod_tool::RodDraft>.run_if(in_state(ToolState::Rod)),
+                    draw_manip_preview::<chain_tool::ChainDraft>.run_if(in_state(ToolState::Chain)),
                     draw_manip_preview::<node_tools::TracerTool>
                         .run_if(in_state(ToolState::Tracer)),
                     draw_manip_preview::<node_tools::ThrusterTool>

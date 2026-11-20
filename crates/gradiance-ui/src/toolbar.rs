@@ -41,6 +41,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
             (ToolState::Slider, "Prismatic", "R", "tool_prismatic"),
             (ToolState::Spring, "Spring", "T", "tool_strut"),
             (ToolState::Rod, "Rod", "L", "wire"),
+            // No key: the editor keymap is not settled (briefs N-3, N-5).
+            (ToolState::Chain, "Chain", "", "chain (2)"),
             (ToolState::Weld, "Weld", "W", "tool_weld"),
             (ToolState::Ground, "Ground", "G", "tool_ground"),
         ],

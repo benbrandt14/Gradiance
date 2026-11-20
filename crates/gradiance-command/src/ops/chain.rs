@@ -87,7 +87,9 @@ impl Operation for Chain {
         }
         let width = self.width.0;
         if !(width.is_finite() && width > 0.0) {
-            return Err(OpError::Invalid(format!("width {width}: a positive length")));
+            return Err(OpError::Invalid(format!(
+                "width {width}: a positive length"
+            )));
         }
         let path: Vec<Vec2> = self
             .path
@@ -153,7 +155,12 @@ pub fn chain_records(
     let mut joints = Vec::with_capacity(bodies.len() + 1);
     for (i, pair) in bodies.windows(2).enumerate() {
         let at = points[i + 1];
-        joints.push(hinge(new_id(), &pair[0], Some((pair[1].id, pair[1].pose)), at));
+        joints.push(hinge(
+            new_id(),
+            &pair[0],
+            Some((pair[1].id, pair[1].pose)),
+            at,
+        ));
     }
     if let (Some(first), Some(last)) = (bodies.first(), bodies.last()) {
         for (link, end, at) in [
@@ -195,7 +202,12 @@ fn link_record(id: StableId, a: Vec2, b: Vec2, radius: f32) -> BodyRecord {
 
 /// A hinge from `link` at the world point `at` to `other` (a body id and
 /// pose), or to the world when `other` is `None`.
-fn hinge(id: StableId, link: &BodyRecord, other: Option<(StableId, PosRot)>, at: Vec2) -> JointRecord {
+fn hinge(
+    id: StableId,
+    link: &BodyRecord,
+    other: Option<(StableId, PosRot)>,
+    at: Vec2,
+) -> JointRecord {
     let to_local = |pose: PosRot| Vec2::from_angle(-pose.rot).rotate(at - pose.pos);
     let (body_b, anchor_b, rest_rot_b) = match other {
         Some((other, pose)) => (Some(other), to_local(pose), pose.rot),
@@ -241,7 +253,11 @@ mod tests {
         assert_eq!(bodies.len(), 2);
         assert_eq!(joints.len(), 1, "one hinge between two free links");
         for (i, body) in bodies.iter().enumerate() {
-            let ShapeDef::Capsule { half_length, radius } = body.shape else {
+            let ShapeDef::Capsule {
+                half_length,
+                radius,
+            } = body.shape
+            else {
                 panic!("a capsule link");
             };
             assert!((half_length - 0.125).abs() < 1e-6 && (radius - 0.03).abs() < 1e-6);
@@ -283,7 +299,11 @@ mod tests {
         assert_eq!(joints.len(), 3, "one between, two pins");
         let start = &joints[1].def;
         assert_eq!((start.body_a, start.body_b), (bodies[0].id, None));
-        assert_eq!(start.anchor_b.value(), points[0], "a world pin's anchor is the point");
+        assert_eq!(
+            start.anchor_b.value(),
+            points[0],
+            "a world pin's anchor is the point"
+        );
         let end = &joints[2].def;
         assert_eq!((end.body_a, end.body_b), (bodies[1].id, Some(body.id)));
         assert!(world_of(body.pose(), end.anchor_b.value()).distance(points[2]) < 1e-5);
