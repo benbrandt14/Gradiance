@@ -31,6 +31,11 @@ use gradiance_scene::JointRecord;
 
 /// Below this drag length a slider uses the body's local X axis.
 const AXIS_THRESHOLD: f32 = 0.05;
+/// How far (screen pixels, scaled to world by the camera) a body's surface
+/// may sit from the anchor and still count as under it: an object-snapped
+/// anchor lies exactly on an edge or a vertex, where containment is a coin
+/// flip, and a lost coin flip turned a two-body hinge into a world pin.
+const ANCHOR_TOLERANCE_PX: f32 = 1.0;
 
 /// In-progress connector gesture (anchor point).
 #[derive(Resource, Default, Debug)]
@@ -70,6 +75,7 @@ impl ManipTool for ConnectorDraft {
                     anchor,
                     ctx.cursor.unwrap_or(anchor),
                     ctx.defaults,
+                    ANCHOR_TOLERANCE_PX * ctx.cam_scale,
                     world,
                 )
             };
@@ -141,11 +147,21 @@ fn build_joint(
     anchor: Vec2,
     release: Vec2,
     defaults: gradiance_domain::settings::ToolDefaults,
+    tol: f32,
     world: &ToolWorld,
 ) -> Option<ToolCommit> {
     // The two topmost bodies at the anchor; one body → world pin.
-    let hits = world.bodies_at(anchor);
+    let hits = world.joint_bodies_at(anchor, tol);
     let &body_a = hits.first()?;
+    // A ground half-plane alone: pinning a fixed body to the world changes
+    // nothing, so there is nothing to make.
+    if hits.len() == 1
+        && world
+            .shape_pose(body_a)
+            .is_some_and(|(shape, _)| shape.contains_half_plane())
+    {
+        return None;
+    }
     let pose_a = world.pose_of(body_a)?;
     let id_a = world.id_of(body_a)?;
     let to_local = |pose: PosRot, world: Vec2| Vec2::from_angle(-pose.rot).rotate(world - pose.pos);

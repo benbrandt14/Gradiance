@@ -30,6 +30,13 @@ Last updated: 2026-11-20 (N-9 handoff, Phase N complete; before that N-8, N-7, N
   `archive.ron`. **Phase N is complete.** **Next:** the orchestrator plans
   the next stage: Phase 6 (testing & diagnostics), then G-0 one graph
   model, 3D-0 the 3D plan, D-2 egui 0.37 once bevy_egui ships it.
+  **J-1** joint stress test is done (in review; branch
+  `claude/project-thread-fmsek9`; brief `docs/briefs/J-1-joint-stress.md`):
+  19 scenes in `tests/it/joint_stress.rs`; five fixes: a body-to-body
+  slider no longer explodes at long travel (`track_slider_anchors`), a
+  rotation lock stops the spin (`stop_locked_spin`), a hinge on a snapped
+  edge joins both bodies, a spring from empty space pins its start, a
+  hinge on a bare ground makes nothing; six decisions in `archive.ron`.
   **N-8** laser node is done (in review; branch
   `claude/project-thread-tw1mvl-n8`): `NodeKind::Laser` (bus name, target
   body, axis in the body's frame, range 50 m, 8 bounces, cap 32) casts its

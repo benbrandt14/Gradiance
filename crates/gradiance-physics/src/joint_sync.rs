@@ -366,6 +366,60 @@ pub fn retune_joints(
     }
 }
 
+/// Moves each body-to-body slider's **engine** anchor on body 1 along the
+/// slide axis to where body 2's anchor projects onto it, and shifts the
+/// travel limits by the same amount, before every physics step.
+///
+/// The constraint is unchanged: the slide line is the same line, and the
+/// limits bound the same travel. What changes is the lever arm. avian's
+/// prismatic applies its sideways correction at the two *anchors*; with
+/// body 2 far along the axis, body 1 got that push at its own anchor (near
+/// its centre) while the real contact is under body 2, a wrong lever that
+/// grows with the travel. A cart run off the end of a light, pinned rail
+/// reached thousands of m/s at about 4 m of travel, at any substep count
+/// (joint stress test, 2026-11-20). With the anchor under body 2 the lever
+/// is the true one (as `Box2D`'s prismatic does).
+///
+/// A world-pin slider is left alone: its first body is the static pin,
+/// which takes no correction. Authored state is not touched; the next
+/// [`sync_joints`] re-derive starts from the authored anchor again.
+pub fn track_slider_anchors(
+    mut joints: Query<(&JointDef, &mut PrismaticJoint)>,
+    poses: Query<(&Position, &Rotation)>,
+) {
+    for (def, mut joint) in &mut joints {
+        let JointKind::Slider { limits, .. } = def.kind else {
+            continue;
+        };
+        if def.world_first() {
+            continue;
+        }
+        let (Ok((p1, r1)), Ok((p2, r2))) = (poses.get(joint.body1), poses.get(joint.body2)) else {
+            continue;
+        };
+        let authored = def.anchor_a.value();
+        let axis = joint.slider_axis.normalize_or_zero();
+        let on_2 = p2.0 + *r2 * def.anchor_b.value();
+        let local = r1.inverse() * (on_2 - p1.0);
+        let shift = (local - authored).dot(axis);
+        if !shift.is_finite() {
+            continue;
+        }
+        let anchor = authored + axis * shift;
+        let moved = match joint.frame1.anchor {
+            JointAnchor::Local(old) => old.distance_squared(anchor) > 1e-12,
+            JointAnchor::FromGlobal(_) => true,
+        };
+        if moved {
+            joint.frame1.anchor = JointAnchor::Local(anchor);
+            joint.limits = limits.map(|[min, max]| DistanceLimit {
+                min: min.value() - shift,
+                max: max.value() - shift,
+            });
+        }
+    }
+}
+
 /// The velocity-tracking motor model avian takes, at per-substep `gain`.
 fn velocity_model(gain: f32) -> MotorModel {
     MotorModel::AccelerationBased {

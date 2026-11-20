@@ -3561,5 +3561,171 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "render::joint_viz::draw_joints",
         ),
+        (
+            question: (
+                id: "joint-anchor-on-edge",
+                title: "Does a joint anchor on a body's edge count as on that body?",
+                source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
+                description: r#"Object snap puts a hinge, slider or spring anchor exactly on an edge or a vertex, where exact containment is a coin flip. A lost flip turned a two-body hinge into a world pin."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Within 1 px of the surface counts",
+                        caption: r#"The connector and spring tools take every body whose surface is within 1 screen pixel of the anchor (ToolWorld::joint_bodies_at), exact hits first, grounds last."#,
+                    ),
+                    (
+                        label: "Exact containment only",
+                        caption: r#"The old rule: a snapped anchor on an edge may miss that body."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "joint-anchor-on-edge",
+                title: "Does a joint anchor on a body's edge count as on that body?",
+                choice: Picked("Within 1 px of the surface counts"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "interaction::tools::context::ToolWorld::joint_bodies_at, connector_tool, spring_tool",
+        ),
+        (
+            question: (
+                id: "hinge-on-bare-ground",
+                title: "What does a hinge click on the ground alone make?",
+                source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
+                description: r#"Clicking the hinge tool on a ground half-plane with no body over it pinned the static ground to the world: a joint that does nothing, an undo step and a gizmo."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Nothing",
+                        caption: r#"No joint and no undo step, as a click on empty space."#,
+                    ),
+                    (
+                        label: "A world pin on the ground",
+                        caption: r#"The old behaviour."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "hinge-on-bare-ground",
+                title: "What does a hinge click on the ground alone make?",
+                choice: Picked("Nothing"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "interaction::tools::connector_tool::build_joint",
+        ),
+        (
+            question: (
+                id: "spring-from-background",
+                title: "What does a spring drag that starts on empty space make?",
+                source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
+                description: r#"Algodoo's spring joins the background at either end. Here a drag from empty space to a body made nothing, while the reverse drag made a world-pinned spring."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A spring pinned at its start",
+                        caption: r#"The body under the far end becomes body A and the start point its world anchor; the joint is symmetric, so nothing else changes. Both ends on empty space still make nothing."#,
+                    ),
+                    (
+                        label: "Nothing",
+                        caption: r#"The old behaviour."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "spring-from-background",
+                title: "What does a spring drag that starts on empty space make?",
+                choice: Picked("A spring pinned at its start"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "interaction::tools::spring_tool::build_spring",
+        ),
+        (
+            question: (
+                id: "slider-engine-anchor",
+                title: "How is the body-to-body slider kept stable at long travel?",
+                source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
+                description: r#"avian's prismatic applies its sideways correction at the two anchors, so with body B far along the axis body A gets the push at its own anchor: a wrong lever arm. A cart run off the end of a pinned rail flew off at thousands of m/s near 4 m of travel, at any substep count."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Move the engine anchor under body B",
+                        caption: r#"physics::joint_sync::track_slider_anchors, before every step: the derived anchor on body A slides along the axis to body B's projection and the derived limits shift by the same amount. Same constraint, true lever arm (Box2D does the same). Authored state untouched."#,
+                    ),
+                    (
+                        label: "Default travel limits on the verb",
+                        caption: r#"Limit (slider …) like the tool does. Hides the fault for short travel only."#,
+                    ),
+                    (
+                        label: "Patch avian",
+                        caption: r#"Not possible under the exact pin without a fork."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "slider-engine-anchor",
+                title: "How is the body-to-body slider kept stable at long travel?",
+                choice: Picked("Move the engine anchor under body B"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "physics::joint_sync::track_slider_anchors",
+        ),
+        (
+            question: (
+                id: "locked-spin",
+                title: "What happens to a body's spin when its rotation gets locked?",
+                source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
+                description: r#"A world-pin slider rotation-locks its body. avian's LockedAxes stops new angular impulses only, so a body already turning (knocked by a contact, or locked from the inspector during a run) turned forever on its guide."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Stop the spin on lock",
+                        caption: r#"physics::body_sync::stop_locked_spin zeroes the angular velocity when the lock is added; simulation state, owned by the physics seam."#,
+                    ),
+                    (
+                        label: "Keep the spin",
+                        caption: r#"The old behaviour."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "locked-spin",
+                title: "What happens to a body's spin when its rotation gets locked?",
+                choice: Picked("Stop the spin on lock"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "physics::body_sync::stop_locked_spin",
+        ),
+        (
+            question: (
+                id: "shared-pivot-collisions",
+                title: "Do bars on one pivot that share no joint collide?",
+                source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
+                description: r#"Three bars hinged at one point (A to the world, A to B, B to C): A and C share no joint, so they still collide where they overlap. In the test they turn freely and nothing blows up."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Keep: only directly jointed pairs ignore each other",
+                        caption: r#"As Algodoo: collision is off per joint pair. Move a bar to another depth layer to let it pass through."#,
+                    ),
+                    (
+                        label: "Ignore every pair sharing a pivot point",
+                        caption: r#"Needs a pivot grouping that the joint model does not have."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "shared-pivot-collisions",
+                title: "Do bars on one pivot that share no joint collide?",
+                choice: Picked("Keep: only directly jointed pairs ignore each other"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "no change (tests/it/joint_stress.rs three_bars_on_one_pivot_each_turn_freely)",
+        ),
     ],
 )
