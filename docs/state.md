@@ -12,7 +12,11 @@ Last updated: 2026-11-20 (N-9 handoff, Phase N complete; before that N-8, N-7, N
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **N-9** mirror and joint load colour is done (in review;
+- **Now:** **Phase 6** is planned (orchestrator, 2026-11-20): briefs
+  **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
+  geometry property tests, **6-3** physics debug toggles + schedule dump,
+  in that order. Phase N merged (#282–#289, #291); J-1 merged (#290).
+  **N-9** mirror and joint load colour is done (in review;
   branch `claude/project-thread-tw1mvl-n9`): `body.mirror_h` /
   `body.mirror_v` (`(mirror-h targets)`, `(mirror-v targets)`, Edit ▸
   Mirror horizontally / vertically, no key) lower to one `ScaleIntent`
@@ -211,7 +215,8 @@ Last updated: 2026-11-20 (N-9 handoff, Phase N complete; before that N-8, N-7, N
   10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10**
       editor areas + saved workspaces (done, #275); **U-11** Adjust
       Last Operation (done, #276).
-  11. **Phase 6** (testing & diagnostics).
+  11. **Phase 6** (testing & diagnostics): **6-1**, **6-2**, **6-3**
+      (`docs/briefs/6-*`).
   12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
       **D-2** egui 0.37 once bevy_egui ships it.
 - **Owner rulings in force:**
