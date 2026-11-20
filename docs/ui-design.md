@@ -415,7 +415,7 @@ settings to its preset; editing those afterwards keeps the look.
 
 | Look | Name | Backdrop | Pieces | Light | Bands |
 |---|---|---|---|---|---|
-| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 5-stop ramp (mauve shadows, cream lit patch), dither, relief, rim 0.2, matte |
+| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 5-stop ramp (mauve shadows, cream lit patch), hard band edges (dither 0), relief, rim 0.2, matte |
 | Blueprint | `blueprint` | navy | pale chalk tones (L 0.84), navy ink outlines | one cool key | 3 cool stops, rim 0.35, flat faces |
 | Flat graphic | `poster` | paper white | bold tones (L 0.615), black outlines | one key | 2 stops, no rim, flat faces |
 
@@ -462,7 +462,8 @@ Light levels are set against the toon white point: see
 `Look::lighting`. Since brief 4b-6 the lit/albedo level indexes a colour
 ramp (`domain::ramp`, Settings > Rendering > Ramp) whose tones tint every
 fill by hard light (mid grey = the fill as authored), so all bodies share
-one falloff; band edges dither in screen space (`dither`, `dither_scale`),
+one falloff; band edges can dither in screen space (`dither`, `dither_scale`;
+0 by default since review `toon-ramp`, hard bands),
 and a front face is lit as a rounded body from its distance to its outline
 (`relief`, `bevel`; `geometry::face_field`). The back plane and grounds use
 the same ramp, so a shadow is a flat step in the bodies' shadow hue. The camera uses a linear tone curve, so the top band

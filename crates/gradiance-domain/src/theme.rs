@@ -86,8 +86,9 @@ impl Look {
 
     /// The render settings this look starts from.
     ///
-    /// Only studio lights its faces with relief ([`STUDIO_RELIEF`]) and
-    /// dithers its band edges: blueprint and poster are flat-colour styles,
+    /// Only studio lights its faces with relief ([`STUDIO_RELIEF`]); no
+    /// look dithers its band edges by default ([`STUDIO_DITHER`] is 0, hard
+    /// bands): blueprint and poster are flat-colour styles,
     /// so their faces stay one tone and their bands stay in the shadows.
     /// No look has a glint: the matte default (brief 4b-6) puts a lit patch
     /// in the ramp instead.
@@ -402,8 +403,9 @@ pub const WHITE_LIGHT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
 /// the ramp (the authored-fill band), so a face turned toward the key can
 /// rise into the lit patch above it (brief 4b-6, measured on lavapipe).
 pub const STUDIO_WHITE_POINT: f32 = 1.25;
-/// Studio's band-edge dither width, in lighting levels.
-pub const STUDIO_DITHER: f32 = 0.025;
+/// Studio's band-edge dither width, in lighting levels: 0, hard bands
+/// (review answer `toon-ramp`, 2026-11-20). The setting and its slider stay.
+pub const STUDIO_DITHER: f32 = 0.0;
 /// Screen pixels per dither cell (every look).
 pub const STUDIO_DITHER_SCALE: f32 = 2.0;
 /// Studio ramp: both shadows, a cool mauve-brown (hue-shifted, not only
