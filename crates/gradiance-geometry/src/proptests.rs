@@ -43,7 +43,7 @@ use proptest::test_runner::RngSeed;
 use std::f32::consts::{PI, TAU};
 
 /// The RNG seed every property runs from unless `PROPTEST_RNG_SEED` is set.
-const SEED: u64 = 0x6_2_6E0;
+const SEED: u64 = 0x0006_0002;
 
 /// A run of `cases` cases (`PROPTEST_CASES` overrides it, for a longer
 /// local search): fixed seed, nothing written to disk.
