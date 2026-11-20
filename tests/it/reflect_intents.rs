@@ -157,6 +157,7 @@ fn spawn_body_intent_round_trips_through_reflection() {
             fade_secs: gradiance::units::Time(1.5),
             ..Default::default()
         }),
+        fluid: Some(gradiance::domain::fluid::Fluid::default()),
     };
     let intent = SpawnBodyIntent {
         record: record.clone(),

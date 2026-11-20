@@ -58,6 +58,7 @@ pub struct BodyProps<'w, 's> {
     body_q: Query<'w, 's, &'static RigidBody, With<Body>>,
     field_q: Query<'w, 's, &'static gradiance_domain::field::FieldSource, With<Body>>,
     tracer_q: Query<'w, 's, &'static gradiance_domain::tracer::Tracer, With<Body>>,
+    fluid_q: Query<'w, 's, &'static gradiance_domain::fluid::Fluid, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -335,7 +336,94 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
         );
     }
     field_block(ui, selection, props, primary);
+    fluid_block(ui, selection, props, primary);
     tracer_block(ui, selection, props, primary);
+}
+
+/// The fluid editor (buoyancy, brief N-7): enable toggle, fluid density and
+/// drag. Turning a body into a fluid also makes it a static sensor, in the
+/// same undo step ([`gradiance_command::property::fluid_changes`]).
+fn fluid_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use gradiance_domain::fluid::{DEFAULT_FLUID_DENSITY, DEFAULT_FLUID_DRAG, Fluid};
+    let current = props.fluid_q.get(primary).ok().copied();
+    let mut on = current.is_some();
+    if ui
+        .checkbox(&mut on, "fluid (buoyancy)")
+        .on_hover_text(
+            "bodies inside float or sink by their density and are damped; \
+             makes this body a static sensor",
+        )
+        .changed()
+    {
+        commit_fluids(selection, props, |old| on.then(|| old.unwrap_or_default()));
+    }
+    let Some(fluid) = current else {
+        return;
+    };
+    let mut density = fluid.density.value();
+    ui.horizontal(|ui| {
+        ui.label("fluid density")
+            .on_hover_text("lighter bodies float, heavier ones sink");
+        if let Commit::Done(_, new) = precise_drag_unit(
+            ui,
+            ui.id().with("fluid-density"),
+            &mut density,
+            DEFAULT_FLUID_DENSITY,
+            0.01,
+            Dimension::Density,
+        ) {
+            let density = gradiance_units::Density(new.max(0.0));
+            commit_fluids(selection, props, move |old| {
+                old.map(|f| Fluid { density, ..f })
+            });
+        }
+    });
+    let mut drag = fluid.drag;
+    ui.horizontal(|ui| {
+        ui.label("fluid drag (1/s)")
+            .on_hover_text("how fast the fluid stops what moves through it");
+        if let Commit::Done(_, new) = precise_drag(
+            ui,
+            ui.id().with("fluid-drag"),
+            &mut drag,
+            DEFAULT_FLUID_DRAG,
+            0.01,
+        ) {
+            let drag = new.max(0.0);
+            commit_fluids(selection, props, move |old| {
+                old.map(|f| Fluid { drag, ..f })
+            });
+        }
+    });
+}
+
+/// Commits one batched fluid edit across the selection: each target's new
+/// fluid is `make_new` of its own (each prior value captured for undo).
+fn commit_fluids(
+    selection: &Selection,
+    props: &mut BodyProps,
+    make_new: impl Fn(Option<gradiance_domain::fluid::Fluid>) -> Option<gradiance_domain::fluid::Fluid>,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = props.ids.get(e).ok().copied()?;
+            let rigid_body = *props.body_q.get(e).ok()?;
+            let (sensor, _) = props.flags_q.get(e).ok()?;
+            let old = props.fluid_q.get(e).ok().copied();
+            Some(gradiance_command::property::fluid_changes(
+                id,
+                old,
+                sensor,
+                rigid_body,
+                make_new(old),
+            ))
+        })
+        .flatten()
+        .collect();
+    if !changes.is_empty() {
+        props.edits.write(PropertyEditIntent { changes });
+    }
 }
 
 /// The tracer editor: enable toggle + fade window. Commits
