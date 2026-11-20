@@ -465,7 +465,10 @@ mod tests {
         // A half-plane across x turns over; mirrored twice it is equivalent.
         let flipped = mirror_shape(&ShapeDef::HalfPlane, MirrorAxis::Y);
         let p = Vec2::new(0.2, 0.5);
-        assert!((crate::sdf::eval(&flipped, p) + crate::sdf::eval(&ShapeDef::HalfPlane, p)).abs() < 1e-5);
+        assert!(
+            (crate::sdf::eval(&flipped, p) + crate::sdf::eval(&ShapeDef::HalfPlane, p)).abs()
+                < 1e-5
+        );
     }
 
     /// The world image of a body-local point is the same whether the world
@@ -501,7 +504,8 @@ mod tests {
                         * Vec2::from_angle(body_rot + dir);
                     let got_dir = Vec2::from_angle(map.rot + map.direction(dir));
                     assert!(
-                        got_dir.perp_dot(world_dir.normalize()).abs() < 1e-4 && got_dir.dot(world_dir) > 0.0,
+                        got_dir.perp_dot(world_dir.normalize()).abs() < 1e-4
+                            && got_dir.dot(world_dir) > 0.0,
                         "{factors} {body_rot} {frame_rot}: direction {got_dir} vs {world_dir} {map:?}"
                     );
                 }

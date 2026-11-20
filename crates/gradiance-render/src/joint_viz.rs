@@ -11,22 +11,22 @@
 //! sees which joint will fail. The load is derived render state: measured
 //! every frame from `physics::queries`, never saved, never undone.
 
+use avian2d::prelude::RigidBody;
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
 use gradiance_core::units::PosRot;
-use avian2d::prelude::RigidBody;
 use gradiance_domain::appearance::Rgba;
 use gradiance_domain::joint::{
     AngularMotorDef, HOT_LOAD, JointDef, JointKind, LinearMotorDef, load_fraction,
 };
 use gradiance_domain::settings::{RenderSettings, SimSettings};
-use gradiance_physics::queries::PhysicsQueries;
 use gradiance_domain::theme::active;
 use gradiance_interaction::joint_edit::{
     HINGE_LIMIT_RADIUS_PX, HINGE_RING_PX, JointLimitDrag, slider_span,
 };
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_interaction::selection::SelectedJoint;
+use gradiance_physics::queries::PhysicsQueries;
 
 /// A joint's load: its reaction force as a fraction of the force it is
 /// rated for ([`load_fraction`]). **Derived** render state on every joint

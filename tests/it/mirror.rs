@@ -13,10 +13,10 @@ use bevy::prelude::*;
 use gradiance::command::HistoryInfo;
 use gradiance::domain::joint::{AngularMotorDef, HOT_LOAD};
 use gradiance::domain::node::NodeKind;
+use gradiance::domain::settings::SimSettings;
 use gradiance::op::{InvokeOp, LastOp, Value, json};
 use gradiance::prelude::*;
 use gradiance::render::joint_viz::{JointLoad, load_colour};
-use gradiance::domain::settings::SimSettings;
 use gradiance::units::{Angle, AngularVelocity, Displacement, Force};
 
 fn invoke(app: &mut App, id: &'static str, params: Value) {
@@ -128,18 +128,29 @@ fn mirroring_a_hinged_pair_twice_gives_the_scene_back() {
         let info = app.world().resource::<HistoryInfo>();
         assert_eq!(info.undo_depth, depth + 1, "{op}: one undo step");
         assert_eq!(info.undo_label, Some("mirror"), "{op}");
-        assert_ne!(record(&mut app), before, "{op}: the mirror changed the scene");
+        assert_ne!(
+            record(&mut app),
+            before,
+            "{op}: the mirror changed the scene"
+        );
 
         // The hinge still joins the same material point of both bodies.
         let def = joint(&app, hinge);
         let (wa, wb) = anchors(&app, &def);
-        assert!((wa - wb).length() < 1e-5, "{op}: anchors meet ({wa} vs {wb})");
+        assert!(
+            (wa - wb).length() < 1e-5,
+            "{op}: anchors meet ({wa} vs {wb})"
+        );
         // All its bodies turned over, so its relative angles did too.
         let JointKind::Hinge { limits, motor } = def.kind else {
             panic!("still a hinge");
         };
         assert_eq!(limits, Some([Angle(-0.5), Angle(0.25)]), "{op}");
-        assert_eq!(motor.unwrap().target_velocity, AngularVelocity(-2.0), "{op}");
+        assert_eq!(
+            motor.unwrap().target_velocity,
+            AngularVelocity(-2.0),
+            "{op}"
+        );
         // The thruster rides the mirrored point and pushes the mirrored way.
         let pa = pose(&app, a);
         let (node_kind, offset) = {
@@ -245,7 +256,11 @@ fn mirroring_one_end_moves_a_world_pin_with_its_body() {
     let JointKind::Hinge { limits, .. } = def.kind else {
         panic!("hinge");
     };
-    assert_eq!(limits, Some([Angle(-0.5), Angle(0.25)]), "a pinned body turns its limits over");
+    assert_eq!(
+        limits,
+        Some([Angle(-0.5), Angle(0.25)]),
+        "a pinned body turns its limits over"
+    );
 }
 
 #[test]
@@ -253,7 +268,12 @@ fn mirror_is_the_last_operation_but_has_nothing_to_adjust() {
     let mut app = paused_app();
     hinged_pair(&mut app, 0.0);
     invoke(&mut app, "body.mirror_v", json!({"targets": [0, 1]}));
-    let last = app.world().resource::<LastOp>().0.as_ref().map(|r| r.call.id);
+    let last = app
+        .world()
+        .resource::<LastOp>()
+        .0
+        .as_ref()
+        .map(|r| r.call.id);
     assert_eq!(last, Some("body.mirror_v"));
     // An empty selection mirrors nothing and records nothing.
     let depth = app.world().resource::<HistoryInfo>().undo_depth;
@@ -311,10 +331,18 @@ fn a_joint_at_ninety_percent_of_its_break_force_draws_hot() {
         .get::<avian2d::prelude::ComputedMass>(entity_of(&app, body).unwrap())
         .unwrap()
         .value()
-        * app.world().resource::<SimSettings>().gravity.value().length();
+        * app
+            .world()
+            .resource::<SimSettings>()
+            .gravity
+            .value()
+            .length();
     // Unbreakable: against ten times the weight it carries.
     let calm = load(&app, pin);
-    assert!((calm - 0.1).abs() < 0.01, "a hanging pendulum reads a tenth ({calm})");
+    assert!(
+        (calm - 0.1).abs() < 0.01,
+        "a hanging pendulum reads a tenth ({calm})"
+    );
     let ink = &gradiance::domain::theme::active(None).ink;
     assert_ne!(load_colour(ink.joint, ink.danger, calm), ink.danger);
 
@@ -337,4 +365,3 @@ fn a_joint_at_ninety_percent_of_its_break_force_draws_hot() {
     let saved = gradiance::scene::to_ron(&SceneRecord::capture(app.world_mut())).unwrap();
     assert!(!saved.contains("JointLoad"), "the load is not saved");
 }
-

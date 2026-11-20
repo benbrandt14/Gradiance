@@ -526,8 +526,14 @@ mod tests {
         // hanging still reads a tenth.
         assert!(close(load_fraction(Force(9.81), None, 1.0, 9.81), 0.1));
         // A zero threshold is hot under any load, calm under none.
-        assert!(close(load_fraction(Force(1.0), Some(Force(0.0)), 1.0, 9.81), 1.0));
-        assert!(close(load_fraction(Force(0.0), Some(Force(0.0)), 1.0, 9.81), 0.0));
+        assert!(close(
+            load_fraction(Force(1.0), Some(Force(0.0)), 1.0, 9.81),
+            1.0
+        ));
+        assert!(close(
+            load_fraction(Force(0.0), Some(Force(0.0)), 1.0, 9.81),
+            0.0
+        ));
     }
 
     #[test]

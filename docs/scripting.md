@@ -161,6 +161,9 @@ across and ±3.5 m up and down); angles are radians.
                              ; inside float or sink by density (brief N-7);
                              ; also makes it a static sensor; density 0 = off
 (scale i fx fy)              ; resize about the body's own centre, own axes
+(mirror-h (list i …))        ; mirror left to right about the bodies' centre,
+(mirror-v (list i …))        ; or top to bottom; joints and nodes follow
+                             ; (brief N-9); one undo step each
 (merge a b)                  ; fuse into one CSG union; a survives
 (subtract a b)               ; cut b's shape out of a; b is consumed
 (intersect a b)              ; keep only the overlap, on a; b is consumed
@@ -832,7 +835,13 @@ Three properties of the write side worth knowing:
 global-axis scale of a rotated box would shear it into a polygon — which
 `geometry::scale` handles correctly, but it is not what the caller meant. Zero
 and negative factors are rejected: zero is unrecoverable and a negative mirrors,
-and neither is a resize.
+and neither is a resize. Mirroring is `(mirror-h targets)` / `(mirror-v
+targets)` (Edit ▸ Mirror horizontally / vertically): world axes through the
+middle of the bodies' bounds; each body turns to its reflected angle and its
+shape reflects across one of its own axes, so a box stays a box and a CSG body
+stays a tree, and mirroring twice gives the scene back. Joint anchors, slider
+axes and node offsets go through the same body map (on any scale); a hinge
+whose bodies all mirror gets its limits and motor turned over.
 
 `(set-friction …)` moves both the static and dynamic coefficients together,
 which is what the inspector does: authoring two numbers that are almost always

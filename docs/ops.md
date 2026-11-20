@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 143 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 145 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -29,6 +29,8 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.intersect` | `(intersect a b)` | edit | `intersect` | Context/Intersect | Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed. | `{"a": 0, "b": 1}` |
 | `body.is_static` | `(body-static? i)` | query | — | — | Whether the i-th body is static (1) or not (0). | `{"i": 0}` |
 | `body.merge` | `(merge a b)` | edit | `merge` | Context/Merge into one body | Fuse bodies a and b into one CSG union; a survives. | `{"a": 0, "b": 1}` |
+| `body.mirror_h` | `(mirror-h targets)` | edit | `mirror` | Edit/Mirror horizontally | Mirror the listed bodies left to right across the vertical line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
+| `body.mirror_v` | `(mirror-v targets)` | edit | `mirror` | Edit/Mirror vertically | Mirror the listed bodies top to bottom across the horizontal line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
 | `body.nearest_at` | `(nearest-at x y)` | query | — | — | Index of the body whose centre is nearest (x, y); -1 if none. | `{"x": 0, "y": 1}` |
 | `body.nearest_dist` | `(nearest-dist x y)` | query | — | — | Distance from (x, y) to the nearest body centre; -1 if the scene is empty. | `{"x": 0, "y": 1}` |
 | `body.place` | `(place i x y angle)` | edit | `commit-transform` | — | Move the i-th body to (x, y) and rotate it to `angle` radians — one undo step. | `{"i": 0, "x": 1.5, "y": 0.25, "angle": 0.5}` |

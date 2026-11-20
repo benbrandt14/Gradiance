@@ -4,9 +4,9 @@ use crate::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
-use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::joint::{JointDef, JointKind};
 use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
+use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::scale::{BodyScale, scale_point};
 use gradiance_units::{Angle, Displacement};
 use std::collections::HashMap;
@@ -180,7 +180,8 @@ fn joint_edits(
                     *limits = Some([Angle(-hi.value()), Angle(-lo.value())]);
                 }
                 if let Some(m) = motor {
-                    m.target_velocity = gradiance_units::AngularVelocity(-m.target_velocity.value());
+                    m.target_velocity =
+                        gradiance_units::AngularVelocity(-m.target_velocity.value());
                 }
             }
             (new != *def).then_some((entity, new))
