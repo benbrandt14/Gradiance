@@ -1,4 +1,21 @@
 (
     version: 1,
-    answers: [],
+    answers: [
+        (
+            question: "toon-ramp",
+            title: "How should a body\'s toon bands meet: dithered, pixel grain, or hard?",
+            choice: Picked("Ramp, hard bands"),
+            note: "All of these are actually pretty good. We can deep dive more visuals later but we\'ll go with the hard bands for now.",
+            answered_at: "2026-11-20T02:08:50Z",
+            revision: "cff98a92dd44",
+        ),
+        (
+            question: "status-bar-and-pie",
+            title: "Should the status bar show by default, and do the tools pie and F3 feel right?",
+            choice: Picked("Status bar on"),
+            note: "",
+            answered_at: "2026-11-20T02:09:37Z",
+            revision: "cff98a92dd44",
+        ),
+    ],
 )
