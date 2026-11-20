@@ -145,6 +145,8 @@ pub fn ground_plane_mesh() -> Mesh {
 /// against), and every ground's when the look or the scenery changes (the
 /// fill shows in the look's tone, the horizon fades to the back colour). The quad mesh
 /// comes from `extrude_sync`.
+///
+/// Non-half-plane bodies are filtered in place, not collected away.
 pub fn sync_ground_planes(
     mut commands: Commands,
     mut materials: ResMut<Assets<InfinitePlaneMaterial>>,
@@ -164,33 +166,36 @@ pub fn sync_ground_planes(
     *shown_look = Some(render.look);
     let theme = render.look.theme();
     // The horizon fades to the back colour, so a scenery edit rebuilds too.
-    let grounds: Vec<_> = if relook || scenery.is_changed() {
-        all.iter().collect()
-    } else {
-        changed.iter().collect()
-    };
-    for (entity, shape, appearance, transform) in grounds {
-        if !matches!(shape, ShapeDef::HalfPlane) {
-            continue;
+    // Iterated in place — no collected Vec of every changed body just to
+    // filter for half-planes.
+    if relook || scenery.is_changed() {
+        for (entity, shape, appearance, transform) in &all {
+            rebuild_ground(
+                &mut commands,
+                &mut materials,
+                theme,
+                &scenery,
+                &render,
+                entity,
+                shape,
+                appearance,
+                transform,
+            );
         }
-        let pose = gradiance_core::units::PosRot::from_transform(transform);
-        let normal = Vec2::from_angle(pose.rot).rotate(Vec2::Y);
-        let mut material = plane_material(
-            theme.display(appearance.fill).into(),
-            normal.extend(0.0),
-            normal.dot(pose.pos),
-            scenery.back_color.into(),
-            // One ground dot per metre (the world is SI).
-            1.0,
-        );
-        material.extension.toon = crate::toon::params_of(&render);
-        material.extension.ramp = crate::toon::ramp_of(&render);
-        let handle = materials.add(material);
-        // Grounds render through this material, not the body toon material.
-        commands
-            .entity(entity)
-            .remove::<MeshMaterial3d<crate::toon::ToonMaterial>>()
-            .insert(MeshMaterial3d(handle));
+    } else {
+        for (entity, shape, appearance, transform) in &changed {
+            rebuild_ground(
+                &mut commands,
+                &mut materials,
+                theme,
+                &scenery,
+                &render,
+                entity,
+                shape,
+                appearance,
+                transform,
+            );
+        }
     }
     // Visibility toggle (config seam); grounds only — bodies are unaffected.
     if scenery.is_changed() {
@@ -208,6 +213,46 @@ pub fn sync_ground_planes(
             }
         });
     }
+}
+
+/// Rebuilds one body's ground material — a no-op for anything but a
+/// half-plane.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "it forwards the sync's resources and one body's state"
+)]
+fn rebuild_ground(
+    commands: &mut Commands,
+    materials: &mut Assets<InfinitePlaneMaterial>,
+    theme: &gradiance_domain::theme::SceneTheme,
+    scenery: &ScenerySettings,
+    render: &RenderSettings,
+    entity: Entity,
+    shape: &ShapeDef,
+    appearance: &gradiance_domain::appearance::Appearance,
+    transform: &Transform,
+) {
+    if !matches!(shape, ShapeDef::HalfPlane) {
+        return;
+    }
+    let pose = gradiance_core::units::PosRot::from_transform(transform);
+    let normal = Vec2::from_angle(pose.rot).rotate(Vec2::Y);
+    let mut material = plane_material(
+        theme.display(appearance.fill).into(),
+        normal.extend(0.0),
+        normal.dot(pose.pos),
+        scenery.back_color.into(),
+        // One ground dot per metre (the world is SI).
+        1.0,
+    );
+    material.extension.toon = crate::toon::params_of(render);
+    material.extension.ramp = crate::toon::ramp_of(render);
+    let handle = materials.add(material);
+    // Grounds render through this material, not the body toon material.
+    commands
+        .entity(entity)
+        .remove::<MeshMaterial3d<crate::toon::ToonMaterial>>()
+        .insert(MeshMaterial3d(handle));
 }
 
 #[cfg(test)]

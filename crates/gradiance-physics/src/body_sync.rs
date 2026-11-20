@@ -10,6 +10,7 @@ use gradiance_geometry::profile::WidthProfile;
 use crate::air::AirProfile;
 use crate::buoyancy::SubmergeOutline;
 use gradiance_geometry::contours::Contours;
+use gradiance_geometry::polygonize::ShapeContours;
 use gradiance_geometry::submerge::SolidOutline;
 
 /// Builds the engine collider for a validated shape.
@@ -120,20 +121,22 @@ fn wake_if_movable(commands: &mut Commands, entity: Entity, kind: RigidBody) {
 }
 
 /// Regenerates colliders — and the other shape-derived physics data, the
-/// air-drag width profile and the buoyancy outline — for bodies whose shape
-/// changed. The shape is polygonized once for all three.
+/// air-drag width profile, the buoyancy outline and the cached
+/// [`ShapeContours`] every per-frame polygon consumer reads — for bodies
+/// whose shape changed. The shape is polygonized once for all of them.
 pub fn sync_colliders(
     mut commands: Commands,
     changed: Query<(Entity, &ShapeDef, &RigidBody), (With<Body>, Changed<ShapeDef>)>,
 ) {
     for (entity, shape, kind) in &changed {
-        let components = gradiance_geometry::polygonize::polygonize_components(shape);
-        match collider_for(shape, &components) {
+        let contours = ShapeContours(gradiance_geometry::polygonize::polygonize_components(shape));
+        match collider_for(shape, &contours) {
             Some(collider) => {
                 commands.entity(entity).insert((
                     collider,
-                    AirProfile(air_profile_for(shape, &components)),
-                    SubmergeOutline(submerge_outline_for(shape, &components)),
+                    AirProfile(air_profile_for(shape, &contours)),
+                    SubmergeOutline(submerge_outline_for(shape, &contours)),
+                    contours,
                 ));
                 // A resized or reshaped body must re-settle against its
                 // neighbours even if it (they) had gone to sleep.
