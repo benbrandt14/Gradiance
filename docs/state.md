@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (Phase Q planned; before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,7 +12,28 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **Phase 6** (orchestrator, 2026-11-20): briefs
+- **Now:** **Phase Q (follow-ups)**, planned per the owner's choice on
+  2026-11-20 ("follow-ups first", before the next planning stage). G-0
+  and G-1 are held as draft PRs #296 / #297: do not touch them or depend
+  on `gradiance-graph`; 3D-0 is on hold. Briefs `docs/briefs/Q-*`, in
+  order: **Q-1** Phase N on screen (screenshot every Phase N tool, glyph,
+  block and settings row, fix what is wrong; ingest the waiting answers
+  `toon-ramp` = hard bands, `status-bar-and-pie` = on) — **ready**;
+  **Q-2** `signal.bind` / `signal.unbind` on today's name-based bindings;
+  **Q-3** File ▸ New keeps the workstation config, mirror rows in the
+  context menu, thinned chain strokes; **Q-4** laser block on the node
+  canvas, "Add to node editor" for joints and nodes, laser target from the
+  selection, free laser names; **Q-5** a fluid acts only in its depth
+  band, a water surface line, a translucent sea; **Q-6** aerodynamic
+  torque and angular drag (hull panel drag); **Q-7** chain link buzz next
+  to a world pin (investigation); **Q-8** a derived contour per body (no
+  per-frame `polygonize`). Each is "after" the one before it. Seven plan
+  decisions in `archive.ron` (`phase-q-order`, `signal-bind-shape`,
+  `new-scene-keeps-workstation`, `fluid-depth-scope` (supersedes
+  `fluid-scope`), `fluid-surface-look`, `aero-panel-drag`,
+  `laser-block`); no new review question (the water surface is reviewed
+  on the Q-5 PR screenshots).
+  **Before that, Phase 6** (orchestrator, 2026-11-20): briefs
   **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
   geometry property tests, **6-3** physics debug toggles + schedule dump,
   in that order. **Phase 6 is complete.** **6-3** is done (in review;
@@ -243,8 +264,11 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
       Last Operation (done, #276).
   11. **Phase 6** (testing & diagnostics): **6-1**, **6-2**, **6-3**
       (`docs/briefs/6-*`).
-  12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
-      **D-2** egui 0.37 once bevy_egui ships it.
+  12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
+      (`docs/briefs/Q-*`), in order.
+  13. Next planning stage (held until Phase Q is done): **G-0** one graph
+      model (drafts #296 / #297), **3D-0** the 3D plan, **D-2** egui 0.37
+      once bevy_egui ships it.
 - **Owner rulings in force:**
   - **Scoped work** (2026-11-17; revises "no unbriefed work" of 2026-11-13).
     The intent is to keep changes local and to keep context from degrading.
@@ -308,8 +332,8 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - torque-based breaking (2-2);
   - rod fixed end = merge, `spawn-rod`, rod inspector (2-3);
   - joint node-graph block (2-1): a minimal one landed with N-1 (sensor
-    outputs, motor inputs); editing, "add to node editor" and layout remain;
-  - `signal.bind` / `signal.unbind` operations (N-1 Outcome);
+    outputs, motor inputs); editing and layout remain ("add to node editor": Q-4);
+  - `signal.bind` / `signal.unbind` operations: moved to brief Q-2;
   - short gravity-loaded arms lose motor speed (0.1 m arm ~27% slowest);
     substeps and the ceiling are not the cause (A-2 Outcome, proposal);
   - field strength does not scale with the source size (fixed 1 m falloff,

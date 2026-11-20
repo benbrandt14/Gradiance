@@ -4171,5 +4171,210 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "gradiance::schedule_dump",
         ),
+        (
+            question: (
+                id: "phase-q-order",
+                title: "Which follow-ups come first, and in what order?",
+                source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
+                description: r#"The Phase N and Phase 6 Outcomes left about a dozen follow-ups. The owner chose to do them before the next planning stage (G-0 and 3D-0 held). Order rule: cheapest and most visible first; small items merged so that each brief is about a day's work."#,
+                decision: true,
+                options: [
+                    (
+                        label: "On-screen check first, then small to large",
+                        caption: r#"Q-1 Phase N on screen (and the two waiting review answers), Q-2 signal.bind, Q-3 editor fixes, Q-4 laser block, Q-5 fluid depth and surface, Q-6 aero torque, Q-7 chain pin buzz, Q-8 contour cache. Defects that the screenshots find are fixed before new work builds on them."#,
+                    ),
+                    (
+                        label: "On-screen check last",
+                        caption: r#"Each feature brief is checked by its own screenshot first; the general pass then also covers Q-2..Q-8, but defects in Phase N wait for weeks."#,
+                    ),
+                    (
+                        label: "Physics first (Q-6, Q-7, Q-5)",
+                        caption: r#"The deepest items first; the visible and cheap ones wait."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "phase-q-order",
+                title: "Which follow-ups come first, and in what order?",
+                choice: Picked("On-screen check first, then small to large"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/Q-1-phase-n-on-screen.md .. Q-8-contour-cache.md; docs/state.md",
+        ),
+        (
+            question: (
+                id: "signal-bind-shape",
+                title: "What do signal.bind and signal.unbind write, and how is a binding named?",
+                source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
+                description: r#"Bindings live in SignalBindings (scene content) and have a name. The graph model drafts (G-0..G-3, #296/#297) would later move binding storage into the graph IR; they are held and must not be depended on."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Today's model: upsert by name, one settings step",
+                        caption: r#"signal.bind builds a SignalBinding (a bus signal or a catalog quantity source, a named sink, a target in the sink's own index vocabulary, an optional map) and upserts it by name through the EditorRequest config seam, as defsignal does; signal.unbind removes it by name. G-3 would change only where they write."#,
+                    ),
+                    (
+                        label: "Wait for the graph model",
+                        caption: r#"No verb until G-3 defines graph-native bindings; N-1..N-8 tests keep writing the resource."#,
+                    ),
+                    (
+                        label: "Edit seam with its own undo label",
+                        caption: r#"A new intent and command for bindings: a second mutation path for a config-seam resource that the settings watcher already records."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "signal-bind-shape",
+                title: "What do signal.bind and signal.unbind write, and how is a binding named?",
+                choice: Picked("Today's model: upsert by name, one settings step"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/Q-2-signal-bind-ops.md",
+        ),
+        (
+            question: (
+                id: "new-scene-keeps-workstation",
+                title: "Does File > New reset the person's grid, snap, camera and dock layouts?",
+                source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
+                description: r#"6-1 found that scene.new loads the default environment, workstation config included, and undo does not bring it back. Workstation config belongs to the person, not the document (CLAUDE.md invariant 4)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Keep the workstation config",
+                        caption: r#"New replaces bodies, joints, nodes and scene-content settings only; grid, snap, camera and workspaces stay. File > Open still loads the file's workstation config."#,
+                    ),
+                    (
+                        label: "Reset it (today)",
+                        caption: r#"New gives the default editor as well as an empty scene; a person's saved dock layouts are lost with no undo."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "new-scene-keeps-workstation",
+                title: "Does File > New reset the person's grid, snap, camera and dock layouts?",
+                choice: Picked("Keep the workstation config"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/Q-3-editor-fixes.md",
+        ),
+        (
+            question: (
+                id: "fluid-depth-scope",
+                title: "Does a fluid act on bodies in other depth bands?",
+                source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
+                description: r#"Supersedes fluid-scope (N-7), which let a fluid act in every band. Collision layer is visual depth everywhere else (collisions, the laser), so a body in front of a pool was buoyed by it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Only bodies whose band shares a layer with the fluid's",
+                        caption: r#"One layer test per pair; a pool and its floaters in the default band behave as before; a body in another band passes in front of or behind the pool."#,
+                    ),
+                    (
+                        label: "Every band (N-7)",
+                        caption: r#"No placement needed, but a body visibly in front of the water floats in it."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-depth-scope",
+                title: "Does a fluid act on bodies in other depth bands?",
+                choice: Picked("Only bodies whose band shares a layer with the fluid's"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/Q-5-fluid-depth-and-surface.md",
+        ),
+        (
+            question: (
+                id: "fluid-surface-look",
+                title: "How is a water surface drawn?",
+                source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
+                description: r#"N-7 drew the fluid translucent but no surface; a sea drew as the ground. The owner reviews the result on the Q-5 PR screenshots; a review question only if the PR shows a problem."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A flat surface line, the sea translucent",
+                        caption: r#"The fluid outline's upward-facing edges (against gravity, within 60 degrees) draw as one 2-pixel line in a lighter tint of the fill; a sea draws its surface line across the view and its plane at the fluid opacity. No waves."#,
+                    ),
+                    (
+                        label: "Animated ripples",
+                        caption: r#"A per-frame wave on the surface line: more look, a per-frame cost, nothing physical behind it."#,
+                    ),
+                    (
+                        label: "Unchanged",
+                        caption: r#"The translucent fill alone shows the water; a sea stays opaque."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "fluid-surface-look",
+                title: "How is a water surface drawn?",
+                choice: Picked("A flat surface line, the sea translucent"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/Q-5-fluid-depth-and-surface.md",
+        ),
+        (
+            question: (
+                id: "aero-panel-drag",
+                title: "How does drag make a torque and damp spin?",
+                source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
+                description: r#"Follow-up of air-drag-torque (N-4). The N-4 force law and its terminal-velocity tests must not change for a body that does not spin."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Panel drag on the convex hull's facing edges",
+                        caption: r#"Each hull edge that leads into the air gets the N-4 law with its own relative velocity (v + w x p - wind), at its midpoint; for a still body the sum equals the width law exactly. Weathervane turning and angular drag follow; a symmetric plate still does not flutter (no lift)."#,
+                    ),
+                    (
+                        label: "A centre-of-pressure offset table",
+                        caption: r#"Sample a centre-of-pressure offset per direction beside the width profile, plus a separate angular drag term: two tuned terms instead of one law."#,
+                    ),
+                    (
+                        label: "Lift and flutter too",
+                        caption: r#"A thin-airfoil lift term: plates flutter, but the N-4 measurements change and a stall model is needed."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "aero-panel-drag",
+                title: "How does drag make a torque and damp spin?",
+                choice: Picked("Panel drag on the convex hull's facing edges"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/Q-6-aero-torque.md",
+        ),
+        (
+            question: (
+                id: "laser-block",
+                title: "How does a laser show on the node canvas?",
+                source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
+                description: r#"Follow-up of laser-signals (N-8): the laser publishes two bus values under its name; no block shows them."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A block over the bus names, and free default names",
+                        caption: r#"A laser block with two outputs (hit, distance) whose pins are the Named sources the laser publishes; no new SignalSource. A laser drawn with the tool takes the first free name (laser, laser2, ...)."#,
+                    ),
+                    (
+                        label: "Sensor ports keyed by the node id",
+                        caption: r#"New SignalSource variants and a node subject in the quantity catalog; renames cannot break a wire, but the catalog and the save format grow."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "laser-block",
+                title: "How does a laser show on the node canvas?",
+                choice: Picked("A block over the bus names, and free default names"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/Q-4-laser-and-joint-blocks.md",
+        ),
     ],
 )
