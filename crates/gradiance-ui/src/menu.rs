@@ -282,8 +282,28 @@ fn edit_menu(
                 .write_batch(key_invocations(EditorAction::Ungroup));
             ui.close();
         }
+        ui.separator();
+        // No key: hotkeys are not settled (brief N-9).
+        for (label, id) in MIRROR_ROWS {
+            if ui
+                .add_enabled(has_selection, egui::Button::new(label))
+                .clicked()
+            {
+                writers
+                    .invoke
+                    .write(InvokeOp::with(id, json!({"targets": ["selection"]})));
+                ui.close();
+            }
+        }
     });
 }
+
+/// Edit ▸ Mirror rows: the label and the operation each invokes on the
+/// selection (brief N-9).
+const MIRROR_ROWS: [(&str, &str); 2] = [
+    ("Mirror horizontally", "body.mirror_h"),
+    ("Mirror vertically", "body.mirror_v"),
+];
 
 /// The View menu, as a table over the panel registry.
 ///

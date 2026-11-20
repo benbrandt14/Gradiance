@@ -169,6 +169,34 @@ pub fn exceeds_break_force(break_force: Option<Force>, force: Force) -> bool {
     break_force.is_some_and(|limit| force.value() > limit.value())
 }
 
+/// The load fraction at which a joint glyph reads fully **hot**: a joint at
+/// 90 % of the force that breaks it is about to fail (brief N-9).
+pub const HOT_LOAD: f32 = 0.9;
+
+/// How loaded a joint is, as a fraction of the force it is rated for: its
+/// `break_force` when it can break, else the break force "breakable" would
+/// give it ([`crate::tuning::default_break_force`]: ten times the weight of
+/// the moving bodies it connects, `moving_mass` kg under `gravity` m/s²). So
+/// an unbreakable joint reads how close it would be to failing, and a
+/// hanging pendulum reads a tenth, not 1. Never negative. Pure.
+#[must_use]
+pub fn load_fraction(
+    force: Force,
+    break_force: Option<Force>,
+    moving_mass: f32,
+    gravity: f32,
+) -> f32 {
+    let rated = break_force.map_or_else(
+        || crate::tuning::default_break_force(moving_mass, gravity),
+        Force::value,
+    );
+    if rated <= 0.0 {
+        // A non-positive threshold breaks on any load (`exceeds_break_force`).
+        return if force.value() > 0.0 { 1.0 } else { 0.0 };
+    }
+    (force.value() / rated).max(0.0)
+}
+
 /// The kind-specific parameters of a joint.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bevy::reflect::Reflect)]
 pub enum JointKind {
@@ -485,6 +513,22 @@ impl JointDef {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn load_is_read_against_the_break_force_or_the_default_rating() {
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-5;
+        // Breakable: against its own threshold.
+        assert!(close(
+            load_fraction(Force(90.0), Some(Force(100.0)), 1.0, 9.81),
+            0.9
+        ));
+        // Unbreakable: against ten times the carried weight, so a body
+        // hanging still reads a tenth.
+        assert!(close(load_fraction(Force(9.81), None, 1.0, 9.81), 0.1));
+        // A zero threshold is hot under any load, calm under none.
+        assert!(close(load_fraction(Force(1.0), Some(Force(0.0)), 1.0, 9.81), 1.0));
+        assert!(close(load_fraction(Force(0.0), Some(Force(0.0)), 1.0, 9.81), 0.0));
+    }
 
     #[test]
     fn motor_ceiling_auto_scales_with_body_and_respects_overrides() {

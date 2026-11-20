@@ -30,6 +30,9 @@ pub mod name {
     pub const COMMIT_TRANSFORM: &str = "commit-transform";
     /// [`ScaleIntent`](super::ScaleIntent) → `ScaleCommand`.
     pub const SCALE: &str = "scale";
+    /// A [`ScaleIntent`](super::ScaleIntent) with one negative factor, which
+    /// mirrors (brief N-9).
+    pub const MIRROR: &str = "mirror";
     /// [`ArrayIntent`](super::ArrayIntent) → `ArrayCommand`.
     pub const ARRAY: &str = "array";
     /// [`SpawnJointIntent`](super::SpawnJointIntent) → `SpawnJointCommand`.

@@ -3,7 +3,7 @@
 //! resolved against the context's snapshot, which also holds the old value an
 //! undoable intent needs.
 
-use super::{bodies_of, body_of};
+use super::{bodies_of, body_of, body_set};
 use crate::intent::TransformChange;
 use crate::intent::name;
 use crate::intent::{CommitTransformIntent, DeleteIntent, PropertyEditIntent, ScaleIntent};
@@ -25,6 +25,8 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<Place>();
     registry.register::<Delete>();
     registry.register::<Scale>();
+    registry.register::<MirrorH>();
+    registry.register::<MirrorV>();
     registry.register::<SetFriction>();
     registry.register::<SetRestitution>();
     registry.register::<SetDensity>();
@@ -166,6 +168,105 @@ impl Operation for Scale {
             frame_rot: body.rot,
             factors: Vec2::new(self.fx, self.fy),
         }))
+    }
+}
+
+/// One mirror of the bodies `targets` names, across the vertical (`x`
+/// flips) or horizontal (`y` flips) line through their centre: the existing
+/// scale with one factor of −1 in world axes (`ScaleCommand`, which turns
+/// each body to its reflected rotation and takes its joints and nodes
+/// along). The centre is the middle of the bodies' world bounds (half-planes
+/// are unbounded and left out), else of their positions. Nothing named is a
+/// quiet no-op, as Delete with nothing selected.
+fn mirror(ctx: &OpContext, targets: &[Target], factors: Vec2) -> Result<OpOutput, OpError> {
+    let scene = ctx.get::<SceneSnapshot>()?;
+    let targets = body_set(ctx, scene, targets)?;
+    let bodies: Vec<&crate::snapshot::BodySnapshot> =
+        targets.iter().filter_map(|id| scene.get(*id)).collect();
+    let Some(pivot) = mirror_pivot(&bodies) else {
+        return Ok(OpOutput::none());
+    };
+    Ok(OpOutput::none().message(ScaleIntent {
+        targets,
+        pivot,
+        frame_rot: 0.0,
+        factors,
+    }))
+}
+
+/// The middle of the bodies' world bounds; half-planes are left out, and
+/// with nothing bounded the middle of their positions. `None` for no bodies.
+fn mirror_pivot(bodies: &[&crate::snapshot::BodySnapshot]) -> Option<Vec2> {
+    let mut min = Vec2::splat(f32::MAX);
+    let mut max = Vec2::splat(f32::MIN);
+    for body in bodies.iter().filter(|b| !b.shape.contains_half_plane()) {
+        let rot = Vec2::from_angle(body.rot);
+        for v in &gradiance_geometry::polygonize::polygonize(&body.shape).outline {
+            let w = body.pos + rot.rotate(*v);
+            min = min.min(w);
+            max = max.max(w);
+        }
+    }
+    if min.x <= max.x {
+        return Some((min + max) / 2.0);
+    }
+    for body in bodies {
+        min = min.min(body.pos);
+        max = max.max(body.pos);
+    }
+    (min.x <= max.x).then(|| (min + max) / 2.0)
+}
+
+/// Mirror the listed bodies left to right, across the vertical line through
+/// their centre — one undo step. Their joints, anchors and nodes mirror with
+/// them (a hinge's limits and motor turn over when all its bodies do).
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct MirrorH {
+    /// The bodies: a list of targets (`(list i …)` in Lisp).
+    pub targets: Vec<Target>,
+}
+
+impl Operation for MirrorH {
+    const META: OpMeta = OpMeta {
+        id: "body.mirror_h",
+        lisp: "mirror-h",
+        doc: "Mirror the listed bodies left to right across the vertical line through their centre, with their joints and nodes — one undo step.",
+        seam: Seam::Edit,
+        menu: Some("Edit/Mirror horizontally"),
+        chord: None,
+        undo: Some(name::MIRROR),
+        example: r#"{"targets": [0, 1]}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        mirror(ctx, &self.targets, Vec2::new(-1.0, 1.0))
+    }
+}
+
+/// Mirror the listed bodies top to bottom, across the horizontal line
+/// through their centre — one undo step, as [`MirrorH`].
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct MirrorV {
+    /// The bodies: a list of targets (`(list i …)` in Lisp).
+    pub targets: Vec<Target>,
+}
+
+impl Operation for MirrorV {
+    const META: OpMeta = OpMeta {
+        id: "body.mirror_v",
+        lisp: "mirror-v",
+        doc: "Mirror the listed bodies top to bottom across the horizontal line through their centre, with their joints and nodes — one undo step.",
+        seam: Seam::Edit,
+        menu: Some("Edit/Mirror vertically"),
+        chord: None,
+        undo: Some(name::MIRROR),
+        example: r#"{"targets": [0, 1]}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        mirror(ctx, &self.targets, Vec2::new(1.0, -1.0))
     }
 }
 
