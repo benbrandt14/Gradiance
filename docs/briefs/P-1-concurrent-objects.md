@@ -81,6 +81,10 @@ Four layers, each independently measured (commits in this order):
 ## Out of scope
 - avian-side fixes upstream (the two gaps above are worked around through
   public API; a fork/patch of avian is an owner decision).
+- **Directional-shadow rendering of tall scenes** (bevy-side, pre-existing):
+  a 4000-box tower costs ~242 ms/frame in shadow passes; shadows off
+  renders the same scene at 47 ms. Its own follow-up brief (cascade /
+  shadow-distance fit for the 2.5D view).
 - egui outliner/depth-panel virtualization (O(N) only while their pane is
   open).
 - The while-playing snap scan (still linear; while playing the physics step
@@ -123,9 +127,39 @@ Decisions (best-estimate, per the scoped-work ruling):
   the standard fixed-timestep trade; `gradiance run` rollouts are
   unaffected (manual clock, one step per update).
 
-Measured after (this branch, same scenes, same method):
-see the conversation report for the final table; the summary line — a
-settled 4000-box pile's physics drops from ~12 ms/step to the ~2–4 ms/step
-band, the desktop build holds 60 fps at body counts that previously fell
-below it, and the settling-pile death spiral is gone (frame time bounded
-by the clamp instead of self-sustaining at 14 steps/frame).
+Measured after (this branch, same scenes, same method; single-run
+two-point slopes, **plain release** build, single-thread headless):
+
+| scene (ms/step, settled steady state) | before | after |
+|---|---|---|
+| empty scene | 1.5 | ~1.5 |
+| 4000 flat resting | 7.7 | **1.0** |
+| 8000 flat resting | — | ~5 |
+| 16000 flat resting | — | 3.5 |
+| 4000 settled pile | 12.0 | **1.6** |
+
+A resting scene now costs barely above the empty-scene floor — sleeping
+bodies skip integration, solving and transform propagation, so the
+per-step cost scales with *awake* bodies, not scene size.
+
+Desktop end-to-end (RTX 3070, 1280x720): comparing like for like is
+complicated by the desktop session — a Wayland compositor throttles
+occluded windows to ~0-1 fps, so both builds were re-measured on an Xvfb
+display with the real GPU (same present artifact both sides):
+
+| Xvfb avg frame time | before | after |
+|---|---|---|
+| 1000 flat | 63.8 ms | 56.9 ms |
+| 4000 flat | 69.4 ms | 67.4 ms |
+| 16000 flat | 520.3 ms | **75.5 ms** |
+| 4000 pile | ~500 ms | ~285 ms (settled; probe: awake=0) |
+
+The remaining frame cost is **render-side, not physics**: at 4000 visible
+bodies the desktop frame is render-bound (shadows + per-body toon
+materials). One pathology stands out and predates this work (present in
+the before build): a **tall** scene (a 4000-box tower) costs ~242 ms/frame
+in directional-light shadow rendering — the bevy cascade fit for a 50 m
+tall scene; with shadows off the same scene renders at 47 ms. That is the
+next lever for dense vertical piles (its own brief: shadow-cascade tuning
+for the 2.5D view / shadow-distance fit), together with the egui outliner
+pane and the while-playing snap scan.
