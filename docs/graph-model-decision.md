@@ -7,9 +7,10 @@ an architecture option is made by the session and recorded, not asked. The
 record is the `graph-model` entry in `docs/review/archive.ron`. This is
 stage G-0 of the next planning stage (`docs/state.md`, roadmap item 12).
 
-Nothing in this document is built yet. The phases below become briefs in
-the order given. Brief G-1 is written (`docs/briefs/G-1-graph-ir.md`). Each
-later brief is written at its predecessor's handoff.
+The phases below become briefs in the order given. G-1 is built (in
+review; `docs/briefs/G-1-graph-ir.md`); brief G-2 is written
+(`docs/briefs/G-2-graph-scene-content.md`). Each later brief is written at
+its predecessor's handoff.
 
 ## The question
 
