@@ -339,6 +339,9 @@ pub struct ToolDefaults {
     /// rotation), the third sets the height to either side — instead of a
     /// two-corner drag.
     pub box_three_point: bool,
+    /// The sketch tool's stroke width (brief N-6): each segment's capsule
+    /// diameter.
+    pub sketch_width: Length,
     /// The chain tool's link length, hinge to hinge (brief N-5). The drawn
     /// path is split into the whole number of links nearest to it.
     pub chain_link: Length,
@@ -353,6 +356,7 @@ impl Default for ToolDefaults {
         Self {
             slider_limits: true,
             box_three_point: false,
+            sketch_width: Length(0.1),
             chain_link: Length(0.25),
             chain_width: Length(0.06),
             chain_pins: ChainPins::Bodies,

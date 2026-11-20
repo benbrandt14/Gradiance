@@ -207,6 +207,14 @@ pub enum ToolCommit {
         /// Where the ends are pinned.
         pins: gradiance_domain::settings::ChainPins,
     },
+    /// Make one body from a freehand stroke (the sketch tool, brief N-6):
+    /// invokes the `body.sketch` operation, one undo step.
+    Sketch {
+        /// The stroke, world space, in drawing order.
+        path: Vec<Vec2>,
+        /// Stroke width (metres).
+        width: f32,
+    },
     /// A script tool's gesture completed: run its body once with these
     /// points (the script tool). Not an authoring intent itself — the script
     /// run emits intents through the ordinary verbs.
@@ -457,6 +465,13 @@ impl ToolCommitWriters<'_> {
                     .write(crate::tools::chain_tool::chain_invocation(
                         &path, link, width, ends, pins,
                     ));
+            }
+            ToolCommit::Sketch { path, width } => {
+                // Through the operation, like the chain: one lowering for
+                // the tool and the verb, and Adjust Last Operation can
+                // change the width afterwards.
+                self.invoke
+                    .write(crate::tools::sketch_tool::sketch_invocation(&path, width));
             }
             ToolCommit::Script { tool, points } => {
                 self.script_tools

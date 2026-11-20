@@ -49,6 +49,7 @@ fn toolbar_palette_lists_all_tools_and_reports_clicks() {
         "Tracer (N)",
         "Thruster",
         "Chain",
+        "Sketch",
     ] {
         harness.get_by_label(label);
     }

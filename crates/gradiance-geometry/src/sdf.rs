@@ -130,6 +130,122 @@ fn ring_distance(p: Vec2, ring: &[Vec2]) -> f32 {
     best
 }
 
+/// How much farther than the best field value a leaf's box must be for
+/// [`UnionField`] to skip it (metres).
+const CULL_MARGIN: f32 = 1e-4;
+
+/// A union of placed leaves, flattened for the many evaluations a contour
+/// makes (brief N-6: a sketch stroke is a union of up to 24 placed
+/// capsules, and borders re-contour every frame).
+///
+/// Evaluates **exactly** what [`eval`] does for the same tree — the same
+/// leaf fields under the same rotation, combined by `min` — two ways
+/// cheaper: each placement's rotation is computed once rather than per
+/// sample, and a leaf whose bounding box is no nearer than the best field
+/// value so far is skipped (an exact leaf's field is at least the distance
+/// to its box, so it cannot lower the minimum).
+#[derive(Debug)]
+pub struct UnionField<'s> {
+    /// `(placement, rotation into the leaf's frame, leaf, box min, box max)`.
+    leaves: Vec<(Vec2, Vec2, &'s ShapeDef, Vec2, Vec2)>,
+}
+
+impl<'s> UnionField<'s> {
+    /// Flattens `shape` when it is a union (plain [`CsgOp::Union`] nodes)
+    /// of exact leaves — capsules, circles and boxes — each bare or under
+    /// one [`Placed`](ShapeDef::Placed). `None` for any other tree (it is
+    /// evaluated with [`eval`] as before).
+    #[must_use]
+    pub fn of(shape: &'s ShapeDef) -> Option<Self> {
+        let mut leaves = Vec::new();
+        Self::collect(shape, &mut leaves)?;
+        (leaves.len() > 1).then_some(Self { leaves })
+    }
+
+    fn collect(
+        shape: &'s ShapeDef,
+        out: &mut Vec<(Vec2, Vec2, &'s ShapeDef, Vec2, Vec2)>,
+    ) -> Option<()> {
+        let exact = |leaf: &ShapeDef| {
+            matches!(
+                leaf,
+                ShapeDef::Capsule { .. } | ShapeDef::Circle { .. } | ShapeDef::Box { .. }
+            )
+        };
+        match shape {
+            ShapeDef::Csg {
+                op: CsgOp::Union,
+                lhs,
+                rhs,
+            } => {
+                Self::collect(lhs, out)?;
+                Self::collect(rhs, out)
+            }
+            ShapeDef::Placed {
+                pos,
+                rot,
+                shape: leaf,
+            } if exact(leaf) => {
+                let (min, max) = aabb(shape);
+                out.push((*pos, Vec2::from_angle(-rot), leaf, min, max));
+                Some(())
+            }
+            leaf if exact(leaf) => {
+                let (min, max) = aabb(leaf);
+                // The identity placement: `None` below marks it.
+                out.push((Vec2::NAN, Vec2::X, leaf, min, max));
+                Some(())
+            }
+            _ => None,
+        }
+    }
+
+    /// The field at `p`: `eval(shape, p)` for the tree this was made from.
+    #[must_use]
+    pub fn eval(&self, p: Vec2) -> f32 {
+        let mut best = f32::INFINITY;
+        for (pos, rot, leaf, min, max) in &self.leaves {
+            let outside = (*min - p).max(p - *max).max(Vec2::ZERO).length();
+            // A margin far above rounding: a leaf whose field could tie
+            // the best within float error is still evaluated.
+            if outside >= best + CULL_MARGIN {
+                continue;
+            }
+            let q = if pos.is_nan() { p } else { rot.rotate(p - *pos) };
+            best = best.min(eval(leaf, q));
+        }
+        best
+    }
+}
+
+/// The thinnest solid feature of `shape` the field contour must resolve:
+/// the diameter of its narrowest [`Capsule`](ShapeDef::Capsule) leaf on
+/// the solid side of the tree (brief N-6), or `None` when it has none.
+///
+/// Capsules are the tree's thin leaves (rods, chain links, sketch
+/// strokes); a box or circle in a tree is contoured at the coarse
+/// resolution as before. A subtracted operand carves rather than adds
+/// material, so a cut stroke does not count.
+pub fn thinnest_solid(shape: &ShapeDef) -> Option<f32> {
+    match shape {
+        ShapeDef::Capsule { radius, .. } => Some(2.0 * radius),
+        ShapeDef::Box { .. }
+        | ShapeDef::Circle { .. }
+        | ShapeDef::Polygon { .. }
+        | ShapeDef::HalfPlane => None,
+        ShapeDef::Placed { shape, .. } => thinnest_solid(shape),
+        ShapeDef::Csg {
+            op: CsgOp::Subtract,
+            lhs,
+            ..
+        } => thinnest_solid(lhs),
+        ShapeDef::Csg { lhs, rhs, .. } => match (thinnest_solid(lhs), thinnest_solid(rhs)) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        },
+    }
+}
+
 /// A conservative axis-aligned bounding box `(min, max)` of the solid
 /// region, in shape-local space.
 ///
@@ -419,5 +535,76 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_thinnest_solid_feature_is_the_narrowest_added_capsule() {
+        let rod = |radius| ShapeDef::Capsule {
+            half_length: 1.0,
+            radius,
+        };
+        let block = ShapeDef::Box {
+            width: 1.0,
+            height: 1.0,
+        };
+        assert_eq!(thinnest_solid(&block), None);
+        assert_eq!(thinnest_solid(&rod(0.05)), Some(0.1));
+        let union = ShapeDef::Csg {
+            op: CsgOp::Union,
+            lhs: Box::new(rod(0.05)),
+            rhs: Box::new(ShapeDef::Placed {
+                pos: Vec2::ONE,
+                rot: 0.3,
+                shape: Box::new(rod(0.02)),
+            }),
+        };
+        assert_eq!(thinnest_solid(&union), Some(0.04));
+        // A subtracted capsule (a cut stroke) carves: it does not count.
+        let cut = ShapeDef::Csg {
+            op: CsgOp::Subtract,
+            lhs: Box::new(block),
+            rhs: Box::new(rod(0.01)),
+        };
+        assert_eq!(thinnest_solid(&cut), None);
+    }
+
+    #[test]
+    fn a_flattened_union_evaluates_exactly_as_the_tree() {
+        let rod = |pos: Vec2, rot: f32, half_length: f32| ShapeDef::Placed {
+            pos,
+            rot,
+            shape: Box::new(ShapeDef::Capsule {
+                half_length,
+                radius: 0.05,
+            }),
+        };
+        let tree = ShapeDef::Csg {
+            op: CsgOp::Union,
+            lhs: Box::new(ShapeDef::Csg {
+                op: CsgOp::Union,
+                lhs: Box::new(rod(Vec2::new(-1.0, 0.2), 0.4, 0.6)),
+                rhs: Box::new(rod(Vec2::new(0.3, -0.4), -1.1, 0.3)),
+            }),
+            rhs: Box::new(ShapeDef::Csg {
+                op: CsgOp::Union,
+                lhs: Box::new(ShapeDef::Circle { radius: 0.2 }),
+                rhs: Box::new(rod(Vec2::new(1.2, 0.9), 2.5, 0.8)),
+            }),
+        };
+        let field = UnionField::of(&tree).unwrap();
+        for i in 0..40 {
+            for j in 0..40 {
+                let p = Vec2::new(-2.5 + i as f32 * 0.13, -2.0 + j as f32 * 0.11);
+                assert_eq!(field.eval(p).to_bits(), eval(&tree, p).to_bits(), "{p}");
+            }
+        }
+        // Not a plain union of exact leaves: not flattened.
+        let cut = ShapeDef::Csg {
+            op: CsgOp::Subtract,
+            lhs: Box::new(ShapeDef::Circle { radius: 1.0 }),
+            rhs: Box::new(ShapeDef::Circle { radius: 0.5 }),
+        };
+        assert!(UnionField::of(&cut).is_none());
+        assert!(UnionField::of(&ShapeDef::Circle { radius: 1.0 }).is_none());
     }
 }

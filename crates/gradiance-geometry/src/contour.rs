@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 pub const FIELD_CELLS: f32 = 96.0;
 
 /// Hard cap on samples per axis (bounds worst-case cost).
-const MAX_SAMPLES: usize = 512;
+pub const MAX_SAMPLES: usize = 512;
 
 /// Bisection iterations when refining a crossing onto the zero set.
 const REFINE_STEPS: u32 = 12;

@@ -32,6 +32,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
             (ToolState::Box, "Box", "B", "tool_box"),
             (ToolState::Circle, "Circle", "C", "tool_circle"),
             (ToolState::Polygon, "Polygon", "P", "tool_polygon"),
+            // No key: the editor keymap is not settled (briefs N-3, N-5, N-6).
+            (ToolState::Sketch, "Sketch", "", "sketch"),
         ],
     ),
     (

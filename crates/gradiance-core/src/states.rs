@@ -33,6 +33,9 @@ pub enum ToolState {
     Circle,
     /// Click out arbitrary polygons.
     Polygon,
+    /// Draw freehand (brief N-6): the dragged stroke becomes one body, its
+    /// segments joined as one union, or a filled polygon when it closes.
+    Sketch,
     /// Connect two bodies (or one body to the world) with a revolute joint.
     Hinge,
     /// Rigidly weld two bodies together.
