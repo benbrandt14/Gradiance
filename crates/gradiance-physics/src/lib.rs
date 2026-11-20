@@ -122,17 +122,14 @@ impl Plugin for GradiancePhysicsPlugin {
         app.add_systems(
             FixedUpdate,
             (
-<<<<<<< HEAD
-                (thrust::apply_thrusters, air::apply_air_drag).run_if(sim_running),
+                (
+                    thrust::apply_thrusters,
+                    air::apply_air_drag,
+                    buoyancy::apply_buoyancy,
+                )
+                    .run_if(sim_running),
                 joint_sync::track_slider_anchors,
             ),
-=======
-                thrust::apply_thrusters,
-                air::apply_air_drag,
-                buoyancy::apply_buoyancy,
-            )
-                .run_if(sim_running),
->>>>>>> origin/main
         );
         app.add_systems(
             FixedPostUpdate,
