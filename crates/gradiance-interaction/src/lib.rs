@@ -26,6 +26,7 @@ pub mod indicators;
 pub mod input;
 pub mod joint_edit;
 pub mod node_edit;
+pub mod debug_ops;
 pub mod ops;
 pub mod overlay;
 pub mod pack;
@@ -121,6 +122,7 @@ impl Plugin for InteractionPlugin {
             .resource_mut::<gradiance_op::OpContextFillers>()
             .add(selection::fill_selection_mirror);
         ops::install(app);
+        debug_ops::install(app);
         tool_ops::install(app);
         transport::install(app);
         pack_ops::install(app);
