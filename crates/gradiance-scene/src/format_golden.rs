@@ -355,3 +355,50 @@ fn every_quantity_field_in_the_save_format_is_spelled_bare() {
         "quantity fields saved wrapped `(x)` -- is the type #[serde(transparent)]? {wrapped:?}"
     );
 }
+
+/// Brief 6-1 (the loader mutation test found it): a file in which two
+/// objects share an id loaded, and the id index then mapped the id to one of
+/// them, so a node followed the wrong body and the next frame changed the
+/// open scene with no command. Such a file is refused with a typed error.
+#[test]
+fn a_file_with_a_shared_id_is_refused() {
+    let scene = every_quantity_scene();
+    assert!(scene.duplicate_id().is_none());
+    assert!(from_ron(&to_ron(&scene).expect("saves")).is_ok());
+    for share in [
+        |s: &mut SceneRecord| s.bodies[1].id = s.bodies[0].id,
+        |s: &mut SceneRecord| s.joints[0].id = s.bodies[0].id,
+        |s: &mut SceneRecord| s.nodes[0].id = s.bodies[0].id,
+    ] {
+        let mut bad = scene.clone();
+        share(&mut bad);
+        let text = to_ron(&bad).expect("saves");
+        assert!(
+            matches!(from_ron(&text), Err(crate::PersistError::DuplicateId(id)) if id == scene.bodies[0].id),
+            "a shared id must be refused"
+        );
+    }
+}
+
+/// Brief 6-1 (the loader mutation test found it): a NaN in a settings
+/// field loaded, the settings sanitizer rewrote it a frame later, and the
+/// watcher recorded a phantom `settings` step; NaN equals nothing, so undo's
+/// value compares cannot settle on it either. Such a file is refused.
+#[test]
+fn a_file_with_a_non_finite_number_is_refused() {
+    let text = to_ron(&every_quantity_scene()).expect("saves");
+    for bad in ["NaN", "inf", "-inf"] {
+        // The first body's x position, and a settings field.
+        for (from, field) in [("pos: (", "pos"), ("gravity: (", "gravity")] {
+            let at = text.find(from).expect("the field is in the file") + from.len();
+            let end = at + text[at..].find(',').expect("a number");
+            let broken = format!("{}{bad}{}", &text[..at], &text[end..]);
+            match from_ron(&broken) {
+                Err(crate::PersistError::NonFinite(path)) => {
+                    assert!(path.contains(field), "{bad} in {field}: reported at {path}");
+                }
+                other => panic!("{bad} in {field} must be refused: {other:?}"),
+            }
+        }
+    }
+}

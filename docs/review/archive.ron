@@ -3727,5 +3727,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "no change (tests/it/joint_stress.rs three_bars_on_one_pivot_each_turn_freely)",
         ),
+        (
+            question: (
+                id: "undo-compare-exclusions",
+                title: "Which fields does the undo matrix leave out of its exact compare?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"The matrix compares the scene.dump JSON before a call with the dump after undo, and after the call with the dump after redo. A load (scene.load, scene.new) writes the whole environment, workstation config included, and undo never reverts workstation config by design."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Leave out the workstation config only",
+                        caption: r#"grid, snap, camera and workspaces (NOT_UNDONE in tests/it/undo_matrix.rs, each with its reason). Everything else, scene-content settings included, compares exactly."#,
+                    ),
+                    (
+                        label: "Compare everything",
+                        caption: r#"Fails on scene.new by design: undoing File > New would have to restore the person's dock layouts."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "undo-compare-exclusions",
+                title: "Which fields does the undo matrix leave out of its exact compare?",
+                choice: Picked("Leave out the workstation config only"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "tests/it/undo_matrix.rs NOT_UNDONE; IDENTITY_ON_FIXTURE waives only the changed-the-scene check for body.mirror_v",
+        ),
+        (
+            question: (
+                id: "attached-node-pose-capture",
+                title: "Where does a snapshot put a node attached to a body?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"An attached node's position is re-derived every frame from its target body and offset, but it is also saved. The follower runs a frame after a command or a load, so a snapshot could hold a stale position: loading such a file changed the open scene a frame later with no command, and the settings watcher recorded a phantom settings step."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Capture where it follows to",
+                        caption: r#"NodeRecord::capture derives the position from the target with NodeAttachment::follow, the one formula the follower uses. The file format does not change; a stale position in a file is replaced on load."#,
+                    ),
+                    (
+                        label: "Stop saving the position of an attached node",
+                        caption: r#"A format change (FORMAT_VERSION bump) for one derived value."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "attached-node-pose-capture",
+                title: "Where does a snapshot put a node attached to a body?",
+                choice: Picked("Capture where it follows to"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_domain::node::NodeAttachment::follow, gradiance_scene::NodeRecord::capture",
+        ),
+        (
+            question: (
+                id: "duplicate-id-load",
+                title: "What does loading a file in which two objects share a StableId do?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"Today such a file loaded: both entities spawned, the id index mapped the id to one of them, and undoing the load left the other one in the scene (the loader mutation test caught it)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Refuse the file",
+                        caption: r#"from_ron returns PersistError::DuplicateId; scene.load, scene.insert and edit.paste report it and change nothing."#,
+                    ),
+                    (
+                        label: "Repair and warn",
+                        caption: r#"Give the second object a fresh id. Joints and nodes that name the id would still attach to a guess."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "duplicate-id-load",
+                title: "What does loading a file in which two objects share a StableId do?",
+                choice: Picked("Refuse the file"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_scene::from_ron, SceneRecord::duplicate_id",
+        ),
+        (
+            question: (
+                id: "dangling-joint-load",
+                title: "What does loading a joint (or a node) that names a missing body do?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"The loader mutation test points a joint end or a node target at an id the file does not hold. Today the file loads, the physics seam builds no engine joint for it (joint_sync::guard_dangling_joints), and load, undo, redo and play all behave."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Keep today's behaviour: load it",
+                        caption: r#"The joint stays in the file as authored and does nothing; nothing panics and the scene round-trips."#,
+                    ),
+                    (
+                        label: "Refuse the file",
+                        caption: r#"Would also refuse files that an older build saved after a body was lost."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "dangling-joint-load",
+                title: "What does loading a joint (or a node) that names a missing body do?",
+                choice: Picked("Keep today's behaviour: load it"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "no change (tests/it/loader_fuzz.rs DanglingJoint cases)",
+        ),
+        (
+            question: (
+                id: "non-finite-load",
+                title: "What does loading a file with a NaN or infinite number do?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"RON reads NaN and inf. Today such a file loaded; a depth band was repaired on spawn, but a NaN in a settings field was rewritten by its sanitizer a frame later and recorded as a phantom settings step, and NaN equals nothing, so undo's value compares cannot settle on it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Refuse the file",
+                        caption: r#"from_ron returns PersistError::NonFinite with the field path, found by a reflection walk over the record (a new field is covered with no change)."#,
+                    ),
+                    (
+                        label: "Repair each field",
+                        caption: r#"Needs a sanitizer per field and still changes what the file says."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "non-finite-load",
+                title: "What does loading a file with a NaN or infinite number do?",
+                choice: Picked("Refuse the file"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_scene::from_ron (non_finite)",
+        ),
+        (
+            question: (
+                id: "loader-fuzz-corpus",
+                title: "Which files does the loader mutation test mutate?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"The brief names the scene fixtures, the goldens and the review scenes. The review scenes are .scm scripts, not scene files: the loader never reads them."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Every committed .ron scene file",
+                        caption: r#"tests/fixtures/scenes, tests/it/golden, crates/gradiance-scene/golden and the two legacy v1 snapshots in snapshots/ (they exercise the version error). Each is first loaded as committed, then 256 seeded mutations in 8 kinds."#,
+                    ),
+                    (
+                        label: "Also turn the review scripts into scenes",
+                        caption: r#"Runs 30 scripts first, for files the goldens already cover."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "loader-fuzz-corpus",
+                title: "Which files does the loader mutation test mutate?",
+                choice: Picked("Every committed .ron scene file"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "tests/it/loader_fuzz.rs SCENE_DIRS",
+        ),
     ],
 )

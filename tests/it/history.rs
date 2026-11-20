@@ -104,6 +104,36 @@ fn auto_pause_leaves_no_drift_step_behind() {
     assert!(entity_of(&app, first).is_some());
 }
 
+/// Regression (brief 6-1, found by the loader mutation test): pausing
+/// took one more physics step on the pausing frame, after the run had been
+/// recorded, so the "simulate" step held a pose one step behind where the
+/// bodies stopped, and undoing a later edit moved them back by that step.
+#[test]
+fn a_paused_run_records_the_pose_the_bodies_stop_at() {
+    let mut app = paused_app();
+    let id = spawn_settled(&mut app);
+    app.world_mut()
+        .resource_mut::<NextState<GameState>>()
+        .set(GameState::Playing);
+    step(&mut app, 10);
+    app.world_mut()
+        .resource_mut::<NextState<GameState>>()
+        .set(GameState::Paused);
+    app.update();
+    step(&mut app, 3);
+    let stopped = pos_of(&app, id);
+    // Back to the drawn pose and forward again: redo restores the recorded
+    // run, which must be where the body stopped.
+    undo(&mut app);
+    assert_ne!(pos_of(&app, id), stopped, "sanity: the run moved the body");
+    redo(&mut app);
+    assert_eq!(
+        pos_of(&app, id),
+        stopped,
+        "the recorded run is the pose the body stopped at"
+    );
+}
+
 #[test]
 fn a_settled_run_that_moved_nothing_records_no_step() {
     // A static scene: running changes nothing, so undo should still reach
