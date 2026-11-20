@@ -148,7 +148,7 @@ fn gpu_gate_fails_loudly_only_when_required() {
 /// have no icon textures).
 #[test]
 fn snapshot_tool_palette() {
-    snapshot("tool_palette", egui::vec2(120.0, 396.0), |ui| {
+    snapshot("tool_palette", egui::vec2(120.0, 418.0), |ui| {
         let _ = tools_palette_ui(ui, ToolState::Box, None, &[]);
     });
 }

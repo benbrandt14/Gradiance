@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 141 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 143 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -131,6 +131,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `node.laser` | `(laser body x y angle target name)` | edit | `spawn-node` | — | Place a laser at world point (x, y) on body (-1: free), aimed along the world angle (radians); the bus value name reads 1 while its beam reaches target (-1: none), name.distance its path length; returns its handle. | `{"body": -1, "x": 0, "y": 2, "angle": -0.7854, "target": 0, "name": "gate"}` |
 | `node.thruster` | `(thruster body x y angle thrust)` | edit | `spawn-node` | — | Attach a thruster to body at world point (x, y), pushing with thrust newtons along the world angle (radians); returns its handle. | `{"body": 0, "x": 0, "y": 0, "angle": 1.5708, "thrust": 10}` |
 
 ## `pack`
@@ -221,6 +222,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.drag` | `(drag-tool)` | editor | — | Tools/Drag, D | Use the drag tool: pull bodies with a mouse spring while playing, move them while paused. | `{}` |
 | `tool.ground` | `(ground-tool)` | editor | — | Tools/Ground, G | Use the ground tool: click to place a ground plane, drag to tilt it. | `{}` |
 | `tool.hinge` | `(hinge-tool)` | editor | — | Tools/Hinge, H | Use the hinge tool: click where two bodies overlap to hinge them, or on one body to pin it. | `{}` |
+| `tool.laser` | `(laser-tool)` | editor | — | Tools/Laser | Use the laser tool: press where the laser sits, drag to aim; release over a body to make it the target. | `{}` |
 | `tool.polygon` | `(polygon-tool)` | editor | — | Tools/Polygon, P | Use the polygon tool: click the vertices, close at the start. | `{}` |
 | `tool.prismatic` | `(prismatic-tool)` | editor | — | Tools/Prismatic, R | Use the prismatic tool: press at the anchor, drag out the slide axis. | `{}` |
 | `tool.register` | `(register-tool name points src)` | editor | — | — | Add a palette tool that collects `points` clicks, then runs src once (read them with tool-x/tool-y). | `{"name": "peg", "points": 1, "src": "(spawn-circle (tool-x 0) (tool-y 0) 0.2)"}` |

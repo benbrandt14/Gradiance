@@ -1,12 +1,13 @@
-//! The placeable behavior-node tools: the **tracer** and the **thruster**
-//! (brief N-3).
+//! The placeable behavior-node tools: the **tracer**, the **thruster**
+//! (brief N-3) and the **laser** (brief N-8).
 //!
 //! Tracer: one-click placement — click a body to attach (the trail rides
 //! it), click empty space for a free node. Thruster: press on a body where
 //! it pushes and release — a click pushes up, a drag aims the push along the
-//! drag. Sensors and other actuators are **not** tools — they are ports on
+//! drag. Laser: press where it sits, drag to aim, release — over another
+//! body, that body becomes its target. Sensors and other actuators are **not** tools — they are ports on
 //! objects (read via `SignalSource`, written via `SignalSink`), wired in the
-//! node editor. Both tools place a [`NodeKind`] entity through the shared
+//! node editor. All three tools place a [`NodeKind`] entity through the shared
 //! [`ToolCommit::SpawnNode`] seam: one gesture, one command.
 
 use crate::selection::Selection;
@@ -16,6 +17,7 @@ use crate::tools::context::{
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
+use gradiance_domain::laser::Laser;
 use gradiance_domain::node::{NodeAttachment, NodeKind};
 use gradiance_domain::theme::Role;
 use gradiance_domain::thruster::Thruster;
@@ -201,6 +203,82 @@ impl ManipTool for ThrusterTool {
     }
 }
 
+/// The world angle a laser gesture aims at: along the drag from `anchor` to
+/// `release`, or along +x for a drag shorter than `deadzone` (world units).
+/// Pure.
+#[must_use]
+pub fn laser_aim(anchor: Vec2, release: Vec2, deadzone: f32) -> f32 {
+    let drag = release - anchor;
+    if drag.length() <= deadzone {
+        0.0
+    } else {
+        drag.to_angle()
+    }
+}
+
+/// Places laser nodes (brief N-8): press where the laser sits (on a body it
+/// rides, or free), drag to aim, release. Releasing over another body makes
+/// that body the laser's target; a click aims along +x with no target. The
+/// axis is stored in the body's frame, so it turns with the body. One
+/// gesture commits one `SpawnNode`.
+#[derive(Resource, Default, Debug)]
+pub struct LaserTool {
+    /// Where the canvas press landed (the laser's point), until release.
+    anchor: Option<Vec2>,
+}
+
+impl ManipTool for LaserTool {
+    fn update(&mut self, ctx: &ManipContext, world: &ToolWorld, _: &Selection) -> ManipOutput {
+        match ctx.left {
+            GesturePhase::Pressed => {
+                self.anchor = ctx.cursor;
+                ManipOutput::default()
+            }
+            GesturePhase::Released => {
+                let (Some(anchor), Some(release)) = (self.anchor.take(), ctx.cursor) else {
+                    return ManipOutput::default();
+                };
+                let deadzone = AIM_DEADZONE_PX * ctx.cam_scale;
+                let aim = laser_aim(anchor, release, deadzone);
+                let rides = world.topmost_body_at(anchor).and_then(|e| world.id_of(e));
+                let target = ((release - anchor).length() > deadzone)
+                    .then(|| world.topmost_body_at(release))
+                    .flatten()
+                    .and_then(|e| world.id_of(e))
+                    .filter(|id| Some(*id) != rides);
+                let record = node_record(world, anchor, |body_rot| {
+                    NodeKind::Laser(Laser {
+                        angle: gradiance_units::Angle(aim - body_rot),
+                        target,
+                        ..Laser::default()
+                    })
+                });
+                ManipOutput::commit(ToolCommit::SpawnNode(Box::new(record)))
+            }
+            _ => ManipOutput::default(),
+        }
+    }
+
+    fn drafting(&self) -> bool {
+        self.anchor.is_some()
+    }
+
+    fn preview(&self, ctx: &ManipContext, out: &mut ToolPreview) {
+        let Some(anchor) = self.anchor else {
+            ghost(ctx, out);
+            return;
+        };
+        out.circle(anchor, 6.0 * ctx.cam_scale, Role::Preview);
+        let Some(cursor) = ctx.cursor else {
+            return;
+        };
+        // The aim as a line to the cursor (or a stub along +x for a click).
+        let aim = Vec2::from_angle(laser_aim(anchor, cursor, AIM_DEADZONE_PX * ctx.cam_scale));
+        let reach = (cursor - anchor).length().max(40.0 * ctx.cam_scale);
+        out.line(anchor, anchor + aim * reach, Role::Preview);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,5 +289,12 @@ mod tests {
         assert!((up - core::f32::consts::FRAC_PI_2).abs() < 1e-6);
         let left = aim_angle(Vec2::ZERO, Vec2::new(-1.0, 0.0), 0.1);
         assert!((left.abs() - core::f32::consts::PI).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_laser_click_aims_along_x_and_a_drag_along_the_drag() {
+        assert!(laser_aim(Vec2::ZERO, Vec2::new(0.0, 0.01), 0.1).abs() < 1e-6);
+        let down = laser_aim(Vec2::ZERO, Vec2::new(0.0, -2.0), 0.1);
+        assert!((down + core::f32::consts::FRAC_PI_2).abs() < 1e-6);
     }
 }

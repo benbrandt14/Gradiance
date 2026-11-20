@@ -38,6 +38,7 @@ use gradiance_domain::quantity::{BodySample, JointSample, QuantitySamples, Subje
 use gradiance_domain::signal::Subjects;
 use gradiance_domain::{Body, Joint};
 use gradiance_physics::drive::SignalDrive;
+use gradiance_physics::laser::LaserBeam;
 use gradiance_physics::queries::PhysicsQueries;
 use std::collections::VecDeque;
 
@@ -256,6 +257,25 @@ pub fn publish_sensor_refs(
     }
 }
 
+/// Publishes each laser's two bus values (brief N-8): under its name, `1`
+/// while its beam reaches its target and `0` otherwise; under
+/// `<name>.distance`, the beam's path length (m). Read from the derived
+/// [`LaserBeam`] the physics step traced; runs before [`evaluate_computed`]
+/// so a block reading a laser sees this frame's value. `O(L)` for `L`
+/// lasers; allocates only the first time a name is published.
+pub fn publish_lasers(
+    lasers: Query<&LaserBeam>,
+    game: Res<State<GameState>>,
+    step: Res<gradiance_physics::SimStep>,
+    mut bus: ResMut<SignalBus>,
+) {
+    let recording = *game.get() == GameState::Playing || step.active();
+    for beam in &lasers {
+        bus.publish(&beam.hit_name, f32::from(u8::from(beam.hit)), recording);
+        bus.publish(&beam.distance_name, beam.distance, recording);
+    }
+}
+
 /// Publishes every parameter's value, then evaluates each computed signal
 /// through its compiled kernel — the modulator layer — before the bindings
 /// read the bus. Params first, so a computed signal reading a param sees
@@ -386,6 +406,7 @@ pub fn evaluate_signals(
     mut bus: ResMut<SignalBus>,
     mut overrides: Query<&mut SignalColorOverride, With<Body>>,
     overridden: Query<Entity, With<SignalColorOverride>>,
+    lasers: Query<&LaserBeam>,
 ) {
     let recording = *game.get() == GameState::Playing || step.active();
     let dt = fixed.timestep().as_secs_f32().max(1e-6);
@@ -426,8 +447,8 @@ pub fn evaluate_signals(
     }
 
     // Bus hygiene: keep the names that still have a producer — bindings,
-    // params, computed signals, `t`, script names, and the canonical sensor
-    // names `publish_sensor_refs` surfaces for a computed's operands (a body
+    // params, computed signals, `t`, script names, live lasers' names, and
+    // the canonical sensor names `publish_sensor_refs` surfaces for a computed's operands (a body
     // sensor feeding a modulation block has no binding/param producer, only
     // the reference from a computed's expression).
     bus.retain(|name| {
@@ -440,6 +461,9 @@ pub fn evaluate_signals(
                 .iter()
                 .any(|(_, c)| c.inputs.iter().any(|i| i == name))
             || script_names.0.iter().any(|n| n == name)
+            || lasers
+                .iter()
+                .any(|l| l.hit_name == name || l.distance_name == name)
     });
 
     // Apply overrides change-detected (a same-color frame must not dirty
@@ -568,6 +592,7 @@ impl Plugin for SignalPlugin {
             (
                 recompile_signals.run_if(resource_changed::<ComputedSignals>),
                 publish_sensor_refs,
+                publish_lasers,
                 evaluate_computed,
                 evaluate_signals,
                 drive_actuators,

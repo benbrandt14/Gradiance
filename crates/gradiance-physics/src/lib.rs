@@ -17,6 +17,7 @@ pub mod fields;
 pub mod grab;
 pub mod hold;
 pub mod joint_sync;
+pub mod laser;
 pub mod motor;
 pub mod queries;
 pub mod thrust;
@@ -136,6 +137,12 @@ impl Plugin for GradiancePhysicsPlugin {
             joint_sync::break_overloaded_joints
                 .in_set(PhysicsSystems::Last)
                 .run_if(sim_running),
+        );
+        // Laser beams (brief N-8): traced after each step, against the
+        // colliders that step left; paused too, so a placed laser shows.
+        app.add_systems(
+            FixedPostUpdate,
+            laser::trace_lasers.after(PhysicsSystems::Last),
         );
     }
 }

@@ -61,6 +61,10 @@ pub enum ToolState {
     /// Place thruster nodes (a push at a point of a body; brief N-3). Press
     /// where it pushes; a drag aims it.
     Thruster,
+    /// Place laser nodes (a reflecting beam with a hit signal; brief N-8).
+    /// Press where it sits; a drag aims it; releasing over another body
+    /// makes that body its target.
+    Laser,
     /// A tool a script registered (`register-tool`): the index of its entry in
     /// [`ScriptTools`](crate::script_tools::ScriptTools). It collects clicks
     /// like the polygon tool and, on the last one, runs the script's body once.

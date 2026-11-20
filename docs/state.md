@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (N-7 handoff; before that N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (N-8 handoff; before that N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -19,6 +19,20 @@ Last updated: 2026-11-20 (N-7 handoff; before that N-6, N-5, N-4, N-3, N-2, N-1;
   rotation lock stops the spin (`stop_locked_spin`), a hinge on a snapped
   edge joins both bodies, a spring from empty space pins its start, a
   hinge on a bare ground makes nothing; six decisions in `archive.ron`.
+  **N-8** laser node is done (in review; branch
+  `claude/project-thread-tw1mvl-n8`): `NodeKind::Laser` (bus name, target
+  body, axis in the body's frame, range 50 m, 8 bounces, cap 32) casts its
+  beam through avian's `SpatialQuery` (`physics::queries::cast_beam`) and
+  reflects off every solid body (pure `geometry::beam`);
+  `physics::laser::trace_lasers`, one allocation-free `FixedPostUpdate`
+  system after the step, `O(lasers × (bounces + 1))` ray casts per step,
+  writes the derived `LaserBeam`; `signal::publish_lasers` puts `<name>`
+  (1 while the beam reaches the target) and `<name>.distance` on the bus,
+  so a light gate drives an N-1 actuator; Laser tool (no key: press, drag
+  to aim, release on the target); `(laser body x y angle target name)`
+  (`node.laser`); a 45-degree beam off a mirror wall reaches the target
+  geometry put on the reflected ray (test); six decisions in
+  `archive.ron`. **Next: N-9** mirror H/V and joint load colour.
   **N-7** buoyancy is done (in review; branch
   `claude/project-thread-tw1mvl-n7`): an authored `domain::fluid::Fluid`
   (areal density, default 2 kg/m², and drag rate, default 2/s) on any
@@ -30,7 +44,7 @@ Last updated: 2026-11-20 (N-7 handoff; before that N-6, N-5, N-4, N-3, N-2, N-1;
   inspector toggle and `(set-fluid i density [drag])` (`body.set_fluid`)
   also make the body a static sensor in the same undo step; fluids draw
   translucent; a half-density box floats half submerged (measured within
-  0.1 %); eight decisions in `archive.ron`. **Next: N-8** laser node.
+  0.1 %); eight decisions in `archive.ron`.
   **N-6** sketch tool is done (in review; branch
   `claude/project-thread-tw1mvl-n6`): drag freehand; release makes one
   body: the stroke simplified (RDP) into at most 24 capsules joined as one
@@ -168,7 +182,7 @@ Last updated: 2026-11-20 (N-7 handoff; before that N-6, N-5, N-4, N-3, N-2, N-1;
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
   9c. **N-1** (done, in review), **N-2** (done, in review), **N-3** (done,
-      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8..N-9** nonlinear dynamics & multibody play (owner-approved
+      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8** (done, in review), **N-9** nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +

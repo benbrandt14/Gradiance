@@ -3,9 +3,11 @@
 //! A **behavior node** is an authored entity that lives in the scene like a
 //! body or a joint, but represents a piece of the signal dataflow
 //! (`docs/signal-dataflow.md`) rather than physical matter. Today there are
-//! two kinds: the [`Tracer`](crate::tracer::Tracer) node — a placeable
-//! trajectory probe — and the [`Thruster`](crate::thruster::Thruster) node —
-//! a push at a point of a body (brief N-3). The framework is general: every
+//! three kinds: the [`Tracer`](crate::tracer::Tracer) node — a placeable
+//! trajectory probe — the [`Thruster`](crate::thruster::Thruster) node —
+//! a push at a point of a body (brief N-3) — and the
+//! [`Laser`](crate::laser::Laser) node — a reflecting beam that publishes a
+//! hit signal (brief N-8). The framework is general: every
 //! future **sensor** (velocity/force reader) and **actuator** (a driver
 //! that writes a signal) becomes another [`NodeKind`], its own tool, and
 //! its own selectable glyph. This is the "eventually all sensors and
@@ -68,8 +70,9 @@ impl NodeAttachment {
 /// [`SignalSource`](crate::signal::SignalSource), written via
 /// [`SignalSink`](crate::signal::SignalSink)), wired in the node
 /// editor. The placeable node kinds are the **tracer** — a trajectory probe
-/// you can drop anywhere or ride on a body — and the **thruster**, which
-/// pushes the body it rides.
+/// you can drop anywhere or ride on a body — the **thruster**, which
+/// pushes the body it rides, and the **laser**, whose beam reflects off
+/// bodies and reports whether it reaches a target.
 #[derive(Component, Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub enum NodeKind {
     /// A trajectory-trail probe (the placeable [`Tracer`]).
@@ -81,6 +84,11 @@ pub enum NodeKind {
     ///
     /// [`Thruster`]: crate::thruster::Thruster
     Thruster(crate::thruster::Thruster),
+    /// A beam cast along the node's axis that reflects off bodies (the
+    /// placeable [`Laser`], brief N-8).
+    ///
+    /// [`Laser`]: crate::laser::Laser
+    Laser(crate::laser::Laser),
 }
 
 impl NodeKind {
@@ -89,6 +97,7 @@ impl NodeKind {
         match self {
             Self::Tracer(_) => "tracer",
             Self::Thruster(_) => "thruster",
+            Self::Laser(_) => "laser",
         }
     }
 
@@ -96,7 +105,7 @@ impl NodeKind {
     pub const fn tracer(&self) -> Option<crate::tracer::Tracer> {
         match self {
             Self::Tracer(t) => Some(*t),
-            Self::Thruster(_) => None,
+            Self::Thruster(_) | Self::Laser(_) => None,
         }
     }
 }

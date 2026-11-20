@@ -215,6 +215,13 @@ pub(crate) fn remap_node(
     if let Some(target) = record.attachment.target {
         record.attachment.target = Some(remapped(id_map, target)?);
     }
+    // A laser aimed at a body copied with it aims at the copy (brief N-8);
+    // a target outside the copied set stays the original body.
+    if let gradiance_domain::node::NodeKind::Laser(laser) = &mut record.kind
+        && let Some(copy) = laser.target.and_then(|t| remapped(id_map, t))
+    {
+        laser.target = Some(copy);
+    }
     record.id = id;
     record.pose.pos += offset;
     Some(record)
