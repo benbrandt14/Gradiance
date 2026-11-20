@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (N-8 handoff; before that N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (N-9 handoff, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,7 +12,25 @@ Last updated: 2026-11-20 (N-8 handoff; before that N-7, N-6, N-5, N-4, N-3, N-2,
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **N-8** laser node is done (in review; branch
+- **Now:** **N-9** mirror and joint load colour is done (in review;
+  branch `claude/project-thread-tw1mvl-n9`): `body.mirror_h` /
+  `body.mirror_v` (`(mirror-h targets)`, `(mirror-v targets)`, Edit ▸
+  Mirror horizontally / vertically, no key) lower to one `ScaleIntent`
+  with a −1 factor about the bodies' bounds centre (one `mirror` undo
+  step); a negative scale now reflects each body's rotation and flips its
+  shape across one local axis structurally (`geometry::scale::BodyScale`,
+  `mirror_shape`), so boxes stay boxes, trees stay trees and mirroring
+  twice gives the scene back (test); every scale now carries joint anchors,
+  slider axes, node offsets/axes and world pins with its bodies, and a
+  fully mirrored hinge turns its limits and motor over; joint glyphs tint
+  from the look's joint ink to its danger ink by the derived `JointLoad`
+  (`render::joint_viz`, force / break force or the default 10x-weight
+  rating, hot from 90 %; `O(joints)`, allocation-free per frame; never
+  saved); world pins keep an outer danger ring; five decisions in
+  `archive.ron`. **Phase N is complete.** **Next:** the orchestrator plans
+  the next stage: Phase 6 (testing & diagnostics), then G-0 one graph
+  model, 3D-0 the 3D plan, D-2 egui 0.37 once bevy_egui ships it.
+  **N-8** laser node is done (in review; branch
   `claude/project-thread-tw1mvl-n8`): `NodeKind::Laser` (bus name, target
   body, axis in the body's frame, range 50 m, 8 bounces, cap 32) casts its
   beam through avian's `SpatialQuery` (`physics::queries::cast_beam`) and
@@ -25,7 +43,7 @@ Last updated: 2026-11-20 (N-8 handoff; before that N-7, N-6, N-5, N-4, N-3, N-2,
   to aim, release on the target); `(laser body x y angle target name)`
   (`node.laser`); a 45-degree beam off a mirror wall reaches the target
   geometry put on the reflected ray (test); six decisions in
-  `archive.ron`. **Next: N-9** mirror H/V and joint load colour.
+  `archive.ron`.
   **N-7** buoyancy is done (in review; branch
   `claude/project-thread-tw1mvl-n7`): an authored `domain::fluid::Fluid`
   (areal density, default 2 kg/m², and drag rate, default 2/s) on any
@@ -175,7 +193,7 @@ Last updated: 2026-11-20 (N-8 handoff; before that N-7, N-6, N-5, N-4, N-3, N-2,
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
   9c. **N-1** (done, in review), **N-2** (done, in review), **N-3** (done,
-      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8** (done, in review), **N-9** nonlinear dynamics & multibody play (owner-approved
+      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8** (done, in review), **N-9** (done, in review; Phase N complete) nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
