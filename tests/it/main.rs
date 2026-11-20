@@ -21,6 +21,7 @@ mod chains;
 mod client;
 mod clipboard;
 mod csg;
+mod debug_overlay;
 mod defaults;
 mod editor_ops;
 mod graph_keys;

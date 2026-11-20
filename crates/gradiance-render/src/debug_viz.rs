@@ -81,7 +81,6 @@ pub fn draw_debug_overlays(
             }
         }
     }
-
 }
 
 /// Per-body debug glyphs: collision set, origin cross/centroid, and

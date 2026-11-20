@@ -20,13 +20,13 @@
 pub mod align;
 pub mod camera;
 pub mod cursor;
+pub mod debug_ops;
 pub mod gesture;
 pub mod graph_keys;
 pub mod indicators;
 pub mod input;
 pub mod joint_edit;
 pub mod node_edit;
-pub mod debug_ops;
 pub mod ops;
 pub mod overlay;
 pub mod pack;

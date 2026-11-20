@@ -47,9 +47,8 @@ pub fn any_engine_overlay(debug: &DebugSettings) -> bool {
 /// `None` for each that is off, and nothing avian draws that Gradiance has
 /// no switch for (body axes, ray and shape casts, islands).
 pub fn physics_gizmos(debug: &DebugSettings) -> PhysicsGizmos {
-    let on = |flag: bool, color: gradiance_domain::appearance::Rgba| {
-        flag.then_some(Color::from(color))
-    };
+    let on =
+        |flag: bool, color: gradiance_domain::appearance::Rgba| flag.then_some(Color::from(color));
     PhysicsGizmos {
         collider_color: on(debug.show_colliders, debug::COLLIDER),
         aabb_color: on(debug.show_aabbs, debug::AABB),
