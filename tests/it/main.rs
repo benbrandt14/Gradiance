@@ -65,5 +65,6 @@ mod ui_registry;
 mod ui_snapshots;
 mod ui_surfaces;
 mod ui_workspaces;
+mod undo_matrix;
 mod unit_commands;
 mod units_display;

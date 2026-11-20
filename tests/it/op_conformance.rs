@@ -120,7 +120,7 @@ fn run_with_ids(app: &mut App, ids: u64, source: &str) {
 /// - bodies 3, 4: apart at x = 3 and 5, grouped together; body 3 is pinned
 ///   to the world by joint 0;
 /// - one undone spawn on the redo stack, so `redo` has a step to take.
-fn fixture() -> App {
+pub(crate) fn fixture() -> App {
     let mut app = headless_app_with(|app| {
         app.add_plugins(RemoteControlPlugin { port: None });
     });
@@ -149,7 +149,7 @@ fn fixture() -> App {
 /// had made it: `edit.adjust_last`'s example edits that call's radius. The
 /// fixture cannot have both a step to redo and an operation on top, so the
 /// record is planted (U-11).
-fn seed_last_op(app: &mut App) {
+pub(crate) fn seed_last_op(app: &mut App) {
     let step = app.world().resource::<CommandStack>().revision();
     app.insert_resource(LastOp(Some(LastOpRecord {
         call: OpCall {
@@ -161,11 +161,11 @@ fn seed_last_op(app: &mut App) {
     })));
 }
 
-fn entries(app: &App) -> Vec<OpEntry> {
+pub(crate) fn entries(app: &App) -> Vec<OpEntry> {
     app.world().resource::<OpRegistry>().entries().to_vec()
 }
 
-fn example(entry: &OpEntry) -> Map<String, Value> {
+pub(crate) fn example(entry: &OpEntry) -> Map<String, Value> {
     match serde_json::from_str(entry.meta.example) {
         Ok(Value::Object(fields)) => fields,
         other => panic!("{}: example is not a JSON object: {other:?}", entry.meta.id),
@@ -191,7 +191,7 @@ fn call(app: &mut App, name: &str, params: Value) -> Option<BrpResult> {
     app.world_mut().run_system_with(id, Some(params)).ok()
 }
 
-fn depths(app: &App) -> (usize, usize) {
+pub(crate) fn depths(app: &App) -> (usize, usize) {
     let history = app.world().resource::<HistoryInfo>();
     (history.undo_depth, history.redo_depth)
 }
