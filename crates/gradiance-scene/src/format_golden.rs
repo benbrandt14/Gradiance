@@ -379,3 +379,26 @@ fn a_file_with_a_shared_id_is_refused() {
         );
     }
 }
+
+/// Brief 6-1 (the loader mutation test found it): a NaN in a settings
+/// field loaded, the settings sanitizer rewrote it a frame later, and the
+/// watcher recorded a phantom `settings` step; NaN equals nothing, so undo's
+/// value compares cannot settle on it either. Such a file is refused.
+#[test]
+fn a_file_with_a_non_finite_number_is_refused() {
+    let text = to_ron(&every_quantity_scene()).expect("saves");
+    for bad in ["NaN", "inf", "-inf"] {
+        // The first body's x position, and a settings field.
+        for (from, field) in [("pos: (", "pos"), ("gravity: (", "gravity")] {
+            let at = text.find(from).expect("the field is in the file") + from.len();
+            let end = at + text[at..].find(',').expect("a number");
+            let broken = format!("{}{bad}{}", &text[..at], &text[end..]);
+            match from_ron(&broken) {
+                Err(crate::PersistError::NonFinite(path)) => {
+                    assert!(path.contains(field), "{bad} in {field}: reported at {path}");
+                }
+                other => panic!("{bad} in {field} must be refused: {other:?}"),
+            }
+        }
+    }
+}

@@ -55,6 +55,15 @@ impl NodeAttachment {
         Self::default()
     }
 
+    /// Where the node sits while its target is at `target`: the offset
+    /// turned into the target's frame. The one formula the per-frame
+    /// follower (`render::tracer::follow_node_attachments`) and the scene
+    /// capture (`scene::NodeRecord::capture`) share, so a snapshot holds the
+    /// position the follower gives (brief 6-1).
+    pub fn follow(&self, target: gradiance_core::units::PosRot) -> Vec2 {
+        target.pos + Vec2::from_angle(target.rot).rotate(self.offset.value())
+    }
+
     /// A node attached to `target` at `offset` (metres) in the target's
     /// local frame.
     pub fn to(target: StableId, offset: Vec2) -> Self {

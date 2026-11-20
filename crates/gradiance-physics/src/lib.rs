@@ -281,8 +281,15 @@ fn advance_owed_step(
     step.stepped = true;
 }
 
+/// Pauses the physics clock **and** zeroes its delta. avian runs its
+/// schedule for any non-zero delta, paused or not (which `sim.step` relies
+/// on), so a pause that kept the running delta took one more step on the
+/// pausing frame, after `close_sim_run` had recorded the run: the undo
+/// history held a pose one step behind where the bodies stopped (brief
+/// 6-1, found by the loader mutation test).
 fn pause_physics_clock(mut time: ResMut<Time<Physics>>) {
     time.pause();
+    time.advance_by(std::time::Duration::ZERO);
 }
 
 fn resume_physics_clock(mut time: ResMut<Time<Physics>>) {

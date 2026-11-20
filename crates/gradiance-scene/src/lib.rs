@@ -78,6 +78,12 @@ pub enum PersistError {
     /// guessed at (brief 6-1, decision `duplicate-id-load`).
     #[error("two objects share the id {0}")]
     DuplicateId(gradiance_core::ids::StableId),
+    /// A number in the file is NaN or infinite (the path names it). Undo,
+    /// the settings watcher and the physics all compare or integrate by
+    /// value, and NaN equals nothing, so the file is refused (brief 6-1,
+    /// decision `non-finite-load`).
+    #[error("a number is not finite at {0}")]
+    NonFinite(String),
 }
 
 /// Serializes a scene to pretty RON (deterministic for identical scenes).
@@ -103,5 +109,56 @@ pub fn from_ron(text: &str) -> Result<SceneRecord, PersistError> {
     if let Some(id) = scene.duplicate_id() {
         return Err(PersistError::DuplicateId(id));
     }
+    if let Some(path) = non_finite(&scene, "scene") {
+        return Err(PersistError::NonFinite(path));
+    }
     Ok(scene)
+}
+
+/// The path of the first NaN or infinite `f32`/`f64` in `value`, walked by
+/// reflection (so a field a later brief adds is covered with no change).
+fn non_finite(value: &dyn bevy::reflect::PartialReflect, path: &str) -> Option<String> {
+    use bevy::reflect::ReflectRef;
+    let field = |v: &dyn bevy::reflect::PartialReflect, at: String| non_finite(v, &at);
+    match value.reflect_ref() {
+        ReflectRef::Struct(s) => (0..s.field_len()).find_map(|i| {
+            let name = s.name_at(i).unwrap_or_default();
+            field(s.field_at(i)?, format!("{path}.{name}"))
+        }),
+        ReflectRef::TupleStruct(t) => {
+            (0..t.field_len()).find_map(|i| field(t.field(i)?, format!("{path}.{i}")))
+        }
+        ReflectRef::Tuple(t) => {
+            (0..t.field_len()).find_map(|i| field(t.field(i)?, format!("{path}.{i}")))
+        }
+        ReflectRef::List(l) => l
+            .iter()
+            .enumerate()
+            .find_map(|(i, v)| field(v, format!("{path}[{i}]"))),
+        ReflectRef::Array(a) => a
+            .iter()
+            .enumerate()
+            .find_map(|(i, v)| field(v, format!("{path}[{i}]"))),
+        ReflectRef::Map(m) => m
+            .iter()
+            .find_map(|(k, v)| field(v, format!("{path}[{k:?}]"))),
+        ReflectRef::Set(s) => s.iter().find_map(|v| field(v, format!("{path}{{}}"))),
+        ReflectRef::Enum(e) => (0..e.field_len()).find_map(|i| {
+            let name = e
+                .name_at(i)
+                .map_or_else(|| i.to_string(), ToOwned::to_owned);
+            field(
+                e.field_at(i)?,
+                format!("{path}.{}.{name}", e.variant_name()),
+            )
+        }),
+        ReflectRef::Opaque(o) => {
+            let finite = o
+                .try_downcast_ref::<f32>()
+                .map(|x| x.is_finite())
+                .or_else(|| o.try_downcast_ref::<f64>().map(|x| x.is_finite()))
+                .unwrap_or(true);
+            (!finite).then(|| path.to_owned())
+        }
+    }
 }

@@ -312,9 +312,21 @@ fn open_scene(app: &mut App) -> String {
 }
 
 /// What the open scene must be once `scene` has loaded: the records
-/// ordered by id, as a capture orders them.
+/// ordered by id, as a capture orders them, with each attached node where
+/// it follows its target to. That position is the one derived value a file
+/// stores (decision `undo-compare-exclusions`): the follower re-derives it,
+/// so a stale one in a file is not kept.
 fn as_loaded(mut scene: SceneRecord) -> String {
     scene.app_version.clear();
+    for node in &mut scene.nodes {
+        if let Some(body) = node
+            .attachment
+            .target
+            .and_then(|id| scene.bodies.iter().find(|b| b.id == id))
+        {
+            node.pose.pos = node.attachment.follow(body.pose);
+        }
+    }
     scene.bodies.sort_by_key(|b| b.id.0);
     scene.joints.sort_by_key(|j| j.id.0);
     scene.nodes.sort_by_key(|n| n.id.0);
@@ -353,9 +365,132 @@ fn set_state(app: &mut App, state: GameState) {
     app.update();
 }
 
-/// The mutation test: [`CASES`] seeded cases over every committed scene
-/// file, each loaded through `scene.load` into one app that keeps the scene
-/// the last good case loaded.
+/// Whether a loaded file must give exactly its records back. True for the
+/// committed files as they are and for the mutations that only rewire ids;
+/// a text mutation may plant a value the domain repairs on spawn (a depth
+/// band with `near < 0` or a non-finite end becomes a well-formed band,
+/// `DepthBand::sanitized`), so for those the loaded scene is checked for
+/// stability and undo instead of equality with the file.
+fn exact(mutation: Option<Mutation>) -> bool {
+    matches!(
+        mutation,
+        None | Some(Mutation::DuplicateId | Mutation::DanglingJoint)
+    )
+}
+
+/// The open scene without the workstation config a load writes and undo
+/// never reverts (`undo_matrix::NOT_UNDONE`).
+fn content(app: &mut App) -> String {
+    let mut scene = SceneRecord::capture(app.world_mut());
+    scene.app_version.clear();
+    let env = &mut scene.environment;
+    env.grid = Default::default();
+    env.snap = Default::default();
+    env.camera = Default::default();
+    env.workspaces = Default::default();
+    to_ron(&scene).unwrap_or_else(|e| panic!("{e}"))
+}
+
+fn run_op(app: &mut App, id: &str) {
+    if let Err(e) = gradiance::op::invoke(app.world_mut(), id, json!({})) {
+        panic!("{id}: {e}");
+    }
+    step(app, 2);
+}
+
+/// Loads `bytes` (from a file in `dir`) through `scene.load` and checks the
+/// outcome. Returns whether the scene loaded.
+fn load_case(app: &mut App, dir: &Path, name: &str, bytes: &[u8], exact: bool) -> bool {
+    let path = dir.join("case.ron");
+    std::fs::write(&path, bytes).unwrap_or_else(|e| panic!("{e}"));
+    let before = open_scene(app);
+    let before_content = content(app);
+    let depth = undo_depth(app);
+    // The typed answer the file gets: a parse, version or identity error,
+    // or a record (which the command may still refuse: a bad shape).
+    let parsed = std::str::from_utf8(bytes)
+        .map_err(|e| e.to_string())
+        .and_then(|t| from_ron(t).map_err(|e| e.to_string()));
+    let call = gradiance::op::invoke(
+        app.world_mut(),
+        "scene.load",
+        json!({"path": path.to_string_lossy()}),
+    );
+    step(app, 2);
+    let after = open_scene(app);
+    let scene = match parsed {
+        Err(why) => {
+            assert!(call.is_err(), "{name}: `{why}`, but scene.load accepted it");
+            assert_eq!(
+                after, before,
+                "{name}: a failed load changed the scene ({why})"
+            );
+            assert_eq!(
+                undo_depth(app),
+                depth,
+                "{name}: a failed load recorded a step"
+            );
+            return false;
+        }
+        Ok(scene) => scene,
+    };
+    assert!(
+        call.is_ok(),
+        "{name}: parses, but scene.load refused: {call:?}"
+    );
+    if undo_depth(app) == depth {
+        // The command refused it (a typed `CommandError`, logged).
+        assert_eq!(after, before, "{name}: a refused load changed the scene");
+        return false;
+    }
+    let label = app.world().resource::<HistoryInfo>().undo_label;
+    assert_eq!(
+        (undo_depth(app), label),
+        (depth + 1, Some("load-scene")),
+        "{name}: a load is one load-scene step"
+    );
+    if exact {
+        let want = as_loaded(scene);
+        assert!(
+            after == want,
+            "{name}: the loaded scene is not the file's: {}",
+            first_line_difference(&after, &want)
+        );
+    }
+    // Stable: nothing changes the loaded scene, or records a step, a frame
+    // later (a phantom step is what found the node capture lag).
+    step(app, 3);
+    assert!(
+        open_scene(app) == after && undo_depth(app) == depth + 1,
+        "{name}: the loaded scene moved with no command: {}",
+        first_line_difference(&open_scene(app), &after)
+    );
+    // Undo gives the scene back, redo the loaded one.
+    let loaded_content = content(app);
+    run_op(app, "edit.undo");
+    let undone = content(app);
+    assert!(
+        undone == before_content,
+        "{name}: undo of the load: {}",
+        first_line_difference(&undone, &before_content)
+    );
+    run_op(app, "edit.redo");
+    let redone = content(app);
+    assert!(
+        redone == loaded_content,
+        "{name}: redo of the load: {}",
+        first_line_difference(&redone, &loaded_content)
+    );
+    // Whatever loaded must also run.
+    set_state(app, GameState::Playing);
+    step(app, 4);
+    set_state(app, GameState::Paused);
+    true
+}
+
+/// The mutation test: every committed scene file as it is, then [`CASES`]
+/// seeded mutations of them, each loaded through `scene.load` into one app
+/// that keeps the scene the last good case loaded.
 #[test]
 fn mutated_scene_files_load_or_fail_cleanly() {
     let files = sources();
@@ -370,82 +505,38 @@ fn mutated_scene_files_load_or_fail_cleanly() {
 
     let mut app = headless_app();
     set_state(&mut app, GameState::Paused);
+    let file_name = |p: &Path| {
+        p.file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    // Every current-version file loads exactly as it is.
+    for (source, bytes) in &files {
+        let current = from_ron(&String::from_utf8_lossy(bytes)).is_ok();
+        let name = format!("{} as committed", file_name(source));
+        assert_eq!(
+            load_case(&mut app, &dir, &name, bytes, exact(None)),
+            current,
+            "{name}"
+        );
+    }
     let (mut loaded, mut failed) = (0, 0);
+    let n = files.len() as u64;
     for case in 0..CASES {
-        let (source, bytes) = &files[usize::try_from(case).unwrap_or(0) % files.len()];
-        let mutation =
-            MUTATIONS[usize::try_from(case / files.len() as u64).unwrap_or(0) % MUTATIONS.len()];
+        let (source, bytes) = &files[usize::try_from(case % n).unwrap_or(0)];
+        let mutation = MUTATIONS[usize::try_from((case / n) % MUTATIONS.len() as u64).unwrap_or(0)];
         let mut rng = Rng(case.wrapping_mul(0x2545_F491_4F6C_DD1D) ^ 0x61);
         let mutated = mutate(bytes, mutation, &mut rng, &pendulum);
-        let name = format!(
-            "case {case}: {mutation:?} of {}",
-            source
-                .file_name()
-                .map(|f| f.to_string_lossy())
-                .unwrap_or_default()
-        );
-        let path = dir.join(format!("case-{case}.ron"));
-        std::fs::write(&path, &mutated).unwrap_or_else(|e| panic!("{e}"));
-
-        let before = open_scene(&mut app);
-        let depth = undo_depth(&app);
-        // The typed answer the file gets: a parse or version error, or a
-        // record (which the command may still refuse: a bad shape).
-        let parsed = std::str::from_utf8(&mutated)
-            .map_err(|e| e.to_string())
-            .and_then(|t| from_ron(t).map_err(|e| e.to_string()));
-        let call = gradiance::op::invoke(
-            app.world_mut(),
-            "scene.load",
-            json!({"path": path.to_string_lossy()}),
-        );
-        step(&mut app, 2);
-        let after = open_scene(&mut app);
-        match parsed {
-            Err(why) => {
-                assert!(call.is_err(), "{name}: `{why}`, but scene.load accepted it");
-                assert_eq!(
-                    after, before,
-                    "{name}: a failed load changed the scene ({why})"
-                );
-                assert_eq!(
-                    undo_depth(&app),
-                    depth,
-                    "{name}: a failed load recorded a step"
-                );
-                failed += 1;
-            }
-            Ok(scene) => {
-                assert!(
-                    call.is_ok(),
-                    "{name}: parses, but scene.load refused: {call:?}"
-                );
-                if undo_depth(&app) == depth {
-                    // The command refused it (a typed `CommandError`).
-                    assert_eq!(after, before, "{name}: a refused load changed the scene");
-                    failed += 1;
-                } else {
-                    let want = as_loaded(scene);
-                    assert!(
-                        undo_depth(&app) == depth + 1 && after == want,
-                        "{name}: not one load-scene step ({} -> {}, {:?}) or not the file's scene: {}",
-                        depth,
-                        undo_depth(&app),
-                        app.world().resource::<HistoryInfo>().undo_label,
-                        first_line_difference(&after, &want),
-                    );
-                    // Whatever loaded must also run.
-                    set_state(&mut app, GameState::Playing);
-                    step(&mut app, 4);
-                    set_state(&mut app, GameState::Paused);
-                    loaded += 1;
-                }
-            }
+        let name = format!("case {case}: {mutation:?} of {}", file_name(source));
+        if load_case(&mut app, &dir, &name, &mutated, exact(Some(mutation))) {
+            loaded += 1;
+        } else {
+            failed += 1;
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
     assert!(
-        loaded > 0 && failed > 0,
+        loaded >= 10 && failed >= 10,
         "loaded {loaded}, failed {failed}: the mix is broken"
     );
 }
