@@ -10,6 +10,7 @@ use crate::toon::{ToonExtension, ToonMaterial, face_of, params_of, ramp_of};
 use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::{Appearance, Rgba};
+use gradiance_domain::fluid::Fluid;
 use gradiance_domain::settings::RenderSettings;
 use gradiance_domain::theme::{Look, SceneTheme};
 use gradiance_signal::SignalColorOverride;
@@ -19,10 +20,16 @@ pub fn color_of(rgba: Rgba) -> Color {
     rgba.into()
 }
 
-/// The standard body material: matte base, toon banding per settings.
+/// How opaque a fluid region draws (brief N-7): translucent, so what
+/// floats or sinks in it stays visible.
+pub const FLUID_OPACITY: f32 = 0.45;
+
+/// The standard body material: matte base, toon banding per settings. A
+/// fluid region blends at [`FLUID_OPACITY`].
 fn body_material(
     appearance: &Appearance,
     tint: Option<Color>,
+    fluid: bool,
     settings: &RenderSettings,
     theme: &SceneTheme,
 ) -> ToonMaterial {
@@ -38,6 +45,17 @@ fn body_material(
         }
         None => theme.display(appearance.fill),
     };
+    let (fill, alpha_mode) = if fluid {
+        (
+            Rgba {
+                a: fill.a * FLUID_OPACITY,
+                ..fill
+            },
+            AlphaMode::Blend,
+        )
+    } else {
+        (fill, AlphaMode::Opaque)
+    };
     ToonMaterial {
         base: StandardMaterial {
             base_color: color_of(fill),
@@ -47,6 +65,7 @@ fn body_material(
             // *simultaneously* as the camera tilts, snapping the whole
             // scene's color. A lit patch is a ramp tone instead (brief
             // 4b-6), and the optional glint is the shader's.
+            alpha_mode,
             perceptual_roughness: 1.0,
             reflectance: 0.0,
             metallic: 0.0,
@@ -78,8 +97,9 @@ fn body_material(
     }
 }
 
-/// (Re)builds a body's material when its appearance or signal tint
-/// changes (or the tint is removed — the authored fill returns).
+/// (Re)builds a body's material when its appearance, signal tint or fluid
+/// flag changes (or the tint or the fluid is removed — the authored fill
+/// returns).
 pub fn sync_body_materials(
     mut commands: Commands,
     mut materials: ResMut<Assets<ToonMaterial>>,
@@ -90,10 +110,15 @@ pub fn sync_body_materials(
             &Appearance,
             Option<&SignalColorOverride>,
             &gradiance_domain::shape::ShapeDef,
+            Has<Fluid>,
         ),
         (
             With<Body>,
-            Or<(Changed<Appearance>, Changed<SignalColorOverride>)>,
+            Or<(
+                Changed<Appearance>,
+                Changed<SignalColorOverride>,
+                Changed<Fluid>,
+            )>,
         ),
     >,
     bodies: Query<
@@ -102,13 +127,15 @@ pub fn sync_body_materials(
             &Appearance,
             Option<&SignalColorOverride>,
             &gradiance_domain::shape::ShapeDef,
+            Has<Fluid>,
         ),
         With<Body>,
     >,
     mut untinted: RemovedComponents<SignalColorOverride>,
+    mut drained: RemovedComponents<Fluid>,
     mut shown_look: Local<Option<Look>>,
 ) {
-    let removed: Vec<Entity> = untinted.read().collect();
+    let removed: Vec<Entity> = untinted.read().chain(drained.read()).collect();
     // A new look re-tones every body: rebuild them all, once.
     let relook = *shown_look != Some(settings.look);
     *shown_look = Some(settings.look);
@@ -118,7 +145,7 @@ pub fn sync_body_materials(
     } else {
         Vec::new()
     };
-    for (entity, appearance, tint, shape) in changed.iter().chain(
+    for (entity, appearance, tint, shape, fluid) in changed.iter().chain(
         removed
             .iter()
             .chain(&all)
@@ -131,6 +158,7 @@ pub fn sync_body_materials(
         let handle = materials.add(body_material(
             appearance,
             tint.and_then(|t| t.fill),
+            fluid,
             &settings,
             theme,
         ));
