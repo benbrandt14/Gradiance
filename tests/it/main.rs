@@ -49,6 +49,7 @@ mod script_examples;
 mod script_tools;
 mod script_units;
 mod scripting;
+mod sketch;
 mod signals;
 mod thrusters;
 mod tools;
