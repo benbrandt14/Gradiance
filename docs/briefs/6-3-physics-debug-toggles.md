@@ -86,9 +86,16 @@ work (skipped in the roadmap), new physics behaviour.
 - Decisions in `archive.ron`: `debug-toggles-which`,
   `debug-toggles-state`, `debug-toggle-op-shape`, `schedule-dump-format`.
 
-**Not done / caveats.** No on-screen check was made in this session: no
-lavapipe screenshot of the overlay on a jointed scene was taken (the
-brief asks for one on the PR). Avian's draw systems are not exercised by
-any test (headless leaves them out). A half-plane ground's AABB is
-avian's, possibly very large, when AABBs are on; not checked visually.
+**Checked on screen** (lavapipe, `tools/screenshot`, not committed): a
+pinned two-link hinge pendulum and a box on a ground with all five
+switches on through the `debug.*` operations over the remote surface:
+green engine collider outlines on every body and the ground line, the
+AABB of the swinging link, joint anchors at both hinges, velocity marks;
+no stray lines from the ground's half-space AABB.
+
+**Caveats.** Avian's draw systems are not exercised by any test (headless
+leaves them out); the View > Debug submenu itself was not opened on
+screen (its rows write the same `InvokeOp` the tests send). Contact
+points draw only while bodies penetrate (avian's rule), so a settled
+scene shows few.
 

@@ -26,7 +26,7 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
   (`interaction::debug_ops::DEBUG_TOGGLES`), no keys; `gradiance
   schedule-dump [schedule]` prints each schedule's system order as text
   (Bevy's own introspection, no new crate); four decisions in
-  `archive.ron`. No lavapipe screenshot of the overlay was taken yet.
+  `archive.ron`. Overlay checked on lavapipe (screenshot on the PR thread, not committed).
   **Next:** the orchestrator's phase gate: G-0 one graph model, 3D-0 the
   3D plan, D-2 egui 0.37 once bevy_egui ships it.
   **6-2** is merged (#294): geometry property tests (proptest,
