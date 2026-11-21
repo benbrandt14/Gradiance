@@ -145,13 +145,32 @@ pub fn rows(entry: &OpEntry, params: &Value) -> Vec<Row> {
         .collect()
 }
 
-/// A value as short text: an object id shows its first eight digits.
+/// Most items a read-only list shows before it is summarised as a count.
+const SHORT_LIST: usize = 4;
+
+/// A value as short text: an object id shows its first eight digits, a
+/// number at most three decimals, and a list longer than [`SHORT_LIST`]
+/// its length (brief Q-1: a drawn chain's path printed every coordinate at
+/// full precision and stretched the panel across the window).
 fn short(value: &Value) -> String {
     match value {
         Value::String(text) if text.len() > 12 => format!("{}..", &text[..8]),
         Value::String(text) => text.clone(),
+        Value::Number(n) => n.as_f64().map_or_else(|| n.to_string(), decimals),
+        Value::Array(items) if items.len() > SHORT_LIST => format!("{} values", items.len()),
         Value::Array(items) => items.iter().map(short).collect::<Vec<_>>().join(", "),
         other => other.to_string(),
+    }
+}
+
+/// `v` with at most three decimals and no trailing zeros.
+fn decimals(v: f64) -> String {
+    let text = format!("{v:.3}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    if text == "-0" {
+        "0".to_owned()
+    } else {
+        text.to_owned()
     }
 }
 
@@ -376,6 +395,20 @@ mod tests {
         assert_eq!(step.len(), 2);
         assert_eq!(step[1].path, "step.1");
         assert_eq!(step[0].dim, Dimension::Length);
+    }
+
+    #[test]
+    fn a_long_path_reads_as_a_count_and_numbers_are_rounded() {
+        let app = app();
+        let chain = entry(&app, "body.chain");
+        let rows = rows(
+            &chain,
+            &json!({"path": [-2.399_999_618_530_273_4, 0.6, -2.35, 0.6, 2.0, 0.6], "link": 0.25,
+                    "width": 0.06, "a": -1, "b": -1, "pins": "bodies"}),
+        );
+        assert_eq!(rows[0].kind, RowKind::ReadOnly("6 values".to_owned()));
+        assert_eq!(short(&json!([-2.399_999_618_530_273_4, 0.5])), "-2.4, 0.5");
+        assert_eq!(short(&json!(-0.000_1)), "0");
     }
 
     #[test]

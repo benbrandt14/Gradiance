@@ -1,6 +1,6 @@
 # Phase N on screen
 Phase Q (follow-ups) · the "not checked on screen" lines of the N-1..N-8 and
-6-3 Outcomes · status: ready
+6-3 Outcomes · status: done (2026-11-21)
 
 Written by the planning thread, 2026-11-20, on `523ed82`, from the
 "Not done / follow-ups" sections of the Phase N and Phase 6 Outcomes (owner
@@ -107,4 +107,56 @@ The check list, with where each thing is drawn:
 
 ## Outcome
 
-To be filled by the worker at handoff.
+Done 2026-11-21 (worker session; lavapipe + Xvfb, 1280x720). Screenshots
+were shown in the session and are described on the PR; none committed.
+
+**Ingested** (own commit): `toon-ramp` = "Ramp, hard bands"
+(`STUDIO_DITHER` 0.025 -> 0; setting and slider kept; the v8 golden's
+`dither` line and the four `tests/it/golden/replay_*` goldens regenerated — one `dither` line each, nothing else); `status-bar-and-pie` =
+"Status bar on" (already the default). Both archived with `ingested_as`;
+their `expected_bodies` rows dropped; scene files kept. `docs/ui-design.md`
+look table updated.
+
+**Seen and fine:** N-1 body block (`fill`, `tracer`, `field`, `gravity`
+pins) after "Add to node editor"; N-2 key block footer (`+ [E] [] pair`;
+the `+` is the slot label, the `-` slot appears when paired); N-3 thruster
+flame (paused and playing), thruster glyph and block; N-4 Settings >
+Simulation > Air, five rows with units; N-5 chain drag preview (line with
+hinge rings) and committed links; N-6 sketch drag preview; N-7 inspector
+fluid toggle and its two fields; N-8 beam in danger ink reaching its target
+with the accent ring, barrel glyph, laser rows (Adjust Last); N-9 Edit >
+Mirror rows (greyed with nothing selected); View > Debug row present;
+palette icons all load.
+
+**Fixed:**
+- *An undone run left its bodies moving* (found on screen: a paused,
+  undone thruster box read 62 m/s and the next play launched it).
+  `CommandStack::undo`/`redo` now zero the velocity of every body whose pose
+  the step restored (`settle_restored_poses`); test
+  `history::undoing_a_run_leaves_the_bodies_at_rest`, red before the fix.
+- *Adjust Last printed a drawn chain's whole path* at full f64 precision,
+  stretching the panel across the window. Read-only lists longer than four
+  items now read as a count (`6 values`), numbers at three decimals; test
+  `adjust_panel::a_long_path_reads_as_a_count_and_numbers_are_rounded`.
+
+**Found, not fixed** (for the orchestrator):
+1. **Bodies lose their fill after the chain tool lays a chain** (render).
+   Repro on lavapipe: start with a ground, a box and a circle
+   (`(spawn-ground 0 -2.5 0) (spawn-box -2 0 1 0.5) (spawn-circle 2 0 0.4)`),
+   pause, select the Chain tool and drag a path across the view (`ui.drag`,
+   120 steps). After release, the box and the circle that existed before draw
+   as outlines only; the ground plane disappears until the next edit; bodies
+   spawned afterwards are filled. The `chain` *operation* with the same path
+   does not do it. Not investigated further (mesh/material handles or the
+   depth slab are the first suspects); not confirmed on a real GPU.
+2. View > Debug opens its submenu on hover only; injected input cannot hover
+   without pressing, so the submenu was not shot here (6-3's PR has it).
+3. The body context menu is ~640 points tall at 720p (egui moves it up to
+   fit); with a joint or Scripts section it may not fit. A scroll area or a
+   shorter menu (B-2's task bar takes rows off it) is the fix.
+4. Small: "fluid drag (1/s)" carries its unit in the label where other
+   fields show it in the field; a static body's sensor row reads
+   "mass 0.00 kg" (S-2's readouts should say "static"); Settings > Air's
+   value column does not line up with Solver's.
+5. The first right-click right after closing a popup with Escape opened no
+   menu (a second one did); likely the injection timing, not reproduced.
