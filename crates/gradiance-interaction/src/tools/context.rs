@@ -59,6 +59,7 @@ use gradiance_core::states::{GameState, ToolState};
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::group::SelectionGroup;
+use gradiance_domain::joint::JointKind;
 use gradiance_domain::settings::{RenderSettings, SnapConfig, ToolDefaults};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::theme::{Ink, Stroke, active};
@@ -642,6 +643,8 @@ pub struct ToolWorld<'w, 's> {
     ids: Query<'w, 's, &'static StableId>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
     kinds: Query<'w, 's, &'static RigidBody, With<Body>>,
+    joints: Query<'w, 's, &'static gradiance_domain::joint::JointDef>,
+    index: Res<'w, gradiance_core::ids::IdIndex>,
 }
 
 impl ToolWorld<'_, '_> {
@@ -789,6 +792,49 @@ impl ToolWorld<'_, '_> {
             })
             .map(|(e, _)| e)
             .collect()
+    }
+
+    /// World anchors of the hinges that tie a selected body to something
+    /// **outside** the selection — a world pin's fixed point, or the anchor
+    /// on the far body of a hinge to an unselected one. Springs do not
+    /// tie a rotation, sliders forbid one, and a joint with both ends
+    /// inside the selection is internal: none of them contribute. The
+    /// rotate gesture pivots about one of these when there is one, so a
+    /// paused rotation of a jointed body turns about what holds it instead
+    /// of tearing the joint off its anchor.
+    pub fn hinge_anchors_outside(&self, selection: &Selection) -> Vec<Vec2> {
+        let selected = |id: Option<StableId>| id.and_then(|i| self.index.entity(i));
+        let mut out = Vec::new();
+        for def in &self.joints {
+            let a_in = selected(Some(def.body_a)).is_some_and(|e| selection.contains(e));
+            let b_in = selected(def.body_b).is_some_and(|e| selection.contains(e));
+            if a_in == b_in {
+                continue; // internal, or not the selection's joint
+            }
+            if !matches!(def.kind, JointKind::Hinge { .. }) {
+                continue;
+            }
+            // The fixed end's anchor is the pivot: a world pin's `anchor_b`
+            // already is the world point; otherwise the outside body's
+            // anchor, where the joint holds the two together.
+            let pivot = match def.body_b {
+                None => Some(def.anchor_b.value()),
+                Some(b) if a_in => self
+                    .index
+                    .entity(b)
+                    .and_then(|e| self.pose_of(e))
+                    .map(|pose| pose.pos + Vec2::from_angle(pose.rot).rotate(def.anchor_b.value())),
+                Some(_) => self
+                    .index
+                    .entity(def.body_a)
+                    .and_then(|e| self.pose_of(e))
+                    .map(|pose| pose.pos + Vec2::from_angle(pose.rot).rotate(def.anchor_a.value())),
+            };
+            if let Some(p) = pivot {
+                out.push(p);
+            }
+        }
+        out
     }
 }
 

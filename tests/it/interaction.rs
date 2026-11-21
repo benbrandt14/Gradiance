@@ -681,3 +681,188 @@ fn a_circle_dragged_near_a_neighbour_commits_the_radius_that_touches_it() {
     assert_eq!(kind, None);
     assert!((radius - 120.0).abs() < 1e-3, "r = {radius}");
 }
+
+// --- a paused rotation pivots about what holds the selection ----------
+//
+// A body pinned to the world (or hinged to an unselected one) used to
+// rotate about its centroid, tearing the joint off its anchor — the
+// solver answered with a large reaction force on resume. The right-drag
+// now turns about the joint anchor nearest the press.
+
+use gradiance::command::CommandStack;
+use gradiance::command::intent::SpawnJointIntent;
+use gradiance::domain::joint::{JointCommon, JointDef, JointKind};
+use gradiance::interaction::cursor::CursorWorldPos;
+use gradiance::interaction::selection::Selection;
+use gradiance::interaction::snap::SnappedCursor;
+use gradiance::scene::JointRecord;
+use gradiance::units::{Angle, Displacement};
+
+fn set_cursor(app: &mut App, p: Vec2) {
+    app.world_mut().insert_resource(CursorWorldPos(Some(p)));
+    app.world_mut().insert_resource(SnappedCursor {
+        raw: Some(p),
+        position: Some(p),
+        kind: None,
+    });
+}
+
+fn right_mouse(app: &mut App, down: bool) {
+    let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+    if down {
+        input.press(MouseButton::Right);
+    } else {
+        input.release(MouseButton::Right);
+    }
+}
+
+/// A world-pin hinge: `body` joined to the world at `world`.
+fn pin_at(app: &mut App, body: StableId, world: Vec2, local: Vec2) {
+    let def = JointDef {
+        kind: JointKind::Hinge {
+            limits: None,
+            motor: None,
+        },
+        common: JointCommon::default(),
+        body_a: body,
+        body_b: None,
+        anchor_a: Displacement(local),
+        anchor_b: Displacement(world),
+        rest_rot_a: Angle(0.0),
+        rest_rot_b: Angle(0.0),
+    };
+    app.world_mut().write_message(SpawnJointIntent {
+        record: JointRecord {
+            id: StableId::new(),
+            def,
+        },
+    });
+    app.update();
+}
+
+/// A right-drag rotates the selected body a quarter turn about the pin it
+/// hangs from: its centre travels with the turn, and the whole gesture is
+/// one undo step.
+#[test]
+fn a_paused_rotation_pivots_about_the_world_pin() {
+    let mut app = paused_app();
+    // A box at (10, 0), pinned to the world at the origin — big enough
+    // that a click well clear of the pin's glyph pick (its ring plus the
+    // pick radius reaches 30 units) still lands on the box.
+    let record = box_record(Vec2::new(10.0, 0.0), 60.0, 40.0);
+    let body = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    app.update();
+    pin_at(&mut app, body, Vec2::ZERO, Vec2::new(-10.0, 0.0));
+    // Snapping off, so a stationary click is stationary (the held body is
+    // excluded from object snap on release, and a press on a body snaps
+    // *onto* it: the two disagree by the snap delta otherwise) and the
+    // rotation angle is exactly what the cursor drew.
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::SnapConfig>()
+        .objects_enabled = false;
+    app.world_mut()
+        .resource_mut::<gradiance::domain::settings::GridSettings>()
+        .visible = false;
+    let before = app.world().resource::<CommandStack>().undo_len();
+    step(&mut app, 2);
+
+    // Select it, then right-press on it and drag a quarter turn: from
+    // angle 0 (the press, east of the pin) to angle 90° (north).
+    // Click the box clear of the pin's glyph: (35, 15) is 38 units out.
+    set_cursor(&mut app, Vec2::new(35.0, 15.0));
+    {
+        let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+        input.press(MouseButton::Left);
+    }
+    app.update();
+    {
+        let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+        input.release(MouseButton::Left);
+    }
+    app.update();
+    assert!(
+        app.world().resource::<Selection>().iter().any(|_| true),
+        "the box is selected"
+    );
+
+    // Right-press there and drag a quarter turn about the pin (the press
+    // sits at ~23°; its 90°-turned image is the release point).
+    set_cursor(&mut app, Vec2::new(35.0, 15.0));
+    right_mouse(&mut app, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(-15.0, 35.0));
+    app.update();
+    right_mouse(&mut app, false);
+    app.update();
+
+    // The centre turned about the pin: (10, 0) rotated 90° lands at
+    // (0, 10), and the body's angle is the quarter turn.
+    let pose = gradiance::core::units::PosRot::from_transform(
+        app.world()
+            .get::<Transform>(entity_of(&app, body).unwrap())
+            .unwrap(),
+    );
+    assert!(
+        (pose.pos - Vec2::new(0.0, 10.0)).length() < 1.0,
+        "the centre travelled with the turn about the pin ({})",
+        pose.pos
+    );
+    assert!(
+        (pose.rot - std::f32::consts::FRAC_PI_2).abs() < 0.02,
+        "a quarter turn about the pin ({})",
+        pose.rot
+    );
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        before + 1,
+        "one undoable rotation"
+    );
+
+    // Nothing holding a free body: the same gesture turns about the
+    // body's own centre instead (the pre-existing rule).
+}
+
+/// With nothing holding it, the same right-drag turns the body about its
+/// own centre: the position stays, only the angle moves.
+#[test]
+fn a_free_body_still_rotates_about_its_centroid() {
+    let mut app = paused_app();
+    let body = spawn_box(&mut app, Vec2::new(10.0, 0.0));
+
+    set_cursor(&mut app, Vec2::new(10.0, 0.0));
+    {
+        let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+        input.press(MouseButton::Left);
+    }
+    app.update();
+    {
+        let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+        input.release(MouseButton::Left);
+    }
+    app.update();
+
+    set_cursor(&mut app, Vec2::new(25.0, 0.0));
+    right_mouse(&mut app, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(10.0, 15.0));
+    app.update();
+    right_mouse(&mut app, false);
+    app.update();
+
+    let pose = gradiance::core::units::PosRot::from_transform(
+        app.world()
+            .get::<Transform>(entity_of(&app, body).unwrap())
+            .unwrap(),
+    );
+    assert!(
+        (pose.pos - Vec2::new(10.0, 0.0)).length() < 1.0,
+        "nothing holds it: the centre never moves ({})",
+        pose.pos
+    );
+    assert!(
+        (pose.rot - std::f32::consts::FRAC_PI_2).abs() < 0.02,
+        "but the quarter turn still applies ({})",
+        pose.rot
+    );
+}

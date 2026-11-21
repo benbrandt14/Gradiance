@@ -456,8 +456,15 @@ impl SelectGesture {
             .iter()
             .filter_map(|e| Some((e, world.id_of(e)?, world.pose_of(e)?)))
             .collect();
-        let pivot =
+        let centroid =
             bodies.iter().map(|(_, _, pose)| pose.pos).sum::<Vec2>() / bodies.len().max(1) as f32;
+        // Pivot about what holds the selection: a hinge or world pin tying
+        // it to something outside it (nearest the press when several), so
+        // a paused rotation turns about the joint instead of tearing it
+        // off its anchor — the "large reaction force on resume" the
+        // feedback named. Nothing holds it, and it turns about its
+        // centroid as before.
+        let pivot = rotation_pivot(p, centroid, &world.hinge_anchors_outside(selection));
         // Hold/exclusions wait for the deadzone: a plain right click must
         // leave the world untouched (context menu).
         *self = SelectGesture::Rotate {
@@ -801,5 +808,47 @@ fn push_shape_outline(
             pts.push(first);
         }
         out.polyline(pts, color);
+    }
+}
+
+/// The pivot a rotation turns about: the joint anchor nearest the press
+/// when a hinge or world pin holds the selection to something outside it,
+/// else its centroid. Pure, so the choice is unit-testable without a
+/// world; the caller supplies the candidate anchors
+/// ([`ToolWorld::hinge_anchors_outside`]).
+#[must_use]
+pub fn rotation_pivot(press: Vec2, centroid: Vec2, joint_anchors: &[Vec2]) -> Vec2 {
+    joint_anchors
+        .iter()
+        .min_by(|a, b| {
+            a.distance_squared(press)
+                .total_cmp(&b.distance_squared(press))
+        })
+        .copied()
+        .unwrap_or(centroid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rotation_pivot;
+    use bevy::prelude::*;
+
+    /// The nearest joint anchor wins; with none, the centroid stands.
+    #[test]
+    fn the_pivot_is_the_nearest_holding_anchor_or_the_centroid() {
+        let centroid = Vec2::new(10.0, 0.0);
+        let anchors = [Vec2::ZERO, Vec2::new(30.0, 0.0)];
+        // The press is nearer the pin at the origin.
+        assert_eq!(
+            rotation_pivot(Vec2::new(8.0, 2.0), centroid, &anchors),
+            Vec2::ZERO
+        );
+        // The press is nearer the far anchor.
+        assert_eq!(
+            rotation_pivot(Vec2::new(22.0, 0.0), centroid, &anchors),
+            Vec2::new(30.0, 0.0)
+        );
+        // Nothing holds the selection: the centroid.
+        assert_eq!(rotation_pivot(Vec2::ZERO, centroid, &[]), centroid);
     }
 }
