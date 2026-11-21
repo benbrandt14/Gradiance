@@ -118,7 +118,7 @@ fn run_with_ids(app: &mut App, ids: u64, source: &str) {
 /// - bodies 0, 1, 2: circles of radius 0.5 at x = -0.4, 0, 0.4 (y = 1),
 ///   overlapping pairwise, so every boolean has an effect;
 /// - bodies 3, 4: apart at x = 3 and 5, grouped together; body 3 is pinned
-///   to the world by joint 0;
+///   to the world by joint 0, whose motor speed the binding `drive` names;
 /// - one undone spawn on the redo stack, so `redo` has a step to take.
 pub(crate) fn fixture() -> App {
     let mut app = headless_app_with(|app| {
@@ -135,6 +135,8 @@ pub(crate) fn fixture() -> App {
          (spawn-circle 3 1 0.5) (spawn-circle 5 1 0.5))",
     );
     run_with_ids(&mut app, 20, "(begin (hinge 3 -1 3 1) (group (list 3 4)))");
+    // A binding, so `signal.unbind`'s example has one to remove.
+    run_with_ids(&mut app, 25, "(bind \"drive\" \"t\" \"motor-speed\" 0)");
     run_with_ids(&mut app, 30, "(spawn-circle 0 6 0.5)");
     run_with_ids(&mut app, 40, "(undo)");
     // A saved workspace, so `layout.workspace.delete`'s example has one.

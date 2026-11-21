@@ -1,6 +1,6 @@
 # Signal bind and unbind operations
 Phase Q (follow-ups) · N-1 Outcome "no `signal.bind` / `signal.unbind`
-operation" (also N-2, N-3) · status: after Q-1
+operation" (also N-2, N-3) · status: done
 
 Written by the planning thread, 2026-11-20, on `523ed82`.
 
@@ -121,4 +121,21 @@ on `gradiance-graph`.
 
 ## Outcome
 
-To be filled by the worker at handoff.
+Done (2026-11-21, branch `claude/jolly-noether-su0a6h`).
+
+- `SignalSink::NAMES` / `name()` / `of_name()` / `subject_of()` and the new
+  `SinkSubject` (domain): one table for both directions, round-trip test.
+- `signal.bind` `(bind name source sink [target] [of] [min] [max])` and
+  `signal.unbind` `(unbind name)` in `gradiance-script/src/ops.rs`, config
+  seam, undo `settings`; `EditorRequest::Bind` / `Unbind` upsert / remove
+  in `SignalBindings`. A new `BindingNames` context mirror lets `unbind`
+  refuse an unknown name. `body_of` / `joint_of` are now `pub` and a new
+  `node_of` resolves a node target (command ops; no new edge).
+- The example uses every param (the registry conformance test needs each
+  declared field in the example, and `null` has no Scheme form), so it binds
+  `speed` of body 0 to joint 0's motor. The conformance fixture gains one
+  binding (`drive`) for `unbind`'s example.
+- `tests/it/signal_bind.rs` (4 tests). `actuators.rs` and `graph_keys.rs`
+  bind through the verb.
+- Learned: the undo check must run paused. A playing motor scene records a
+  `simulate` step on top of the settings step.

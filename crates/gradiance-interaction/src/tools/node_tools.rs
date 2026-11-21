@@ -246,8 +246,10 @@ impl ManipTool for LaserTool {
                     .flatten()
                     .and_then(|e| world.id_of(e))
                     .filter(|id| Some(*id) != rides);
+                let name = world.free_laser_name();
                 let record = node_record(world, anchor, |body_rot| {
                     NodeKind::Laser(Laser {
+                        name,
                         angle: gradiance_units::Angle(aim - body_rot),
                         target,
                         ..Laser::default()

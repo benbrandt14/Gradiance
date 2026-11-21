@@ -17,10 +17,7 @@ use gradiance::interaction::graph_keys::GraphKeys;
 use gradiance::op::invoke;
 use gradiance::prelude::*;
 use gradiance::script::bridge::{ScriptInputs, ScriptLog};
-use gradiance::signal::{
-    BlockOp, ComputedSignals, GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap,
-    SignalSink, SignalSource,
-};
+use gradiance::signal::{BlockOp, ComputedSignals, SignalBus};
 use gradiance::units::{Angle, AngularVelocity as Omega, Displacement};
 use serde_json::json;
 
@@ -80,17 +77,12 @@ fn run(app: &mut App, source: &str) {
 }
 
 fn bind_motor(app: &mut App, source: &str, joint: StableId) {
-    app.world_mut()
-        .resource_mut::<SignalBindings>()
-        .0
-        .push(SignalBinding {
-            name: "drive".into(),
-            source: SignalSource::Named(source.into()),
-            map: SignalMap::default(),
-            curve: None,
-            gradient: GradientSpec::default(),
-            sink: SignalSink::MotorSpeed(joint),
-        });
+    invoke(
+        app.world_mut(),
+        "signal.bind",
+        json!({"name": "drive", "source": source, "sink": "motor-speed", "target": joint.0.to_string()}),
+    )
+    .expect("bind");
 }
 
 fn bus(app: &App, name: &str) -> Option<f32> {

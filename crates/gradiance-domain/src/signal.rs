@@ -279,6 +279,20 @@ pub enum SignalSink {
     Thrust(StableId),
 }
 
+/// The kind of object a [`SignalSink`] is set on, by name
+/// ([`SignalSink::NAMES`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SinkSubject {
+    /// Nothing (`plot`).
+    None,
+    /// A body (`fill`, `tracer`, `field`, `gravity`).
+    Body,
+    /// A joint (`motor-speed`, `motor-cap`).
+    Joint,
+    /// A behavior node (`thrust`).
+    Node,
+}
+
 /// The physical quantity an actuator sink sets, by what it is set on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActuatorTarget {
@@ -572,6 +586,63 @@ impl SignalSink {
             Self::GravityScale(_) | Self::Fill(_) | Self::TracerColor(_) | Self::Plot => {
                 D::Dimensionless
             }
+        }
+    }
+
+    /// The sink names an operation takes (`signal.bind`), each with the kind
+    /// of object it names. One table for both directions: [`name`](Self::name)
+    /// and [`of_name`](Self::of_name) read it.
+    pub const NAMES: [(&'static str, SinkSubject); 8] = [
+        ("fill", SinkSubject::Body),
+        ("tracer", SinkSubject::Body),
+        ("plot", SinkSubject::None),
+        ("motor-speed", SinkSubject::Joint),
+        ("motor-cap", SinkSubject::Joint),
+        ("field", SinkSubject::Body),
+        ("gravity", SinkSubject::Body),
+        ("thrust", SinkSubject::Node),
+    ];
+
+    /// The sink's operation name (`motor-speed`), a row of [`NAMES`](Self::NAMES).
+    pub const fn name(&self) -> &'static str {
+        Self::NAMES[self.name_index()].0
+    }
+
+    /// The kind of object the sink named `name` takes, `None` for an unknown
+    /// name.
+    pub fn subject_of(name: &str) -> Option<SinkSubject> {
+        Self::NAMES
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|&(_, subject)| subject)
+    }
+
+    /// The sink named `name` on the object `id` (ignored by `plot`). `None`
+    /// for an unknown name.
+    pub fn of_name(name: &str, id: StableId) -> Option<Self> {
+        Some(match name {
+            "fill" => Self::Fill(id),
+            "tracer" => Self::TracerColor(id),
+            "plot" => Self::Plot,
+            "motor-speed" => Self::MotorSpeed(id),
+            "motor-cap" => Self::MotorCap(id),
+            "field" => Self::FieldStrength(id),
+            "gravity" => Self::GravityScale(id),
+            "thrust" => Self::Thrust(id),
+            _ => return None,
+        })
+    }
+
+    const fn name_index(&self) -> usize {
+        match self {
+            Self::Fill(_) => 0,
+            Self::TracerColor(_) => 1,
+            Self::Plot => 2,
+            Self::MotorSpeed(_) => 3,
+            Self::MotorCap(_) => 4,
+            Self::FieldStrength(_) => 5,
+            Self::GravityScale(_) => 6,
+            Self::Thrust(_) => 7,
         }
     }
 
@@ -1119,6 +1190,35 @@ mod tests {
         );
         assert_eq!(SignalSink::Thrust(id).dimension(false), D::Force);
         assert_eq!(SignalSink::Thrust(id).label(), "thrust");
+    }
+
+    #[test]
+    fn every_sink_round_trips_through_its_name() {
+        let id = StableId::new();
+        let all = [
+            SignalSink::Fill(id),
+            SignalSink::TracerColor(id),
+            SignalSink::Plot,
+            SignalSink::MotorSpeed(id),
+            SignalSink::MotorCap(id),
+            SignalSink::FieldStrength(id),
+            SignalSink::GravityScale(id),
+            SignalSink::Thrust(id),
+        ];
+        assert_eq!(all.len(), SignalSink::NAMES.len());
+        for sink in all {
+            assert_eq!(SignalSink::of_name(sink.name(), id), Some(sink.clone()));
+            let subject = SignalSink::subject_of(sink.name()).expect("named");
+            let expected = match sink.actuator() {
+                Some(ActuatorTarget::Joint(_)) => SinkSubject::Joint,
+                Some(ActuatorTarget::Node(_)) => SinkSubject::Node,
+                None if sink == SignalSink::Plot => SinkSubject::None,
+                Some(ActuatorTarget::Body(_)) | None => SinkSubject::Body,
+            };
+            assert_eq!(subject, expected, "{}", sink.name());
+        }
+        assert_eq!(SignalSink::of_name("motor", id), None);
+        assert_eq!(SignalSink::subject_of("motor"), None);
     }
 
     #[test]

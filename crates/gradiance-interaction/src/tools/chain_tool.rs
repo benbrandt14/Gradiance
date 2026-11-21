@@ -21,6 +21,7 @@ use gradiance_core::ids::StableId;
 use gradiance_domain::settings::{ChainPins, ToolDefaults};
 use gradiance_domain::theme::Role;
 use gradiance_geometry::chain::chain_points;
+use gradiance_geometry::sketch::rdp;
 
 /// End-attachment tolerance in screen pixels (the rod tool's).
 const ATTACH_TOLERANCE_PX: f32 = 8.0;
@@ -28,6 +29,10 @@ const ATTACH_TOLERANCE_PX: f32 = 8.0;
 /// (screen pixels): smooth enough for a curve, few enough to keep the
 /// operation's parameters short.
 const SAMPLE_PX: f32 = 4.0;
+/// The committed stroke is thinned to within this many screen pixels (the
+/// sketch tool's), so a long stroke is a short `body.chain` call and a short
+/// Adjust Last entry (brief Q-3).
+const THIN_PX: f32 = 1.0;
 
 /// In-progress chain gesture: the stroke so far (empty when idle).
 #[derive(Resource, Default, Debug)]
@@ -80,7 +85,7 @@ impl ManipTool for ChainDraft {
                 }
             }
             GesturePhase::Released if !self.path.is_empty() => {
-                let path = self.stroke_to(ctx.cursor);
+                let path = rdp(&self.stroke_to(ctx.cursor), THIN_PX * ctx.cam_scale);
                 self.path.clear();
                 let tol = ATTACH_TOLERANCE_PX * ctx.cam_scale;
                 if let Some(commit) = build_chain(path, &ctx.defaults, tol, world) {
@@ -191,6 +196,46 @@ mod tests {
         let stroke = draft.stroke_to(Some(Vec2::new(0.25, 0.0)));
         assert_eq!(stroke.len(), 3);
         assert_eq!(draft.stroke_to(Some(Vec2::new(0.2, 0.0))).len(), 2);
+    }
+
+    /// Distance from `p` to the polyline `path`.
+    fn distance_to(path: &[Vec2], p: Vec2) -> f32 {
+        path.windows(2)
+            .map(|w| {
+                let (a, b) = (w[0], w[1]);
+                let ab = b - a;
+                let t = ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0);
+                p.distance(a + ab * t)
+            })
+            .fold(f32::INFINITY, f32::min)
+    }
+
+    #[test]
+    fn a_committed_stroke_is_thinned_within_a_pixel() {
+        let px = 0.01;
+        // A straight 4 m drag sampled every 4 px: two points survive.
+        let straight: Vec<Vec2> = (0..=100).map(|i| Vec2::new(i as f32 * 0.04, 0.0)).collect();
+        assert_eq!(rdp(&straight, THIN_PX * px).len(), 2);
+        // A quarter circle of 2 m: far fewer points, and every link point
+        // the thinned stroke lays lies within a pixel of the raw stroke.
+        let arc: Vec<Vec2> = (0..=80)
+            .map(|i| {
+                let a = i as f32 / 80.0 * std::f32::consts::FRAC_PI_2;
+                Vec2::new(a.cos(), a.sin()) * 2.0
+            })
+            .collect();
+        let thin = rdp(&arc, THIN_PX * px);
+        assert!(
+            thin.len() < arc.len() / 2,
+            "{} of {}",
+            thin.len(),
+            arc.len()
+        );
+        let links = chain_points(&thin, 0.25).expect("a chain");
+        for p in links {
+            let d = distance_to(&arc, p);
+            assert!(d <= THIN_PX * px + 1e-4, "a hinge {d} m off the stroke");
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@
 Phase Q (follow-ups) · N-8 Outcome "no laser block on the node canvas",
 "the target can only be set by the tool or the operation", "two lasers with
 one name share one bus value"; N-1 Outcome "the joint block has no 'add to
-node editor' entry" · status: after Q-3
+node editor' entry" · status: done
 
 Written by the planning thread, 2026-11-20, on `523ed82`.
 
@@ -102,4 +102,32 @@ Written by the planning thread, 2026-11-20, on `523ed82`.
 
 ## Outcome
 
-To be filled by the worker at handoff.
+Done (2026-11-21). Lavapipe review on #305: the block reads hit 1.00 and
+distance 5.40 m live and wires into a gravity pin; it sits in the producer
+column (first shot put it in the body column, its wire running down into
+the block it fed). The context menu's Mirror rows were clicked through
+`ui.click` on lavapipe and recorded `body.mirror_h`.
+
+- `NodeData::Laser { id, name }` (outputs `hit`, `distance` with unit m,
+  live readouts off the bus). `source_pin` now takes the live lasers
+  (`NodeGraph::lasers`, refreshed each frame in `prepare`): a `Named`
+  source matching `<name>` or `<name>.distance` resolves to the block's pin
+  0 or 1 before the param fallback. Operand wires resolve the same way.
+  `collect_desired` → `node_blocks` shows a laser read by a wire or a
+  modulation block, riding a body on the canvas, or added.
+- **Add to node editor** for a joint (joint section) and for a thruster or
+  laser (node menu). One `added` set holds bodies, joints and nodes
+  (`NodeGraph::add`). A joint or node block that was added offers
+  "Remove from node editor".
+- **Target from the selection.** `node_kind_editor` takes `pick` (the one
+  other selected non-node object). The laser row's "selection" button sets
+  `target` as one edit. The inspector and the node menu pass a pick; the
+  Signals list passes none.
+- **Free names:** `laser::free_name` (`laser`, `laser2`, …), used by the
+  Laser tool through `ToolWorld::free_laser_name`. The operation keeps its
+  name as given.
+- Tests: `a_laser_block_claims_its_bus_names` (node_graph), a kittest
+  button test (widgets), `free_name` unit test, and
+  `ui_input::two_drawn_lasers_take_two_names`.
+- Not done: a CI test for the context-menu rows (no headless egui pass
+  reaches the menu; checked by hand on lavapipe instead).

@@ -87,7 +87,7 @@ fn node_block(
         return;
     };
     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-    if let Some(next) = widgets::node_kind_editor(ui, "list", &kind) {
+    if let Some(next) = widgets::node_kind_editor(ui, "list", &kind, None) {
         edits.write(gradiance_command::intent::PropertyEditIntent {
             changes: vec![gradiance_command::property::PropertyChange {
                 id,

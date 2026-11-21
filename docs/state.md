@@ -2,9 +2,11 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-21 (gizmo polish merged, #304: the context menu's first right-click survives its egui sizing pass and every menu row is remote-clickable, nodes drag (release on a body re-attaches, on empty canvas deletes), cut/booleans rewire or delete attached nodes, and a paused rotate pivots about the nearest external hinge/pin; two follow-ups named in its commits: a stationary click can move a body by a snap delta, and joints are not yet draggable with the Drag tool; before that Q-1 done: review answers ingested, undone runs leave bodies at rest, Adjust Last lists summarised; one render bug found — fills lost after the chain tool, Q-1 Outcome; before that the roadmap unified and the VectorCraft port planned: phases C, E, H, T, B; before that Phase Q planned; before that the parity audit and Phase S briefs (#298); before that the G-1 handoff (#297); before that the G-0 plan (#296); before that the J-2 handoff (#293); before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects` (#300); before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
-3f211ab; six review answers ingested; order per
-`docs/unified-surface-plan.md` § 10 and § 13).
+Last updated: 2026-11-21 (Phase Q worked through in one session on branch
+`claude/jolly-noether-su0a6h`, one stacked branch for Q-2..Q-8, no PR yet:
+Q-2, Q-3, Q-4, Q-5, Q-6, Q-8 done; Q-7 returned (avian cause, ignored
+repro); before that gizmo polish merged, #304; before that Q-1 done; the
+earlier history is in git).
 
 ## Position
 
@@ -26,32 +28,23 @@ Last updated: 2026-11-21 (gizmo polish merged, #304: the context menu's first ri
   the external UI project). Every new canvas brief names its feel row in
   `docs/interaction-feel.md` (Algodoo play, Blender commands, Illustrator
   drawing, CAD measuring).
-- **Now:** **Phase Q (follow-ups)**, planned per the owner's choice on
-  2026-11-20 ("follow-ups first", before the next planning stage). The
-  G-0 decision (#296) and the G-1 graph IR crate (#297) are merged as
-  planning artifacts: nothing in the app uses `gradiance-graph` yet —
-  do not depend on it until Phase Q is done; 3D-0 is on hold. Briefs
-  `docs/briefs/Q-*`, in
-  order: **Q-1** Phase N on screen (screenshot every Phase N tool, glyph,
-  block and settings row, fix what is wrong; ingest the waiting answers
-  `toon-ramp` = hard bands, `status-bar-and-pie` = on) — **done**
-  (2026-11-21; Outcome lists five "found, not fixed" items — the first, fills
-  lost after the chain tool lays a chain, needs a brief: proposed **Q-9**, before
-  Phase S);
-  **Q-2** `signal.bind` / `signal.unbind` on today's name-based bindings — **next**;
-  **Q-3** File ▸ New keeps the workstation config, mirror rows in the
-  context menu, thinned chain strokes; **Q-4** laser block on the node
-  canvas, "Add to node editor" for joints and nodes, laser target from the
-  selection, free laser names; **Q-5** a fluid acts only in its depth
-  band, a water surface line, a translucent sea; **Q-6** aerodynamic
-  torque and angular drag (hull panel drag); **Q-7** chain link buzz next
-  to a world pin (investigation); **Q-8** a derived contour per body (no
-  per-frame `polygonize`). Each is "after" the one before it. Seven plan
-  decisions in `archive.ron` (`phase-q-order`, `signal-bind-shape`,
-  `new-scene-keeps-workstation`, `fluid-depth-scope` (supersedes
-  `fluid-scope`), `fluid-surface-look`, `aero-panel-drag`,
-  `laser-block`); no new review question (the water surface is reviewed
-  on the Q-5 PR screenshots).
+- **Now:** **Phase Q (follow-ups)** is worked through on
+  `claude/jolly-noether-su0a6h` (PR #305; fmt, clippy, doc and the full `cargo test --workspace` green locally, CI not yet run;
+  the owner opens or asks for the PR). Each brief's Outcome is filled:
+  **Q-2** `bind`/`unbind` operations (done); **Q-3** New keeps the
+  workstation, Mirror rows in the context menu, thinned chain paths (done);
+  **Q-4** laser block, Add to node editor for joints and nodes, target from
+  the selection, free laser names (done; reviewed on lavapipe);
+  **Q-5** fluids act in their depth band, the water surface line, the
+  translucent sea (done; shots on #305, `fluid-surface-look` awaits the
+  owner's verdict); **Q-6** panel drag with aerodynamic torque and angular drag
+  (done; two points per edge, not one, see Outcome); **Q-7** returned: the
+  buzz is avian reporting a standing 1.5 mm joint correction as velocity
+  (ignored repro, `docs/upstream-watch.md`); **Q-8** remainder done
+  (`selection_box` reads `ShapeContours`; P-1 had built the cache).
+  **Next:** proposed **Q-9**
+  (Q-1 Outcome: fills lost after the chain tool), which still needs a
+  brief; then **Phase S** (S-1..S-9).
   **Before that:** **G-1 the graph IR crate is done** (merged #297, on the G-0
   decision #296): the new pure
   crate `gradiance-graph` (`graph → core, domain`; DAG row and serde
@@ -371,6 +364,10 @@ Last updated: 2026-11-21 (gizmo polish merged, #304: the context menu's first ri
     real slider widget is retained (UI/render).
   - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
     reject older files, regenerate goldens, no migrations.
+  - **Open a PR at the end of every feature cycle** (2026-11-21), so CI
+    has time to run, and review new features on lavapipe screenshots
+    (`tools/screenshot/`) to the needed polish before hand-off; post what
+    the shots show on the PR.
   - **Merge freely when CI is green** and no tests or checks were removed to
     get there (2026-11-16).
   - **Orchestrator rotation at gates is skipped.**

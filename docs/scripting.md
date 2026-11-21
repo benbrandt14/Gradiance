@@ -324,6 +324,15 @@ across and ±3.5 m up and down); angles are radians.
                              ; other signals + `t`, e.g. "t sin amp *"
 (defkey name key [negative]) ; a key input: 1 while key is held in play,
                              ; -1 for negative (brief N-2), e.g. "E" "Q"
+(bind name source sink [target] [of] [min] [max])
+                             ; bind a bus signal (or, with of, a quantity
+                             ; read off those subjects) to a sink: fill,
+                             ; tracer, plot, motor-speed, motor-cap, field,
+                             ; gravity, thrust on target (a joint for motor-*,
+                             ; a node for thrust, else a body); brief Q-2
+                             ; (bind "spin" "osc" "motor-speed" 0)
+                             ; (bind "v" "speed" "plot" -1 (list 0))
+(unbind name)                ; remove a binding; the authored value returns
 (label body name)            ; name a body in the workspace (viewport tag);
                              ; body is a spawn's return value (or ans)
 

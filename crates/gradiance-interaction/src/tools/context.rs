@@ -639,15 +639,26 @@ pub struct ToolWorld<'w, 's> {
     physics: PhysicsQueries<'w, 's>,
     hit: super::HitQuery<'w, 's>,
     shapes: Query<'w, 's, (&'static ShapeDef, &'static Transform), With<Body>>,
+    contours: Query<'w, 's, &'static gradiance_geometry::polygonize::ShapeContours, With<Body>>,
     centers: Query<'w, 's, (Entity, &'static Transform), With<Body>>,
     ids: Query<'w, 's, &'static StableId>,
     groups: Query<'w, 's, (Entity, &'static SelectionGroup), With<Body>>,
     kinds: Query<'w, 's, &'static RigidBody, With<Body>>,
     joints: Query<'w, 's, &'static gradiance_domain::joint::JointDef>,
+    node_kinds: Query<'w, 's, &'static gradiance_domain::node::NodeKind>,
     index: Res<'w, gradiance_core::ids::IdIndex>,
 }
 
 impl ToolWorld<'_, '_> {
+    /// The bus name a new laser takes: the first free one of `laser`,
+    /// `laser2`, … (brief Q-4).
+    pub fn free_laser_name(&self) -> String {
+        gradiance_domain::laser::free_name(self.node_kinds.iter().filter_map(|kind| match kind {
+            gradiance_domain::node::NodeKind::Laser(laser) => Some(laser.name.as_str()),
+            _ => None,
+        }))
+    }
+
     /// The topmost authored body at a world point (front layer wins; the
     /// infinite ground sorts last).
     pub fn topmost_body_at(&self, p: Vec2) -> Option<Entity> {
@@ -740,7 +751,7 @@ impl ToolWorld<'_, '_> {
     /// The selection's oriented bounding box in `frame`, if anything scalable
     /// is selected.
     pub fn selection_box(&self, selection: &Selection, frame: ScaleFrame) -> Option<SelectionBox> {
-        selection_box(selection, frame, &self.shapes)
+        selection_box(selection, frame, &self.shapes, &self.contours)
     }
 
     /// Bodies fully inside the axis-aligned box (the "no partials" rule for

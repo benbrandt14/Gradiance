@@ -397,3 +397,58 @@ fn a_chain_of_many_links_swings_without_coming_apart() {
     assert!(fastest < 25.0, "fastest link {fastest} m/s");
     assert!(worst_gap < 0.02, "worst hinge gap {worst_gap} m");
 }
+
+/// A drawn chain commits a thinned path (brief Q-3): a long straight drag
+/// sampled every few pixels records two points in its `body.chain` call.
+#[test]
+fn a_drawn_straight_chain_records_two_path_points() {
+    let mut app = paused_app();
+    let path: Vec<Vec2> = (0..=60)
+        .map(|i| Vec2::new(-1.5 + i as f32 * 0.05, 1.0))
+        .collect();
+    draw_chain(&mut app, &path);
+    let params = app
+        .world()
+        .resource::<LastOp>()
+        .0
+        .as_ref()
+        .map(|r| r.call.params.clone())
+        .expect("the chain call");
+    let flat = params["path"].as_array().expect("a path").len();
+    assert_eq!(flat, 4, "two points, x and y each: {params}");
+}
+
+/// Brief Q-7: a chain pinned to the world at both ends comes to rest. After
+/// it settles, no link moves faster than 0.02 m/s over a whole second.
+///
+/// Ignored: the first link at each pin keeps a steady *reported* velocity
+/// (0.44 m/s and 1.17 rad/s at the left pin) while its pose is frozen to
+/// 1e-7 m. The pin hinge stays stretched 1.5 mm under the chain's weight and
+/// avian's joint solve reports that standing correction as velocity. Not
+/// drag, sleeping, contacts or the pin's hierarchy (each ruled out, brief
+/// Q-7 Outcome); recorded in `docs/upstream-watch.md`.
+#[test]
+#[ignore = "avian reports a standing joint correction as velocity (brief Q-7)"]
+fn a_settled_chain_has_no_buzzing_link() {
+    let mut app = headless_app();
+    app.world_mut().resource_mut::<SimSettings>().linear_drag = 10.0;
+    app.update();
+    invoke(
+        &mut app,
+        "body.chain",
+        json!({"path": [-2.0, 0.0, 0.0, -1.5, 2.0, 0.0], "link": 0.25, "width": 0.06,
+               "a": -1, "b": -1, "pins": "world"}),
+    );
+    step(&mut app, 600);
+    let mut fastest = 0.0_f32;
+    for _ in 0..60 {
+        step(&mut app, 1);
+        fastest = app
+            .world_mut()
+            .query_filtered::<&LinearVelocity, With<Body>>()
+            .iter(app.world())
+            .map(|v| v.0.length())
+            .fold(fastest, f32::max);
+    }
+    assert!(fastest < 0.02, "fastest link {fastest} m/s");
+}

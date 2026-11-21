@@ -1,7 +1,7 @@
 # Fluid by depth band, and a water surface
 Phase Q (follow-ups) · N-7 Outcome "a fluid acts across depth bands", "no
 surface drawing", "a half-plane sea draws as the ground does, not
-translucent" · status: after Q-4
+translucent" · status: done
 
 Written by the planning thread, 2026-11-20, on `523ed82`.
 
@@ -101,4 +101,35 @@ Scenes from before this brief that have a pool and floaters in one band
 
 ## Outcome
 
-To be filled by the worker at handoff.
+Done (2026-11-21). Lavapipe review on #305: a pool with floaters (squares
+at half density settle corner-down, the known stable pose), two boxes in
+band 0.3 m falling through the pool to the ground behind it, and a sea with
+a plank and a ball whose submerged halves show through. The shader change
+runs. `fluid-surface-look` awaits the owner's verdict on those shots.
+
+- **Depth:** `apply_buoyancy` reads both sides' `CollisionLayers` and skips
+  a pair whose memberships share no bit (a missing layer reads as all
+  bits). A sea is a half-plane, whose layers are all bits, so it holds every
+  band. Test `a_body_in_another_band_passes_the_pool_by` (free fall in
+  another band; floats half submerged in the pool's band).
+- **Surface:** `geometry::submerge::surface_edges(contours, up)` is pure and
+  allocation-free (outward normal within 60° of up, `SURFACE_COS`). It reads
+  the cached `ShapeContours` per frame (`O(V)`, no contour), so the brief's
+  "build where FluidRegion is built" was not needed: a fluid that turns
+  keeps the right surface for free. `render::decorations::draw_fluid_surfaces`
+  draws it in the fill lightened 75 % toward white (45 % read darker than
+  the translucent fill on lavapipe) (`surface_colour`),
+  opaque, on the overlay gizmos. A sea draws ±5 km along its surface.
+- Unit tests: box top, gravity sideways, a tilted box, U tank, air pocket.
+  Note: a U-shaped *fluid body* also has its channel floor facing up, so it
+  gives three edges (two rims and the floor), not two.
+- **Translucent sea:** `rebuild_ground` blends a fluid half-plane at
+  `FLUID_OPACITY` (`AlphaMode::Blend`). `plane.wesl` now keeps the
+  material's alpha and fades it to opaque in the horizon fog (opaque grounds
+  are unchanged). A ground that stops being a fluid turns opaque again
+  (`RemovedComponents<Fluid>`).
+- The line draws over floaters in the fluid's own band (it is the water's
+  front face; the translucent fill tints their submerged halves the same
+  way), kept.
+- Learned: `group.create` with one target makes no group (one body is not
+  a group), so a review scene that moves one body's depth needs two.

@@ -17,12 +17,18 @@
 use crate::actions::{ScriptAction, ScriptActions};
 use crate::bridge::WorkspaceLabels;
 use bevy::prelude::*;
+use gradiance_command::ops::{body_of, joint_of, node_of};
+use gradiance_command::snapshot::SceneSnapshot;
 use gradiance_core::ids::StableId;
 use gradiance_core::script_tools::{ScriptToolSpec, ScriptTools};
-use gradiance_domain::signal::{BlockOp, ComputedSignal, SignalExpr, SignalParam};
+use gradiance_domain::quantity::{self, Subject};
+use gradiance_domain::signal::{
+    BlockOp, ComputedSignal, GradientSpec, SignalBinding, SignalBindings, SignalExpr, SignalMap,
+    SignalParam, SignalSink, SignalSource, SinkSubject, Subjects,
+};
 use gradiance_op::{
-    OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Value,
-    json,
+    OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target,
+    Value, json,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -58,6 +64,10 @@ pub enum EditorRequest {
     Param(SignalParam),
     /// Declare (or update, by name) a computed signal.
     Computed(ComputedSignal),
+    /// Add (or replace, by name) a signal binding (`signal.bind`, brief Q-2).
+    Bind(SignalBinding),
+    /// Remove the binding of this name (`signal.unbind`).
+    Unbind(String),
     /// Write recorded signal history as CSV (`signal.export`, brief R-1).
     Export {
         /// The file.
@@ -78,6 +88,11 @@ pub struct SignalValues(pub HashMap<String, f64>);
 #[derive(Debug, Clone, Default)]
 pub struct SignalHistories(pub HashMap<String, Vec<(f32, f32)>>);
 
+/// The names of the scene's signal bindings, as a read-only context mirror
+/// (`unbind` refuses a name that binds nothing).
+#[derive(Debug, Clone, Default)]
+pub struct BindingNames(pub Vec<String>);
+
 /// Registers this layer's operations, the signal mirror, the request
 /// message and the system that applies it.
 pub(crate) fn install(app: &mut App) {
@@ -91,6 +106,8 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<DefParam>();
         registry.register::<DefSignal>();
         registry.register::<DefKey>();
+        registry.register::<Bind>();
+        registry.register::<Unbind>();
         registry.register::<SignalHistory>();
         registry.register::<SignalExport>();
     }
@@ -102,6 +119,11 @@ pub(crate) fn install(app: &mut App) {
 
 /// Publishes the signal bus's values into a new operation context.
 fn fill_signal_mirror(world: &mut World, ctx: &mut OpContext) {
+    if let Some(bindings) = world.get_resource::<SignalBindings>() {
+        ctx.insert(BindingNames(
+            bindings.0.iter().map(|b| b.name.clone()).collect(),
+        ));
+    }
     if let Some(bus) = world.get_resource::<gradiance_signal::SignalBus>() {
         ctx.insert(SignalValues(
             bus.entries()
@@ -412,6 +434,176 @@ impl Operation for DefKey {
     }
 }
 
+/// Bind a signal to a sink (brief Q-2): what a wire on the node canvas or a
+/// row of the Signals list makes. Scene content with one settled `settings`
+/// undo step, like [`DefSignal`].
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct Bind {
+    /// The binding's name (unique: re-binding a name replaces it); its value
+    /// publishes on the bus under this name.
+    pub name: String,
+    /// A bus signal's name, or with `of` a catalog quantity's name.
+    pub source: String,
+    /// The sink: `fill`, `tracer`, `plot`, `motor-speed`, `motor-cap`,
+    /// `field`, `gravity` or `thrust`.
+    pub sink: String,
+    /// The sink's object: a joint for the motor sinks, a node for `thrust`,
+    /// a body otherwise; ignored by `plot`.
+    pub target: Option<Target>,
+    /// The quantity's subjects when `source` is a catalog quantity: one body,
+    /// one joint (a `joint-*` quantity) or two bodies (`distance`).
+    pub of: Option<Vec<Target>>,
+    /// The value mapped to the colour ramp's start (default 0).
+    pub min: Option<f64>,
+    /// The value mapped to the ramp's end (default 500).
+    pub max: Option<f64>,
+}
+
+impl Operation for Bind {
+    const META: OpMeta = OpMeta {
+        id: "signal.bind",
+        lisp: "bind",
+        doc: "Bind a signal to a sink: source is a bus signal, or with of (a list of the quantity's subjects) a catalog quantity; sink is fill, tracer, plot, motor-speed, motor-cap, field, gravity or thrust on target (a joint for motor-*, a node for thrust, a body otherwise; plot takes none). min/max map a colour sink's ramp; an actuator takes the raw value. Re-binding a name replaces it.",
+        seam: Seam::Config,
+        menu: None,
+        chord: None,
+        undo: Some(gradiance_command::intent::name::SETTINGS),
+        example: r#"{"name": "spin", "source": "speed", "sink": "motor-speed", "target": 0, "of": [0], "min": 0, "max": 2}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let name = self.name.trim().to_owned();
+        if name.is_empty() {
+            return Err(OpError::Invalid("the name is empty".to_owned()));
+        }
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let source = match &self.of {
+            None => SignalSource::Named(self.source.clone()),
+            Some(of) => quantity_source(ctx, scene, &self.source, of)?,
+        };
+        let subject = SignalSink::subject_of(&self.sink).ok_or_else(|| {
+            let names: Vec<&str> = SignalSink::NAMES.iter().map(|(n, _)| *n).collect();
+            OpError::Invalid(format!(
+                "unknown sink \"{}\"; sinks: {}",
+                self.sink,
+                names.join(", ")
+            ))
+        })?;
+        let id = match subject {
+            SinkSubject::None => StableId(uuid::Uuid::nil()),
+            other => {
+                let target = self.target.as_ref().ok_or_else(|| {
+                    OpError::Invalid(format!("the {} sink needs a target", self.sink))
+                })?;
+                let id = match other {
+                    SinkSubject::Body => body_of(ctx, scene, target)?.map(|b| b.id),
+                    SinkSubject::Joint => joint_of(ctx, scene, target)?,
+                    SinkSubject::Node | SinkSubject::None => node_of(ctx, scene, target)?,
+                };
+                id.ok_or_else(|| {
+                    let noun = match other {
+                        SinkSubject::Joint => "joint",
+                        SinkSubject::Node => "node",
+                        _ => "body",
+                    };
+                    OpError::Invalid(format!("{target:?} names no {noun}"))
+                })?
+            }
+        };
+        let sink = SignalSink::of_name(&self.sink, id)
+            .ok_or_else(|| OpError::Invalid(format!("unknown sink \"{}\"", self.sink)))?;
+        let default = SignalMap::default();
+        let map = SignalMap {
+            in_min: self.min.map_or(default.in_min, |v| v as f32),
+            in_max: self.max.map_or(default.in_max, |v| v as f32),
+        };
+        Ok(OpOutput::none().message(EditorRequest::Bind(SignalBinding {
+            name,
+            source,
+            map,
+            curve: None,
+            gradient: GradientSpec::default(),
+            sink,
+        })))
+    }
+}
+
+/// The source reading the catalog quantity `name` off the subjects `of`.
+fn quantity_source(
+    ctx: &OpContext,
+    scene: &SceneSnapshot,
+    name: &str,
+    of: &[Target],
+) -> Result<SignalSource, OpError> {
+    let row = quantity::quantity(name).ok_or_else(|| {
+        OpError::Invalid(format!(
+            "unknown quantity \"{name}\"; known: {}",
+            quantity::known_names()
+        ))
+    })?;
+    let body = |target: &Target| -> Result<StableId, OpError> {
+        body_of(ctx, scene, target)?
+            .map(|b| b.id)
+            .ok_or_else(|| OpError::Invalid(format!("{target:?} names no body")))
+    };
+    let subjects = match (row.subject(), of) {
+        (Subject::Body, [a]) => Subjects::One(body(a)?),
+        (Subject::Joint, [a]) => Subjects::One(
+            joint_of(ctx, scene, a)?
+                .ok_or_else(|| OpError::Invalid(format!("{a:?} names no joint")))?,
+        ),
+        (Subject::BodyPair, [a, b]) => Subjects::Two(body(a)?, body(b)?),
+        (subject, _) => {
+            let want = if subject == Subject::BodyPair {
+                "two bodies".to_owned()
+            } else {
+                format!("one {}", subject.noun())
+            };
+            return Err(OpError::Invalid(format!(
+                "\"{name}\" reads {want}; of names {}",
+                of.len()
+            )));
+        }
+    };
+    SignalSource::of_quantity(name, subjects)
+        .ok_or_else(|| OpError::Invalid(format!("\"{name}\" cannot be bound (no live read)")))
+}
+
+/// Remove a signal binding by name. Scene content with one settled
+/// `settings` undo step.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct Unbind {
+    /// The binding's name.
+    pub name: String,
+}
+
+impl Operation for Unbind {
+    const META: OpMeta = OpMeta {
+        id: "signal.unbind",
+        lisp: "unbind",
+        doc: "Remove the signal binding of this name; an actuator it drove returns to its authored value.",
+        seam: Seam::Config,
+        menu: None,
+        chord: None,
+        undo: Some(gradiance_command::intent::name::SETTINGS),
+        example: r#"{"name": "drive"}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let names = ctx.get::<BindingNames>()?;
+        if !names.0.contains(&self.name) {
+            return Err(OpError::Invalid(format!(
+                "no binding \"{}\" (bindings: {})",
+                self.name,
+                names.0.join(", ")
+            )));
+        }
+        Ok(OpOutput::none().message(EditorRequest::Unbind(self.name)))
+    }
+}
+
 /// A signal's recorded samples as `[t, v]` pairs.
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
@@ -573,6 +765,19 @@ pub fn apply_editor_requests(world: &mut World) {
                 Ok(()) => info!(path = %path.display(), "signals exported"),
                 Err(e) => warn!(path = %path.display(), error = %e, "signal export failed"),
             },
+            EditorRequest::Bind(binding) => {
+                if let Some(mut bindings) = world.get_resource_mut::<SignalBindings>() {
+                    match bindings.0.iter_mut().find(|b| b.name == binding.name) {
+                        Some(existing) => *existing = binding,
+                        None => bindings.0.push(binding),
+                    }
+                }
+            }
+            EditorRequest::Unbind(name) => {
+                if let Some(mut bindings) = world.get_resource_mut::<SignalBindings>() {
+                    bindings.0.retain(|b| b.name != name);
+                }
+            }
             EditorRequest::Computed(signal) => {
                 if let Some(mut computed) =
                     world.get_resource_mut::<gradiance_signal::ComputedSignals>()

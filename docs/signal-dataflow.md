@@ -72,7 +72,9 @@ same regardless of how many points were placed.
   `ConstantLinearAcceleration` for gravity scale). An actuator takes the
   **raw value** in its SI unit — no map, curve or gradient; shape it
   upstream with a computed block. Unbinding removes the drive and the
-  authored value returns with no command. A drive never enables a disabled
+  authored value returns with no command. Bindings are also made and
+  removed by the `signal.bind` / `signal.unbind` operations (`(bind …)`,
+  `(unbind name)`, brief Q-2): one `settings` undo step each. A drive never enables a disabled
   motor or adds a motor or field; a driven cap of 0 or less switches the
   motor off.
 - **Key inputs** (brief N-2) are a source block: `BlockOp::Key { key,
@@ -188,11 +190,22 @@ otherwise; `<name>.distance` is the beam's path length to where it ends
 inputs, so a light gate or a reflection puzzle drives any actuator sink.
 
 The **Laser tool** (no key) places one: press where it sits, drag to aim,
-release; releasing over another body makes it the target. Script:
-`(laser body x y angle target name)` (`node.laser`; `-1` for a free laser
-or no target). Name, axis, range and bounces are edited in the inspector,
-the node menu and the Signals list (one undo step per gesture); the target
-can be cleared there.
+release; releasing over another body makes it the target. A drawn laser
+takes the first free name of `laser`, `laser2`, … (brief Q-4), so two
+lasers publish two values; a typed or scripted name is kept as given.
+Script: `(laser body x y angle target name)` (`node.laser`; `-1` for a
+free laser or no target). Name, axis, range and bounces are edited in the
+inspector, the node menu and the Signals list (one undo step per gesture);
+the target is cleared there, or set to the one other selected body with
+the **selection** button (inspector and node menu).
+
+On the node canvas a laser is a block with two outputs, **hit** and
+**distance** (brief Q-4): a wire from a pin is the same name-based binding
+as typing `<name>` or `<name>.distance` (`SignalSource::Named`); a
+`Named` source that matches a live laser's name draws from its block
+rather than a param block. The block shows while a wire or a modulation
+block reads it, while its body is on the canvas, or after **Add to node
+editor** in the node's context menu (joints have the same row).
 
 The beam is **derived**: `physics::laser::trace_lasers`, one system in
 `FixedPostUpdate` after avian's step (every fixed tick, paused too), casts

@@ -444,6 +444,14 @@ macro_rules! scene_content {
             pub fn apply_scene_content(&self, world: &mut World) {
                 $( world.insert_resource(self.$field.clone()); )*
             }
+
+            /// Copies `other`'s scene-content settings into this record and
+            /// keeps this record's workstation config: File ▸ New's
+            /// environment is the defaults' content with the person's own
+            /// grid, snap, camera and workspaces (brief Q-3).
+            pub fn set_scene_content(&mut self, other: &Self) {
+                $( self.$field = other.$field.clone(); )*
+            }
         }
     };
 }

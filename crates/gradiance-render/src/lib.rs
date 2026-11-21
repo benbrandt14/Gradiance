@@ -89,6 +89,7 @@ impl Plugin for GradianceRenderPlugin {
                 joint_viz::draw_joints.after(joint_viz::measure_joint_loads),
                 decorations::draw_circle_radius_lines,
                 decorations::draw_body_borders,
+                decorations::draw_fluid_surfaces,
                 debug_viz::draw_debug_overlays,
                 tracer::draw_traces,
                 tracer::draw_node_glyphs,

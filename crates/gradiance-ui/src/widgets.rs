@@ -393,11 +393,14 @@ const MAX_THRUST: f32 = 1.0e5;
 /// inspector, the node context menu, and the signal list. Returns the edited
 /// kind when a field changed (the caller emits one undoable
 /// `PropertyEditIntent` — this widget never mutates). `salt` keeps widget ids
-/// unique between host surfaces.
+/// unique between host surfaces. `pick` is the one other body selected, if
+/// any: a laser's "target: selection" button sets it as the target (brief
+/// Q-4) and is disabled without one.
 pub fn node_kind_editor(
     ui: &mut egui::Ui,
     salt: &str,
     kind: &gradiance_domain::node::NodeKind,
+    pick: Option<gradiance_core::ids::StableId>,
 ) -> Option<gradiance_domain::node::NodeKind> {
     use gradiance_domain::node::NodeKind;
     let mut next = kind.clone();
@@ -490,7 +493,7 @@ pub fn node_kind_editor(
             }
         }
         NodeKind::Laser(laser) => {
-            if !laser_editor(ui, salt, laser) {
+            if !laser_editor(ui, salt, laser, pick) {
                 return None;
             }
         }
@@ -501,9 +504,15 @@ pub fn node_kind_editor(
 /// The laser's fields (brief N-8): its bus name, axis, range, bounce limit
 /// and target. Each reports once per gesture (the edit seam); the name
 /// commits on Enter or focus loss, Esc cancels. The target is set by the
-/// laser tool or the `laser` operation; here it can only be cleared.
-/// Returns whether a field finished an edit.
-fn laser_editor(ui: &mut egui::Ui, salt: &str, laser: &mut gradiance_domain::laser::Laser) -> bool {
+/// laser tool, the `laser` operation, or here from `pick` (the one other
+/// selected body), and cleared here. Returns whether a field finished an
+/// edit.
+fn laser_editor(
+    ui: &mut egui::Ui,
+    salt: &str,
+    laser: &mut gradiance_domain::laser::Laser,
+    pick: Option<gradiance_core::ids::StableId>,
+) -> bool {
     use gradiance_domain::laser::{Laser, MAX_BOUNCES, MAX_RANGE};
     let defaults = Laser::default();
     let mut committed = false;
@@ -592,6 +601,17 @@ fn laser_editor(ui: &mut egui::Ui, salt: &str, laser: &mut gradiance_domain::las
         } else {
             ui.weak("none");
         }
+        let fresh = pick.filter(|id| laser.target != Some(*id));
+        if ui
+            .add_enabled(fresh.is_some(), egui::Button::new("selection").small())
+            .on_hover_text("aim at the selected body: the hit reads 1 while the beam reaches it")
+            .on_disabled_hover_text("select the laser and one other body")
+            .clicked()
+            && let Some(id) = fresh
+        {
+            laser.target = Some(id);
+            committed = true;
+        }
     });
     committed
 }
@@ -656,7 +676,7 @@ mod layout_tests {
         };
         let mut h = Harness::new_ui_state(
             |ui, (kind, edits): &mut (NodeKind, Vec<NodeKind>)| {
-                if let Some(next) = node_kind_editor(ui, "test", kind) {
+                if let Some(next) = node_kind_editor(ui, "test", kind, None) {
                     edits.push(next.clone());
                     *kind = next;
                 }
@@ -688,6 +708,36 @@ mod layout_tests {
             ..start
         };
         assert_eq!(edits[0], NodeKind::Tracer(reset));
+    }
+
+    /// A laser's "selection" button aims it at the picked body: one finished
+    /// edit with the new target (brief Q-4).
+    #[test]
+    fn the_selection_button_sets_a_laser_target() {
+        use gradiance_core::ids::StableId;
+        use gradiance_domain::laser::Laser;
+        use gradiance_domain::node::NodeKind;
+        let target = StableId::new();
+        let mut h = Harness::new_ui_state(
+            |ui, (kind, edits): &mut (NodeKind, Vec<NodeKind>)| {
+                if let Some(next) = node_kind_editor(ui, "test", kind, Some(target)) {
+                    edits.push(next.clone());
+                    *kind = next;
+                }
+            },
+            (NodeKind::Laser(Laser::default()), Vec::new()),
+        );
+        h.run();
+        h.get_by_label("selection").click();
+        h.run();
+        let edits = &h.state().1;
+        assert_eq!(
+            edits.as_slice(),
+            [NodeKind::Laser(Laser {
+                target: Some(target),
+                ..Laser::default()
+            })]
+        );
     }
 
     /// The helpers must not panic on an empty context — they are called from

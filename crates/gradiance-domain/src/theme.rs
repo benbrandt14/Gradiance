@@ -397,6 +397,11 @@ const fn swatch(name: &'static str, r: f32, g: f32, b: f32) -> Swatch {
 
 /// White light (an untinted lamp).
 pub const WHITE_LIGHT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
+
+/// What a fluid's surface line lifts its fill toward (brief Q-5): the line
+/// is the fill blended part way to this, so it reads as the water's top in
+/// every look.
+pub const FLUID_SURFACE_LIFT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
 /// The studio key: a warm lamp.
 /// Studio's white point: a face lit by both lights lands at about 0.76 of
 /// the ramp (the authored-fill band), so a face turned toward the key can

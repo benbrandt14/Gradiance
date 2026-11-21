@@ -8,7 +8,9 @@
 //! faint line where the plane crosses the authoring plane (z = 0).
 //! Opacity (with depth writes) matters: plane/plane and plane/body
 //! intersections resolve as crisp seams, and there is no transparent-sort
-//! order to flip as the view rotates. They differ **only in orientation**: a ground's plane
+//! order to flip as the view rotates (the one exception is a **sea**, a
+//! fluid ground, which blends like a pool so what floats in it shows; brief
+//! Q-5). They differ **only in orientation**: a ground's plane
 //! contains its surface line and sweeps along ±Z (the scene rests *on*
 //! it, like pieces standing on a floor); the back plane is parallel to
 //! the sim plane behind the deepest layer. Physics is untouched — the
@@ -22,6 +24,7 @@ use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
+use gradiance_domain::fluid::Fluid;
 use gradiance_domain::settings::{RenderSettings, ScenerySettings};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::theme::Look;
@@ -154,13 +157,19 @@ pub fn sync_ground_planes(
     render: Res<RenderSettings>,
     mut shown_look: Local<Option<Look>>,
     changed: Query<
-        (Entity, &ShapeDef, &Appearance, &Transform),
+        (Entity, &ShapeDef, &Appearance, &Transform, Has<Fluid>),
         (
             With<Body>,
-            Or<(Changed<ShapeDef>, Changed<Appearance>, Changed<Transform>)>,
+            Or<(
+                Changed<ShapeDef>,
+                Changed<Appearance>,
+                Changed<Transform>,
+                Changed<Fluid>,
+            )>,
         ),
     >,
-    all: Query<(Entity, &ShapeDef, &Appearance, &Transform), With<Body>>,
+    all: Query<(Entity, &ShapeDef, &Appearance, &Transform, Has<Fluid>), With<Body>>,
+    mut drained: RemovedComponents<Fluid>,
 ) {
     let relook = *shown_look != Some(render.look);
     *shown_look = Some(render.look);
@@ -168,8 +177,9 @@ pub fn sync_ground_planes(
     // The horizon fades to the back colour, so a scenery edit rebuilds too.
     // Iterated in place — no collected Vec of every changed body just to
     // filter for half-planes.
-    if relook || scenery.is_changed() {
-        for (entity, shape, appearance, transform) in &all {
+    // A sea that stopped being a fluid turns opaque again.
+    for entity in drained.read() {
+        if let Ok((entity, shape, appearance, transform, fluid)) = all.get(entity) {
             rebuild_ground(
                 &mut commands,
                 &mut materials,
@@ -177,13 +187,24 @@ pub fn sync_ground_planes(
                 &scenery,
                 &render,
                 entity,
-                shape,
-                appearance,
-                transform,
+                (shape, appearance, transform, fluid),
+            );
+        }
+    }
+    if relook || scenery.is_changed() {
+        for (entity, shape, appearance, transform, fluid) in &all {
+            rebuild_ground(
+                &mut commands,
+                &mut materials,
+                theme,
+                &scenery,
+                &render,
+                entity,
+                (shape, appearance, transform, fluid),
             );
         }
     } else {
-        for (entity, shape, appearance, transform) in &changed {
+        for (entity, shape, appearance, transform, fluid) in &changed {
             rebuild_ground(
                 &mut commands,
                 &mut materials,
@@ -191,9 +212,7 @@ pub fn sync_ground_planes(
                 &scenery,
                 &render,
                 entity,
-                shape,
-                appearance,
-                transform,
+                (shape, appearance, transform, fluid),
             );
         }
     }
@@ -215,12 +234,19 @@ pub fn sync_ground_planes(
     }
 }
 
+/// One body's state a ground material reads: its shape, appearance, pose
+/// and whether it is a fluid (a sea).
+type GroundState<'a> = (
+    &'a ShapeDef,
+    &'a gradiance_domain::appearance::Appearance,
+    &'a Transform,
+    bool,
+);
+
 /// Rebuilds one body's ground material — a no-op for anything but a
-/// half-plane.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "it forwards the sync's resources and one body's state"
-)]
+/// half-plane. A sea (a fluid half-plane) blends at the pools'
+/// [`FLUID_OPACITY`](crate::material_sync::FLUID_OPACITY) (brief Q-5), so
+/// a floater's lower half shows through it.
 fn rebuild_ground(
     commands: &mut Commands,
     materials: &mut Assets<InfinitePlaneMaterial>,
@@ -228,17 +254,19 @@ fn rebuild_ground(
     scenery: &ScenerySettings,
     render: &RenderSettings,
     entity: Entity,
-    shape: &ShapeDef,
-    appearance: &gradiance_domain::appearance::Appearance,
-    transform: &Transform,
+    (shape, appearance, transform, fluid): GroundState,
 ) {
     if !matches!(shape, ShapeDef::HalfPlane) {
         return;
     }
     let pose = gradiance_core::units::PosRot::from_transform(transform);
     let normal = Vec2::from_angle(pose.rot).rotate(Vec2::Y);
+    let mut fill = theme.display(appearance.fill);
+    if fluid {
+        fill.a *= crate::material_sync::FLUID_OPACITY;
+    }
     let mut material = plane_material(
-        theme.display(appearance.fill).into(),
+        fill.into(),
         normal.extend(0.0),
         normal.dot(pose.pos),
         scenery.back_color.into(),
@@ -247,6 +275,9 @@ fn rebuild_ground(
     );
     material.extension.toon = crate::toon::params_of(render);
     material.extension.ramp = crate::toon::ramp_of(render);
+    if fluid {
+        material.base.alpha_mode = AlphaMode::Blend;
+    }
     let handle = materials.add(material);
     // Grounds render through this material, not the body toon material.
     commands

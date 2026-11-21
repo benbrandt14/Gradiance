@@ -15,10 +15,7 @@ use gradiance::domain::field::FieldSource;
 use gradiance::op::invoke;
 use gradiance::physics::drive::SignalDrive;
 use gradiance::prelude::*;
-use gradiance::signal::{
-    GradientSpec, SignalBinding, SignalBindings, SignalBus, SignalMap, SignalParam, SignalParams,
-    SignalSink, SignalSource,
-};
+use gradiance::signal::{SignalBus, SignalParam, SignalParams, SignalSink};
 use gradiance::units::{Acceleration2, Angle, AngularVelocity as Omega, Displacement};
 use serde_json::json;
 
@@ -70,26 +67,20 @@ fn motor_wheel(app: &mut App) -> (StableId, StableId) {
     (wheel_id, joint_id)
 }
 
-/// An actuator binding of the named bus signal `source` into `sink`.
+/// An actuator binding of the named bus signal `source` into `sink`,
+/// through the verb a script uses (`signal.bind`, brief Q-2).
 fn bind(app: &mut App, name: &str, source: &str, sink: SignalSink) {
-    app.world_mut()
-        .resource_mut::<SignalBindings>()
-        .0
-        .push(SignalBinding {
-            name: name.into(),
-            source: SignalSource::Named(source.into()),
-            map: SignalMap::default(),
-            curve: None,
-            gradient: GradientSpec::default(),
-            sink,
-        });
+    let target = sink.actuator().map(|t| t.id().0.to_string());
+    invoke(
+        app.world_mut(),
+        "signal.bind",
+        json!({"name": name, "source": source, "sink": sink.name(), "target": target}),
+    )
+    .expect("bind");
 }
 
 fn unbind(app: &mut App, name: &str) {
-    app.world_mut()
-        .resource_mut::<SignalBindings>()
-        .0
-        .retain(|b| b.name != name);
+    invoke(app.world_mut(), "signal.unbind", json!({"name": name})).expect("unbind");
 }
 
 /// A constant knob on the bus (a `defparam`).

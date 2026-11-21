@@ -34,6 +34,7 @@ use egui_snarl::ui::{BackgroundPattern, PinInfo, SnarlStyle, SnarlViewer, WireSt
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::joint::{JointDef, JointKind};
+use gradiance_domain::laser::DISTANCE_SUFFIX;
 use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
 use gradiance_domain::quantity::Subject;
 use gradiance_domain::shape::ShapeDef;
@@ -57,7 +58,8 @@ enum GraphKey {
     /// A scene joint (its sensor ports, and its motor's actuator ports), by
     /// id (brief N-1).
     Joint(StableId),
-    /// A behavior node (a thruster's thrust pin), by id (brief N-3).
+    /// A behavior node (a thruster's thrust pin, a laser's hit and distance
+    /// pins), by id (briefs N-3, Q-4).
     Node(StableId),
     /// A `defparam` knob, by name.
     Param(String),
@@ -95,6 +97,10 @@ enum NodeData {
     /// A thruster block (brief N-3): one input, its thrust (N), and no
     /// outputs. Shown while a wire names it or its body is on the canvas.
     Thruster { id: StableId },
+    /// A laser block (brief Q-4): no inputs, two outputs, its hit (`<name>`,
+    /// 0/1) and its distance (`<name>.distance`, m), read off the bus. Shown
+    /// while a wire reads it, its body is on the canvas, or it was added.
+    Laser { id: StableId, name: String },
     /// A param block: one output (its published bus name).
     Param(String),
     /// A computed/modulation block. `block` is the structured op (canvas
@@ -128,7 +134,7 @@ impl NodeData {
         match self {
             Self::Body { id, .. } => GraphKey::Body(*id),
             Self::Joint { id, .. } => GraphKey::Joint(*id),
-            Self::Thruster { id } => GraphKey::Node(*id),
+            Self::Thruster { id } | Self::Laser { id, .. } => GraphKey::Node(*id),
             Self::Param(name) => GraphKey::Param(name.clone()),
             Self::Computed { name, .. } => GraphKey::Computed(name.clone()),
             Self::Scope => GraphKey::Scope,
@@ -139,7 +145,9 @@ impl NodeData {
     fn role(&self) -> Role {
         match self {
             Self::Body { .. } | Self::Joint { .. } | Self::Thruster { .. } => Role::Body,
-            Self::Param(_) => Role::Producer,
+            // A laser only produces signals: the producer column, so its
+            // wires run left to right into the blocks they drive.
+            Self::Param(_) | Self::Laser { .. } => Role::Producer,
             Self::Computed { .. } => Role::Modulator,
             Self::Scope => Role::Scope,
             Self::Comment { .. } => Role::Comment,
@@ -152,6 +160,7 @@ impl NodeData {
             Self::Body { name, kind, .. } => name.clone().unwrap_or_else(|| (*kind).to_owned()),
             Self::Joint { kind, .. } => (*kind).to_owned(),
             Self::Thruster { .. } => "thruster".to_owned(),
+            Self::Laser { name, .. } => format!("laser {name}"),
             Self::Param(name) => format!("⊙ {name}"),
             Self::Computed { name, .. } => format!("ƒ {name}"),
             Self::Scope => "▭ Scope".to_owned(),
@@ -166,6 +175,10 @@ impl NodeData {
             Self::Joint { id, .. } => joint_sensors(*id).get(index).map(|(_, s)| s.clone()),
             Self::Param(name) => (index == 0).then(|| SignalSource::Named(name.clone())),
             Self::Computed { name, .. } => (index == 0).then(|| SignalSource::Named(name.clone())),
+            Self::Laser { name, .. } => laser_outputs(name)
+                .into_iter()
+                .nth(index)
+                .map(|(_, bus)| SignalSource::Named(bus)),
             Self::Thruster { .. } | Self::Scope | Self::Comment { .. } => None,
         }
     }
@@ -216,10 +229,13 @@ pub struct NodeGraph {
     open: bool,
     snarl: Snarl<NodeData>,
     keys: HashMap<GraphKey, NodeId>,
-    /// Bodies explicitly added to the canvas ("Add to node editor"). Bodies
-    /// don't auto-appear on selection — only when added or when a binding
-    /// references them — so the canvas stays uncluttered.
+    /// Bodies, joints and nodes explicitly added to the canvas ("Add to node
+    /// editor"). Objects don't auto-appear on selection — only when added or
+    /// when a binding references them — so the canvas stays uncluttered.
     added: HashSet<StableId>,
+    /// The live lasers by bus name, refreshed each frame: a `Named` source
+    /// reading `<name>` or `<name>.distance` is that laser's pin (brief Q-4).
+    lasers: HashMap<String, StableId>,
     /// Optional custom short names per body (editable in the block; view-state).
     names: HashMap<StableId, String>,
     /// Free-floating annotations: `(serial, text)`. Pure view state — see
@@ -243,6 +259,7 @@ impl Default for NodeGraph {
             snarl: Snarl::new(),
             keys: HashMap::new(),
             added: HashSet::new(),
+            lasers: HashMap::new(),
             names: HashMap::new(),
             comments: Vec::new(),
             next_comment: 0,
@@ -258,6 +275,12 @@ impl NodeGraph {
     /// Adds a body's block to the canvas and opens it (the "Add to node
     /// editor" context action).
     pub fn add_body(&mut self, id: StableId) {
+        self.add(id);
+    }
+
+    /// Adds a body's, joint's or behaviour node's block to the canvas and
+    /// opens it (brief Q-4: the joint and node "Add to node editor" rows).
+    pub fn add(&mut self, id: StableId) {
         self.added.insert(id);
         self.open = true;
     }
@@ -267,9 +290,15 @@ impl NodeGraph {
 /// a producer block on the canvas: a param or computed block by name, a body
 /// sensor in [`body_sensors`] order, a joint sensor in [`joint_sensors`]
 /// order. `None` for a two-body source (distance), which has no block.
-fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
+fn source_pin(
+    source: &SignalSource,
+    lasers: &HashMap<String, StableId>,
+) -> Option<(GraphKey, usize)> {
     match (source, source.reading()) {
-        (SignalSource::Named(name), _) => Some((GraphKey::Param(name.clone()), 0)),
+        (SignalSource::Named(name), _) => Some(laser_pin(name, lasers).map_or_else(
+            || (GraphKey::Param(name.clone()), 0),
+            |(id, pin)| (GraphKey::Node(id), pin),
+        )),
         (_, Some((row, Subjects::One(id)))) if row.subject() == Subject::Joint => Some((
             GraphKey::Joint(id),
             joint_sensors(id).iter().position(|(_, s)| s == source)?,
@@ -280,6 +309,24 @@ fn source_pin(source: &SignalSource) -> Option<(GraphKey, usize)> {
         )),
         _ => None,
     }
+}
+
+/// A laser's output pins: the label and the bus name each reads.
+fn laser_outputs(name: &str) -> [(&'static str, String); 2] {
+    [
+        ("hit", name.to_owned()),
+        ("distance", format!("{name}{DISTANCE_SUFFIX}")),
+    ]
+}
+
+/// The live laser and output pin a bus name reads: `<name>` is a laser's hit
+/// (pin 0), `<name>.distance` its distance (pin 1).
+fn laser_pin(bus: &str, lasers: &HashMap<String, StableId>) -> Option<(StableId, usize)> {
+    if let Some(&id) = lasers.get(bus) {
+        return Some((id, 0));
+    }
+    let name = bus.strip_suffix(DISTANCE_SUFFIX)?;
+    lasers.get(name).map(|&id| (id, 1))
 }
 
 /// The `(GraphKey, input index)` a binding sink resolves to — body actuator
@@ -341,8 +388,17 @@ pub struct GraphParams<'w, 's> {
 /// bottom-dock host calls this before rendering; [`node_graph_section`] draws
 /// the returned viewer and [`apply_pane`] drains its edits afterward.
 pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
+    gp.graph.lasers = gp
+        .nodes
+        .iter()
+        .filter_map(|(id, kind, _)| match kind {
+            NodeKind::Laser(laser) => Some((laser.name.clone(), *id)),
+            NodeKind::Thruster(_) | NodeKind::Tracer(_) => None,
+        })
+        .collect();
     let desired = collect_desired(
         &gp.graph.added,
+        &gp.graph.lasers,
         &gp.graph.names,
         &gp.graph.comments,
         &gp.bindings,
@@ -381,6 +437,7 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
         bindings: gp.bindings.0.clone(),
         params: gp.params.0.clone(),
         editor_keys: gp.editor_keys.clone(),
+        added: gp.graph.added.clone(),
         ..GraphViewer::default()
     }
 }
@@ -617,6 +674,10 @@ fn output_pin_values(
                 .map(|(_, s)| read_source(s, index, physics, body_transforms, dt))
                 .collect(),
             NodeData::Param(name) | NodeData::Computed { name, .. } => vec![bus.get(name)],
+            NodeData::Laser { name, .. } => laser_outputs(name)
+                .iter()
+                .map(|(_, bus_name)| bus.get(bus_name))
+                .collect(),
             NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. } => Vec::new(),
         };
         values.insert(data.key(), vals);
@@ -682,6 +743,7 @@ fn paint_dot_grid(painter: &egui::Painter, rect: egui::Rect, t: egui::emath::TST
 /// canvas), plus every param and computed signal.
 fn collect_desired(
     added: &HashSet<StableId>,
+    lasers: &HashMap<String, StableId>,
     names: &HashMap<StableId, String>,
     comments: &[(u32, String)],
     bindings: &SignalBindings,
@@ -712,7 +774,7 @@ fn collect_desired(
     // Joints a binding names (a joint sensor source or a motor sink).
     let mut shown_joints: HashSet<StableId> = HashSet::new();
     for binding in &bindings.0 {
-        if let Some((GraphKey::Joint(id), _)) = source_pin(&binding.source) {
+        if let Some((GraphKey::Joint(id), _)) = source_pin(&binding.source, lasers) {
             shown_joints.insert(id);
         }
         if let (GraphKey::Joint(id), _) = sink_pin(&binding.sink) {
@@ -723,7 +785,7 @@ fn collect_desired(
     // in its expr).
     for signal in &computed.0 {
         for input in signal.expr.inputs() {
-            match SignalSource::from_bus_name(&input).and_then(|s| source_pin(&s)) {
+            match SignalSource::from_bus_name(&input).and_then(|s| source_pin(&s, lasers)) {
                 Some((GraphKey::Body(id), _)) if live.contains(&id) => {
                     shown.insert(id);
                 }
@@ -752,7 +814,7 @@ fn collect_desired(
     for (id, def) in joints {
         let motor = joint_motor(def);
         let on_canvas = def.referenced_bodies().any(|b| shown.contains(&b));
-        if shown_joints.contains(id) || (motor.is_some() && on_canvas) {
+        if shown_joints.contains(id) || added.contains(id) || (motor.is_some() && on_canvas) {
             items.push(NodeData::Joint {
                 id: *id,
                 kind: joint_kind_label(&def.kind),
@@ -764,19 +826,7 @@ fn collect_desired(
     // A thruster block for every thruster a wire names, and for every
     // thruster on a body already on the canvas: its thrust pin is where a
     // drive is wired (brief N-3).
-    for (id, kind, attachment) in nodes {
-        if !matches!(kind, NodeKind::Thruster(_)) {
-            continue;
-        }
-        let named = bindings
-            .0
-            .iter()
-            .any(|b| sink_pin(&b.sink).0 == GraphKey::Node(*id));
-        let on_canvas = attachment.target.is_some_and(|b| shown.contains(&b));
-        if named || on_canvas {
-            items.push(NodeData::Thruster { id: *id });
-        }
-    }
+    node_blocks(&mut items, added, lasers, &shown, bindings, computed, nodes);
     for id in shown {
         items.push(NodeData::Body {
             id,
@@ -794,6 +844,60 @@ fn collect_desired(
         }));
     }
     items
+}
+
+/// The behaviour-node blocks (briefs N-3, Q-4): a thruster block for every
+/// thruster a wire drives, a laser block for every laser a wire or a
+/// modulation block reads, and either for a node that was added or rides a
+/// body already on the canvas.
+fn node_blocks(
+    items: &mut Vec<NodeData>,
+    added: &HashSet<StableId>,
+    lasers: &HashMap<String, StableId>,
+    shown: &HashSet<StableId>,
+    bindings: &SignalBindings,
+    computed: &ComputedSignals,
+    nodes: &Query<(&StableId, &NodeKind, &NodeAttachment), With<BehaviorNode>>,
+) {
+    // A laser block for every laser a wire or a modulation block reads
+    // (brief Q-4), and the same rules as a thruster otherwise.
+    let mut read_nodes: HashSet<StableId> = HashSet::new();
+    for binding in &bindings.0 {
+        if let Some((GraphKey::Node(id), _)) = source_pin(&binding.source, lasers) {
+            read_nodes.insert(id);
+        }
+    }
+    for signal in &computed.0 {
+        for input in signal.expr.inputs() {
+            if let Some((id, _)) = laser_pin(&input, lasers) {
+                read_nodes.insert(id);
+            }
+        }
+    }
+    for (id, kind, attachment) in nodes {
+        let on_canvas = attachment.target.is_some_and(|b| shown.contains(&b));
+        let wanted = on_canvas || added.contains(id);
+        match kind {
+            NodeKind::Thruster(_) => {
+                let named = bindings
+                    .0
+                    .iter()
+                    .any(|b| sink_pin(&b.sink).0 == GraphKey::Node(*id));
+                if named || wanted {
+                    items.push(NodeData::Thruster { id: *id });
+                }
+            }
+            NodeKind::Laser(laser) => {
+                if read_nodes.contains(id) || wanted {
+                    items.push(NodeData::Laser {
+                        id: *id,
+                        name: laser.name.clone(),
+                    });
+                }
+            }
+            NodeKind::Tracer(_) => {}
+        }
+    }
 }
 
 /// Whether a joint has a motor a drive can reach: `Some(linear)` for a
@@ -969,6 +1073,9 @@ pub(crate) struct GraphViewer {
     add_blocks: Vec<BlockOp>,
     /// Replace a computed block's op (operand wiring + footer constants).
     block_edits: Vec<(String, BlockOp)>,
+    /// Objects added by "Add to node editor" (a joint or node block offers
+    /// "Remove from node editor" only then).
+    added: HashSet<StableId>,
     remove_bodies: Vec<StableId>,
     delete_params: Vec<String>,
     delete_computed: Vec<String>,
@@ -1236,7 +1343,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 }
             }
             NodeData::Thruster { id } => thruster_actuators(*id).len(),
-            NodeData::Param(_) | NodeData::Comment { .. } => 0,
+            NodeData::Param(_) | NodeData::Comment { .. } | NodeData::Laser { .. } => 0,
             NodeData::Computed { inputs, block, .. } => block
                 .as_ref()
                 .map_or(inputs.len(), |op| op.input_slots().len()),
@@ -1249,6 +1356,7 @@ impl SnarlViewer<NodeData> for GraphViewer {
             NodeData::Body { id, .. } => body_sensors(*id).len(),
             NodeData::Joint { id, .. } => joint_sensors(*id).len(),
             NodeData::Param(_) | NodeData::Computed { .. } => 1,
+            NodeData::Laser { .. } => 2,
             NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. } => 0,
         }
     }
@@ -1312,6 +1420,13 @@ impl SnarlViewer<NodeData> for GraphViewer {
                 |(l, s)| ((*l).to_owned(), s.dimension().symbol()),
             ),
             Some(NodeData::Param(name) | NodeData::Computed { name, .. }) => (name.clone(), ""),
+            Some(NodeData::Laser { .. }) => match pin.id.output {
+                0 => ("hit".to_owned(), ""),
+                _ => (
+                    "distance".to_owned(),
+                    gradiance_units::Dimension::Length.symbol(),
+                ),
+            },
             Some(NodeData::Thruster { .. } | NodeData::Scope | NodeData::Comment { .. }) | None => {
                 (String::new(), "")
             }
@@ -1439,8 +1554,18 @@ impl SnarlViewer<NodeData> for GraphViewer {
                     ui.close();
                 }
             }
-            Some(NodeData::Joint { .. } | NodeData::Thruster { .. }) => {
-                widgets::empty_state(ui, "shown while a wire or a body on the canvas names it");
+            Some(
+                NodeData::Joint { id, .. } | NodeData::Thruster { id } | NodeData::Laser { id, .. },
+            ) => {
+                let id = *id;
+                if self.added.contains(&id) {
+                    if ui.button("Remove from node editor").clicked() {
+                        self.remove_bodies.push(id);
+                        ui.close();
+                    }
+                } else {
+                    widgets::empty_state(ui, "shown while a wire or a body on the canvas names it");
+                }
             }
             Some(NodeData::Scope) | None => {
                 widgets::empty_state(ui, "the plot output");
@@ -1697,7 +1822,7 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
     }
     // Binding wires: source output pin → sink input pin.
     for binding in &bindings.0 {
-        let Some((src_key, out)) = source_pin(&binding.source) else {
+        let Some((src_key, out)) = source_pin(&binding.source, &graph.lasers) else {
             continue;
         };
         let (sink_key, in_) = sink_pin(&binding.sink);
@@ -1748,8 +1873,10 @@ fn rebuild_wires(graph: &mut NodeGraph, bindings: &SignalBindings) {
             .copied()
             .map(|id| (id, 0usize))
             .or_else(|| {
-                let source = SignalSource::from_bus_name(&name)?;
-                let (key, out) = source_pin(&source)?;
+                let (key, out) = match laser_pin(&name, &graph.lasers) {
+                    Some((id, out)) => (GraphKey::Node(id), out),
+                    None => source_pin(&SignalSource::from_bus_name(&name)?, &graph.lasers)?,
+                };
                 graph.keys.get(&key).copied().map(|id| (id, out))
             });
         if let Some((src_id, out)) = src {
@@ -1870,31 +1997,86 @@ mod tests {
         assert_eq!(graph.keys[&GraphKey::Body(b)], in_.node);
     }
 
+    /// A laser named `gate` is a block with two outputs; a wire reading
+    /// `gate` starts at its pin 0, `gate.distance` at pin 1, and an unrelated
+    /// name at a param block (brief Q-4).
+    #[test]
+    fn a_laser_block_claims_its_bus_names() {
+        let laser = StableId::new();
+        let lasers = HashMap::from([("gate".to_owned(), laser)]);
+        let named = |n: &str| SignalSource::Named(n.into());
+        assert_eq!(
+            source_pin(&named("gate"), &lasers),
+            Some((GraphKey::Node(laser), 0))
+        );
+        assert_eq!(
+            source_pin(&named("gate.distance"), &lasers),
+            Some((GraphKey::Node(laser), 1))
+        );
+        assert_eq!(
+            source_pin(&named("gated"), &lasers),
+            Some((GraphKey::Param("gated".into()), 0))
+        );
+        let block = NodeData::Laser {
+            id: laser,
+            name: "gate".into(),
+        };
+        assert_eq!(block.output_source(0), Some(named("gate")));
+        assert_eq!(block.output_source(1), Some(named("gate.distance")));
+        assert_eq!(block.output_source(2), None);
+
+        // A gravity-scale wire from the hit pin draws from the laser block.
+        let mut graph = NodeGraph {
+            lasers,
+            ..NodeGraph::default()
+        };
+        let ball = StableId::new();
+        reconcile_add(&mut graph, block);
+        body(&mut graph, ball);
+        let mut bindings = SignalBindings::default();
+        bindings.0.push(SignalBinding {
+            name: "lift".into(),
+            source: named("gate.distance"),
+            map: SignalMap::default(),
+            curve: None,
+            gradient: GradientSpec::default(),
+            sink: SignalSink::GravityScale(ball),
+        });
+        rebuild_wires(&mut graph, &bindings);
+        let (out, in_) = graph.snarl.wires().next().expect("a wire");
+        assert_eq!(graph.keys[&GraphKey::Node(laser)], out.node);
+        assert_eq!(out.output, 1, "the distance pin");
+        assert_eq!(graph.keys[&GraphKey::Body(ball)], in_.node);
+    }
+
     #[test]
     fn source_and_sink_pins_match_the_port_order() {
         let id = StableId::new();
         // Sensor pins line up with body_sensors / joint_sensors order.
         assert_eq!(
-            source_pin(&SignalSource::Speed(id)),
+            source_pin(&SignalSource::Speed(id), &HashMap::new()),
             Some((GraphKey::Body(id), 0))
         );
         assert_eq!(
-            source_pin(&SignalSource::ContactCount(id)),
+            source_pin(&SignalSource::ContactCount(id), &HashMap::new()),
             Some((GraphKey::Body(id), 5))
         );
         assert_eq!(
-            source_pin(&SignalSource::Named("x".into())),
+            source_pin(&SignalSource::Named("x".into()), &HashMap::new()),
             Some((GraphKey::Param("x".into()), 0))
         );
         assert_eq!(
-            source_pin(&SignalSource::Distance(id, StableId::new())),
+            source_pin(
+                &SignalSource::Distance(id, StableId::new()),
+                &HashMap::new()
+            ),
             None
         );
         let angle = joint_sensors(id)
             .iter()
             .position(|(_, s)| *s == SignalSource::JointAngle(id));
         assert_eq!(
-            source_pin(&SignalSource::JointAngle(id)),
+            source_pin(&SignalSource::JointAngle(id), &HashMap::new()),
             angle.map(|i| (GraphKey::Joint(id), i)),
             "a joint sensor is a joint block's output (brief N-1)"
         );

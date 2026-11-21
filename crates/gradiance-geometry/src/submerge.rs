@@ -391,8 +391,120 @@ pub fn transform_ring_into(ring: &[Vec2], rotation: Vec2, offset: Vec2, out: &mu
     out.extend(ring.iter().map(|p| rotation.rotate(*p) + offset));
 }
 
+/// The cosine of the steepest edge a water surface still includes: an edge
+/// whose outward normal is within 60 degrees of up (brief Q-5).
+pub const SURFACE_COS: f32 = 0.5;
+
+/// A fluid's **surface**: the edges of its outline (outer rings
+/// counter-clockwise, holes clockwise, as [`Contours`] holds them) whose
+/// outward normal is within 60 degrees of `up`, in the outline's frame.
+/// `up` is a unit vector against gravity, in the same frame. Allocation
+/// free; `O(V)` for `V` outline vertices.
+pub fn surface_edges(contours: &Contours, up: Vec2) -> impl Iterator<Item = (Vec2, Vec2)> + '_ {
+    contours.rings().flat_map(move |ring| {
+        let n = ring.len();
+        (0..n).filter_map(move |i| {
+            let (p, q) = (ring[i], ring[(i + 1) % n]);
+            let edge = q - p;
+            // The solid is on the left of every ring, so the outward normal
+            // is the edge turned clockwise.
+            let normal = Vec2::new(edge.y, -edge.x).normalize_or_zero();
+            (normal.dot(up) >= SURFACE_COS).then_some((p, q))
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
+
+    fn edges(contours: &Contours, up: Vec2) -> Vec<(Vec2, Vec2)> {
+        surface_edges(contours, up).collect()
+    }
+
+    fn corners(x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<Vec2> {
+        vec![
+            Vec2::new(x0, y0),
+            Vec2::new(x1, y0),
+            Vec2::new(x1, y1),
+            Vec2::new(x0, y1),
+        ]
+    }
+
+    #[test]
+    fn a_box_pool_has_its_top_edge_as_surface() {
+        let pool = Contours {
+            outline: corners(-2.0, -1.0, 2.0, 0.0),
+            holes: Vec::new(),
+        };
+        assert_eq!(
+            edges(&pool, Vec2::Y),
+            [(Vec2::new(2.0, 0.0), Vec2::new(-2.0, 0.0))]
+        );
+        // Gravity along +x: the left side faces up.
+        assert_eq!(
+            edges(&pool, Vec2::NEG_X),
+            [(Vec2::new(-2.0, 0.0), Vec2::new(-2.0, -1.0))]
+        );
+    }
+
+    #[test]
+    fn a_tilted_box_has_its_upward_edges_as_surface() {
+        // A square turned 30 degrees: its top (normal 30 degrees off up)
+        // counts, its right side (60 degrees off, on the line) counts, the
+        // others do not.
+        let turn = Vec2::from_angle(std::f32::consts::FRAC_PI_6);
+        let outline: Vec<Vec2> = corners(-1.0, -1.0, 1.0, 1.0)
+            .into_iter()
+            .map(|v| turn.rotate(v))
+            .collect();
+        let tilted = Contours {
+            outline,
+            holes: Vec::new(),
+        };
+        let up_ish = edges(&tilted, Vec2::Y);
+        assert!(!up_ish.is_empty() && up_ish.len() <= 2, "{up_ish:?}");
+        for (p, q) in up_ish {
+            assert!((p + q).y / 2.0 > 0.0, "an edge on the upper side");
+        }
+    }
+
+    #[test]
+    fn a_u_shaped_tank_has_its_rims_and_its_channel_floor() {
+        // A U: the two arm tops and the floor between the arms face up.
+        let outline = vec![
+            Vec2::new(-3.0, 0.0),
+            Vec2::new(3.0, 0.0),
+            Vec2::new(3.0, 2.0),
+            Vec2::new(2.0, 2.0),
+            Vec2::new(2.0, 1.0),
+            Vec2::new(-2.0, 1.0),
+            Vec2::new(-2.0, 2.0),
+            Vec2::new(-3.0, 2.0),
+        ];
+        let tank = Contours {
+            outline,
+            holes: Vec::new(),
+        };
+        let mut ys: Vec<f32> = edges(&tank, Vec2::Y).iter().map(|(p, _)| p.y).collect();
+        ys.sort_by(f32::total_cmp);
+        assert_eq!(ys, [1.0, 2.0, 2.0], "two rims and the floor");
+    }
+
+    #[test]
+    fn a_hole_faces_out_of_the_solid() {
+        // A pool with an air pocket: the pocket's floor is a surface.
+        let pool = Contours {
+            outline: corners(-2.0, -2.0, 2.0, 0.0),
+            holes: vec![corners(-0.5, -1.5, 0.5, -0.5).into_iter().rev().collect()],
+        };
+        let found = edges(&pool, Vec2::Y);
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(
+            found
+                .iter()
+                .any(|(p, q)| (p.y + 1.5).abs() < 1e-6 && (q.y + 1.5).abs() < 1e-6)
+        );
+    }
     use super::*;
 
     fn rect(w: f32, h: f32, center: Vec2) -> Vec<Vec2> {

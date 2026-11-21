@@ -84,8 +84,149 @@ impl WidthProfile {
     }
 }
 
+/// Most panels a body's drag hull keeps (brief Q-6): a hull with more
+/// vertices keeps an evenly spaced subset of them (still convex).
+pub const MAX_PANELS: usize = 64;
+
+/// One edge of a body's convex hull, in the body's own frame: its
+/// midpoint, outward unit normal and length. Air presses on it when its
+/// normal leads into the relative air (brief Q-6, decision
+/// `aero-panel-drag`).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Panel {
+    /// The edge's midpoint (body frame).
+    pub mid: Vec2,
+    /// The outward unit normal (body frame).
+    pub normal: Vec2,
+    /// The edge's length (m).
+    pub length: f32,
+}
+
+/// A body's drag panels: the edges of its convex hull, at most
+/// [`MAX_PANELS`]. Fixed size, so reading it never allocates.
+///
+/// For a body that does not spin, the panels facing a flow `r` present
+/// `Σ L·(n̂·r̂)` = the hull's width across `r`, the same width
+/// [`WidthProfile`] samples: the per-panel law reduces to the width law.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DragPanels {
+    panels: [Panel; MAX_PANELS],
+    count: usize,
+}
+
+impl Default for DragPanels {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+impl DragPanels {
+    /// No panels (an empty or infinite shape).
+    pub const NONE: Self = Self {
+        panels: [Panel {
+            mid: Vec2::ZERO,
+            normal: Vec2::ZERO,
+            length: 0.0,
+        }; MAX_PANELS],
+        count: 0,
+    };
+
+    /// The panels of the convex hull of `points` (any point set; usually
+    /// every outline vertex of a shape). Cost `O(n log n)`, run when a shape
+    /// changes, never per step.
+    #[must_use]
+    pub fn from_points(points: &[Vec2]) -> Self {
+        let hull = crate::hull::convex_hull(points);
+        if hull.len() < 3 {
+            return Self::NONE;
+        }
+        // An evenly spaced subset of a convex ring is convex.
+        let n = hull.len();
+        let kept = n.min(MAX_PANELS);
+        let ring: Vec<Vec2> = (0..kept).map(|i| hull[i * n / kept]).collect();
+        let mut out = Self::NONE;
+        for i in 0..kept {
+            let (p, q) = (ring[i], ring[(i + 1) % kept]);
+            let edge = q - p;
+            let length = edge.length();
+            if length <= f32::EPSILON {
+                continue;
+            }
+            // Counter-clockwise: the outward normal is the edge turned
+            // clockwise.
+            out.panels[out.count] = Panel {
+                mid: (p + q) * 0.5,
+                normal: Vec2::new(edge.y, -edge.x) / length,
+                length,
+            };
+            out.count += 1;
+        }
+        out
+    }
+
+    /// The panels.
+    #[must_use]
+    pub fn panels(&self) -> &[Panel] {
+        &self.panels[..self.count]
+    }
+
+    /// The width the panels facing `flow` present across it (`Σ L·(n̂·r̂)`
+    /// over the facing panels): the hull's width across `flow`.
+    #[must_use]
+    pub fn facing_width(&self, flow: Vec2) -> f32 {
+        let Some(dir) = flow.try_normalize() else {
+            return 0.0;
+        };
+        self.panels()
+            .iter()
+            .map(|p| p.normal.dot(dir))
+            .zip(self.panels())
+            .filter(|(c, _)| *c > 0.0)
+            .map(|(c, p)| c * p.length)
+            .sum()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_still_body_presents_its_width_through_its_panels() {
+        // At the profile's sample directions both are exact.
+        for shape in [
+            ShapeDef::Box {
+                width: 2.0,
+                height: 0.3,
+            },
+            ShapeDef::Circle { radius: 0.5 },
+        ] {
+            let contours = polygonize(&shape);
+            let profile = WidthProfile::from_contours(&contours);
+            let panels = DragPanels::from_points(&contours.outline);
+            for k in 0..PROFILE_SAMPLES {
+                let d = Vec2::from_angle(PI * k as f32 / PROFILE_SAMPLES as f32);
+                let (a, b) = (panels.facing_width(d), profile.width_across(d));
+                assert!(
+                    close(a, b, 1e-4 * (1.0 + b)),
+                    "{shape:?} at {k}: {a} vs {b}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_long_hull_keeps_at_most_max_panels() {
+        let ring: Vec<Vec2> = (0..500)
+            .map(|i| Vec2::from_angle(i as f32 / 500.0 * core::f32::consts::TAU))
+            .collect();
+        let panels = DragPanels::from_points(&ring);
+        assert_eq!(panels.panels().len(), MAX_PANELS);
+        assert!(close(panels.facing_width(Vec2::Y), 2.0, 0.01));
+        assert_eq!(
+            DragPanels::from_points(&[Vec2::ZERO, Vec2::X]).panels(),
+            &[]
+        );
+    }
     use super::*;
     use crate::polygonize::polygonize;
     use crate::shape::ShapeDef;

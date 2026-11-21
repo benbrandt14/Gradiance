@@ -4598,7 +4598,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                 note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
                 answered_at: "2026-11-20T12:00:00Z",
             ),
-            ingested_as: "docs/briefs/Q-3-editor-fixes.md",
+            ingested_as: "crates/gradiance-command/src/ops/scene.rs (NewScene::lower keeps the live workstation half via EnvironmentRecord::set_scene_content; brief Q-3)",
         ),
         (
             question: (
