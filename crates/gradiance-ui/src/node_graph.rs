@@ -144,10 +144,10 @@ impl NodeData {
 
     fn role(&self) -> Role {
         match self {
-            Self::Body { .. } | Self::Joint { .. } | Self::Thruster { .. } | Self::Laser { .. } => {
-                Role::Body
-            }
-            Self::Param(_) => Role::Producer,
+            Self::Body { .. } | Self::Joint { .. } | Self::Thruster { .. } => Role::Body,
+            // A laser only produces signals: the producer column, so its
+            // wires run left to right into the blocks they drive.
+            Self::Param(_) | Self::Laser { .. } => Role::Producer,
             Self::Computed { .. } => Role::Modulator,
             Self::Scope => Role::Scope,
             Self::Comment { .. } => Role::Comment,

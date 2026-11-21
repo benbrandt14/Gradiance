@@ -102,7 +102,11 @@ Written by the planning thread, 2026-11-20, on `523ed82`.
 
 ## Outcome
 
-Done (2026-11-21), except the lavapipe screenshot.
+Done (2026-11-21). Lavapipe review on #305: the block reads hit 1.00 and
+distance 5.40 m live and wires into a gravity pin; it sits in the producer
+column (first shot put it in the body column, its wire running down into
+the block it fed). The context menu's Mirror rows were clicked through
+`ui.click` on lavapipe and recorded `body.mirror_h`.
 
 - `NodeData::Laser { id, name }` (outputs `hit`, `distance` with unit m,
   live readouts off the bus). `source_pin` now takes the live lasers
@@ -125,5 +129,5 @@ Done (2026-11-21), except the lavapipe screenshot.
 - Tests: `a_laser_block_claims_its_bus_names` (node_graph), a kittest
   button test (widgets), `free_name` unit test, and
   `ui_input::two_drawn_lasers_take_two_names`.
-- Not done: the context-menu "Add to node editor on a joint" test (no
-  headless egui pass reaches the menu) and the PR screenshot.
+- Not done: a CI test for the context-menu rows (no headless egui pass
+  reaches the menu; checked by hand on lavapipe instead).

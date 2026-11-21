@@ -29,21 +29,20 @@ earlier history is in git).
   `docs/interaction-feel.md` (Algodoo play, Blender commands, Illustrator
   drawing, CAD measuring).
 - **Now:** **Phase Q (follow-ups)** is worked through on
-  `claude/jolly-noether-su0a6h` (one branch for Q-2..Q-8; fmt, clippy, doc and the full `cargo test --workspace` green locally, CI not yet run;
+  `claude/jolly-noether-su0a6h` (PR #305; fmt, clippy, doc and the full `cargo test --workspace` green locally, CI not yet run;
   the owner opens or asks for the PR). Each brief's Outcome is filled:
   **Q-2** `bind`/`unbind` operations (done); **Q-3** New keeps the
   workstation, Mirror rows in the context menu, thinned chain paths (done);
   **Q-4** laser block, Add to node editor for joints and nodes, target from
-  the selection, free laser names (done; lavapipe screenshot not taken);
+  the selection, free laser names (done; reviewed on lavapipe);
   **Q-5** fluids act in their depth band, the water surface line, the
-  translucent sea (done; `fluid-surface-look` still needs the owner's
-  screenshot review, and the `plane.wesl` alpha change is not yet run on
-  lavapipe); **Q-6** panel drag with aerodynamic torque and angular drag
+  translucent sea (done; shots on #305, `fluid-surface-look` awaits the
+  owner's verdict); **Q-6** panel drag with aerodynamic torque and angular drag
   (done; two points per edge, not one, see Outcome); **Q-7** returned: the
   buzz is avian reporting a standing 1.5 mm joint correction as velocity
   (ignored repro, `docs/upstream-watch.md`); **Q-8** remainder done
   (`selection_box` reads `ShapeContours`; P-1 had built the cache).
-  **Next:** a lavapipe pass for Q-4/Q-5 screenshots; proposed **Q-9**
+  **Next:** proposed **Q-9**
   (Q-1 Outcome: fills lost after the chain tool), which still needs a
   brief; then **Phase S** (S-1..S-9).
   **Before that:** **G-1 the graph IR crate is done** (merged #297, on the G-0

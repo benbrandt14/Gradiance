@@ -85,7 +85,7 @@ pub fn draw_circle_radius_lines(
 }
 
 /// How far toward white a fluid's surface line is from its fill (brief Q-5).
-const SURFACE_LIGHTEN: f32 = 0.45;
+const SURFACE_LIGHTEN: f32 = 0.75;
 
 /// Half the length a sea's surface line is drawn (m): past any view.
 const SEA_HALF_SPAN: f32 = 5_000.0;
