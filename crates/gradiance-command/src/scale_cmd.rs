@@ -87,8 +87,22 @@ impl GameCommand for ScaleCommand {
         });
         let nodes = node_edits(world, &maps, &staged);
 
+        // A mirror turns a body's authored initial motion over with it
+        // (brief S-1): the velocity reflects across the mirror line, the
+        // spin reverses.
+        let mirror_normal = Vec2::from_angle(self.frame_rot).rotate(if self.factors.x < 0.0 {
+            Vec2::X
+        } else {
+            Vec2::Y
+        });
         for (_, entity, map, new_shape, new_pos) in staged {
             let mut entity_mut = world.entity_mut(entity);
+            if map.mirrors()
+                && let Some(mut motion) =
+                    entity_mut.get_mut::<gradiance_domain::motion::InitialMotion>()
+            {
+                *motion = motion.mirrored(mirror_normal);
+            }
             if let Some(mut s) = entity_mut.get_mut::<ShapeDef>() {
                 *s = new_shape;
             }

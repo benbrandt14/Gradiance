@@ -138,6 +138,12 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                         density: gradiance::units::Density(density),
                         drag,
                     }),
+                    // A starting velocity follows from the pose seeds, so the
+                    // round trip covers the field without another strategy.
+                    motion: (x > 0.0).then_some(gradiance::domain::motion::InitialMotion {
+                        velocity: gradiance::units::Velocity2(bevy::math::Vec2::new(x, y)),
+                        spin: gradiance::units::AngularVelocity(rot),
+                    }),
                 }
             },
         )

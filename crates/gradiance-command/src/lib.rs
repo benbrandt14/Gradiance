@@ -386,6 +386,57 @@ fn settle_restored_poses(to: &SceneRecord, from: &SceneRecord, world: &mut World
     }
 }
 
+/// Starts each body with its authored [`InitialMotion`] when a run opens
+/// from an edited layout (brief S-1): on leaving pause, unless the newest
+/// step is the run that pause just closed (a resume keeps the live motion).
+///
+/// [`InitialMotion`]: gradiance_domain::motion::InitialMotion
+fn apply_initial_motion(world: &mut World) {
+    let resuming = world
+        .get_resource::<CommandStack>()
+        .and_then(CommandStack::peek_undo)
+        == Some(intent::name::SIMULATE);
+    if resuming {
+        return;
+    }
+    let mut bodies = world.query::<(
+        &gradiance_domain::motion::InitialMotion,
+        &avian2d::prelude::RigidBody,
+        &mut avian2d::prelude::LinearVelocity,
+        &mut avian2d::prelude::AngularVelocity,
+    )>();
+    for (motion, kind, mut v, mut w) in bodies.iter_mut(world) {
+        if kind.is_dynamic() {
+            v.0 = motion.velocity.value();
+            w.0 = motion.spin.value();
+        }
+    }
+}
+
+/// Starts a body that gains (or changes) its [`InitialMotion`] while the
+/// sim plays: a scene loaded mid-play, the headless `run`, an edit made
+/// while playing.
+///
+/// [`InitialMotion`]: gradiance_domain::motion::InitialMotion
+fn start_new_motion(
+    mut bodies: Query<
+        (
+            &gradiance_domain::motion::InitialMotion,
+            &avian2d::prelude::RigidBody,
+            &mut avian2d::prelude::LinearVelocity,
+            &mut avian2d::prelude::AngularVelocity,
+        ),
+        Changed<gradiance_domain::motion::InitialMotion>,
+    >,
+) {
+    for (motion, kind, mut v, mut w) in &mut bodies {
+        if kind.is_dynamic() {
+            v.0 = motion.velocity.value();
+            w.0 = motion.spin.value();
+        }
+    }
+}
+
 /// Records the just-finished simulation run as one undo step (see
 /// [`CommandStack::push_boundary`]). Runs when the sim pauses.
 fn close_sim_run(world: &mut World) {
@@ -482,6 +533,7 @@ impl Plugin for CommandPlugin {
         app.register_type::<gradiance_domain::field::FieldSource>();
         app.register_type::<gradiance_domain::fluid::Fluid>();
         app.register_type::<gradiance_domain::tracer::Tracer>();
+        app.register_type::<gradiance_domain::motion::InitialMotion>();
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),
@@ -497,6 +549,19 @@ impl Plugin for CommandPlugin {
         app.add_systems(
             OnEnter(gradiance_core::states::GameState::Paused),
             close_sim_run,
+        );
+        // A run opened from an edited layout starts each body with its
+        // authored initial motion (brief S-1); a motion added while playing
+        // starts at once.
+        app.add_systems(
+            OnExit(gradiance_core::states::GameState::Paused),
+            apply_initial_motion,
+        );
+        app.add_systems(
+            Update,
+            start_new_motion
+                .after(CommandDispatchSet)
+                .run_if(in_state(gradiance_core::states::GameState::Playing)),
         );
         // Adjust Last Operation: a step recorded anywhere but through the
         // dispatcher (a settings edit, a closed run) retires the last

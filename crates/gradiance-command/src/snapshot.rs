@@ -52,6 +52,9 @@ pub struct BodySnapshot {
     /// The fluid region the body holds, if any: the old half of a
     /// `set-fluid` edit (brief N-7).
     pub fluid: Option<gradiance_domain::fluid::Fluid>,
+    /// The initial motion, if any: the old half of a `set-velocity` /
+    /// `set-spin` edit (brief S-1).
+    pub motion: Option<gradiance_domain::motion::InitialMotion>,
 }
 
 impl BodySnapshot {
@@ -197,6 +200,9 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
                     .get::<SelectionGroup>()
                     .map_or_else(Vec::new, |g| g.0.clone()),
                 fluid: entity.get::<gradiance_domain::fluid::Fluid>().copied(),
+                motion: entity
+                    .get::<gradiance_domain::motion::InitialMotion>()
+                    .copied(),
             }
         })
         .collect();

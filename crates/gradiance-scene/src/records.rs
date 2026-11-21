@@ -72,6 +72,9 @@ pub struct BodyRecord {
     /// Fluid region (buoyancy, brief N-7), if the body holds a fluid.
     #[serde(default)]
     pub fluid: Option<gradiance_domain::fluid::Fluid>,
+    /// Initial velocity and spin (brief S-1), if the body starts moving.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion: Option<gradiance_domain::motion::InitialMotion>,
 }
 
 impl BodyRecord {
@@ -97,6 +100,9 @@ impl BodyRecord {
                 .get::<gradiance_domain::tracer::Tracer>()
                 .copied(),
             fluid: entity_ref.get::<gradiance_domain::fluid::Fluid>().copied(),
+            motion: entity_ref
+                .get::<gradiance_domain::motion::InitialMotion>()
+                .copied(),
         })
     }
 
@@ -124,6 +130,9 @@ impl BodyRecord {
         }
         if let Some(fluid) = self.fluid {
             entity.insert(fluid);
+        }
+        if let Some(motion) = self.motion {
+            entity.insert(motion);
         }
         entity.id()
     }
@@ -191,6 +200,16 @@ impl BodyRecord {
                 }
                 None => {
                     entity.remove::<gradiance_domain::fluid::Fluid>();
+                }
+            }
+        }
+        if self.motion != prev.motion {
+            match self.motion {
+                Some(motion) => {
+                    entity.insert(motion);
+                }
+                None => {
+                    entity.remove::<gradiance_domain::motion::InitialMotion>();
                 }
             }
         }
