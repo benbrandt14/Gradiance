@@ -315,6 +315,7 @@ mod tests {
                 field: None,
                 tracer: None,
                 fluid: None,
+                motion: None,
             },
         };
 

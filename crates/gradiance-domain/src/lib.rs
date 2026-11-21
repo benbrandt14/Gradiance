@@ -15,6 +15,7 @@ pub mod joint;
 pub mod keys;
 pub mod laser;
 pub mod layers;
+pub mod motion;
 pub mod node;
 pub mod props;
 pub mod quantity;

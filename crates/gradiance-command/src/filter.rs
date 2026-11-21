@@ -245,6 +245,7 @@ mod tests {
             depth: DepthBand::default(),
             groups,
             fluid: None,
+            motion: None,
         }
     }
 

@@ -33,6 +33,8 @@ pub enum PropertyValue {
     Field(Option<gradiance_domain::field::FieldSource>),
     /// Fluid region (`None` = not a fluid; brief N-7).
     Fluid(Option<gradiance_domain::fluid::Fluid>),
+    /// Initial velocity and spin (`None` = starts at rest; brief S-1).
+    InitialMotion(Option<gradiance_domain::motion::InitialMotion>),
     /// Trajectory-trail marker (`None` = no tracer).
     Tracer(Option<gradiance_domain::tracer::Tracer>),
     /// Rotation-lock flag (`LockedAxes::ROTATION_LOCKED` presence).
@@ -97,6 +99,17 @@ impl PropertyValue {
                     entity_mut.remove::<gradiance_domain::fluid::Fluid>();
                 }
             },
+            // A motion at rest is no motion: the record stays empty.
+            Self::InitialMotion(motion) => {
+                match motion.map(gradiance_domain::motion::InitialMotion::sanitized) {
+                    Some(m) if !m.is_rest() => {
+                        entity_mut.insert(m);
+                    }
+                    _ => {
+                        entity_mut.remove::<gradiance_domain::motion::InitialMotion>();
+                    }
+                }
+            }
             Self::Tracer(tracer) => match tracer {
                 Some(t) => {
                     entity_mut.insert(*t);

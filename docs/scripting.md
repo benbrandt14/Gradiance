@@ -161,6 +161,10 @@ across and ±3.5 m up and down); angles are radians.
 (set-fluid i 2 [2])          ; a fluid of density 2 kg/m² (drag 2 /s): bodies
                              ; inside float or sink by density (brief N-7);
                              ; also makes it a static sensor; density 0 = off
+(set-velocity i vx vy)       ; the velocity (m/s) the body starts a run with
+(set-spin i w)               ; the spin (rad/s, CCW) it starts a run with;
+                             ; applied when play starts from an edited
+                             ; layout, not on resume (brief S-1)
 (scale i fx fy)              ; resize about the body's own centre, own axes
 (mirror-h (list i …))        ; mirror left to right about the bodies' centre,
 (mirror-v (list i …))        ; or top to bottom; joints and nodes follow

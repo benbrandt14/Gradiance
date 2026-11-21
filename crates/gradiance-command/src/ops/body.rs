@@ -15,6 +15,7 @@ use gradiance_core::ids::StableId;
 use gradiance_core::units::PosRot;
 use gradiance_domain::appearance::{Appearance, Rgba};
 use gradiance_domain::fluid::Fluid;
+use gradiance_domain::motion::InitialMotion;
 use gradiance_domain::props::BodyPhysics;
 use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target};
 use gradiance_units::{Angle, Length};
@@ -33,6 +34,8 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetStatic>();
     registry.register::<SetColor>();
     registry.register::<SetFluid>();
+    registry.register::<SetVelocity>();
+    registry.register::<SetSpin>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -540,5 +543,95 @@ impl Operation for SetFluid {
             return Ok(OpOutput::none());
         }
         Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// The property edits that give every body `target` names a new initial
+/// motion, `edit` applied to its current one (at rest when it has none).
+fn motion_edits(
+    ctx: &OpContext,
+    target: &Target,
+    edit: impl Fn(InitialMotion) -> InitialMotion,
+) -> Result<OpOutput, OpError> {
+    let scene = ctx.get::<SceneSnapshot>()?;
+    let changes: Vec<PropertyChange> = bodies_of(ctx, scene, target)?
+        .into_iter()
+        .filter_map(|id| scene.get(id))
+        .filter_map(|body| {
+            let next = edit(body.motion.unwrap_or_default()).sanitized();
+            let new = (!next.is_rest()).then_some(next);
+            (new != body.motion).then_some(PropertyChange {
+                id: body.id,
+                old: PropertyValue::InitialMotion(body.motion),
+                new: PropertyValue::InitialMotion(new),
+            })
+        })
+        .collect();
+    if changes.is_empty() {
+        return Ok(OpOutput::none());
+    }
+    Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+}
+
+/// Set the velocity a body starts a run with (brief S-1).
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetVelocity {
+    /// The body.
+    pub i: Target,
+    /// Velocity along x (m/s).
+    pub vx: f32,
+    /// Velocity along y (m/s).
+    pub vy: f32,
+}
+
+impl Operation for SetVelocity {
+    const META: OpMeta = OpMeta {
+        id: "body.set_velocity",
+        lisp: "set-velocity",
+        doc: "Set the velocity (vx, vy in m/s) the i-th body starts each run with; (0, 0) and no spin: it starts at rest. Applied when play starts from an edited layout, not on resume — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "vx": 3, "vy": 0}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let v = Vec2::new(self.vx, self.vy);
+        motion_edits(ctx, &self.i, |m| InitialMotion {
+            velocity: gradiance_units::Velocity2(v),
+            ..m
+        })
+    }
+}
+
+/// Set the spin a body starts a run with (brief S-1).
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetSpin {
+    /// The body.
+    pub i: Target,
+    /// Angular velocity (rad/s, counter-clockwise).
+    pub w: f32,
+}
+
+impl Operation for SetSpin {
+    const META: OpMeta = OpMeta {
+        id: "body.set_spin",
+        lisp: "set-spin",
+        doc: "Set the spin (rad/s, counter-clockwise) the i-th body starts each run with. Applied when play starts from an edited layout, not on resume — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "w": 2}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        motion_edits(ctx, &self.i, |m| InitialMotion {
+            spin: gradiance_units::AngularVelocity(self.w),
+            ..m
+        })
     }
 }
