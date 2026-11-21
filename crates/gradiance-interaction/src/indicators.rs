@@ -11,9 +11,9 @@ use crate::snap::{SnapKind, SnappedCursor};
 use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::settings::RenderSettings;
-use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::theme::active;
-use gradiance_geometry::polygonize::polygonize;
+use gradiance_geometry::contours::Contours;
+use gradiance_geometry::polygonize::ShapeContours;
 
 /// Screen-constant glyph half-size in world units.
 fn glyph_size(scale: crate::camera::CameraScale) -> f32 {
@@ -94,29 +94,26 @@ pub fn draw_constraint_guides(
     }
 }
 
-/// Outlines selected bodies with their world-space contours.
+/// Outlines selected bodies with their world-space contours, read from the
+/// cached [`ShapeContours`] (no per-frame re-contouring).
 pub fn draw_selection_outlines(
     selection: Res<Selection>,
-    bodies: Query<(&ShapeDef, &Transform), With<Body>>,
+    bodies: Query<(&ShapeContours, &Transform), With<Body>>,
     settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let accent = Color::from(active(settings.as_deref()).ink.accent);
     for entity in selection.iter() {
-        let Ok((shape, transform)) = bodies.get(entity) else {
+        let Ok((contours, transform)) = bodies.get(entity) else {
             continue;
         };
         let affine = transform.compute_affine();
-        let contours = polygonize(shape);
-        for ring in contours.rings() {
-            let mut points: Vec<Vec2> = ring
-                .iter()
-                .map(|v| affine.transform_point3(v.extend(0.0)).truncate())
-                .collect();
-            if let Some(first) = points.first().copied() {
-                points.push(first);
-            }
-            gizmos.linestrip_2d(points, accent);
+        for ring in contours.iter().flat_map(Contours::rings) {
+            let to_world = |v: &bevy::math::Vec2| affine.transform_point3(v.extend(0.0)).truncate();
+            gizmos.linestrip_2d(
+                ring.iter().map(to_world).chain(ring.first().map(to_world)),
+                accent,
+            );
         }
     }
 }

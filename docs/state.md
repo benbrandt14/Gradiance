@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects`; before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,10 +12,28 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **Phase 6** (orchestrator, 2026-11-20): briefs
-  **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
-  geometry property tests, **6-3** physics debug toggles + schedule dump,
-  in that order. **Phase 6 is complete.** **6-3** is done (in review;
+- **Now (perf, 2026-11-20):** **P-1** max concurrent objects at 60 fps is
+  done (in review; branch `perf/max-concurrent-objects`; brief
+  `docs/briefs/P-1-concurrent-objects.md`): avian islands (sleeping)
+  re-enabled with the wake seams avian does not own (collider/layer regen,
+  joint changes, thrusters, fluids, gravity-drive unbind), an enabled
+  motor parks `SleepingDisabled` (Box2D's rule), static-static joints
+  derive `JointDisabled`, and `physics::island_sync` reconciles island
+  links while paused (avian learns joint graph changes through messages
+  its paused schedule never reads — bevy expires them after two frames;
+  that was the resume panic). Per-frame O(N) costs: `ShapeContours`
+  cached beside the collider (borders/snap/selection/debug read it, no
+  per-frame re-contour), the snap collider scan skips while paused with
+  unchanged inputs, `sync_ground_planes` filters in place, the debug
+  overlay pass skips when its toggles are off. `clamp_fixed_catchup` caps
+  fixed-timestep catch-up at `ceil(speed)+3` steps per frame — the
+  measured desktop death spiral (a settling 4000-box pile self-sustained
+  at ~14 steps/frame, 244-397 ms frames) is bounded. `tests/it/sleeping.rs`
+  pins the contract incl. the old avian-0.7 repro. Settled 4000-box
+  physics: ~12 ms/step before, ~2-4 ms after (headless, single-thread).
+  Phase 6 is complete: **6-1** undo round-trip matrix + scene loader
+  mutation tests, **6-2** geometry property tests, **6-3** physics debug
+  toggles + schedule dump. **6-3** is done (in review;
   branch `claude/project-thread-tw1mvl-6-3`): avian's `PhysicsDebugPlugin`
   behind four `DebugSettings` switches (colliders, contacts, joints, AABBs;
   workstation state, never saved or undone) copied onto `PhysicsGizmos` in

@@ -17,6 +17,7 @@ pub mod drive;
 pub mod fields;
 pub mod grab;
 pub mod hold;
+pub mod island_sync;
 pub mod joint_sync;
 pub mod laser;
 pub mod motor;
@@ -35,19 +36,29 @@ pub struct GradiancePhysicsPlugin;
 
 impl Plugin for GradiancePhysicsPlugin {
     fn build(&self, app: &mut App) {
-        // Islands (sleeping optimization) are disabled: avian 0.7's island
-        // bookkeeping panics when a contact pair is removed by inserting
+        // Islands (the sleeping optimization) are enabled. avian 0.7's island
+        // bookkeeping panicked when a contact pair was removed by inserting
         // `JointCollisionDisabled` on already-touching bodies — a routine
-        // editor operation (welding touching boxes). Avian documents the
-        // plugin as safely omittable.
+        // editor operation (welding touching boxes); that was why the plugin
+        // was disabled. The 0.8 islands are a persistent-islands rewrite, and
+        // that path now goes through `ContactStatusChangeQueue`; the repro is
+        // pinned by `tests/it/sleeping.rs`.
+        //
+        // Sleeping skips integration and solving for bodies at rest
+        // (default: 0.15 m/s and 0.15 rad/s for 0.5 s), which is what keeps
+        // large settled scenes inside the frame budget. avian wakes bodies by
+        // itself on authored pose/velocity/force/gravity changes; the seams it
+        // does not see — a regenerated collider, a collision-layer regen, an
+        // authored joint change, a thruster's push, a fluid's push — queue
+        // `WakeBody` where they happen (`body_sync`, `joint_sync`, `thrust`,
+        // `buoyancy`), and an enabled motor parks `SleepingDisabled` on its
+        // bodies (`retune_joints`), matching Box2D's motor-keeps-awake rule.
         app.add_plugins(
             PhysicsPlugins::default()
                 // The world is SI: 1 world unit = 1 metre, so avian's
                 // length-based tolerances need no scaling (pixels live only at
                 // the render/pick seam).
-                .with_length_unit(1.0)
-                .build()
-                .disable::<IslandPlugin>(),
+                .with_length_unit(1.0),
         );
         // The collider picking backend needs bevy's core picking plugin
         // (present under DefaultPlugins, absent in headless test apps).
@@ -61,6 +72,9 @@ impl Plugin for GradiancePhysicsPlugin {
         app.init_resource::<gradiance_domain::settings::SimSettings>();
         // Reflected config seam for scripting (see script-lisp-decision.md).
         app.register_type::<gradiance_domain::settings::SimSettings>();
+        // The fixed-catchup clamp (see [`clamp_fixed_catchup]): keeps one
+        // slow frame from demanding several steps on the next.
+        app.add_systems(PreUpdate, clamp_fixed_catchup);
         // `PostUpdate`, not `Update`: every writer of the settings (the
         // settings window, the context menu, a script's `sim-set`) runs in
         // `Update`, and the next physics step runs at the start of the next
@@ -72,6 +86,11 @@ impl Plugin for GradiancePhysicsPlugin {
             PostUpdate,
             apply_sim_settings.run_if(resource_changed::<gradiance_domain::settings::SimSettings>),
         );
+        // Paused-edit island reconciliation (see the module docs): avian
+        // learns joint graph changes through messages a paused schedule
+        // never reads, so the editor's paused frames reconcile the island
+        // links against the live graph instead.
+        island_sync::install(app);
         app.init_resource::<hold::KinematicHold>();
         app.init_resource::<grab::MouseSpring>();
         app.init_resource::<grab::MouseTwist>();
@@ -178,6 +197,38 @@ fn apply_sim_settings(
     substeps.0 = settings.substeps.clamp(1, 64);
     // The physics schedule runs on the fixed clock; this is the timestep.
     fixed.set_timestep_hz(f64::from(settings.timestep_hz.value().clamp(15.0, 240.0)));
+}
+
+/// Drops fixed-timestep catch-up above the per-frame budget.
+///
+/// Without the cap, one slow frame — a physics step past the 16.7 ms
+/// budget, a shader build, a scene capture — makes the next frame run
+/// several fixed steps to catch up, which makes *that* frame slower, which
+/// demands more steps: the death spiral that turns a brief overload into
+/// seconds of near-frozen simulation (measured: a 4000-box pile settles
+/// into a self-sustaining ~14-steps-per-frame loop on the desktop build).
+/// With the cap, an overloaded simulation runs slower than wall clock
+/// instead of spiraling — the standard trade in fixed-timestep games: step
+/// determinism is kept, the mapping of steps to wall time stretches until
+/// the budget fits again.
+///
+/// The budget scales with the authored speed: a 10x speed genuinely asks
+/// for ~10 steps per frame, so it is allowed them. A manual-clock rollout
+/// (`gradiance run`, the integration harness) advances one step per update
+/// and never accumulates overstep, so nothing changes there.
+fn clamp_fixed_catchup(
+    settings: Res<gradiance_domain::settings::SimSettings>,
+    mut fixed: ResMut<Time<Fixed>>,
+) {
+    const SPARE_STEPS: u32 = 3;
+    #[expect(clippy::cast_sign_loss, reason = "a clamped, ceiled speed")]
+    #[expect(clippy::cast_possible_truncation, reason = "a clamped, ceiled speed")]
+    let per_frame = settings.speed.clamp(0.0, 10.0).ceil().max(1.0) as u32;
+    let budget = fixed.timestep() * (per_frame + SPARE_STEPS);
+    if fixed.overstep() > budget {
+        let excess = fixed.overstep().checked_sub(budget).unwrap_or_default();
+        fixed.discard_overstep(excess);
+    }
 }
 
 /// Per-substep positions of dynamic bodies from the most recent physics

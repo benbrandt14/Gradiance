@@ -7,7 +7,8 @@ use gradiance_domain::depth::DepthBand;
 use gradiance_domain::settings::RenderSettings;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::theme::active;
-use gradiance_geometry::polygonize::polygonize;
+use gradiance_geometry::contours::Contours;
+use gradiance_geometry::polygonize::ShapeContours;
 use gradiance_interaction::overlay::OverlayGizmos;
 
 /// Depth just in front of a body's front cap: a 5 mm world lift, enough to
@@ -18,14 +19,26 @@ fn front_z(band: DepthBand) -> f32 {
     band.z_front() + 0.005
 }
 
-/// Draws each body's authored border outline (alpha 0 hides it).
+/// Draws each body's authored border outline (alpha 0 hides it) from the
+/// cached [`ShapeContours`]: every connected component, matching the
+/// extruded mesh — re-contouring the SDF per frame was the border pass's
+/// cost at high body counts.
 pub fn draw_body_borders(
-    bodies: Query<(&ShapeDef, &Appearance, &DepthBand, &Transform), With<Body>>,
+    bodies: Query<
+        (
+            &ShapeDef,
+            &ShapeContours,
+            &Appearance,
+            &DepthBand,
+            &Transform,
+        ),
+        With<Body>,
+    >,
     settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let theme = active(settings.as_deref());
-    for (shape, appearance, layers, transform) in &bodies {
+    for (shape, contours, appearance, layers, transform) in &bodies {
         let border = theme.display(appearance.border);
         if border.a <= 0.01 || shape.contains_half_plane() {
             continue;
@@ -33,18 +46,17 @@ pub fn draw_body_borders(
         let color = Color::from(border);
         let z = front_z(*layers);
         let affine = transform.compute_affine();
-        for ring in polygonize(shape).rings() {
-            let mut points: Vec<Vec3> = ring
-                .iter()
-                .map(|v| {
-                    let w = affine.transform_point3(v.extend(0.0));
-                    Vec3::new(w.x, w.y, z)
-                })
-                .collect();
-            if let Some(first) = points.first().copied() {
-                points.push(first);
-            }
-            gizmos.linestrip(points, color);
+        for ring in contours.iter().flat_map(Contours::rings) {
+            // Close the loop without collecting: `linestrip` takes an
+            // iterator.
+            let to_world = |v: &bevy::math::Vec2| {
+                let w = affine.transform_point3(v.extend(0.0));
+                Vec3::new(w.x, w.y, z)
+            };
+            gizmos.linestrip(
+                ring.iter().map(to_world).chain(ring.first().map(to_world)),
+                color,
+            );
         }
     }
 }

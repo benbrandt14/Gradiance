@@ -51,6 +51,7 @@ pub fn thruster_push(
 /// hash probe) and one `get_mut` on the body query; no allocation.
 #[expect(clippy::type_complexity, reason = "one filtered query")]
 pub fn apply_thrusters(
+    mut commands: Commands,
     index: Res<IdIndex>,
     thrusters: Query<(&NodeKind, &NodeAttachment, Option<&SignalDrive>), With<BehaviorNode>>,
     mut bodies: Query<(Forces, &RigidBody), (With<Body>, Without<BehaviorNode>)>,
@@ -81,6 +82,11 @@ pub fn apply_thrusters(
             continue;
         };
         forces.apply_force_at_point(force, point);
+        // A pushed body must move even from a dead sleep: `Forces` alone does
+        // not wake an island, and a thruster is a user action, not a
+        // constant of the scene. The wake is a no-op while the body is
+        // already awake, and once the thrust ends the body may sleep again.
+        commands.queue(WakeBody(target));
     }
 }
 
