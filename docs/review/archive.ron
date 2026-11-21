@@ -4287,5 +4287,144 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "docs/graph-model-decision.md (decision and phases G-0 to G-6); docs/briefs/G-1-graph-ir.md.",
         ),
+        (
+            question: (
+                id: "graph-block-constants",
+                title: "Are a block's numbers input ports or node fields?",
+                source: "The graph IR crate (docs/briefs/G-1-graph-ir.md)",
+                description: r#"Today a BlockOp carries its numbers (a gain's k, an oscillator's amp and freq, a constant's value) as fields and only its operands are wires. The brief fixes that shape inputs (a box's width) are ports a param can drive."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Input ports with defaults",
+                        caption: r#"Every number a node reads is a port with a default and a hard range (Graphite's model): an unconnected port holds a constant, and a param can drive a gain's k as it drives a box's width. Lowering is unchanged for today's blocks."#,
+                    ),
+                    (
+                        label: "Node fields",
+                        caption: r#"Numbers stay fields of the kind; only operands are ports. Two ways to hold a number, and a param could not drive a gain."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "graph-block-constants",
+                title: "Are a block's numbers input ports or node fields?",
+                choice: Picked("Input ports with defaults"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_graph::NodeKind (unit variants for blocks), gradiance_graph::CATALOG",
+        ),
+        (
+            question: (
+                id: "graph-unconnected-shape",
+                title: "What does an unconnected shape input read?",
+                source: "The graph IR crate (docs/briefs/G-1-graph-ir.md)",
+                description: r#"A Csg or Placed node with a shape port left open. Scalar ports read their default; ShapeDef has no empty shape."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The default 1 m box",
+                        caption: r#"The port's default is ShapeDef::default (the documented default shape); a constant shape on the port is how a baked shape enters the graph."#,
+                    ),
+                    (
+                        label: "A validation error",
+                        caption: r#"Refuse a graph with an open shape port; every half-built canvas graph would fail validation."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "graph-unconnected-shape",
+                title: "What does an unconnected shape input read?",
+                choice: Picked("The default 1 m box"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_graph::PortDefault::UnitBox",
+        ),
+        (
+            question: (
+                id: "graph-unlabelled-wires",
+                title: "How does a wire to an unpublished signal node lower?",
+                source: "The graph IR crate (docs/briefs/G-1-graph-ir.md)",
+                description: r#"The brief fixes that a wire to a labelled node lowers to Input(label). A node without a label has no bus name."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Inline it; refuse an unlabelled cycle",
+                        caption: r#"The source's expression is inlined into the reader. A frame-rate cycle must pass through a labelled node (its bus value carries last frame's value); a cycle of unlabelled nodes only is GraphError::UnlabelledCycle."#,
+                    ),
+                    (
+                        label: "Every signal node needs a label",
+                        caption: r#"Simpler lowering, but every helper block would publish a bus name."#,
+                    ),
+                    (
+                        label: "Generate a hidden label",
+                        caption: r#"Publishes names nobody chose, and they would leak into the bus and the plotter."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "graph-unlabelled-wires",
+                title: "How does a wire to an unpublished signal node lower?",
+                choice: Picked("Inline it; refuse an unlabelled cycle"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_graph::lower_signal, GraphError::UnlabelledCycle",
+        ),
+        (
+            question: (
+                id: "graph-expr-ports",
+                title: "How do a console defsignal's names become ports?",
+                source: "The graph IR crate (docs/briefs/G-1-graph-ir.md)",
+                description: r#"A defsignal is an RPN-parsed SignalExpr over bus names; the brief fixes one port per name in first-appearance order."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Keep the expression; its names label the ports",
+                        caption: r#"NodeKind::Expr keeps the parsed expression unchanged; port i replaces every read of the i-th name. After a rename the old name is only a port label, so the wire still holds. Every port is a scalar that reads 0 open."#,
+                    ),
+                    (
+                        label: "Rewrite names to port indices",
+                        caption: r#"An expression with placeholder inputs: the console text could not be shown again without the port table."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "graph-expr-ports",
+                title: "How do a console defsignal's names become ports?",
+                choice: Picked("Keep the expression; its names label the ports"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_graph::NodeKind::Expr, NodeKind::input_name",
+        ),
+        (
+            question: (
+                id: "graph-serde-allowlist",
+                title: "May the graph crate derive Serialize?",
+                source: "The graph IR crate (docs/briefs/G-1-graph-ir.md)",
+                description: r#"tests/boundaries.rs confines serde derives to authored data (domain, core, the shape tree, units, scene, persist). The brief asks Graph to derive Serialize and Deserialize; it is scene content from G-2 on."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Add gradiance-graph to the allowlist",
+                        caption: r#"One row in serialization_is_confined_to_authored_data, with a comment naming G-1: the graph is authored data, like the shape tree."#,
+                    ),
+                    (
+                        label: "Wrap it in scene records",
+                        caption: r#"Graph stays serde-free and gradiance-scene mirrors it: a second type for every node kind to keep in step."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "graph-serde-allowlist",
+                title: "May the graph crate derive Serialize?",
+                choice: Picked("Add gradiance-graph to the allowlist"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "tests/boundaries.rs serialization_is_confined_to_authored_data",
+        ),
     ],
 )

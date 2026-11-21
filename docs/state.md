@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (G-0 plan handoff; before that J-2 handoff; before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects`; before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that J-2 handoff; before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects`; before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,8 +12,23 @@ Last updated: 2026-11-20 (G-0 plan handoff; before that J-2 handoff; before that
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **G-0 one graph model: plan written** (2026-11-20, docs only;
-  merged #296). Decision
+- **Now:** **G-1 the graph IR crate is done** (merged #297, on the G-0
+  decision #296): the new pure
+  crate `gradiance-graph` (`graph → core, domain`; DAG row and serde
+  allowlist row in `tests/boundaries.rs`) holds the IR (nodes by
+  `StableId`, `Input = Const | Wire { node, port } | External`), the
+  `NodeMeta` catalog (21 rows, ids `signal::gain`, `shape::box`),
+  `Graph::validate` (types, the rate rule, `hard` ranges, labels,
+  cycles: frame-rate ones broken at the lowest id and reported, edit-rate
+  ones refused; depth ≤ `MAX_CSG_DEPTH`), `lower_signal`/`lower_signals`
+  (→ `SignalExpr`) and `lower_shape` (→ `ShapeDef`), and `from_signals`.
+  Every `BlockOp` and RPN signal converts and lowers `==` to today's
+  expression (16 tests, one proptest). Nothing in the app uses it; no
+  format change. Five decisions in `archive.ron` (`graph-*`).
+  **Next: G-2** the graph becomes scene content
+  (`docs/briefs/G-2-graph-scene-content.md`, status ready; `FORMAT_VERSION`
+  9; `graph.*` operations; saved positions; `docs/nodes.md`).
+  **Before that, G-0 one graph model: plan written** (merged #296). Decision
   (`docs/graph-model-decision.md`, `graph-model` in `archive.ron`,
   session best estimate): **one IR, two node families**. A pure
   `gradiance-graph` crate holds nodes by `StableId`, typed ports and edges
@@ -23,8 +38,7 @@ Last updated: 2026-11-20 (G-0 plan handoff; before that J-2 handoff; before that
   entities (reference nodes); the graph is scene content edited through
   `graph.*` operations; node positions become saved fields. Not the
   graph-as-document model. Phases G-1 to G-6 in the decision's table.
-  **Next: G-1** the graph IR crate (`docs/briefs/G-1-graph-ir.md`,
-  status ready; pure crate, no ECS, no format change). G-1/G-2 do not
+  G-1/G-2 do not
   touch the files F1–F3 touch, so the 3D-0 plan can interleave.
   **Before that:** **J-2** cut / selection / boolean stress test is done (merged
   #293; brief `docs/briefs/J-2-cut-select-stress.md`): 7 scenes in
