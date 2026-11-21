@@ -4949,5 +4949,32 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
         ),
             ingested_as: "No change: the status bar already shows by default (crates/gradiance-ui/src/status_bar.rs), brief Q-1.",
         ),
+        (
+            question: (
+                id: "parity-gap-scope-owner",
+                title: "Which parity gaps get a brief? (owner ruling)",
+                source: "Sandbox parity audit (docs/parity-audit.md), PR #298 follow-up",
+                description: r#"The first audit (decision parity-gap-scope) briefed nine seam-reusing gaps and declined the rest. The owner reviewed it in the project thread."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Reject material presets, brief the rest",
+                        caption: r#"S-4 removed; S-10..S-22 added for every declined item except the owner's earlier rejections (sketch gesture grammar: no shape recognition; notes and tutorials)."#,
+                    ),
+                    (
+                        label: "Keep the first scope",
+                        caption: r#"Nine briefs; the rest stays declined."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "parity-gap-scope-owner",
+                title: "Which parity gaps get a brief? (owner ruling)",
+                choice: Picked("Reject material presets, brief the rest"),
+                note: "Owner, in the project thread, 2026-11-21: \"Reject material presets and include the others.\" Supersedes parity-gap-scope.",
+                answered_at: "2026-11-21T00:00:00Z",
+            ),
+            ingested_as: "docs/briefs/S-10..S-22",
+        ),
     ],
 )

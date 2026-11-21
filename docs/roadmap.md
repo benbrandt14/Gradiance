@@ -40,7 +40,7 @@ bevy_egui; 3D planning comes last, as before.
 | # | Phase | Briefs | Feel | Closes |
 |---|---|---|---|---|
 | 1 | **Q — follow-ups** (now) | Q-1 .. Q-8 | — | N/6/J Outcomes |
-| 2 | **S — sandbox parity** | S-1 .. S-9 | Algodoo | `docs/parity-audit.md` |
+| 2 | **S — sandbox parity** | S-1 .. S-22 (S-4 rejected) | Algodoo | `docs/parity-audit.md` |
 | 3 | **C — construction & measurement** | C-1 one snapper for every tool (alignment while drawing, construction-angle guides, snap labels); C-2 distance guides; C-3 grip-point snap + line tangent to two outlines; C-4 Measure tool; C-5 dimensions as live sensors; C-6 typed length/angle during a draft | CAD | M18 "alignment during creation tools"; the 2026-11-19 measure-tool rejection (reversed by the owner) |
 | 4 | **E — editable paths (splines)** | E-1 `ShapeDef::Path` leaf on `kurbo` (closed = solid, open + width = curved rod); E-2 Curvature + Pen tools; E-3 direct selection (anchors, handles, polygon vertices); E-4 anchor tools (add/remove keeping shape, slide, extend, smooth↔corner); E-5 width profile (tapered rods); E-6 sketch strokes fitted to splines; E-7 cam profiles | Illustrator (E-7 CAD) | "no leaf holds an arc edge" (`docs/curvilinear-tools-decision.md`); M20 cams |
 | 5 | **H — shape finishing** | H-1 Contour (offset) and hollow shells; H-2 live corners (round / chamfer per corner); H-3 tangent constructors (circle tangent to two outlines, three-point arc, smooth bridge) | Illustrator / CAD | M21 "fillets of existing corners, chamfers" |
@@ -750,7 +750,7 @@ and most visible first:
 8. **Q-8** a derived contour per body: borders and selection outlines
    stop calling `polygonize` every frame.
 
-## Sandbox parity (audit 2026-11-20, briefs S-1..S-9)
+## Sandbox parity (audit 2026-11-20, briefs S-1..S-22; S-4 rejected 2026-11-21)
 
 The parity audit (`docs/parity-audit.md`) checks every tool, menu and
 object option of the reference sandbox against `main`. Most are present.
@@ -761,7 +761,7 @@ Each gap below reuses an existing seam; one brief each, in this order:
    phase plots, per-body velocity/momentum/force arrows.
 3. **S-3** laser refraction (refractive index, Snell, total internal
    reflection) and beam colour.
-4. **S-4** material presets, default material for new bodies, mass entry.
+4. ~~S-4 material presets~~ — rejected by the owner (2026-11-21).
 5. **S-5** gear outline + gear tool (meshing by contact, no constraint).
 6. **S-6** context quick actions: loosen, centre pin, centre thruster,
    to circle, motor brake.
@@ -771,11 +771,23 @@ Each gap below reuses an existing seam; one brief each, in this order:
    contact tangent speed.
 9. **S-9** camera follow, frame selection, camera verbs.
 
-**Declined by the audit** (reasons in the audit): particle water and
-liquify, soft bodies, textures and image geometry, dispersion, sketch
-gestures and brush erase, file thumbnails, online sharing, language
-choice, joystick, multi-touch, air buoyancy. The first three are on the
-Horizon below.
+Added 2026-11-21 (owner: "include the others"):
+
+10. **S-10** particle fluid: spike + decision note (method, body
+    coupling, budget). 11. **S-11** liquify, water fill, drain (after S-10).
+12. **S-12** sponge: a spring lattice inside the outline.
+13. **S-13** image texture on a body (through the toon ramp or raw).
+14. **S-14** shape from an image (alpha → field leaf or traced polygon).
+15. **S-15** dispersion and white light (after S-3).
+16. **S-16** brush erase mode of the sketch tool.
+17. **S-17** scene browser with thumbnails. 18. **S-18** share a scene
+    as one file (no server). 19. **S-19** language choice (string table).
+20. **S-20** gamepad input on the bus. 21. **S-21** trackpad and touch
+    gestures. 22. **S-22** air buoyancy.
+
+**Rejected:** material presets (owner, 2026-11-21); sketch gesture
+grammar (no shape recognition, owner 2026-11-21); notes and tutorials
+(owner, 2026-11-19).
 
 ## Scripting & symbolic modeling (design accepted)
 
@@ -1145,14 +1157,6 @@ them and cross-cutting passes leave the right seams.
   camera scale since the P2 flip) and the coordinate-frames path
   (`docs/frames-decision.md`: the `PlaneFrame` lift and its ratchet, F1–F3,
   come first; authored planes, F4, arrive with the engine decision).
-
-- **Particle fluids, soft bodies, image geometry** (parity audit,
-  2026-11-20). Particle water with "liquify" needs a particle solver
-  coupled to avian and its own renderer (the Tier-B kernel de-risks only
-  the maths); soft bodies need a new solver (a spring lattice is already
-  scriptable); geometry from an image needs a sampled-field SDF leaf,
-  because `polygonize` is the single discretization point, and textures
-  conflict with the toon look direction.
 
 ## Backlog / later
 
