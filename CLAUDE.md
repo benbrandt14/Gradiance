@@ -145,6 +145,9 @@ Rationale, coupling data, and the roadmap→package feature tree:
   `Component`/`Reflect` derives on the shape tree). `gradiance-kernel` is fully
   pure (no bevy at all).
 - Errors: `thiserror` enums; no `unwrap`/`expect`/`panic!` outside tests (clippy denies).
+- Canvas feel: **`docs/interaction-feel.md`** — the operation in progress picks
+  the reference (Algodoo play, Blender commands, Illustrator drawing, CAD
+  measuring); a brief that adds canvas behaviour names its row.
 - UI chrome: **`docs/ui-design.md` is the design system** — read it before adding a
   panel, a glyph, or a numeric field. Three rules bite immediately:
   non-ASCII characters come from `ui::fonts::glyph` and nowhere else (a source

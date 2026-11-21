@@ -12,6 +12,69 @@ the ordering; M18–M21 and the tracers/plotters milestone carry the detail.
 > planning stage, is the phase plan in `docs/orchestration.md`; it
 > supersedes the "Sequencing after M17.1" section below where they differ.
 > Current position: `docs/state.md`.
+>
+> **Unified 2026-11-21:** the section "Unified plan" directly below is the
+> one ordered list of everything still open, across every track. Sections
+> after it are the record of each milestone (what landed, with decisions)
+> and the detail its items point to.
+
+## Unified plan (2026-11-21)
+
+One list, in order. Each phase ends at a gate (main green, `docs/state.md`
+current). Owner direction for this revision: port the VectorCraft features
+surveyed in `docs/vectorcraft-survey.md` "where useful", rebuild arrays with
+VectorCraft's Repeat as the reference, and give the canvas a feel that
+follows the operation in progress — Algodoo for play, Blender for commands
+and navigation, Illustrator for drawing and shaping, CAD for measuring and
+constructing (`docs/interaction-feel.md`; every new brief names its row).
+
+**Why this order.** Phase Q and S are already briefed and cheap. Phase C
+(snapping and measuring) improves every tool that follows it, including the
+new path tools, so it goes first among the new work. Paths (E) are the
+keystone the shaping (H) and array (T) work builds on: corners, contours,
+cams and "along a path" all need a curved outline. The graph track's shape
+family (G-4) comes after E and H so shape nodes cover paths, offsets and
+corners from the start. The UI bootstrap (B) waits for egui 0.37 in
+bevy_egui; 3D planning comes last, as before.
+
+| # | Phase | Briefs | Feel | Closes |
+|---|---|---|---|---|
+| 1 | **Q — follow-ups** (now) | Q-1 .. Q-8 | — | N/6/J Outcomes |
+| 2 | **S — sandbox parity** | S-1 .. S-9 | Algodoo | `docs/parity-audit.md` |
+| 3 | **C — construction & measurement** | C-1 one snapper for every tool (alignment while drawing, construction-angle guides, snap labels); C-2 distance guides; C-3 grip-point snap + line tangent to two outlines; C-4 Measure tool; C-5 dimensions as live sensors; C-6 typed length/angle during a draft | CAD | M18 "alignment during creation tools"; the 2026-11-19 measure-tool rejection (reversed by the owner) |
+| 4 | **E — editable paths (splines)** | E-1 `ShapeDef::Path` leaf on `kurbo` (closed = solid, open + width = curved rod); E-2 Curvature + Pen tools; E-3 direct selection (anchors, handles, polygon vertices); E-4 anchor tools (add/remove keeping shape, slide, extend, smooth↔corner); E-5 width profile (tapered rods); E-6 sketch strokes fitted to splines; E-7 cam profiles | Illustrator (E-7 CAD) | "no leaf holds an arc edge" (`docs/curvilinear-tools-decision.md`); M20 cams |
+| 5 | **H — shape finishing** | H-1 Contour (offset) and hollow shells; H-2 live corners (round / chamfer per corner); H-3 tangent constructors (circle tangent to two outlines, three-point arc, smooth bridge) | Illustrator / CAD | M21 "fillets of existing corners, chamfers" |
+| 6 | **T — arrays, rebuilt** | T-0 the decision (recipe model, why the first attempt failed, a review question with live scenes); T-1 radial; T-2 mirror; T-3 grid v2 (brick/hex, spacing and count handles); T-4 bodies along a path; T-5 blend | Illustrator | `docs/array-decision.md` (reopened) |
+| 7 | **G — one graph** | G-2 .. G-6 (`docs/graph-model-decision.md`) | Blender (node canvas) | P2 remainder "fold `SignalBinding` into the canvas" |
+| 8 | **B — UI bootstrap from the Craft apps** | B-0 compare VectorCraft's control protocol and UI tests with U-4/U-5; B-1 egui 0.37 (was D-2); B-2 contextual task bar; B-3 history panel; B-4 rulers and ruler guides | Blender / Illustrator | Future intent 1 (`docs/orchestration.md`) |
+| 9 | **3D-0 and frames** | F1 .. F3 (`docs/frames-decision.md`), then the 3D plan (F4, F5, simulation planes, PR #208) | — | Horizon "Full 3D" |
+
+**Interleaving rules.** G-2 and G-3 touch no file the C, E, H or T briefs
+touch; the orchestrator may run them at any gate. **B-1 is
+trigger-driven:** when bevy_egui releases on egui 0.37 it jumps the queue at
+the next gate (a dependency bump goes in alone). B-2..B-4 may land natively
+before B-1 if a session prefers; a later port then replaces the native code.
+
+**Format bumps.** E-1 (new leaf), H-1 (offset/shell leaf), H-2 (corner
+data), C-5 (dimension node) and T-0's recipe each bump `FORMAT_VERSION`
+under the owner's experimental-format ruling (reject older files, regenerate
+goldens; no migrations).
+
+**Retained, not scheduled** (each waits for a reason named in its section):
+backlash and planar contact (M20); sprite joint glyphs (M20); exact fillet
+without the flush-face bulge (accepted, low priority — `fillet-bulge`); the
+`set-color` verb and the remaining hard-wired context-menu commands (P3);
+per-particle `Kernel::drive` populations (P2); symbolic field forces (P3);
+`reflect_functions`, `miette`, `bevy-persistent`, `egui_code_editor`
+(adoption audit C); the `bevy_picking` interaction rework (audit D, after B
+so the gesture port happens once, on the final UI); node-graph block
+constants with the unit parser (5-4 follow-up); the elastica/flexure spike
+(after units). The Horizon section is unchanged.
+
+**Declined** (do not re-propose without new facts): freehand shape
+recognition (owner, 2026-11-21: "this should be a more precise tool than
+that"); scene notes and a File ▸ Examples menu (2026-11-19); session macro
+recording to `.scm` (2026-11-19); the parity audit's declined list.
 
 ## Addressed in M12 (this round)
 
@@ -269,7 +332,7 @@ missing foundation:**
   (`align_centers`, off), along the grid's axes in oblique coordinates
   (`geometry::align`; isometric aligns along its own families); a faint
   guide shows each holding alignment. Alignment during creation tools is
-  still open.*
+  still open — brief C-1.*
 - Alternate constructors: 3-point box, tangent circle (3.1) — *3-point
   box landed (brief 1-6): with `ToolDefaults::box_three_point` on (Grid &
   Snap → Tools), the box tool takes three clicks — two set one edge's
@@ -288,7 +351,7 @@ missing foundation:**
   `docs/curvilinear-tools-decision.md`): tools compute in plane-local 2D,
   points snap through the grid's chart, edges stay straight (a polar
   edge does not curve); an arc-on-a-ring constructor and a radial/ring
-  lock are a later option.*
+  lock are a later option (the arc constructor: brief H-3).*
 - Snap glyph stability, tangent glyph, snap-off-when-grid-hidden (3.4) —
   *stability and snap-off landed (brief 1-4): circles snap to their exact
   features (`geometry::snap_features`: quadrants, exact nearest point), not
@@ -443,7 +506,7 @@ shadow items from M19. Design decisions in the slice PRs.
   run's breaks undo with the run, a save keeps them, and a broken joint draws
   as grey dashed rings. The reaction force is a sensor
   (`SignalSource::JointForce`, `PhysicsQueries::joint_force`).
-  Cams/planar contact/backlash open.
+  Cams/planar contact/backlash open (cams: brief E-7, on path outlines).
 - Contact point & force debug overlays (2.6, 8.3) — **first cut landed**:
   `PhysicsQueries::contact_points()` reads avian's `ContactGraph` (read-only, so
   the facade stays complete for plotters/scripts), and `DebugSettings.show_contacts`
@@ -607,7 +670,8 @@ the two interpolation modes cover the shapes in practice.
   `fillet-merge`; a non-finite or non-positive radius is refused); verb
   `(fillet-merge a b radius)`; context-menu "Merge with fillet" with a
   menu-local radius field. Fillets of existing corners of one body, chamfers
-  and smooth subtract/intersect remain open
+  and smooth subtract/intersect remain open (corners and chamfers: brief
+  H-2)
 
 ## Run & read surface (planned 2026-11-19, briefs R-1..R-4)
 
@@ -635,7 +699,9 @@ before U-9 (`docs/state.md`).
   operations, so a recorder captures only part of the edits. U-11 (Adjust
   Last Operation) needs op-level history first.
 - *Ruler / measure tool*: script tools have no previews yet (3-5,
-  retained), so it is new native UI work, not low effort.
+  retained), so it is new native UI work, not low effort. **Reversed by
+  the owner 2026-11-21:** the Measure tool is brief C-4 and rulers are B-4
+  (native work, budgeted as such; `docs/vectorcraft-survey.md`).
 
 ## Nonlinear dynamics & multibody play (planned 2026-11-19, briefs N-1..N-9)
 

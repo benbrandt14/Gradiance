@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::harness::*;
+use avian2d::prelude::{AngularVelocity, LinearVelocity};
 use bevy::prelude::*;
 use gradiance::command::HistoryInfo;
 use gradiance::prelude::*;
@@ -69,6 +70,37 @@ fn undo_during_a_live_run_pauses_and_reverts_the_run() {
     assert!(
         (after - drawn).length() < 1.0,
         "the first press reverts the run, not an edit ({after} should be {drawn})"
+    );
+}
+
+/// Regression (brief Q-1, found on screen): undoing a run put each body
+/// back at its pre-run pose but left the run's velocity on it, so the next
+/// play launched it (a thruster box read 62 m/s while paused). A restored
+/// pose is a pose at rest.
+#[test]
+fn undoing_a_run_leaves_the_bodies_at_rest() {
+    let mut app = paused_app();
+    let id = spawn_settled(&mut app);
+    app.world_mut()
+        .resource_mut::<NextState<GameState>>()
+        .set(GameState::Playing);
+    step(&mut app, 30);
+    let entity = entity_of(&app, id).unwrap();
+    let falling = app.world().get::<LinearVelocity>(entity).unwrap().0;
+    assert!(
+        falling.length() > 1.0,
+        "sanity: the body is falling ({falling})"
+    );
+
+    undo(&mut app);
+    app.update();
+
+    let entity = entity_of(&app, id).unwrap();
+    let v = app.world().get::<LinearVelocity>(entity).unwrap().0;
+    let w = app.world().get::<AngularVelocity>(entity).unwrap().0;
+    assert!(
+        v.length() < 1e-6 && w.abs() < 1e-6,
+        "an undone run leaves no motion behind (v {v}, w {w})"
     );
 }
 

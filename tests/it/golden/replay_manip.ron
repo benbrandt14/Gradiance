@@ -296,7 +296,7 @@
                     ),
                 ],
             ),
-            dither: 0.025,
+            dither: 0.0,
             dither_scale: 2.0,
             rim_strength: 0.2,
             white_point: 1.25,

@@ -1,6 +1,11 @@
 # Array repetition — the ctrl-drag tool
 
-**Status:** accepted, landed.
+**Status:** accepted, landed — **reopened 2026-11-21** (owner: arrays were
+"a failed attempt before, but it's a high value feature and good to spend
+time on with a good reference"). Phase T rebuilds arrays with VectorCraft's
+Repeat as the reference (`docs/vectorcraft-survey.md` rows 17-19); brief
+T-0 writes the successor decision. Until T-0 lands, this note describes
+`main`.
 
 ## What it is
 

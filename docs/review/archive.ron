@@ -4716,5 +4716,238 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "docs/briefs/Q-4-laser-and-joint-blocks.md",
         ),
+        (
+            question: (
+                id: "vectorcraft-path-leaf",
+                title: "Splines: a Bezier path leaf in the shape model?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"Gradiance has no curved edge: ShapeDef is Box, Circle, Polygon, Capsule, HalfPlane and Csg. VectorCraft's anchor-and-handle path model, Curvature tool and curve fitting are the reference."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A path leaf on kurbo",
+                        caption: r#"ShapeDef::Path with authored anchors and handles, flattened inside polygonize (the single discretization point); a closed path is a solid, an open path with a width is a curved rod."#,
+                    ),
+                    (
+                        label: "No curved leaf",
+                        caption: r#"Edges stay straight; curves only as polygons."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-path-leaf",
+                title: "Splines: a Bezier path leaf in the shape model?",
+                choice: Picked("A path leaf on kurbo"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/E-1-path-leaf.md (phase E, E-1..E-7)",
+        ),
+        (
+            question: (
+                id: "vectorcraft-arrays",
+                title: "Arrays: rebuild with VectorCraft's Repeat as the reference?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"docs/array-decision.md keeps arrays as pure translations after per-copy tweens were removed. VectorCraft's live Repeat has radial, grid and mirror kinds with on-canvas handles."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Rebuild arrays",
+                        caption: r#"Reopen the array decision; a decision brief (T-0) studies VectorCraft's Repeat first, then radial, mirror, grid v2, along a path and blend."#,
+                    ),
+                    (
+                        label: "Keep arrays as they are",
+                        caption: r#"Pure translations only; no radial or mirror arrays."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-arrays",
+                title: "Arrays: rebuild with VectorCraft's Repeat as the reference?",
+                choice: Picked("Rebuild arrays"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it. Owner: "Arrays was a failed attempt before, but it's a high value feature and good to spend time on with a good reference.""#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/T-0-arrays-decision.md (phase T)",
+        ),
+        (
+            question: (
+                id: "vectorcraft-shape-recognition",
+                title: "Sketch tool: recognise rough strokes as clean shapes?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"VectorCraft's Shaper classifies a freehand stroke as a rectangle, ellipse, polygon or line (geom/recognize.rs). The parity audit had declined sketch gestures."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Port shape recognition",
+                        caption: r#"The sketch tool turns a rough stroke into a clean shape."#,
+                    ),
+                    (
+                        label: "Decline",
+                        caption: r#"Keep the sketch tool literal; precision comes from the drawing tools."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-shape-recognition",
+                title: "Sketch tool: recognise rough strokes as clean shapes?",
+                choice: Picked("Decline"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it. Owner: "Shape recognition no, this should be a more precise tool than that.""#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/vectorcraft-survey.md (Not taken); roadmap Unified plan, Declined",
+        ),
+        (
+            question: (
+                id: "vectorcraft-dimensions-bus",
+                title: "Dimensions: live sensors on the signal bus, or drawing aids?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"VectorCraft's dimensions are associative: they follow the art they measure."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Publish to the bus",
+                        caption: r#"A dimension is a behaviour node that publishes its value under its name: plottable, bindable, readable by scripts."#,
+                    ),
+                    (
+                        label: "Drawing aids only",
+                        caption: r#"Dimensions draw and follow bodies but publish nothing."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-dimensions-bus",
+                title: "Dimensions: live sensors on the signal bus, or drawing aids?",
+                choice: Picked("Publish to the bus"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/C-5-dimensions-as-sensors.md",
+        ),
+        (
+            question: (
+                id: "external-ui-project",
+                title: "Is VectorCraft part of the external UI project?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21; docs/orchestration.md Future intent 1",
+                description: r#"The orchestration plan says the UI will be bootstrapped from an external project with UI test and MCP infrastructure. VectorCraft is an egui 0.37 Craft app with both."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Yes, the Craft apps",
+                        caption: r#"VectorCraft, SolidCraft and craft-libs; phase B starts the bootstrap."#,
+                    ),
+                    (
+                        label: "Reference only",
+                        caption: r#"Port features, not chrome or harness."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "external-ui-project",
+                title: "Is VectorCraft part of the external UI project?",
+                choice: Picked("Yes, the Craft apps"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/orchestration.md Future intent 1; phase B briefs",
+        ),
+        (
+            question: (
+                id: "unified-roadmap-order",
+                title: "Where do the VectorCraft phases go in the roadmap?",
+                source: "Owner direction 2026-11-21: unify the full roadmap and place these features where useful",
+                description: r#"Open work: Phase Q, Phase S, the graph track G-2..G-6, 3D-0 with frames F1..F3, D-2 egui 0.37, plus the new phases C, E, H, T, B."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Q, S, C, E, H, T, G, B, 3D-0",
+                        caption: r#"Briefed work first; snapping before paths because it improves every later tool; paths before shaping and arrays, which need curves; G-4 after paths so shape nodes cover them; B waits for egui 0.37 (B-1 trigger-driven); G-2/G-3 may interleave at any gate."#,
+                    ),
+                    (
+                        label: "G before the new phases",
+                        caption: r#"Finish the graph track first, then the VectorCraft features."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "unified-roadmap-order",
+                title: "Where do the VectorCraft phases go in the roadmap?",
+                choice: Picked("Q, S, C, E, H, T, G, B, 3D-0"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/roadmap.md Unified plan; docs/state.md; docs/orchestration.md",
+        ),
+        (
+            question: (
+            id: "toon-ramp",
+            title: "How should a body's toon bands meet: dithered, pixel grain, or hard?",
+            source: "Owner direction 2026-11-19 with a reference image (docs/briefs/assets/4b-6-reference.gif); brief 4b-6",
+            description: r#"The toon shader now follows your reference (docs/briefs/assets/4b-6-reference.gif): lighting indexes a colour ramp shared by every body, the default is matte (no glint), shadows shift hue toward a cool mauve, a face turned to the key light gets a warm cream patch, and the light falloff comes from the shape: each front face is lit as a rounded body from its distance to its outline, so a circle reads as a dome and a box as a slab with lit, chamfered edges (lighting only; the outline and the physics stay flat).
+
+    The ramp is in Settings > Rendering > Ramp: drag the stop markers, double-click the bar to add a stop, right-click one to remove it, pick a stop's tone, switch Constant and Linear; the strips under the bar show three palette fills through it. Mid grey shows a fill as authored, darker tones multiply, lighter ones brighten. "relief" and "bevel" set how round the faces are.
+
+    The options differ only in how two bands meet. Zoom in on the circles and the boxes (mouse wheel) to see the grain, compare with the reference, then press play and watch the bands follow the bodies."#,
+            options: [
+                (
+                    label: "Ramp + dither",
+                    caption: "The new default: band edges break into a fine ordered (Bayer) pattern, 2-pixel cells, over a narrow zone (dither 0.025).",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                ),
+                (
+                    label: "Ramp + pixel grain",
+                    caption: "A wider zone in chunky 4-pixel cells (dither 0.06, dither_scale 4): a pixel-art grain at every band edge.",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    settings: (render: (dither: 0.06, dither_scale: 4.0)),
+                ),
+                (
+                    label: "Ramp, hard bands",
+                    caption: "No dither (dither 0): each band edge is a clean line, as in the reference image.",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    settings: (render: (dither: 0.0)),
+                ),
+            ],
+        ),
+            answer: (
+            question: "toon-ramp",
+            title: "How should a body\'s toon bands meet: dithered, pixel grain, or hard?",
+            choice: Picked("Ramp, hard bands"),
+            note: "All of these are actually pretty good. We can deep dive more visuals later but we\'ll go with the hard bands for now.",
+            answered_at: "2026-11-20T02:08:50Z",
+            revision: "cff98a92dd44",
+        ),
+            ingested_as: "Default dither 0 (STUDIO_DITHER = 0.0; the setting and its slider stay), brief Q-1.",
+        ),
+        (
+            question: (
+            id: "status-bar-and-pie",
+            title: "Should the status bar show by default, and do the tools pie and F3 feel right?",
+            source: "Brief U-9 (F3 search, status bar, pie menus; docs/unified-surface-plan.md section 7.2)",
+            description: r#"Three new surfaces read the operation registry. The status bar along the bottom edge names the active tool and its key, the tool's mouse gestures, F3 and Q, and at the right the selection count and Playing or Paused. It takes 22 points of height from the scene. F3 opens a search over every operation a click can run; greyed rows say why. Q held over the canvas opens a pie of eight tools (Select at the top, then clockwise Box, Circle, Polygon, Cut, Spring, Hinge, Drag): release over a slice to pick it, release back in the centre to cancel; a quick tap keeps the pie open for a click.
+
+    The options differ only in whether the status bar shows. In both, try a few tools from the pie (hold Q, flick, release) and from F3 (type "box", Enter), and watch the status bar's hints change with the tool. A note on the pie's size (labels about 92 points from the centre), its slices or the hints is welcome."#,
+            options: [
+                (
+                    label: "Status bar on",
+                    caption: "As built: the bar shows by default. View > Status bar hides it.",
+                    scripts: ["scenes/status-bar-and-pie/scene.scm", "scenes/status-bar-and-pie/shown.scm"],
+                ),
+                (
+                    label: "Status bar off",
+                    caption: "The bar is hidden until View > Status bar turns it on; the scene gets the 22 points back.",
+                    scripts: ["scenes/status-bar-and-pie/scene.scm", "scenes/status-bar-and-pie/hidden.scm"],
+                ),
+            ],
+        ),
+            answer: (
+            question: "status-bar-and-pie",
+            title: "Should the status bar show by default, and do the tools pie and F3 feel right?",
+            choice: Picked("Status bar on"),
+            note: "",
+            answered_at: "2026-11-20T02:09:37Z",
+            revision: "cff98a92dd44",
+        ),
+            ingested_as: "No change: the status bar already shows by default (crates/gradiance-ui/src/status_bar.rs), brief Q-1.",
+        ),
     ],
 )

@@ -84,7 +84,8 @@ Phase · roadmap item (quote it) · status: ready | in progress | done | returne
 ## Read first    — 3–6 files/sections, with why. Nothing else is required.
 ## Facts         — what the orchestrator already found, with file:line, so
                    the worker doesn't re-derive it. Mark anything unverified.
-## Approach      — the intended shape, and the invariants it touches.
+## Approach      — the intended shape, and the invariants it touches;
+                   for canvas behaviour, its feel row (docs/interaction-feel.md).
 ## Out of scope  — explicit list. Touching these = stop and hand back.
 ## Done when     — tests that must exist, gates, doc updates.
 ## Outcome       — filled by the worker at handoff.
@@ -282,6 +283,19 @@ until Phase Q is done.
 "Sandbox parity"). Runs after Phase Q; independent of G-0 and 3D-0. S-8
 starts with an API check and may return.
 
+**Phases C, E, H, T, B — the VectorCraft port (planned 2026-11-21).**
+Owner direction: take the features surveyed in `docs/vectorcraft-survey.md`
+where useful, rebuild arrays with VectorCraft's Repeat as the reference,
+and let the operation in progress pick the canvas feel
+(`docs/interaction-feel.md`). Order after Phase S: **C** construction &
+measurement (C-1..C-6), **E** editable paths (E-1..E-7), **H** shape
+finishing (H-1..H-3), **T** arrays rebuilt (T-0 decision, then T-1..T-5),
+**G** the rest of the graph track (G-2..G-6; G-2/G-3 may interleave at any
+gate), **B** UI bootstrap from the Craft apps (B-0..B-4; B-1 = egui 0.37,
+trigger-driven), then **3D-0** with F1..F3. The table is the roadmap's
+"Unified plan" section. T-1..T-5 are stubs until T-0's Outcome rewrites
+them.
+
 **Deferred to the next planning stage** (not part of "roadmap complete"):
 `bevy_picking` interaction rework (audit D); node-canvas layout persistence
 (G-0 decided 2026-11-20: positions become saved, undoable node fields in
@@ -297,7 +311,10 @@ above should leave them cheaper, never more expensive.
 
 **1. The UI will be bootstrapped from an external project** that already
 has UI test and MCP infrastructure; editor and UI code will be copied in.
-So, until then:
+*Named 2026-11-21 (owner):* the Craft apps — VectorCraft
+(`https://github.com/storytold/vectorcraft`, egui 0.37) together with
+SolidCraft and craft-libs already listed in `docs/upstream-watch.md`. Phase B
+is the planned start of that bootstrap. So, until then:
 
 - **Op surface first, then excellent chrome.** A feature is done when it is
   reachable as an intent and a registered op with a test. *Revised

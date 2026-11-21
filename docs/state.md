@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (Phase Q planned; before that the parity audit and Phase S briefs (#298); before that the G-1 handoff (#297); before that the G-0 plan (#296); before that the J-2 handoff (#293); before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects` (#300); before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-21 (Q-1 done: review answers ingested, undone runs leave bodies at rest, Adjust Last lists summarised; one render bug found — fills lost after the chain tool, Q-1 Outcome; before that the roadmap unified and the VectorCraft port planned: phases C, E, H, T, B; before that Phase Q planned; before that the parity audit and Phase S briefs (#298); before that the G-1 handoff (#297); before that the G-0 plan (#296); before that the J-2 handoff (#293); before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects` (#300); before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,8 +12,20 @@ Last updated: 2026-11-20 (Phase Q planned; before that the parity audit and Phas
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Queued:** **Phase S** sandbox parity (audit 2026-11-20,
-  `docs/parity-audit.md`; briefs S-1..S-9, after Phase Q).
+- **Queued** (one ordered list: `docs/roadmap.md` § "Unified plan",
+  2026-11-21): **Phase S** sandbox parity (S-1..S-9, after Phase Q) →
+  **C** construction & measurement (C-1..C-6) → **E** editable paths /
+  splines (E-1..E-7) → **H** shape finishing (H-1..H-3) → **T** arrays
+  rebuilt (T-0 decision with a review question, then T-1..T-5, stubs until
+  T-0) → **G** G-2..G-6 (G-2/G-3 may interleave at any gate) → **B** UI
+  bootstrap from the Craft apps (B-0..B-4; **B-1 = egui 0.37 jumps the
+  queue when bevy_egui ships it**) → **3D-0** with F1..F3. Source of the
+  new phases: `docs/vectorcraft-survey.md` (VectorCraft at `9fff48d`, MIT
+  OR Apache-2.0; owner rulings 2026-11-21: paths yes, arrays rebuilt,
+  shape recognition **no**, dimensions on the bus, VectorCraft is part of
+  the external UI project). Every new canvas brief names its feel row in
+  `docs/interaction-feel.md` (Algodoo play, Blender commands, Illustrator
+  drawing, CAD measuring).
 - **Now:** **Phase Q (follow-ups)**, planned per the owner's choice on
   2026-11-20 ("follow-ups first", before the next planning stage). The
   G-0 decision (#296) and the G-1 graph IR crate (#297) are merged as
@@ -22,8 +34,11 @@ Last updated: 2026-11-20 (Phase Q planned; before that the parity audit and Phas
   `docs/briefs/Q-*`, in
   order: **Q-1** Phase N on screen (screenshot every Phase N tool, glyph,
   block and settings row, fix what is wrong; ingest the waiting answers
-  `toon-ramp` = hard bands, `status-bar-and-pie` = on) — **ready**;
-  **Q-2** `signal.bind` / `signal.unbind` on today's name-based bindings;
+  `toon-ramp` = hard bands, `status-bar-and-pie` = on) — **done**
+  (2026-11-21; Outcome lists five "found, not fixed" items — the first, fills
+  lost after the chain tool lays a chain, needs a brief: proposed **Q-9**, before
+  Phase S);
+  **Q-2** `signal.bind` / `signal.unbind` on today's name-based bindings — **next**;
   **Q-3** File ▸ New keeps the workstation config, mirror rows in the
   context menu, thinned chain strokes; **Q-4** laser block on the node
   canvas, "Add to node editor" for joints and nodes, laser target from the
@@ -320,6 +335,10 @@ Last updated: 2026-11-20 (Phase Q planned; before that the parity audit and Phas
   12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
       (`docs/briefs/Q-*`), in order. **Phase S** sandbox parity (audit
       `docs/parity-audit.md`, briefs S-1..S-9) follows Phase Q.
+  12b. **VectorCraft port** (planned 2026-11-21, owner direction; roadmap
+      § "Unified plan"): **C-1..C-6**, **E-1..E-7**, **H-1..H-3**,
+      **T-0..T-5**, then the G track below, then **B-0..B-4** (B-1 =
+      egui 0.37, trigger-driven), then 3D-0.
   13. Next planning stage (held until Phase Q is done): **G-0** one graph
       model (plan written, 2026-11-20: `docs/graph-model-decision.md`,
       merged #296; phases **G-1** graph IR

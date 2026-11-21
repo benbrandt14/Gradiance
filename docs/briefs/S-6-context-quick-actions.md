@@ -29,6 +29,9 @@ area, and brake a hinge motor. Each is an operation, each is one undo step.
 - Operations: `body.loosen`, `body.pin_centre`, `body.thruster_centre`,
   `body.to_circle`, `joint.brake` (motor on, target 0, cap kept).
 - Context menu rows invoke them by id (`InvokeOp`), never the intent.
+- Keep the rows as one table of operation ids by selection kind (as
+  `ui::pie::TOOLS_PIE` is): the contextual task bar (B-2, 2026-11-21 plan)
+  renders the same table, so add no per-row UI logic.
 
 ## Out of scope
 
