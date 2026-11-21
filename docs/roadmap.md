@@ -657,6 +657,33 @@ Examples menu ("this isn't an educational tool"). **Not recommended by the
 planner:** gears (no avian gear constraint known; unverified), particle
 water, a time scrubber (undo already reverts a run).
 
+## Follow-ups (Phase Q, planned 2026-11-20, briefs Q-1..Q-8)
+
+The owner chose "follow-ups first" (2026-11-20): close the follow-ups the
+N, Phase 6 and J Outcomes left, before the next planning stage (G-2 and
+the rest of the G track wait). One brief each, in this order, cheapest
+and most visible first:
+
+1. **Q-1** Phase N on screen: `tools/screenshot/` over every Phase N
+   tool, glyph, node block and settings row; fix what is wrong. Ingests
+   the waiting review answers (`toon-ramp` = hard bands,
+   `status-bar-and-pie` = on).
+2. **Q-2** `signal.bind` / `signal.unbind` on today's name-based signal
+   bindings (one `settings` undo step per call).
+3. **Q-3** File ▸ New keeps the workstation config (grid, snap, camera,
+   workspaces); mirror rows in the context menu; a drawn chain's stroke
+   thinned before it is recorded.
+4. **Q-4** laser block on the node canvas; "Add to node editor" for
+   joints and nodes; a laser's target set from the selection; free
+   default laser names.
+5. **Q-5** a fluid acts only on bodies in its depth band; a water
+   surface line is drawn; a sea draws translucent.
+6. **Q-6** aerodynamic torque and angular drag: panel drag on the convex
+   hull; a body that does not spin gets the same force as the N-4 law.
+7. **Q-7** chain link buzz next to a world pin (investigation).
+8. **Q-8** a derived contour per body: borders and selection outlines
+   stop calling `polygonize` every frame.
+
 ## Sandbox parity (audit 2026-11-20, briefs S-1..S-9)
 
 The parity audit (`docs/parity-audit.md`) checks every tool, menu and

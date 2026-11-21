@@ -271,7 +271,8 @@ with 4b and 5; the order is in `docs/state.md`.
 
 **Phase Q — follow-ups (planned 2026-11-20, the owner's "follow-ups
 first").** Briefs Q-1..Q-8 in `docs/briefs/Q-*`, in order, cheapest and
-most visible first (roadmap list in `docs/state.md`). Q-1 screenshots
+most visible first (roadmap § "Follow-ups"; the order list is in
+`docs/state.md`). Q-1 screenshots
 Phase N on screen; Q-2..Q-6 close follow-ups from the N/6/J Outcomes;
 Q-7 investigates, Q-8 derives. G-2 and the rest of the G track wait
 until Phase Q is done.

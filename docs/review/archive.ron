@@ -4547,7 +4547,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                 id: "signal-bind-shape",
                 title: "What do signal.bind and signal.unbind write, and how is a binding named?",
                 source: "Phase Q follow-ups plan (docs/briefs/Q-*.md; owner chose follow-ups first, 2026-11-20)",
-                description: r#"Bindings live in SignalBindings (scene content) and have a name. The graph model drafts (G-0..G-3, #296/#297) would later move binding storage into the graph IR; they are held and must not be depended on."#,
+                description: r#"Bindings live in SignalBindings (scene content) and have a name. The graph model (G-0..G-3; the G-0 decision and the G-1 IR crate are merged as planning artifacts, #296/#297, unused by the app) would later move binding storage into the graph IR; until the G track resumes, nothing may depend on it."#,
                 decision: true,
                 options: [
                     (

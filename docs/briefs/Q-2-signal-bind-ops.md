@@ -16,7 +16,8 @@ end to end.
 
 The operations work on **today's signal model**: a binding is a
 `SignalBinding` in the `SignalBindings` resource, named by its `name`.
-The graph model (G-0..G-3, held as drafts #296/#297) would later move
+The graph model (G-0..G-3; the G-0 decision and the G-1 IR crate are
+merged as planning artifacts, #296/#297) would later move
 binding storage into the graph IR; when it lands, these operations keep
 their parameters and change only where they write. Do not read or depend
 on `gradiance-graph`.
