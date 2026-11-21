@@ -39,8 +39,8 @@ bevy_egui; 3D planning comes last, as before.
 
 | # | Phase | Briefs | Feel | Closes |
 |---|---|---|---|---|
-| 1 | **Q — follow-ups** (now) | Q-1 .. Q-8 | — | N/6/J Outcomes |
-| 2 | **S — sandbox parity** | S-1 .. S-22 (S-4 rejected) | Algodoo | `docs/parity-audit.md` |
+| 1 | **Q — follow-ups** (done, #305/#306) | Q-1 .. Q-8 (Q-7 returned: avian; Q-9 not reproducible) | — | N/6/J Outcomes |
+| 2 | **S — sandbox parity** (now; S-1 done) | S-1 .. S-22 (S-4 rejected) | Algodoo | `docs/parity-audit.md` |
 | 3 | **C — construction & measurement** | C-1 one snapper for every tool (alignment while drawing, construction-angle guides, snap labels); C-2 distance guides; C-3 grip-point snap + line tangent to two outlines; C-4 Measure tool; C-5 dimensions as live sensors; C-6 typed length/angle during a draft | CAD | M18 "alignment during creation tools"; the 2026-11-19 measure-tool rejection (reversed by the owner) |
 | 4 | **E — editable paths (splines)** | E-1 `ShapeDef::Path` leaf on `kurbo` (closed = solid, open + width = curved rod); E-2 Curvature + Pen tools; E-3 direct selection (anchors, handles, polygon vertices); E-4 anchor tools (add/remove keeping shape, slide, extend, smooth↔corner); E-5 width profile (tapered rods); E-6 sketch strokes fitted to splines; E-7 cam profiles | Illustrator (E-7 CAD) | "no leaf holds an arc edge" (`docs/curvilinear-tools-decision.md`); M20 cams |
 | 5 | **H — shape finishing** | H-1 Contour (offset) and hollow shells; H-2 live corners (round / chamfer per corner); H-3 tangent constructors (circle tangent to two outlines, three-point arc, smooth bridge) | Illustrator / CAD | M21 "fillets of existing corners, chamfers" |
@@ -723,7 +723,12 @@ Examples menu ("this isn't an educational tool"). **Not recommended by the
 planner:** gears (no avian gear constraint known; unverified), particle
 water, a time scrubber (undo already reverts a run).
 
-## Follow-ups (Phase Q, planned 2026-11-20, briefs Q-1..Q-8)
+## Follow-ups (Phase Q, planned 2026-11-20, briefs Q-1..Q-8) — done
+
+Merged as #305 (Q-2..Q-8) after Q-1. Q-7 returned: avian reports a
+standing joint correction as velocity (`docs/upstream-watch.md`, ignored
+repro). Q-9, proposed from Q-1 (fills lost after the chain tool), does not
+reproduce on `8f7c547` and was closed without a brief (2026-11-21).
 
 The owner chose "follow-ups first" (2026-11-20): close the follow-ups the
 N, Phase 6 and J Outcomes left, before the next planning stage (G-2 and
@@ -756,7 +761,8 @@ The parity audit (`docs/parity-audit.md`) checks every tool, menu and
 object option of the reference sandbox against `main`. Most are present.
 Each gap below reuses an existing seam; one brief each, in this order:
 
-1. **S-1** authored initial velocity and spin (inspector dial, verbs).
+1. **S-1** authored initial velocity and spin (inspector dial, verbs) —
+   done (#306).
 2. **S-2** readouts (area, inertia, potential energy, acceleration), XY
    phase plots, per-body velocity/momentum/force arrows.
 3. **S-3** laser refraction (refractive index, Snell, total internal

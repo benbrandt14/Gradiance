@@ -2,8 +2,8 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-21 (Phase S started on `claude/jolly-noether-su0a6h`:
-S-1 done; Q-9 closed as not reproducible on main `8f7c547`; Phase Q merged
+Last updated: 2026-11-21 (Phase S under way: S-1 merged as #306, roadmap,
+audit and phase plan aligned; Q-9 closed as not reproducible on main `8f7c547`; Phase Q merged
 as #305; earlier history in git).
 
 ## Position
@@ -320,8 +320,9 @@ as #305; earlier history in git).
       (done, #300); **J-1** joint stress test (done, #290), **J-2**
       cut/select/boolean stress test (done, #293).
   12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
-      (`docs/briefs/Q-*`), in order. **Phase S** sandbox parity (audit
-      `docs/parity-audit.md`, briefs S-1..S-22, S-4 rejected) follows Phase Q.
+      (done, #305; Q-7 returned to upstream, Q-9 not reproducible).
+      **Phase S** sandbox parity (audit `docs/parity-audit.md`, briefs
+      S-1..S-22, S-4 rejected): **S-1** done (#306), **S-2** next.
   12b. **VectorCraft port** (planned 2026-11-21, owner direction; roadmap
       § "Unified plan"): **C-1..C-6**, **E-1..E-7**, **H-1..H-3**,
       **T-0..T-5**, then the G track below, then **B-0..B-4** (B-1 =

@@ -59,7 +59,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Material for new objects | rejected | owner, 2026-11-21 (with presets) |
 | Colour palettes, skins | present | colour presets (`appearance.rs`), looks, chrome presets |
 | Velocity menu: show velocity / momentum / force arrows | partial | `debug.velocities` (global only). Per body, plus momentum and force: **S-2** |
-| Direction picker for velocity | missing | **S-1** (gravity already has one) |
+| Direction picker for velocity | done | **S-1** (#306: inspector Starting motion dial) |
 | File load / save / new | present | `load-scene`, `save-scene`, `new-scene`, File menu |
 | File browser with thumbnails | missing | **S-17** |
 | Online scene sharing | missing | **S-18** (one-file share, no server) |
@@ -94,7 +94,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Material: attraction | present | `FieldSource` (`domain::field`, M20) |
 | Material: surface velocity (conveyor) | missing | **S-8** |
 | Material presets (wood, glass, …) | rejected | owner, 2026-11-21 |
-| Velocity: set linear and angular velocity | missing | **S-1** (velocity is not authored today) |
+| Velocity: set linear and angular velocity | done | **S-1** (#306: `InitialMotion`, `set-velocity`, `set-spin`) |
 | Information: mass, position, speed, spin, momentum, angular momentum, kinetic energy | present | quantity catalog (`quantity`), signal sources, Probe panel |
 | Information: area, moment of inertia, potential energy | missing | **S-2** |
 | Collision layers | present | Depth panel, context Depth |
@@ -133,7 +133,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Script language + console | present | Steel Lisp, REPL console, `--script` |
 | Spawn from script | present | `spawn-*`, `chain`, `sketch`, `hinge`, … |
 | Read/write position, angle | present | `body-x`, `body-y`, `body-rot`, `place` |
-| Read/write velocity | partial | read via `quantity`; write: **S-1** |
+| Read/write velocity | done | read via `quantity`; the starting value written by `set-velocity`/`set-spin` (**S-1**) |
 | Per-frame update / post-step | present | computed signals (`defsignal`, Tier-B kernel): the VM never runs per frame by rule |
 | On collide | partial | `ContactCount`, `ContactForce` sources; no edge event, no action on hit: **S-7** |
 | On key | present | `defkey` |
