@@ -245,6 +245,8 @@ Recommendation:
 - **D-2: egui 0.37** when bevy_egui releases it. The Craft code is on 0.37, so
   this step lowers porting cost again. Do **not** fork bevy_egui to get there
   earlier: a fork is one more upstream to track.
+  *2026-11-21:* now brief B-1 (`docs/briefs/B-1-egui-0-37.md`), trigger-driven
+  in the roadmap's "Unified plan".
 - The 3D refactor (avian2d → a 3D engine) is separate and later. D-1 does not
   make it harder.
 
