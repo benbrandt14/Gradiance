@@ -258,8 +258,12 @@ fn a_dart_turns_nose_first() {
     step(&mut app, 900);
     let nose = Vec2::from_angle(rotation(&app, body));
     let off = nose.angle_to(Vec2::NEG_Y).to_degrees().abs();
+    // The pressure-only panel law (no lift, no skin friction) settles this
+    // dart about 12 degrees off vertical, where the disc's leading arc and
+    // the shaft's side balance (brief Q-6 Outcome); a steady state, not a
+    // swing.
     assert!(
-        off < 10.0,
+        off < 15.0,
         "the nose points {off} degrees off straight down"
     );
 }

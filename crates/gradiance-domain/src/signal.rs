@@ -1212,9 +1212,8 @@ mod tests {
             let expected = match sink.actuator() {
                 Some(ActuatorTarget::Joint(_)) => SinkSubject::Joint,
                 Some(ActuatorTarget::Node(_)) => SinkSubject::Node,
-                Some(ActuatorTarget::Body(_)) => SinkSubject::Body,
                 None if sink == SignalSink::Plot => SinkSubject::None,
-                None => SinkSubject::Body,
+                Some(ActuatorTarget::Body(_)) | None => SinkSubject::Body,
             };
             assert_eq!(subject, expected, "{}", sink.name());
         }

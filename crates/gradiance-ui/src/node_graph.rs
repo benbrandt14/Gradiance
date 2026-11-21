@@ -826,6 +826,39 @@ fn collect_desired(
     // A thruster block for every thruster a wire names, and for every
     // thruster on a body already on the canvas: its thrust pin is where a
     // drive is wired (brief N-3).
+    node_blocks(&mut items, added, lasers, &shown, bindings, computed, nodes);
+    for id in shown {
+        items.push(NodeData::Body {
+            id,
+            name: names.get(&id).cloned(),
+            kind: kinds.get(&id).copied().unwrap_or("body"),
+        });
+    }
+    // The Scope sink is a fixture whenever there's anything to plot into it.
+    if !items.is_empty() {
+        items.push(NodeData::Scope);
+        // Comments last, so a new note lands after the graph in reconcile order.
+        items.extend(comments.iter().map(|(id, text)| NodeData::Comment {
+            id: *id,
+            text: text.clone(),
+        }));
+    }
+    items
+}
+
+/// The behaviour-node blocks (briefs N-3, Q-4): a thruster block for every
+/// thruster a wire drives, a laser block for every laser a wire or a
+/// modulation block reads, and either for a node that was added or rides a
+/// body already on the canvas.
+fn node_blocks(
+    items: &mut Vec<NodeData>,
+    added: &HashSet<StableId>,
+    lasers: &HashMap<String, StableId>,
+    shown: &HashSet<StableId>,
+    bindings: &SignalBindings,
+    computed: &ComputedSignals,
+    nodes: &Query<(&StableId, &NodeKind, &NodeAttachment), With<BehaviorNode>>,
+) {
     // A laser block for every laser a wire or a modulation block reads
     // (brief Q-4), and the same rules as a thruster otherwise.
     let mut read_nodes: HashSet<StableId> = HashSet::new();
@@ -865,23 +898,6 @@ fn collect_desired(
             NodeKind::Tracer(_) => {}
         }
     }
-    for id in shown {
-        items.push(NodeData::Body {
-            id,
-            name: names.get(&id).cloned(),
-            kind: kinds.get(&id).copied().unwrap_or("body"),
-        });
-    }
-    // The Scope sink is a fixture whenever there's anything to plot into it.
-    if !items.is_empty() {
-        items.push(NodeData::Scope);
-        // Comments last, so a new note lands after the graph in reconcile order.
-        items.extend(comments.iter().map(|(id, text)| NodeData::Comment {
-            id: *id,
-            text: text.clone(),
-        }));
-    }
-    items
 }
 
 /// Whether a joint has a motor a drive can reach: `Some(linear)` for a

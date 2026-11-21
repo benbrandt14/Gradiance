@@ -25,8 +25,7 @@ fn workstation(app: &App) -> (f32, f32, String) {
         world.resource::<SnapConfig>().rotation_step_deg,
         world
             .get_resource::<Workspaces>()
-            .map(|w| w.active.clone())
-            .unwrap_or_default(),
+            .map_or_else(String::new, |w| w.active.clone()),
     )
 }
 

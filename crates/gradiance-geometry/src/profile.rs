@@ -222,10 +222,9 @@ mod tests {
         let panels = DragPanels::from_points(&ring);
         assert_eq!(panels.panels().len(), MAX_PANELS);
         assert!(close(panels.facing_width(Vec2::Y), 2.0, 0.01));
-        assert!(
-            DragPanels::from_points(&[Vec2::ZERO, Vec2::X])
-                .panels()
-                .is_empty()
+        assert_eq!(
+            DragPanels::from_points(&[Vec2::ZERO, Vec2::X]).panels(),
+            &[]
         );
     }
     use super::*;

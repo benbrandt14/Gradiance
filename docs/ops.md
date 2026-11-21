@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 150 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 152 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -191,7 +191,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `scene.dump` | `(scene-dump)` | query | — | — | The whole scene as JSON: the record a save writes (bodies with their groups and depth, joints with their anchors, nodes, and the environment). Lisp gets the JSON text. | `{}` |
 | `scene.insert` | `(insert-scene path at)` | edit | `insert` | File/Insert… | Add a .ron file's bodies, joints, nodes and groups to the scene with fresh ids, one undo step ("" = a dialog). `at`: [] keeps the file's positions, [x y] centres the bodies there. Returns the new bodies' ids. | `{"path": "tests/fixtures/scenes/pendulum.ron", "at": [6, 2]}` |
 | `scene.load` | `(load-scene path)` | edit | `load-scene` | File/Open…, Ctrl+O | Replace the scene with a .ron file's (relative to the working directory; "" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing. | `{"path": "tests/fixtures/scenes/pendulum.ron"}` |
-| `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default environment) — one undo step, as File ▸ New scene. | `{}` |
+| `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default gravity, look and signals; your grid, snap, camera and workspaces stay) — one undo step, as File ▸ New scene. | `{}` |
 | `scene.save` | `(save-scene path)` | editor | — | File/Save, Ctrl+S | Write the scene to a .ron file (relative to the working directory; "" = the last path, else a dialog). Returns the path; the file is written this frame. No undo step. | `{"path": "target/scene.ron"}` |
 
 ## `scenery`
@@ -204,6 +204,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `signal.bind` | `(bind name source sink [target] [of] [min] [max])` | config | `settings` | — | Bind a signal to a sink: source is a bus signal, or with of (a list of the quantity's subjects) a catalog quantity; sink is fill, tracer, plot, motor-speed, motor-cap, field, gravity or thrust on target (a joint for motor-*, a node for thrust, a body otherwise; plot takes none). min/max map a colour sink's ramp; an actuator takes the raw value. Re-binding a name replaces it. | `{"name": "spin", "source": "speed", "sink": "motor-speed", "target": 0, "of": [0], "min": 0, "max": 2}` |
 | `signal.computed` | `(defsignal name expr)` | config | `settings` | — | Declare a computed signal from an RPN expression over other signals (e.g. "t sin amp *"). | `{"name": "osc", "expr": "t sin 2 *"}` |
 | `signal.export` | `(signal-export path names)` | editor | — | — | Write signals' recorded history to a .csv file: a header t,name1,name2,... then one row per sample of the first signal (a cell is empty where another signal has no sample at that t). Returns the path. No undo step. | `{"path": "target/signals.csv", "names": ["t"]}` |
 | `signal.get` | `(signal-get name)` | query | — | — | Current value of a named signal on the bus; NaN if unset. | `{"name": "t"}` |
@@ -211,6 +212,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `signal.key` | `(defkey name key [negative])` | config | `settings` | — | Declare a key input: a signal that is 1 while key is held in play (0 paused or while a field has the keyboard); with negative, -1 while that key is held and 0 when both are. While the sim plays the key is the input's, not the editor's. | `{"name": "throttle", "key": "E", "negative": "Q"}` |
 | `signal.param` | `(defparam name value min max)` | config | `settings` | — | Declare a tunable signal parameter (an auto-slider) published on the bus. | `{"name": "amp", "value": 2, "min": 0, "max": 10}` |
 | `signal.set` | `(signal-set name value)` | editor | — | — | Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md). | `{"name": "excitement", "value": 7}` |
+| `signal.unbind` | `(unbind name)` | config | `settings` | — | Remove the signal binding of this name; an actuator it drove returns to its authored value. | `{"name": "drive"}` |
 
 ## `sim`
 

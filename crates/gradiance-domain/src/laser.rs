@@ -50,7 +50,8 @@ pub fn free_name<'a>(taken: impl IntoIterator<Item = &'a str>) -> String {
     if !taken.contains(&DEFAULT_NAME) {
         return DEFAULT_NAME.to_owned();
     }
-    (2_u32..)
+    // `taken` has n names, so one of the first n + 1 candidates is free.
+    (2..=taken.len() + 2)
         .map(|n| format!("{DEFAULT_NAME}{n}"))
         .find(|name| !taken.contains(&name.as_str()))
         .unwrap_or_else(|| DEFAULT_NAME.to_owned())

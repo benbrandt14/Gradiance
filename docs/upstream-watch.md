@@ -18,3 +18,17 @@ Licence note: VectorCraft's code is MIT OR Apache-2.0 except the ArtCraft
 name, logos and `docs/brand/`, which are reserved. SolidCraft's code is MIT OR Apache-2.0, except its brand
 material (`crates/ui-kit`, `crates/look`, `crates/theme`, branding assets),
 which its `LICENSE-BRAND` reserves. Port nothing from those folders.
+
+## Dependency notes (not ported from; behaviour to recheck on upgrade)
+
+- **avian2d 0.8 — standing joint correction reported as velocity** (brief
+  Q-7, 2026-11-21). A chain pinned to the world at both ends settles into
+  its catenary, but the link at each pin keeps a steady *reported*
+  `LinearVelocity`/`AngularVelocity` (0.44 m/s and 1.17 rad/s at the left
+  pin) while its pose is frozen to 1e-7 m; that hinge stays stretched
+  1.5 mm under the chain's weight. Ruled out on the Gradiance side: air
+  drag (switching it off changes nothing), sleeping (not asleep), contacts
+  (none), the world pin as `ChildOf` the joint (top-level: identical).
+  Repro: `tests/it/chains.rs` `a_settled_chain_has_no_buzzing_link`
+  (`#[ignore]`). Recheck on each avian upgrade; a reader of link speed
+  (plots, readouts) sees the phantom value.

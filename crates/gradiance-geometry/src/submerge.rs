@@ -499,7 +499,11 @@ mod tests {
         };
         let found = edges(&pool, Vec2::Y);
         assert_eq!(found.len(), 2, "{found:?}");
-        assert!(found.iter().any(|(p, q)| p.y == -1.5 && q.y == -1.5));
+        assert!(
+            found
+                .iter()
+                .any(|(p, q)| (p.y + 1.5).abs() < 1e-6 && (q.y + 1.5).abs() < 1e-6)
+        );
     }
     use super::*;
 

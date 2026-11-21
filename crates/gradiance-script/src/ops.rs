@@ -469,7 +469,7 @@ impl Operation for Bind {
         menu: None,
         chord: None,
         undo: Some(gradiance_command::intent::name::SETTINGS),
-        example: r#"{"name": "spin", "source": "t", "sink": "motor-speed", "target": 0}"#,
+        example: r#"{"name": "spin", "source": "speed", "sink": "motor-speed", "target": 0, "of": [0], "min": 0, "max": 2}"#,
     };
 
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {

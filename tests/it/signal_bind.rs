@@ -120,19 +120,37 @@ fn bind_drives_a_motor_and_unbind_releases_it() {
 
     run(&mut app, "(unbind \"spin\")").unwrap();
     assert_eq!(depth(&app), before + 2, "unbind is one undo step");
-    assert!(binding_names(&app).is_empty(), "the binding is gone");
+    assert_eq!(
+        binding_names(&app),
+        [] as [String; 0],
+        "the binding is gone"
+    );
     step(&mut app, 2);
     assert!(
         (motor_target(&app, joint) - AUTHORED_SPEED).abs() < 1e-6,
         "the authored motor speed is back"
     );
+}
 
+/// Each call is one undo step, and undo reverts it (paused, so no run step
+/// lands between them).
+#[test]
+fn bind_and_unbind_undo() {
+    let mut app = crate::harness::paused_app();
+    motor_wheel(&mut app);
+    run(&mut app, "(bind \"spin\" \"t\" \"motor-speed\" 0)").unwrap();
+    run(&mut app, "(unbind \"spin\")").unwrap();
+    assert_eq!(binding_names(&app), [] as [String; 0]);
     undo(&mut app);
     step(&mut app, 2);
     assert_eq!(binding_names(&app), ["spin"], "undo restores the binding");
     undo(&mut app);
     step(&mut app, 2);
-    assert!(binding_names(&app).is_empty(), "undo removes the binding");
+    assert_eq!(
+        binding_names(&app),
+        [] as [String; 0],
+        "undo removes the binding"
+    );
 }
 
 /// Re-binding a name replaces the binding; a quantity source with `of`
@@ -181,5 +199,5 @@ fn bad_binds_are_typed_errors() {
         assert!(err.contains(needle), "{source}: {err}");
     }
     assert_eq!(depth(&app), before, "no refusal records a step");
-    assert!(binding_names(&app).is_empty());
+    assert_eq!(binding_names(&app), [] as [String; 0]);
 }

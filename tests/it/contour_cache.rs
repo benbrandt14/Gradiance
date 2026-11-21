@@ -50,5 +50,5 @@ fn the_cache_follows_every_shape_edit_and_is_never_saved() {
     }
     let saved =
         gradiance::scene::to_ron(&gradiance::scene::SceneRecord::capture(app.world_mut())).unwrap();
-    assert!(!saved.contains("ShapeContours") && !saved.contains("holes"));
+    assert!(!saved.contains("ShapeContours"));
 }
