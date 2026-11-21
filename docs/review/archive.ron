@@ -4716,5 +4716,167 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "docs/briefs/Q-4-laser-and-joint-blocks.md",
         ),
+        (
+            question: (
+                id: "vectorcraft-path-leaf",
+                title: "Splines: a Bezier path leaf in the shape model?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"Gradiance has no curved edge: ShapeDef is Box, Circle, Polygon, Capsule, HalfPlane and Csg. VectorCraft's anchor-and-handle path model, Curvature tool and curve fitting are the reference."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A path leaf on kurbo",
+                        caption: r#"ShapeDef::Path with authored anchors and handles, flattened inside polygonize (the single discretization point); a closed path is a solid, an open path with a width is a curved rod."#,
+                    ),
+                    (
+                        label: "No curved leaf",
+                        caption: r#"Edges stay straight; curves only as polygons."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-path-leaf",
+                title: "Splines: a Bezier path leaf in the shape model?",
+                choice: Picked("A path leaf on kurbo"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/E-1-path-leaf.md (phase E, E-1..E-7)",
+        ),
+        (
+            question: (
+                id: "vectorcraft-arrays",
+                title: "Arrays: rebuild with VectorCraft's Repeat as the reference?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"docs/array-decision.md keeps arrays as pure translations after per-copy tweens were removed. VectorCraft's live Repeat has radial, grid and mirror kinds with on-canvas handles."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Rebuild arrays",
+                        caption: r#"Reopen the array decision; a decision brief (T-0) studies VectorCraft's Repeat first, then radial, mirror, grid v2, along a path and blend."#,
+                    ),
+                    (
+                        label: "Keep arrays as they are",
+                        caption: r#"Pure translations only; no radial or mirror arrays."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-arrays",
+                title: "Arrays: rebuild with VectorCraft's Repeat as the reference?",
+                choice: Picked("Rebuild arrays"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it. Owner: "Arrays was a failed attempt before, but it's a high value feature and good to spend time on with a good reference.""#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/T-0-arrays-decision.md (phase T)",
+        ),
+        (
+            question: (
+                id: "vectorcraft-shape-recognition",
+                title: "Sketch tool: recognise rough strokes as clean shapes?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"VectorCraft's Shaper classifies a freehand stroke as a rectangle, ellipse, polygon or line (geom/recognize.rs). The parity audit had declined sketch gestures."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Port shape recognition",
+                        caption: r#"The sketch tool turns a rough stroke into a clean shape."#,
+                    ),
+                    (
+                        label: "Decline",
+                        caption: r#"Keep the sketch tool literal; precision comes from the drawing tools."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-shape-recognition",
+                title: "Sketch tool: recognise rough strokes as clean shapes?",
+                choice: Picked("Decline"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it. Owner: "Shape recognition no, this should be a more precise tool than that.""#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/vectorcraft-survey.md (Not taken); roadmap Unified plan, Declined",
+        ),
+        (
+            question: (
+                id: "vectorcraft-dimensions-bus",
+                title: "Dimensions: live sensors on the signal bus, or drawing aids?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21",
+                description: r#"VectorCraft's dimensions are associative: they follow the art they measure."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Publish to the bus",
+                        caption: r#"A dimension is a behaviour node that publishes its value under its name: plottable, bindable, readable by scripts."#,
+                    ),
+                    (
+                        label: "Drawing aids only",
+                        caption: r#"Dimensions draw and follow bodies but publish nothing."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "vectorcraft-dimensions-bus",
+                title: "Dimensions: live sensors on the signal bus, or drawing aids?",
+                choice: Picked("Publish to the bus"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/briefs/C-5-dimensions-as-sensors.md",
+        ),
+        (
+            question: (
+                id: "external-ui-project",
+                title: "Is VectorCraft part of the external UI project?",
+                source: "VectorCraft survey (docs/vectorcraft-survey.md), discussed with the owner in chat 2026-11-21; docs/orchestration.md Future intent 1",
+                description: r#"The orchestration plan says the UI will be bootstrapped from an external project with UI test and MCP infrastructure. VectorCraft is an egui 0.37 Craft app with both."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Yes, the Craft apps",
+                        caption: r#"VectorCraft, SolidCraft and craft-libs; phase B starts the bootstrap."#,
+                    ),
+                    (
+                        label: "Reference only",
+                        caption: r#"Port features, not chrome or harness."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "external-ui-project",
+                title: "Is VectorCraft part of the external UI project?",
+                choice: Picked("Yes, the Craft apps"),
+                note: r#"Answered by the owner in chat on 2026-11-21 (not through review mode), recorded here so later sessions find it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/orchestration.md Future intent 1; phase B briefs",
+        ),
+        (
+            question: (
+                id: "unified-roadmap-order",
+                title: "Where do the VectorCraft phases go in the roadmap?",
+                source: "Owner direction 2026-11-21: unify the full roadmap and place these features where useful",
+                description: r#"Open work: Phase Q, Phase S, the graph track G-2..G-6, 3D-0 with frames F1..F3, D-2 egui 0.37, plus the new phases C, E, H, T, B."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Q, S, C, E, H, T, G, B, 3D-0",
+                        caption: r#"Briefed work first; snapping before paths because it improves every later tool; paths before shaping and arrays, which need curves; G-4 after paths so shape nodes cover them; B waits for egui 0.37 (B-1 trigger-driven); G-2/G-3 may interleave at any gate."#,
+                    ),
+                    (
+                        label: "G before the new phases",
+                        caption: r#"Finish the graph track first, then the VectorCraft features."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "unified-roadmap-order",
+                title: "Where do the VectorCraft phases go in the roadmap?",
+                choice: Picked("Q, S, C, E, H, T, G, B, 3D-0"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-21T12:00:00Z",
+            ),
+            ingested_as: "docs/roadmap.md Unified plan; docs/state.md; docs/orchestration.md",
+        ),
     ],
 )
