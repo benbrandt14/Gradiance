@@ -205,7 +205,7 @@ impl Operation for Cut {
     const META: OpMeta = OpMeta {
         id: "body.cut",
         lisp: "cut",
-        doc: "Sever every body crossed by the stroke a→b of the given width (metres).",
+        doc: "Cut every body the stroke a→b passes through, at the given width (metres).",
         seam: Seam::Edit,
         menu: None,
         chord: None,

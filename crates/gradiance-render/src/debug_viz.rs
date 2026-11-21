@@ -17,7 +17,8 @@ use gradiance_domain::layers::layer_hue;
 use gradiance_domain::settings::DebugSettings;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::theme::debug;
-use gradiance_geometry::polygonize::polygonize;
+use gradiance_geometry::contours::Contours;
+use gradiance_geometry::polygonize::ShapeContours;
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_physics::SubstepTrace;
 use gradiance_physics::fields::Fields;
@@ -34,7 +35,7 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
     scale: Res<gradiance_interaction::camera::CameraScale>,
-    bodies: Query<(Entity, &ShapeDef, &Transform, &DepthBand), With<Body>>,
+    bodies: Query<(Entity, &ShapeDef, &ShapeContours, &Transform, &DepthBand), With<Body>>,
     field_sources: Query<(&Transform, &FieldSource), With<Body>>,
     fields: Fields,
     cameras: Query<(&Transform, &Projection), (With<Camera3d>, Without<Body>)>,
@@ -51,8 +52,12 @@ pub fn draw_debug_overlays(
     // derived from real geometry (rings, AABBs) and vectors proportional to a
     // physical quantity (velocity/field arrows) are already world-consistent.
     let px = scale.0;
-    for body in &bodies {
-        draw_body_overlays(&debug, &physics, &mut gizmos, body, px);
+    // Nothing below reads a body unless one of the per-body toggles is on;
+    // skip the pass entirely when they are all off.
+    if debug.show_layers || debug.show_origins || debug.show_velocities {
+        for body in &bodies {
+            draw_body_overlays(&debug, &physics, &mut gizmos, body, px);
+        }
     }
 
     if debug.show_joint_anchors {
@@ -91,22 +96,22 @@ fn draw_body_overlays(
     debug: &DebugSettings,
     physics: &PhysicsQueries,
     gizmos: &mut Gizmos<OverlayGizmos>,
-    body: (Entity, &ShapeDef, &Transform, &DepthBand),
+    body: (Entity, &ShapeDef, &ShapeContours, &Transform, &DepthBand),
     px: f32,
 ) {
-    let (entity, shape, transform, band) = body;
+    let (entity, shape, contours, transform, band) = body;
     let infinite = shape.contains_half_plane();
 
     // Collision-set visualization: outline in the front-most derived
     // layer's hue, matching the depth panel's gridline swatches.
     if debug.show_layers && !infinite {
         let color = Color::from(debug::layer(layer_hue(band.bits().trailing_zeros())));
-        for ring in polygonize(shape).rings() {
-            let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
-            if let Some(first) = pts.first().copied() {
-                pts.push(first);
-            }
-            gizmos.linestrip_2d(pts, color);
+        for ring in contours.iter().flat_map(Contours::rings) {
+            let to_world = |v: &bevy::math::Vec2| world_point(transform, *v);
+            gizmos.linestrip_2d(
+                ring.iter().map(to_world).chain(ring.first().map(to_world)),
+                color,
+            );
         }
     }
 
@@ -124,7 +129,8 @@ fn draw_body_overlays(
         );
         if !infinite {
             // Centroid may sit off-origin after CSG reshapes.
-            let centroid = world_point(transform, polygonize(shape).centroid());
+            let local = contours.largest().map_or(Vec2::ZERO, Contours::centroid);
+            let centroid = world_point(transform, local);
             gizmos.circle_2d(
                 Isometry2d::from_translation(centroid),
                 3.0 * px,

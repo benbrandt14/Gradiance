@@ -34,9 +34,15 @@ use uuid::Uuid;
 pub struct StableId(pub Uuid);
 
 impl StableId {
-    /// Generates a fresh random id.
+    /// Generates a fresh id.
+    ///
+    /// Time-ordered (UUID v7): ids minted later compare greater, within a
+    /// process and across sessions. The id order is therefore the creation
+    /// order: the stacking order of bodies on one depth band (newest on
+    /// top, as in Algodoo; brief J-2) and the order of script indices.
+    /// Ids already saved as v4 keep a fixed, arbitrary order.
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        Self(Uuid::now_v7())
     }
 }
 

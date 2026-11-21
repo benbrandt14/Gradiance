@@ -1,9 +1,11 @@
 //! The CSG cut command: subtract a stroke strip from every body it
 //! crosses.
 //!
-//! Cuts only **sever**: subtracting the strip must separate the body
-//! into components (or swallow it entirely) — partial strokes are
-//! rejected, so no notches or microscopic thin features can appear.
+//! Cuts only go **through**: subtracting the strip must separate the body
+//! into components, swallow it entirely, or open a body the stroke passes
+//! right through (a ring cut on one side) — a stroke that ends inside
+//! the material is rejected, so no notches or microscopic thin features
+//! can appear.
 //! Pieces become fresh polygon-leaf bodies (connectivity is a
 //! topological property no field boolean can express, so splitting is
 //! where discretization is inherent).
@@ -20,7 +22,7 @@ use gradiance_domain::Body;
 use gradiance_domain::joint::JointDef;
 use gradiance_domain::shape::{CsgOp, ShapeDef};
 use gradiance_geometry::contours::{Contours, point_in_ring};
-use gradiance_geometry::polygonize::polygonize_components;
+use gradiance_geometry::polygonize::polygonize_components_on_axes;
 use gradiance_geometry::sdf;
 use gradiance_scene::{BodyRecord, JointRecord};
 use gradiance_units::Displacement;
@@ -76,7 +78,7 @@ impl CutCommand {
 
     /// The cutting strip in a body's local frame: a box along the stroke,
     /// extended by one width so the stroke's round-off never leaves a film
-    /// at its ends.
+    /// at its ends. Only its bounds are used (the pre-check).
     fn local_strip(&self, pose: &gradiance_core::units::PosRot) -> ShapeDef {
         let inv = Vec2::from_angle(-pose.rot);
         let a = inv.rotate(self.a - pose.pos);
@@ -91,6 +93,81 @@ impl CutCommand {
                 height: self.width,
             }),
         }
+    }
+
+    /// The stroke frame: its midpoint (world) and direction angle. The
+    /// stroke runs along this frame's `x` axis.
+    fn frame(&self) -> (Vec2, f32) {
+        let dir = self.b - self.a;
+        let angle = if dir.length() > 1e-6 {
+            dir.to_angle()
+        } else {
+            0.0
+        };
+        ((self.a + self.b) / 2.0, angle)
+    }
+
+    /// The connected pieces left when the strip is cut out of `original`,
+    /// in the body's local frame.
+    ///
+    /// Contoured in the stroke frame, on a lattice with a sample row on the
+    /// stroke's centre line (`polygonize_components_on_axes`): a slit
+    /// thinner than the body's contour cell still severs it. Contoured in
+    /// the body frame, such a slit fell between two sample rows wherever
+    /// the body sat, and the body ignored the cut (brief J-2).
+    fn pieces(&self, original: &BodyRecord) -> Vec<Contours> {
+        let (mid, angle) = self.frame();
+        let to_stroke = Vec2::from_angle(-angle);
+        let len = self.a.distance(self.b);
+        let tree = ShapeDef::Csg {
+            op: CsgOp::Subtract,
+            lhs: Box::new(ShapeDef::Placed {
+                pos: to_stroke.rotate(original.pose.pos - mid),
+                rot: original.pose.rot - angle,
+                shape: Box::new(original.shape.clone()),
+            }),
+            rhs: Box::new(ShapeDef::Box {
+                width: len + self.width,
+                height: self.width,
+            }),
+        };
+        // Stroke frame -> body frame.
+        let rot = Vec2::from_angle(angle);
+        let to_body = Vec2::from_angle(-original.pose.rot);
+        let map = |p: Vec2| to_body.rotate(mid + rot.rotate(p) - original.pose.pos);
+        polygonize_components_on_axes(&tree)
+            .into_iter()
+            .map(|c| Contours {
+                outline: c.outline.into_iter().map(map).collect(),
+                holes: c
+                    .holes
+                    .into_iter()
+                    .map(|h| h.into_iter().map(map).collect())
+                    .collect(),
+            })
+            .collect()
+    }
+
+    /// Whether the stroke passes *through* the body's material: both of
+    /// its ends lie outside it and it crosses it somewhere. Cutting a
+    /// ring on one side opens it without severing it; a stroke that ends
+    /// inside the material would leave a notch, so it does nothing.
+    fn passes_through(&self, original: &BodyRecord) -> bool {
+        let inv = Vec2::from_angle(-original.pose.rot);
+        let local = |p: Vec2| inv.rotate(p - original.pose.pos);
+        let inside = |p: Vec2| sdf::eval(&original.shape, local(p)) < 0.0;
+        if inside(self.a) || inside(self.b) {
+            return false;
+        }
+        let len = self.a.distance(self.b);
+        let step = (self.width / 2.0).max(len / 4096.0).max(1e-4);
+        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let n = (len / step).ceil() as usize;
+        (1..n).any(|i| {
+            #[expect(clippy::cast_precision_loss)]
+            let t = i as f32 / n as f32;
+            sdf::eval(&original.shape, local(self.a.lerp(self.b, t))) < -self.width / 4.0
+        })
     }
 
     /// Computes what the stroke does to every body it crosses.
@@ -112,24 +189,20 @@ impl CutCommand {
             if !aabbs_overlap(sdf::aabb(&original.shape), sdf::aabb(&strip)) {
                 continue;
             }
-            let cut_tree = ShapeDef::Csg {
-                op: CsgOp::Subtract,
-                lhs: Box::new(original.shape.clone()),
-                rhs: Box::new(strip),
-            };
-            let components = polygonize_components(&cut_tree);
+            let components = self.pieces(&original);
 
-            // Cuts only *sever*: a stroke that fails to pass fully through
-            // leaves the body untouched (no notches, no microscopic thin
-            // features). Deliberate notches are body booleans instead
-            // (subtract / intersect / xor between bodies, `merge_cmd`).
-            let replacement = if components.is_empty() {
-                Replacement::Destroy
-            } else if components.len() == 1 {
-                continue;
-            } else {
-                let pieces = piece_records(&original, components);
-                Replacement::Split { pieces }
+            // A cut severs (two or more pieces), swallows (none), or opens
+            // a body it passes right through (one piece: a ring cut on one
+            // side). A stroke that ends inside the material leaves the body
+            // untouched (no notches, no microscopic thin features).
+            // Deliberate notches are body booleans instead (subtract /
+            // intersect / xor between bodies, `merge_cmd`).
+            let replacement = match components.len() {
+                0 => Replacement::Destroy,
+                1 if !self.passes_through(&original) => continue,
+                _ => Replacement::Split {
+                    pieces: piece_records(&original, components),
+                },
             };
 
             outcomes.push(CutOutcome {

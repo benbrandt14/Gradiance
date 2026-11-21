@@ -58,7 +58,6 @@ use gradiance_core::ids::StableId;
 use gradiance_core::states::{GameState, ToolState};
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
-use gradiance_domain::depth::DepthBand;
 use gradiance_domain::group::SelectionGroup;
 use gradiance_domain::settings::{RenderSettings, SnapConfig, ToolDefaults};
 use gradiance_domain::shape::ShapeDef;
@@ -637,7 +636,7 @@ pub fn draw_draft_preview<T: DraftTool>(
 #[derive(SystemParam)]
 pub struct ToolWorld<'w, 's> {
     physics: PhysicsQueries<'w, 's>,
-    hit: Query<'w, 's, (&'static ShapeDef, &'static DepthBand), With<Body>>,
+    hit: super::HitQuery<'w, 's>,
     shapes: Query<'w, 's, (&'static ShapeDef, &'static Transform), With<Body>>,
     centers: Query<'w, 's, (Entity, &'static Transform), With<Body>>,
     ids: Query<'w, 's, &'static StableId>,

@@ -34,8 +34,6 @@ type EdgeKey = (i32, i32, bool);
 /// `cell` is the sampling step; boundary detail below it may be missed
 /// (the returned vertices themselves are refined far beyond it).
 /// Components with area below ~4 cells are discarded as slivers.
-#[expect(clippy::too_many_lines)] // one algorithm: sample, march, chain
-#[expect(clippy::cast_possible_wrap)] // grid axes are capped at MAX_SAMPLES
 pub fn contour_components(
     field: impl Fn(Vec2) -> f32,
     min: Vec2,
@@ -50,7 +48,56 @@ pub fn contour_components(
     let nx = ((span.x / cell).ceil() as usize + 1).clamp(2, MAX_SAMPLES);
     let ny = ((span.y / cell).ceil() as usize + 1).clamp(2, MAX_SAMPLES);
     let step = Vec2::new(span.x / nx as f32, span.y / ny as f32);
+    march(&field, min, step, (nx, ny), cell)
+}
 
+/// [`contour_components`] on a lattice through the origin: every sample
+/// sits at an integer multiple of the (square) cell, so the lines `x = 0`
+/// and `y = 0` are sample rows.
+///
+/// A thin gap centred on the `x` axis is then always resolved, however
+/// coarse the cell: its centre row samples the gap, so the two sides
+/// never join. The cut command contours a stroke this way, in the
+/// stroke's frame (brief J-2: a cut narrower than the cell used to
+/// fall between two sample rows, and the body ignored it).
+#[expect(clippy::cast_possible_truncation)] // lattice indices are capped at MAX_SAMPLES
+#[expect(clippy::cast_sign_loss)] // spans are positive
+pub fn contour_components_on_axes(
+    field: impl Fn(Vec2) -> f32,
+    min: Vec2,
+    max: Vec2,
+    cell: f32,
+) -> Vec<Contours> {
+    let mut cell = cell.max(1e-3);
+    let pad = |cell: f32| {
+        let lo = ((min - Vec2::splat(2.0 * cell)) / cell).floor();
+        let hi = ((max + Vec2::splat(2.0 * cell)) / cell).ceil();
+        (lo, hi - lo)
+    };
+    // Grow the cell until the lattice fits the sample cap; the origin stays
+    // on the lattice at any cell.
+    let (lo, count) = loop {
+        let (lo, count) = pad(cell);
+        if count.max_element() < MAX_SAMPLES as f32 {
+            break (lo, count);
+        }
+        cell *= count.max_element() / (MAX_SAMPLES as f32 - 8.0);
+    };
+    let nx = (count.x as usize).max(2);
+    let ny = (count.y as usize).max(2);
+    march(&field, lo * cell, Vec2::splat(cell), (nx, ny), cell)
+}
+
+/// Marching squares over the `n.0 × n.1` cells of size `step` from `min`.
+#[expect(clippy::too_many_lines)] // one algorithm: sample, march, chain
+#[expect(clippy::cast_possible_wrap)] // grid axes are capped at MAX_SAMPLES
+fn march(
+    field: &impl Fn(Vec2) -> f32,
+    min: Vec2,
+    step: Vec2,
+    (nx, ny): (usize, usize),
+    cell: f32,
+) -> Vec<Contours> {
     let point_at = |ix: i32, iy: i32| min + step * Vec2::new(ix as f32, iy as f32);
     let mut values = vec![0.0f32; (nx + 1) * (ny + 1)];
     for iy in 0..=ny {

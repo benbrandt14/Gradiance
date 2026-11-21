@@ -245,7 +245,7 @@ pub fn open_context_menu(
     cursor: Res<CursorWorldPos>,
     over_ui: Res<PointerOverUi>,
     physics: PhysicsQueries,
-    bodies: Query<(&ShapeDef, &DepthBand), With<Body>>,
+    bodies: gradiance_interaction::tools::HitQuery,
     ids: Query<&StableId>,
     joints: Query<(&StableId, &JointDef)>,
     transforms: Query<&Transform, With<Body>>,

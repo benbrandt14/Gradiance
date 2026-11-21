@@ -3729,6 +3729,91 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
         ),
         (
             question: (
+                id: "cut-thin-slit",
+                title: "How does a cut stay reliable on a long body?",
+                source: "Cut, selection and boolean stress test (docs/briefs/J-2-cut-select-stress.md)",
+                description: r#"The cut tool's stroke is 3 px wide (3 cm at the default zoom). A body is contoured with about 96 cells across its longer side, so a 4 m box has 4.2 cm cells: the slit fell between two sample rows at some positions and the body ignored the cut."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Contour in the stroke frame, a sample row on the stroke line",
+                        caption: r#"The row inside the slit always separates the two sides, at the body's usual sample count. Piece corners keep the existing contour accuracy."#,
+                    ),
+                    (
+                        label: "Exact polygon clipping",
+                        caption: r#"Exact corners, but a new polygon-boolean dependency for one command; the SDF tree stays the model everywhere else."#,
+                    ),
+                    (
+                        label: "Finer cells for cuts",
+                        caption: r#"Cells under a third of the slit: a large body takes millions of field samples per cut."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "cut-thin-slit",
+                title: "How does a cut stay reliable on a long body?",
+                choice: Picked("Contour in the stroke frame, a sample row on the stroke line"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "cut_cmd::CutCommand::pieces, polygonize::polygonize_components_on_axes (test a_thin_cut_severs_a_long_body_wherever_it_crosses)",
+        ),
+        (
+            question: (
+                id: "cut-through-ring",
+                title: "Does a cut through one side of a ring open it?",
+                source: "Cut, selection and boolean stress test (docs/briefs/J-2-cut-select-stress.md)",
+                description: r#"A stroke that passes right through a ring's side leaves one piece, not two. The cut rule required two pieces, so nothing happened."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Open it: a stroke through the material always cuts",
+                        caption: r#"As Algodoo's knife. A stroke that ends inside the material still does nothing (no notches)."#,
+                    ),
+                    (
+                        label: "Keep: a cut must sever",
+                        caption: r#"The ring cannot be opened with the cut tool; subtract a thin box instead."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "cut-through-ring",
+                title: "Does a cut through one side of a ring open it?",
+                choice: Picked("Open it: a stroke through the material always cuts"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "cut_cmd::CutCommand::passes_through (tests a_cut_through_one_side_of_a_ring_opens_it, a_stroke_that_ends_inside_a_body_still_does_nothing)",
+        ),
+        (
+            question: (
+                id: "stacking-order",
+                title: "Which of two overlapping bodies on one layer is on top?",
+                source: "Cut, selection and boolean stress test (docs/briefs/J-2-cut-select-stress.md)",
+                description: r#"Bodies on one depth band can overlap while paused (one moved onto another). Their front faces are coplanar, so the GPU drew either one, while a click picked by entity index, which a cut, a delete or an undo reshuffles. A body that looked on top was often not clickable."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Newest on top, for drawing and for clicks",
+                        caption: r#"As Algodoo. Ids are minted in creation order (UUID v7); the hit-test breaks a band tie by the newest id; render::stack sinks older bodies 1 cm per step. Scenes saved before keep their v4 ids, in a fixed arbitrary order."#,
+                    ),
+                    (
+                        label: "An authored stacking order with Bring to front / Send to back",
+                        caption: r#"A new authored field, menu rows and save format change. Possible later on top of this order."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "stacking-order",
+                title: "Which of two overlapping bodies on one layer is on top?",
+                choice: Picked("Newest on top, for drawing and for clicks"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "StableId::new (v7), tools::bodies_at_sorted, render::stack (test a_click_on_two_overlapping_bodies_of_one_band_picks_the_newest)",
+        ),
+        (
+            question: (
                 id: "undo-compare-exclusions",
                 title: "Which fields does the undo matrix leave out of its exact compare?",
                 source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",

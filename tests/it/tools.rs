@@ -516,8 +516,10 @@ fn shift_drag_from_a_body_becomes_an_additive_band() {
 #[test]
 fn weld_tool_merges_two_overlapping_bodies() {
     let mut app = paused_app();
-    let a = spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
-    spawn_box_at(&mut app, Vec2::new(40.0, 0.0), 60.0, 40.0);
+    spawn_box_at(&mut app, Vec2::ZERO, 60.0, 40.0);
+    // The newer box is on top of its band (brief J-2), so it is the first
+    // target under the cursor and hosts the merge.
+    let top = spawn_box_at(&mut app, Vec2::new(40.0, 0.0), 60.0, 40.0);
     app.update(); // colliders
     app.world_mut()
         .resource_mut::<NextState<ToolState>>()
@@ -534,7 +536,7 @@ fn weld_tool_merges_two_overlapping_bodies() {
 
     assert_eq!(body_count(&mut app), 1, "the two bodies merged into one");
     assert_eq!(stack_undo_len(&app), before + 1, "one undoable command");
-    let entity = entity_of(&app, a).expect("first target survives");
+    let entity = entity_of(&app, top).expect("first target survives");
     assert!(
         matches!(
             app.world().get::<ShapeDef>(entity).unwrap(),
