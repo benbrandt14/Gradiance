@@ -29,6 +29,16 @@ pub fn default_gravity_scale() -> GravityScale {
     GravityScale(1.0)
 }
 
+/// The authored body kind of a body that a gesture holds kinematic.
+///
+/// The kinematic hold (`physics::hold`) parks a dragged body as
+/// [`RigidBody::Kinematic`] while the preview runs. That kind is transient,
+/// so the hold puts the authored kind here and [`BodyPhysics::capture`]
+/// reads it first: a move committed while the hold is on records the
+/// authored kind, not the hold (brief J-2). Derived; never saved.
+#[derive(bevy::ecs::component::Component, Debug, Clone, Copy, PartialEq)]
+pub struct HeldKind(pub RigidBody);
+
 /// The authored physics of a body, grouped for capture / persistence / undo.
 ///
 /// Not a live component: the entity carries these avian components directly.
@@ -94,7 +104,11 @@ impl BodyPhysics {
     /// falling back to defaults for any that are absent.
     pub fn capture(entity: &EntityRef) -> Self {
         Self {
-            rigid_body: entity.get::<RigidBody>().copied().unwrap_or_default(),
+            rigid_body: entity
+                .get::<HeldKind>()
+                .map(|held| held.0)
+                .or_else(|| entity.get::<RigidBody>().copied())
+                .unwrap_or_default(),
             friction: entity
                 .get::<Friction>()
                 .copied()

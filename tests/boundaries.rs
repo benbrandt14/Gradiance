@@ -149,6 +149,8 @@ fn serialization_is_confined_to_authored_data() {
         "crates/gradiance-domain/src/",
         "crates/gradiance-core/src/",
         "crates/gradiance-geometry/src/shape.rs",
+        // The graph IR is scene content from G-2 on (brief G-1).
+        "crates/gradiance-graph/src/",
         "crates/gradiance-units/src/",
         "crates/gradiance-scene/src/",
         "crates/gradiance-persist/src/",
@@ -157,7 +159,7 @@ fn serialization_is_confined_to_authored_data() {
     assert!(
         v.is_empty(),
         "Serde derives are only allowed on authored/persisted data \
-         (domain, core, the shape tree, typed quantities, scene records, persist):\n{}",
+         (domain, core, the shape tree, the graph IR, typed quantities, scene records, persist):\n{}",
         v.join("\n")
     );
 }
@@ -197,6 +199,9 @@ fn the_crate_dag_matches_the_architecture() {
         ("core", &[]),
         ("domain", &["core", "geometry", "units"]),
         ("geometry", &["core"]),
+        // The one graph IR (brief G-1, docs/graph-model-decision.md): pure,
+        // above the shape tree and the signal types it lowers to.
+        ("graph", &["core", "domain"]),
         (
             "interaction",
             &[

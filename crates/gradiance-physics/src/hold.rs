@@ -9,6 +9,7 @@
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use gradiance_domain::props::HeldKind;
 
 /// Entities temporarily excluded from dynamics during a preview gesture.
 #[derive(Resource, Default, Debug)]
@@ -34,7 +35,10 @@ pub fn apply_kinematic_hold(
         if hold.entities.contains(entity) {
             true
         } else {
-            commands.entity(*entity).try_insert(*kind);
+            commands
+                .entity(*entity)
+                .try_insert(*kind)
+                .try_remove::<HeldKind>();
             false
         }
     });
@@ -43,7 +47,9 @@ pub fn apply_kinematic_hold(
         if !held.iter().any(|(e, _)| *e == entity) {
             let kind = bodies.get(entity).copied().unwrap_or(RigidBody::Dynamic);
             held.push((entity, kind));
-            commands.entity(entity).try_insert(RigidBody::Kinematic);
+            commands
+                .entity(entity)
+                .try_insert((RigidBody::Kinematic, HeldKind(kind)));
             if let Ok((mut lin, mut ang)) = velocities.get_mut(entity) {
                 lin.0 = Vec2::ZERO;
                 ang.0 = 0.0;

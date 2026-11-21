@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that J-2 handoff; before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects`; before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -14,11 +14,67 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
   brief's Outcome records its decisions; read it before touching that area.
 - **Queued:** **Phase S** sandbox parity (audit 2026-11-20,
   `docs/parity-audit.md`; briefs S-1..S-9, after Phase Q).
-- **Now:** **Phase 6** (orchestrator, 2026-11-20): briefs
-  **6-1** undo round-trip matrix + scene loader mutation tests, **6-2**
-  geometry property tests, **6-3** physics debug toggles + schedule dump,
-  in that order. **Phase 6 is complete.** **6-3** is done (in review;
-  branch `claude/project-thread-tw1mvl-6-3`): avian's `PhysicsDebugPlugin`
+- **Now:** **G-1 the graph IR crate is done** (merged #297, on the G-0
+  decision #296): the new pure
+  crate `gradiance-graph` (`graph → core, domain`; DAG row and serde
+  allowlist row in `tests/boundaries.rs`) holds the IR (nodes by
+  `StableId`, `Input = Const | Wire { node, port } | External`), the
+  `NodeMeta` catalog (21 rows, ids `signal::gain`, `shape::box`),
+  `Graph::validate` (types, the rate rule, `hard` ranges, labels,
+  cycles: frame-rate ones broken at the lowest id and reported, edit-rate
+  ones refused; depth ≤ `MAX_CSG_DEPTH`), `lower_signal`/`lower_signals`
+  (→ `SignalExpr`) and `lower_shape` (→ `ShapeDef`), and `from_signals`.
+  Every `BlockOp` and RPN signal converts and lowers `==` to today's
+  expression (16 tests, one proptest). Nothing in the app uses it; no
+  format change. Five decisions in `archive.ron` (`graph-*`).
+  **Next: G-2** the graph becomes scene content
+  (`docs/briefs/G-2-graph-scene-content.md`, status ready; `FORMAT_VERSION`
+  9; `graph.*` operations; saved positions; `docs/nodes.md`).
+  **Before that, G-0 one graph model: plan written** (merged #296). Decision
+  (`docs/graph-model-decision.md`, `graph-model` in `archive.ron`,
+  session best estimate): **one IR, two node families**. A pure
+  `gradiance-graph` crate holds nodes by `StableId`, typed ports and edges
+  by id; the signal family runs at frame rate (lowers to the kernel), the
+  shape family at edit rate (lowers to `ShapeDef`); an edit-rate input
+  never takes a frame-rate output. Bodies and joints stay authored
+  entities (reference nodes); the graph is scene content edited through
+  `graph.*` operations; node positions become saved fields. Not the
+  graph-as-document model. Phases G-1 to G-6 in the decision's table.
+  G-1/G-2 do not
+  touch the files F1–F3 touch, so the 3D-0 plan can interleave.
+  **Before that:** **J-2** cut / selection / boolean stress test is done (merged
+  #293; brief `docs/briefs/J-2-cut-select-stress.md`): 7 scenes in
+  `tests/it/cut_select_stress.rs`; four fixes: a 3 cm cut no longer
+  falls between the contour rows of a long body (the cut contours in
+  the stroke frame, `polygonize_components_on_axes`), a stroke through
+  one side of a ring opens it, a move no longer records the hold's
+  `Kinematic` in its undo step (`HeldKind`), and the newest body of a
+  depth band is on top for both drawing and clicks (`StableId::new` is
+  UUID v7, `tools::bodies_at_sorted`, `render::stack`); three decisions
+  in `archive.ron`.
+  **P-1 (perf, 2026-11-20)** max concurrent objects at 60 fps is done
+  (merged #300; brief `docs/briefs/P-1-concurrent-objects.md`): avian
+  islands (sleeping) re-enabled with the wake seams avian does not own
+  (collider/layer regen, joint changes, thrusters, fluids,
+  gravity-drive unbind), an enabled
+  motor parks `SleepingDisabled` (Box2D's rule), static-static joints
+  derive `JointDisabled`, and `physics::island_sync` reconciles island
+  links while paused (avian learns joint graph changes through messages
+  its paused schedule never reads — bevy expires them after two frames;
+  that was the resume panic). Per-frame O(N) costs: `ShapeContours`
+  cached beside the collider (borders/snap/selection/debug read it, no
+  per-frame re-contour), the snap collider scan skips while paused with
+  unchanged inputs, `sync_ground_planes` filters in place, the debug
+  overlay pass skips when its toggles are off. `clamp_fixed_catchup` caps
+  fixed-timestep catch-up at `ceil(speed)+3` steps per frame — the
+  measured desktop death spiral (a settling 4000-box pile self-sustained
+  at ~14 steps/frame, 244-397 ms frames) is bounded. `tests/it/sleeping.rs`
+  pins the contract incl. the old avian-0.7 repro. Settled 4000-box
+  physics: ~12 ms/step before, ~2-4 ms after (headless, single-thread).
+  Phase 6 is complete: **6-1** undo round-trip matrix + scene loader
+  mutation tests, **6-2** geometry property tests, **6-3** physics debug
+  toggles + schedule dump. **6-3** is merged (#295): avian's
+  `PhysicsDebugPlugin`
   behind four `DebugSettings` switches (colliders, contacts, joints, AABBs;
   workstation state, never saved or undone) copied onto `PhysicsGizmos` in
   `GizmoConfigStore` by `physics::debug_gizmos` (plugin only with a
@@ -44,8 +100,7 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
   captures an attached node where it follows its target; `from_ron`
   refuses a shared `StableId` and a NaN/inf number (typed errors); six
   decisions in `archive.ron`). Phase N merged (#282–#289, #291); J-1 merged (#290).
-  **N-9** mirror and joint load colour is done (in review;
-  branch `claude/project-thread-tw1mvl-n9`): `body.mirror_h` /
+  **N-9** mirror and joint load colour is merged (#291): `body.mirror_h` /
   `body.mirror_v` (`(mirror-h targets)`, `(mirror-v targets)`, Edit ▸
   Mirror horizontally / vertically, no key) lower to one `ScaleIntent`
   with a −1 factor about the bodies' bounds centre (one `mirror` undo
@@ -62,8 +117,8 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
   `archive.ron`. **Phase N is complete.** **Next:** the orchestrator plans
   the next stage: Phase 6 (testing & diagnostics), then G-0 one graph
   model, 3D-0 the 3D plan, D-2 egui 0.37 once bevy_egui ships it.
-  **J-1** joint stress test is done (in review; branch
-  `claude/project-thread-fmsek9`; brief `docs/briefs/J-1-joint-stress.md`):
+  **J-1** joint stress test is done (merged #290; brief
+  `docs/briefs/J-1-joint-stress.md`):
   19 scenes in `tests/it/joint_stress.rs`; five fixes: a body-to-body
   slider no longer explodes at long travel (`track_slider_anchors`), a
   rotation lock stops the spin (`stop_locked_spin`), a hinge on a snapped
@@ -245,8 +300,12 @@ Last updated: 2026-11-20 (6-3 handoff, Phase 6 complete; before that 6-2; before
       Last Operation (done, #276).
   11. **Phase 6** (testing & diagnostics): **6-1**, **6-2**, **6-3**
       (`docs/briefs/6-*`).
-  12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
-      **D-2** egui 0.37 once bevy_egui ships it.
+  12. Next planning stage: **G-0** one graph model (plan written,
+      2026-11-20: `docs/graph-model-decision.md`; phases **G-1** graph IR
+      crate (brief ready), **G-2** graph as scene content, **G-3**
+      bindings as edges, **G-4** parametric shapes, **G-5** Lisp view,
+      **G-6** Graphite review), **3D-0** the 3D plan, **D-2** egui 0.37
+      once bevy_egui ships it.
 - **Owner rulings in force:**
   - **Scoped work** (2026-11-17; revises "no unbriefed work" of 2026-11-13).
     The intent is to keep changes local and to keep context from degrading.

@@ -276,7 +276,8 @@ starts with an API check and may return.
 
 **Deferred to the next planning stage** (not part of "roadmap complete"):
 `bevy_picking` interaction rework (audit D); node-canvas layout persistence
-(becomes document content if the graph becomes the document: G-0);
+(G-0 decided 2026-11-20: positions become saved, undoable node fields in
+G-2, `docs/graph-model-decision.md`);
 `bevy-persistent`; `egui_code_editor`; PR #208. *Revised 2026-11-17:* dock
 layout persistence moved into U-10 (workstation config); the UI framework
 question is settled (egui, polished).
