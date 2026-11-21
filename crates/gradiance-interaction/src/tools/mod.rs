@@ -64,6 +64,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<array_tool::ArrayConfig>();
         app.register_type::<array_tool::ArrayConfig>();
         app.init_resource::<connector_tool::ConnectorDraft>();
+        app.init_resource::<crate::node_edit::NodeDrag>();
         app.init_resource::<drag_tool::DragTool>();
         app.init_resource::<box_tool::BoxTool>();
         app.init_resource::<cut_tool::CutTool>();
@@ -93,17 +94,30 @@ impl Plugin for ToolsPlugin {
         app.add_systems(
             Update,
             (
-                // Joint picking runs first: a joint click consumes the
-                // press so the body select tool skips it this frame.
-                crate::joint_edit::pick_joint
-                    .run_if(in_state(ToolState::Select))
-                    .before(run_manip_tool::<select::SelectGesture>),
-                // Node picking runs after joint picking (joints keep
-                // priority) and before the body select gesture.
-                crate::node_edit::pick_node
-                    .run_if(in_state(ToolState::Select))
-                    .after(crate::joint_edit::pick_joint)
-                    .before(run_manip_tool::<select::SelectGesture>),
+                // Gizmo picking runs first: a joint or node press consumes
+                // the click so the body tools skip it this frame.
+                (
+                    // Joint picking runs first: a joint click consumes the
+                    // press so the body select tool skips it this frame.
+                    crate::joint_edit::pick_joint
+                        .run_if(in_state(ToolState::Select))
+                        .before(run_manip_tool::<select::SelectGesture>),
+                    // Node picking runs after joint picking (joints keep
+                    // priority) and before the body select gesture.
+                    crate::node_edit::pick_node
+                        .run_if(in_state(ToolState::Select))
+                        .after(crate::joint_edit::pick_joint)
+                        .before(run_manip_tool::<select::SelectGesture>),
+                    // The Drag tool's press on a node claims it before the
+                    // body grab below can take the body behind it.
+                    crate::node_edit::arm_node_drag
+                        .run_if(in_state(ToolState::Drag))
+                        .before(run_manip_tool::<drag_tool::DragTool>),
+                    // The node-drag gesture itself is stateless about the
+                    // tool: the resource is only set by a press that armed
+                    // it.
+                    crate::node_edit::drag_node,
+                ),
                 crate::joint_edit::drag_joint_anchor.run_if(in_state(ToolState::Select)),
                 crate::joint_edit::drag_joint_limit.run_if(in_state(ToolState::Select)),
                 run_manip_tool::<select::SelectGesture>.run_if(in_state(ToolState::Select)),

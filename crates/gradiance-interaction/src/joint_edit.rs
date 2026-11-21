@@ -37,8 +37,11 @@ use gradiance_units::{Angle, Length};
 /// Screen-space radius (logical px) for clicking a joint glyph. Shared with
 /// the context menu so left-click picking and right-click config agree.
 pub const ANCHOR_PICK_PX: f32 = 18.0;
-/// World-space deadzone before an anchor drag engages.
-const DRAG_DEADZONE: f32 = 0.04;
+/// Screen-space deadzone (logical px) before an anchor or limit drag
+/// engages — a plain click never nudges a joint. Screen-space, so the feel
+/// is the same at every zoom (it was a fixed world distance before, which
+/// shrank to a hair at zoom-out and swallowed clicks).
+const DRAG_DEADZONE_PX: f32 = 4.0;
 /// Hinge glyph ring radius (logical px) — shared with `render::joint_viz`.
 /// Sized to read clearly next to the ~10 px selection handles.
 pub const HINGE_RING_PX: f32 = 12.0;
@@ -226,8 +229,21 @@ impl JointLimitDrag {
 pub struct JointAnchorDrag {
     /// The joint entity whose anchor is being dragged.
     joint: Option<Entity>,
+    /// Cursor at press (deadzone reference).
+    press: Vec2,
     /// Whether the deadzone has been left.
     engaged: bool,
+    /// Where the glyph previews this frame (the joint would land here):
+    /// `None` until the drag engages. Drawn by `render::joint_viz`, like
+    /// the limit drag's `tentative`.
+    pub tentative: Option<Vec2>,
+}
+
+impl JointAnchorDrag {
+    /// The joint currently being anchor-dragged, if any.
+    pub fn dragging(&self) -> Option<Entity> {
+        self.joint
+    }
 }
 
 /// Picks a joint on left-press (Select tool) and arms anchor dragging.
@@ -329,7 +345,9 @@ pub fn pick_joint(
                 active.0 = true;
             } else if anchor.distance(p) <= radius {
                 drag.joint = Some(joint);
+                drag.press = p;
                 drag.engaged = false;
+                drag.tentative = None;
                 active.0 = true;
             }
         }
@@ -342,9 +360,11 @@ pub fn pick_joint(
 
 /// Drives a limit-handle drag: tentative limits preview on move (rendered
 /// by the joint glyph), one undoable `PropertyEditIntent` on release.
+#[expect(clippy::too_many_arguments)] // one gesture, grouped reads
 pub fn drag_joint_limit(
     buttons: Res<PointerButtons>,
     snapped: Res<SnappedCursor>,
+    cam_scale: Res<crate::camera::CameraScale>,
     ids: Query<&StableId>,
     joints: Query<&JointDef>,
     bodies: Query<&Transform, With<Body>>,
@@ -390,7 +410,7 @@ pub fn drag_joint_limit(
         active.0 = false;
         return;
     };
-    if !drag.engaged && drag.press.distance(p) > DRAG_DEADZONE {
+    if !drag.engaged && drag.press.distance(p) > DRAG_DEADZONE_PX * cam_scale.0 {
         drag.engaged = true;
     }
     if drag.engaged {
@@ -398,10 +418,13 @@ pub fn drag_joint_limit(
     }
 }
 
-/// Drives the anchor drag: preview on move, commit one edit on release.
+/// Drives the anchor drag: the glyph previews at the cursor once engaged
+/// ([`JointAnchorDrag::tentative`]), one undoable edit on release.
+#[expect(clippy::too_many_arguments)] // one gesture, grouped reads
 pub fn drag_joint_anchor(
     buttons: Res<PointerButtons>,
     snapped: Res<SnappedCursor>,
+    cam_scale: Res<crate::camera::CameraScale>,
     ids: Query<&StableId>,
     joints: Query<&JointDef>,
     bodies: Query<&Transform, With<Body>>,
@@ -419,6 +442,7 @@ pub fn drag_joint_anchor(
 
     if buttons.just_released(MouseButton::Left) {
         drag.joint = None;
+        drag.tentative = None;
         active.0 = false;
         if !drag.engaged {
             return;
@@ -438,26 +462,13 @@ pub fn drag_joint_anchor(
         return;
     }
 
-    // Engage once the cursor leaves the deadzone (relative to the current
-    // anchor), so a plain click never nudges the anchor.
-    if !drag.engaged
-        && let Ok(def) = joints.get(joint)
-        && let Some(anchor) = current_anchor(def, &bodies, &index)
-        && anchor.distance(p) > DRAG_DEADZONE
-    {
+    // Engage once the cursor leaves the deadzone around the press (the
+    // hand moved), so a plain click never nudges the anchor; the glyph
+    // previews at the cursor from there to the release.
+    if !drag.engaged && drag.press.distance(p) > DRAG_DEADZONE_PX * cam_scale.0 {
         drag.engaged = true;
     }
-}
-
-/// The joint's current world anchor, if body A resolves.
-fn current_anchor(
-    def: &JointDef,
-    bodies: &Query<&Transform, With<Body>>,
-    index: &IdIndex,
-) -> Option<Vec2> {
-    let entity = index.entity(def.body_a)?;
-    let pose = PosRot::from_transform(bodies.get(entity).ok()?);
-    Some(def.anchor_world(pose.pos, pose.rot))
+    drag.tentative = drag.engaged.then_some(p);
 }
 
 /// A copy of `def` with both anchors moved to world point `target`.
@@ -500,6 +511,7 @@ pub fn clear_joint_on_tool_change(
     if *tool.get() != ToolState::Select {
         selected_joint.0 = None;
         drag.joint = None;
+        drag.tentative = None;
         limit_drag.target = None;
         limit_drag.tentative = None;
     }

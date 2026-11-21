@@ -22,7 +22,7 @@ use gradiance_domain::joint::{
 use gradiance_domain::settings::{RenderSettings, SimSettings};
 use gradiance_domain::theme::active;
 use gradiance_interaction::joint_edit::{
-    HINGE_LIMIT_RADIUS_PX, HINGE_RING_PX, JointLimitDrag, slider_span,
+    HINGE_LIMIT_RADIUS_PX, HINGE_RING_PX, JointAnchorDrag, JointLimitDrag, slider_span,
 };
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_interaction::selection::SelectedJoint;
@@ -91,6 +91,7 @@ pub fn draw_joints(
     joints: Query<(Entity, &JointDef, Option<&JointLoad>)>,
     selected: Res<SelectedJoint>,
     limit_drag: Res<JointLimitDrag>,
+    anchor_drag: Res<JointAnchorDrag>,
     index: Res<IdIndex>,
     transforms: Query<&Transform>,
     cam_scale: Res<gradiance_interaction::camera::CameraScale>,
@@ -112,11 +113,12 @@ pub fn draw_joints(
             continue;
         };
         let anchor = def.anchor_world(pose_a.pos, pose_a.rot);
+        let (anchor, world_b_drag) = preview_anchor(anchor, entity, &anchor_drag);
         if def.common.broken {
             // A broken joint constrains nothing, so none of its kind glyph,
             // limits, or motor applies: draw a greyed dashed ring on each
             // half's anchor, which drift apart as the bodies separate.
-            let world_b = anchor_b_world(def, &index, &transforms);
+            let world_b = world_b_drag.or_else(|| anchor_b_world(def, &index, &transforms));
             for end in std::iter::once(anchor).chain(world_b) {
                 draw_dashed_ring(&mut gizmos, end, HINGE_RING_PX * s, ink.muted.into());
             }
@@ -207,7 +209,7 @@ pub fn draw_joints(
             JointKind::Spring { .. } => {
                 // A coil between the two anchors; the connected bodies don't
                 // collide, so it reads as a free spring, not a rod.
-                if let Some(b) = anchor_b_world(def, &index, &transforms) {
+                if let Some(b) = world_b_drag.or_else(|| anchor_b_world(def, &index, &transforms)) {
                     let coil = Color::from(load_colour(ink.alternate, ink.danger, load));
                     draw_spring(&mut gizmos, anchor, b, s, coil);
                 }
@@ -218,6 +220,17 @@ pub fn draw_joints(
         if selected.0 == Some(entity) {
             gizmos.circle_2d(Isometry2d::from_translation(anchor), 11.0 * s, accent);
         }
+    }
+}
+
+/// The anchor a live drag previews for `entity`, and the matching override
+/// for the far end: a joint anchor drag moves **both** anchors together
+/// (`joint_edit::relocated`), so while one is held the glyph draws at the
+/// cursor — A's anchor and B's alike — until the release commits.
+fn preview_anchor(anchor: Vec2, entity: Entity, drag: &JointAnchorDrag) -> (Vec2, Option<Vec2>) {
+    match (drag.dragging(), drag.tentative) {
+        (Some(e), Some(at)) if e == entity => (at, Some(at)),
+        _ => (anchor, None),
     }
 }
 

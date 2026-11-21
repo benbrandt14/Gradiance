@@ -685,6 +685,11 @@ const SIDE_DOOR_ALLOW: &[(&str, &str, &str)] = &[
         "gesture: a joint anchor or limit handle drag commits one edit on release",
     ),
     (
+        "gradiance-interaction/src/node_edit.rs",
+        "PropertyEditIntent",
+        "gesture: a node drag commits one placement edit (re-attach or free) on release",
+    ),
+    (
         "gradiance-interaction/src/pack.rs",
         "CommitTransformIntent",
         "gesture: a finished packing run commits one transform of the selection",
