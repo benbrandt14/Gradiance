@@ -2927,7 +2927,7 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                     ),
                     (
                         label: "Fill to the stroke's outer edge",
-                        caption: r#"Offset the ring outward by half the width. Needs an offset of a concave ring; more code for 1 cm per step."#,
+                        caption: r#"Offset the ring outward by half the width. Needs an offset of a concave ring; more code for a few millimetres."#,
                     ),
                 ],
             ),
@@ -3428,6 +3428,141 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
         ),
         (
             question: (
+                id: "mirror-operation",
+                title: "What is the mirror operation, and about which line?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"The brief asks for Mirror H / V over the existing negative scale, with an Edit-menu row and no key."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Two operations about the bounds centre",
+                        caption: r#"body.mirror_h (mirror-h) and body.mirror_v (mirror-v), each taking only targets, so F3 search and the Edit menu list them and the menu rows invoke them on the selection; world axes through the middle of the bodies' world bounds (half-planes left out); one ScaleIntent with a -1 factor, one undo step labelled mirror. Adjust Last records the call but has nothing to adjust."#,
+                    ),
+                    (
+                        label: "One operation with an axis param",
+                        caption: r#"body.mirror with axis "h" or "v": one id, but F3 search lists only click-runnable operations (no params besides targets), so it would be missing there, and the axis would be a read-only text row in Adjust Last."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-operation",
+                title: "What is the mirror operation, and about which line?",
+                choice: Picked("Two operations about the bounds centre"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "command::ops::body::MirrorH, command::ops::body::MirrorV",
+        ),
+        (
+            question: (
+                id: "mirror-rotated-bodies",
+                title: "How does a negative scale treat a rotated body?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"Before, a negative factor mapped the shape through R(-rot)·S·R(rot), which shears a rotated box into a polygon and keeps the body's rotation."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Reflect the rotation, flip one local axis",
+                        caption: r#"With one negative factor the body turns to 2·frame - rot and its shape reflects across one local axis, structurally (geometry::scale::mirror_shape): a box stays a box at any angle, a CSG body stays a tree, and mirroring twice gives the scene back. The scale handle dragged past its pivot takes the same path and its undo step reads Mirror."#,
+                    ),
+                    (
+                        label: "Keep the plain matrix",
+                        caption: r#"Mirrors polygonize rotated boxes and every CSG tree; mirroring twice does not give the original shapes back."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-rotated-bodies",
+                title: "How does a negative scale treat a rotated body?",
+                choice: Picked("Reflect the rotation, flip one local axis"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "geometry::scale::BodyScale, command::scale_cmd",
+        ),
+        (
+            question: (
+                id: "mirror-joints",
+                title: "What happens to joints and nodes on scaled or mirrored bodies?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"Before, a scale left joint anchors and node offsets at their old body-local points, so a scaled hinged body pulled its joint off the material."#,
+                decision: true,
+                options: [
+                    (
+                        label: "They go through the body's map",
+                        caption: r#"Every scale, mirror or not, maps anchors, slider axes and node offsets and axes (thruster, laser) through the body-local map, and a world pin of a scaled body moves with it. When every body of a joint is mirrored (a world pin counts as its body), the joint's relative angles change sign: hinge limits become [-max, -min] and the motor turns the other way. A joint with only one mirrored end keeps its limits and motor."#,
+                    ),
+                    (
+                        label: "Only on a mirror",
+                        caption: r#"Leave positive scales as they were (anchors stale) and map only on a mirror."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-joints",
+                title: "What happens to joints and nodes on scaled or mirrored bodies?",
+                choice: Picked("They go through the body's map"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "command::scale_cmd::joint_edits, command::scale_cmd::node_edits",
+        ),
+        (
+            question: (
+                id: "joint-load-rating",
+                title: "What does the joint load colour measure against?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"The brief: joint-force / break_force, or force relative to body weight when the joint cannot break."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Break force, else the default rating",
+                        caption: r#"Load = linear reaction force / break force; for an unbreakable joint / the break force breakable would give it (ten times the weight of its moving bodies, tuning::default_break_force), so a hanging pendulum reads 0.1. The face blends straight from calm to hot and is fully hot from 90 % (HOT_LOAD). A broken joint reads 0. Paused, the last solve's load stays."#,
+                    ),
+                    (
+                        label: "Force over the plain weight",
+                        caption: r#"Any joint holding a still body reads 1 and is fully hot."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "joint-load-rating",
+                title: "What does the joint load colour measure against?",
+                choice: Picked("Break force, else the default rating"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "domain::joint::load_fraction, render::joint_viz::JointLoad",
+        ),
+        (
+            question: (
+                id: "joint-load-colours",
+                title: "Which colours does the load use, and what marks a world pin?",
+                source: "Brief N-9 mirror and joint load colour (docs/briefs/N-9-mirror-and-joint-load.md)",
+                description: r#"World pins were drawn in the danger hue; the load's hot colour must come from the scene look."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Face calm to danger, pins get a ring",
+                        caption: r#"The glyph face (hinge ring and hub, slider marker) blends from the look's joint ink to its danger ink; a spring's coil from its alternate ink to danger. A world pin keeps its warning hue as an outer danger ring, so its face can show load like any joint."#,
+                    ),
+                    (
+                        label: "Pins keep a red face",
+                        caption: r#"Pins stay red and show no load, though they are the commonest breakable joints."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "joint-load-colours",
+                title: "Which colours does the load use, and what marks a world pin?",
+                choice: Picked("Face calm to danger, pins get a ring"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T12:00:00Z",
+            ),
+            ingested_as: "render::joint_viz::draw_joints",
+        ),
+        (
+            question: (
                 id: "joint-anchor-on-edge",
                 title: "Does a joint anchor on a body's edge count as on that body?",
                 source: "Joint stress test (docs/briefs/J-1-joint-stress.md)",
@@ -3676,6 +3811,450 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
                 answered_at: "2026-11-20T00:00:00Z",
             ),
             ingested_as: "StableId::new (v7), tools::bodies_at_sorted, render::stack (test a_click_on_two_overlapping_bodies_of_one_band_picks_the_newest)",
+        ),
+        (
+            question: (
+                id: "undo-compare-exclusions",
+                title: "Which fields does the undo matrix leave out of its exact compare?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"The matrix compares the scene.dump JSON before a call with the dump after undo, and after the call with the dump after redo. A load (scene.load, scene.new) writes the whole environment, workstation config included, and undo never reverts workstation config by design."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Leave out the workstation config only",
+                        caption: r#"grid, snap, camera and workspaces (NOT_UNDONE in tests/it/undo_matrix.rs, each with its reason). Everything else, scene-content settings included, compares exactly."#,
+                    ),
+                    (
+                        label: "Compare everything",
+                        caption: r#"Fails on scene.new by design: undoing File > New would have to restore the person's dock layouts."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "undo-compare-exclusions",
+                title: "Which fields does the undo matrix leave out of its exact compare?",
+                choice: Picked("Leave out the workstation config only"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "tests/it/undo_matrix.rs NOT_UNDONE; IDENTITY_ON_FIXTURE waives only the changed-the-scene check for body.mirror_v",
+        ),
+        (
+            question: (
+                id: "attached-node-pose-capture",
+                title: "Where does a snapshot put a node attached to a body?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"An attached node's position is re-derived every frame from its target body and offset, but it is also saved. The follower runs a frame after a command or a load, so a snapshot could hold a stale position: loading such a file changed the open scene a frame later with no command, and the settings watcher recorded a phantom settings step."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Capture where it follows to",
+                        caption: r#"NodeRecord::capture derives the position from the target with NodeAttachment::follow, the one formula the follower uses. The file format does not change; a stale position in a file is replaced on load."#,
+                    ),
+                    (
+                        label: "Stop saving the position of an attached node",
+                        caption: r#"A format change (FORMAT_VERSION bump) for one derived value."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "attached-node-pose-capture",
+                title: "Where does a snapshot put a node attached to a body?",
+                choice: Picked("Capture where it follows to"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_domain::node::NodeAttachment::follow, gradiance_scene::NodeRecord::capture",
+        ),
+        (
+            question: (
+                id: "duplicate-id-load",
+                title: "What does loading a file in which two objects share a StableId do?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"Today such a file loaded: both entities spawned, the id index mapped the id to one of them, and undoing the load left the other one in the scene (the loader mutation test caught it)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Refuse the file",
+                        caption: r#"from_ron returns PersistError::DuplicateId; scene.load, scene.insert and edit.paste report it and change nothing."#,
+                    ),
+                    (
+                        label: "Repair and warn",
+                        caption: r#"Give the second object a fresh id. Joints and nodes that name the id would still attach to a guess."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "duplicate-id-load",
+                title: "What does loading a file in which two objects share a StableId do?",
+                choice: Picked("Refuse the file"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_scene::from_ron, SceneRecord::duplicate_id",
+        ),
+        (
+            question: (
+                id: "dangling-joint-load",
+                title: "What does loading a joint (or a node) that names a missing body do?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"The loader mutation test points a joint end or a node target at an id the file does not hold. Today the file loads, the physics seam builds no engine joint for it (joint_sync::guard_dangling_joints), and load, undo, redo and play all behave."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Keep today's behaviour: load it",
+                        caption: r#"The joint stays in the file as authored and does nothing; nothing panics and the scene round-trips."#,
+                    ),
+                    (
+                        label: "Refuse the file",
+                        caption: r#"Would also refuse files that an older build saved after a body was lost."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "dangling-joint-load",
+                title: "What does loading a joint (or a node) that names a missing body do?",
+                choice: Picked("Keep today's behaviour: load it"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "no change (tests/it/loader_fuzz.rs DanglingJoint cases)",
+        ),
+        (
+            question: (
+                id: "non-finite-load",
+                title: "What does loading a file with a NaN or infinite number do?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"RON reads NaN and inf. Today such a file loaded; a depth band was repaired on spawn, but a NaN in a settings field was rewritten by its sanitizer a frame later and recorded as a phantom settings step, and NaN equals nothing, so undo's value compares cannot settle on it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Refuse the file",
+                        caption: r#"from_ron returns PersistError::NonFinite with the field path, found by a reflection walk over the record (a new field is covered with no change)."#,
+                    ),
+                    (
+                        label: "Repair each field",
+                        caption: r#"Needs a sanitizer per field and still changes what the file says."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "non-finite-load",
+                title: "What does loading a file with a NaN or infinite number do?",
+                choice: Picked("Refuse the file"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_scene::from_ron (non_finite)",
+        ),
+        (
+            question: (
+                id: "loader-fuzz-corpus",
+                title: "Which files does the loader mutation test mutate?",
+                source: "Undo matrix and loader mutation tests (docs/briefs/6-1-undo-matrix-and-loader-fuzz.md)",
+                description: r#"The brief names the scene fixtures, the goldens and the review scenes. The review scenes are .scm scripts, not scene files: the loader never reads them."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Every committed .ron scene file",
+                        caption: r#"tests/fixtures/scenes, tests/it/golden, crates/gradiance-scene/golden and the two legacy v1 snapshots in snapshots/ (they exercise the version error). Each is first loaded as committed, then 256 seeded mutations in 8 kinds."#,
+                    ),
+                    (
+                        label: "Also turn the review scripts into scenes",
+                        caption: r#"Runs 30 scripts first, for files the goldens already cover."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "loader-fuzz-corpus",
+                title: "Which files does the loader mutation test mutate?",
+                choice: Picked("Every committed .ron scene file"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "tests/it/loader_fuzz.rs SCENE_DIRS",
+        ),
+        (
+            question: (
+                id: "geometry-proptest-dependency",
+                title: "Which property-test crate do the geometry tests use?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"proptest 1.11.0 is already in Cargo.lock (the workspace pins 1.9; kernel, units and the root package use it). Adding it to gradiance-geometry's dev-dependencies adds one dependency-edge line to Cargo.lock and no new package."#,
+                decision: true,
+                options: [
+                    (
+                        label: "proptest, the workspace version",
+                        caption: r#"One lockfile line (the edge); shrinking finds minimal cases, which is how both bugs below were minimised."#,
+                    ),
+                    (
+                        label: "A hand-written seeded generator",
+                        caption: r#"No lockfile change, but no shrinking: a failure would be a 60-point stroke instead of a two-leaf case."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "geometry-proptest-dependency",
+                title: "Which property-test crate do the geometry tests use?",
+                choice: Picked("proptest, the workspace version"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-geometry/Cargo.toml [dev-dependencies]",
+        ),
+        (
+            question: (
+                id: "geometry-proptest-cases",
+                title: "How many cases do the geometry properties run, and from which seed?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"The brief asks for under 30 s for cargo test -p gradiance-geometry (the coordinator asked for under 10 s). Proptest's default seed is random per run."#,
+                decision: true,
+                options: [
+                    (
+                        label: "512 for bare leaves, 256 for the rest, fixed seed",
+                        caption: r#"3584 cases in about 2 s of test time; a fixed seed makes CI deterministic, and no failure-persistence file is written into the repository. PROPTEST_RNG_SEED and PROPTEST_CASES still override both for a longer local search (six seeds at 2000 cases each passed, about 17 s each)."#,
+                    ),
+                    (
+                        label: "Proptest defaults (256 cases, random seed)",
+                        caption: r#"Finds new cases on every CI run, but a failure is a flake on someone else's PR, and the default writes regression files next to the source."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "geometry-proptest-cases",
+                title: "How many cases do the geometry properties run, and from which seed?",
+                choice: Picked("512 for bare leaves, 256 for the rest, fixed seed"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::proptests::config, SEED",
+        ),
+        (
+            question: (
+                id: "geometry-proptest-tolerances",
+                title: "Which tolerances do the contour area and CSG properties use?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"polygonize bisects every contour vertex onto the zero set, so the errors come from three places only: simplify_ring drops vertices within 0.05 cell of their chord, a curve keeps one-cell chords (sag cell^2/8R), and the grid chamfers a corner. CSG makes corners anywhere along a boundary and drops slivers under 4 cell^2 on purpose."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Derived from the cell size",
+                        caption: r#"Bare leaves: exact, or the inscribed 48-gon loss (0.29 % of the disc) for circles and caps. Contoured leaf: 0.05 cell x perimeter + (corners + 2) cell^2. CSG areas: 0.25 cell x perimeter + 4 cell^2 per component, summed over the areas a relation uses. Field classification: points within 1.5 cells of the boundary are not judged. Submerged clip: 1e-4 relative plus the f32 shoelace rounding bound. Mirror field: 1e-4 (1 + |p|)."#,
+                    ),
+                    (
+                        label: "A flat percentage",
+                        caption: r#"Simpler to read, but too loose for large shapes and too tight for thin rods (a 10 cm rod at a 2.8 cm cell is off by 1.3 % within the contour's design)."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "geometry-proptest-tolerances",
+                title: "Which tolerances do the contour area and CSG properties use?",
+                choice: Picked("Derived from the cell size"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::proptests (each property's doc comment)",
+        ),
+        (
+            question: (
+                id: "contour-simplify-drift",
+                title: "What do we do about contour edges that drift past the simplification tolerance?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"A property found that simplify_ring tested each dropped vertex only against the chord from the last kept vertex to its next neighbour. A run of dropped vertices could drift: on a capsule, the straight side's edge ran 0.48 m into both caps, 7.5e-4 m inside the curve (tolerance 3.2e-4), and the area came out 0.63 % short."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Fix it: test the whole dropped run",
+                        caption: r#"A vertex is dropped only while every vertex dropped since the last kept one stays within the tolerance of the new chord. Cost O(run length) per vertex, small at the contour's sample budget. Contours may keep a few more vertices on long gentle curves."#,
+                    ),
+                    (
+                        label: "Record a known limit and widen the tolerance",
+                        caption: r#"No change to contours, but the error is unbounded along long runs."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "contour-simplify-drift",
+                title: "What do we do about contour edges that drift past the simplification tolerance?",
+                choice: Picked("Fix it: test the whole dropped run"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::contour::simplify_ring; regression_contour_simplification_stays_within_its_tolerance",
+        ),
+        (
+            question: (
+                id: "union-field-cull-inside",
+                title: "What do we do about UnionField skipping a leaf whose box holds the point?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"UnionField culled a leaf when the distance to its box was at least the best field so far plus a margin. Inside the box that distance is 0, so once the best was negative the leaf was skipped although its field could be lower. The sign was always right, so contours did not change; the value was not the tree's field, which its docs promise bit for bit."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Fix it: cull only outside the box",
+                        caption: r#"Skip a leaf only when the point is outside its box and that distance beats the best. The evaluation is exact again; the cull still skips every far leaf."#,
+                    ),
+                    (
+                        label: "Document it as a sign-only field",
+                        caption: r#"Keeps a little speed inside overlapping leaves, but the field would no longer be usable for distances."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "union-field-cull-inside",
+                title: "What do we do about UnionField skipping a leaf whose box holds the point?",
+                choice: Picked("Fix it: cull only outside the box"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::sdf::UnionField::eval; regression_union_field_never_culls_a_leaf_whose_box_holds_the_point",
+        ),
+        (
+            question: (
+                id: "mirror-twice-half-plane",
+                title: "What does mirroring twice give for a tree with a half-plane?",
+                source: "Geometry property tests (docs/briefs/6-2-geometry-proptests.md)",
+                description: r#"mirror_shape gives a bare half-plane mirrored across x back as a half-plane placed at a half turn, by design, and the angle pi - (pi - r) is not always r in f32. So mirroring twice is bit-exact for trees without a half-plane, and gives the same field (not the same tree) for trees with one. Bodies that are a bare half-plane go through BodyScale, which handles it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Test the field for half-plane trees",
+                        caption: r#"Structural identity for every tree without a half-plane; the field to 1e-4 (1 + |p|) where there is one."#,
+                    ),
+                    (
+                        label: "Change mirror_shape to be structurally exact",
+                        caption: r#"More special cases in mirror_shape for no visible difference."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "mirror-twice-half-plane",
+                title: "What does mirroring twice give for a tree with a half-plane?",
+                choice: Picked("Test the field for half-plane trees"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_geometry::proptests::mirroring_twice_is_the_identity",
+        ),
+        (
+            question: (
+                id: "debug-toggles-which",
+                title: "Which physics debug toggles ship, and how?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"The brief lists colliders, contacts, joints, AABBs and velocities as toggles on avian's PhysicsGizmos config. Gradiance already had hand-rolled overlays for most of them (render::debug_viz), drawing the authored model. avian 0.8 has no velocity gizmo."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Engine view from avian, velocities ours",
+                        caption: r#"Colliders, contacts, joints and AABBs are avian's PhysicsDebugPlugin (what the engine built and solves); the hand-rolled collider, AABB and contact overlays are removed; velocities stay Gradiance's overlay (read from the engine). Joints are a new switch beside the authored joint anchors. All five off by default."#,
+                    ),
+                    (
+                        label: "Keep both views",
+                        caption: r#"Every overlay twice, one authored and one engine; two switches per item in the menu."#,
+                    ),
+                    (
+                        label: "Only avian",
+                        caption: r#"Drop velocities: avian has no gizmo for them."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "debug-toggles-which",
+                title: "Which physics debug toggles ship, and how?",
+                choice: Picked("Engine view from avian, velocities ours"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_physics::debug_gizmos; gradiance_interaction::debug_ops::DEBUG_TOGGLES",
+        ),
+        (
+            question: (
+                id: "debug-toggles-state",
+                title: "Where do the physics debug switches live?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"Grid visibility is saved with the scene as workstation config; the existing debug overlays (DebugSettings, the Settings Debug tab and View > Field overlay) are never saved."#,
+                decision: true,
+                options: [
+                    (
+                        label: "DebugSettings, never saved",
+                        caption: r#"The switches are fields of DebugSettings with the other debug overlays: workstation state, never saved, never undone (not in the environment record, so not in scene_content!). A sync copies them onto GizmoConfigStore."#,
+                    ),
+                    (
+                        label: "Saved with the scene as workstation config",
+                        caption: r#"A new environment-record field: opening a shared scene would turn on someone's debug overlay, and the golden file changes."#,
+                    ),
+                    (
+                        label: "GizmoConfigStore only",
+                        caption: r#"No Gradiance resource: an operation cannot write it through the config seam, and the Settings window could not show it."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "debug-toggles-state",
+                title: "Where do the physics debug switches live?",
+                choice: Picked("DebugSettings, never saved"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_domain::settings::DebugSettings",
+        ),
+        (
+            question: (
+                id: "debug-toggle-op-shape",
+                title: "Does a debug operation flip or set its switch?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"A menu checkbox knows the new value; a script run reads one snapshot (scripting rule 3)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Set: (debug-colliders on)",
+                        caption: r#"Each operation takes on (true/false); the same call twice gives the same result, and the menu passes the checkbox's new value."#,
+                    ),
+                    (
+                        label: "Flip: (debug-colliders)",
+                        caption: r#"No argument; two calls in one run would not compose."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "debug-toggle-op-shape",
+                title: "Does a debug operation flip or set its switch?",
+                choice: Picked("Set: (debug-colliders on)"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance_interaction::debug_ops",
+        ),
+        (
+            question: (
+                id: "schedule-dump-format",
+                title: "Is the schedule dump text or DOT, and how is it built?",
+                source: "Physics debug toggles and a schedule dump (docs/briefs/6-3-physics-debug-toggles.md)",
+                description: r#"Bevy 0.20 exposes each schedule's executable order (Schedule::initialize, Schedule::systems). bevy_mod_debugdump would add crates to the lockfile and draws graphs."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Text from Bevy's own introspection",
+                        caption: r#"gradiance schedule-dump [schedule]: one section per schedule in frame order, one system per line in executor (topological) order, sync points included. No new crate; diffs and greps."#,
+                    ),
+                    (
+                        label: "DOT via bevy_mod_debugdump",
+                        caption: r#"Graphs with sets and edges; a lockfile change and a viewer needed."#,
+                    ),
+                    (
+                        label: "Both",
+                        caption: r#"Text now plus a hand-written DOT from the dependency graph: more code for a view nobody asked for yet."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "schedule-dump-format",
+                title: "Is the schedule dump text or DOT, and how is it built?",
+                choice: Picked("Text from Bevy's own introspection"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "gradiance::schedule_dump",
         ),
     ],
 )

@@ -572,6 +572,10 @@ pub mod debug {
     pub const SPRING: Rgba = Rgba::rgb(0.0, 1.0, 0.498);
     /// Contact points and normals.
     pub const CONTACT: Rgba = Rgba::rgb(1.0, 0.0, 1.0);
+    /// Engine joint anchors (the physics debug overlay).
+    pub const JOINT_ANCHOR: Rgba = Rgba::rgb(1.0, 0.647, 0.0);
+    /// The gap between an engine joint's two anchors (joint error).
+    pub const JOINT_SEPARATION: Rgba = Rgba::rgb(1.0, 0.0, 0.0);
     /// Substep traces.
     pub const SUBSTEP: Rgba = Rgba::rgb(0.729, 0.333, 0.827);
     /// Force-field arrows, weak end.

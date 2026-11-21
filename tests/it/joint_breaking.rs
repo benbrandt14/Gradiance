@@ -182,7 +182,11 @@ fn the_joint_force_source_reads_the_load() {
             sink: SignalSink::Plot,
         });
     set_state(&mut app, GameState::Playing);
-    step(&mut app, 60);
+    // Read while the box is still awake: a body at rest on its pin sleeps
+    // after ~0.5 s, and a sleeping island solves nothing, so its joints
+    // read zero — the same Box2D-style rule for parked machinery. The load
+    // readout is live while the body is being solved.
+    step(&mut app, 15);
     let pull = app.world().resource::<SignalBus>().get("pull").unwrap();
     // The pin carries the box's weight, m·g = 1 kg · 10 m/s².
     assert!((pull - 10.0).abs() < 1.0, "reaction ~ weight, read {pull}");

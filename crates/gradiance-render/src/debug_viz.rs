@@ -1,8 +1,11 @@
 //! Debug overlays: gizmo visualizations of editor/physics internals,
-//! toggled from the Debug settings tab ([`DebugSettings`]).
+//! toggled from the Debug settings tab ([`DebugSettings`]) and View > Debug.
 //!
 //! Everything here reads authored components, the pure geometry layer,
-//! and the `physics::queries` read facade.
+//! and the `physics::queries` read facade. The engine's own view
+//! (colliders, AABBs, contacts, joints) is avian's `PhysicsDebugPlugin`,
+//! switched by `gradiance_physics::debug_gizmos` (brief 6-3); these are
+//! the overlays avian has no gizmo for.
 
 use bevy::prelude::*;
 use gradiance_core::ids::IdIndex;
@@ -14,8 +17,8 @@ use gradiance_domain::layers::layer_hue;
 use gradiance_domain::settings::DebugSettings;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::theme::debug;
-use gradiance_geometry::polygonize::polygonize;
-use gradiance_geometry::sdf;
+use gradiance_geometry::contours::Contours;
+use gradiance_geometry::polygonize::ShapeContours;
 use gradiance_interaction::overlay::OverlayGizmos;
 use gradiance_physics::SubstepTrace;
 use gradiance_physics::fields::Fields;
@@ -32,7 +35,7 @@ fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
 pub fn draw_debug_overlays(
     debug: Res<DebugSettings>,
     scale: Res<gradiance_interaction::camera::CameraScale>,
-    bodies: Query<(Entity, &ShapeDef, &Transform, &DepthBand), With<Body>>,
+    bodies: Query<(Entity, &ShapeDef, &ShapeContours, &Transform, &DepthBand), With<Body>>,
     field_sources: Query<(&Transform, &FieldSource), With<Body>>,
     fields: Fields,
     cameras: Query<(&Transform, &Projection), (With<Camera3d>, Without<Body>)>,
@@ -49,8 +52,12 @@ pub fn draw_debug_overlays(
     // derived from real geometry (rings, AABBs) and vectors proportional to a
     // physical quantity (velocity/field arrows) are already world-consistent.
     let px = scale.0;
-    for body in &bodies {
-        draw_body_overlays(&debug, &physics, &mut gizmos, body, px);
+    // Nothing below reads a body unless one of the per-body toggles is on;
+    // skip the pass entirely when they are all off.
+    if debug.show_layers || debug.show_origins || debug.show_velocities {
+        for body in &bodies {
+            draw_body_overlays(&debug, &physics, &mut gizmos, body, px);
+        }
     }
 
     if debug.show_joint_anchors {
@@ -79,69 +86,33 @@ pub fn draw_debug_overlays(
             }
         }
     }
-
-    if debug.show_contacts {
-        draw_contacts(&physics, &mut gizmos, px);
-    }
 }
 
-/// Per-body debug glyphs: collision set, collider contours, AABB, origin
-/// cross/centroid, and velocity arrows. `px` is world-per-pixel so pixel-
+/// Per-body debug glyphs: collision set, origin cross/centroid, and
+/// velocity arrows. `px` is world-per-pixel so pixel-
 /// sized markers stay a fixed on-screen size (geometry-derived outlines and
 /// the quantity-proportional velocity arrow are already world-consistent).
 fn draw_body_overlays(
     debug: &DebugSettings,
     physics: &PhysicsQueries,
     gizmos: &mut Gizmos<OverlayGizmos>,
-    body: (Entity, &ShapeDef, &Transform, &DepthBand),
+    body: (Entity, &ShapeDef, &ShapeContours, &Transform, &DepthBand),
     px: f32,
 ) {
-    let (entity, shape, transform, band) = body;
+    let (entity, shape, contours, transform, band) = body;
     let infinite = shape.contains_half_plane();
 
     // Collision-set visualization: outline in the front-most derived
     // layer's hue, matching the depth panel's gridline swatches.
     if debug.show_layers && !infinite {
         let color = Color::from(debug::layer(layer_hue(band.bits().trailing_zeros())));
-        for ring in polygonize(shape).rings() {
-            let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
-            if let Some(first) = pts.first().copied() {
-                pts.push(first);
-            }
-            gizmos.linestrip_2d(pts, color);
+        for ring in contours.iter().flat_map(Contours::rings) {
+            let to_world = |v: &bevy::math::Vec2| world_point(transform, *v);
+            gizmos.linestrip_2d(
+                ring.iter().map(to_world).chain(ring.first().map(to_world)),
+                color,
+            );
         }
-    }
-
-    if debug.show_colliders && !infinite {
-        let contours = polygonize(shape);
-        for ring in contours.rings() {
-            let mut pts: Vec<Vec2> = ring.iter().map(|v| world_point(transform, *v)).collect();
-            if let Some(first) = pts.first().copied() {
-                pts.push(first);
-            }
-            gizmos.linestrip_2d(pts, Color::from(debug::COLLIDER));
-        }
-    }
-
-    if debug.show_aabbs && !infinite {
-        let (min, max) = sdf::aabb(shape);
-        let corners = [
-            Vec2::new(min.x, min.y),
-            Vec2::new(max.x, min.y),
-            Vec2::new(max.x, max.y),
-            Vec2::new(min.x, max.y),
-        ]
-        .map(|c| world_point(transform, c));
-        let (mut wmin, mut wmax) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
-        for c in corners {
-            wmin = wmin.min(c);
-            wmax = wmax.max(c);
-        }
-        gizmos.rect_2d(
-            Isometry2d::from_translation((wmin + wmax) / 2.0),
-            wmax - wmin,
-            Color::from(debug::AABB),
-        );
     }
 
     if debug.show_origins {
@@ -158,7 +129,8 @@ fn draw_body_overlays(
         );
         if !infinite {
             // Centroid may sit off-origin after CSG reshapes.
-            let centroid = world_point(transform, polygonize(shape).centroid());
+            let local = contours.largest().map_or(Vec2::ZERO, Contours::centroid);
+            let centroid = world_point(transform, local);
             gizmos.circle_2d(
                 Isometry2d::from_translation(centroid),
                 3.0 * px,
@@ -235,26 +207,6 @@ fn draw_joint_anchors(
         if let (Some(a), Some(b)) = (world_a, world_b) {
             gizmos.line_2d(a, b, color);
         }
-    }
-}
-
-/// Draws every touching contact point and its impulse-scaled normal.
-fn draw_contacts(physics: &PhysicsQueries, gizmos: &mut Gizmos<OverlayGizmos>, px: f32) {
-    for contact in physics.contact_points() {
-        gizmos.circle_2d(
-            Isometry2d::from_translation(contact.point),
-            2.5 * px,
-            Color::from(debug::CONTACT),
-        );
-        // Screen-sized base plus a term growing with the contact impulse
-        // (N·s, SI — clamped so hard hits stay on-screen). The impulse gain
-        // is approximate; this is a dev overlay, not a visually pinned value.
-        let length = (8.0 + contact.normal_impulse.value().min(2.0) * 12.0) * px;
-        gizmos.arrow_2d(
-            contact.point,
-            contact.point + contact.normal * length,
-            Color::from(debug::CONTACT),
-        );
     }
 }
 

@@ -62,7 +62,7 @@ pub fn follow_node_attachments(
         else {
             continue;
         };
-        let world = pose.pos + Vec2::from_angle(pose.rot).rotate(attachment.offset.value());
+        let world = attachment.follow(pose);
         transform.translation.x = world.x;
         transform.translation.y = world.y;
     }

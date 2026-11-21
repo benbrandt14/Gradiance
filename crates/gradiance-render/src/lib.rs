@@ -40,6 +40,7 @@ impl Plugin for GradianceRenderPlugin {
         // Trail sampling is derived-state upkeep, not drawing — it runs
         // headless too (tests assert on trails).
         tracer::install_sampling(app);
+        joint_viz::install_load(app);
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }
@@ -85,7 +86,7 @@ impl Plugin for GradianceRenderPlugin {
                 // the drawn step and the snapped step identical on every frame,
                 // including the one where a zoom crosses a doubling boundary.
                 grid::draw_grid.before(gradiance_interaction::InteractionSet),
-                joint_viz::draw_joints,
+                joint_viz::draw_joints.after(joint_viz::measure_joint_loads),
                 decorations::draw_circle_radius_lines,
                 decorations::draw_body_borders,
                 debug_viz::draw_debug_overlays,

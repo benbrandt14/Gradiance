@@ -21,6 +21,11 @@ fn main() {
     if let Some(code) = gradiance::run::main(&args) {
         std::process::exit(code);
     }
+    // `gradiance schedule-dump [schedule]` prints the headless app's system
+    // order (brief 6-3).
+    if let Some(code) = gradiance::schedule_dump::main(&args) {
+        std::process::exit(code);
+    }
     if let Some(code) = gradiance::script::client::main(&args) {
         std::process::exit(code);
     }
@@ -50,7 +55,9 @@ fn main() {
     //   `gradiance ops | op | mcp …`    client doorways to a `--remote` app
     //                                   (handled above; `gradiance op --help`);
     //   `gradiance run scene.ron …`     a headless rollout to CSV (handled
-    //                                   above; `gradiance run --help`).
+    //                                   above; `gradiance run --help`);
+    //   `gradiance schedule-dump [s]`   prints the schedules' system order
+    //                                   (handled above).
     let mut scripts = Vec::new();
     let mut i = 0;
     while i < args.len() {

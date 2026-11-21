@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (J-2 handoff; before that N-8; before that N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (J-2 handoff; before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects`; before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -12,9 +12,8 @@ Last updated: 2026-11-20 (J-2 handoff; before that N-8; before that N-7, N-6, N-
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
-- **Now:** **J-2** cut / selection / boolean stress test is done (in
-  review; branch `claude/project-thread-rtg6i7`; brief
-  `docs/briefs/J-2-cut-select-stress.md`): 7 scenes in
+- **Now:** **J-2** cut / selection / boolean stress test is done (merged
+  #293; brief `docs/briefs/J-2-cut-select-stress.md`): 7 scenes in
   `tests/it/cut_select_stress.rs`; four fixes: a 3 cm cut no longer
   falls between the contour rows of a long body (the cut contours in
   the stroke frame, `polygonize_components_on_axes`), a stroke through
@@ -23,8 +22,73 @@ Last updated: 2026-11-20 (J-2 handoff; before that N-8; before that N-7, N-6, N-
   depth band is on top for both drawing and clicks (`StableId::new` is
   UUID v7, `tools::bodies_at_sorted`, `render::stack`); three decisions
   in `archive.ron`.
-  **J-1** joint stress test is done (in review; branch
-  `claude/project-thread-fmsek9`; brief `docs/briefs/J-1-joint-stress.md`):
+  **P-1 (perf, 2026-11-20)** max concurrent objects at 60 fps is done
+  (merged #300; brief `docs/briefs/P-1-concurrent-objects.md`): avian
+  islands (sleeping) re-enabled with the wake seams avian does not own
+  (collider/layer regen, joint changes, thrusters, fluids,
+  gravity-drive unbind), an enabled
+  motor parks `SleepingDisabled` (Box2D's rule), static-static joints
+  derive `JointDisabled`, and `physics::island_sync` reconciles island
+  links while paused (avian learns joint graph changes through messages
+  its paused schedule never reads — bevy expires them after two frames;
+  that was the resume panic). Per-frame O(N) costs: `ShapeContours`
+  cached beside the collider (borders/snap/selection/debug read it, no
+  per-frame re-contour), the snap collider scan skips while paused with
+  unchanged inputs, `sync_ground_planes` filters in place, the debug
+  overlay pass skips when its toggles are off. `clamp_fixed_catchup` caps
+  fixed-timestep catch-up at `ceil(speed)+3` steps per frame — the
+  measured desktop death spiral (a settling 4000-box pile self-sustained
+  at ~14 steps/frame, 244-397 ms frames) is bounded. `tests/it/sleeping.rs`
+  pins the contract incl. the old avian-0.7 repro. Settled 4000-box
+  physics: ~12 ms/step before, ~2-4 ms after (headless, single-thread).
+  Phase 6 is complete: **6-1** undo round-trip matrix + scene loader
+  mutation tests, **6-2** geometry property tests, **6-3** physics debug
+  toggles + schedule dump. **6-3** is merged (#295): avian's
+  `PhysicsDebugPlugin`
+  behind four `DebugSettings` switches (colliders, contacts, joints, AABBs;
+  workstation state, never saved or undone) copied onto `PhysicsGizmos` in
+  `GizmoConfigStore` by `physics::debug_gizmos` (plugin only with a
+  renderer); velocities stay Gradiance's overlay; the hand-rolled collider,
+  AABB and contact overlays are gone; `debug.*` operations
+  (`(debug-colliders #t)`) and View > Debug over one table
+  (`interaction::debug_ops::DEBUG_TOGGLES`), no keys; `gradiance
+  schedule-dump [schedule]` prints each schedule's system order as text
+  (Bevy's own introspection, no new crate); four decisions in
+  `archive.ron`. Overlay checked on lavapipe (screenshot on the PR thread, not committed).
+  **Next:** the orchestrator's phase gate: G-0 one graph model, 3D-0 the
+  3D plan, D-2 egui 0.37 once bevy_egui ships it.
+  **6-2** is merged (#294): geometry property tests (proptest,
+  dev-dependency), two fixes (`UnionField` cull, contour drift), six
+  decisions.
+  **6-1** is merged (#292; `tests/it/undo_matrix.rs` runs
+  every history operation (55) from its example: dump, call, undo, redo,
+  each dump exact (workstation config left out), 17 s;
+  `tests/it/loader_fuzz.rs` loads every committed scene file and 256
+  seeded mutations through `scene.load`: typed error and nothing changed,
+  or one stable, undoable `load-scene` step, 3 s. Four fixes: pausing no
+  longer takes one more step after the run is recorded; a snapshot
+  captures an attached node where it follows its target; `from_ron`
+  refuses a shared `StableId` and a NaN/inf number (typed errors); six
+  decisions in `archive.ron`). Phase N merged (#282–#289, #291); J-1 merged (#290).
+  **N-9** mirror and joint load colour is merged (#291): `body.mirror_h` /
+  `body.mirror_v` (`(mirror-h targets)`, `(mirror-v targets)`, Edit ▸
+  Mirror horizontally / vertically, no key) lower to one `ScaleIntent`
+  with a −1 factor about the bodies' bounds centre (one `mirror` undo
+  step); a negative scale now reflects each body's rotation and flips its
+  shape across one local axis structurally (`geometry::scale::BodyScale`,
+  `mirror_shape`), so boxes stay boxes, trees stay trees and mirroring
+  twice gives the scene back (test); every scale now carries joint anchors,
+  slider axes, node offsets/axes and world pins with its bodies, and a
+  fully mirrored hinge turns its limits and motor over; joint glyphs tint
+  from the look's joint ink to its danger ink by the derived `JointLoad`
+  (`render::joint_viz`, force / break force or the default 10x-weight
+  rating, hot from 90 %; `O(joints)`, allocation-free per frame; never
+  saved); world pins keep an outer danger ring; five decisions in
+  `archive.ron`. **Phase N is complete.** **Next:** the orchestrator plans
+  the next stage: Phase 6 (testing & diagnostics), then G-0 one graph
+  model, 3D-0 the 3D plan, D-2 egui 0.37 once bevy_egui ships it.
+  **J-1** joint stress test is done (merged #290; brief
+  `docs/briefs/J-1-joint-stress.md`):
   19 scenes in `tests/it/joint_stress.rs`; five fixes: a body-to-body
   slider no longer explodes at long travel (`track_slider_anchors`), a
   rotation lock stops the spin (`stop_locked_spin`), a hinge on a snapped
@@ -43,7 +107,7 @@ Last updated: 2026-11-20 (J-2 handoff; before that N-8; before that N-7, N-6, N-
   to aim, release on the target); `(laser body x y angle target name)`
   (`node.laser`); a 45-degree beam off a mirror wall reaches the target
   geometry put on the reflected ray (test); six decisions in
-  `archive.ron`. **Next: N-9** mirror H/V and joint load colour.
+  `archive.ron`.
   **N-7** buoyancy is done (in review; branch
   `claude/project-thread-tw1mvl-n7`): an authored `domain::fluid::Fluid`
   (areal density, default 2 kg/m², and drag rate, default 2/s) on any
@@ -193,7 +257,7 @@ Last updated: 2026-11-20 (J-2 handoff; before that N-8; before that N-7, N-6, N-
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
   9c. **N-1** (done, in review), **N-2** (done, in review), **N-3** (done,
-      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8** (done, in review), **N-9** nonlinear dynamics & multibody play (owner-approved
+      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8** (done, in review), **N-9** (done, in review; Phase N complete) nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
@@ -204,7 +268,8 @@ Last updated: 2026-11-20 (J-2 handoff; before that N-8; before that N-7, N-6, N-
   10. **U-9** F3 search, status bar, pie menus (done, #272); **U-10**
       editor areas + saved workspaces (done, #275); **U-11** Adjust
       Last Operation (done, #276).
-  11. **Phase 6** (testing & diagnostics).
+  11. **Phase 6** (testing & diagnostics): **6-1**, **6-2**, **6-3**
+      (`docs/briefs/6-*`).
   12. Next planning stage: **G-0** one graph model, **3D-0** the 3D plan,
       **D-2** egui 0.37 once bevy_egui ships it.
 - **Owner rulings in force:**

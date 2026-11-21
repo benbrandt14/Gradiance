@@ -237,12 +237,38 @@ pub struct NodeRecord {
 
 impl NodeRecord {
     /// Captures the authored state of a behavior-node entity.
+    ///
+    /// An attached node's position is captured where it follows its target
+    /// to ([`NodeAttachment::follow`]), not where its `Transform` was last
+    /// left: the follower moves it on the frame after a command moves (or a
+    /// load places) the target, so the live `Transform` can lag the
+    /// snapshot by a frame. Without this, a load of a file whose stored
+    /// position is stale changed the open scene a frame later with no
+    /// command, and the settings watcher recorded that as a phantom
+    /// `settings` step (brief 6-1).
+    ///
+    /// [`NodeAttachment::follow`]: gradiance_domain::node::NodeAttachment::follow
     pub fn capture(world: &World, entity: Entity) -> Option<Self> {
         let entity_ref = world.get_entity(entity).ok()?;
+        let attachment = *entity_ref.get::<gradiance_domain::node::NodeAttachment>()?;
+        let mut pose = PosRot::from_transform(entity_ref.get::<Transform>()?);
+        if let Some(target) = attachment
+            .target
+            .and_then(|id| {
+                world
+                    .get_resource::<gradiance_core::ids::IdIndex>()?
+                    .entity(id)
+            })
+            .and_then(|e| world.get_entity(e).ok())
+            .filter(EntityRef::contains::<Body>)
+            .and_then(|e| e.get::<Transform>())
+        {
+            pose.pos = attachment.follow(PosRot::from_transform(target));
+        }
         Some(Self {
             id: *entity_ref.get::<StableId>()?,
-            pose: PosRot::from_transform(entity_ref.get::<Transform>()?),
-            attachment: *entity_ref.get::<gradiance_domain::node::NodeAttachment>()?,
+            pose,
+            attachment,
             kind: entity_ref
                 .get::<gradiance_domain::node::NodeKind>()?
                 .clone(),
@@ -546,6 +572,19 @@ impl SceneRecord {
             nodes: capture_all::<NodeRecord, With<gradiance_domain::node::BehaviorNode>>(world),
             environment: EnvironmentRecord::capture(world),
         }
+    }
+
+    /// The first [`StableId`] two of the scene's objects (bodies, joints and
+    /// nodes together) share, if any. A live world never holds one (the id
+    /// index maps an id to one entity), so a file that does is refused.
+    pub fn duplicate_id(&self) -> Option<StableId> {
+        let mut seen = std::collections::HashSet::new();
+        self.bodies
+            .iter()
+            .map(|b| b.id)
+            .chain(self.joints.iter().map(|j| j.id))
+            .chain(self.nodes.iter().map(|n| n.id))
+            .find(|id| !seen.insert(*id))
     }
 
     /// Despawns every authored entity, then spawns this scene and applies

@@ -7,6 +7,7 @@ use crate::contours::Contours;
 use crate::sdf;
 use crate::shape::ShapeDef;
 use bevy::math::Vec2;
+use bevy::prelude::Component;
 use gradiance_core::constants::{CIRCLE_SEGMENTS, GROUND_SLAB_DEPTH, GROUND_SLAB_WIDTH};
 
 /// Converts a shape into explicit contours (counter-clockwise outline).
@@ -141,6 +142,44 @@ fn stadium(half_length: f32, radius: f32) -> Vec<Vec2> {
             std::f32::consts::FRAC_PI_2,
         ))
         .collect()
+}
+
+/// A body's polygonized shape, one [`Contours`] per connected component —
+/// the cached [`polygonize_components`] result.
+///
+/// Derived beside the collider when a shape changes
+/// (`physics::body_sync::sync_colliders`), and read by every per-frame
+/// polygon consumer (borders, snapping, selection outlines, debug overlays)
+/// so none of them contours an SDF in the frame loop. Never authored,
+/// never saved, never captured in undo records.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct ShapeContours(pub Vec<Contours>);
+
+impl ShapeContours {
+    /// The largest component — the single-[`Contours`] view of a body
+    /// ([`polygonize`] semantics; commands keep authored bodies
+    /// single-component).
+    pub fn largest(&self) -> Option<&Contours> {
+        self.0.iter().max_by(|a, b| {
+            a.area()
+                .partial_cmp(&b.area())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    }
+}
+
+impl core::ops::Deref for ShapeContours {
+    type Target = Vec<Contours>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for ShapeContours {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
 
 fn rectangle(width: f32, height: f32, center: Vec2) -> Contours {

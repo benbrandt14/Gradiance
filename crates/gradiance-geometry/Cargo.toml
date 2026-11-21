@@ -16,3 +16,6 @@ serde.workspace = true
 thiserror.workspace = true
 # Features-only: serde impls for the bevy math types shapes serialize.
 glam.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

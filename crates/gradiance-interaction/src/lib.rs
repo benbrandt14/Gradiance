@@ -20,6 +20,7 @@
 pub mod align;
 pub mod camera;
 pub mod cursor;
+pub mod debug_ops;
 pub mod gesture;
 pub mod graph_keys;
 pub mod indicators;
@@ -121,6 +122,7 @@ impl Plugin for InteractionPlugin {
             .resource_mut::<gradiance_op::OpContextFillers>()
             .add(selection::fill_selection_mirror);
         ops::install(app);
+        debug_ops::install(app);
         tool_ops::install(app);
         transport::install(app);
         pack_ops::install(app);

@@ -70,6 +70,7 @@ fn linear_motor(m: &LinearMotorDef) -> LinearMotor {
 pub fn sync_joints(
     mut commands: Commands,
     index: Res<IdIndex>,
+    bodies: Query<&RigidBody>,
     changed: Query<
         (Entity, &JointDef, Option<&PinAnchor>),
         Or<(Changed<JointDef>, With<JointUnresolved>)>,
@@ -110,10 +111,20 @@ pub fn sync_joints(
         };
         let mut entity_commands = commands.entity(entity);
         entity_commands.remove::<JointUnresolved>();
-        // Broken → disabled, derived from the authored flag. Inserted *before*
-        // the joint component so avian's on-add observer never puts a broken
-        // joint into its joint graph, even for a frame.
-        if def.common.broken {
+        // Broken → disabled, derived from the authored flag. A joint between
+        // two immovable ends is derived disabled too: it solves nothing (two
+        // statics cannot move each other), and avian's islands cannot link
+        // it — a merge of two bodies that are in no island would panic.
+        // The authored joint stays (sensors read angle and length from the
+        // bodies' poses; undo and persistence are untouched).
+        // Inserted *before* the joint component so avian's on-add observer
+        // never puts such a joint into its joint graph, even for a frame.
+        let movable = |body: Entity| {
+            bodies
+                .get(body)
+                .is_ok_and(|rb| rb.is_dynamic() || rb.is_kinematic())
+        };
+        if def.common.broken || (!movable(body_a) && !movable(body_b)) {
             entity_commands.insert(JointDisabled);
         } else {
             entity_commands.remove::<JointDisabled>();
@@ -149,6 +160,17 @@ pub fn sync_joints(
             entity_commands.remove::<JointCollisionDisabled>();
         } else {
             entity_commands.insert(JointCollisionDisabled);
+        }
+        // An authored joint change (creation, edit, undo/redo) must reach
+        // bodies that may be asleep — avian does not wake on joint changes.
+        // This is also the old island-panic path (welding touching boxes
+        // inserts `JointCollisionDisabled`), now exercised every time.
+        for body in [body_a, body_b] {
+            if let Ok(kind) = bodies.get(body)
+                && (kind.is_dynamic() || kind.is_kinematic())
+            {
+                commands.queue(WakeBody(body));
+            }
         }
     }
 }
@@ -238,12 +260,9 @@ fn insert_derived_joint(
 
 /// The reduced mass and angular inertia of a joint's two bodies (a static,
 /// kinematic or not-yet-computed side counts as immovable).
-fn reduced_of(
-    [a, b]: [Entity; 2],
-    bodies: &Query<(&RigidBody, &ComputedMass, &ComputedAngularInertia)>,
-) -> (f32, f32) {
+fn reduced_of([a, b]: [Entity; 2], bodies: &JointBodies) -> (f32, f32) {
     let inv = |e: Entity| {
-        bodies.get(e).map_or((0.0, 0.0), |(rb, m, i)| {
+        bodies.get(e).map_or((0.0, 0.0), |(rb, m, i, _)| {
             let moves = rb.is_dynamic();
             (
                 tuning::inverse(m.value(), moves),
@@ -253,6 +272,108 @@ fn reduced_of(
     };
     let ((ma, ia), (mb, ib)) = (inv(a), inv(b));
     (tuning::reduced(ma, mb), tuning::reduced(ia, ib))
+}
+
+/// The per-body state [`retune_joints`] reads: what a body is, its computed
+/// mass properties, and whether a motor has parked [`SleepingDisabled`] on it.
+type JointBodies<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static RigidBody,
+        &'static ComputedMass,
+        &'static ComputedAngularInertia,
+        Has<SleepingDisabled>,
+    ),
+>;
+/// Parks or lifts the motor's **no-sleep guard** ([`SleepingDisabled`]) on a
+/// joint's bodies: an enabled motor keeps them awake — `Box2D`'s rule — so a
+/// motorized hinge keeps turning and a driven slider keeps sliding however
+/// long the bodies would otherwise rest. Only the moving ends carry the
+/// guard; a static or world-pin end never sleeps to begin with.
+fn apply_motor_sleep_guard(
+    commands: &mut Commands,
+    bodies: &JointBodies,
+    a: Entity,
+    b: Entity,
+    motored: bool,
+) {
+    for entity in [a, b] {
+        let Ok((rb, _, _, guarded)) = bodies.get(entity) else {
+            continue;
+        };
+        if !(rb.is_dynamic() || rb.is_kinematic()) || motored == guarded {
+            continue;
+        }
+        if motored {
+            commands.entity(entity).insert(SleepingDisabled);
+        } else {
+            commands.entity(entity).remove::<SleepingDisabled>();
+        }
+    }
+}
+
+/// A joint motor's retuned values: the mass-derived ceiling, the gain model,
+/// the target velocity, and whether the motor is enabled (a driven
+/// non-positive cap switches it off — avian reads such a cap as
+/// "unlimited"). Pure.
+fn motor_tuning(
+    authored_ceiling: f32,
+    reduced: f32,
+    per_unit: f32,
+    damping: f32,
+    substep_secs: f32,
+    drive: &SignalDrive,
+    authored: &impl MotorParams,
+    live: f32,
+) -> (f32, MotorModel, f32, bool) {
+    let ceiling = drive
+        .motor_cap
+        .unwrap_or_else(|| motor_ceiling(authored_ceiling, reduced, per_unit));
+    let model = velocity_model(tuning::motor_gain(damping, substep_secs));
+    let target = drive
+        .motor_speed
+        .unwrap_or_else(|| undriven_target(authored.target(), authored.oscillates(), live));
+    (
+        ceiling,
+        model,
+        target,
+        authored.enabled() && drive.motor_cap.is_none_or(|cap| cap > 0.0),
+    )
+}
+
+/// The authored values [`motor_tuning`] reads from either motor kind.
+trait MotorParams {
+    /// The authored target speed (rad/s or m/s).
+    fn target(&self) -> f32;
+    /// Whether the authored motor oscillates.
+    fn oscillates(&self) -> bool;
+    /// Whether the authored motor is enabled.
+    fn enabled(&self) -> bool;
+}
+
+impl MotorParams for AngularMotorDef {
+    fn target(&self) -> f32 {
+        self.target_velocity.value()
+    }
+    fn oscillates(&self) -> bool {
+        self.oscillate
+    }
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+}
+
+impl MotorParams for LinearMotorDef {
+    fn target(&self) -> f32 {
+        self.target_velocity.value()
+    }
+    fn oscillates(&self) -> bool {
+        self.oscillate
+    }
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
 }
 
 /// Re-derives every joint's **mass-derived** engine values from the bodies'
@@ -268,6 +389,7 @@ fn reduced_of(
 /// ([`undriven_target`]), so unbinding needs no command.
 #[expect(clippy::type_complexity, reason = "one optional engine joint per kind")]
 pub fn retune_joints(
+    mut commands: Commands,
     mut joints: Query<(
         &JointDef,
         Option<&mut RevoluteJoint>,
@@ -275,7 +397,7 @@ pub fn retune_joints(
         Option<&mut DistanceJoint>,
         Option<&SignalDrive>,
     )>,
-    bodies: Query<(&RigidBody, &ComputedMass, &ComputedAngularInertia)>,
+    bodies: JointBodies,
     fixed: Res<Time<Fixed>>,
     physics_time: Res<Time<Physics>>,
     substeps: Res<SubstepCount>,
@@ -291,23 +413,19 @@ pub fn retune_joints(
             JointKind::Hinge { motor: Some(m), .. } => {
                 let Some(mut joint) = revolute else { continue };
                 let (_, inertia) = reduced_of([joint.body1, joint.body2], &bodies);
-                let ceiling = drive.motor_cap.unwrap_or_else(|| {
-                    motor_ceiling(m.max_torque.value(), inertia, MOTOR_TORQUE_PER_INERTIA)
-                });
-                let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
-                let target = drive.motor_speed.unwrap_or_else(|| {
-                    undriven_target(
-                        m.target_velocity.value(),
-                        m.oscillate,
-                        joint.motor.target_velocity,
-                    )
-                });
+                let (ceiling, model, target, enabled) = motor_tuning(
+                    m.max_torque.value(),
+                    inertia,
+                    MOTOR_TORQUE_PER_INERTIA,
+                    m.damping,
+                    substep_secs,
+                    &drive,
+                    m,
+                    joint.motor.target_velocity,
+                );
                 if differs(joint.motor.max_torque, ceiling) {
                     joint.motor.max_torque = ceiling;
                 }
-                // avian reads a non-positive cap as "unlimited", so a driven
-                // cap of zero or less switches the motor off instead.
-                let enabled = m.enabled && drive.motor_cap.is_none_or(|cap| cap > 0.0);
                 if joint.motor.enabled != enabled {
                     joint.motor.enabled = enabled;
                 }
@@ -317,27 +435,24 @@ pub fn retune_joints(
                 if differs(joint.motor.target_velocity, target) {
                     joint.motor.target_velocity = target;
                 }
+                apply_motor_sleep_guard(&mut commands, &bodies, joint.body1, joint.body2, enabled);
             }
             JointKind::Slider { motor: Some(m), .. } => {
                 let Some(mut joint) = prismatic else { continue };
                 let (mass, _) = reduced_of([joint.body1, joint.body2], &bodies);
-                let ceiling = drive.motor_cap.unwrap_or_else(|| {
-                    motor_ceiling(m.max_force.value(), mass, MOTOR_FORCE_PER_MASS)
-                });
-                let model = velocity_model(tuning::motor_gain(m.damping, substep_secs));
-                let target = drive.motor_speed.unwrap_or_else(|| {
-                    undriven_target(
-                        m.target_velocity.value(),
-                        m.oscillate,
-                        joint.motor.target_velocity,
-                    )
-                });
+                let (ceiling, model, target, enabled) = motor_tuning(
+                    m.max_force.value(),
+                    mass,
+                    MOTOR_FORCE_PER_MASS,
+                    m.damping,
+                    substep_secs,
+                    &drive,
+                    m,
+                    joint.motor.target_velocity,
+                );
                 if differs(joint.motor.max_force, ceiling) {
                     joint.motor.max_force = ceiling;
                 }
-                // avian reads a non-positive cap as "unlimited", so a driven
-                // cap of zero or less switches the motor off instead.
-                let enabled = m.enabled && drive.motor_cap.is_none_or(|cap| cap > 0.0);
                 if joint.motor.enabled != enabled {
                     joint.motor.enabled = enabled;
                 }
@@ -347,6 +462,7 @@ pub fn retune_joints(
                 if differs(joint.motor.target_velocity, target) {
                     joint.motor.target_velocity = target;
                 }
+                apply_motor_sleep_guard(&mut commands, &bodies, joint.body1, joint.body2, enabled);
             }
             JointKind::Spring { frequency, .. } => {
                 let Some(mut joint) = distance else { continue };
@@ -360,8 +476,22 @@ pub fn retune_joints(
                 if differs(joint.compliance, compliance) {
                     joint.compliance = compliance;
                 }
+                // A spring holds, it does not drive: no guard here, and one
+                // left by an earlier motorized kind must come off.
+                apply_motor_sleep_guard(&mut commands, &bodies, joint.body1, joint.body2, false);
             }
-            _ => {}
+            JointKind::Hinge { .. } | JointKind::Slider { .. } => {
+                // No motor on this joint: a guard left by an earlier
+                // motorized kind must come off so the bodies may sleep.
+                let ends = revolute
+                    .as_deref()
+                    .map(|j| (j.body1, j.body2))
+                    .or_else(|| prismatic.as_deref().map(|j| (j.body1, j.body2)))
+                    .or_else(|| distance.as_deref().map(|j| (j.body1, j.body2)));
+                if let Some((a, b)) = ends {
+                    apply_motor_sleep_guard(&mut commands, &bodies, a, b, false);
+                }
+            }
         }
     }
 }

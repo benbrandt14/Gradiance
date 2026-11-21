@@ -33,6 +33,24 @@ impl Rgba {
         Self { a, ..self }
     }
 
+    /// The straight blend from `self` (`t = 0`) to `other` (`t = 1`), per
+    /// channel in sRGB; `t` is clamped to `[0, 1]`, so `t = 1` is `other`
+    /// exactly.
+    #[must_use]
+    pub fn lerp(self, other: Self, t: f32) -> Self {
+        let t = t.clamp(0.0, 1.0);
+        if t >= 1.0 {
+            return other;
+        }
+        let mix = |a: f32, b: f32| a + (b - a) * t;
+        Self {
+            r: mix(self.r, other.r),
+            g: mix(self.g, other.g),
+            b: mix(self.b, other.b),
+            a: mix(self.a, other.a),
+        }
+    }
+
     /// Builds an opaque color.
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
         Self { r, g, b, a: 1.0 }
