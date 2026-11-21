@@ -28,9 +28,7 @@ use gradiance_core::states::GameState;
 use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::group::SelectionGroup;
-use gradiance_domain::laser::Laser;
 use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
-use gradiance_domain::thruster::Thruster;
 
 /// Screen-space pick radius for a node glyph (logical px): the drawn ring
 /// (6 px, `render::tracer::draw_node_glyphs`) plus the shared 4 px pick
@@ -258,14 +256,6 @@ fn relocate_changes(
     old_rot: f32,
     target: Option<(StableId, PosRot)>,
 ) -> Vec<PropertyChange> {
-    // The node's world axis: an attached thruster/laser stores its angle
-    // in the body's frame, so the world direction is the frame angle plus
-    // the body's live rotation (the draw code's formula).
-    let world_angle = match kind {
-        NodeKind::Thruster(t) => t.angle.value() + old_rot,
-        NodeKind::Laser(l) => l.angle.value() + old_rot,
-        NodeKind::Tracer(_) => 0.0,
-    };
     let (new_attachment, new_rot) = match target {
         Some((body_id, body_pose)) => (
             NodeAttachment::to(
@@ -292,26 +282,16 @@ fn relocate_changes(
     }];
     // A moved target re-expresses the axis in the new frame; the same
     // target keeps its frame angle (and a free node's frame *is* the
-    // world's).
-    if new_attachment.target != attachment.target {
-        let new_kind = match kind {
-            NodeKind::Thruster(t) => NodeKind::Thruster(Thruster {
-                angle: gradiance_units::Angle(world_angle - new_rot),
-                ..*t
-            }),
-            NodeKind::Laser(l) => NodeKind::Laser(Laser {
-                angle: gradiance_units::Angle(world_angle - new_rot),
-                ..l.clone()
-            }),
-            NodeKind::Tracer(_) => kind.clone(),
-        };
-        if new_kind != *kind {
-            changes.push(PropertyChange {
-                id,
-                old: PropertyValue::NodeKind(kind.clone()),
-                new: PropertyValue::NodeKind(new_kind),
-            });
-        }
+    // world's). The rule is `NodeKind::reframe`, shared with the
+    // cut/merge rewires.
+    if new_attachment.target != attachment.target
+        && let Some(new_kind) = kind.reframe(old_rot, new_rot)
+    {
+        changes.push(PropertyChange {
+            id,
+            old: PropertyValue::NodeKind(kind.clone()),
+            new: PropertyValue::NodeKind(new_kind),
+        });
     }
     changes
 }
@@ -319,6 +299,8 @@ fn relocate_changes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gradiance_domain::laser::Laser;
+    use gradiance_domain::thruster::Thruster;
     use gradiance_domain::tracer::Tracer;
 
     /// A laser moved from a rotated body to empty space keeps aiming the

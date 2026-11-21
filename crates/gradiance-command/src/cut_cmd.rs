@@ -20,6 +20,7 @@ use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::joint::JointDef;
+use gradiance_domain::node::NodeAttachment;
 use gradiance_domain::shape::{CsgOp, ShapeDef};
 use gradiance_geometry::contours::{Contours, point_in_ring};
 use gradiance_geometry::polygonize::polygonize_components_on_axes;
@@ -361,6 +362,46 @@ pub(crate) fn aabbs_overlap(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
     a.0.x <= b.1.x && b.0.x <= a.1.x && a.0.y <= b.1.y && b.0.y <= a.1.y
 }
 
+/// Rewires or deletes each behavior node attached to a cut body — the
+/// joints' rule, for nodes: a split re-attaches the node to the piece
+/// that contains its offset (the pieces share the original's rotation,
+/// so the node's world direction never moves), and a node whose piece was
+/// swallowed, or whose body was destroyed, goes with its body. Undo is
+/// the snapshot, as ever.
+fn rewire_cut_nodes(world: &mut World, outcomes: &[CutOutcome]) {
+    let ids: Vec<StableId> = outcomes.iter().map(|o| o.original.id).collect();
+    for (entity, record) in crate::spawn::nodes_attached(world, &ids) {
+        let offset = record.attachment.offset.value();
+        let Some(outcome) = record
+            .attachment
+            .target
+            .and_then(|t| outcomes.iter().find(|o| o.original.id == t))
+        else {
+            continue;
+        };
+        let new = match &outcome.replacement {
+            Replacement::Split { pieces } => pieces.iter().find_map(|piece| {
+                // The piece's centroid in the original's frame, as
+                // `rewire_end` measures it.
+                let local = Vec2::from_angle(-outcome.original.pose.rot)
+                    .rotate(piece.pose.pos - outcome.original.pose.pos);
+                shape_contains(&piece.shape, offset - local).then(|| (piece.id, offset - local))
+            }),
+            Replacement::Destroy => None,
+        };
+        match new {
+            Some((body, offset)) => {
+                if let Some(mut live) = world.get_mut::<NodeAttachment>(entity) {
+                    *live = NodeAttachment::to(body, offset);
+                }
+            }
+            None => {
+                world.despawn(entity);
+            }
+        }
+    }
+}
+
 impl GameCommand for CutCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         let stage = self.stage(world);
@@ -378,7 +419,9 @@ impl GameCommand for CutCommand {
                 }
             }
         }
-        apply_joint_changes(world, &stage.joint_changes)
+        apply_joint_changes(world, &stage.joint_changes)?;
+        rewire_cut_nodes(world, &stage.outcomes);
+        Ok(())
     }
 
     fn name(&self) -> &'static str {

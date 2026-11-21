@@ -617,3 +617,164 @@ fn node_placement(app: &App, id: StableId) -> (NodeAttachment, Vec2) {
             .truncate(),
     )
 }
+
+// --- a node dies with its body, on every path that consumes one ---------
+//
+// The delete command already cascaded; cut and the booleans rewired joints
+// but left a node attached to a despawned body — orphaned, floating where
+// its body used to be. Now every body-consuming path shares the joints'
+// rule: a node moves onto what holds its point, or goes with its material.
+
+use gradiance::command::intent::{BooleanIntent, CutIntent};
+
+fn cut(app: &mut App, a: Vec2, b: Vec2, width: f32) {
+    app.world_mut().write_message(CutIntent { a, b, width });
+    app.update();
+}
+
+fn attachment_of(app: &App, id: StableId) -> NodeAttachment {
+    *app.world()
+        .get::<NodeAttachment>(entity_of(app, id).unwrap())
+        .unwrap()
+}
+
+/// A cut through a thrustered body re-attaches the thruster to the piece
+/// that holds its point; a cut that swallows the point deletes the node.
+#[test]
+fn a_cut_rewires_or_deletes_the_nodes_on_the_body() {
+    let mut app = paused_app();
+    let body = box_record(Vec2::ZERO, 40.0, 40.0);
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+    let record = thruster_record(
+        Vec2::new(0.0, 10.0),
+        NodeAttachment::to(body_id, Vec2::new(0.0, 10.0)),
+    );
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    app.update();
+    assert_eq!(node_count(&mut app), 1);
+
+    // Split the box under the thruster: the top half keeps its point.
+    cut(&mut app, Vec2::new(-30.0, 0.0), Vec2::new(30.0, 0.0), 2.0);
+    assert_eq!(node_count(&mut app), 1, "the node survived the split");
+    let moved = attachment_of(&app, node_id);
+    let piece = moved.target.expect("re-attached to a piece");
+    assert_ne!(piece, body_id, "the original body is gone");
+    let piece_shape = app
+        .world()
+        .get::<gradiance::domain::shape::ShapeDef>(entity_of(&app, piece).unwrap())
+        .unwrap()
+        .clone();
+    assert!(
+        gradiance::geometry::sdf::eval(&piece_shape, moved.offset.value()) < 1.0,
+        "the piece contains the node's point (offset {:?})",
+        moved.offset.value()
+    );
+
+    // A strip wide enough to swallow the point: the node goes with it.
+    cut(
+        &mut app,
+        Vec2::new(-30.0, 11.0),
+        Vec2::new(30.0, 11.0),
+        24.0,
+    );
+    assert_eq!(
+        node_count(&mut app),
+        0,
+        "no piece holds the node: deleted with its material"
+    );
+
+    // The snapshot undoes both cuts and the node comes back on its body.
+    undo(&mut app);
+    undo(&mut app);
+    assert_eq!(node_count(&mut app), 1);
+    assert_eq!(
+        attachment_of(&app, node_id).target,
+        Some(body_id),
+        "undo restores the original attachment"
+    );
+}
+
+/// A subtract consumes its tool body: a node on the consumed body moves
+/// onto the host (its axis re-expressed so its world direction never
+/// changes), and a node on the material the subtract removed goes with it.
+#[test]
+fn a_boolean_moves_consumed_nodes_onto_the_host() {
+    let mut app = paused_app();
+    // Host: a box at the origin. Tool: an overlapping box to its right.
+    let host = box_record(Vec2::ZERO, 40.0, 40.0);
+    let host_id = host.id;
+    let mut tool = box_record(Vec2::new(20.0, 0.0), 40.0, 40.0);
+    tool.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    tool.pose.rot = 0.25;
+    let tool_id = tool.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: host });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: tool });
+    app.update();
+
+    // A laser on the tool, far off its material: subtract moves it onto
+    // the host, aiming the same world way (the tool was rotated 0.25).
+    let record = NodeRecord {
+        id: StableId::new(),
+        pose: PosRot {
+            pos: Vec2::new(-10.0, 0.0),
+            rot: 0.0,
+        },
+        attachment: NodeAttachment::to(tool_id, Vec2::new(-30.0, 0.0)),
+        kind: NodeKind::Laser(Laser {
+            angle: gradiance::units::Angle(0.0),
+            ..Laser::default()
+        }),
+        appearance: gradiance::domain::appearance::Appearance::default(),
+    };
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    // A tracer on the tool's own material, inside the subtracted overlap:
+    // the material vanishes, and the tracer with it.
+    let swallowed = tracer_record(
+        Vec2::new(20.0, 0.0),
+        NodeAttachment::to(tool_id, Vec2::ZERO),
+    );
+    let swallowed_id = swallowed.id;
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: swallowed });
+    app.update();
+
+    app.world_mut().write_message(BooleanIntent {
+        op: gradiance::domain::shape::CsgOp::Subtract,
+        targets: vec![host_id, tool_id],
+    });
+    app.update();
+
+    let moved = attachment_of(&app, node_id);
+    assert_eq!(moved.target, Some(host_id), "the laser rides the host now");
+    let laser = app
+        .world()
+        .get::<NodeKind>(entity_of(&app, node_id).unwrap())
+        .unwrap();
+    let NodeKind::Laser(l) = laser else {
+        panic!("still a laser: {laser:?}");
+    };
+    assert!(
+        (l.angle.value() - 0.25).abs() < 1e-4,
+        "world aim unchanged: the frame angle advanced by the tool's rotation ({})",
+        l.angle.value()
+    );
+    assert!(
+        entity_of(&app, swallowed_id).is_none(),
+        "the tracer on the removed material went with it"
+    );
+
+    undo(&mut app);
+    assert_eq!(
+        attachment_of(&app, node_id).target,
+        Some(tool_id),
+        "undo restores the pre-boolean attachment"
+    );
+    assert!(entity_of(&app, swallowed_id).is_some(), "and the tracer");
+}
